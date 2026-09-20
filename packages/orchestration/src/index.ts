@@ -21,6 +21,8 @@ import {
   type TaskResult,
 } from "@conclave/protocol";
 
+export * from "./forge.js";
+
 export interface MvpPersistence {
   saveGoal(goal: GoalRecord): Promise<void>;
   saveRun(run: RunRecord): Promise<void>;

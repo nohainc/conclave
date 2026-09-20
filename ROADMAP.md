@@ -73,6 +73,8 @@ See [docs/specifications/LOCAL_RUNTIME.md](docs/specifications/LOCAL_RUNTIME.md)
 ## Phase 10 — Conclave Forge MVP
 Implement the software-development workflow: repository research -> plan -> implementation -> review -> fix loop -> tests -> final verification -> completion report.
 
+See [docs/specifications/FORGE_MVP.md](docs/specifications/FORGE_MVP.md) for the worker separation, runtime adapter, correction loop, evidence, and completion gate.
+
 **Exit:** Conclave can take a real repository and development goal and complete it using at least two independent AI workers plus real tests.
 
 ## Phase 11 — Durable cloud execution

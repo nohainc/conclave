@@ -10,6 +10,7 @@ Phase 1 establishes a small monorepo with one shared Flutter application and pro
 - Core worker registry — configurable capability/role/permission routing independent of provider.
 - Core task graph — validated dependencies with deterministic retries, budgets, timeouts, cancellation, and reopening.
 - Core verification gate — isolated reviews, policy-based evidence, blocking findings, and fix/re-review loops.
+- Forge workflow — research, plan, implementation, independent review, correction, tests, verification, and reporting.
 - `packages/local-runtime` — local execution boundary and environment configuration.
 - Local Runtime operation boundary — outbound approved repository operations with bounded structured evidence.
 - `apps/worker` — Cloudflare Worker API entrypoint and smoke tests.
