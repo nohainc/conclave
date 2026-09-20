@@ -59,6 +59,8 @@ See [docs/specifications/VERIFICATION.md](docs/specifications/VERIFICATION.md) f
 ## Phase 8 — Conclave Studio execution UI
 Build project/goal creation, worker setup, goal graph, timeline/events, task details, findings, artifacts, and conversational goal interface.
 
+See [docs/specifications/STUDIO.md](docs/specifications/STUDIO.md) for the execution dashboard, control semantics, and API boundary.
+
 **Exit:** a user can observe and control a cloud run from Studio.
 
 ## Phase 9 — Conclave Local Runtime
