@@ -66,6 +66,8 @@ See [docs/specifications/STUDIO.md](docs/specifications/STUDIO.md) for the execu
 ## Phase 9 — Conclave Local Runtime
 Implement secure outbound connection, repository registration, file/search operations, Git status/diff, controlled shell/test/build execution, permissions, and audit events.
 
+See [docs/specifications/LOCAL_RUNTIME.md](docs/specifications/LOCAL_RUNTIME.md) for the outbound transport, approval envelope, operation policy, and evidence contract.
+
 **Exit:** Cloud can request an allowed local operation and receive verifiable evidence without exposing an inbound local port.
 
 ## Phase 10 — Conclave Forge MVP
