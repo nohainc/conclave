@@ -237,6 +237,37 @@ export interface RetentionPolicyRecord extends EntityRecord {
   readonly usageDays: number;
 }
 
+export interface ExtensionRecord extends EntityRecord {
+  readonly organizationId: string;
+  readonly kind: "provider" | "agent" | "tool" | "ci" | "human";
+  readonly name: string;
+  readonly version: string;
+  readonly manifest: JsonValue;
+  readonly status: "active" | "disabled" | "pending_review";
+}
+
+export interface WorkflowTemplateRecord extends EntityRecord {
+  readonly organizationId: string;
+  readonly name: string;
+  readonly version: number;
+  readonly template: JsonValue;
+  readonly status: "draft" | "active" | "archived";
+  readonly createdByUserId: string;
+}
+
+export interface HumanApprovalRecord {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly runId: string;
+  readonly taskId: string | null;
+  readonly requestedByUserId: string;
+  readonly decidedByUserId: string | null;
+  readonly prompt: string;
+  readonly decision: "pending" | "approved" | "rejected";
+  readonly requestedAt: string;
+  readonly decidedAt: string | null;
+}
+
 export interface Repository<T extends { readonly id: string }> {
   get(id: string): Promise<T | null>;
   save(record: T): Promise<void>;
@@ -313,6 +344,16 @@ export interface EncryptedCredentialRepository {
 export interface RetentionPolicyRepository {
   get(organizationId: string): Promise<RetentionPolicyRecord | null>;
   save(record: RetentionPolicyRecord): Promise<void>;
+}
+export type ExtensionRepository = Repository<ExtensionRecord>;
+export interface WorkflowTemplateRepository extends Repository<WorkflowTemplateRecord> {
+  listByOrganization(
+    organizationId: string,
+  ): Promise<readonly WorkflowTemplateRecord[]>;
+}
+export interface HumanApprovalRepository {
+  get(id: string): Promise<HumanApprovalRecord | null>;
+  save(record: HumanApprovalRecord): Promise<void>;
 }
 
 export interface PersistenceRepositories {
