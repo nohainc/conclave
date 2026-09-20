@@ -39,6 +39,12 @@ export interface ForgeRuntimeEvidence {
   readonly contentDigest: string;
   readonly command?: readonly string[];
   readonly exitCode?: number | null;
+  readonly checks?: readonly {
+    readonly name: string;
+    readonly status: "passed" | "failed" | "skipped" | "inconclusive";
+    readonly command?: string;
+    readonly exitCode?: number;
+  }[];
 }
 
 export interface ForgeRuntimeAdapter {
@@ -92,6 +98,7 @@ export interface ForgeWorkflowResult {
   readonly implementation: ImplementationResult;
   readonly reviews: readonly ReviewResult[];
   readonly tests: TestResult;
+  readonly machineEvidence: ForgeRuntimeEvidence;
   readonly verification: VerificationResult;
   readonly completion: CompletionResult;
   readonly correctionLoops: number;
@@ -723,14 +730,12 @@ export async function executeForgeGoal(
     ["test_execution"],
     "TestResult",
   );
-  const testEvidenceId = await runtimeArtifact(
-    testTask.id,
-    await input.runtime.test({
-      repositoryId: input.repositoryId,
-      revision: input.revision,
-      changedFiles: implementation.payload.changedFiles,
-    }),
-  );
+  const machineEvidence = await input.runtime.test({
+    repositoryId: input.repositoryId,
+    revision: input.revision,
+    changedFiles: implementation.payload.changedFiles,
+  });
+  const testEvidenceId = await runtimeArtifact(testTask.id, machineEvidence);
   const testRequest: TaskRequest = {
     ...researchRequest,
     messageId: id(),
@@ -837,7 +842,11 @@ export async function executeForgeGoal(
   }
   await artifact(
     completionTask.id,
-    JSON.stringify(completion.payload),
+    JSON.stringify({
+      completion: completion.payload,
+      machineEvidence,
+      interpretedTestResult: tests.payload,
+    }),
     "application/json",
     { kind: "completion_report", workerId: input.lead.resource.id },
   );
@@ -852,6 +861,7 @@ export async function executeForgeGoal(
     implementation,
     reviews,
     tests,
+    machineEvidence,
     verification,
     completion,
     correctionLoops,

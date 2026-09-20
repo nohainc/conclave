@@ -87,6 +87,8 @@ See [docs/specifications/DURABLE_EXECUTION.md](docs/specifications/DURABLE_EXECU
 ## Phase 12 — CI/CD and evidence
 Integrate lint/build/unit/integration checks, optional preview deployments, smoke tests, approvals, and post-deploy verification.
 
+See [docs/specifications/CI_EVIDENCE.md](docs/specifications/CI_EVIDENCE.md) for the machine-evidence contract, GitHub Actions upload, and durable CI wait.
+
 **Exit:** completion reports distinguish AI assertions from machine-generated evidence.
 
 ## Phase 13 — Security, tenancy, quotas, observability

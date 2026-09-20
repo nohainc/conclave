@@ -56,6 +56,7 @@ async function handleRunRequest(request: Request, env: Env): Promise<Response> {
     goalId: requiredString(body.goalId, "goalId"),
     idempotencyKey,
     ...(body.requireApproval === true ? { requireApproval: true } : {}),
+    ...(body.requireCiEvidence === false ? { requireCiEvidence: false } : {}),
   };
   const run = await createOrGetRun(env, params);
   return json(run, { status: 202 });
@@ -65,19 +66,39 @@ async function handleRunCommand(
   request: Request,
   env: Env,
   runId: string,
-  command: "pause" | "resume" | "restart" | "event",
+  command: "pause" | "resume" | "restart" | "event" | "ci-evidence",
 ): Promise<Response> {
   const instance = await env.CONCLAVE_RUN_WORKFLOW.get(runId);
   if (command === "pause") await instance.pause();
   if (command === "resume") await instance.resume();
   if (command === "restart") await instance.restart();
-  if (command === "event") {
-    const body = (await request.json()) as Record<string, unknown>;
-    const type = requiredString(body.type, "type");
-    if (type !== "run-control" && type !== "run-approval") {
-      throw new Error("Unsupported workflow event type");
+  if (command === "event" || command === "ci-evidence") {
+    if (command === "ci-evidence") {
+      const configuredToken = (
+        env as Env & {
+          CONCLAVE_CI_INGEST_TOKEN?: string;
+        }
+      ).CONCLAVE_CI_INGEST_TOKEN;
+      if (
+        configuredToken !== undefined &&
+        request.headers.get("authorization") !== `Bearer ${configuredToken}`
+      ) {
+        throw new Error("CI evidence authorization failed");
+      }
     }
-    await instance.sendEvent({ type, payload: body.payload });
+    const body = (await request.json()) as Record<string, unknown>;
+    if (command === "ci-evidence") {
+      await instance.sendEvent({
+        type: "ci-evidence",
+        payload: body.payload ?? body,
+      });
+    } else {
+      const type = requiredString(body.type, "type");
+      if (type !== "run-control" && type !== "run-approval") {
+        throw new Error("Unsupported workflow event type");
+      }
+      await instance.sendEvent({ type, payload: body.payload });
+    }
   }
   return json({ id: instance.id, status: (await instance.status()).status });
 }
@@ -95,7 +116,7 @@ export default {
         return await handleRunRequest(request, env);
       }
       const runMatch = url.pathname.match(
-        /^\/api\/runs\/([^/]+)(?:\/(pause|resume|restart|events))?$/,
+        /^\/api\/runs\/([^/]+)(?:\/(pause|resume|restart|events|ci-evidence))?$/,
       );
       if (runMatch?.[1] && request.method === "GET" && !runMatch[2]) {
         const instance = await env.CONCLAVE_RUN_WORKFLOW.get(runMatch[1]);
@@ -105,7 +126,9 @@ export default {
         const command =
           runMatch[2] === "events"
             ? "event"
-            : (runMatch[2] as "pause" | "resume" | "restart");
+            : runMatch[2] === "ci-evidence"
+              ? "ci-evidence"
+              : (runMatch[2] as "pause" | "resume" | "restart");
         return await handleRunCommand(request, env, runMatch[1], command);
       }
     } catch (error) {

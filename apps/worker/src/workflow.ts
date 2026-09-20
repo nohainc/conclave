@@ -3,12 +3,17 @@ import {
   type WorkflowEvent,
   type WorkflowStep,
 } from "cloudflare:workers";
+import {
+  parseMachineCheckEvidence,
+  type MachineCheckEvidence,
+} from "@conclave/protocol";
 
 export interface ConclaveWorkflowParams {
   readonly runId: string;
   readonly goalId: string;
   readonly idempotencyKey: string;
   readonly requireApproval?: boolean;
+  readonly requireCiEvidence?: boolean;
 }
 
 export interface ConclaveWorkflowCheckpoint {
@@ -26,6 +31,21 @@ export interface ConclaveWorkflowCheckpoint {
   readonly status: "active" | "waiting" | "completed" | "cancelled";
   readonly eventId?: string;
   readonly eventAction?: string;
+  readonly machineEvidence?: Pick<
+    MachineCheckEvidence,
+    | "evidenceId"
+    | "source"
+    | "externalRunId"
+    | "revision"
+    | "workflow"
+    | "conclusion"
+    | "checks"
+    | "coveragePercent"
+    | "previewUrl"
+    | "smokeTests"
+    | "healthChecks"
+    | "observedAt"
+  >;
 }
 
 interface RunControlEvent {
@@ -37,6 +57,8 @@ interface ApprovalEvent {
   readonly eventId: string;
   readonly approved: boolean;
 }
+
+type MachineEvidenceEvent = MachineCheckEvidence;
 
 const stepConfig = {
   retries: {
@@ -127,6 +149,36 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
       async () => ({ ...planning, stage: "implementation" as const }),
     );
 
+    let machineEvidence: MachineEvidenceEvent | undefined;
+    if (params.requireCiEvidence !== false) {
+      const ciEvent = await step.waitForEvent<MachineEvidenceEvent>(
+        "wait for machine CI evidence",
+        { type: "ci-evidence", timeout: "365 days" },
+      );
+      try {
+        machineEvidence = parseMachineCheckEvidence(ciEvent.payload);
+      } catch (error) {
+        throw new Error(
+          `Invalid CI evidence: ${error instanceof Error ? error.message : "unknown"}`,
+        );
+      }
+      if (machineEvidence.conclusion !== "success") {
+        throw new Error(
+          `Machine checks concluded ${machineEvidence.conclusion}`,
+        );
+      }
+      const evidenceCheckpoint = await step.do(
+        "checkpoint:machine-evidence",
+        stepConfig,
+        async () => ({
+          ...implementation,
+          stage: "implementation" as const,
+          machineEvidence,
+        }),
+      );
+      machineEvidence = evidenceCheckpoint.machineEvidence;
+    }
+
     if (params.requireApproval) {
       const approvalEvent = await step.waitForEvent<ApprovalEvent>(
         "wait for external approval",
@@ -153,7 +205,11 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
     const verification = await step.do(
       "checkpoint:verification",
       stepConfig,
-      async () => ({ ...implementation, stage: "verification" as const }),
+      async () => ({
+        ...implementation,
+        stage: "verification" as const,
+        ...(machineEvidence ? { machineEvidence } : {}),
+      }),
     );
     return step.do("checkpoint:completed", stepConfig, async () => ({
       ...verification,

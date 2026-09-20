@@ -8,5 +8,8 @@
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json",
     "check:startup": "wrangler check startup"
+  },
+  "dependencies": {
+    "@conclave/protocol": "workspace:*"
   }
 }

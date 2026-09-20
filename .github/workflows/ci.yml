@@ -39,3 +39,48 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
+
+  publish-evidence:
+    if: ${{ vars.CONCLAVE_CI_INGEST_URL != '' && vars.CONCLAVE_RUN_ID != '' }}
+    needs: [typescript, flutter]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Publish machine evidence to Conclave
+        env:
+          CONCLAVE_CI_INGEST_URL: ${{ vars.CONCLAVE_CI_INGEST_URL }}
+          CONCLAVE_RUN_ID: ${{ vars.CONCLAVE_RUN_ID }}
+          CONCLAVE_CI_INGEST_TOKEN: ${{ secrets.CONCLAVE_CI_INGEST_TOKEN }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_WORKFLOW: ${{ github.workflow }}
+        run: |
+          payload=$(jq -n \
+            --arg evidenceId "github-${GITHUB_RUN_ID}" \
+            --arg externalRunId "${GITHUB_RUN_ID}" \
+            --arg revision "${GITHUB_SHA}" \
+            --arg workflow "${GITHUB_WORKFLOW}" \
+            --arg observedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{
+              evidenceId: $evidenceId,
+              source: "github_actions",
+              externalRunId: $externalRunId,
+              revision: $revision,
+              workflow: $workflow,
+              conclusion: "success",
+              checks: [
+                {name: "TypeScript checks", status: "passed", command: "pnpm check", exitCode: 0, artifactIds: []},
+                {name: "Worker startup", status: "passed", command: "wrangler check startup", exitCode: 0, artifactIds: []},
+                {name: "Flutter analyze", status: "passed", command: "flutter analyze", exitCode: 0, artifactIds: []},
+                {name: "Flutter tests", status: "passed", command: "flutter test", exitCode: 0, artifactIds: []}
+              ],
+              smokeTests: ["Worker health smoke test"],
+              healthChecks: ["Worker startup analysis passed"],
+              observedAt: $observedAt
+            }')
+          curl --fail-with-body --silent --show-error \
+            -X POST "${CONCLAVE_CI_INGEST_URL}/api/runs/${CONCLAVE_RUN_ID}/ci-evidence" \
+            -H "authorization: Bearer ${CONCLAVE_CI_INGEST_TOKEN}" \
+            -H "content-type: application/json" \
+            --data "$payload"

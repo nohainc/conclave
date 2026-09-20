@@ -33,7 +33,11 @@ importers:
         specifier: ^4.38.0
         version: 4.135.0(@types/node@24.13.6)
 
-  apps/worker: {}
+  apps/worker:
+    dependencies:
+      '@conclave/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
 
   packages/core:
     dependencies:

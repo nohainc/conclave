@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   PlanResultSchema,
   parseModelResult,
+  parseMachineCheckEvidence,
   parsePlanRequest,
   parseProtocolMessage,
   PROTOCOL_NAME,
@@ -119,6 +120,37 @@ describe("versioned protocol contracts", () => {
     expect(parseProtocolMessage(request).messageType).toBe("PlanRequest");
     expect(() =>
       parseProtocolMessage({ ...request, version: "0.2" }),
+    ).toThrow();
+  });
+
+  it("accepts machine evidence and rejects unverified check claims", () => {
+    const evidence = parseMachineCheckEvidence({
+      evidenceId: "evidence-1",
+      source: "github_actions",
+      externalRunId: "run-100",
+      revision: "abc123",
+      workflow: "CI",
+      conclusion: "success",
+      checks: [
+        {
+          name: "compile",
+          status: "passed",
+          command: "pnpm typecheck",
+          exitCode: 0,
+          artifactIds: [],
+        },
+      ],
+      smokeTests: [],
+      healthChecks: ["/health: 200"],
+      observedAt: "2026-09-21T10:00:00.000Z",
+    });
+    expect(evidence.checks[0]?.status).toBe("passed");
+    expect(() =>
+      parseMachineCheckEvidence({
+        ...evidence,
+        conclusion: "success",
+        checks: [],
+      }),
     ).toThrow();
   });
 });

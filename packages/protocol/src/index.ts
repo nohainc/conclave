@@ -152,6 +152,23 @@ const checkResult = z
   })
   .strict();
 
+const machineCheckEvidencePayload = z
+  .object({
+    evidenceId: id,
+    source: z.enum(["github_actions", "local_runtime", "ci"]),
+    externalRunId: nonEmpty,
+    revision: nonEmpty,
+    workflow: nonEmpty,
+    conclusion: z.enum(["success", "failure", "cancelled", "neutral"]),
+    checks: z.array(checkResult).min(1),
+    coveragePercent: z.number().min(0).max(100).optional(),
+    previewUrl: z.url().optional(),
+    smokeTests: z.array(nonEmpty),
+    healthChecks: z.array(nonEmpty),
+    observedAt: z.iso.datetime(),
+  })
+  .strict();
+
 const testResultPayload = z
   .object({
     revision: nonEmpty,
@@ -240,6 +257,7 @@ export const ImplementationResultSchema = message(
 );
 export const ReviewResultSchema = message("ReviewResult", reviewResultPayload);
 export const TestResultSchema = message("TestResult", testResultPayload);
+export const MachineCheckEvidenceSchema = machineCheckEvidencePayload;
 export const VerificationResultSchema = message(
   "VerificationResult",
   verificationResultPayload,
@@ -287,6 +305,7 @@ export type ResearchResult = z.infer<typeof ResearchResultSchema>;
 export type ImplementationResult = z.infer<typeof ImplementationResultSchema>;
 export type ReviewResult = z.infer<typeof ReviewResultSchema>;
 export type TestResult = z.infer<typeof TestResultSchema>;
+export type MachineCheckEvidence = z.infer<typeof MachineCheckEvidenceSchema>;
 export type VerificationResult = z.infer<typeof VerificationResultSchema>;
 export type DecisionResult = z.infer<typeof DecisionResultSchema>;
 export type CompletionResult = z.infer<typeof CompletionResultSchema>;
@@ -299,6 +318,12 @@ export function parsePlanRequest(input: unknown): PlanRequest {
 
 export function parseTaskRequest(input: unknown): TaskRequest {
   return TaskRequestSchema.parse(input);
+}
+
+export function parseMachineCheckEvidence(
+  input: unknown,
+): MachineCheckEvidence {
+  return MachineCheckEvidenceSchema.parse(input);
 }
 
 export function parseModelResult(input: unknown): ModelResult {

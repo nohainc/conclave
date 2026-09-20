@@ -111,5 +111,39 @@ describe("Worker smoke tests", () => {
     );
     expect(instance.pause).toHaveBeenCalledOnce();
     expect(instance.resume).toHaveBeenCalledOnce();
+
+    const ciEvidence = {
+      evidenceId: "ci-evidence-1",
+      source: "github_actions",
+      externalRunId: "github-100",
+      revision: "abc123",
+      workflow: "CI",
+      conclusion: "success",
+      checks: [
+        {
+          name: "TypeScript checks",
+          status: "passed",
+          command: "pnpm check",
+          exitCode: 0,
+          artifactIds: [],
+        },
+      ],
+      smokeTests: ["Worker health"],
+      healthChecks: ["/health returned 200"],
+      observedAt: "2026-09-21T10:00:00.000Z",
+    };
+    const ciResponse = await worker.fetch(
+      new Request("https://conclave.test/api/runs/run-goal-1/ci-evidence", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(ciEvidence),
+      }),
+      env,
+    );
+    expect(ciResponse.status).toBe(200);
+    expect(instance.sendEvent).toHaveBeenCalledWith({
+      type: "ci-evidence",
+      payload: ciEvidence,
+    });
   });
 });
