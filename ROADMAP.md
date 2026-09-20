@@ -45,7 +45,9 @@ See [docs/specifications/TWO_MODEL_MVP.md](docs/specifications/TWO_MODEL_MVP.md)
 ## Phase 6 — Goal decomposition and task graph
 Add phases, tasks, dependencies, retries, budgets, cancellation, and deterministic state transitions. AI proposes plans; Core validates/persists them.
 
-**Exit:** a larger goal executes as multiple dependent small tasks.
+See [docs/specifications/TASK_GRAPH.md](docs/specifications/TASK_GRAPH.md) for graph validation and state transitions.
+
+**Exit:** a larger goal executes as multiple dependent small tasks under Core-owned retries, budgets, timeouts, cancellation, and reopening.
 
 ## Phase 7 — Independent verification loops
 Add findings, review decisions, reopen/fix/re-review loops, verification policies, and isolated reviewer contexts.

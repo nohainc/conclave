@@ -9,6 +9,7 @@ import type {
   RunRecord,
   TaskRecord,
 } from "@conclave/persistence";
+import { validateTaskGraph } from "@conclave/core";
 import type { ModelResponse, ModelWorker } from "@conclave/providers";
 import {
   parseModelResult,
@@ -373,7 +374,8 @@ export async function executeTwoModelGoal(
     },
   };
   const plan = await call(input.lead, planTask, planRequest, "PlanResult");
-  const delegated = plan.payload.phases[0]?.tasks[0];
+  const validatedGraph = validateTaskGraph(plan);
+  const delegated = validatedGraph.tasks[0];
   if (delegated === undefined)
     throw new Error("Lead returned no delegated task");
 
