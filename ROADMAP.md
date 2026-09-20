@@ -24,7 +24,9 @@ See [docs/specifications/PROTOCOL.md](docs/specifications/PROTOCOL.md) for the e
 ## Phase 3 — Persistence and event model
 Create D1 schema/migrations and repository interfaces for projects, workers, goals, runs, phases, tasks, attempts, model calls, findings, verifications, artifacts, events, and usage. Configure R2 artifact references.
 
-**Exit:** a run can be reconstructed from persisted state and ordered events.
+See [docs/specifications/PERSISTENCE.md](docs/specifications/PERSISTENCE.md) for the row/payload split and reconstruction contract.
+
+**Exit:** a goal/run can be reconstructed entirely from persisted state and contiguous ordered events.
 
 ## Phase 4 — Worker registry and provider abstraction
 Create worker/capability/role/permission configuration. Add exactly two initial model adapters and mock workers.

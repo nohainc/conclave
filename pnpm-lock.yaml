@@ -47,6 +47,8 @@ importers:
         specifier: workspace:*
         version: link:../core
 
+  packages/persistence: {}
+
   packages/protocol:
     dependencies:
       zod:
