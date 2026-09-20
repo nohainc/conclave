@@ -1,0 +1,307 @@
+import { z } from "zod";
+
+export const PROTOCOL_NAME = "conclave.protocol" as const;
+export const PROTOCOL_VERSION = "0.1" as const;
+
+const id = z.string().min(1);
+const nonEmpty = z.string().min(1);
+const artifactIds = z.array(id);
+const envelopeFields = {
+  protocol: z.literal(PROTOCOL_NAME),
+  version: z.literal(PROTOCOL_VERSION),
+  messageId: id,
+  goalId: id,
+  runId: id,
+  workerId: id,
+  createdAt: z.iso.datetime(),
+};
+
+const repositoryContext = z
+  .object({
+    repositoryId: id,
+    revision: nonEmpty,
+  })
+  .strict();
+
+const message = <T extends z.ZodType>(messageType: string, payload: T) =>
+  z
+    .object({
+      ...envelopeFields,
+      messageType: z.literal(messageType),
+      payload,
+    })
+    .strict();
+
+const planRequestPayload = z
+  .object({
+    objective: nonEmpty,
+    constraints: z.array(nonEmpty),
+    repository: repositoryContext,
+    completionCriteria: z.array(nonEmpty).min(1),
+  })
+  .strict();
+
+const taskPlan = z
+  .object({
+    taskId: id,
+    objective: nonEmpty,
+    role: nonEmpty,
+    capabilities: z.array(nonEmpty).min(1),
+    dependsOnTaskIds: z.array(id),
+    requiresIndependentVerification: z.boolean(),
+  })
+  .strict();
+
+const phasePlan = z
+  .object({
+    phaseId: id,
+    name: nonEmpty,
+    purpose: nonEmpty,
+    tasks: z.array(taskPlan).min(1),
+  })
+  .strict();
+
+const planResultPayload = z
+  .object({
+    phases: z.array(phasePlan).min(1),
+    assumptions: z.array(nonEmpty),
+    risks: z.array(nonEmpty),
+  })
+  .strict();
+
+const taskRequestPayload = z
+  .object({
+    taskId: id,
+    objective: nonEmpty,
+    role: nonEmpty,
+    requiredCapabilities: z.array(nonEmpty).min(1),
+    contextArtifactIds: artifactIds,
+    inputs: z.record(z.string(), z.unknown()),
+  })
+  .strict();
+
+const taskResultPayload = z
+  .object({
+    taskId: id,
+    status: z.enum(["succeeded", "blocked", "failed"]),
+    summary: nonEmpty,
+    artifactIds,
+    findingIds: z.array(id),
+  })
+  .strict();
+
+const researchResultPayload = z
+  .object({
+    summary: nonEmpty,
+    relevantPaths: z.array(nonEmpty),
+    observations: z
+      .array(
+        z
+          .object({
+            statement: nonEmpty,
+            evidenceArtifactIds: artifactIds,
+          })
+          .strict(),
+      )
+      .min(1),
+    risks: z.array(nonEmpty),
+  })
+  .strict();
+
+const implementationResultPayload = z
+  .object({
+    status: z.enum(["succeeded", "blocked", "failed"]),
+    revision: nonEmpty,
+    changedFiles: z.array(nonEmpty),
+    artifactIds,
+    testsAdded: z.array(nonEmpty),
+    summary: nonEmpty,
+    risks: z.array(nonEmpty),
+  })
+  .strict();
+
+const finding = z
+  .object({
+    findingId: id,
+    severity: z.enum(["blocker", "major", "minor", "note"]),
+    scope: nonEmpty,
+    description: nonEmpty,
+    evidenceArtifactIds: artifactIds,
+  })
+  .strict();
+
+const reviewResultPayload = z
+  .object({
+    outcome: z.enum(["pass", "changes_requested", "blocked"]),
+    reviewedArtifactIds: artifactIds,
+    findings: z.array(finding),
+    summary: nonEmpty,
+  })
+  .strict();
+
+const checkResult = z
+  .object({
+    name: nonEmpty,
+    status: z.enum(["passed", "failed", "skipped", "inconclusive"]),
+    command: nonEmpty.optional(),
+    exitCode: z.number().int().optional(),
+    artifactIds,
+  })
+  .strict();
+
+const testResultPayload = z
+  .object({
+    revision: nonEmpty,
+    outcome: z.enum(["pass", "fail", "inconclusive"]),
+    checks: z.array(checkResult).min(1),
+    summary: nonEmpty,
+  })
+  .strict();
+
+const verificationResultPayload = z
+  .object({
+    criterionId: id,
+    method: z.enum([
+      "executable_check",
+      "independent_review",
+      "policy_check",
+      "human_approval",
+    ]),
+    outcome: z.enum(["passed", "failed", "waived", "inconclusive"]),
+    evidenceArtifactIds: artifactIds,
+    rationale: nonEmpty,
+  })
+  .strict();
+
+const decisionResultPayload = z
+  .object({
+    decisionType: z.enum([
+      "accept_plan",
+      "retry",
+      "accept_finding",
+      "dismiss_finding",
+      "reopen",
+      "waive",
+      "complete",
+      "fail",
+    ]),
+    outcome: z.enum(["accepted", "rejected"]),
+    rationale: nonEmpty,
+    evidenceArtifactIds: artifactIds,
+    transitions: z
+      .array(
+        z
+          .object({
+            entityType: z.enum(["goal", "run", "phase", "task", "finding"]),
+            entityId: id,
+            from: nonEmpty,
+            to: nonEmpty,
+          })
+          .strict(),
+      )
+      .min(1),
+  })
+  .strict();
+
+const completionResultPayload = z
+  .object({
+    outcome: z.enum(["completed", "failed"]),
+    criteria: z
+      .array(
+        z
+          .object({
+            criterionId: id,
+            status: z.enum(["satisfied", "failed", "waived", "inconclusive"]),
+            evidenceArtifactIds: artifactIds,
+          })
+          .strict(),
+      )
+      .min(1),
+    finalReportArtifactId: id,
+    unresolvedFindingIds: z.array(id),
+    remainingRisks: z.array(nonEmpty),
+  })
+  .strict();
+
+export const PlanRequestSchema = message("PlanRequest", planRequestPayload);
+export const PlanResultSchema = message("PlanResult", planResultPayload);
+export const TaskRequestSchema = message("TaskRequest", taskRequestPayload);
+export const TaskResultSchema = message("TaskResult", taskResultPayload);
+export const ResearchResultSchema = message(
+  "ResearchResult",
+  researchResultPayload,
+);
+export const ImplementationResultSchema = message(
+  "ImplementationResult",
+  implementationResultPayload,
+);
+export const ReviewResultSchema = message("ReviewResult", reviewResultPayload);
+export const TestResultSchema = message("TestResult", testResultPayload);
+export const VerificationResultSchema = message(
+  "VerificationResult",
+  verificationResultPayload,
+);
+export const DecisionResultSchema = message(
+  "DecisionResult",
+  decisionResultPayload,
+);
+export const CompletionResultSchema = message(
+  "CompletionResult",
+  completionResultPayload,
+);
+
+export const ModelResultSchema = z.discriminatedUnion("messageType", [
+  PlanResultSchema,
+  TaskResultSchema,
+  ResearchResultSchema,
+  ImplementationResultSchema,
+  ReviewResultSchema,
+  TestResultSchema,
+  VerificationResultSchema,
+  DecisionResultSchema,
+  CompletionResultSchema,
+]);
+
+export const ProtocolMessageSchema = z.discriminatedUnion("messageType", [
+  PlanRequestSchema,
+  TaskRequestSchema,
+  PlanResultSchema,
+  TaskResultSchema,
+  ResearchResultSchema,
+  ImplementationResultSchema,
+  ReviewResultSchema,
+  TestResultSchema,
+  VerificationResultSchema,
+  DecisionResultSchema,
+  CompletionResultSchema,
+]);
+
+export type PlanRequest = z.infer<typeof PlanRequestSchema>;
+export type PlanResult = z.infer<typeof PlanResultSchema>;
+export type TaskRequest = z.infer<typeof TaskRequestSchema>;
+export type TaskResult = z.infer<typeof TaskResultSchema>;
+export type ResearchResult = z.infer<typeof ResearchResultSchema>;
+export type ImplementationResult = z.infer<typeof ImplementationResultSchema>;
+export type ReviewResult = z.infer<typeof ReviewResultSchema>;
+export type TestResult = z.infer<typeof TestResultSchema>;
+export type VerificationResult = z.infer<typeof VerificationResultSchema>;
+export type DecisionResult = z.infer<typeof DecisionResultSchema>;
+export type CompletionResult = z.infer<typeof CompletionResultSchema>;
+export type ModelResult = z.infer<typeof ModelResultSchema>;
+export type ProtocolMessage = z.infer<typeof ProtocolMessageSchema>;
+
+export function parsePlanRequest(input: unknown): PlanRequest {
+  return PlanRequestSchema.parse(input);
+}
+
+export function parseTaskRequest(input: unknown): TaskRequest {
+  return TaskRequestSchema.parse(input);
+}
+
+export function parseModelResult(input: unknown): ModelResult {
+  return ModelResultSchema.parse(input);
+}
+
+export function parseProtocolMessage(input: unknown): ProtocolMessage {
+  return ProtocolMessageSchema.parse(input);
+}

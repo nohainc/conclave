@@ -17,7 +17,9 @@ Create TypeScript/pnpm workspace, Flutter client, Cloudflare Workers app, local 
 ## Phase 2 — Conclave Protocol
 Implement versioned structured contracts for task, plan, research, implementation, review, test, verification, decision, and completion messages. Validate all external/AI input.
 
-**Exit:** malformed responses are rejected/retried and contract tests pass.
+See [docs/specifications/PROTOCOL.md](docs/specifications/PROTOCOL.md) for the envelope, contract inventory, and Core admission rule.
+
+**Exit:** malformed responses cannot enter Core state; they are rejected for retry or rerouting, and runtime contract tests pass.
 
 ## Phase 3 — Persistence and event model
 Create D1 schema/migrations and repository interfaces for projects, workers, goals, runs, phases, tasks, attempts, model calls, findings, verifications, artifacts, events, and usage. Configure R2 artifact references.

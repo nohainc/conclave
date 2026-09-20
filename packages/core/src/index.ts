@@ -1,3 +1,5 @@
+import { parseModelResult, type ModelResult } from "@conclave/protocol";
+
 export const CORE_PROTOCOL_VERSION = "0.1";
 
 export type GoalStatus =
@@ -23,4 +25,12 @@ export function isTerminalGoalStatus(status: GoalStatus): boolean {
     status === "cancelled" ||
     status === "superseded"
   );
+}
+
+/**
+ * Core's model-result admission boundary. Callers must provide untrusted data
+ * as unknown; only the parsed result may be used for state transitions.
+ */
+export function admitModelResult(input: unknown): ModelResult {
+  return parseModelResult(input);
 }

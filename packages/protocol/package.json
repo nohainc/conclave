@@ -1,5 +1,5 @@
 {
-  "name": "@conclave/core",
+  "name": "@conclave/protocol",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,6 +11,6 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@conclave/protocol": "workspace:*"
+    "zod": "^4.1.11"
   }
 }

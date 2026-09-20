@@ -35,13 +35,23 @@ importers:
 
   apps/worker: {}
 
-  packages/core: {}
+  packages/core:
+    dependencies:
+      '@conclave/protocol':
+        specifier: workspace:*
+        version: link:../protocol
 
   packages/local-runtime:
     dependencies:
       '@conclave/core':
         specifier: workspace:*
         version: link:../core
+
+  packages/protocol:
+    dependencies:
+      zod:
+        specifier: ^4.1.11
+        version: 4.6.5
 
 packages:
 
@@ -1353,6 +1363,9 @@ packages:
   youch@4.1.0-beta.10:
     resolution: {integrity: sha512-rLfVLB4FgQneDr0dv1oddCVZmKjcJ6yX6mS4pU82Mq/Dt9a3cLZQ62pDBL4AUO+uVrCvtWz3ZFUL2HFAFJ/BXQ==}
 
+  zod@4.6.5:
+    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
+
 snapshots:
 
   '@cloudflare/kv-asset-handler@0.5.0': {}
@@ -2513,3 +2526,5 @@ snapshots:
       '@speed-highlight/core': 1.2.24
       cookie: 1.1.1
       youch-core: 0.3.3
+
+  zod@4.6.5: {}

@@ -5,6 +5,7 @@ Phase 1 establishes a small monorepo with one shared Flutter application and pro
 ## Workspace layout
 
 - `packages/core` — provider-independent Core types and domain helpers.
+- `packages/protocol` — versioned runtime-validated machine-to-machine contracts.
 - `packages/local-runtime` — local execution boundary and environment configuration.
 - `apps/worker` — Cloudflare Worker API entrypoint and smoke tests.
 - `apps/flutter_app` — one Flutter codebase for Studio and web UI.
