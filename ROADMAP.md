@@ -80,7 +80,9 @@ See [docs/specifications/FORGE_MVP.md](docs/specifications/FORGE_MVP.md) for the
 ## Phase 11 — Durable cloud execution
 Map long-running goal execution to Cloudflare Workflows. Add cancellation/resume/recovery/idempotency. Introduce Queues or Durable Objects only for demonstrated needs.
 
-**Exit:** runs survive Worker restarts and long waits without losing state.
+See [docs/specifications/DURABLE_EXECUTION.md](docs/specifications/DURABLE_EXECUTION.md) for Workflow checkpoints, controls, idempotency, external events, and recovery semantics.
+
+**Exit:** runs survive Worker restarts and long waits without losing completed work.
 
 ## Phase 12 — CI/CD and evidence
 Integrate lint/build/unit/integration checks, optional preview deployments, smoke tests, approvals, and post-deploy verification.

@@ -11,4 +11,11 @@
   "vars": {
     "CONCLAVE_ENVIRONMENT": "development",
   },
+  "workflows": [
+    {
+      "name": "conclave-run",
+      "binding": "CONCLAVE_RUN_WORKFLOW",
+      "class_name": "ConclaveRunWorkflow",
+    },
+  ],
 }
