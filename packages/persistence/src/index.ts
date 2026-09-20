@@ -169,6 +169,74 @@ export interface UsageRecord {
   readonly recordedAt: string;
 }
 
+export interface OrganizationRecord extends EntityRecord {
+  readonly name: string;
+  readonly status: "active" | "suspended";
+  readonly plan: string;
+}
+
+export interface MembershipRecord {
+  readonly organizationId: string;
+  readonly userId: string;
+  readonly role: string;
+  readonly status: "active" | "invited" | "suspended";
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface ProjectMembershipRecord {
+  readonly projectId: string;
+  readonly userId: string;
+  readonly role: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface AuditLogRecord {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly actorUserId: string | null;
+  readonly action: string;
+  readonly resourceType: string;
+  readonly resourceId: string | null;
+  readonly outcome: "success" | "denied" | "failure";
+  readonly metadata: JsonValue;
+  readonly occurredAt: string;
+  readonly retentionUntil: string;
+}
+
+export interface BudgetRecord extends EntityRecord {
+  readonly organizationId: string;
+  readonly projectId: string | null;
+  readonly runId: string | null;
+  readonly maxInputTokens: number | null;
+  readonly maxOutputTokens: number | null;
+  readonly maxCostMicros: number | null;
+  readonly usedInputTokens: number;
+  readonly usedOutputTokens: number;
+  readonly usedCostMicros: number;
+  readonly status: "active" | "exhausted" | "disabled";
+}
+
+export interface EncryptedCredentialRecord {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly provider: string;
+  readonly keyId: string;
+  readonly algorithm: "AES-GCM";
+  readonly iv: string;
+  readonly ciphertext: string;
+  readonly createdAt: string;
+  readonly expiresAt: string | null;
+}
+
+export interface RetentionPolicyRecord extends EntityRecord {
+  readonly organizationId: string;
+  readonly auditDays: number;
+  readonly artifactDays: number;
+  readonly usageDays: number;
+}
+
 export interface Repository<T extends { readonly id: string }> {
   get(id: string): Promise<T | null>;
   save(record: T): Promise<void>;
@@ -217,6 +285,34 @@ export interface RunEventRepository {
 export interface UsageRepository {
   save(record: UsageRecord): Promise<void>;
   listByRun(runId: string): Promise<readonly UsageRecord[]>;
+}
+
+export type OrganizationRepository = Repository<OrganizationRecord>;
+export interface MembershipRepository {
+  get(organizationId: string, userId: string): Promise<MembershipRecord | null>;
+  save(record: MembershipRecord): Promise<void>;
+}
+export interface ProjectMembershipRepository {
+  listByProject(projectId: string): Promise<readonly ProjectMembershipRecord[]>;
+  save(record: ProjectMembershipRecord): Promise<void>;
+}
+export interface AuditLogRepository {
+  append(record: AuditLogRecord): Promise<void>;
+  listByOrganization(
+    organizationId: string,
+  ): Promise<readonly AuditLogRecord[]>;
+}
+export type BudgetRepository = Repository<BudgetRecord>;
+export interface EncryptedCredentialRepository {
+  get(
+    organizationId: string,
+    provider: string,
+  ): Promise<EncryptedCredentialRecord | null>;
+  save(record: EncryptedCredentialRecord): Promise<void>;
+}
+export interface RetentionPolicyRepository {
+  get(organizationId: string): Promise<RetentionPolicyRecord | null>;
+  save(record: RetentionPolicyRecord): Promise<void>;
 }
 
 export interface PersistenceRepositories {
