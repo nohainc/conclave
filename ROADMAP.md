@@ -38,7 +38,9 @@ See [docs/specifications/WORKER_REGISTRY.md](docs/specifications/WORKER_REGISTRY
 ## Phase 5 — Minimal two-model orchestration
 User goal -> Lead -> specialist -> Lead evaluation -> completion. Persist every transition and call.
 
-**Exit:** first real multi-model goal completes through Conclave.
+See [docs/specifications/TWO_MODEL_MVP.md](docs/specifications/TWO_MODEL_MVP.md) for the two adapters, configuration boundary, and persistence sequence.
+
+**Exit:** the first real Conclave goal completes through two configured model workers with every request, result, model call, and event persisted.
 
 ## Phase 6 — Goal decomposition and task graph
 Add phases, tasks, dependencies, retries, budgets, cancellation, and deterministic state transitions. AI proposes plans; Core validates/persists them.

@@ -47,6 +47,21 @@ importers:
         specifier: workspace:*
         version: link:../core
 
+  packages/orchestration:
+    dependencies:
+      '@conclave/core':
+        specifier: workspace:*
+        version: link:../core
+      '@conclave/persistence':
+        specifier: workspace:*
+        version: link:../persistence
+      '@conclave/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@conclave/providers':
+        specifier: workspace:*
+        version: link:../providers
+
   packages/persistence: {}
 
   packages/protocol:
@@ -54,6 +69,15 @@ importers:
       zod:
         specifier: ^4.1.11
         version: 4.6.5
+
+  packages/providers:
+    dependencies:
+      '@conclave/core':
+        specifier: workspace:*
+        version: link:../core
+      '@conclave/protocol':
+        specifier: workspace:*
+        version: link:../protocol
 
 packages:
 

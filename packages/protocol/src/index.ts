@@ -23,7 +23,10 @@ const repositoryContext = z
   })
   .strict();
 
-const message = <T extends z.ZodType>(messageType: string, payload: T) =>
+const message = <TMessageType extends string, TPayload extends z.ZodType>(
+  messageType: TMessageType,
+  payload: TPayload,
+) =>
   z
     .object({
       ...envelopeFields,

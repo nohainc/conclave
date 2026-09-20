@@ -3,13 +3,13 @@
   "private": true,
   "packageManager": "pnpm@11.19.0",
   "scripts": {
-    "build": "tsc -p packages/protocol/tsconfig.json && tsc -p packages/persistence/tsconfig.json && tsc -p packages/core/tsconfig.json && tsc -p packages/local-runtime/tsconfig.json && tsc -p apps/worker/tsconfig.json",
+    "build": "tsc -p packages/protocol/tsconfig.json && tsc -p packages/persistence/tsconfig.json && tsc -p packages/core/tsconfig.json && tsc -p packages/providers/tsconfig.json && tsc -p packages/orchestration/tsconfig.json && tsc -p packages/local-runtime/tsconfig.json && tsc -p apps/worker/tsconfig.json",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
-    "test": "vitest run packages/protocol/test packages/persistence/test packages/core/test packages/local-runtime/test apps/worker/test",
-    "typecheck": "tsc -p packages/protocol/tsconfig.json && tsc -p packages/persistence/tsconfig.json && tsc -p packages/core/tsconfig.json && tsc -p packages/local-runtime/tsconfig.json && tsc -p apps/worker/tsconfig.json",
-    "check": "prettier --check . && eslint . && tsc -p packages/protocol/tsconfig.json && tsc -p packages/persistence/tsconfig.json && tsc -p packages/core/tsconfig.json && tsc -p packages/local-runtime/tsconfig.json && tsc -p apps/worker/tsconfig.json && vitest run packages/protocol/test packages/persistence/test packages/core/test packages/local-runtime/test apps/worker/test"
+    "test": "vitest run packages/protocol/test packages/persistence/test packages/core/test packages/providers/test packages/orchestration/test packages/local-runtime/test apps/worker/test",
+    "typecheck": "tsc -p packages/protocol/tsconfig.json && tsc -p packages/persistence/tsconfig.json && tsc -p packages/core/tsconfig.json && tsc -p packages/providers/tsconfig.json && tsc -p packages/orchestration/tsconfig.json && tsc -p packages/local-runtime/tsconfig.json && tsc -p apps/worker/tsconfig.json",
+    "check": "prettier --check . && eslint . && tsc -p packages/protocol/tsconfig.json && tsc -p packages/persistence/tsconfig.json && tsc -p packages/core/tsconfig.json && tsc -p packages/providers/tsconfig.json && tsc -p packages/orchestration/tsconfig.json && tsc -p packages/local-runtime/tsconfig.json && tsc -p apps/worker/tsconfig.json && vitest run packages/protocol/test packages/persistence/test packages/core/test packages/providers/test packages/orchestration/test packages/local-runtime/test apps/worker/test"
   },
   "devDependencies": {
     "@eslint/js": "^9.35.0",
