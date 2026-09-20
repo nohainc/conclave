@@ -52,8 +52,10 @@ Organization
               -> Finding
               -> Verification
               -> Decision
-              -> Event
+      -> Event
 ```
+
+The normative definitions, state semantics, completion rules, failure classes, and first Forge workflow are in [docs/specifications/DOMAIN_SPECIFICATION.md](docs/specifications/DOMAIN_SPECIFICATION.md). That specification takes precedence over shorthand vocabulary in this overview.
 
 ## Fundamental rules
 1. Conclave manages **Goals**, not prompts.

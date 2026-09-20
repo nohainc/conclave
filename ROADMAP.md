@@ -5,7 +5,9 @@ This roadmap is ordered for AI delegation. Do not skip foundational phases merel
 ## Phase 0 — Product and domain specification
 Define goals, workers, roles, tasks, attempts, artifacts, findings, verification, decisions, events, completion criteria, and the Forge MVP workflow.
 
-**Exit:** a development goal can be described end-to-end without implementation ambiguity.
+See [docs/specifications/DOMAIN_SPECIFICATION.md](docs/specifications/DOMAIN_SPECIFICATION.md) for the normative domain model, lifecycle, failure semantics, and Forge workflow.
+
+**Exit:** the full lifecycle from user message to verified completion is unambiguous, including ownership of state transitions, required evidence, independent review, correction loops, and terminal failure states.
 
 ## Phase 1 — Monorepo and quality foundation
 Create TypeScript/pnpm workspace, Flutter client, Cloudflare Workers app, local runtime package, formatting/linting/tests, GitHub Actions, local development documentation.
