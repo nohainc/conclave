@@ -31,7 +31,9 @@ See [docs/specifications/PERSISTENCE.md](docs/specifications/PERSISTENCE.md) for
 ## Phase 4 — Worker registry and provider abstraction
 Create worker/capability/role/permission configuration. Add exactly two initial model adapters and mock workers.
 
-**Exit:** Core routes a typed task to a capability-compatible worker without provider-specific domain logic.
+See [docs/specifications/WORKER_REGISTRY.md](docs/specifications/WORKER_REGISTRY.md) for resource fields and resolution rules.
+
+**Exit:** Core resolves a request such as `code_review` to an available capability-compatible worker without provider-specific domain logic.
 
 ## Phase 5 — Minimal two-model orchestration
 User goal -> Lead -> specialist -> Lead evaluation -> completion. Persist every transition and call.

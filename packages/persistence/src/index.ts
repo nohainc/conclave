@@ -16,11 +16,15 @@ export interface ProjectRecord extends EntityRecord {
 export interface WorkerRecord extends EntityRecord {
   readonly name: string;
   readonly kind: "model" | "agent" | "runtime" | "ci" | "tool" | "human";
+  readonly provider: string;
   readonly adapterVersion: string;
   readonly roles: readonly string[];
   readonly capabilities: readonly string[];
   readonly permissions: readonly string[];
   readonly independenceKey: string;
+  readonly availability: "available" | "busy" | "disabled" | "offline";
+  readonly executionEnvironment: "cloud" | "local" | "ci" | "human";
+  readonly costMetadata: JsonValue;
 }
 
 export interface GoalRecord extends EntityRecord {

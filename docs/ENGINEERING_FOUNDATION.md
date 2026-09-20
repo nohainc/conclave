@@ -7,6 +7,7 @@ Phase 1 establishes a small monorepo with one shared Flutter application and pro
 - `packages/core` — provider-independent Core types and domain helpers.
 - `packages/protocol` — versioned runtime-validated machine-to-machine contracts.
 - `packages/persistence` — D1/R2-neutral records, repository interfaces, and run reconstruction.
+- Core worker registry — configurable capability/role/permission routing independent of provider.
 - `packages/local-runtime` — local execution boundary and environment configuration.
 - `apps/worker` — Cloudflare Worker API entrypoint and smoke tests.
 - `apps/flutter_app` — one Flutter codebase for Studio and web UI.
