@@ -1,4 +1,10 @@
 import type { PlanResult } from "@conclave/protocol";
+import {
+  type Finding,
+  type VerificationPolicy,
+  type VerificationRecord,
+  VerificationGate,
+} from "./verification.js";
 
 export type GraphTaskStatus =
   | "pending"
@@ -98,6 +104,7 @@ export interface TaskExecutionPolicy {
   readonly maxTotalAttempts: number;
   readonly maxCostMicros: number;
   readonly timeoutMs: number;
+  readonly verificationPolicy?: VerificationPolicy;
 }
 
 export interface TaskState {
@@ -122,6 +129,7 @@ export class TaskGraphState {
   private runStatus: GraphRunStatus = "active";
   private totalAttempts = 0;
   private totalCostMicros = 0;
+  readonly verification: VerificationGate | null;
 
   constructor(
     readonly graph: ValidatedTaskGraph,
@@ -145,6 +153,9 @@ export class TaskGraphState {
     ) {
       throw new Error("Task execution limits must be positive");
     }
+    this.verification = policy.verificationPolicy
+      ? new VerificationGate(policy.verificationPolicy)
+      : null;
   }
 
   snapshot(): TaskGraphSnapshot {
@@ -225,6 +236,7 @@ export class TaskGraphState {
     costMicros: number,
   ): TaskState {
     const state = this.requireRunning(taskId);
+    this.verification?.assertCanComplete(taskId);
     this.totalCostMicros += costMicros;
     if (this.totalCostMicros > this.policy.maxCostMicros) {
       return this.failTask(taskId, finishedAt, "budget", 0);
@@ -294,6 +306,36 @@ export class TaskGraphState {
     };
     this.taskStates.set(taskId, next);
     return next;
+  }
+
+  openFinding(finding: Finding): void {
+    if (this.verification === null)
+      throw new Error("No verification policy is configured");
+    this.verification.openFinding(finding);
+  }
+
+  recordVerification(record: VerificationRecord): void {
+    if (this.verification === null)
+      throw new Error("No verification policy is configured");
+    this.verification.recordVerification(record);
+  }
+
+  fixFinding(findingId: string): Finding {
+    if (this.verification === null)
+      throw new Error("No verification policy is configured");
+    return this.verification.fixFinding(findingId);
+  }
+
+  verifyFinding(findingId: string): Finding {
+    if (this.verification === null)
+      throw new Error("No verification policy is configured");
+    return this.verification.verifyFinding(findingId);
+  }
+
+  reopenFinding(findingId: string): Finding {
+    if (this.verification === null)
+      throw new Error("No verification policy is configured");
+    return this.verification.reopenFinding(findingId);
   }
 
   timeoutTasks(nowMs: number, timestamp: string): readonly TaskState[] {

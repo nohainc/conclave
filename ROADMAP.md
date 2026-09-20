@@ -52,7 +52,9 @@ See [docs/specifications/TASK_GRAPH.md](docs/specifications/TASK_GRAPH.md) for g
 ## Phase 7 — Independent verification loops
 Add findings, review decisions, reopen/fix/re-review loops, verification policies, and isolated reviewer contexts.
 
-**Exit:** an implementation cannot complete while blocking findings or required verification remain unresolved.
+See [docs/specifications/VERIFICATION.md](docs/specifications/VERIFICATION.md) for policy rules, isolation, and finding lifecycle.
+
+**Exit:** a task cannot complete while required verification or blocking findings remain unresolved.
 
 ## Phase 8 — Conclave Studio execution UI
 Build project/goal creation, worker setup, goal graph, timeline/events, task details, findings, artifacts, and conversational goal interface.

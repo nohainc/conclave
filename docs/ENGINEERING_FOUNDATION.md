@@ -9,6 +9,7 @@ Phase 1 establishes a small monorepo with one shared Flutter application and pro
 - `packages/persistence` — D1/R2-neutral records, repository interfaces, and run reconstruction.
 - Core worker registry — configurable capability/role/permission routing independent of provider.
 - Core task graph — validated dependencies with deterministic retries, budgets, timeouts, cancellation, and reopening.
+- Core verification gate — isolated reviews, policy-based evidence, blocking findings, and fix/re-review loops.
 - `packages/local-runtime` — local execution boundary and environment configuration.
 - `apps/worker` — Cloudflare Worker API entrypoint and smoke tests.
 - `apps/flutter_app` — one Flutter codebase for Studio and web UI.
