@@ -440,7 +440,9 @@ export async function executeTwoModelGoal(
         repositoryId: input.repositoryId,
         revision: input.revision,
       },
-      completionCriteria: [...input.goal.completionCriteria],
+      completionCriteria: input.goal.completionCriteria.map(
+        (criterion) => criterion.description,
+      ),
     },
   };
   const plan = await call(input.lead, planTask, planRequest, "PlanResult");

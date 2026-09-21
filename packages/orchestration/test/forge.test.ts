@@ -21,7 +21,30 @@ const goal: GoalRecord = {
   originalMessage: "Fix the greeting bug",
   objective: "Fix the greeting bug and add a regression test",
   constraints: ["Keep the public API stable"],
-  completionCriteria: ["The bug is fixed", "A regression test passes"],
+  completionCriteria: [
+    {
+      id: "criterion-1",
+      description: "The bug is fixed",
+      verificationRequirement: "policy_check",
+      status: "pending",
+      evidenceArtifactIds: [],
+      verifiedByWorkerId: null,
+      verificationId: null,
+      createdAt: "2026-09-21T10:00:00.000Z",
+      updatedAt: "2026-09-21T10:00:00.000Z",
+    },
+    {
+      id: "criterion-2",
+      description: "A regression test passes",
+      verificationRequirement: "policy_check",
+      status: "pending",
+      evidenceArtifactIds: [],
+      verifiedByWorkerId: null,
+      verificationId: null,
+      createdAt: "2026-09-21T10:00:00.000Z",
+      updatedAt: "2026-09-21T10:00:00.000Z",
+    },
+  ],
   verificationPolicy: { name: "high" },
   status: "running",
   createdAt: "2026-09-21T10:00:00.000Z",
@@ -202,6 +225,13 @@ describe("Forge MVP workflow", () => {
           evidenceArtifactIds: [],
           rationale: "Review and executable evidence cover the criteria.",
         }),
+        envelope("VerificationResult", "lead", {
+          criterionId: "criterion-2",
+          method: "policy_check",
+          outcome: "passed",
+          evidenceArtifactIds: [],
+          rationale: "The regression test passes.",
+        }),
         envelope("CompletionResult", "lead", {
           outcome: "completed",
           criteria: [
@@ -347,7 +377,7 @@ describe("Forge MVP workflow", () => {
     expect(appliedOperations.every((operations) => operations.length > 0)).toBe(
       true,
     );
-    expect(persistence.modelCalls).toHaveLength(11);
+    expect(persistence.modelCalls).toHaveLength(12);
     expect(persistence.artifacts.length).toBeGreaterThan(15);
     expect(persistence.events.at(-1)?.eventType).toBe("RunCompleted");
     expect(

@@ -61,9 +61,9 @@ Forge uses the `high` verification policy for the MVP. Completion requires:
 1. a passing independent review;
 2. no unresolved blocking Finding;
 3. passing executable test evidence;
-4. a passing final VerificationResult;
-5. a CompletionResult marked `completed` with no unresolved Finding IDs;
+4. an individually passing VerificationResult for every Goal criterion;
+5. a CompletionResult marked `completed` with exactly the Goal criterion IDs and no unresolved Finding IDs;
 6. a final report Artifact containing the machine evidence and interpreted TestResult;
 7. a persisted final report Artifact and `RunCompleted` Event.
 
-AI statements such as “tests pass” are not enough. The test result must be grounded in evidence returned by the runtime adapter.
+AI statements such as “tests pass” are not enough. Each criterion must be verified by Core against persisted evidence returned by the runtime adapter; the Lead cannot mark an unverified criterion complete.

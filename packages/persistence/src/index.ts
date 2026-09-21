@@ -13,6 +13,21 @@ export interface ProjectRecord extends EntityRecord {
   readonly repositoryId: string | null;
 }
 
+export type CompletionCriterionStatus =
+  "pending" | "verified" | "failed" | "waived";
+
+export interface CompletionCriterionRecord {
+  readonly id: string;
+  readonly description: string;
+  readonly verificationRequirement: string;
+  readonly status: CompletionCriterionStatus;
+  readonly evidenceArtifactIds: readonly string[];
+  readonly verifiedByWorkerId: string | null;
+  readonly verificationId: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
 export interface WorkerRecord extends EntityRecord {
   readonly name: string;
   readonly kind: "model" | "agent" | "runtime" | "ci" | "tool" | "human";
@@ -32,7 +47,7 @@ export interface GoalRecord extends EntityRecord {
   readonly originalMessage: string;
   readonly objective: string;
   readonly constraints: readonly string[];
-  readonly completionCriteria: readonly string[];
+  readonly completionCriteria: readonly CompletionCriterionRecord[];
   readonly verificationPolicy: JsonValue;
   readonly status: string;
 }

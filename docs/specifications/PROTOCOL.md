@@ -30,7 +30,7 @@ The runtime schemas live in `@conclave/protocol`. They reject the wrong version,
 - `TestResult` — executable check outcomes tied to a revision and evidence Artifacts.
 - `VerificationResult` — criterion-level verification method, outcome, rationale, and evidence.
 - `DecisionResult` — a proposed state decision with rationale and explicit transitions.
-- `CompletionResult` — criterion matrix, final report Artifact, unresolved Findings, and remaining risks.
+- `CompletionResult` — criterion matrix, final report Artifact, unresolved Findings, and remaining risks. It is a recommendation; Core independently checks that the matrix exactly matches the Goal's first-class criteria and that every criterion is verified.
 
 `PlanRequest` and `TaskRequest` are worker inputs. The remaining contracts are worker outputs. `ModelResultSchema` is the union used when the expected output type is selected dynamically.
 

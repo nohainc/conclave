@@ -134,7 +134,7 @@ Events are ordered within a Run, carry a schema version and correlation IDs, and
 
 ## 3. Completion criteria and verification policy
 
-Completion criteria are typed assertions, not prose-only aspirations. Each criterion has an ID, description, required evidence type, evaluator, blocking behavior, and status. Forge supports at least:
+Completion criteria are first-class records created with the Goal, not an unstructured string list. Each criterion has an ID, description, verification requirement, evidence references, and status. Core owns the criterion state and Forge supports at least:
 
 - requested behavior is implemented;
 - relevant tests are added or an explicit rationale records why not;
@@ -145,7 +145,7 @@ Completion criteria are typed assertions, not prose-only aspirations. Each crite
 
 The verification policy specifies required roles, independence rules, minimum evidence, retry limits, timeout/budget limits, and approval requirements. A criterion may be marked `satisfied` only by accepted Verification evidence. Criteria may also be `failed`, `waived`, or `inconclusive`; `waived` requires an explicit Decision and cannot silently satisfy a mandatory criterion.
 
-Run completion requires all of the following:
+The Lead may recommend completion, but its report is advisory. Core requires an exact criterion-id mapping and proves each criterion independently before allowing the terminal state. Run completion requires all of the following:
 
 1. every mandatory criterion is satisfied or explicitly approved as waived;
 2. all required Tasks and Phases are successful;
@@ -281,4 +281,3 @@ Phase 0 is complete when a reviewer can answer these questions from the document
 - What happens on malformed output, worker outage, failed tests, cancellation, or exhausted retries?
 - Who owns each state transition and how is it audited?
 - What exact sequence does Forge follow from user message to final report?
-

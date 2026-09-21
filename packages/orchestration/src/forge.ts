@@ -10,6 +10,7 @@ import type {
   TaskRecord,
 } from "@conclave/persistence";
 import {
+  CompletionCriteriaGate,
   createIsolatedReviewContext,
   getVerificationPolicy,
   validateTaskGraph,
@@ -130,7 +131,7 @@ export interface ForgeWorkflowResult {
   readonly reviews: readonly ReviewResult[];
   readonly tests: TestResult;
   readonly machineEvidence: ForgeRuntimeEvidence;
-  readonly verification: VerificationResult;
+  readonly verification: readonly VerificationResult[];
   readonly completion: CompletionResult;
   readonly correctionLoops: number;
 }
@@ -663,7 +664,9 @@ export async function executeForgeGoal(
         repositoryId: input.repositoryId,
         revision: input.revision,
       },
-      completionCriteria: [...input.goal.completionCriteria],
+      completionCriteria: input.goal.completionCriteria.map(
+        (criterion) => criterion.description,
+      ),
     },
   };
   const plan = await call(input.lead, planningTask, planRequest, "PlanResult");
@@ -942,35 +945,47 @@ export async function executeForgeGoal(
     ["evaluation"],
     "VerificationResult",
   );
-  const verificationRequest: TaskRequest = {
-    ...testRequest,
-    messageId: id(),
-    workerId: input.lead.resource.id,
-    payload: {
-      ...testRequest.payload,
-      taskId: verificationTask.id,
-      objective:
-        "Verify every completion criterion using the review and test evidence",
-      role: "Verifier",
-      requiredCapabilities: ["evaluation"],
-      inputs: {
-        reviews: reviews.map((review) => review.payload),
-        tests: tests.payload,
-        completionCriteria: input.goal.completionCriteria,
-      },
-    },
-  };
-  const verification = await call(
-    input.lead,
-    verificationTask,
-    verificationRequest,
-    "VerificationResult",
-    [testEvidenceId, implementationEvidenceId],
+  const criteriaGate = new CompletionCriteriaGate(
+    input.goal.completionCriteria,
   );
-  if (
-    verification.payload.outcome !== "passed" ||
-    !gate.canComplete(implementationTask.id)
-  )
+  const verificationResults: VerificationResult[] = [];
+  for (const criterion of input.goal.completionCriteria) {
+    const verificationRequest: TaskRequest = {
+      ...testRequest,
+      messageId: id(),
+      workerId: input.lead.resource.id,
+      payload: {
+        ...testRequest.payload,
+        taskId: verificationTask.id,
+        objective: `Verify completion criterion ${criterion.id}: ${criterion.description}`,
+        role: "Verifier",
+        requiredCapabilities: ["evaluation"],
+        inputs: {
+          reviews: reviews.map((review) => review.payload),
+          tests: tests.payload,
+          completionCriterion: criterion,
+        },
+      },
+    };
+    const verification = await call(
+      input.lead,
+      verificationTask,
+      verificationRequest,
+      "VerificationResult",
+      [testEvidenceId, implementationEvidenceId],
+    );
+    criteriaGate.recordVerification({
+      criterionId: verification.payload.criterionId,
+      method: verification.payload.method,
+      outcome: verification.payload.outcome,
+      verificationId: id(),
+      verifierWorkerId: input.lead.resource.id,
+      evidenceArtifactIds: [testEvidenceId, implementationEvidenceId],
+    });
+    verificationResults.push(verification);
+  }
+  criteriaGate.assertAllVerified();
+  if (!gate.canComplete(implementationTask.id))
     throw new Error("Forge verification gate did not pass");
 
   const reportingPhase = await phase(
@@ -986,15 +1001,15 @@ export async function executeForgeGoal(
     "CompletionResult",
   );
   const completionRequest: TaskRequest = {
-    ...verificationRequest,
+    ...testRequest,
     messageId: id(),
     workerId: input.lead.resource.id,
     payload: {
-      ...verificationRequest.payload,
+      ...testRequest.payload,
       taskId: completionTask.id,
       objective: "Produce the final verified completion report",
       inputs: {
-        verification: verification.payload,
+        verifications: verificationResults.map((result) => result.payload),
         implementation: implementation.payload,
         reviews: reviews.map((review) => review.payload),
         tests: tests.payload,
@@ -1008,6 +1023,7 @@ export async function executeForgeGoal(
     "CompletionResult",
     [testEvidenceId, implementationEvidenceId],
   );
+  criteriaGate.assertCompletionClaim(completion.payload.criteria);
   if (
     completion.payload.outcome !== "completed" ||
     completion.payload.unresolvedFindingIds.length > 0
@@ -1036,7 +1052,7 @@ export async function executeForgeGoal(
     reviews,
     tests,
     machineEvidence,
-    verification,
+    verification: verificationResults,
     completion,
     correctionLoops,
   };

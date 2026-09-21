@@ -3,6 +3,7 @@ import { parseModelResult, type ModelResult } from "@conclave/protocol";
 export * from "./worker-registry.js";
 export * from "./task-graph.js";
 export * from "./verification.js";
+export * from "./completion.js";
 
 export const CORE_PROTOCOL_VERSION = "0.1";
 
