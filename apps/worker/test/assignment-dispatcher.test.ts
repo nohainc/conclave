@@ -354,6 +354,33 @@ describe("Assignment Dispatcher (Cloud -> Agent -> Worker)", () => {
         .prepare("SELECT * FROM tasks WHERE id = 'task-1'")
         .get() as Record<string, unknown>;
       expect(taskRow.status).toBe("completed");
+
+      await recordAssignmentResult(d1, dispatchResult.assignmentId, {
+        status: "completed",
+        output: { result: "late replacement" },
+        artifactIds: ["late-artifact"],
+        summary: "Late duplicate",
+      });
+      const stableAssignment = db
+        .prepare("SELECT output_json FROM worker_assignments WHERE id = ?")
+        .get(dispatchResult.assignmentId) as { output_json: string };
+      expect(stableAssignment.output_json).toContain("Feature X implemented");
+
+      await recordAssignmentError(d1, dispatchResult.assignmentId, {
+        status: "failed",
+        error: {
+          code: "LATE_ERROR",
+          message: "must not regress completed state",
+          retryable: false,
+        },
+      });
+      expect(
+        (
+          db
+            .prepare("SELECT status FROM worker_assignments WHERE id = ?")
+            .get(dispatchResult.assignmentId) as { status: string }
+        ).status,
+      ).toBe("completed");
     });
 
     it("transitions assignment, attempt, and task to failed on error", async () => {

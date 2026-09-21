@@ -368,6 +368,15 @@ export async function recordAssignmentResult(
 ): Promise<void> {
   const now = new Date().toISOString();
 
+  const existing = await db
+    .prepare(
+      `SELECT status, task_id, attempt_id FROM worker_assignments WHERE id = ?1`,
+    )
+    .bind(assignmentId)
+    .first<{ status: string; task_id: string; attempt_id: string }>();
+  if (!existing || existing.status === "completed") return;
+  if (existing.status === "failed" || existing.status === "cancelled") return;
+
   // 1. Update assignment
   await db
     .prepare(
@@ -377,22 +386,13 @@ export async function recordAssignmentResult(
     .run();
 
   // 2. Query assignment context
-  const assignmentRow = await db
-    .prepare(`SELECT task_id, attempt_id FROM worker_assignments WHERE id = ?1`)
-    .bind(assignmentId)
-    .first<{ task_id: string; attempt_id: string }>();
-
-  if (assignmentRow) {
+  if (existing) {
     // 3. Update attempt
     await db
       .prepare(
         `UPDATE attempts SET status = 'completed', output_artifact_ids_json = ?1, finished_at = ?2 WHERE id = ?3`,
       )
-      .bind(
-        JSON.stringify(result.artifactIds || []),
-        now,
-        assignmentRow.attempt_id,
-      )
+      .bind(JSON.stringify(result.artifactIds || []), now, existing.attempt_id)
       .run();
 
     // 4. Update task
@@ -400,7 +400,7 @@ export async function recordAssignmentResult(
       .prepare(
         `UPDATE tasks SET status = 'completed', updated_at = ?1 WHERE id = ?2`,
       )
-      .bind(now, assignmentRow.task_id)
+      .bind(now, existing.task_id)
       .run();
   }
 }
@@ -415,6 +415,19 @@ export async function recordAssignmentError(
 ): Promise<void> {
   const now = new Date().toISOString();
 
+  const existing = await db
+    .prepare(
+      `SELECT status, task_id, attempt_id FROM worker_assignments WHERE id = ?1`,
+    )
+    .bind(assignmentId)
+    .first<{ status: string; task_id: string; attempt_id: string }>();
+  if (
+    !existing ||
+    ["completed", "failed", "cancelled"].includes(existing.status)
+  ) {
+    return;
+  }
+
   await db
     .prepare(
       `UPDATE worker_assignments SET status = 'failed', error_json = ?1, updated_at = ?2 WHERE id = ?3`,
@@ -422,24 +435,19 @@ export async function recordAssignmentError(
     .bind(JSON.stringify(failure), now, assignmentId)
     .run();
 
-  const assignmentRow = await db
-    .prepare(`SELECT task_id, attempt_id FROM worker_assignments WHERE id = ?1`)
-    .bind(assignmentId)
-    .first<{ task_id: string; attempt_id: string }>();
-
-  if (assignmentRow) {
+  if (existing) {
     await db
       .prepare(
         `UPDATE attempts SET status = 'failed', failure_class = ?1, finished_at = ?2 WHERE id = ?3`,
       )
-      .bind(failure.error.code, now, assignmentRow.attempt_id)
+      .bind(failure.error.code, now, existing.attempt_id)
       .run();
 
     await db
       .prepare(
         `UPDATE tasks SET status = 'failed', updated_at = ?1 WHERE id = ?2`,
       )
-      .bind(now, assignmentRow.task_id)
+      .bind(now, existing.task_id)
       .run();
   }
 }
