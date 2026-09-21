@@ -89,6 +89,12 @@ export class InteractiveConnector {
   }
 
   registerTask(task: ConnectorTask): void {
+    if (this.tasks.has(task.taskId)) {
+      throw new InteractiveConnectorError(
+        `Task '${task.taskId}' is already registered`,
+        "conflict",
+      );
+    }
     this.tasks.set(task.taskId, {
       ...task,
       status: "queued",
@@ -98,6 +104,34 @@ export class InteractiveConnector {
       findings: [],
       statusReport: null,
     });
+  }
+
+  getTaskStatus(
+    registrationToken: string,
+    taskId: string,
+  ): {
+    readonly status: TaskState["status"];
+    readonly result: unknown | null;
+    readonly candidates: readonly unknown[];
+    readonly findings: readonly unknown[];
+    readonly statusReport: ConnectorStatus | null;
+  } {
+    if (registrationToken !== this.options.registrationToken) {
+      throw new InteractiveConnectorError(
+        "Connector authentication required",
+        "unauthorized",
+      );
+    }
+    const task = this.tasks.get(taskId);
+    if (!task)
+      throw new InteractiveConnectorError("Task not found", "not_found");
+    return {
+      status: task.status,
+      result: task.result,
+      candidates: [...task.candidates],
+      findings: [...task.findings],
+      statusReport: task.statusReport,
+    };
   }
 
   registerSession(

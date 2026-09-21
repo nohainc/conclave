@@ -94,3 +94,28 @@ export async function handleConnectorRequest(
       return Response.json({ error: "not_found" }, { status: 404 });
   }
 }
+
+export async function handleConnectorTaskRequest(
+  request: Request,
+  env: ConnectorEnv,
+  taskId?: string,
+): Promise<Response> {
+  const service = connector(env);
+  const token = bearer(request) ?? "";
+  if (request.method === "POST" && !taskId) {
+    const body = (await request.json()) as Record<string, unknown>;
+    service.registerTask({
+      taskId: typeof body.taskId === "string" ? body.taskId : crypto.randomUUID(),
+      goalId: typeof body.goalId === "string" ? body.goalId : "web-goal",
+      runId: typeof body.runId === "string" ? body.runId : "web-run",
+      objective: typeof body.objective === "string" ? body.objective : "",
+      context: [],
+      messages: [body.prompt ?? body.input ?? {}],
+    });
+    return Response.json({ accepted: true });
+  }
+  if (request.method === "GET" && taskId) {
+    return Response.json(service.getTaskStatus(token, taskId));
+  }
+  return Response.json({ error: "not_found" }, { status: 404 });
+}

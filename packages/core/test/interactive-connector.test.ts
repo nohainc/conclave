@@ -87,4 +87,34 @@ describe("interactive connector", () => {
       connector.getContext(session.sessionId, session.sessionToken, "missing"),
     ).toThrow("expired");
   });
+
+  it("exposes authenticated task status for the web relay", () => {
+    const connector = new InteractiveConnector({
+      registrationToken: "relay-token",
+      idFactory: (prefix) => `${prefix}-web`,
+    });
+    connector.registerTask({
+      taskId: "web-task",
+      goalId: "goal-1",
+      runId: "run-1",
+      objective: "Propose an architecture",
+      context: [],
+      messages: [{ prompt: "Return a candidate" }],
+    });
+    expect(connector.getTaskStatus("relay-token", "web-task")).toMatchObject({
+      status: "queued",
+      result: null,
+    });
+    expect(() => connector.getTaskStatus("wrong", "web-task")).toThrow(
+      "authentication",
+    );
+    expect(() => connector.registerTask({
+      taskId: "web-task",
+      goalId: "goal-1",
+      runId: "run-1",
+      objective: "Duplicate",
+      context: [],
+      messages: [],
+    })).toThrow("already registered");
+  });
 });
