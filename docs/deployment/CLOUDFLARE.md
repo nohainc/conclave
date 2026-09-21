@@ -8,17 +8,17 @@
 - `docs.conclaveax.com` — documentation later.
 - `status.conclaveax.com` — status page later.
 
-## Initial deployment
+## Current development deployment
 
-The first public deployment intentionally publishes only the Flutter web application at `app.conclaveax.com`.
+`app.conclaveax.com` is the current development/staging web application. It runs the real Studio application; there is no demo-mode runtime branch.
 
-It is built in **demo mode**:
+The deployment builds Flutter Web with the planned same-origin API endpoint:
 
 ```
-flutter build web --release --dart-define=CONCLAVE_DEMO_MODE=true
+flutter build web --release --dart-define=CONCLAVE_API_URL=https://app.conclaveax.com/api
 ```
 
-This means the UI is publicly viewable without exposing unfinished orchestration, D1 data, model provider credentials, Local Runtime access, or backend control APIs.
+Until the real API is deployed at that endpoint, Studio is expected to show its normal connection-error state. This is intentional: development should expose real integration gaps rather than hide them behind fake runtime data.
 
 The static application is deployed with Cloudflare Workers Static Assets. SPA fallback is enabled so Flutter web routes resolve to `index.html`.
 

@@ -18,17 +18,11 @@ class ConclaveApp extends StatelessWidget {
   final PlatformServices services;
   final StudioDataSource? dataSource;
 
-  static const bool _demoMode = bool.fromEnvironment(
-    'CONCLAVE_DEMO_MODE',
-    defaultValue: false,
-  );
-
   @override
   Widget build(BuildContext context) {
     return StudioApp(
       services: services,
-      dataSource: dataSource ??
-          (_demoMode ? const DemoStudioDataSource() : StudioApiClient()),
+      dataSource: dataSource ?? StudioApiClient(),
     );
   }
 }
