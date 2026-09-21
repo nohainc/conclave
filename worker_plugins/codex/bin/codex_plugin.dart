@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:conclave_codex_plugin/codex_worker.dart';
+import 'package:conclave_codex_plugin/codex_manifest.dart';
 
 Future<void> main() async {
   final worker = CodexWorker();
@@ -11,15 +12,15 @@ Future<void> main() async {
     try {
       final result = switch (request['method']) {
         'initialize' => {
-            'pluginId': 'conclave.codex',
-            'protocolVersion': '2.0'
+            'pluginId': codexPluginManifest['pluginId'],
+            'protocolVersion': codexPluginManifest['protocolVersion']
           },
-        'health' => {'status': 'healthy'},
-        'start_assignment' => {
-            'status': 'completed',
-            'output':
-                await worker.execute(request['params']['objective'] as String)
+        'health' => {
+            'status': (await worker.availability()).installed
+                ? 'healthy'
+                : 'unavailable'
           },
+        'start_assignment' => await _executeAssignment(worker, request),
         'shutdown' => {'stopped': true},
         _ => throw StateError('unsupported method'),
       };
@@ -33,4 +34,25 @@ Future<void> main() async {
       }));
     }
   }
+}
+
+Future<Map<String, Object?>> _executeAssignment(
+  CodexWorker worker,
+  Map<String, dynamic> request,
+) async {
+  final params = Map<String, Object?>.from(request['params'] as Map);
+  final objective = params['objective'];
+  if (objective is! String || objective.trim().isEmpty) {
+    throw const FormatException('assignment objective is required');
+  }
+  final result = await worker.executeTask(objective);
+  return {
+    'status': 'completed',
+    'summary': result.summary,
+    'output': result.output,
+    'evidence': {
+      'metrics': {'events': result.events.length},
+      'logs': ['Codex returned structured JSON output'],
+    },
+  };
 }
