@@ -91,6 +91,27 @@ export function assertSingleAgentForgeBindings(
   }
 }
 
+export function assertMultiAgentForgeBindings(
+  bindings: readonly WorkerBinding[],
+  agentIds: ReadonlyMap<string, string>,
+): void {
+  if (bindings.length < 3) {
+    throw new Error("Multi-agent Forge requires lead, implementation, and review workers");
+  }
+  if (bindings.some(({ connection }) => connection.transport !== "local_agent")) {
+    throw new Error("Multi-agent Forge does not permit direct cloud model workers");
+  }
+  const resolvedAgentIds = bindings
+    .map(({ worker }) => agentIds.get(worker.id))
+    .filter((id): id is string => Boolean(id));
+  if (resolvedAgentIds.length !== bindings.length) {
+    throw new Error("Multi-agent Forge requires every worker to resolve to an agent");
+  }
+  if (new Set(resolvedAgentIds).size < 2) {
+    throw new Error("Multi-agent Forge requires workers on at least two Agents");
+  }
+}
+
 function digest(value: string): string {
   return [...new Uint8Array(new TextEncoder().encode(value))]
     .map((byte) => byte.toString(16).padStart(2, "0"))
@@ -673,7 +694,7 @@ export async function executeForgeService(
   };
   const workers = await env.CONCLAVE_DB.prepare(
     `SELECT
-       w.id, w.name, w.kind, w.roles_json, w.capabilities_json,
+       w.id, w.agent_id, w.name, w.kind, w.roles_json, w.capabilities_json,
        w.permissions_json, w.independence_key, w.availability,
        c.id AS connection_id, c.name AS connection_name,
        c.transport, c.provider, c.adapter_version AS connection_adapter_version,
@@ -708,26 +729,33 @@ export async function executeForgeService(
   if (reviewerResource.worker.id === implementerResource.worker.id) {
     throw new Error("Forge requires independent worker resources");
   }
-  const executionMode = params.executionMode === "cloud_api" ? "cloud_api" : "single_agent";
+  const executionMode = params.executionMode === "cloud_api"
+    ? "cloud_api"
+    : params.executionMode === "multi_agent"
+      ? "multi_agent"
+      : "single_agent";
+  const agentIds = new Map(
+    (workers.results ?? []).map((row) => [String(row.id), String(row.agent_id)]),
+  );
+  const selectedBindings = [leadResource, implementerResource, reviewerResource];
   if (executionMode === "single_agent") {
-    const selectedWorkerIds = [
-      leadResource.worker.id,
-      implementerResource.worker.id,
-      reviewerResource.worker.id,
-    ];
-    const placeholders = selectedWorkerIds.map(() => "?").join(",");
-    const agentRows = await env.CONCLAVE_DB.prepare(
-      `SELECT id, agent_id FROM workers WHERE organization_id = ?1 AND id IN (${placeholders})`,
-    )
-      .bind(context.organizationId, ...selectedWorkerIds)
-      .all<{ id: string; agent_id: string }>();
-    const agentIds = new Map(
-      (agentRows.results ?? []).map((row) => [row.id, row.agent_id]),
-    );
     assertSingleAgentForgeBindings(
-      [leadResource, implementerResource, reviewerResource],
+      selectedBindings,
       agentIds,
     );
+  }
+  if (executionMode === "multi_agent") {
+    assertMultiAgentForgeBindings(selectedBindings, agentIds);
+  }
+  const secondaryResearchResource = executionMode === "multi_agent"
+    ? registry.list().find(({ worker, connection }) =>
+        connection.transport === "local_agent" &&
+        worker.capabilities.includes("repository_read") &&
+        agentIds.get(worker.id) !== agentIds.get(leadResource.worker.id),
+      )
+    : undefined;
+  if (executionMode === "multi_agent" && !secondaryResearchResource) {
+    throw new Error("Multi-agent Forge requires a repository research worker on the second Agent");
   }
   const models = env.CONCLAVE_WORKER_MODELS
     ? (JSON.parse(env.CONCLAVE_WORKER_MODELS) as Record<string, string>)
@@ -762,6 +790,10 @@ export async function executeForgeService(
       lead: modelFor(leadResource, env, models, context),
       implementer: modelFor(implementerResource, env, models, context),
       reviewer: modelFor(reviewerResource, env, models, context),
+      ...(secondaryResearchResource
+        ? { secondaryResearcher: modelFor(secondaryResearchResource, env, models, context) }
+        : {}),
+      requireSecondaryResearch: executionMode === "multi_agent",
       runtime: new RemoteLocalRuntime(env, context),
       persistence,
     });

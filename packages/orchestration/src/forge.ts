@@ -115,6 +115,8 @@ export interface ForgeWorkflowInput {
   readonly lead: WorkerExecutor;
   readonly implementer: WorkerExecutor;
   readonly reviewer?: WorkerExecutor;
+  readonly secondaryResearcher?: WorkerExecutor;
+  readonly requireSecondaryResearch?: boolean;
   readonly runtime: ForgeRuntimeAdapter;
   readonly implementationAgent?: ForgeImplementationAgent;
   readonly validationFallbackWorker?: WorkerExecutor;
@@ -623,7 +625,7 @@ export async function executeForgeGoal(
   );
 
   let secondaryResearch: ResearchResult | null = null;
-  if (research.payload.risks.length > 0) {
+  if (input.requireSecondaryResearch || research.payload.risks.length > 0) {
     const secondResearchTask = await task(
       researchPhase.id,
       "Independently challenge the repository research",
@@ -634,7 +636,7 @@ export async function executeForgeGoal(
     const secondRequest: TaskRequest = {
       ...researchRequest,
       messageId: id(),
-      workerId: reviewer.resource.id,
+        workerId: (input.secondaryResearcher ?? reviewer).resource.id,
       payload: {
         ...researchRequest.payload,
         taskId: secondResearchTask.id,
@@ -649,7 +651,7 @@ export async function executeForgeGoal(
       },
     };
     secondaryResearch = await call(
-      reviewer,
+      input.secondaryResearcher ?? reviewer,
       secondResearchTask,
       secondRequest,
       "ResearchResult",
