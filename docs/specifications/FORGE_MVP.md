@@ -67,3 +67,55 @@ Forge uses the `high` verification policy for the MVP. Completion requires:
 7. a persisted final report Artifact and `RunCompleted` Event.
 
 AI statements such as “tests pass” are not enough. Each criterion must be verified by Core against persisted evidence returned by the runtime adapter; the Lead cannot mark an unverified criterion complete.
+
+
+## Configurable worker multiplicity
+
+Forge does not hard-code a single Researcher, Implementer, or Reviewer.
+
+Every Forge Task uses the generic Core Execution Policy described in [MULTI_WORKER_ORCHESTRATION.md](MULTI_WORKER_ORCHESTRATION.md).
+
+The default cost-conscious Forge policy remains close to the MVP:
+
+```text
+Research       -> 1 Worker
+Planning       -> 1 Worker
+Implementation -> 1 Worker
+Review         -> 1 independent Worker
+Verification   -> machine evidence + 1 reasoning Worker where needed
+```
+
+For design-heavy, ambiguous, or high-assurance work, the same workflow may resolve to:
+
+```text
+Research/Architecture
+  -> Worker A
+  -> Worker B
+  -> Worker C
+  -> Synthesizer
+  -> accepted research/design basis
+
+Implementation
+  -> one Implementer by default
+  -> optional isolated competing Implementers under explicit policy
+
+Review
+  -> Reviewer A
+  -> Reviewer B
+  -> merged attributable Findings
+```
+
+No role-specific multi-model side channel is allowed. Parallel candidates are ordinary immutable Attempts under the same Task. Synthesis/evaluation is an ordinary downstream Task with an explicit Decision.
+
+## Worker transports
+
+Forge uses the generic Worker/Connection model in [WORKER_EXECUTION.md](WORKER_EXECUTION.md).
+
+A Forge Worker may therefore be:
+- an API-backed online model;
+- a Codex/Claude Code style local agent through Local Runtime;
+- a remote/self-hosted agent;
+- a local model;
+- a human/manual bridge.
+
+Forge should prefer configuration and policy over transport-specific branching.
