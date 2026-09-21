@@ -234,4 +234,30 @@ void main() {
     );
     await directory.delete(recursive: true);
   });
+
+  test('rejects a manifest that redirects execution outside the package',
+      () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-plugins-');
+    final manager = PluginManager(directory);
+    final bytes = [17, 18, 19];
+    await manager.install(PluginPackage(
+      id: 'redirected',
+      version: '1.0.0',
+      bytes: bytes,
+      digest: sha256.convert(bytes).toString(),
+    ));
+    final manifestFile = File(
+      '${directory.path}/redirected/1.0.0/manifest.json',
+    );
+    final manifest =
+        jsonDecode(await manifestFile.readAsString()) as Map<String, dynamic>;
+    manifest['executable'] = '../../outside';
+    await manifestFile.writeAsString(jsonEncode(manifest), flush: true);
+    await expectLater(
+      manager.activeProcessSpec('redirected'),
+      throwsA(isA<StateError>()),
+    );
+    await directory.delete(recursive: true);
+  });
 }

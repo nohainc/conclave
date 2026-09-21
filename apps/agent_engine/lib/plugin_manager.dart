@@ -196,10 +196,26 @@ class PluginManager {
     if (executable is! String || executable.isEmpty) {
       throw StateError('plugin executable is missing');
     }
+    // PluginPackage currently stores one immutable executable payload. Do not
+    // allow a mutable manifest to redirect execution to another local binary.
+    if (executable != 'package.bin') {
+      throw StateError(
+          'plugin executable must be the verified package payload');
+    }
+    final packageDirectory = Directory('${root.path}/$pluginId/$version');
+    final packageRoot = await packageDirectory.resolveSymbolicLinks();
+    final executableFile = File('${packageDirectory.path}/package.bin');
+    final executablePath = await executableFile.resolveSymbolicLinks();
+    final containedPrefix = packageRoot.endsWith(Platform.pathSeparator)
+        ? packageRoot
+        : '$packageRoot${Platform.pathSeparator}';
+    if (!executablePath.startsWith(containedPrefix)) {
+      throw StateError('plugin executable escapes its package directory');
+    }
     final arguments = manifest['arguments'];
     return PluginProcessSpec(
       pluginId: pluginId,
-      executable: executable,
+      executable: executablePath,
       arguments:
           arguments is List ? arguments.whereType<String>().toList() : const [],
       workingDirectory: '${root.path}/$pluginId/$version',
