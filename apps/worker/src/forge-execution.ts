@@ -172,33 +172,44 @@ function cost(value: unknown): WorkerCostMetadata {
 }
 
 function workerResource(row: Record<string, unknown>): WorkerResource {
+  const workerStatus = String(row.worker_status ?? row.status ?? "offline");
+  const agentStatus =
+    row.revoked_at == null ? String(row.agent_status ?? "offline") : "offline";
+  const enabled = row.enabled === undefined || row.enabled === 1;
   return {
     id: String(row.id),
     name: String(row.name),
-    type: String(row.kind) as WorkerType,
+    type: "agent" as WorkerType,
     capabilities: parseJsonArray(row.capabilities_json),
     roles: parseJsonArray(row.roles_json),
     permissions: parseJsonArray(row.permissions_json),
     independenceKey: String(row.independence_key),
-    connectionIds: [String(row.connection_id)],
-    availability: String(row.availability) as WorkerAvailability,
+    connectionIds: [String(row.id)],
+    availability:
+      enabled && agentStatus === "online" && workerStatus === "available"
+        ? "available"
+        : (workerStatus as WorkerAvailability),
   };
 }
 
 function connectionResource(row: Record<string, unknown>): ConnectionResource {
+  const workerStatus = String(row.worker_status ?? "offline");
+  const agentStatus =
+    row.revoked_at == null ? String(row.agent_status ?? "offline") : "offline";
   return {
-    id: String(row.connection_id),
-    name: String(row.connection_name),
-    transport: String(row.transport) as ConnectionResource["transport"],
-    provider: typeof row.provider === "string" ? row.provider : null,
-    adapterVersion: String(row.connection_adapter_version),
-    authMode: String(row.auth_mode) as ConnectionResource["authMode"],
+    id: String(row.id),
+    name: `${String(row.name)} Agent channel`,
+    transport: "local_agent",
+    provider: null,
+    adapterVersion: String(row.plugin_version_policy ?? "latest"),
+    authMode: "local_session",
     billingMode: String(row.billing_mode) as ConnectionResource["billingMode"],
     cost: cost(row.cost_metadata_json),
-    executionEnvironment: String(
-      row.execution_environment,
-    ) as ExecutionEnvironment,
-    availability: String(row.connection_availability) as WorkerAvailability,
+    executionEnvironment: "local" as ExecutionEnvironment,
+    availability:
+      row.enabled !== 0 && agentStatus === "online" && workerStatus === "available"
+        ? "available"
+        : (workerStatus as WorkerAvailability),
   };
 }
 
@@ -886,17 +897,15 @@ export async function executeForgeService(
   };
   const workers = await env.CONCLAVE_DB.prepare(
     `SELECT
-       w.id, w.agent_id, w.name, w.kind, w.roles_json, w.capabilities_json,
-       w.permissions_json, w.independence_key, w.availability,
-       c.id AS connection_id, c.name AS connection_name,
-       c.transport, c.provider, c.adapter_version AS connection_adapter_version,
-       c.auth_mode, c.billing_mode, c.cost_metadata_json,
-       c.execution_environment, c.availability AS connection_availability
+       w.id, w.agent_id, w.name, w.plugin_id, w.plugin_version_policy,
+       w.roles_json, w.capabilities_json, w.secret_refs_json,
+       w.independence_key, w.billing_mode, w.cost_metadata_json,
+       w.status AS worker_status, w.enabled,
+       a.status AS agent_status, a.revoked_at
      FROM workers w
-     JOIN worker_connections wc ON wc.worker_id = w.id
-     JOIN connections c ON c.id = wc.connection_id
-     WHERE w.organization_id = ?1
-     ORDER BY wc.is_default DESC, c.id`,
+     JOIN agents a ON a.id = w.agent_id
+     WHERE w.workspace_id = ?1
+     ORDER BY w.id`,
   )
     .bind(context.organizationId)
     .all<Record<string, unknown>>();
