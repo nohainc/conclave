@@ -104,3 +104,19 @@ Plugin/SDK contracts, additional providers and agents, headless Runner, reusable
 - mobile apps;
 - generic no-code workflow builder;
 - premature microservices.
+
+
+## Worker transport and ensemble extension
+
+After the integration foundations are stable, implement the worker transport and multi-worker roadmap in [docs/specifications/WORKER_IMPLEMENTATION_PHASES.md](docs/specifications/WORKER_IMPLEMENTATION_PHASES.md).
+
+Key additions:
+- separate Worker resources from Connection/transport resources;
+- unify provider APIs and local/remote agents behind one execution contract;
+- prioritize Codex and Claude Code local-agent adapters for subscription-backed execution;
+- allow every role to use one or several Workers through Execution Policies;
+- add synthesis/evaluation for multi-candidate results;
+- add quality presets and cost-aware routing;
+- add isolated competitive implementation only after read-only ensembles are proven.
+
+These are extensions of the existing phases, not a second orchestration architecture.

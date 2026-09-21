@@ -34,3 +34,17 @@ The Forge flow can be expressed as a template: research agent → plan provider 
 ## Roadmap
 
 The first implementation deliberately uses host-supplied handlers and in-memory registries. Next steps are signed extension packages, a CLI SDK, persisted template management endpoints, CI webhooks, and a graphical designer that emits the same validated template format.
+
+
+## Worker transports and ensembles
+
+Extensions must integrate through the generic Worker/Connection model rather than adding provider-specific orchestration paths.
+
+A provider or agent extension declares how a Worker executes; the Task's Execution Policy declares whether one or multiple Workers are used.
+
+Multi-worker execution uses immutable candidate Attempts and explicit synthesis/selection Decisions. Workflow templates may select quality presets or explicit policies but cannot bypass Core budgets, independence requirements, permissions, or anti-explosion limits.
+
+See:
+- [WORKER_EXECUTION.md](WORKER_EXECUTION.md)
+- [MULTI_WORKER_ORCHESTRATION.md](MULTI_WORKER_ORCHESTRATION.md)
+- [WORKER_IMPLEMENTATION_PHASES.md](WORKER_IMPLEMENTATION_PHASES.md)
