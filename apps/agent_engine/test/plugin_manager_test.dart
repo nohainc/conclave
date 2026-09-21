@@ -25,6 +25,8 @@ void main() {
       digest: sha256.convert(bytes).toString(),
     ));
     expect(await manager.activeVersion('echo'), '2.0.0');
+    expect((await manager.activeProcessSpec('echo'))!.workingDirectory,
+        endsWith('/echo/2.0.0'));
     await manager.rollback('echo', '1.0.0');
     expect(await manager.activeVersion('echo'), '1.0.0');
     await directory.delete(recursive: true);
