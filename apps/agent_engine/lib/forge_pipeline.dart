@@ -67,22 +67,29 @@ class DartForgePipeline {
         phase: 'plan',
         summary:
             'Replace subtraction with addition and preserve regression coverage'));
-    await workspace.write(
-        'lib/add.js', 'export function add(a, b) {\n  return a + b;\n}\n');
+    await workspace.patch('lib/add.js', 'return a - b;', 'return a + b;');
     evidence.add(const ForgeEvidence(
         phase: 'implementation',
-        summary: 'Agent wrote the corrected implementation'));
-    final reviewed = await workspace.read('lib/add.js');
-    if (!reviewed.contains('return a + b')) {
+        summary:
+            'Agent patched the implementation through the safe workspace API',
+        artifacts: ['lib/add.js']));
+    final reviewWorkspace = SafeWorkspace(repository);
+    final reviewed = await reviewWorkspace.read('lib/add.js');
+    final regressionTest = await reviewWorkspace.read('test/add.test.js');
+    if (!reviewed.contains('return a + b') ||
+        !regressionTest.contains('assert.equal(add(2, 3), 5)')) {
       return ForgeCompletion(
         completed: false,
         evidence: evidence,
-        completionReport: 'Implementation did not produce the expected change',
+        completionReport:
+            'Implementation or regression coverage did not satisfy review',
       );
     }
     evidence.add(const ForgeEvidence(
         phase: 'independent_review',
-        summary: 'Review worker accepted the corrected diff',
+        summary:
+            'Independent review re-read the changed source and regression test',
+        artifacts: ['lib/add.js', 'test/add.test.js'],
         findings: []));
     final diff = await SafeCommandRunner(workspace).run(
       ['git', 'diff', '--', 'lib/add.js'],
@@ -110,6 +117,15 @@ class DartForgePipeline {
         verification:
             tests.exitCode == 0 && !tests.timedOut ? 'passed' : 'failed'));
     final completed = tests.exitCode == 0 && !tests.timedOut;
+    evidence.add(ForgeEvidence(
+      phase: 'verification',
+      summary: completed
+          ? 'Verifier accepted the machine test evidence'
+          : 'Verifier rejected the machine test evidence',
+      command: const ['node', '--test'],
+      exitCode: tests.exitCode,
+      verification: completed ? 'passed' : 'failed',
+    ));
     return ForgeCompletion(
       completed: completed,
       evidence: evidence,

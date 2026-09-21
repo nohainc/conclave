@@ -15,6 +15,7 @@ void main() {
         'independent_review',
         'diff',
         'tests',
+        'verification',
       ]);
       expect(result.evidence[4].summary, contains('return a + b'));
       expect(
