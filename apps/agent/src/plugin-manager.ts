@@ -69,7 +69,10 @@ export class PluginManager {
   ) {
     const configuredSigningKey =
       signingKeyOverride || process.env.CONCLAVE_PLUGIN_SIGNING_KEY;
-    if (!configuredSigningKey && process.env.CONCLAVE_ENVIRONMENT === "production") {
+    if (
+      !configuredSigningKey &&
+      process.env.CONCLAVE_ENVIRONMENT === "production"
+    ) {
       throw new Error("CONCLAVE_PLUGIN_SIGNING_KEY is required in production");
     }
     this.signingKey = configuredSigningKey || "conclave-default-signing-key";

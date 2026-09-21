@@ -25,9 +25,12 @@ describe("web AI connector relay", () => {
     expect(registered.status).toBe(200);
 
     const status = await worker.fetch(
-      new Request("https://conclave.test/api/connector/tasks/web-relay-task/status", {
-        headers: { authorization: "Bearer relay-test-token" },
-      }),
+      new Request(
+        "https://conclave.test/api/connector/tasks/web-relay-task/status",
+        {
+          headers: { authorization: "Bearer relay-test-token" },
+        },
+      ),
       env,
     );
     expect(status.status).toBe(200);

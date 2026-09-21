@@ -79,10 +79,19 @@ export class MacOSKeychainCredentialStore implements CredentialStore {
   }
 }
 
-export function readMacOSCredentialSync(account: string, service = "com.conclaveax.agent"): string | undefined {
+export function readMacOSCredentialSync(
+  account: string,
+  service = "com.conclaveax.agent",
+): string | undefined {
   if (process.platform !== "darwin") return undefined;
   try {
-    return execFileSync("security", ["find-generic-password", "-a", account, "-s", service, "-w"], { encoding: "utf8" }).trim() || undefined;
+    return (
+      execFileSync(
+        "security",
+        ["find-generic-password", "-a", account, "-s", service, "-w"],
+        { encoding: "utf8" },
+      ).trim() || undefined
+    );
   } catch {
     return undefined;
   }

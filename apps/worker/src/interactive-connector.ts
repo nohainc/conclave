@@ -105,7 +105,8 @@ export async function handleConnectorTaskRequest(
   if (request.method === "POST" && !taskId) {
     const body = (await request.json()) as Record<string, unknown>;
     service.registerTask({
-      taskId: typeof body.taskId === "string" ? body.taskId : crypto.randomUUID(),
+      taskId:
+        typeof body.taskId === "string" ? body.taskId : crypto.randomUUID(),
       goalId: typeof body.goalId === "string" ? body.goalId : "web-goal",
       runId: typeof body.runId === "string" ? body.runId : "web-run",
       objective: typeof body.objective === "string" ? body.objective : "",

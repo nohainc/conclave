@@ -108,13 +108,15 @@ describe("interactive connector", () => {
     expect(() => connector.getTaskStatus("wrong", "web-task")).toThrow(
       "authentication",
     );
-    expect(() => connector.registerTask({
-      taskId: "web-task",
-      goalId: "goal-1",
-      runId: "run-1",
-      objective: "Duplicate",
-      context: [],
-      messages: [],
-    })).toThrow("already registered");
+    expect(() =>
+      connector.registerTask({
+        taskId: "web-task",
+        goalId: "goal-1",
+        runId: "run-1",
+        objective: "Duplicate",
+        context: [],
+        messages: [],
+      }),
+    ).toThrow("already registered");
   });
 });

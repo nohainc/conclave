@@ -826,7 +826,9 @@ export function assertAllowedPermissions(
   allowed: readonly string[] = DEFAULT_PLUGIN_PERMISSION_ALLOWLIST,
 ): void {
   const allowedSet = new Set(allowed);
-  const forbidden = requested.filter((permission) => !allowedSet.has(permission));
+  const forbidden = requested.filter(
+    (permission) => !allowedSet.has(permission),
+  );
   if (forbidden.length > 0) {
     throw new AuthorizationError("workspace:manage");
   }
@@ -855,9 +857,16 @@ export function isCredentialRotationRequired(
 }
 
 export class SlidingWindowRateLimiter {
-  private readonly windows = new Map<string, { count: number; windowStartedAt: number }>();
+  private readonly windows = new Map<
+    string,
+    { count: number; windowStartedAt: number }
+  >();
 
-  consume(key: string, policy: RateLimitPolicy, nowMs = Date.now()): RateLimitDecision {
+  consume(
+    key: string,
+    policy: RateLimitPolicy,
+    nowMs = Date.now(),
+  ): RateLimitDecision {
     const state = this.windows.get(key) ?? { count: 0, windowStartedAt: nowMs };
     const decision = consumeRateLimit(state, policy, nowMs);
     this.windows.set(key, state);

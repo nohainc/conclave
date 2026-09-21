@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { assertSingleAgentForgeBindings } from "../src/forge-execution.js";
 import type { WorkerBinding } from "@conclave/core";
 
-function binding(id: string, transport: "local_agent" | "provider_api"): WorkerBinding {
+function binding(
+  id: string,
+  transport: "local_agent" | "provider_api",
+): WorkerBinding {
   return {
     worker: {
       id,
@@ -22,7 +25,8 @@ function binding(id: string, transport: "local_agent" | "provider_api"): WorkerB
       provider: transport === "provider_api" ? "openai" : null,
       adapterVersion: "1",
       authMode: transport === "provider_api" ? "api_key" : "local_session",
-      billingMode: transport === "provider_api" ? "api_metered" : "subscription",
+      billingMode:
+        transport === "provider_api" ? "api_metered" : "subscription",
       cost: { estimatedCostMicrosPerAttempt: null },
       executionEnvironment: "local",
       availability: "available",
@@ -32,29 +36,56 @@ function binding(id: string, transport: "local_agent" | "provider_api"): WorkerB
 
 describe("single-agent Forge policy", () => {
   it("requires three local workers on the same Agent", () => {
-    const bindings = [binding("lead", "local_agent"), binding("implementer", "local_agent"), binding("reviewer", "local_agent")];
-    expect(() => assertSingleAgentForgeBindings(bindings, new Map([
-      ["lead", "agent-mac"],
-      ["implementer", "agent-mac"],
-      ["reviewer", "agent-mac"],
-    ]))).not.toThrow();
+    const bindings = [
+      binding("lead", "local_agent"),
+      binding("implementer", "local_agent"),
+      binding("reviewer", "local_agent"),
+    ];
+    expect(() =>
+      assertSingleAgentForgeBindings(
+        bindings,
+        new Map([
+          ["lead", "agent-mac"],
+          ["implementer", "agent-mac"],
+          ["reviewer", "agent-mac"],
+        ]),
+      ),
+    ).not.toThrow();
   });
 
   it("rejects provider API workers", () => {
-    const bindings = [binding("lead", "local_agent"), binding("implementer", "provider_api"), binding("reviewer", "local_agent")];
-    expect(() => assertSingleAgentForgeBindings(bindings, new Map([
-      ["lead", "agent-mac"],
-      ["implementer", "agent-mac"],
-      ["reviewer", "agent-mac"],
-    ]))).toThrow(/direct cloud model workers/);
+    const bindings = [
+      binding("lead", "local_agent"),
+      binding("implementer", "provider_api"),
+      binding("reviewer", "local_agent"),
+    ];
+    expect(() =>
+      assertSingleAgentForgeBindings(
+        bindings,
+        new Map([
+          ["lead", "agent-mac"],
+          ["implementer", "agent-mac"],
+          ["reviewer", "agent-mac"],
+        ]),
+      ),
+    ).toThrow(/direct cloud model workers/);
   });
 
   it("rejects workers split across Agents", () => {
-    const bindings = [binding("lead", "local_agent"), binding("implementer", "local_agent"), binding("reviewer", "local_agent")];
-    expect(() => assertSingleAgentForgeBindings(bindings, new Map([
-      ["lead", "agent-mac"],
-      ["implementer", "agent-mac"],
-      ["reviewer", "agent-linux"],
-    ]))).toThrow(/one Agent/);
+    const bindings = [
+      binding("lead", "local_agent"),
+      binding("implementer", "local_agent"),
+      binding("reviewer", "local_agent"),
+    ];
+    expect(() =>
+      assertSingleAgentForgeBindings(
+        bindings,
+        new Map([
+          ["lead", "agent-mac"],
+          ["implementer", "agent-mac"],
+          ["reviewer", "agent-linux"],
+        ]),
+      ),
+    ).toThrow(/one Agent/);
   });
 });

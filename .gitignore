@@ -14,3 +14,9 @@ apps/flutter_app/.flutter-plugins
 apps/flutter_app/.flutter-plugins-dependencies
 apps/flutter_app/.packages
 apps/flutter_app/pubspec.lock
+
+# Dart and Flutter generated state for the V3 desktop applications.
+**/.dart_tool/
+**/build/
+apps/agent_app/pubspec.lock
+apps/agent_engine/pubspec.lock

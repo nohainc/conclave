@@ -636,7 +636,7 @@ export async function executeForgeGoal(
     const secondRequest: TaskRequest = {
       ...researchRequest,
       messageId: id(),
-        workerId: (input.secondaryResearcher ?? reviewer).resource.id,
+      workerId: (input.secondaryResearcher ?? reviewer).resource.id,
       payload: {
         ...researchRequest.payload,
         taskId: secondResearchTask.id,

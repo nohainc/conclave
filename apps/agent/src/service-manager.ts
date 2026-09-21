@@ -12,7 +12,11 @@ export function launchAgentPlist(options: {
   homeDir: string;
   logDir: string;
 }): string {
-  const escape = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  const escape = (value: string) =>
+    value
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;");
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -28,19 +32,35 @@ export function launchAgentPlist(options: {
 }
 
 export class MacOSLaunchAgentService {
-  readonly plistPath = path.join(os.homedir(), "Library", "LaunchAgents", `${LAUNCH_AGENT_LABEL}.plist`);
+  readonly plistPath = path.join(
+    os.homedir(),
+    "Library",
+    "LaunchAgents",
+    `${LAUNCH_AGENT_LABEL}.plist`,
+  );
 
   private assertMacOS(): void {
-    if (process.platform !== "darwin") throw new Error("launchd is available only on macOS");
+    if (process.platform !== "darwin")
+      throw new Error("launchd is available only on macOS");
   }
 
-  async install(options: { executable: string; homeDir: string; logDir: string }): Promise<void> {
+  async install(options: {
+    executable: string;
+    homeDir: string;
+    logDir: string;
+  }): Promise<void> {
     this.assertMacOS();
     await fs.mkdir(path.dirname(this.plistPath), { recursive: true });
     await fs.mkdir(options.logDir, { recursive: true });
-    await fs.writeFile(this.plistPath, launchAgentPlist(options), { mode: 0o600 });
+    await fs.writeFile(this.plistPath, launchAgentPlist(options), {
+      mode: 0o600,
+    });
     await this.unloadIfPresent();
-    await execFile("launchctl", ["bootstrap", `gui/${process.getuid?.() ?? ""}`, this.plistPath]);
+    await execFile("launchctl", [
+      "bootstrap",
+      `gui/${process.getuid?.() ?? ""}`,
+      this.plistPath,
+    ]);
   }
 
   async uninstall(): Promise<void> {
@@ -52,7 +72,10 @@ export class MacOSLaunchAgentService {
   async status(): Promise<string> {
     this.assertMacOS();
     try {
-      const result = await execFile("launchctl", ["print", `gui/${process.getuid?.() ?? ""}/${LAUNCH_AGENT_LABEL}`]);
+      const result = await execFile("launchctl", [
+        "print",
+        `gui/${process.getuid?.() ?? ""}/${LAUNCH_AGENT_LABEL}`,
+      ]);
       return result.stdout;
     } catch {
       return "not running";
@@ -60,7 +83,9 @@ export class MacOSLaunchAgentService {
   }
 
   private async unloadIfPresent(): Promise<void> {
-    await execFile("launchctl", ["bootout", `gui/${process.getuid?.() ?? ""}/${LAUNCH_AGENT_LABEL}`]).catch(() => undefined);
+    await execFile("launchctl", [
+      "bootout",
+      `gui/${process.getuid?.() ?? ""}/${LAUNCH_AGENT_LABEL}`,
+    ]).catch(() => undefined);
   }
 }
-

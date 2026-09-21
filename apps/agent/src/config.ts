@@ -172,7 +172,9 @@ export function saveAgentConfig(
         agentId: config.agentId,
         name: config.name,
         cloudUrl: config.cloudUrl,
-        ...(options.persistToken === false ? {} : { agentToken: config.agentToken }),
+        ...(options.persistToken === false
+          ? {}
+          : { agentToken: config.agentToken }),
         workDir: config.workDir,
         pluginDir: config.pluginDir,
         journalDir: config.journalDir,

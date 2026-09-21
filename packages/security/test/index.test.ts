@@ -355,15 +355,30 @@ describe("Architecture v2 Security & Authentication Suite", () => {
       expect(() => assertAllowedPermissions(["credential:export"])).toThrow();
 
       const issuedAt = "2026-01-01T00:00:00.000Z";
-      expect(credentialExpiresAt(issuedAt, { maxAgeDays: 30, overlapGraceDays: 2 })).toBe(
-        "2026-01-31T00:00:00.000Z",
-      );
-      expect(isCredentialRotationRequired(issuedAt, { maxAgeDays: 30, overlapGraceDays: 2 }, Date.parse("2026-02-01T00:00:00.000Z"))).toBe(true);
+      expect(
+        credentialExpiresAt(issuedAt, { maxAgeDays: 30, overlapGraceDays: 2 }),
+      ).toBe("2026-01-31T00:00:00.000Z");
+      expect(
+        isCredentialRotationRequired(
+          issuedAt,
+          { maxAgeDays: 30, overlapGraceDays: 2 },
+          Date.parse("2026-02-01T00:00:00.000Z"),
+        ),
+      ).toBe(true);
 
       const limiter = new SlidingWindowRateLimiter();
-      expect(limiter.consume("user-1", { requests: 1, windowSeconds: 60 }, 1_000).allowed).toBe(true);
-      expect(limiter.consume("user-1", { requests: 1, windowSeconds: 60 }, 2_000).allowed).toBe(false);
-      expect(limiter.consume("user-1", { requests: 1, windowSeconds: 60 }, 62_000).allowed).toBe(true);
+      expect(
+        limiter.consume("user-1", { requests: 1, windowSeconds: 60 }, 1_000)
+          .allowed,
+      ).toBe(true);
+      expect(
+        limiter.consume("user-1", { requests: 1, windowSeconds: 60 }, 2_000)
+          .allowed,
+      ).toBe(false);
+      expect(
+        limiter.consume("user-1", { requests: 1, windowSeconds: 60 }, 62_000)
+          .allowed,
+      ).toBe(true);
 
       expect(createRetentionExportManifest("ws-1")).toMatchObject({
         format: "conclave-retention-export-v1",

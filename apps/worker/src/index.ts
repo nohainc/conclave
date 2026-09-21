@@ -2852,9 +2852,9 @@ async function handleStudioSnapshot(
   const ownershipBind = bind;
   const [
     projects,
+    workers,
     agents,
     plugins,
-    workers,
     tasks,
     findings,
     events,

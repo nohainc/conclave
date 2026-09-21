@@ -43,7 +43,9 @@ async function main(): Promise<void> {
       if (process.platform === "darwin") {
         await createCredentialStore().set(result.agentId, result.authToken);
       }
-      saveAgentConfig(updatedConfig, { persistToken: process.platform !== "darwin" });
+      saveAgentConfig(updatedConfig, {
+        persistToken: process.platform !== "darwin",
+      });
       console.log("Enrollment successful!");
       console.log(`Agent ID: ${result.agentId}`);
       console.log(`Workspace ID: ${result.workspaceId}`);
@@ -62,7 +64,10 @@ async function main(): Promise<void> {
 
   if (command === "install") {
     const config = loadAgentConfig();
-    const executable = args[args.indexOf("--executable") + 1] || process.argv[1] || process.execPath;
+    const executable =
+      args[args.indexOf("--executable") + 1] ||
+      process.argv[1] ||
+      process.execPath;
     try {
       await installMacOSAgent(config, executable);
       console.log("Conclave Agent background service installed.");
@@ -76,7 +81,9 @@ async function main(): Promise<void> {
   if (command === "uninstall") {
     try {
       await uninstallMacOSAgent();
-      console.log("Conclave Agent background service uninstalled. Local data was preserved.");
+      console.log(
+        "Conclave Agent background service uninstalled. Local data was preserved.",
+      );
     } catch (err) {
       console.error(err instanceof Error ? err.message : String(err));
       process.exit(1);

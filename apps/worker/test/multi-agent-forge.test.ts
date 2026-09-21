@@ -32,24 +32,28 @@ function binding(id: string): WorkerBinding {
 
 describe("multi-agent Forge policy", () => {
   it("accepts distributed local workers", () => {
-    expect(() => assertMultiAgentForgeBindings(
-      [binding("lead"), binding("implementer"), binding("reviewer")],
-      new Map([
-        ["lead", "agent-macbook"],
-        ["implementer", "agent-macbook"],
-        ["reviewer", "agent-linux"],
-      ]),
-    )).not.toThrow();
+    expect(() =>
+      assertMultiAgentForgeBindings(
+        [binding("lead"), binding("implementer"), binding("reviewer")],
+        new Map([
+          ["lead", "agent-macbook"],
+          ["implementer", "agent-macbook"],
+          ["reviewer", "agent-linux"],
+        ]),
+      ),
+    ).not.toThrow();
   });
 
   it("rejects a single Agent topology", () => {
-    expect(() => assertMultiAgentForgeBindings(
-      [binding("lead"), binding("implementer"), binding("reviewer")],
-      new Map([
-        ["lead", "agent-macbook"],
-        ["implementer", "agent-macbook"],
-        ["reviewer", "agent-macbook"],
-      ]),
-    )).toThrow(/at least two Agents/);
+    expect(() =>
+      assertMultiAgentForgeBindings(
+        [binding("lead"), binding("implementer"), binding("reviewer")],
+        new Map([
+          ["lead", "agent-macbook"],
+          ["implementer", "agent-macbook"],
+          ["reviewer", "agent-macbook"],
+        ]),
+      ),
+    ).toThrow(/at least two Agents/);
   });
 });
