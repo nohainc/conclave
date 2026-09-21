@@ -137,6 +137,11 @@ class PluginManager {
         manifest.version != package.version) {
       throw StateError('plugin manifest identity does not match package');
     }
+    if (manifest.publisher != null &&
+        package.publisher != null &&
+        manifest.publisher != package.publisher) {
+      throw StateError('plugin manifest publisher does not match package');
+    }
     if (manifest.protocolVersion != protocolVersion ||
         !_satisfiesMinimumVersion(engineVersion, manifest.engineVersion)) {
       throw StateError('plugin is incompatible with this Agent Engine');
@@ -150,7 +155,11 @@ class PluginManager {
     await File('${target.path}/package.bin')
         .writeAsBytes(package.bytes, flush: true);
     await File('${target.path}/manifest.json').writeAsString(
-      jsonEncode({...manifest.toJson(), 'digest': actual}),
+      jsonEncode({
+        ...manifest.toJson(),
+        'digest': actual,
+        if (package.signature != null) 'signature': package.signature,
+      }),
       flush: true,
     );
     await _activate(package.id, package.version, actual);
@@ -224,7 +233,38 @@ class PluginManager {
     if (actualDigest != expectedDigest) {
       throw StateError('plugin package was modified after installation');
     }
+    final policy = trustPolicy;
+    if (policy != null) {
+      final publisher = manifest['publisher'];
+      final signature = manifest['signature'];
+      if (publisher is! String ||
+          signature is! String ||
+          !policy.verify(
+            publisher: publisher,
+            digest: expectedDigest,
+            signature: signature,
+          )) {
+        throw StateError('plugin signing trust has been revoked');
+      }
+      policy.requirePermissions(
+        _permissionsFromManifest(manifest['permissions']),
+        allowedPermissions,
+      );
+    }
     return manifest;
+  }
+
+  List<PluginPermission> _permissionsFromManifest(Object? raw) {
+    if (raw is! List) return const [];
+    return raw
+        .whereType<String>()
+        .map((value) => PluginPermission.values.firstWhere(
+              (permission) => permission.name == value,
+              orElse: () => throw StateError(
+                'plugin manifest contains an unknown permission',
+              ),
+            ))
+        .toList();
   }
 
   Future<List<InstalledPlugin>> inventory() async {

@@ -81,6 +81,44 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('rechecks signing revocation before launching an installed plugin',
+      () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-plugins-');
+    final bytes = [19, 20, 21];
+    final digest = sha256.convert(bytes).toString();
+    const installPolicy =
+        PluginTrustPolicy(trustedSecrets: {'publisher': 'root'});
+    final manager = PluginManager(
+      directory,
+      trustPolicy: installPolicy,
+      allowedPermissions: {PluginPermission.readWorkspace},
+    );
+    await manager.install(PluginPackage(
+      id: 'revocable',
+      version: '1.0.0',
+      bytes: bytes,
+      digest: digest,
+      publisher: 'publisher',
+      signature: installPolicy.sign('publisher', digest),
+      permissions: [PluginPermission.readWorkspace],
+    ));
+
+    final revokedManager = PluginManager(
+      directory,
+      trustPolicy: PluginTrustPolicy(
+        trustedSecrets: const {'publisher': 'root'},
+        revokedDigests: {digest},
+      ),
+      allowedPermissions: {PluginPermission.readWorkspace},
+    );
+    await expectLater(
+      revokedManager.activeProcessSpec('revocable'),
+      throwsA(isA<StateError>()),
+    );
+    await directory.delete(recursive: true);
+  });
+
   test('rejects a plugin that does not support the Agent platform', () async {
     final directory =
         await Directory.systemTemp.createTemp('conclave-plugins-');
