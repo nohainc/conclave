@@ -33,27 +33,6 @@ importers:
         specifier: ^4.38.0
         version: 4.135.0(@types/node@24.13.6)
 
-  apps/agent:
-    dependencies:
-      '@conclave/agent-protocol':
-        specifier: workspace:*
-        version: link:../../packages/agent-protocol
-      '@conclave/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      '@conclave/local-runtime':
-        specifier: workspace:*
-        version: link:../../packages/local-runtime
-      '@conclave/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../packages/plugin-sdk
-      '@conclave/protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
-      '@conclave/security':
-        specifier: workspace:*
-        version: link:../../packages/security
-
   apps/worker:
     dependencies:
       '@conclave/agent-protocol':
