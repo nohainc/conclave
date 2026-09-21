@@ -110,6 +110,164 @@ String _string(Map<String, dynamic> json, String key, [String fallback = '—'])
 List<String> _strings(Map<String, dynamic> json, String key) =>
     List<String>.from(json[key] as List? ?? const []);
 
+enum StudioMessageSender { user, conclave, system }
+
+enum StudioMessageRole { user, assistant, system }
+
+extension StudioMessageSenderRole on StudioMessageSender {
+  StudioMessageRole get role => switch (this) {
+        StudioMessageSender.user => StudioMessageRole.user,
+        StudioMessageSender.conclave => StudioMessageRole.assistant,
+        StudioMessageSender.system => StudioMessageRole.system,
+      };
+}
+
+enum StudioPhaseStatus { completed, inProgress, pending }
+
+class StudioPhaseItem {
+  const StudioPhaseItem({
+    required this.name,
+    required this.status,
+    this.detail,
+  });
+
+  final String name;
+  final StudioPhaseStatus status;
+  final String? detail;
+
+  factory StudioPhaseItem.fromJson(Map<String, dynamic> json) =>
+      StudioPhaseItem(
+        name: _string(json, 'name'),
+        status: StudioPhaseStatus.values.firstWhere(
+          (v) => v.name == json['status'],
+          orElse: () => StudioPhaseStatus.pending,
+        ),
+        detail: json['detail'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'status': status.name,
+        'detail': detail,
+      };
+}
+
+typedef StudioRunPhase = StudioPhaseItem;
+
+class StudioRunPreview {
+  const StudioRunPreview({
+    required this.runId,
+    required this.statusSummary,
+    required this.phases,
+    required this.workerCount,
+    this.finalAnswer,
+  });
+
+  final String runId;
+  final String statusSummary;
+  final List<StudioPhaseItem> phases;
+  final int workerCount;
+  final String? finalAnswer;
+
+  factory StudioRunPreview.fromJson(Map<String, dynamic> json) =>
+      StudioRunPreview(
+        runId: _string(json, 'runId'),
+        statusSummary: _string(json, 'statusSummary'),
+        phases: (json['phases'] as List? ?? const [])
+            .map((item) => StudioPhaseItem.fromJson(
+                Map<String, dynamic>.from(item as Map)))
+            .toList(),
+        workerCount: json['workerCount'] as int? ?? 1,
+        finalAnswer: json['finalAnswer'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'runId': runId,
+        'statusSummary': statusSummary,
+        'phases': phases.map((p) => p.toJson()).toList(),
+        'workerCount': workerCount,
+        'finalAnswer': finalAnswer,
+      };
+}
+
+class StudioChatMessage {
+  const StudioChatMessage({
+    required this.id,
+    required this.sender,
+    required this.text,
+    required this.timestamp,
+    this.runPreview,
+  });
+
+  final String id;
+  final StudioMessageSender sender;
+  final String text;
+  final String timestamp;
+  final StudioRunPreview? runPreview;
+
+  factory StudioChatMessage.fromJson(Map<String, dynamic> json) =>
+      StudioChatMessage(
+        id: _string(json, 'id'),
+        sender: StudioMessageSender.values.firstWhere(
+          (v) => v.name == json['sender'],
+          orElse: () => StudioMessageSender.conclave,
+        ),
+        text: _string(json, 'text'),
+        timestamp: _string(json, 'timestamp'),
+        runPreview: json['runPreview'] == null
+            ? null
+            : StudioRunPreview.fromJson(
+                Map<String, dynamic>.from(json['runPreview'] as Map)),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'sender': sender.name,
+        'text': text,
+        'timestamp': timestamp,
+        'runPreview': runPreview?.toJson(),
+      };
+}
+
+class StudioChat {
+  const StudioChat({
+    required this.id,
+    required this.projectId,
+    required this.title,
+    required this.lastActivity,
+    required this.messages,
+    this.activeRunId,
+  });
+
+  final String id;
+  final String projectId;
+  final String title;
+  final String lastActivity;
+  final List<StudioChatMessage> messages;
+  final String? activeRunId;
+
+  factory StudioChat.fromJson(Map<String, dynamic> json) => StudioChat(
+        id: _string(json, 'id'),
+        projectId: _string(json, 'projectId'),
+        title: _string(json, 'title'),
+        lastActivity: _string(json, 'lastActivity'),
+        messages: (json['messages'] as List? ?? const [])
+            .map((item) => StudioChatMessage.fromJson(
+                Map<String, dynamic>.from(item as Map)))
+            .toList(),
+        activeRunId: json['activeRunId'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'projectId': projectId,
+        'title': title,
+        'lastActivity': lastActivity,
+        'messages': messages.map((m) => m.toJson()).toList(),
+        'activeRunId': activeRunId,
+      };
+}
+
 class StudioProject {
   const StudioProject({
     required this.id,
@@ -118,6 +276,7 @@ class StudioProject {
     required this.branch,
     required this.activeGoals,
     required this.lastActivity,
+    this.chats = const [],
   });
 
   final String id;
@@ -126,14 +285,20 @@ class StudioProject {
   final String branch;
   final int activeGoals;
   final String lastActivity;
+  final List<StudioChat> chats;
 
   factory StudioProject.fromJson(Map<String, dynamic> json) => StudioProject(
-      id: _string(json, 'id'),
-      name: _string(json, 'name'),
-      repository: _string(json, 'repository'),
-      branch: _string(json, 'branch'),
-      activeGoals: json['activeGoals'] as int? ?? 0,
-      lastActivity: _string(json, 'lastActivity'));
+        id: _string(json, 'id'),
+        name: _string(json, 'name'),
+        repository: _string(json, 'repository'),
+        branch: _string(json, 'branch'),
+        activeGoals: json['activeGoals'] as int? ?? 0,
+        lastActivity: _string(json, 'lastActivity'),
+        chats: (json['chats'] as List? ?? const [])
+            .map((item) =>
+                StudioChat.fromJson(Map<String, dynamic>.from(item as Map)))
+            .toList(),
+      );
 }
 
 class StudioWorker {
@@ -353,6 +518,7 @@ class StudioRun {
 class StudioSnapshot {
   const StudioSnapshot({
     this.activeRunId,
+    this.activeChatId,
     this.run,
     required this.projects,
     required this.workers,
@@ -367,6 +533,7 @@ class StudioSnapshot {
   });
 
   final String? activeRunId;
+  final String? activeChatId;
   final StudioRun? run;
   final List<StudioProject> projects;
   final List<StudioWorker> workers;
@@ -379,6 +546,18 @@ class StudioSnapshot {
   final List<StudioCandidateOutput> candidateOutputs;
   final StudioSynthesisDecision? synthesisDecision;
 
+  List<StudioChat> get allChats =>
+      projects.expand((project) => project.chats).toList();
+
+  StudioChat? get activeChat {
+    final chats = allChats;
+    if (activeChatId != null) {
+      final found = chats.where((c) => c.id == activeChatId).firstOrNull;
+      if (found != null) return found;
+    }
+    return chats.firstOrNull;
+  }
+
   static StudioSnapshot empty() => const StudioSnapshot(
       projects: [],
       workers: [],
@@ -390,6 +569,7 @@ class StudioSnapshot {
 
   factory StudioSnapshot.fromJson(Map<String, dynamic> json) => StudioSnapshot(
         activeRunId: json['activeRunId'] as String?,
+        activeChatId: json['activeChatId'] as String?,
         run: json['run'] == null
             ? null
             : StudioRun.fromJson(Map<String, dynamic>.from(json['run'] as Map)),
@@ -437,10 +617,11 @@ class StudioSnapshot {
 
   static StudioSnapshot demo() => const StudioSnapshot(
         activeRunId: 'run-demo',
+        activeChatId: 'chat-auth-1',
         run: StudioRun(
           id: 'run-demo',
           status: RunStatus.running,
-          objective: 'Build a useful Conclave Studio UI',
+          objective: 'Improve authentication architecture',
           taskCount: 4,
           completedTaskCount: 1,
           openFindingCount: 1,
@@ -457,6 +638,78 @@ class StudioSnapshot {
             branch: 'main',
             activeGoals: 1,
             lastActivity: '2 min ago',
+            chats: [
+              StudioChat(
+                id: 'chat-auth-1',
+                projectId: 'forge',
+                title: 'Improve authentication architecture',
+                lastActivity: 'Just now',
+                activeRunId: 'run-demo',
+                messages: [
+                  StudioChatMessage(
+                    id: 'msg-user-1',
+                    sender: StudioMessageSender.user,
+                    text: 'Improve authentication architecture.',
+                    timestamp: '10:14 AM',
+                  ),
+                  StudioChatMessage(
+                    id: 'msg-conclave-1',
+                    sender: StudioMessageSender.conclave,
+                    text:
+                        'Researching repository boundaries and coordinating candidate workers across GPT-4o and Claude 3.7.',
+                    timestamp: '10:15 AM',
+                    runPreview: StudioRunPreview(
+                      runId: 'run-demo',
+                      statusSummary: 'Researching with 2 Workers...',
+                      phases: [
+                        StudioPhaseItem(
+                          name: 'Research',
+                          status: StudioPhaseStatus.completed,
+                          detail:
+                              'Repository boundaries and auth endpoints identified',
+                        ),
+                        StudioPhaseItem(
+                          name: 'Synthesis',
+                          status: StudioPhaseStatus.inProgress,
+                          detail:
+                              'Consolidating PKCE token rotation and session limits',
+                        ),
+                        StudioPhaseItem(
+                          name: 'Implementation',
+                          status: StudioPhaseStatus.pending,
+                          detail: 'Worker code patch generation',
+                        ),
+                      ],
+                      workerCount: 2,
+                      finalAnswer:
+                          '### Architecture Recommendation\n\n1. **PKCE Authentication Flow**: Migrate all client sessions to short-lived scoped JWTs with client-bound ephemeral proofs.\n2. **Multi-Agent Consensus Gate**: Require cryptographic signature checks across independent reviewer workers before tenant admin role elevations.\n3. **Distributed Revocation List**: Store blacklisted tokens in edge KV memory with automatic 15-minute TTL expirations.',
+                    ),
+                  ),
+                ],
+              ),
+              StudioChat(
+                id: 'chat-stream-2',
+                projectId: 'forge',
+                title: 'Streaming assignment protocol',
+                lastActivity: '1 hour ago',
+                messages: [
+                  StudioChatMessage(
+                    id: 'msg-stream-u1',
+                    sender: StudioMessageSender.user,
+                    text:
+                        'How should worker assignment progress chunks stream to Cloud?',
+                    timestamp: '09:00 AM',
+                  ),
+                  StudioChatMessage(
+                    id: 'msg-stream-c1',
+                    sender: StudioMessageSender.conclave,
+                    text:
+                        'Progress chunks are transmitted over the persistent AgentGateway DO WebSocket connection with incremental percentage and stage logs.',
+                    timestamp: '09:01 AM',
+                  ),
+                ],
+              ),
+            ],
           ),
           StudioProject(
             id: 'atlas',
@@ -465,6 +718,30 @@ class StudioSnapshot {
             branch: 'develop',
             activeGoals: 0,
             lastActivity: 'Yesterday',
+            chats: [
+              StudioChat(
+                id: 'chat-db-1',
+                projectId: 'atlas',
+                title: 'Database migration v2',
+                lastActivity: 'Yesterday',
+                messages: [
+                  StudioChatMessage(
+                    id: 'msg-db-u1',
+                    sender: StudioMessageSender.user,
+                    text:
+                        'Plan zero-downtime D1 migration for event sourcing ledger.',
+                    timestamp: 'Yesterday',
+                  ),
+                  StudioChatMessage(
+                    id: 'msg-db-c1',
+                    sender: StudioMessageSender.conclave,
+                    text:
+                        'Migration plan formulated: step 1 shadow writes, step 2 backfill verification, step 3 read-switchover.',
+                    timestamp: 'Yesterday',
+                  ),
+                ],
+              ),
+            ],
           ),
         ],
         workers: [

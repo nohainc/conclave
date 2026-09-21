@@ -12,6 +12,15 @@ abstract interface class StudioDataSource {
     required String objective,
     required String revision,
   });
+  Future<StudioChatMessage> sendChatMessage({
+    required String projectId,
+    required String chatId,
+    required String text,
+  });
+  Future<StudioChat> createChat({
+    required String projectId,
+    required String title,
+  });
 }
 
 class StudioApiException implements Exception {
@@ -77,6 +86,41 @@ class StudioApiClient implements StudioDataSource {
       throw StudioApiException('Goal creation failed (${response.statusCode})');
     }
   }
+
+  @override
+  Future<StudioChatMessage> sendChatMessage({
+    required String projectId,
+    required String chatId,
+    required String text,
+  }) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/projects/$projectId/chats/$chatId/messages'),
+      headers: {'content-type': 'application/json'},
+      body: jsonEncode({'content': text}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException('Send message failed (${response.statusCode})');
+    }
+    return StudioChatMessage.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  @override
+  Future<StudioChat> createChat({
+    required String projectId,
+    required String title,
+  }) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/projects/$projectId/chats'),
+      headers: {'content-type': 'application/json'},
+      body: jsonEncode({'title': title}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException('Create chat failed (${response.statusCode})');
+    }
+    return StudioChat.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
+  }
 }
 
 class DemoStudioDataSource implements StudioDataSource {
@@ -94,4 +138,33 @@ class DemoStudioDataSource implements StudioDataSource {
     required String objective,
     required String revision,
   }) async {}
+
+  @override
+  Future<StudioChatMessage> sendChatMessage({
+    required String projectId,
+    required String chatId,
+    required String text,
+  }) async {
+    return StudioChatMessage(
+      id: 'msg-${DateTime.now().millisecondsSinceEpoch}',
+      sender: StudioMessageSender.user,
+      text: text,
+      timestamp: 'Just now',
+    );
+  }
+
+  @override
+  Future<StudioChat> createChat({
+    required String projectId,
+    required String title,
+  }) async {
+    return StudioChat(
+      id: 'chat-${DateTime.now().millisecondsSinceEpoch}',
+      projectId: projectId,
+      title: title,
+      lastActivity: 'Just now',
+      messages: [],
+    );
+  }
 }
+

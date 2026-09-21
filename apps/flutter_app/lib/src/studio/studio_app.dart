@@ -25,13 +25,18 @@ class _StudioAppState extends State<StudioApp> {
   bool isLoading = true;
   String? loadError;
   String? selectedTaskId = 'implement';
+  String? selectedChatId;
   int navigationIndex = 0;
+  bool showRunDetails = false;
+  final Set<String> expandedProjectIds = {'forge'};
   bool showNewGoal = false;
   bool showWorkerDrawer = false;
   StudioQualityPreset selectedQuality = StudioQualityPreset.balanced;
   final Map<String, bool> workerEnabled = {};
   final objectiveController = TextEditingController();
   final revisionController = TextEditingController();
+  final chatController = TextEditingController();
+  final List<StudioChatMessage> localChatMessages = [];
 
   StudioProject? get selectedProject => snapshot.projects
       .where((project) => project.id == selectedProjectId)
@@ -39,6 +44,12 @@ class _StudioAppState extends State<StudioApp> {
 
   StudioTask? get selectedTask =>
       snapshot.tasks.where((task) => task.id == selectedTaskId).firstOrNull;
+
+  StudioChat? get selectedChat =>
+      snapshot.allChats
+          .where((chat) => chat.id == (selectedChatId ?? snapshot.activeChatId))
+          .firstOrNull ??
+      snapshot.activeChat;
 
   @override
   void initState() {
@@ -66,6 +77,7 @@ class _StudioAppState extends State<StudioApp> {
                 (project) => project.id == (projectId ?? selectedProjectId))
             ? (projectId ?? selectedProjectId)
             : loaded.projects.firstOrNull?.id;
+        selectedChatId = loaded.activeChatId ?? loaded.activeChat?.id;
         isLoading = false;
         if (loaded.run?.status == RunStatus.paused) {
           // The API is the source of truth; no local pause state is maintained.
@@ -101,6 +113,7 @@ class _StudioAppState extends State<StudioApp> {
     refreshTimer?.cancel();
     objectiveController.dispose();
     revisionController.dispose();
+    chatController.dispose();
     super.dispose();
   }
 
@@ -231,16 +244,34 @@ class _StudioAppState extends State<StudioApp> {
           ]),
           const SizedBox(height: 32),
           _sidebarLabel('WORKSPACE'),
-          _navItem(Icons.grid_view_rounded, 'Overview', 0),
+          _navItem(Icons.chat_bubble_outline, 'Chats', 0),
           _navItem(Icons.track_changes_rounded, 'Goals', 1,
               badge:
                   '${snapshot.projects.fold<int>(0, (total, project) => total + project.activeGoals)}'),
           _navItem(Icons.people_alt_outlined, 'Workers', 2),
           _navItem(Icons.folder_copy_outlined, 'Artifacts', 3),
           const SizedBox(height: 26),
-          _sidebarLabel('PROJECTS'),
-          ...snapshot.projects.map((project) => _projectItem(project)),
-          const Spacer(),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _sidebarLabel('PROJECTS'),
+                  ...snapshot.projects.map((project) => _projectItem(project)),
+                  TextButton.icon(
+                    onPressed: _createChat,
+                    icon: const Icon(Icons.add, size: 15),
+                    label: const Text('New chat'),
+                    style: TextButton.styleFrom(
+                        alignment: Alignment.centerLeft,
+                        foregroundColor: Colors.white54,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8)),
+                  ),
+                ],
+              ),
+            ),
+          ),
           if (compact) _navItem(Icons.close_rounded, 'Close menu', -1),
           _navItem(Icons.settings_outlined, 'Settings', 4),
           const SizedBox(height: 6),
@@ -317,37 +348,79 @@ class _StudioAppState extends State<StudioApp> {
 
   Widget _projectItem(StudioProject project) {
     final active = selectedProject?.id == project.id;
-    return InkWell(
-      onTap: () {
-        setState(() => selectedProjectId = project.id);
-        _loadSnapshot(projectId: project.id);
-      },
-      borderRadius: BorderRadius.circular(9),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 3),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        decoration: BoxDecoration(
-            color: active ? const Color(0xff29283c) : Colors.transparent,
-            borderRadius: BorderRadius.circular(9)),
-        child: Row(children: [
-          Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                  color: active ? const Color(0xff70d6a5) : Colors.white30,
-                  shape: BoxShape.circle)),
-          const SizedBox(width: 10),
-          Expanded(
-              child: Text(project.name,
-                  style: TextStyle(
-                      color: active ? Colors.white : Colors.white60,
-                      fontSize: 12))),
-          if (project.activeGoals > 0)
-            Text('${project.activeGoals}',
-                style: const TextStyle(color: Color(0xffaaa4d9), fontSize: 11))
-        ]),
+    final expanded = expandedProjectIds.contains(project.id);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      InkWell(
+        onTap: () {
+          setState(() {
+            selectedProjectId = project.id;
+            expandedProjectIds.add(project.id);
+            selectedChatId = project.chats.firstOrNull?.id;
+          });
+          _loadSnapshot(projectId: project.id);
+        },
+        borderRadius: BorderRadius.circular(9),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 3),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+              color: active ? const Color(0xff29283c) : Colors.transparent,
+              borderRadius: BorderRadius.circular(9)),
+          child: Row(children: [
+            Icon(expanded ? Icons.expand_more : Icons.chevron_right,
+                size: 15, color: Colors.white38),
+            const SizedBox(width: 2),
+            Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                    color: active ? const Color(0xff70d6a5) : Colors.white30,
+                    shape: BoxShape.circle)),
+            const SizedBox(width: 10),
+            Expanded(
+                child: Text(project.name,
+                    style: TextStyle(
+                        color: active ? Colors.white : Colors.white60,
+                        fontSize: 12))),
+            if (project.activeGoals > 0)
+              Text('${project.activeGoals}',
+                  style:
+                      const TextStyle(color: Color(0xffaaa4d9), fontSize: 11))
+          ]),
+        ),
       ),
-    );
+      if (expanded)
+        ...project.chats.map(
+          (chat) => InkWell(
+            onTap: () => setState(() {
+              selectedProjectId = project.id;
+              selectedChatId = chat.id;
+              showRunDetails = false;
+              navigationIndex = 0;
+            }),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(30, 7, 8, 7),
+              child: Row(children: [
+                Icon(Icons.chat_bubble_outline,
+                    size: 13,
+                    color: selectedChatId == chat.id
+                        ? const Color(0xffbcb3ff)
+                        : Colors.white38),
+                const SizedBox(width: 7),
+                Expanded(
+                    child: Text(chat.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            color: selectedChatId == chat.id
+                                ? Colors.white
+                                : Colors.white54,
+                            fontSize: 11))),
+              ]),
+            ),
+          ),
+        ),
+    ]);
   }
 
   Widget _content(bool compact) {
@@ -357,7 +430,8 @@ class _StudioAppState extends State<StudioApp> {
           child: SingleChildScrollView(
               padding: EdgeInsets.fromLTRB(
                   compact ? 18 : 34, 26, compact ? 18 : 34, 40),
-              child: _dashboard(compact))),
+              child:
+                  showRunDetails ? _dashboard(compact) : _chatView(compact))),
     ]);
   }
 
@@ -369,13 +443,17 @@ class _StudioAppState extends State<StudioApp> {
           color: Colors.white,
           border: Border(bottom: BorderSide(color: Color(0xffe8e8ed)))),
       child: Row(children: [
+        if (showRunDetails)
+          IconButton(
+              onPressed: () => setState(() => showRunDetails = false),
+              icon: const Icon(Icons.arrow_back_rounded)),
         if (compact)
           Builder(
               builder: (context) => IconButton(
                   onPressed: () => Scaffold.of(context).openDrawer(),
                   icon: const Icon(Icons.menu_rounded))),
-        const Expanded(
-            child: Text('Studio',
+        Expanded(
+            child: Text(showRunDetails ? 'Run details' : 'Studio',
                 style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -469,6 +547,266 @@ class _StudioAppState extends State<StudioApp> {
     ]);
   }
 
+  Future<void> _sendChatMessage() async {
+    final chat = selectedChat;
+    final text = chatController.text.trim();
+    if (chat == null || text.isEmpty) return;
+    chatController.clear();
+    setState(() {
+      localChatMessages.add(StudioChatMessage(
+        id: 'local-${DateTime.now().microsecondsSinceEpoch}',
+        sender: StudioMessageSender.user,
+        text: text,
+        timestamp: 'Just now',
+      ));
+    });
+    try {
+      final response = await widget.dataSource.sendChatMessage(
+        projectId: chat.projectId,
+        chatId: chat.id,
+        text: text,
+      );
+      if (!mounted) return;
+      setState(() => localChatMessages.add(response));
+    } catch (error) {
+      if (mounted) setState(() => loadError = error.toString());
+    }
+  }
+
+  Future<void> _createChat() async {
+    final projectId = selectedProjectId;
+    if (projectId == null) return;
+    final titleController = TextEditingController();
+    final title = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('New chat'),
+        content: TextField(
+          controller: titleController,
+          autofocus: true,
+          decoration: const InputDecoration(
+              hintText: 'What would you like to work on?'),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () =>
+                  Navigator.pop(context, titleController.text.trim()),
+              child: const Text('Create')),
+        ],
+      ),
+    );
+    titleController.dispose();
+    if (title == null || title.isEmpty) return;
+    try {
+      final chat = await widget.dataSource
+          .createChat(projectId: projectId, title: title);
+      if (!mounted) return;
+      setState(() {
+        selectedChatId = chat.id;
+        showRunDetails = false;
+        navigationIndex = 0;
+      });
+      await _loadSnapshot(projectId: projectId, showSpinner: false);
+    } catch (error) {
+      if (mounted) setState(() => loadError = error.toString());
+    }
+  }
+
+  Widget _chatView(bool compact) {
+    final chat = selectedChat;
+    final messages = [
+      ...?chat?.messages,
+      ...localChatMessages,
+    ];
+    if (chat == null) {
+      return _panel(
+        title: 'Start a conversation',
+        subtitle: 'Choose a project chat from the sidebar',
+        child: FilledButton.icon(
+          onPressed: () {},
+          icon: const Icon(Icons.add),
+          label: const Text('New chat'),
+        ),
+      );
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(selectedProject?.name ?? 'Project',
+                style: const TextStyle(color: Color(0xff777683), fontSize: 12)),
+            const SizedBox(height: 6),
+            Text(chat.title,
+                style: const TextStyle(
+                    fontSize: 25,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xff20202c))),
+            const SizedBox(height: 5),
+            const Text(
+                'Chat with Conclave and follow multi-worker execution inline.',
+                style: TextStyle(color: Color(0xff777683), fontSize: 13)),
+          ]),
+        ),
+        OutlinedButton.icon(
+          onPressed: _createChat,
+          icon: const Icon(Icons.add, size: 17),
+          label: const Text('New chat'),
+        ),
+      ]),
+      const SizedBox(height: 22),
+      _panel(
+        title: 'Conversation',
+        subtitle:
+            '${messages.length} messages · ${_qualityLabel(selectedQuality)} policy',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ...messages.map(_chatMessage),
+            const SizedBox(height: 10),
+            Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Expanded(
+                child: TextField(
+                  controller: chatController,
+                  minLines: 1,
+                  maxLines: 5,
+                  onSubmitted: (_) => _sendChatMessage(),
+                  decoration: InputDecoration(
+                    hintText: 'Ask Conclave to research, plan, or implement…',
+                    filled: true,
+                    fillColor: const Color(0xfff7f7fa),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filled(
+                  onPressed: _sendChatMessage,
+                  icon: const Icon(Icons.arrow_upward_rounded)),
+            ]),
+          ],
+        ),
+      ),
+    ]);
+  }
+
+  Widget _chatMessage(StudioChatMessage message) {
+    final isUser = message.sender == StudioMessageSender.user;
+    return Align(
+      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 760),
+        margin: const EdgeInsets.only(bottom: 14),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: isUser ? const Color(0xff6254d9) : const Color(0xfffafaff),
+          borderRadius: BorderRadius.circular(13),
+          border: isUser ? null : Border.all(color: const Color(0xffe6e3f8)),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(message.text,
+              style: TextStyle(
+                  color: isUser ? Colors.white : const Color(0xff393743),
+                  fontSize: 13,
+                  height: 1.45)),
+          const SizedBox(height: 5),
+          Text(message.timestamp,
+              style: TextStyle(
+                  color: isUser ? Colors.white70 : const Color(0xffaaa8b1),
+                  fontSize: 10)),
+          if (message.runPreview != null) ...[
+            const SizedBox(height: 14),
+            _runPreviewCard(message.runPreview!),
+          ],
+        ]),
+      ),
+    );
+  }
+
+  Widget _runPreviewCard(StudioRunPreview preview) => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(color: const Color(0xffdfdcf7))),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Icon(Icons.hub_rounded, color: Color(0xff6254d9), size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+                child: Text(preview.statusSummary,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 12))),
+            Text('${preview.workerCount} workers',
+                style: const TextStyle(color: Color(0xff888691), fontSize: 10)),
+          ]),
+          const SizedBox(height: 12),
+          ...preview.phases.map((phase) => _phaseIndicator(phase)),
+          if (preview.finalAnswer != null) ...[
+            const Divider(height: 20),
+            const Text('Final synthesized answer',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+            const SizedBox(height: 6),
+            Text(preview.finalAnswer!,
+                maxLines: 8,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    color: Color(0xff575564), fontSize: 12, height: 1.4)),
+          ],
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: () => setState(() {
+                showRunDetails = true;
+                navigationIndex = 0;
+              }),
+              icon: const Icon(Icons.open_in_new, size: 15),
+              label: const Text('Open run details'),
+            ),
+          ),
+        ]),
+      );
+
+  Widget _phaseIndicator(StudioPhaseItem phase) {
+    final (icon, color) = switch (phase.status) {
+      StudioPhaseStatus.completed => (
+          Icons.check_circle_rounded,
+          const Color(0xff43b17f)
+        ),
+      StudioPhaseStatus.inProgress => (
+          Icons.radio_button_checked,
+          const Color(0xff6254d9)
+        ),
+      StudioPhaseStatus.pending => (
+          Icons.radio_button_unchecked,
+          const Color(0xffaaa8b1)
+        ),
+    };
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 7),
+      child: Row(children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 8),
+        Text(phase.name,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+        if (phase.detail != null) ...[
+          const SizedBox(width: 8),
+          Expanded(
+              child: Text(phase.detail!,
+                  overflow: TextOverflow.ellipsis,
+                  style:
+                      const TextStyle(color: Color(0xff96949e), fontSize: 10))),
+        ],
+      ]),
+    );
+  }
+
   Color _runStatusColor(RunStatus status) => switch (status) {
         RunStatus.completed => const Color(0xff43b17f),
         RunStatus.failed || RunStatus.cancelled => const Color(0xffbd6565),
@@ -523,14 +861,14 @@ class _StudioAppState extends State<StudioApp> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(run?.objective ?? 'No goal has been started',
-                            style: TextStyle(
+                            style: const TextStyle(
                                 fontWeight: FontWeight.w700, fontSize: 14)),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 4),
                         Text(
                             run == null
                                 ? 'Select New goal to begin'
                                 : 'Run ${run.id} · Forge',
-                            style: TextStyle(
+                            style: const TextStyle(
                                 color: Color(0xff898896), fontSize: 11))
                       ]),
                   _statusChip(_statusLabel(status), _runStatusColor(status)),
@@ -538,8 +876,8 @@ class _StudioAppState extends State<StudioApp> {
                   if (!compact)
                     Text(
                         '${run?.verifiedCriterionCount ?? 0} / ${run?.criterionCount ?? 0} criteria verified',
-                        style:
-                            TextStyle(color: Color(0xff777683), fontSize: 11)),
+                        style: const TextStyle(
+                            color: Color(0xff777683), fontSize: 11)),
                   OutlinedButton.icon(
                       onPressed: canControl
                           ? () => _controlRun(paused ? 'resume' : 'pause')
@@ -705,41 +1043,6 @@ class _StudioAppState extends State<StudioApp> {
       ),
     );
   }
-
-  Widget _phaseRow(String number, String name, String detail, bool complete) =>
-      Padding(
-          padding: const EdgeInsets.fromLTRB(2, 13, 2, 7),
-          child: Row(children: [
-            Container(
-                width: 23,
-                height: 23,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                    color: complete
-                        ? const Color(0xffe8f7f0)
-                        : const Color(0xfff0eff4),
-                    borderRadius: BorderRadius.circular(7)),
-                child: Text(number,
-                    style: TextStyle(
-                        fontSize: 10,
-                        color: complete
-                            ? const Color(0xff329b6c)
-                            : const Color(0xff858391),
-                        fontWeight: FontWeight.w700))),
-            const SizedBox(width: 9),
-            Text(name,
-                style:
-                    const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
-            const SizedBox(width: 8),
-            Text(detail,
-                style: const TextStyle(color: Color(0xff96949e), fontSize: 11)),
-            const Spacer(),
-            Icon(complete ? Icons.check_circle_rounded : Icons.more_horiz,
-                size: 16,
-                color: complete
-                    ? const Color(0xff42b27d)
-                    : const Color(0xffb0afb8))
-          ]));
 
   Widget _taskRow(StudioTask task, {bool selected = false}) {
     final active = selectedTaskId == task.id;
@@ -1177,14 +1480,14 @@ class _StudioAppState extends State<StudioApp> {
                 const SizedBox(height: 18),
                 TextField(
                     controller: objectiveController,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                         labelText: 'What should Conclave accomplish?',
                         hintText: 'Describe the outcome, not just the task',
                         border: OutlineInputBorder())),
                 const SizedBox(height: 14),
                 TextField(
                     controller: revisionController,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                         labelText: 'Expected commit SHA',
                         hintText: 'The commit CI must verify',
                         border: OutlineInputBorder())),
