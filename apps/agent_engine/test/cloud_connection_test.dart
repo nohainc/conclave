@@ -226,6 +226,69 @@ void main() {
     await connection.close();
   });
 
+  test('replays a completed assignment without rerunning the handler',
+      () async {
+    final socket = FakeSocket();
+    final directory = await Directory.systemTemp.createTemp('agent-journal-');
+    final journal =
+        AssignmentJournal(File('${directory.path}/assignments.jsonl'));
+    var executions = 0;
+    final connection = AgentCloudConnection(
+      uri: Uri.parse('wss://cloud.test/agent'),
+      agentId: 'agent-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      assignmentJournal: journal,
+      assignmentHandler: (_) async {
+        executions += 1;
+        return const AgentAssignmentResult(summary: 'once');
+      },
+    );
+    await connection.connect();
+
+    Map<String, Object?> assignment() => {
+          'protocol': 'conclave.agent-protocol',
+          'protocolVersion': '2.0',
+          'messageId': 'server-replay-${executions + 1}',
+          'timestamp': DateTime.now().toUtc().toIso8601String(),
+          'type': 'assignment.start',
+          'workspaceId': 'workspace-1',
+          'agentId': 'agent-1',
+          'workerId': 'worker-1',
+          'runId': 'run-1',
+          'taskId': 'task-1',
+          'attemptId': 'attempt-1',
+          'assignmentId': 'assignment-replay',
+          'idempotencyKey': 'idem-replay',
+          'payload': {
+            'objective': 'inspect',
+            'role': 'research',
+            'pluginId': 'conclave.echo',
+            'resolvedPluginVersion': '1.0.0',
+            'input': {},
+            'contextArtifactIds': [],
+            'timeoutMs': 1000,
+          },
+        };
+
+    socket.controller.add(jsonEncode(assignment()));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    socket.controller.add(jsonEncode(assignment()));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+
+    expect(executions, 1);
+    expect(
+      socket.sent
+          .where((message) =>
+              (jsonDecode(message as String) as Map<String, dynamic>)['type'] ==
+              'assignment.result')
+          .length,
+      2,
+    );
+    await connection.close();
+    await directory.delete(recursive: true);
+  });
+
   test('reconnects after a dropped socket', () async {
     final sockets = <FakeSocket>[FakeSocket(), FakeSocket()];
     final first = sockets.first;

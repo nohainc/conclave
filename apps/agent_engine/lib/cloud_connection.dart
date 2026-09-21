@@ -269,6 +269,28 @@ class AgentCloudConnection {
       payload: Map<String, Object?>.from(payload),
     );
     final correlation = _assignmentCorrelation(message);
+    final journalState = await assignmentJournal?.reconcile();
+    final previous = journalState?[context.assignmentId];
+    if (previous?.status == AssignmentStatus.completed &&
+        previous?.result != null) {
+      socket.send(jsonEncode(_assignmentEnvelope(
+        'assignment.ack',
+        correlation,
+        {'accepted': true, 'estimatedStartMs': 0},
+      )));
+      socket.send(jsonEncode(_assignmentEnvelope(
+        'assignment.result',
+        correlation,
+        {
+          'status': 'completed',
+          'summary': previous!.result!['summary'] ??
+              'Assignment replayed from the local journal',
+          'output': null,
+          'artifactIds': previous.result!['artifactIds'] ?? const [],
+        },
+      )));
+      return;
+    }
     await _recordAssignment(context.assignmentId, AssignmentStatus.received);
 
     if (assignmentHandler == null) {
