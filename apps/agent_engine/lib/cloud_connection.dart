@@ -103,6 +103,8 @@ class AgentCloudConnection {
     this.assignmentCancellationHandler,
     this.assignmentJournal,
     this.heartbeat = const Duration(seconds: 15),
+    this.reconnectBaseDelay = const Duration(milliseconds: 10),
+    this.reconnectMaxDelay = const Duration(seconds: 5),
   })  : hostname = hostname ?? Platform.localHostname,
         capabilities = capabilities ?? _defaultCapabilities();
 
@@ -121,10 +123,14 @@ class AgentCloudConnection {
   final AgentAssignmentCancellationHandler? assignmentCancellationHandler;
   final AssignmentJournal? assignmentJournal;
   final Duration heartbeat;
+  final Duration reconnectBaseDelay;
+  final Duration reconnectMaxDelay;
   AgentCloudSocket? _socket;
   Timer? _heartbeatTimer;
   StreamSubscription<Object?>? _subscription;
   bool _closing = false;
+  bool _reconnecting = false;
+  int _reconnectAttempt = 0;
   int reconnectCount = 0;
   String? sessionId;
   bool get isConnected => sessionId != null;
@@ -162,6 +168,7 @@ class AgentCloudConnection {
     final socket = await factory(uri);
     _socket = socket;
     sessionId = null;
+    _reconnectAttempt = 0;
     await _subscription?.cancel();
     _subscription = socket.messages.listen(
       _handleMessage,
@@ -514,10 +521,28 @@ class AgentCloudConnection {
   }
 
   Future<void> _reconnect() async {
-    if (_closing) return;
-    reconnectCount += 1;
-    await Future<void>.delayed(const Duration(milliseconds: 10));
-    if (!_closing) await _open();
+    if (_closing || _reconnecting) return;
+    _reconnecting = true;
+    try {
+      while (!_closing) {
+        reconnectCount += 1;
+        final multiplier = 1 << _reconnectAttempt.clamp(0, 8);
+        final delay = Duration(
+          microseconds: (reconnectBaseDelay.inMicroseconds * multiplier)
+              .clamp(0, reconnectMaxDelay.inMicroseconds),
+        );
+        await Future<void>.delayed(delay);
+        if (_closing) return;
+        try {
+          await _open();
+          return;
+        } on Object {
+          _reconnectAttempt = (_reconnectAttempt + 1).clamp(0, 8);
+        }
+      }
+    } finally {
+      _reconnecting = false;
+    }
   }
 
   Future<void> close() async {

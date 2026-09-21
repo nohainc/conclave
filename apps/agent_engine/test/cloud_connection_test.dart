@@ -461,4 +461,29 @@ void main() {
     expect(connection.reconnectCount, 1);
     await connection.close();
   });
+
+  test('retries a failed reconnect with backoff', () async {
+    final first = FakeSocket();
+    final recovered = FakeSocket();
+    var factoryCalls = 0;
+    final connection = AgentCloudConnection(
+      uri: Uri.parse('wss://cloud.test/agent'),
+      agentId: 'agent-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async {
+        factoryCalls += 1;
+        if (factoryCalls == 2) throw const SocketException('temporary loss');
+        return factoryCalls == 1 ? first : recovered;
+      },
+      heartbeat: const Duration(hours: 1),
+      reconnectBaseDelay: const Duration(milliseconds: 5),
+      reconnectMaxDelay: const Duration(milliseconds: 20),
+    );
+    await connection.connect();
+    await first.controller.close();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(factoryCalls, greaterThanOrEqualTo(3));
+    expect(connection.reconnectCount, greaterThanOrEqualTo(2));
+    await connection.close();
+  });
 }
