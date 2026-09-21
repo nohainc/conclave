@@ -51,6 +51,11 @@ Future<Map<String, Object?>> _runAssignment(Object? rawParams) async {
             'summary': item.summary,
             'artifacts': item.artifacts,
             if (item.exitCode != null) 'exitCode': item.exitCode,
+            if (item.command.isNotEmpty) 'command': item.command,
+            if (item.stderr.isNotEmpty) 'stderr': item.stderr,
+            if (item.revision != null) 'revision': item.revision,
+            'findings': item.findings,
+            if (item.verification != null) 'verification': item.verification,
           })
       .toList();
   return {
@@ -58,7 +63,11 @@ Future<Map<String, Object?>> _runAssignment(Object? rawParams) async {
     'summary': completion.completed
         ? 'Forge completed and verified the repository change'
         : 'Forge did not satisfy the repository acceptance checks',
-    'output': {'completed': completion.completed, 'evidence': evidence},
+    'output': {
+      'completed': completion.completed,
+      'completionReport': completion.completionReport,
+      'evidence': evidence,
+    },
     'artifactIds': const <String>[],
   };
 }
