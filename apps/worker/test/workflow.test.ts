@@ -4,6 +4,7 @@ import { ConclaveRunWorkflow } from "../src/workflow.js";
 function workflow(
   terminalEvents: readonly Record<string, unknown>[],
   executionId = "forge-execution-1",
+  stepNames: string[] = [],
 ) {
   const service = {
     fetch: async () => Response.json({ executionId }, { status: 202 }),
@@ -18,7 +19,10 @@ function workflow(
       _name: string,
       _config: unknown,
       callback: () => Promise<T>,
-    ) => callback(),
+    ) => {
+      stepNames.push(_name);
+      return callback();
+    },
     waitForEvent: async <T>() => ({ payload: queue.shift() }) as { payload: T },
   } as unknown as import("cloudflare:workers").WorkflowStep;
   return { instance, step };
@@ -32,6 +36,35 @@ const params = {
 };
 
 describe("durable Forge lifecycle", () => {
+  it("records durable phases before waiting for Forge terminal state", async () => {
+    const stepNames: string[] = [];
+    const { instance, step } = workflow(
+      [
+        {
+          eventId: "forge-order-1",
+          runId: "run-1",
+          executionId: "forge-execution-1",
+          status: "completed",
+        },
+      ],
+      "forge-execution-1",
+      stepNames,
+    );
+
+    await instance.run({ payload: params } as never, step);
+
+    expect(stepNames).toEqual([
+      "checkpoint:intake",
+      "checkpoint:research",
+      "checkpoint:planning",
+      "checkpoint:implementation",
+      "forge:execute",
+      "forge:terminal:forge-order-1",
+      "checkpoint:verification",
+      "checkpoint:completed",
+    ]);
+  });
+
   it("does not complete until Forge reports completion", async () => {
     const { instance, step } = workflow([
       {

@@ -240,6 +240,20 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
       }
     }
 
+    const planning = await step.do(
+      "checkpoint:planning",
+      stepConfig,
+      async () => ({
+        ...research,
+        stage: "planning" as const,
+      }),
+    );
+    const implementation = await step.do(
+      "checkpoint:implementation",
+      stepConfig,
+      async () => ({ ...planning, stage: "implementation" as const }),
+    );
+
     const execution = await step.do("forge:execute", stepConfig, async () => {
       const service = (this.env as ExecutionEnv).CONCLAVE_FORGE_EXECUTION;
       if (!service) {
@@ -265,7 +279,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
         throw new Error("Forge execution returned no executionId");
       }
       return {
-        ...research,
+        ...implementation,
         executionId: body.executionId,
         executionStatus: "started" as const,
       };
@@ -311,20 +325,6 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
           : {}),
       }));
     }
-
-    const planning = await step.do(
-      "checkpoint:planning",
-      stepConfig,
-      async () => ({
-        ...execution,
-        stage: "planning" as const,
-      }),
-    );
-    const implementation = await step.do(
-      "checkpoint:implementation",
-      stepConfig,
-      async () => ({ ...planning, stage: "implementation" as const }),
-    );
 
     let machineEvidence: MachineEvidenceEvent | undefined;
     if (params.requireCiEvidence !== false) {
