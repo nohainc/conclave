@@ -1,17 +1,22 @@
-# conclave_agent_app
+# Conclave AX Agent
 
-A new Flutter project.
+The macOS Agent consists of the Flutter host-management app and the local
+Dart Agent Engine. The app owns local setup and status; Cloud orchestration
+stays in Studio.
 
-## Getting Started
+## Build and package macOS
 
-This project is a starting point for a Flutter application.
+From the repository root:
 
-A few resources to get you started if this is your first Flutter project:
+```sh
+scripts/build-agent-macos.sh
+scripts/package-agent-macos.sh \
+  --app-bundle apps/agent_app/build/macos/Build/Products/Release/conclave_agent_app.app \
+  --engine apps/agent_app/build/macos/Build/Products/Release/conclave_agent_engine \
+  --output dist/conclave-agent-macos.zip \
+  --version 0.1.0
+```
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+For a release build, provide `--signing-identity` (or
+`CONCLAVE_CODESIGN_IDENTITY`) and notarize the resulting signed app through
+the release pipeline. Local unsigned packages are intended for development.

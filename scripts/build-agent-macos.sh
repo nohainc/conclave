@@ -9,3 +9,4 @@ dart compile exe apps/agent_engine/bin/conclave_agent_engine.dart \
   -o apps/agent_app/build/macos/Build/Products/Release/conclave_agent_engine
 
 echo "Unsigned macOS Agent bundle and Engine produced under apps/agent_app/build/macos."
+echo "Package with scripts/package-agent-macos.sh after signing identities are configured."
