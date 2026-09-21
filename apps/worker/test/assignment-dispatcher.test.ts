@@ -241,6 +241,37 @@ describe("Assignment Dispatcher (Cloud -> Agent -> Worker)", () => {
 
       expect(selected).toBeNull();
     });
+
+    it("does not select an explicitly requested offline worker", async () => {
+      const selected = await selectWorkerForTask(
+        d1,
+        "ws-1",
+        {
+          id: "task-offline",
+          role: "implementer",
+          objective: "Build feature X",
+        },
+        { explicitWorkerId: "worker-implementer" },
+      );
+
+      db.prepare(
+        "UPDATE agents SET status = 'offline' WHERE id = 'ag-1'",
+      ).run();
+
+      const offlineSelected = await selectWorkerForTask(
+        d1,
+        "ws-1",
+        {
+          id: "task-offline",
+          role: "implementer",
+          objective: "Build feature X",
+        },
+        { explicitWorkerId: "worker-implementer" },
+      );
+
+      expect(selected).not.toBeNull();
+      expect(offlineSelected).toBeNull();
+    });
   });
 
   describe("dispatchTaskAssignment", () => {
@@ -314,6 +345,32 @@ describe("Assignment Dispatcher (Cloud -> Agent -> Worker)", () => {
       const assignmentRow = db
         .prepare("SELECT * FROM worker_assignments WHERE task_id = 'task-1'")
         .get() as Record<string, unknown>;
+      expect(assignmentRow.status).toBe("failed");
+    });
+
+    it("fails closed when no Agent Gateway is configured", async () => {
+      const result = await dispatchTaskAssignment(
+        { ...env, AGENT_GATEWAY: undefined, CONCLAVE_AGENT_GATEWAY: undefined },
+        {
+          workspaceId: "ws-1",
+          runId: "run-1",
+          taskId: "task-1",
+          task: {
+            id: "task-1",
+            role: "implementer",
+            objective: "Build feature X",
+          },
+        },
+      );
+
+      expect(result.status).toBe("failed");
+      expect(result.accepted).toBe(false);
+      expect(result.error).toContain("Agent Gateway is not configured");
+      const assignmentRow = db
+        .prepare(
+          "SELECT status FROM worker_assignments WHERE task_id = 'task-1'",
+        )
+        .get() as { status: string };
       expect(assignmentRow.status).toBe("failed");
     });
   });

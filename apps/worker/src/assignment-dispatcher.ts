@@ -73,7 +73,9 @@ export async function selectWorkerForTask(
                 a.status as agent_status
          FROM workers w
          JOIN agents a ON a.id = w.agent_id
-         WHERE w.workspace_id = ?1 AND w.id = ?2 AND w.enabled = 1`,
+         WHERE w.workspace_id = ?1 AND w.id = ?2 AND w.enabled = 1
+           AND w.status != 'disabled' AND a.status = 'online'
+           AND a.revoked_at IS NULL`,
       )
       .bind(workspaceId, options.explicitWorkerId)
       .first<Record<string, unknown>>();
@@ -258,7 +260,30 @@ export async function dispatchTaskAssignment(
   };
 
   const gatewayNamespace = env.CONCLAVE_AGENT_GATEWAY || env.AGENT_GATEWAY;
-  if (gatewayNamespace) {
+  if (!gatewayNamespace) {
+    const error =
+      "Agent Gateway is not configured; assignment was not dispatched";
+    await recordAssignmentError(env.CONCLAVE_DB, assignmentId, {
+      status: "failed",
+      error: {
+        code: "AGENT_GATEWAY_NOT_CONFIGURED",
+        message: error,
+        retryable: true,
+      },
+    });
+    return {
+      assignmentId,
+      attemptId,
+      workerId: selectedWorker.id,
+      agentId: selectedWorker.agentId,
+      pluginId: selectedWorker.pluginId,
+      status: "failed",
+      accepted: false,
+      error,
+    };
+  }
+
+  {
     try {
       const doId = gatewayNamespace.idFromName(selectedWorker.agentId);
       const stub = gatewayNamespace.get(doId);
