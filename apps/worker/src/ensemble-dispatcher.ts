@@ -59,7 +59,9 @@ export async function selectEnsembleCandidateWorkers(
                 w.roles_json, w.capabilities_json, a.status as agent_status
          FROM workers w
          JOIN agents a ON a.id = w.agent_id
-         WHERE w.workspace_id = ?1 AND w.id IN (${placeholders}) AND w.enabled = 1`,
+         WHERE w.workspace_id = ?1 AND w.id IN (${placeholders}) AND w.enabled = 1
+           AND w.status != 'disabled' AND a.status = 'online'
+           AND a.revoked_at IS NULL`,
       )
       .bind(workspaceId, ...explicitWorkerIds)
       .all<Record<string, unknown>>();

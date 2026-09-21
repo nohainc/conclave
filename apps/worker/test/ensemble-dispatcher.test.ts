@@ -243,6 +243,30 @@ describe("Multi-Agent Ensemble Dispatcher (Cloud -> Multi-Agent -> Workers)", ()
       const indepKeys = candidates.map((c) => c.independenceKey);
       expect(new Set(indepKeys).size).toBe(3);
     });
+
+    it("excludes offline Agents even when candidate IDs are explicit", async () => {
+      db.prepare(
+        "UPDATE agents SET status = 'offline' WHERE id = 'ag-linux'",
+      ).run();
+
+      const candidates = await selectEnsembleCandidateWorkers(
+        d1,
+        "ws-1",
+        {
+          id: "task-arch",
+          role: "architect",
+          objective: "Design Architecture",
+          capabilities: ["architecture"],
+        },
+        3,
+        ["w-claude-mac", "w-gpt-linux", "w-web-worker"],
+      );
+
+      expect(candidates.map((candidate) => candidate.id)).toEqual([
+        "w-claude-mac",
+        "w-web-worker",
+      ]);
+    });
   });
 
   describe("dispatchEnsembleTaskAssignment", () => {
