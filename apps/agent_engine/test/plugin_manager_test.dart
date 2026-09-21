@@ -29,6 +29,14 @@ void main() {
         endsWith('/echo/2.0.0'));
     await manager.rollback('echo', '1.0.0');
     expect(await manager.activeVersion('echo'), '1.0.0');
+    await manager.rollback('echo', '2.0.0');
+    final inventory = await manager.inventory();
+    expect(inventory, hasLength(2));
+    expect(inventory.singleWhere((plugin) => plugin.active).version, '2.0.0');
+    await manager.remove('echo', '1.0.0');
+    expect((await manager.inventory()).map((plugin) => plugin.version),
+        contains('2.0.0'));
+    expect(() => manager.remove('echo', '2.0.0'), throwsA(isA<StateError>()));
     await directory.delete(recursive: true);
   });
 

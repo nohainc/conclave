@@ -66,6 +66,22 @@ class PluginPackage {
   final PluginManifest? manifest;
 }
 
+class InstalledPlugin {
+  const InstalledPlugin({
+    required this.pluginId,
+    required this.version,
+    required this.digest,
+    required this.active,
+    required this.manifest,
+  });
+
+  final String pluginId;
+  final String version;
+  final String digest;
+  final bool active;
+  final Map<String, Object?> manifest;
+}
+
 class PluginManager {
   PluginManager(this.root,
       {this.trustPolicy, this.allowedPermissions = const {}});
@@ -152,6 +168,43 @@ class PluginManager {
           arguments is List ? arguments.whereType<String>().toList() : const [],
       workingDirectory: '${root.path}/$pluginId/$version',
     );
+  }
+
+  Future<List<InstalledPlugin>> inventory() async {
+    if (!await root.exists()) return [];
+    final result = <InstalledPlugin>[];
+    await for (final pluginEntity in root.list(followLinks: false)) {
+      if (pluginEntity is! Directory) continue;
+      final pluginId = pluginEntity.path.split(Platform.pathSeparator).last;
+      final active = await activeVersion(pluginId);
+      await for (final versionEntity in pluginEntity.list(followLinks: false)) {
+        if (versionEntity is! Directory) continue;
+        final version = versionEntity.path.split(Platform.pathSeparator).last;
+        final manifestFile = File('${versionEntity.path}/manifest.json');
+        if (!await manifestFile.exists()) continue;
+        final manifest = Map<String, Object?>.from(
+          jsonDecode(await manifestFile.readAsString()) as Map,
+        );
+        final digest = manifest['digest'];
+        if (digest is! String) continue;
+        result.add(InstalledPlugin(
+          pluginId: pluginId,
+          version: version,
+          digest: digest,
+          active: active == version,
+          manifest: manifest,
+        ));
+      }
+    }
+    return result;
+  }
+
+  Future<void> remove(String pluginId, String version) async {
+    if (await activeVersion(pluginId) == version) {
+      throw StateError('cannot remove the active plugin version');
+    }
+    final target = Directory('${root.path}/$pluginId/$version');
+    if (await target.exists()) await target.delete(recursive: true);
   }
 
   PluginAssignmentHandler assignmentHandler(PluginProcessExecutor executor) =>
