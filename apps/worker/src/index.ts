@@ -253,25 +253,47 @@ async function accessSecurityContext(
     throw new HttpError(401, "Cloudflare Access authentication required");
 
   const targetOrgOrWs = env.CONCLAVE_ACCESS_ORGANIZATION_ID;
-  const legacyQuery = targetOrgOrWs
-    ? "SELECT organization_id, role, status FROM organization_memberships WHERE organization_id = ?1 AND user_id = ?2"
-    : "SELECT organization_id, role, status FROM organization_memberships WHERE user_id = ?1";
-  const membershipStatement = env.CONCLAVE_DB.prepare(legacyQuery);
-  const memberships = targetOrgOrWs
-    ? await membershipStatement.bind(targetOrgOrWs, userId).all<{
-        organization_id?: string;
-        workspace_id?: string;
-        role: string;
-        status?: string;
-      }>()
-    : await membershipStatement.bind(userId).all<{
-        organization_id?: string;
-        workspace_id?: string;
-        role: string;
-        status?: string;
-      }>();
+  const membershipQuery = targetOrgOrWs
+    ? `SELECT wm.workspace_id, wm.role, wm.status, w.status AS workspace_status
+       FROM workspace_memberships wm
+       JOIN workspaces w ON w.id = wm.workspace_id
+       WHERE wm.workspace_id = ?1 AND wm.user_id = ?2`
+    : `SELECT wm.workspace_id, wm.role, wm.status, w.status AS workspace_status
+       FROM workspace_memberships wm
+       JOIN workspaces w ON w.id = wm.workspace_id
+       WHERE wm.user_id = ?1`;
+  type AccessMembership = {
+    workspace_id: string;
+    role: string;
+    status?: string;
+    workspace_status?: string;
+  };
+  let memberships: { results?: readonly AccessMembership[] };
+  try {
+    const statement = env.CONCLAVE_DB.prepare(membershipQuery);
+    memberships = targetOrgOrWs
+      ? await statement.bind(targetOrgOrWs, userId).all<AccessMembership>()
+      : await statement.bind(userId).all<AccessMembership>();
+  } catch {
+    // Older development databases do not yet have membership status.
+    const legacyMembershipQuery = targetOrgOrWs
+      ? `SELECT wm.workspace_id, wm.role, w.status AS workspace_status
+         FROM workspace_memberships wm
+         JOIN workspaces w ON w.id = wm.workspace_id
+         WHERE wm.workspace_id = ?1 AND wm.user_id = ?2`
+      : `SELECT wm.workspace_id, wm.role, w.status AS workspace_status
+         FROM workspace_memberships wm
+         JOIN workspaces w ON w.id = wm.workspace_id
+         WHERE wm.user_id = ?1`;
+    const statement = env.CONCLAVE_DB.prepare(legacyMembershipQuery);
+    memberships = targetOrgOrWs
+      ? await statement.bind(targetOrgOrWs, userId).all<AccessMembership>()
+      : await statement.bind(userId).all<AccessMembership>();
+  }
   const activeMemberships = (memberships.results ?? []).filter(
-    (m) => m.status === undefined || m.status === "active",
+    (m) =>
+      (m.status === undefined || m.status === "active") &&
+      (m.workspace_status === undefined || m.workspace_status === "active"),
   );
   if (activeMemberships.length !== 1)
     throw new HttpError(
@@ -281,10 +303,9 @@ async function accessSecurityContext(
         : "A workspace must be selected for this identity",
     );
   const membership = activeMemberships[0]!;
-  const wsId =
-    membership.workspace_id ?? membership.organization_id ?? "default";
+  const wsId = membership.workspace_id;
   const projects = await env.CONCLAVE_DB.prepare(
-    "SELECT project_id, role FROM project_memberships WHERE project_id IN (SELECT id FROM projects WHERE organization_id = ?1 OR workspace_id = ?1) AND user_id = ?2",
+    "SELECT pm.project_id, pm.role FROM project_memberships pm JOIN projects p ON p.id = pm.project_id WHERE p.workspace_id = ?1 AND pm.user_id = ?2",
   )
     .bind(wsId, userId)
     .all<{ project_id: string; role: string }>();

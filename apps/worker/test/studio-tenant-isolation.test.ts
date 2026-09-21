@@ -140,7 +140,7 @@ class Statement implements D1Statement {
     return this;
   }
   async first<T>(): Promise<T | null> {
-    if (this.query.includes("organization_memberships")) {
+    if (this.query.includes("workspace_memberships")) {
       return { role: "owner", status: "active" } as T;
     }
     if (this.query.includes("SELECT r.id FROM runs")) {
@@ -158,12 +158,14 @@ class Statement implements D1Statement {
     return null;
   }
   async all<T>(): Promise<{ results: readonly T[] }> {
-    if (this.query.includes("FROM organization_memberships")) {
-      const organizationId = this.values[0] as Tenant;
+    if (this.query.includes("FROM workspace_memberships")) {
+      const organizationId = this.values.find(
+        (value): value is Tenant => value === "org-a" || value === "org-b",
+      ) as Tenant;
       return {
         results: [
           {
-            organization_id: organizationId,
+            workspace_id: organizationId,
             role: "owner",
             status: "active",
           } as T,
