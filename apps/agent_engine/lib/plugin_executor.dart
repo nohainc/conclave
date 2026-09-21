@@ -45,6 +45,8 @@ class PluginProcessExecutor {
   int _requestSequence = 0;
   final _activeProcesses = <String, Process>{};
   final _activeResponses = <String, Completer<Map<String, Object?>>>{};
+  final _cancelledOperations = <String>{};
+  final _activeCancellations = <String, void Function()>{};
 
   static Future<Process> _launch(PluginProcessSpec spec) =>
       startIsolatedProcess(
@@ -70,12 +72,30 @@ class PluginProcessExecutor {
         '${++_requestSequence}';
     final processId = operationId ?? requestId;
     _activeProcesses[processId] = process;
+    final pending = <String, Completer<Map<String, Object?>>>{};
     final response = Completer<Map<String, Object?>>();
     _activeResponses[processId] = response;
+    _activeCancellations[processId] = () {
+      for (final pendingResponse in pending.values) {
+        if (!pendingResponse.isCompleted) {
+          pendingResponse.completeError(
+            ProcessException(
+              'cancelled',
+              const [],
+              'Plugin assignment cancelled',
+            ),
+          );
+        }
+      }
+    };
     var stdoutBytes = 0;
     var stderrBytes = 0;
     void fail(String message) {
-      if (!response.isCompleted) response.completeError(StateError(message));
+      for (final pendingResponse in pending.values) {
+        if (!pendingResponse.isCompleted) {
+          pendingResponse.completeError(StateError(message));
+        }
+      }
       unawaited(_terminator(process, force: true));
     }
 
@@ -91,21 +111,23 @@ class PluginProcessExecutor {
       }
       try {
         final decoded = jsonDecode(line);
-        if (decoded is! Map<String, dynamic> || decoded['id'] != requestId) {
+        if (decoded is! Map<String, dynamic> || decoded['id'] is! String) {
           return;
         }
+        final pendingResponse = pending[decoded['id'] as String];
+        if (pendingResponse == null || pendingResponse.isCompleted) return;
         if (decoded['error'] is Map) {
-          response.completeError(
+          pendingResponse.completeError(
               StateError('${(decoded['error'] as Map)['message']}'));
           return;
         }
         final result = decoded['result'];
         if (result is! Map) {
-          response
+          pendingResponse
               .completeError(StateError('plugin returned a non-object result'));
           return;
         }
-        response.complete(Map<String, Object?>.from(result));
+        pendingResponse.complete(Map<String, Object?>.from(result));
       } on Object catch (error) {
         response.completeError(error);
       }
@@ -116,15 +138,49 @@ class PluginProcessExecutor {
         fail('plugin stderr exceeded $maxStderrBytes bytes');
       }
     });
-    try {
+    unawaited(process.exitCode.then((exitCode) {
+      if (!_cancelledOperations.contains(processId) &&
+          pending.values
+              .any((pendingResponse) => !pendingResponse.isCompleted)) {
+        fail('plugin process exited with code $exitCode before completing');
+      }
+    }));
+    Future<Map<String, Object?>> request(
+      String method,
+      Map<String, Object?> params,
+    ) {
+      final id =
+          method == 'start_assignment' ? requestId : '$requestId-$method';
+      final pendingResponse = method == 'start_assignment'
+          ? response
+          : Completer<Map<String, Object?>>();
+      pending[id] = pendingResponse;
       process.stdin.writeln(jsonEncode({
         'jsonrpc': '2.0',
-        'id': requestId,
-        'method': 'start_assignment',
+        'id': id,
+        'method': method,
         'params': params,
       }));
-      process.stdin.close();
-      final result = await response.future.timeout(
+      return pendingResponse.future;
+    }
+
+    try {
+      final execution = () async {
+        final initialized = await request('initialize', {
+          'pluginId': spec.pluginId,
+          'protocolVersion': '2.0',
+        });
+        if (initialized['pluginId'] != spec.pluginId ||
+            initialized['protocolVersion'] != '2.0') {
+          throw StateError('plugin handshake identity is invalid');
+        }
+        final health = await request('health', {});
+        if (health['status'] != 'healthy') {
+          throw StateError('plugin health check failed');
+        }
+        return await request('start_assignment', params);
+      }();
+      final result = await execution.timeout(
         timeout,
         onTimeout: () {
           fail('plugin execution timed out after $timeout');
@@ -133,11 +189,14 @@ class PluginProcessExecutor {
       );
       return result;
     } finally {
+      await process.stdin.close();
       await stdoutSubscription.cancel();
       await stderrSubscription.cancel();
       await _terminator(process, force: false);
       _activeProcesses.remove(processId);
       _activeResponses.remove(processId);
+      _cancelledOperations.remove(processId);
+      _activeCancellations.remove(processId);
     }
   }
 
@@ -145,12 +204,8 @@ class PluginProcessExecutor {
     final process = _activeProcesses[operationId];
     if (process == null) return false;
     _activeProcesses.remove(operationId);
-    final response = _activeResponses[operationId];
-    if (response != null && !response.isCompleted) {
-      response.completeError(
-        ProcessException('cancelled', const [], 'Plugin assignment cancelled'),
-      );
-    }
+    _cancelledOperations.add(operationId);
+    _activeCancellations.remove(operationId)?.call();
     await _terminator(process, force: false);
     return true;
   }

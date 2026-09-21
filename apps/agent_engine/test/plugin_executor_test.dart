@@ -6,6 +6,16 @@ import 'package:conclave_agent_engine/plugin_executor.dart';
 import 'package:test/test.dart';
 import 'fixture_copy.dart';
 
+Future<Directory> createSilentPlugin() async {
+  final directory = await Directory.systemTemp.createTemp('silent-plugin-');
+  await File('${directory.path}/silent.dart').writeAsString('''
+Future<void> main() async {
+  await Future<void>.delayed(const Duration(seconds: 5));
+}
+''');
+  return directory;
+}
+
 void main() {
   test('does not inherit unrelated Agent secrets into plugin processes', () {
     final environment = safePluginEnvironment(
@@ -80,35 +90,45 @@ void main() {
   });
 
   test('terminates a plugin that does not answer before the timeout', () async {
-    await expectLater(
-      PluginProcessExecutor().execute(
-        PluginProcessSpec(
-          pluginId: 'silent',
-          executable: Platform.resolvedExecutable,
-          arguments: ['-e', 'Future<void>.delayed(Duration(seconds: 5));'],
+    final directory = await createSilentPlugin();
+    try {
+      await expectLater(
+        PluginProcessExecutor().execute(
+          PluginProcessSpec(
+            pluginId: 'silent',
+            executable: Platform.resolvedExecutable,
+            arguments: ['run', '${directory.path}/silent.dart'],
+          ),
+          {},
+          timeout: const Duration(milliseconds: 50),
         ),
-        {},
-        timeout: const Duration(milliseconds: 50),
-      ),
-      throwsA(isA<TimeoutException>()),
-    );
+        throwsA(isA<TimeoutException>()),
+      );
+    } finally {
+      await directory.delete(recursive: true);
+    }
   });
 
   test('cancels an active plugin process by operation ID', () async {
+    final directory = await createSilentPlugin();
     final executor = PluginProcessExecutor();
-    final execution = executor.execute(
-      PluginProcessSpec(
-        pluginId: 'silent',
-        executable: Platform.resolvedExecutable,
-        arguments: ['-e', 'Future<void>.delayed(Duration(seconds: 5));'],
-      ),
-      {},
-      operationId: 'assignment-cancel-1',
-      timeout: const Duration(seconds: 10),
-    );
-    await Future<void>.delayed(const Duration(milliseconds: 100));
-    expect(await executor.cancel('assignment-cancel-1'), isTrue);
-    await expectLater(execution, throwsA(isA<ProcessException>()));
+    try {
+      final execution = executor.execute(
+        PluginProcessSpec(
+          pluginId: 'silent',
+          executable: Platform.resolvedExecutable,
+          arguments: ['run', '${directory.path}/silent.dart'],
+        ),
+        {},
+        operationId: 'assignment-cancel-1',
+        timeout: const Duration(seconds: 10),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(await executor.cancel('assignment-cancel-1'), isTrue);
+      await expectLater(execution, throwsA(isA<ProcessException>()));
+    } finally {
+      await directory.delete(recursive: true);
+    }
   });
 
   test('executes the Forge plugin against the real fixture repository',
