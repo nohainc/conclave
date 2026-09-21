@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { assertSingleAgentForgeBindings } from "../src/forge-execution.js";
+import {
+  assertSingleAgentForgeBindings,
+  resolveForgeExecutionMode,
+} from "../src/forge-execution.js";
 import type { WorkerBinding } from "@conclave/core";
 
 function binding(
@@ -35,6 +38,11 @@ function binding(
 }
 
 describe("single-agent Forge policy", () => {
+  it("does not permit the retired direct cloud execution mode", () => {
+    expect(() => resolveForgeExecutionMode("cloud_api")).toThrow(
+      "direct cloud model execution has been retired",
+    );
+  });
   it("requires three local workers on the same Agent", () => {
     const bindings = [
       binding("lead", "local_agent"),

@@ -29,10 +29,6 @@ import {
   type ForgeRuntimeAdapter,
   type ForgeRuntimeEvidence,
 } from "@conclave/orchestration";
-import {
-  AnthropicMessagesWorker,
-  OpenAIResponsesWorker,
-} from "@conclave/providers";
 import type { ImplementationOperation } from "@conclave/protocol";
 import type {
   RuntimeEvidence,
@@ -51,9 +47,6 @@ interface ForgeExecutionEnv {
   readonly CONCLAVE_API_BASE_URL?: string;
   readonly CONCLAVE_API?: Fetcher;
   readonly CONCLAVE_FORGE_CALLBACK_TOKEN?: string;
-  readonly CONCLAVE_OPENAI_API_KEY?: string;
-  readonly CONCLAVE_ANTHROPIC_API_KEY?: string;
-  readonly CONCLAVE_WORKER_MODELS?: string;
   readonly CONCLAVE_LOCAL_RUNTIME_URL?: string;
   readonly CONCLAVE_LOCAL_RUNTIME_TOKEN?: string;
   readonly CONCLAVE_RUNTIME_ID?: string;
@@ -811,37 +804,26 @@ async function discoverLocalWorkers(
 function modelFor(
   binding: WorkerBinding,
   env: ForgeExecutionEnv,
-  models: Readonly<Record<string, string>>,
   context: ForgeExecutionContext,
 ): WorkerExecutor {
   const { worker: resource, connection } = binding;
   if (connection.transport === "local_agent") {
     return new AgentGatewayWorkerExecutor(resource, connection, env, context);
   }
-  const model = models[resource.id] ?? connection.name;
-  if (connection.provider === "openai") {
-    if (!env.CONCLAVE_OPENAI_API_KEY)
-      throw new Error("OpenAI API key is not configured");
-    return new OpenAIResponsesWorker({
-      apiKey: env.CONCLAVE_OPENAI_API_KEY,
-      model,
-      resource,
-      connection,
-    });
-  }
-  if (connection.provider === "anthropic") {
-    if (!env.CONCLAVE_ANTHROPIC_API_KEY)
-      throw new Error("Anthropic API key is not configured");
-    return new AnthropicMessagesWorker({
-      apiKey: env.CONCLAVE_ANTHROPIC_API_KEY,
-      model,
-      resource,
-      connection,
-    });
-  }
   throw new Error(
-    `Unsupported model provider: ${connection.provider ?? connection.transport}`,
+    `Forge requires Dart Agent execution; unsupported transport: ${connection.transport}`,
   );
+}
+
+export type ForgeExecutionMode = "single_agent" | "multi_agent";
+
+export function resolveForgeExecutionMode(value: unknown): ForgeExecutionMode {
+  if (value === "cloud_api") {
+    throw new Error(
+      "Forge direct cloud model execution has been retired; use Dart Agent workers",
+    );
+  }
+  return value === "multi_agent" ? "multi_agent" : "single_agent";
 }
 
 async function readExecutionContext(
@@ -939,12 +921,7 @@ export async function executeForgeService(
   if (reviewerResource.worker.id === implementerResource.worker.id) {
     throw new Error("Forge requires independent worker resources");
   }
-  const executionMode =
-    params.executionMode === "cloud_api"
-      ? "cloud_api"
-      : params.executionMode === "multi_agent"
-        ? "multi_agent"
-        : "single_agent";
+  const executionMode = resolveForgeExecutionMode(params.executionMode);
   const agentIds = new Map(
     (workers.results ?? []).map((row) => [
       String(row.id),
@@ -978,9 +955,6 @@ export async function executeForgeService(
       "Multi-agent Forge requires a repository research worker on the second Agent",
     );
   }
-  const models = env.CONCLAVE_WORKER_MODELS
-    ? (JSON.parse(env.CONCLAVE_WORKER_MODELS) as Record<string, string>)
-    : {};
   const localBindings = [
     leadResource,
     implementerResource,
@@ -1008,17 +982,12 @@ export async function executeForgeService(
       run,
       repositoryId: context.repositoryId,
       revision: context.revision,
-      lead: modelFor(leadResource, env, models, context),
-      implementer: modelFor(implementerResource, env, models, context),
-      reviewer: modelFor(reviewerResource, env, models, context),
+      lead: modelFor(leadResource, env, context),
+      implementer: modelFor(implementerResource, env, context),
+      reviewer: modelFor(reviewerResource, env, context),
       ...(secondaryResearchResource
         ? {
-            secondaryResearcher: modelFor(
-              secondaryResearchResource,
-              env,
-              models,
-              context,
-            ),
+            secondaryResearcher: modelFor(secondaryResearchResource, env, context),
           }
         : {}),
       requireSecondaryResearch: executionMode === "multi_agent",
