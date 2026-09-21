@@ -22,12 +22,18 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - name: Build Flutter web
-        run: flutter build web --release --dart-define=CONCLAVE_API_URL=https://app.conclaveax.com/api
+        run: flutter build web --release --dart-define=CONCLAVE_API_URL=/api
       - name: Verify browser bundle contains no server secrets
         working-directory: .
         run: node scripts/assert-no-browser-secrets.mjs apps/flutter_app/build/web
       - name: Install Wrangler
         run: npm install --global wrangler@4.38.0
+      - name: Deploy Forge execution service
+        working-directory: .
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: wrangler deploy --config "$GITHUB_WORKSPACE/apps/worker/forge-execution.wrangler.jsonc"
       - name: Deploy app.conclaveax.com
         working-directory: .
         env:

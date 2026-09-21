@@ -1,11 +1,66 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "conclave-ax-app",
+  "main": "../../apps/worker/src/index.ts",
   "compatibility_date": "2026-09-21",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+  },
   "assets": {
     "directory": "../../apps/flutter_app/build/web",
+    "binding": "ASSETS",
     "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/health"],
   },
+  "vars": {
+    "CONCLAVE_ENVIRONMENT": "production",
+  },
+  "d1_databases": [
+    {
+      "binding": "CONCLAVE_DB",
+      "database_name": "conclave-development",
+      "migrations_dir": "../../apps/worker/migrations",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "CONCLAVE_ARTIFACTS",
+      "bucket_name": "conclave-artifacts-development",
+    },
+  ],
+  "services": [
+    {
+      "binding": "CONCLAVE_FORGE_EXECUTION",
+      "service": "conclave-forge-execution",
+    },
+  ],
+  "workflows": [
+    {
+      "name": "conclave-run",
+      "binding": "CONCLAVE_RUN_WORKFLOW",
+      "class_name": "ConclaveRunWorkflow",
+    },
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "CONCLAVE_AGENT_GATEWAY",
+        "class_name": "AgentGateway",
+      },
+      {
+        "name": "CONCLAVE_RUNTIME_CONNECTION",
+        "class_name": "RuntimeConnection",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1-runtime-connection",
+      "new_sqlite_classes": ["RuntimeConnection", "AgentGateway"],
+    },
+  ],
   "routes": [
     {
       "pattern": "app.conclaveax.com",
