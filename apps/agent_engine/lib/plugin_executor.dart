@@ -42,16 +42,30 @@ class PluginProcessExecutor {
     PluginProcessSpec spec,
     Map<String, Object?> params, {
     Duration timeout = const Duration(minutes: 5),
+    int maxStdoutBytes = 1024 * 1024,
+    int maxStderrBytes = 1024 * 1024,
   }) async {
     final process = await _launcher(spec);
     final requestId = 'agent-${DateTime.now().microsecondsSinceEpoch}-'
         '${++_requestSequence}';
     final response = Completer<Map<String, Object?>>();
+    var stdoutBytes = 0;
+    var stderrBytes = 0;
+    void fail(String message) {
+      if (!response.isCompleted) response.completeError(StateError(message));
+      process.kill(ProcessSignal.sigterm);
+    }
+
     final stdoutSubscription = process.stdout
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen((line) {
       if (response.isCompleted || line.trim().isEmpty) return;
+      stdoutBytes += utf8.encode(line).length + 1;
+      if (stdoutBytes > maxStdoutBytes) {
+        fail('plugin stdout exceeded $maxStdoutBytes bytes');
+        return;
+      }
       try {
         final decoded = jsonDecode(line);
         if (decoded is! Map<String, dynamic> || decoded['id'] != requestId) {
@@ -73,7 +87,12 @@ class PluginProcessExecutor {
         response.completeError(error);
       }
     });
-    final stderrSubscription = process.stderr.listen((_) {});
+    final stderrSubscription = process.stderr.listen((chunk) {
+      stderrBytes += chunk.length;
+      if (stderrBytes > maxStderrBytes) {
+        fail('plugin stderr exceeded $maxStderrBytes bytes');
+      }
+    });
     try {
       process.stdin.writeln(jsonEncode({
         'jsonrpc': '2.0',
@@ -82,7 +101,13 @@ class PluginProcessExecutor {
         'params': params,
       }));
       process.stdin.close();
-      final result = await response.future.timeout(timeout);
+      final result = await response.future.timeout(
+        timeout,
+        onTimeout: () {
+          fail('plugin execution timed out after $timeout');
+          throw TimeoutException('plugin execution timed out', timeout);
+        },
+      );
       return result;
     } finally {
       await stdoutSubscription.cancel();

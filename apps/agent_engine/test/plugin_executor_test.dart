@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:conclave_agent_engine/cloud_connection.dart';
@@ -53,5 +54,20 @@ void main() {
       payload: {'pluginId': 'conclave.echo'},
     ));
     expect(result.summary, contains('echo worker'));
+  });
+
+  test('terminates a plugin that does not answer before the timeout', () async {
+    await expectLater(
+      PluginProcessExecutor().execute(
+        PluginProcessSpec(
+          pluginId: 'silent',
+          executable: Platform.resolvedExecutable,
+          arguments: ['-e', 'Future<void>.delayed(Duration(seconds: 5));'],
+        ),
+        {},
+        timeout: const Duration(milliseconds: 50),
+      ),
+      throwsA(isA<TimeoutException>()),
+    );
   });
 }
