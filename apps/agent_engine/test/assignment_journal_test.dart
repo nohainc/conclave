@@ -43,6 +43,40 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('rejects corruption in a complete non-final record', () async {
+    final directory = await Directory.systemTemp.createTemp('journal-');
+    final file = File('${directory.path}/assignments.jsonl');
+    await file.writeAsString(
+      '{"assignmentId":"assignment-1","status":"running","updatedAt":"2026-01-01T00:00:00Z"}\n'
+      '{"assignmentId":"assignment-2","status":"running"}\n',
+    );
+    await expectLater(
+      AssignmentJournal(file).reconcile(),
+      throwsFormatException,
+    );
+    await directory.delete(recursive: true);
+  });
+
+  test('uses the later record when timestamps are equal', () async {
+    final directory = await Directory.systemTemp.createTemp('journal-');
+    final journal =
+        AssignmentJournal(File('${directory.path}/assignments.jsonl'));
+    final timestamp = DateTime.utc(2026, 1, 1);
+    await journal.append(AssignmentRecord(
+      assignmentId: 'assignment-1',
+      status: AssignmentStatus.received,
+      updatedAt: timestamp,
+    ));
+    await journal.append(AssignmentRecord(
+      assignmentId: 'assignment-1',
+      status: AssignmentStatus.accepted,
+      updatedAt: timestamp,
+    ));
+    expect((await journal.reconcile())['assignment-1']!.status,
+        AssignmentStatus.accepted);
+    await directory.delete(recursive: true);
+  });
+
   test('uses timestamps rather than append order during replay', () async {
     final directory = await Directory.systemTemp.createTemp('journal-');
     final journal =

@@ -306,24 +306,50 @@ class AgentCloudConnection {
     final correlation = _assignmentCorrelation(message);
     final journalState = await assignmentJournal?.reconcile();
     final previous = journalState?[context.assignmentId];
-    if (previous?.status == AssignmentStatus.completed &&
-        previous?.result != null) {
-      socket.send(jsonEncode(_assignmentEnvelope(
-        'assignment.ack',
-        correlation,
-        {'accepted': true, 'estimatedStartMs': 0},
-      )));
-      socket.send(jsonEncode(_assignmentEnvelope(
-        'assignment.result',
-        correlation,
-        {
-          'status': 'completed',
-          'summary': previous!.result!['summary'] ??
-              'Assignment replayed from the local journal',
-          'output': null,
-          'artifactIds': previous.result!['artifactIds'] ?? const [],
-        },
-      )));
+    if (previous != null) {
+      if (previous.status == AssignmentStatus.completed &&
+          previous.result != null) {
+        socket.send(jsonEncode(_assignmentEnvelope(
+          'assignment.ack',
+          correlation,
+          {'accepted': true, 'estimatedStartMs': 0},
+        )));
+        socket.send(jsonEncode(_assignmentEnvelope(
+          'assignment.result',
+          correlation,
+          {
+            'status': 'completed',
+            'summary': previous.result!['summary'] ??
+                'Assignment replayed from the local journal',
+            'output': null,
+            'artifactIds': previous.result!['artifactIds'] ?? const [],
+          },
+        )));
+      } else if (previous.status == AssignmentStatus.failed) {
+        _sendAssignmentError(
+          socket,
+          message,
+          'assignment_replayed_failure',
+          previous.result?['error']?.toString() ??
+              'Assignment already failed locally',
+          retryable: true,
+        );
+      } else if (previous.status == AssignmentStatus.cancelled) {
+        socket.send(jsonEncode(_assignmentEnvelope(
+          'assignment.cancel.ack',
+          correlation,
+          {'cancelled': true, 'alreadyTerminated': true},
+        )));
+      } else {
+        socket.send(jsonEncode(_assignmentEnvelope(
+          'assignment.ack',
+          correlation,
+          {
+            'accepted': false,
+            'reason': 'assignment already exists in local journal',
+          },
+        )));
+      }
       return;
     }
     await _recordAssignment(context.assignmentId, AssignmentStatus.received);

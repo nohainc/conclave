@@ -370,6 +370,72 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('does not rerun a non-terminal assignment on duplicate delivery',
+      () async {
+    final socket = FakeSocket();
+    final directory = await Directory.systemTemp.createTemp('agent-journal-');
+    final journal =
+        AssignmentJournal(File('${directory.path}/assignments.jsonl'));
+    final release = Completer<void>();
+    var executions = 0;
+    final connection = AgentCloudConnection(
+      uri: Uri.parse('wss://cloud.test/agent'),
+      agentId: 'agent-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      assignmentJournal: journal,
+      assignmentHandler: (_) async {
+        executions += 1;
+        await release.future;
+        return const AgentAssignmentResult(summary: 'once');
+      },
+    );
+    await connection.connect();
+
+    final assignment = <String, Object?>{
+      'protocol': 'conclave.agent-protocol',
+      'protocolVersion': '2.0',
+      'messageId': 'server-running-1',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'assignment.start',
+      'workspaceId': 'workspace-1',
+      'agentId': 'agent-1',
+      'workerId': 'worker-1',
+      'runId': 'run-1',
+      'taskId': 'task-1',
+      'attemptId': 'attempt-1',
+      'assignmentId': 'assignment-running',
+      'idempotencyKey': 'idem-running',
+      'payload': {
+        'objective': 'inspect',
+        'role': 'research',
+        'pluginId': 'conclave.echo',
+        'resolvedPluginVersion': '1.0.0',
+        'input': {},
+        'contextArtifactIds': [],
+        'timeoutMs': 1000,
+      },
+    };
+    socket.controller.add(jsonEncode(assignment));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    socket.controller
+        .add(jsonEncode({...assignment, 'messageId': 'server-running-2'}));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    expect(executions, 1);
+    final duplicateAck = socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .firstWhere((message) =>
+            message['type'] == 'assignment.ack' &&
+            (message['payload'] as Map<String, dynamic>)['accepted'] == false);
+    expect((duplicateAck['payload'] as Map<String, dynamic>)['reason'],
+        contains('already exists'));
+    release.complete();
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    await connection.close();
+    await directory.delete(recursive: true);
+  });
+
   test('acknowledges cancellation for an already completed assignment',
       () async {
     final socket = FakeSocket();
