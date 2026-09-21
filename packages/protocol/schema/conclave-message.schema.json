@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://conclaveax.com/schemas/conclave-message.schema.json",
+  "title": "Conclave Cloud to Worker message",
+  "description": "Canonical cross-language envelope shared by Cloud, Agent Engine, and Worker Plugins.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol",
+    "version",
+    "messageId",
+    "goalId",
+    "runId",
+    "workerId",
+    "createdAt",
+    "messageType",
+    "payload"
+  ],
+  "properties": {
+    "protocol": { "const": "conclave.protocol" },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?$"
+    },
+    "messageId": { "type": "string", "minLength": 1 },
+    "goalId": { "type": "string", "minLength": 1 },
+    "runId": { "type": "string", "minLength": 1 },
+    "workerId": { "type": "string", "minLength": 1 },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "messageType": { "type": "string", "minLength": 1 },
+    "payload": { "type": "object", "additionalProperties": true }
+  }
+}

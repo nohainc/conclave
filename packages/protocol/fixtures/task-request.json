@@ -1,0 +1,18 @@
+{
+  "protocol": "conclave.protocol",
+  "version": "0.1",
+  "messageId": "message-1",
+  "goalId": "goal-1",
+  "runId": "run-1",
+  "workerId": "worker-1",
+  "createdAt": "2026-09-21T00:00:00.000Z",
+  "messageType": "TaskRequest",
+  "payload": {
+    "taskId": "task-1",
+    "objective": "Inspect the repository",
+    "role": "researcher",
+    "requiredCapabilities": ["repository_read"],
+    "contextArtifactIds": [],
+    "inputs": {}
+  }
+}
