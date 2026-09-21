@@ -9,13 +9,26 @@ void main() {
 }
 
 class ConclaveApp extends StatelessWidget {
-  const ConclaveApp({super.key, this.services = const DefaultPlatformServices(), this.dataSource});
+  const ConclaveApp({
+    super.key,
+    this.services = const DefaultPlatformServices(),
+    this.dataSource,
+  });
 
   final PlatformServices services;
   final StudioDataSource? dataSource;
 
+  static const bool _demoMode = bool.fromEnvironment(
+    'CONCLAVE_DEMO_MODE',
+    defaultValue: false,
+  );
+
   @override
   Widget build(BuildContext context) {
-    return StudioApp(services: services, dataSource: dataSource ?? StudioApiClient());
+    return StudioApp(
+      services: services,
+      dataSource: dataSource ??
+          (_demoMode ? const DemoStudioDataSource() : StudioApiClient()),
+    );
   }
 }
