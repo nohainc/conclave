@@ -20,4 +20,28 @@ void main() {
     expect(() => limited.execute(apiKey: 'secret', model: 'gpt', prompt: 'hi'),
         throwsA(isA<RetriableProviderError>()));
   });
+
+  test('parses structured provider content and preserves usage', () async {
+    final worker = OpenAiWorker((_, __, ___) async => const ProviderResponse(
+          statusCode: 200,
+          body: '{"choices":[{"message":{"content":"{\\"ok\\":true}"}}]}',
+          inputTokens: 8,
+          outputTokens: 5,
+        ));
+    final result = await worker.executeStructured(
+        apiKey: 'secret', model: 'gpt', prompt: 'hi');
+    expect(result.output['ok'], isTrue);
+    expect(result.usage.inputTokens, 8);
+  });
+
+  test('rejects malformed structured content', () async {
+    final worker = OpenAiWorker((_, __, ___) async => const ProviderResponse(
+        statusCode: 200,
+        body: '{"choices":[{"message":{"content":"plain text"}}]}'));
+    expect(
+      () => worker.executeStructured(
+          apiKey: 'secret', model: 'gpt', prompt: 'hi'),
+      throwsFormatException,
+    );
+  });
 }
