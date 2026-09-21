@@ -102,7 +102,7 @@ describe("Web / Cloud AI Worker Plugin (conclave.web-ai)", () => {
         pollIntervalMs: 10,
         timeoutMs: 5000,
       },
-      secrets: {},
+      secrets: { CONCLAVE_CONNECTOR_TOKEN: "relay-test-token" },
     };
 
     const result = await executeWebAiWorker(
@@ -152,7 +152,7 @@ describe("Web / Cloud AI Worker Plugin (conclave.web-ai)", () => {
         contextArtifactIds: [],
         timeoutMs: 2000,
         config: { pollIntervalMs: 10, timeoutMs: 2000 },
-        secrets: {},
+        secrets: { CONCLAVE_CONNECTOR_TOKEN: "relay-test-token" },
       },
       dummyContext,
       mockFetch,
@@ -161,6 +161,25 @@ describe("Web / Cloud AI Worker Plugin (conclave.web-ai)", () => {
     expect(result.status).toBe("failed");
     expect(result.error?.code).toBe("RATE_LIMITED_WEB_SESSION");
     expect(result.error?.retryable).toBe(true);
+  });
+
+  it("fails closed when connector authentication is not configured", async () => {
+    const result = await executeWebAiWorker(
+      {
+        role: "architect",
+        objective: "Design a safe system",
+        input: { taskId: "asg-auth-missing" },
+        contextArtifactIds: [],
+        timeoutMs: 1000,
+        config: {},
+        secrets: {},
+      },
+      dummyContext,
+      async () => new Response("should not be called", { status: 500 }),
+    );
+
+    expect(result.status).toBe("failed");
+    expect(result.error?.code).toBe("CONNECTOR_AUTH_REQUIRED");
   });
 
   it("executes standalone fixture out-of-process via PluginProcessRunner", async () => {

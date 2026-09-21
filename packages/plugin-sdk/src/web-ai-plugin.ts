@@ -113,8 +113,22 @@ export async function executeWebAiWorker(
 
   const sessionToken =
     input.secrets?.CONCLAVE_CONNECTOR_TOKEN ||
-    process.env.CONCLAVE_CONNECTOR_TOKEN ||
-    "tok_connector_default";
+    process.env.CONCLAVE_CONNECTOR_TOKEN;
+
+  if (!sessionToken) {
+    return {
+      status: "failed",
+      summary: "Web AI connector authentication is unavailable",
+      output: null,
+      artifactIds: [],
+      error: {
+        code: "CONNECTOR_AUTH_REQUIRED",
+        message:
+          "CONCLAVE_CONNECTOR_TOKEN must be configured on the Agent host",
+        retryable: false,
+      },
+    };
+  }
 
   const targetPlatform = config.targetPlatform || "chatgpt_web";
   const pollIntervalMs = config.pollIntervalMs || 200;
