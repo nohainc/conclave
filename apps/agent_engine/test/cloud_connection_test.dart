@@ -188,6 +188,44 @@ void main() {
     await connection.close();
   });
 
+  test('rejects malformed assignment payloads before plugin execution',
+      () async {
+    final socket = FakeSocket();
+    final connection = AgentCloudConnection(
+      uri: Uri.parse('wss://cloud.test/agent'),
+      agentId: 'agent-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      assignmentHandler: (_) async {
+        fail('malformed assignment reached the handler');
+      },
+    );
+    await connection.connect();
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.agent-protocol',
+      'protocolVersion': '2.0',
+      'messageId': 'server-assignment-3',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'assignment.start',
+      'workspaceId': 'workspace-1',
+      'agentId': 'agent-1',
+      'workerId': 'worker-1',
+      'runId': 'run-1',
+      'taskId': 'task-1',
+      'attemptId': 'attempt-1',
+      'assignmentId': 'assignment-3',
+      'idempotencyKey': 'idem-3',
+      'payload': {'pluginId': 'conclave.echo'},
+    }));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    final error = socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .firstWhere((message) => message['type'] == 'assignment.error');
+    expect((error['payload'] as Map<String, dynamic>)['error']['code'],
+        'malformed_assignment');
+    await connection.close();
+  });
+
   test('reconnects after a dropped socket', () async {
     final sockets = <FakeSocket>[FakeSocket(), FakeSocket()];
     final first = sockets.first;

@@ -187,7 +187,12 @@ class AgentCloudConnection {
 
   void _handleMessage(Object? raw) {
     if (raw is! String) return;
-    final decoded = jsonDecode(raw);
+    dynamic decoded;
+    try {
+      decoded = jsonDecode(raw);
+    } on FormatException {
+      return;
+    }
     if (decoded is! Map<String, dynamic>) return;
     if (decoded['protocol'] != protocol ||
         decoded['protocolVersion'] != protocolVersion) {
@@ -230,18 +235,25 @@ class AgentCloudConnection {
 
     if (message['workspaceId'] != workspaceId ||
         message['agentId'] != agentId) {
-      socket.send(jsonEncode(_assignmentEnvelope(
-        'assignment.error',
-        _assignmentCorrelation(message),
-        {
-          'status': 'failed',
-          'error': {
-            'code': 'assignment_context_mismatch',
-            'message': 'Assignment is not addressed to this agent/workspace',
-            'retryable': false,
-          },
-        },
-      )));
+      _sendAssignmentError(
+        socket,
+        message,
+        'assignment_context_mismatch',
+        'Assignment is not addressed to this agent/workspace',
+        retryable: false,
+      );
+      return;
+    }
+
+    final payloadError = _validateAssignmentPayload(payload);
+    if (payloadError != null) {
+      _sendAssignmentError(
+        socket,
+        message,
+        'malformed_assignment',
+        payloadError,
+        retryable: false,
+      );
       return;
     }
 
@@ -315,6 +327,56 @@ class AgentCloudConnection {
         result: {'error': '$error'},
       );
     }
+  }
+
+  String? _validateAssignmentPayload(Object? rawPayload) {
+    if (rawPayload is! Map<String, dynamic>) {
+      return 'Assignment payload must be an object';
+    }
+    for (final field in [
+      'objective',
+      'role',
+      'pluginId',
+      'resolvedPluginVersion',
+    ]) {
+      if (rawPayload[field] is! String ||
+          (rawPayload[field] as String).trim().isEmpty) {
+        return 'Assignment field $field is required';
+      }
+    }
+    if (rawPayload['input'] is! Map) {
+      return 'Assignment input must be an object';
+    }
+    final artifactIds = rawPayload['contextArtifactIds'];
+    if (artifactIds is! List || artifactIds.any((id) => id is! String)) {
+      return 'Assignment contextArtifactIds must be a string array';
+    }
+    final timeoutMs = rawPayload['timeoutMs'];
+    if (timeoutMs is! int || timeoutMs < 1000) {
+      return 'Assignment timeoutMs must be at least 1000 milliseconds';
+    }
+    return null;
+  }
+
+  void _sendAssignmentError(
+    AgentCloudSocket socket,
+    Map<String, dynamic> message,
+    String code,
+    String errorMessage, {
+    required bool retryable,
+  }) {
+    socket.send(jsonEncode(_assignmentEnvelope(
+      'assignment.error',
+      _assignmentCorrelation(message),
+      {
+        'status': 'failed',
+        'error': {
+          'code': code,
+          'message': errorMessage,
+          'retryable': retryable,
+        },
+      },
+    )));
   }
 
   Future<void> _recordAssignment(
