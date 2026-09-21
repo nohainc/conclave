@@ -7,6 +7,16 @@ import 'package:test/test.dart';
 import 'fixture_copy.dart';
 
 void main() {
+  test('does not inherit unrelated Agent secrets into plugin processes', () {
+    final environment = safePluginEnvironment({
+      'PLUGIN_MODE': 'test',
+    });
+
+    expect(environment['PLUGIN_MODE'], 'test');
+    expect(
+        environment.keys.where((key) => key.startsWith('CONCLAVE_')), isEmpty);
+  });
+
   test('executes a real Worker Plugin through JSON-RPC', () async {
     final repository = Directory.current.parent.parent;
     final pluginDirectory = Directory(

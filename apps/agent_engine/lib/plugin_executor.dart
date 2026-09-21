@@ -49,7 +49,7 @@ class PluginProcessExecutor {
         spec.executable,
         spec.arguments,
         workingDirectory: spec.workingDirectory,
-        environment: spec.environment.isEmpty ? null : spec.environment,
+        environment: safePluginEnvironment(spec.environment),
       );
 
   Future<Map<String, Object?>> execute(
@@ -149,6 +149,27 @@ class PluginProcessExecutor {
     await _terminator(process, force: false);
     return true;
   }
+}
+
+Map<String, String> safePluginEnvironment(Map<String, String> requested) {
+  final environment = <String, String>{};
+  for (final name in const [
+    'PATH',
+    'HOME',
+    'USERPROFILE',
+    'TMPDIR',
+    'TMP',
+    'TEMP',
+    'SystemRoot',
+    'LANG',
+    'LC_ALL',
+    'LC_CTYPE',
+  ]) {
+    final value = Platform.environment[name];
+    if (value != null && value.isNotEmpty) environment[name] = value;
+  }
+  environment.addAll(requested);
+  return environment;
 }
 
 class PluginAssignmentHandler {
