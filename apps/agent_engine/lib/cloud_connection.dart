@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'assignment_journal.dart';
+
 abstract interface class AgentCloudSocket {
   Stream<Object?> get messages;
   void send(Object message);
@@ -86,6 +88,7 @@ class AgentCloudConnection {
     this.activeWorkerIds = const [],
     this.unreconciledAssignmentIds = const [],
     this.assignmentHandler,
+    this.assignmentJournal,
     this.heartbeat = const Duration(seconds: 15),
   })  : hostname = hostname ?? Platform.localHostname,
         capabilities = capabilities ?? _defaultCapabilities();
@@ -102,6 +105,7 @@ class AgentCloudConnection {
   final List<String> activeWorkerIds;
   final List<String> unreconciledAssignmentIds;
   final AgentAssignmentHandler? assignmentHandler;
+  final AssignmentJournal? assignmentJournal;
   final Duration heartbeat;
   AgentCloudSocket? _socket;
   Timer? _heartbeatTimer;
@@ -224,6 +228,23 @@ class AgentCloudConnection {
       return;
     }
 
+    if (message['workspaceId'] != workspaceId ||
+        message['agentId'] != agentId) {
+      socket.send(jsonEncode(_assignmentEnvelope(
+        'assignment.error',
+        _assignmentCorrelation(message),
+        {
+          'status': 'failed',
+          'error': {
+            'code': 'assignment_context_mismatch',
+            'message': 'Assignment is not addressed to this agent/workspace',
+            'retryable': false,
+          },
+        },
+      )));
+      return;
+    }
+
     final context = AgentAssignmentContext(
       workspaceId: message['workspaceId'] as String,
       agentId: message['agentId'] as String,
@@ -236,6 +257,7 @@ class AgentCloudConnection {
       payload: Map<String, Object?>.from(payload),
     );
     final correlation = _assignmentCorrelation(message);
+    await _recordAssignment(context.assignmentId, AssignmentStatus.received);
 
     if (assignmentHandler == null) {
       socket.send(jsonEncode(_assignmentEnvelope(
@@ -246,6 +268,7 @@ class AgentCloudConnection {
       return;
     }
 
+    await _recordAssignment(context.assignmentId, AssignmentStatus.running);
     socket.send(jsonEncode(_assignmentEnvelope(
       'assignment.ack',
       correlation,
@@ -268,6 +291,11 @@ class AgentCloudConnection {
             },
         },
       )));
+      await _recordAssignment(
+        context.assignmentId,
+        AssignmentStatus.completed,
+        result: {'summary': result.summary, 'artifactIds': result.artifactIds},
+      );
     } catch (error) {
       socket.send(jsonEncode(_assignmentEnvelope(
         'assignment.error',
@@ -281,7 +309,27 @@ class AgentCloudConnection {
           },
         },
       )));
+      await _recordAssignment(
+        context.assignmentId,
+        AssignmentStatus.failed,
+        result: {'error': '$error'},
+      );
     }
+  }
+
+  Future<void> _recordAssignment(
+    String assignmentId,
+    AssignmentStatus status, {
+    Map<String, Object?>? result,
+  }) async {
+    final journal = assignmentJournal;
+    if (journal == null) return;
+    await journal.append(AssignmentRecord(
+      assignmentId: assignmentId,
+      status: status,
+      updatedAt: DateTime.now().toUtc(),
+      result: result,
+    ));
   }
 
   Map<String, Object?> _assignmentCorrelation(Map<String, dynamic> message) => {

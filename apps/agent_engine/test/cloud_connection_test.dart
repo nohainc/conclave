@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:conclave_agent_engine/assignment_journal.dart';
 import 'package:conclave_agent_engine/cloud_connection.dart';
 import 'package:test/test.dart';
 
@@ -92,6 +94,9 @@ void main() {
   test('executes correlated assignments through the injected handler',
       () async {
     final socket = FakeSocket();
+    final directory = await Directory.systemTemp.createTemp('agent-journal-');
+    final journal =
+        AssignmentJournal(File('${directory.path}/assignments.jsonl'));
     final connection = AgentCloudConnection(
       uri: Uri.parse('wss://cloud.test/agent'),
       agentId: 'agent-1',
@@ -102,6 +107,7 @@ void main() {
         expect(context.taskId, 'task-1');
         return const AgentAssignmentResult(summary: 'completed by agent');
       },
+      assignmentJournal: journal,
     );
     await connection.connect();
 
@@ -142,6 +148,43 @@ void main() {
     expect(result['assignmentId'], 'assignment-1');
     expect((result['payload'] as Map<String, dynamic>)['summary'],
         'completed by agent');
+    final records = await journal.reconcile();
+    expect(records['assignment-1']!.status, AssignmentStatus.completed);
+    await connection.close();
+    await directory.delete(recursive: true);
+  });
+
+  test('rejects assignments addressed to another workspace', () async {
+    final socket = FakeSocket();
+    final connection = AgentCloudConnection(
+      uri: Uri.parse('wss://cloud.test/agent'),
+      agentId: 'agent-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+    );
+    await connection.connect();
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.agent-protocol',
+      'protocolVersion': '2.0',
+      'messageId': 'server-assignment-2',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'assignment.start',
+      'workspaceId': 'workspace-2',
+      'agentId': 'agent-1',
+      'workerId': 'worker-1',
+      'runId': 'run-1',
+      'taskId': 'task-1',
+      'attemptId': 'attempt-1',
+      'assignmentId': 'assignment-2',
+      'idempotencyKey': 'idem-2',
+      'payload': {},
+    }));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    final error = socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .firstWhere((message) => message['type'] == 'assignment.error');
+    expect((error['payload'] as Map<String, dynamic>)['error']['code'],
+        'assignment_context_mismatch');
     await connection.close();
   });
 
