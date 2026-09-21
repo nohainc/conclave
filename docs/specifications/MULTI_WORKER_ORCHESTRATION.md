@@ -284,4 +284,4 @@ Conclave does not need direct provider API billing for these candidates when the
 
 Web workers are particularly suitable for Research, Architecture, Planning proposals, Review, and Synthesis. Their availability may be interactive rather than continuously autonomous, so Execution Policy must allow waiting, notification, or fallback.
 
-See [WEB_APP_WORKERS.md](WEB_APP_WORKERS.md).
+Interactive web/cloud candidates are implemented through the Architecture v3 Worker Plugin model and Cloud connector relay. See [Architecture v3](../architecture/ARCHITECTURE_V3.md).

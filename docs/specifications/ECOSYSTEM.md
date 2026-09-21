@@ -1,50 +1,67 @@
-# Extensibility and ecosystem
+# Extensibility and Ecosystem
 
-Phase 14 turns Conclave into an extension platform while keeping Core responsible for validation, authorization, persistence, and state transitions.
+Conclave AX Architecture v3 uses **Worker Plugins** as the extension boundary.
 
-## Extension types
+## Worker Plugin model
 
-Versioned resources have two identities: a globally unique row id for audit and references, and a tenant-scoped logical id plus version. This allows multiple immutable versions such as `provider.openai` 1 and 2 to coexist. The D1 uniqueness rules are `(organization_id, extension_id, version)` and `(organization_id, template_id, version)`.
+A Worker Plugin is a signed/versioned executable package installed by the Dart Agent Engine.
 
-- Providers adapt model or service APIs to versioned protocol payloads. A provider never writes Core state directly.
-- Agents package a specialized execution strategy behind an objective/input/output contract.
-- Tools expose bounded external operations and declare required permissions. Tool inputs and outputs are persisted as evidence.
-- CI workers return machine evidence, including the command, revision, result, and checks.
-- Human workers are represented by approval steps. The run pauses durably until an authorized person approves or rejects.
-- Workflow templates are versioned DAGs of provider, agent, tool, CI, and approval steps.
+A plugin declares:
+- plugin identity/version;
+- supported Agent Engine versions;
+- supported OS/architectures;
+- roles/capabilities;
+- configuration schema;
+- secret requirements;
+- permissions;
+- billing modes;
+- executable entrypoint.
 
-## SDK and headless Runner
+Cloud stores plugin metadata in D1 and plugin packages in R2.
 
-`@conclave/sdk` provides registries and a deterministic headless Runner. The Runner validates template versions, rejects unknown dependencies and cycles, executes only dependency-ready steps, emits lifecycle events, and pauses at approvals. A host supplies handlers; the SDK does not execute arbitrary shell commands or grant permissions.
+## Language independence
 
-The same Runner can be used by the Worker API, a CLI/CI process, or an integration service. Hosts should persist snapshots and events after every step, use idempotency keys, and resume with the same template version.
+The plugin protocol is language-independent.
 
-## Extension manifest rules
+Official plugins should use Dart when practical, but a plugin may use TypeScript/Node.js, Rust, Python, Go, or another language when that ecosystem is materially better for the integration.
 
-An extension must declare a stable id, semantic version, capabilities, execution environment, data access, required permissions, timeout, and failure behavior. Organization administrators approve installation. Extensions are tenant-scoped unless explicitly published as a reviewed global package. Secrets are referenced by credential id and never included in manifests or workflow payloads.
+The Agent Engine communicates with plugins through the Worker Plugin Protocol, preferably JSON-RPC over stdin/stdout for v1.
 
-## Safety boundary
+## Worker instances
 
-Templates are data, not code. A template can select registered capabilities, but cannot introduce an unregistered provider, agent, tool, CI command, or permission. Tool adapters must enforce their own allowlists and receive a cancellation signal. Human approvals are authorization decisions, not model outputs.
+A Worker is one configured instance of a plugin.
 
-## Initial workflow examples
+One plugin may produce multiple Workers with different:
+- models;
+- roles;
+- permissions;
+- prompts/instructions;
+- billing modes;
+- concurrency limits;
+- session policies.
 
-The Forge flow can be expressed as a template: research agent → plan provider → implementation agent → independent review agent → approval → CI worker → verification provider. Other teams can use the same primitives for documentation review, incident response, data validation, or release operations without adding Forge-specific Core logic.
+Cloud schedules Workers, never hidden provider pools.
 
-## Roadmap
+## Extension safety
 
-The first implementation deliberately uses host-supplied handlers and in-memory registries. Next steps are signed extension packages, a CLI SDK, persisted template management endpoints, CI webhooks, and a graphical designer that emits the same validated template format.
+Plugins run outside the Agent Engine control process.
 
+A plugin cannot:
+- mutate Cloud orchestration state directly;
+- bypass permissions;
+- access unrelated Workspace secrets;
+- silently install additional plugins;
+- create follow-up Tasks.
 
-## Worker transports and ensembles
+All Worker results pass through normal Conclave validation/persistence.
 
-Extensions must integrate through the generic Worker/Connection model rather than adding provider-specific orchestration paths.
+## Workflow templates
 
-A provider or agent extension declares how a Worker executes; the Task's Execution Policy declares whether one or multiple Workers are used.
+Workflow templates remain data.
 
-Multi-worker execution uses immutable candidate Attempts and explicit synthesis/selection Decisions. Workflow templates may select quality presets or explicit policies but cannot bypass Core budgets, independence requirements, permissions, or anti-explosion limits.
+They select roles/capabilities/policies and cannot introduce unsigned/unregistered plugin code.
 
 See:
-- [WORKER_EXECUTION.md](WORKER_EXECUTION.md)
-- [MULTI_WORKER_ORCHESTRATION.md](MULTI_WORKER_ORCHESTRATION.md)
-- [WORKER_IMPLEMENTATION_PHASES.md](WORKER_IMPLEMENTATION_PHASES.md)
+- [Architecture v3](../architecture/ARCHITECTURE_V3.md)
+- [Technology Stack](../architecture/TECH_STACK.md)
+- [Multi-Worker Orchestration](MULTI_WORKER_ORCHESTRATION.md)

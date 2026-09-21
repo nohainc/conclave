@@ -1,124 +1,14 @@
-# Conclave Development Roadmap
+# Conclave AX Roadmap
 
-> **Architecture v2 Implementation:** For the current normative v2 phased execution roadmap, see [docs/roadmaps/ARCHITECTURE_V2_IMPLEMENTATION.md](docs/roadmaps/ARCHITECTURE_V2_IMPLEMENTATION.md).
+The normative implementation roadmap is:
 
-This roadmap is ordered for AI delegation. Do not skip foundational phases merely to reach UI or provider integration faster.
+[Architecture v3 Implementation Roadmap](docs/roadmaps/ARCHITECTURE_V3_IMPLEMENTATION.md)
 
-## Phase 0 — Product and domain specification
-Define goals, workers, roles, tasks, attempts, artifacts, findings, verification, decisions, events, completion criteria, and the Forge MVP workflow.
+Do not implement phases from older v1/v2 roadmaps when they conflict with Architecture v3.
 
-See [docs/specifications/DOMAIN_SPECIFICATION.md](docs/specifications/DOMAIN_SPECIFICATION.md) for the normative domain model, lifecycle, failure semantics, and Forge workflow.
-
-**Exit:** the full lifecycle from user message to verified completion is unambiguous, including ownership of state transitions, required evidence, independent review, correction loops, and terminal failure states.
-
-## Phase 1 — Monorepo and quality foundation
-Create TypeScript/pnpm workspace, Flutter client, Cloudflare Workers app, local runtime package, formatting/linting/tests, GitHub Actions, local development documentation.
-
-**Exit:** Flutter, TypeScript, Worker, and local-runtime smoke tests pass in CI.
-
-## Phase 2 — Conclave Protocol
-Implement versioned structured contracts for task, plan, research, implementation, review, test, verification, decision, and completion messages. Validate all external/AI input.
-
-See [docs/specifications/PROTOCOL.md](docs/specifications/PROTOCOL.md) for the envelope, contract inventory, and Core admission rule.
-
-**Exit:** malformed responses cannot enter Core state; they are rejected for retry or rerouting, and runtime contract tests pass.
-
-## Phase 3 — Persistence and event model
-Create D1 schema/migrations and repository interfaces for projects, workers, goals, runs, phases, tasks, attempts, model calls, findings, verifications, artifacts, events, and usage. Configure R2 artifact references.
-
-See [docs/specifications/PERSISTENCE.md](docs/specifications/PERSISTENCE.md) for the row/payload split and reconstruction contract.
-
-**Exit:** a goal/run can be reconstructed entirely from persisted state and contiguous ordered events.
-
-## Phase 4 — Worker registry and provider abstraction
-Create worker/capability/role/permission configuration. Add exactly two initial model adapters and mock workers.
-
-See [docs/specifications/WORKER_REGISTRY.md](docs/specifications/WORKER_REGISTRY.md) for resource fields and resolution rules.
-
-**Exit:** Core resolves a request such as `code_review` to an available capability-compatible worker without provider-specific domain logic.
-
-## Phase 5 — Minimal two-model orchestration
-User goal -> Lead -> specialist -> Lead evaluation -> completion. Persist every transition and call.
-
-See [docs/specifications/TWO_MODEL_MVP.md](docs/specifications/TWO_MODEL_MVP.md) for the two adapters, configuration boundary, and persistence sequence.
-
-**Exit:** the first real Conclave goal completes through two configured model workers with every request, result, model call, and event persisted.
-
-## Phase 6 — Goal decomposition and task graph
-Add phases, tasks, dependencies, retries, budgets, cancellation, and deterministic state transitions. AI proposes plans; Core validates/persists them.
-
-See [docs/specifications/TASK_GRAPH.md](docs/specifications/TASK_GRAPH.md) for graph validation and state transitions.
-
-**Exit:** a larger goal executes as multiple dependent small tasks under Core-owned retries, budgets, timeouts, cancellation, and reopening.
-
-## Phase 7 — Independent verification loops
-Add findings, review decisions, reopen/fix/re-review loops, verification policies, and isolated reviewer contexts.
-
-See [docs/specifications/VERIFICATION.md](docs/specifications/VERIFICATION.md) for policy rules, isolation, and finding lifecycle.
-
-**Exit:** a task cannot complete while required verification or blocking findings remain unresolved.
-
-## Phase 8 — Conclave Studio execution UI
-Build project/goal creation, worker setup, goal graph, timeline/events, task details, findings, artifacts, and conversational goal interface.
-
-See [docs/specifications/STUDIO.md](docs/specifications/STUDIO.md) for the execution dashboard, control semantics, and API boundary.
-
-**Exit:** a user can observe and control a cloud run from Studio.
-
-## Phase 9 — Conclave Local Runtime
-Implement secure outbound connection, repository registration, file/search operations, Git status/diff, controlled shell/test/build execution, permissions, and audit events.
-
-See [docs/specifications/LOCAL_RUNTIME.md](docs/specifications/LOCAL_RUNTIME.md) for the outbound transport, approval envelope, operation policy, and evidence contract.
-
-**Exit:** Cloud can request an allowed local operation and receive verifiable evidence without exposing an inbound local port.
-
-## Phase 10 — Conclave Forge MVP
-Implement the software-development workflow: repository research -> plan -> implementation -> review -> fix loop -> tests -> final verification -> completion report.
-
-See [docs/specifications/FORGE_MVP.md](docs/specifications/FORGE_MVP.md) for the worker separation, runtime adapter, correction loop, evidence, and completion gate.
-
-**Exit:** Conclave can take a real repository and development goal and complete it using at least two independent AI workers plus real tests.
-
-## Phase 11 — Durable cloud execution
-Map long-running goal execution to Cloudflare Workflows. Add cancellation/resume/recovery/idempotency. Introduce Queues or Durable Objects only for demonstrated needs.
-
-See [docs/specifications/DURABLE_EXECUTION.md](docs/specifications/DURABLE_EXECUTION.md) for Workflow checkpoints, controls, idempotency, external events, and recovery semantics.
-
-**Exit:** runs survive Worker restarts and long waits without losing completed work.
-
-## Phase 12 — CI/CD and evidence
-Integrate lint/build/unit/integration checks, optional preview deployments, smoke tests, approvals, and post-deploy verification.
-
-See [docs/specifications/CI_EVIDENCE.md](docs/specifications/CI_EVIDENCE.md) for the machine-evidence contract, GitHub Actions upload, and durable CI wait.
-
-**Exit:** completion reports distinguish AI assertions from machine-generated evidence.
-
-## Phase 13 — Security, tenancy, quotas, observability
-Organizations, RBAC, BYOK encryption, usage/cost accounting, rate limits, audit logs, telemetry, retention policies, threat model.
-
-## Phase 14 — Extensibility
-Plugin/SDK contracts, additional providers and agents, headless Runner, reusable workflow templates, optional visual workflow builder.
-
-## Non-goals before Forge MVP
-- many AI providers;
-- marketplace;
-- vector-memory subsystem without a proven need;
-- mobile apps;
-- generic no-code workflow builder;
-- premature microservices.
-
-
-## Worker transport and ensemble extension
-
-After the integration foundations are stable, implement the worker transport and multi-worker roadmap in [docs/specifications/WORKER_IMPLEMENTATION_PHASES.md](docs/specifications/WORKER_IMPLEMENTATION_PHASES.md).
-
-Key additions:
-- separate Worker resources from Connection/transport resources;
-- unify provider APIs and local/remote agents behind one execution contract;
-- prioritize Codex and Claude Code local-agent adapters for subscription-backed execution;
-- allow every role to use one or several Workers through Execution Policies;
-- add synthesis/evaluation for multi-candidate results;
-- add quality presets and cost-aware routing;
-- add isolated competitive implementation only after read-only ensembles are proven.
-
-These are extensions of the existing phases, not a second orchestration architecture.
+Current priority:
+1. restore fully green CI;
+2. freeze Architecture v3;
+3. establish schema-first TypeScript/Dart protocols;
+4. migrate the Agent from TypeScript to Flutter Agent App + Dart Agent Engine incrementally;
+5. preserve Cloud TypeScript/Cloudflare and Studio Flutter.
