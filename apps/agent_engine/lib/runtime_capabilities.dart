@@ -80,9 +80,14 @@ class SafeWorkspace {
 class CommandPolicy {
   const CommandPolicy(
       {required this.allowedExecutables,
+      this.allowedArgumentPatterns = const {},
       this.maxOutputBytes = 256 * 1024,
       this.timeout = const Duration(minutes: 2)});
   final Set<String> allowedExecutables;
+
+  /// Optional per-executable argument allowlists. When configured, every
+  /// argument must match at least one pattern for that executable.
+  final Map<String, List<RegExp>> allowedArgumentPatterns;
   final int maxOutputBytes;
   final Duration timeout;
 }
@@ -108,6 +113,21 @@ class SafeCommandRunner {
     if (command.isEmpty || !policy.allowedExecutables.contains(command.first)) {
       throw const RuntimeViolation('command is not allowlisted');
     }
+    if (policy.maxOutputBytes <= 0) {
+      throw const RuntimeViolation('output limit must be positive');
+    }
+    if (command.skip(1).any((argument) =>
+        argument.isEmpty ||
+        argument.contains('\u0000') ||
+        RegExp(r'[;&|<>`\$()]').hasMatch(argument))) {
+      throw const RuntimeViolation('command argument contains shell syntax');
+    }
+    final patterns = policy.allowedArgumentPatterns[command.first];
+    if (patterns != null &&
+        command.skip(1).any((argument) =>
+            !patterns.any((pattern) => pattern.hasMatch(argument)))) {
+      throw const RuntimeViolation('command argument is not allowlisted');
+    }
     final cwd = Directory(await workspace._contained(workingDirectory));
     final process = await startIsolatedProcess(
       command.first,
@@ -115,8 +135,17 @@ class SafeCommandRunner {
       workingDirectory: cwd.path,
       environment: {'PATH': Platform.environment['PATH'] ?? '/usr/bin:/bin'},
     );
-    final stdoutFuture = _bounded(process.stdout, policy.maxOutputBytes);
-    final stderrFuture = _bounded(process.stderr, policy.maxOutputBytes);
+    var outputLimitExceeded = false;
+    Future<void> stopForOutputLimit() async {
+      if (outputLimitExceeded) return;
+      outputLimitExceeded = true;
+      await terminateProcessTree(process, force: true);
+    }
+
+    final stdoutFuture =
+        _bounded(process.stdout, policy.maxOutputBytes, stopForOutputLimit);
+    final stderrFuture =
+        _bounded(process.stderr, policy.maxOutputBytes, stopForOutputLimit);
     var timedOut = false;
     final exit = process.exitCode.timeout(policy.timeout, onTimeout: () {
       timedOut = true;
@@ -130,12 +159,16 @@ class SafeCommandRunner {
         timedOut: timedOut);
   }
 
-  Future<String> _bounded(Stream<List<int>> stream, int maxBytes) async {
+  Future<String> _bounded(Stream<List<int>> stream, int maxBytes,
+      Future<void> Function() onExceeded) async {
     final bytes = <int>[];
     await for (final chunk in stream) {
-      if (bytes.length < maxBytes) {
+      if (bytes.length + chunk.length > maxBytes) {
         bytes.addAll(chunk.take(maxBytes - bytes.length));
+        await onExceeded();
+        break;
       }
+      bytes.addAll(chunk);
     }
     return utf8.decode(bytes, allowMalformed: true);
   }

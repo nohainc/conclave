@@ -25,6 +25,35 @@ void main() {
         () => runner.run(['sh', '-c', 'echo unsafe'],
             policy: const CommandPolicy(allowedExecutables: {'printf'})),
         throwsA(isA<RuntimeViolation>()));
+    expect(
+        () => runner.run(['printf', 'safe; echo unsafe'],
+            policy: const CommandPolicy(allowedExecutables: {'printf'})),
+        throwsA(isA<RuntimeViolation>()));
+    expect(
+        () => runner.run(['printf', 'anything'],
+            policy: CommandPolicy(
+              allowedExecutables: {'printf'},
+              allowedArgumentPatterns: {
+                'printf': [RegExp(r'^safe$')],
+              },
+            )),
+        throwsA(isA<RuntimeViolation>()));
+    await directory.delete(recursive: true);
+  });
+
+  test('terminates a command that exceeds the output limit', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-runtime-');
+    final runner = SafeCommandRunner(SafeWorkspace(directory));
+    final result = await runner.run(
+      ['yes'],
+      policy: const CommandPolicy(
+        allowedExecutables: {'yes'},
+        maxOutputBytes: 32,
+        timeout: Duration(seconds: 5),
+      ),
+    );
+    expect(result.stdout.length, lessThanOrEqualTo(32));
     await directory.delete(recursive: true);
   });
 

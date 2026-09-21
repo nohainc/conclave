@@ -12,6 +12,7 @@ class PluginProcessSpec {
     this.arguments = const [],
     this.workingDirectory,
     this.environment = const {},
+    this.allowedEnvironmentVariables = const {},
   });
 
   final String pluginId;
@@ -19,6 +20,7 @@ class PluginProcessSpec {
   final List<String> arguments;
   final String? workingDirectory;
   final Map<String, String> environment;
+  final Set<String> allowedEnvironmentVariables;
 }
 
 typedef PluginProcessLauncher = Future<Process> Function(
@@ -49,7 +51,10 @@ class PluginProcessExecutor {
         spec.executable,
         spec.arguments,
         workingDirectory: spec.workingDirectory,
-        environment: safePluginEnvironment(spec.environment),
+        environment: safePluginEnvironment(
+          spec.environment,
+          allowedNames: spec.allowedEnvironmentVariables,
+        ),
       );
 
   Future<Map<String, Object?>> execute(
@@ -151,7 +156,10 @@ class PluginProcessExecutor {
   }
 }
 
-Map<String, String> safePluginEnvironment(Map<String, String> requested) {
+Map<String, String> safePluginEnvironment(
+  Map<String, String> requested, {
+  Set<String> allowedNames = const {},
+}) {
   final environment = <String, String>{};
   for (final name in const [
     'PATH',
@@ -168,7 +176,9 @@ Map<String, String> safePluginEnvironment(Map<String, String> requested) {
     final value = Platform.environment[name];
     if (value != null && value.isNotEmpty) environment[name] = value;
   }
-  environment.addAll(requested);
+  for (final entry in requested.entries) {
+    if (allowedNames.contains(entry.key)) environment[entry.key] = entry.value;
+  }
   return environment;
 }
 
