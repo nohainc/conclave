@@ -69,6 +69,16 @@ const rowsByTenant: Record<
         status: "completed",
       },
     ],
+    plugins: [
+      {
+        id: "plugin-a",
+        name: "Plugin A",
+        version: "1.0.0",
+        status: "Installed",
+        roles: [],
+        capabilities: [],
+      },
+    ],
   },
   "org-b": {
     workers: [
@@ -122,6 +132,16 @@ const rowsByTenant: Record<
         cost: 0,
         duration: "—",
         status: "completed",
+      },
+    ],
+    plugins: [
+      {
+        id: "plugin-b",
+        name: "Plugin B",
+        version: "1.0.0",
+        status: "Installed",
+        roles: [],
+        capabilities: [],
       },
     ],
   },
@@ -210,6 +230,8 @@ class Statement implements D1Statement {
       return { results: this.rows("artifacts") as T[] };
     if (this.query.includes("FROM model_calls mc"))
       return { results: this.rows("modelCalls") as T[] };
+    if (this.query.includes("FROM worker_plugins p"))
+      return { results: this.rows("plugins") as T[] };
     return { results: [] };
   }
   async run(): Promise<{ success: boolean }> {
@@ -267,6 +289,7 @@ async function snapshot(organizationId: Tenant) {
     events: readonly { detail: string }[];
     artifacts: readonly { name: string }[];
     modelCalls: readonly { worker: string }[];
+    plugins: readonly { id: string }[];
   }>;
 }
 
@@ -280,6 +303,7 @@ describe("Studio tenant isolation", () => {
     expect(a.tasks.map((row) => row.id)).toEqual(["task-a"]);
     expect(a.findings.map((row) => row.id)).toEqual(["finding-a"]);
     expect(a.events.map((row) => row.detail)).toEqual(["run-a"]);
+    expect(a.plugins.map((row) => row.id)).toEqual(["plugin-a"]);
     expect(a.artifacts.map((row) => row.name)).toEqual(["artifact-a"]);
     expect(a.modelCalls.map((row) => row.worker)).toEqual(["worker-a"]);
     expect(a.activeRunId).toBe("run-a");
@@ -289,6 +313,7 @@ describe("Studio tenant isolation", () => {
     expect(b.tasks.map((row) => row.id)).toEqual(["task-b"]);
     expect(b.findings.map((row) => row.id)).toEqual(["finding-b"]);
     expect(b.events.map((row) => row.detail)).toEqual(["run-b"]);
+    expect(b.plugins.map((row) => row.id)).toEqual(["plugin-b"]);
     expect(b.artifacts.map((row) => row.name)).toEqual(["artifact-b"]);
     expect(b.modelCalls.map((row) => row.worker)).toEqual(["worker-b"]);
     expect(b.activeRunId).toBe("run-b");

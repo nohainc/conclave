@@ -2914,8 +2914,13 @@ async function handleStudioSnapshot(
       `SELECT p.id, p.display_name AS name,
               COALESCE((SELECT v.version FROM worker_plugin_versions v WHERE v.plugin_id = p.id AND v.is_revoked = 0 ORDER BY v.created_at DESC LIMIT 1), '—') AS version,
               p.status, p.supported_roles_json AS roles, p.supported_capabilities_json AS capabilities
-       FROM worker_plugins p WHERE p.status <> 'deprecated' ORDER BY p.display_name`,
-    ).all(),
+       FROM worker_plugins p
+       JOIN workers w ON w.plugin_id = p.id
+       WHERE w.workspace_id = ?1 AND p.status <> 'deprecated'
+       GROUP BY p.id ORDER BY p.display_name`,
+    )
+      .bind(context.workspaceId)
+      .all(),
     env.CONCLAVE_DB.prepare(
       `SELECT t.id, t.objective AS title, ph.name AS phase, t.status, t.role AS worker, t.objective AS detail, CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END AS progress, '[]' AS dependencies, '—' AS tokens, '—' AS cost FROM tasks t JOIN phases ph ON ph.id = t.phase_id JOIN runs r ON r.id = ph.run_id JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${ownership} ORDER BY t.created_at DESC LIMIT 100`,
     )
