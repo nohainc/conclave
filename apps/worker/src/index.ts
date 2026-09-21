@@ -194,6 +194,8 @@ class HttpError extends Error {
 type SecurityEnv = Env & {
   readonly CONCLAVE_ACCESS_ORGANIZATION_ID?: string;
   readonly CONCLAVE_AUTH_TOKEN?: string;
+  readonly CONCLAVE_PLUGIN_SIGNING_KEY?: string;
+  readonly CONCLAVE_AGENT_SIGNING_KEY?: string;
   readonly CONCLAVE_AUTH_USER_ID?: string;
   readonly CONCLAVE_AUTH_ORGANIZATION_ID?: string;
   readonly CONCLAVE_ALLOW_ANONYMOUS_DEV?: string;
@@ -3679,9 +3681,16 @@ async function handlePublishPlugin(
   const digest = manifest.digest || computedDigest;
 
   const signingSecret =
-    body.signingSecret ||
-    env.CONCLAVE_AUTH_TOKEN ||
-    "conclave_platform_signing_secret_dev";
+    env.CONCLAVE_PLUGIN_SIGNING_KEY ||
+    (env.CONCLAVE_ENVIRONMENT === "development"
+      ? body.signingSecret
+      : undefined);
+  if (!signingSecret) {
+    return json(
+      { error: "Plugin signing key is not configured" },
+      { status: 503 },
+    );
+  }
   let signature = manifest.signature;
   if (!signature) {
     signature = await signPackageDigest(digest, signingSecret);
@@ -4154,8 +4163,15 @@ async function handlePublishAgentRelease(
   const digest = computedDigest;
 
   const secretKey =
+    env.CONCLAVE_AGENT_SIGNING_KEY ||
     (env as unknown as { CONCLAVE_SECURITY_KEY?: string })
-      .CONCLAVE_SECURITY_KEY || "conclave-default-signing-key";
+      .CONCLAVE_SECURITY_KEY;
+  if (!secretKey) {
+    return json(
+      { error: "Agent signing key is not configured" },
+      { status: 503 },
+    );
+  }
   let signature: string;
   if (providedSignature) {
     const valid = await verifyPackageDigestSignature(

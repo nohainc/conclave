@@ -128,6 +128,7 @@ describe("Architecture v2 Cloud Plugin Registry", () => {
     env = {
       CONCLAVE_ENVIRONMENT: "development",
       CONCLAVE_ALLOW_ANONYMOUS_DEV: "true",
+      CONCLAVE_PLUGIN_SIGNING_KEY: "test-plugin-signing-key",
       CONCLAVE_DB: createD1Mock(db) as unknown as D1Database,
       CONCLAVE_ARTIFACTS: r2 as unknown as R2Bucket,
       CONCLAVE_PLUGINS: r2 as unknown as R2Bucket,
