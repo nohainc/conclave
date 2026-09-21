@@ -111,6 +111,28 @@ class _StudioAppState extends State<StudioApp> {
     }
   }
 
+  Future<void> _setWorkerEnabled(String workerId, bool enabled) async {
+    final workspaceId = snapshot.workspaceId;
+    if (workspaceId == null || workspaceId.isEmpty) return;
+    try {
+      await store.workers.setEnabled(workspaceId, workerId, enabled);
+      await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
+    } catch (error) {
+      if (mounted) setState(() => loadError = error.toString());
+    }
+  }
+
+  Future<void> _revokeAgent(String agentId) async {
+    final workspaceId = snapshot.workspaceId;
+    if (workspaceId == null || workspaceId.isEmpty) return;
+    try {
+      await store.agents.revoke(workspaceId, agentId);
+      await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
+    } catch (error) {
+      if (mounted) setState(() => loadError = error.toString());
+    }
+  }
+
   @override
   void dispose() {
     refreshTimer?.cancel();
@@ -1416,6 +1438,12 @@ class _StudioAppState extends State<StudioApp> {
                                 agent.status.toLowerCase() == 'online'
                                     ? const Color(0xff3ca879)
                                     : const Color(0xff9a98a5)),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              tooltip: 'Revoke Agent',
+                              onPressed: () => _revokeAgent(agent.id),
+                              icon: const Icon(Icons.link_off_outlined),
+                            ),
                           ]),
                           const SizedBox(height: 8),
                           Text('${agent.hostname} · Agent ${agent.version}',
@@ -1517,8 +1545,10 @@ class _StudioAppState extends State<StudioApp> {
                   trailing: Switch(
                     value: workerEnabled[worker.id] ??
                         worker.status.toLowerCase() != 'offline',
-                    onChanged: (value) =>
-                        setState(() => workerEnabled[worker.id] = value),
+                    onChanged: (value) {
+                      setState(() => workerEnabled[worker.id] = value);
+                      _setWorkerEnabled(worker.id, value);
+                    },
                   ),
                 ),
               ),

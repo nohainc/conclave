@@ -604,6 +604,7 @@ class StudioViewer {
 
 class StudioSnapshot {
   const StudioSnapshot({
+    this.workspaceId,
     this.viewer,
     this.activeRunId,
     this.activeChatId,
@@ -622,6 +623,7 @@ class StudioSnapshot {
     this.synthesisDecision,
   });
 
+  final String? workspaceId;
   final String? activeRunId;
   final StudioViewer? viewer;
   final String? activeChatId;
@@ -663,6 +665,7 @@ class StudioSnapshot {
       modelCalls: []);
 
   factory StudioSnapshot.fromJson(Map<String, dynamic> json) => StudioSnapshot(
+        workspaceId: json['workspaceId'] as String?,
         viewer: json['viewer'] == null
             ? null
             : StudioViewer.fromJson(
