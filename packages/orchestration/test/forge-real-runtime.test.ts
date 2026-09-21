@@ -3,7 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import type { ConnectionResource, WorkerResource } from "@conclave/core";
+import type {
+  ConnectionResource,
+  WorkerExecutionRequest,
+  WorkerExecutionResult,
+  WorkerResource,
+} from "@conclave/core";
 import { LocalRuntime, type RuntimeOperation } from "@conclave/local-runtime";
 import type { GoalRecord, RunRecord } from "@conclave/persistence";
 import type {
@@ -140,6 +145,23 @@ class ScenarioModel implements ModelWorker {
 
   get connection(): ConnectionResource {
     return connection(this.resource.id);
+  }
+
+  async execute(
+    request: WorkerExecutionRequest,
+  ): Promise<WorkerExecutionResult> {
+    const response = await this.complete({
+      message: request.message as ModelRequest["message"],
+      context: request.context,
+    });
+    return {
+      status: "succeeded",
+      output: response.text,
+      rawOutput: response.rawResponse,
+      providerRequestId: response.providerRequestId,
+      usage: response.usage,
+      evidenceArtifactIds: [],
+    };
   }
 
   async complete(request: ModelRequest): Promise<ModelResponse> {

@@ -17,7 +17,7 @@ import {
   VerificationGate,
   type Finding,
 } from "@conclave/core";
-import type { ModelResponse, ModelWorker } from "@conclave/providers";
+import type { WorkerExecutionResult, WorkerExecutor } from "@conclave/core";
 import {
   ContextBuilder,
   type ArtifactResolver,
@@ -112,12 +112,12 @@ export interface ForgeWorkflowInput {
   readonly run: RunRecord;
   readonly repositoryId: string;
   readonly revision: string;
-  readonly lead: ModelWorker;
-  readonly implementer: ModelWorker;
-  readonly reviewer?: ModelWorker;
+  readonly lead: WorkerExecutor;
+  readonly implementer: WorkerExecutor;
+  readonly reviewer?: WorkerExecutor;
   readonly runtime: ForgeRuntimeAdapter;
   readonly implementationAgent?: ForgeImplementationAgent;
-  readonly validationFallbackWorker?: ModelWorker;
+  readonly validationFallbackWorker?: WorkerExecutor;
   readonly persistence: ForgePersistence;
   readonly maxReviewLoops?: number;
   readonly idFactory?: () => string;
@@ -363,7 +363,7 @@ export async function executeForgeGoal(
   };
 
   const callOnce = async <T extends ModelResult["messageType"]>(
-    worker: ModelWorker,
+    worker: WorkerExecutor,
     modelTask: TaskRecord,
     request: PlanRequest | TaskRequest,
     expected: T,
@@ -403,9 +403,25 @@ export async function executeForgeGoal(
       workerId: worker.resource.id,
     });
 
-    let response: ModelResponse;
+    let response: WorkerExecutionResult;
     try {
-      response = await worker.complete(modelRequest);
+      response = await worker.execute({
+        requestId: id(),
+        goalId: request.goalId,
+        runId: request.runId,
+        taskId: modelTask.id,
+        attemptId,
+        workerId: worker.resource.id,
+        connectionId: worker.connection.id,
+        message: request,
+        context: modelRequest.context ?? [],
+      });
+      if (response.status !== "succeeded" || response.output === null) {
+        throw new Error(
+          response.error?.message ??
+            `Worker execution ended with status ${response.status}`,
+        );
+      }
     } catch (error) {
       await persistence.saveAttempt({
         id: attemptId,
@@ -427,11 +443,11 @@ export async function executeForgeGoal(
 
     const responseArtifactId = await artifact(
       modelTask.id,
-      response.rawResponse,
+      response.rawOutput ?? response.output,
       "application/json",
       {
         kind: "provider_response",
-        providerRequestId: response.providerRequestId,
+        providerRequestId: response.providerRequestId ?? null,
         workerId: worker.resource.id,
       },
     );
@@ -439,6 +455,7 @@ export async function executeForgeGoal(
       id: id(),
       attemptId,
       workerId: worker.resource.id,
+      connectionId: worker.connection.id,
       provider: worker.connection.provider ?? worker.connection.transport,
       model: worker.resource.name,
       requestArtifactId,
@@ -450,7 +467,7 @@ export async function executeForgeGoal(
       finishedAt: now(),
     });
     try {
-      const parsed = parseModelResult(JSON.parse(response.text) as unknown);
+      const parsed = parseModelResult(JSON.parse(response.output) as unknown);
       validateResponseContext(parsed, {
         goalId: request.goalId,
         runId: request.runId,
@@ -501,7 +518,7 @@ export async function executeForgeGoal(
   };
 
   const call = async <T extends ModelResult["messageType"]>(
-    worker: ModelWorker,
+    worker: WorkerExecutor,
     modelTask: TaskRecord,
     request: PlanRequest | TaskRequest,
     expected: T,

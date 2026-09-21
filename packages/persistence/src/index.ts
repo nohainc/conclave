@@ -113,6 +113,7 @@ export interface ModelCallRecord {
   readonly id: string;
   readonly attemptId: string;
   readonly workerId: string;
+  readonly connectionId: string;
   readonly provider: string;
   readonly model: string;
   readonly requestArtifactId: string | null;

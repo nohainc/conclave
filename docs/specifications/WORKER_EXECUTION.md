@@ -131,6 +131,10 @@ WorkerExecutionRequest
   -> structured WorkerExecutionResult
 ```
 
+Every transport implements the same `WorkerExecutor.execute` contract. The request carries `goalId`, `runId`, `taskId`, `attemptId`, `workerId`, `connectionId`, the validated protocol message, assembled context, and cancellation/deadline information. The result carries status (`succeeded`, `failed`, `waiting`, or `cancelled`), structured output or raw output, usage, execution/provider IDs, evidence references, and a classified retryable error when applicable.
+
+API model adapters, local-agent adapters, remote-agent adapters, tool/CI workers, and human bridges must implement this contract. Their transport-specific authentication, streaming, session, and billing behavior stays behind the selected Connection adapter. Core never calls a provider-specific method or interprets provider-specific response shapes.
+
 The transport is responsible for:
 - session creation/reuse;
 - converting Conclave protocol/context into the provider/agent format;
@@ -145,6 +149,8 @@ Core remains responsible for:
 - accepting/rejecting state transitions;
 - retry/rerouting;
 - persistence and audit.
+
+The selected Connection ID is persisted with the ModelCall/Attempt snapshot. Retries may select a different binding only through Core policy; an adapter may not silently switch connections.
 
 ## 6. Local subscription-backed agents
 

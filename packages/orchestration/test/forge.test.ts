@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { GoalRecord, RunRecord } from "@conclave/persistence";
-import type { ConnectionResource, WorkerResource } from "@conclave/core";
+import type {
+  ConnectionResource,
+  WorkerExecutionRequest,
+  WorkerExecutionResult,
+  WorkerResource,
+} from "@conclave/core";
 import type {
   ModelRequest,
   ModelResponse,
@@ -111,6 +116,23 @@ class FakeWorker implements ModelWorker {
 
   get connection(): ConnectionResource {
     return connection(this.resource.id);
+  }
+
+  async execute(
+    request: WorkerExecutionRequest,
+  ): Promise<WorkerExecutionResult> {
+    const response = await this.complete({
+      message: request.message as ModelRequest["message"],
+      context: request.context,
+    });
+    return {
+      status: "succeeded",
+      output: response.text,
+      rawOutput: response.rawResponse,
+      providerRequestId: response.providerRequestId,
+      usage: response.usage,
+      evidenceArtifactIds: [],
+    };
   }
 
   complete(request: ModelRequest): Promise<ModelResponse> {

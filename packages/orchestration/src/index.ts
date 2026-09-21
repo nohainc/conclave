@@ -9,8 +9,11 @@ import type {
   RunRecord,
   TaskRecord,
 } from "@conclave/persistence";
-import { validateTaskGraph } from "@conclave/core";
-import type { ModelResponse, ModelWorker } from "@conclave/providers";
+import {
+  validateTaskGraph,
+  type WorkerExecutionResult,
+  type WorkerExecutor,
+} from "@conclave/core";
 import {
   parseModelResult,
   validateResponseContext,
@@ -41,13 +44,13 @@ export interface TwoModelGoalInput {
   readonly run: RunRecord;
   readonly repositoryId: string;
   readonly revision: string;
-  readonly lead: ModelWorker;
-  readonly specialist: ModelWorker;
+  readonly lead: WorkerExecutor;
+  readonly specialist: WorkerExecutor;
   readonly persistence: MvpPersistence;
   readonly idFactory?: () => string;
   readonly now?: () => string;
   readonly maxValidationAttempts?: number;
-  readonly validationFallbackWorker?: ModelWorker;
+  readonly validationFallbackWorker?: WorkerExecutor;
 }
 
 export interface TwoModelGoalResult {
@@ -234,7 +237,7 @@ export async function executeTwoModelGoal(
   await persistence.saveTask(planTask);
 
   const callOnce = async <T extends ModelResult["messageType"]>(
-    worker: ModelWorker,
+    worker: WorkerExecutor,
     task: TaskRecord,
     request: PlanRequest | TaskRequest,
     expected: T,
@@ -274,9 +277,25 @@ export async function executeTwoModelGoal(
       finishedAt: null,
     });
 
-    let response: ModelResponse;
+    let response: WorkerExecutionResult;
     try {
-      response = await worker.complete({ message: request });
+      response = await worker.execute({
+        requestId: id(),
+        goalId: request.goalId,
+        runId: request.runId,
+        taskId: task.id,
+        attemptId,
+        workerId: worker.resource.id,
+        connectionId: worker.connection.id,
+        message: request,
+        context: [],
+      });
+      if (response.status !== "succeeded" || response.output === null) {
+        throw new Error(
+          response.error?.message ??
+            `Worker execution ended with status ${response.status}`,
+        );
+      }
     } catch (error) {
       await persistence.saveAttempt({
         id: attemptId,
@@ -303,12 +322,12 @@ export async function executeTwoModelGoal(
       input.run.id,
       task.id,
       attemptId,
-      response.rawResponse,
+      response.rawOutput ?? response.output,
       "application/json",
       {
         kind: "provider_response",
         provider: worker.connection.provider ?? worker.connection.transport,
-        providerRequestId: response.providerRequestId,
+        providerRequestId: response.providerRequestId ?? null,
       },
       now(),
     );
@@ -316,6 +335,7 @@ export async function executeTwoModelGoal(
       id: id(),
       attemptId,
       workerId: worker.resource.id,
+      connectionId: worker.connection.id,
       provider: worker.connection.provider ?? worker.connection.transport,
       model: worker.resource.name,
       requestArtifactId,
@@ -330,7 +350,7 @@ export async function executeTwoModelGoal(
     let result: ModelResult;
     let accepted: Extract<ModelResult, { messageType: T }>;
     try {
-      result = parseModelResult(JSON.parse(response.text) as unknown);
+      result = parseModelResult(JSON.parse(response.output) as unknown);
       validateResponseContext(result, {
         goalId: request.goalId,
         runId: request.runId,
@@ -383,7 +403,7 @@ export async function executeTwoModelGoal(
   };
 
   const call = async <T extends ModelResult["messageType"]>(
-    worker: ModelWorker,
+    worker: WorkerExecutor,
     task: TaskRecord,
     request: PlanRequest | TaskRequest,
     expected: T,

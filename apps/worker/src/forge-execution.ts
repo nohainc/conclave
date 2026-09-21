@@ -16,6 +16,7 @@ import type {
   WorkerResource,
   WorkerBinding,
   ConnectionResource,
+  WorkerExecutor,
   WorkerAvailability,
   WorkerType,
   WorkerCostMetadata,
@@ -29,7 +30,6 @@ import {
 import {
   AnthropicMessagesWorker,
   OpenAIResponsesWorker,
-  type ModelWorker,
 } from "@conclave/providers";
 import type { ImplementationOperation } from "@conclave/protocol";
 import type {
@@ -453,7 +453,7 @@ function modelFor(
   binding: WorkerBinding,
   env: ForgeExecutionEnv,
   models: Readonly<Record<string, string>>,
-): ModelWorker {
+): WorkerExecutor {
   const { worker: resource, connection } = binding;
   const model = models[resource.id] ?? connection.name;
   if (connection.provider === "openai") {

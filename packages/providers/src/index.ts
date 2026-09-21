@@ -1,4 +1,10 @@
-import type { ConnectionResource, WorkerResource } from "@conclave/core";
+import type {
+  ConnectionResource,
+  WorkerExecutionRequest,
+  WorkerExecutionResult,
+  WorkerExecutor,
+  WorkerResource,
+} from "@conclave/core";
 import type { ProtocolMessage } from "@conclave/protocol";
 
 export interface ModelContextItem {
@@ -28,9 +34,7 @@ export interface ModelResponse {
   readonly usage: ModelUsage;
 }
 
-export interface ModelWorker {
-  readonly resource: WorkerResource;
-  readonly connection: ConnectionResource;
+export interface ModelWorker extends WorkerExecutor {
   complete(request: ModelRequest): Promise<ModelResponse>;
 }
 
@@ -107,6 +111,22 @@ function jsonResponseFormat(): Record<string, unknown> {
   return { type: "json_object" };
 }
 
+function failedExecution(error: unknown): WorkerExecutionResult {
+  return {
+    status: "failed",
+    output: null,
+    rawOutput: null,
+    usage: { inputTokens: null, outputTokens: null },
+    evidenceArtifactIds: [],
+    error: {
+      code: "provider_execution_failed",
+      message:
+        error instanceof Error ? error.message : "unknown provider error",
+      retryable: true,
+    },
+  };
+}
+
 export interface OpenAIResponsesWorkerOptions {
   readonly apiKey: string;
   readonly model: string;
@@ -131,6 +151,28 @@ export class OpenAIResponsesWorker implements ModelWorker {
     this.model = options.model;
     this.transport = options.transport ?? { fetch };
     this.endpoint = options.endpoint ?? "https://api.openai.com/v1/responses";
+  }
+
+  async execute(
+    request: WorkerExecutionRequest,
+  ): Promise<WorkerExecutionResult> {
+    try {
+      const response = await this.complete({
+        message: request.message as ProtocolMessage,
+        context: request.context,
+        ...(request.systemPrompt ? { systemPrompt: request.systemPrompt } : {}),
+      });
+      return {
+        status: "succeeded",
+        output: response.text,
+        rawOutput: response.rawResponse,
+        providerRequestId: response.providerRequestId,
+        usage: response.usage,
+        evidenceArtifactIds: [],
+      };
+    } catch (error) {
+      return failedExecution(error);
+    }
   }
 
   async complete(request: ModelRequest): Promise<ModelResponse> {
@@ -203,6 +245,28 @@ export class AnthropicMessagesWorker implements ModelWorker {
     this.transport = options.transport ?? { fetch };
     this.endpoint = options.endpoint ?? "https://api.anthropic.com/v1/messages";
     this.apiVersion = options.apiVersion ?? "2023-06-01";
+  }
+
+  async execute(
+    request: WorkerExecutionRequest,
+  ): Promise<WorkerExecutionResult> {
+    try {
+      const response = await this.complete({
+        message: request.message as ProtocolMessage,
+        context: request.context,
+        ...(request.systemPrompt ? { systemPrompt: request.systemPrompt } : {}),
+      });
+      return {
+        status: "succeeded",
+        output: response.text,
+        rawOutput: response.rawResponse,
+        providerRequestId: response.providerRequestId,
+        usage: response.usage,
+        evidenceArtifactIds: [],
+      };
+    } catch (error) {
+      return failedExecution(error);
+    }
   }
 
   async complete(request: ModelRequest): Promise<ModelResponse> {
