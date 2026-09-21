@@ -8,7 +8,6 @@ Architecture v3 keeps the Cloud-first design but changes the host/client impleme
 | --- | --- |
 | Flutter Studio | keep Flutter Studio |
 | TypeScript Cloud Worker | keep TypeScript Cloud |
-| TypeScript `apps/agent` | migrate to Flutter Agent App + Dart Agent Engine |
 | TypeScript plugin SDK/runtime | replace runtime dependency with language-independent plugin protocol |
 | TS first-party plugins | migrate selectively to Dart; keep TS where ecosystem advantage is meaningful |
 | Local Runtime product concept | internal Agent Engine runtime primitives only |
@@ -44,21 +43,17 @@ worker-plugins/
 
 The exact directory rename is not a release blocker.
 
-## Migration rule
+## Migration status
 
-Do not delete the existing TypeScript Agent until the Dart Agent Engine passes parity/E2E tests.
+The Dart Agent App and Agent Engine are now the only supported host stack.
+The former TypeScript Agent has been removed after the Dart path gained:
 
-Migrate vertically:
-1. establish Dart Agent protocol bindings;
-2. create Agent Engine skeleton;
-3. connect Agent Engine to Cloud;
-4. implement plugin process protocol;
-5. migrate deterministic plugin;
-6. migrate local CLI plugins;
-7. migrate API plugins;
-8. add Agent App;
-9. achieve E2E parity;
-10. remove legacy TypeScript Agent.
+- Cloud enrollment/configuration and reconnect recovery;
+- durable assignment journaling;
+- signed plugin installation and updates;
+- Codex, Claude Code, OpenAI, Anthropic, and Forge plugin packages;
+- Agent App and Agent Engine CI tests;
+- end-to-end Forge execution through Agent Workers.
 
 ## Reuse
 

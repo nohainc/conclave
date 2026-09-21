@@ -55,17 +55,6 @@ Purpose:
 - local credentials/runtime;
 - updates.
 
-## Transitional application
-
-### Legacy TypeScript Agent
-Path: `apps/agent`
-
-Status:
-- transitional;
-- no new architecture features;
-- retained until Dart Agent Engine reaches parity;
-- removed in roadmap phase P24.
-
 ## Non-app packages
 
 Core, protocols, persistence, security, orchestration, and plugin SDKs remain libraries and must not be treated as deployable applications.
