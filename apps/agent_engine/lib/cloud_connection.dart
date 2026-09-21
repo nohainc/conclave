@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 abstract interface class AgentCloudSocket {
   Stream<Object?> get messages;
@@ -8,6 +9,27 @@ abstract interface class AgentCloudSocket {
 }
 
 typedef AgentCloudSocketFactory = Future<AgentCloudSocket> Function(Uri uri);
+
+class IoAgentCloudSocket implements AgentCloudSocket {
+  IoAgentCloudSocket(this.socket);
+  final WebSocket socket;
+
+  @override
+  Stream<Object?> get messages => socket;
+
+  @override
+  void send(Object message) => socket.add(message);
+
+  @override
+  Future<void> close() async {
+    await socket.close(WebSocketStatus.normalClosure);
+  }
+}
+
+Future<AgentCloudSocket> connectIoAgentCloudSocket(Uri uri) async {
+  final socket = await WebSocket.connect(uri.toString());
+  return IoAgentCloudSocket(socket);
+}
 
 class AgentCloudConnection {
   AgentCloudConnection({
