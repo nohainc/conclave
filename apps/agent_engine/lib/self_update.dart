@@ -21,8 +21,9 @@ class AgentUpdater {
   Future<void> apply(ReleasePackage release,
       {required Future<bool> Function(File executable) healthCheck}) async {
     final actual = sha256.convert(release.bytes).toString();
-    if (actual != release.digest)
+    if (actual != release.digest) {
       throw StateError('agent release digest mismatch');
+    }
     await root.create(recursive: true);
     final staged = File('${root.path}/agent-${release.version}.staged');
     final active = File('${root.path}/agent.active');
