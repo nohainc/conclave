@@ -1,4 +1,4 @@
-import type { WorkerResource } from "@conclave/core";
+import type { ConnectionResource, WorkerResource } from "@conclave/core";
 import type { ProtocolMessage } from "@conclave/protocol";
 
 export interface ModelContextItem {
@@ -30,6 +30,7 @@ export interface ModelResponse {
 
 export interface ModelWorker {
   readonly resource: WorkerResource;
+  readonly connection: ConnectionResource;
   complete(request: ModelRequest): Promise<ModelResponse>;
 }
 
@@ -110,12 +111,14 @@ export interface OpenAIResponsesWorkerOptions {
   readonly apiKey: string;
   readonly model: string;
   readonly resource: WorkerResource;
+  readonly connection: ConnectionResource;
   readonly transport?: HttpTransport;
   readonly endpoint?: string;
 }
 
 export class OpenAIResponsesWorker implements ModelWorker {
   readonly resource: WorkerResource;
+  readonly connection: ConnectionResource;
   private readonly apiKey: string;
   private readonly model: string;
   private readonly transport: HttpTransport;
@@ -123,6 +126,7 @@ export class OpenAIResponsesWorker implements ModelWorker {
 
   constructor(options: OpenAIResponsesWorkerOptions) {
     this.resource = options.resource;
+    this.connection = options.connection;
     this.apiKey = options.apiKey;
     this.model = options.model;
     this.transport = options.transport ?? { fetch };
@@ -176,6 +180,7 @@ export interface AnthropicMessagesWorkerOptions {
   readonly apiKey: string;
   readonly model: string;
   readonly resource: WorkerResource;
+  readonly connection: ConnectionResource;
   readonly transport?: HttpTransport;
   readonly endpoint?: string;
   readonly apiVersion?: string;
@@ -183,6 +188,7 @@ export interface AnthropicMessagesWorkerOptions {
 
 export class AnthropicMessagesWorker implements ModelWorker {
   readonly resource: WorkerResource;
+  readonly connection: ConnectionResource;
   private readonly apiKey: string;
   private readonly model: string;
   private readonly transport: HttpTransport;
@@ -191,6 +197,7 @@ export class AnthropicMessagesWorker implements ModelWorker {
 
   constructor(options: AnthropicMessagesWorkerOptions) {
     this.resource = options.resource;
+    this.connection = options.connection;
     this.apiKey = options.apiKey;
     this.model = options.model;
     this.transport = options.transport ?? { fetch };

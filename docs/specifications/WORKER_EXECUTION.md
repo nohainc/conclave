@@ -28,17 +28,12 @@ A Worker resource describes stable orchestration attributes:
 - kind: `model`, `agent`, `tool`, `ci`, `human`;
 - supported Roles;
 - Capabilities;
-- connection id;
 - trust level and independence group;
-- provider/model family where known;
-- execution location;
-- concurrency limits;
 - availability/health;
-- cost/billing metadata;
 - permissions;
-- version.
+- connection bindings.
 
-Worker identity is distinct from a model name. Multiple Workers may use the same underlying model with different roles, connections, permissions, contexts, or billing modes.
+Worker identity contains no provider, transport, authentication, billing, model endpoint, or execution-environment fields. It describes the participant and its orchestration abilities. Multiple Workers may use the same underlying model, and one Worker may have multiple eligible Connections.
 
 Example:
 
@@ -47,15 +42,19 @@ Worker: codex-implementer
 kind: agent
 roles: Implementer, Researcher
 capabilities: repository_read, repository_write, shell, tests
-connection: local-codex
-executionLocation: local
-billingMode: subscription
+connections: local-codex
 independenceGroup: openai-codex-local
 ```
 
+### 2.1 Worker–Connection binding
+
+The `worker_connections` relation associates a Worker with one or more Connections and may mark one as the default. It is a routing relationship, not part of Worker identity. Core resolves a `WorkerRequirement` to a `WorkerBinding` containing the selected Worker and Connection.
+
+The binding is selected using capability, role, permission, connection availability, execution environment, and connection cost policy. The selected connection is persisted on the Attempt/ModelCall snapshot so a later retry or audit does not silently change transport.
+
 ## 3. Connection resource
 
-A Connection describes the transport and authentication boundary.
+A Connection describes the transport, authentication, billing, and execution boundary. It is independently configurable, replaceable, health-checked, and tenant-scoped.
 
 Required transport types:
 
@@ -109,7 +108,7 @@ Connection authentication modes may include:
 - `none`;
 - `manual`.
 
-Secrets never appear in ordinary Worker, Task, Event, Artifact, or protocol payloads.
+Authentication belongs only to Connection configuration. Secrets never appear in ordinary Worker, Task, Event, Artifact, or protocol payloads. A Worker cannot grant or select credentials by itself.
 
 Billing modes:
 
@@ -119,7 +118,7 @@ Billing modes:
 - `external`;
 - `manual`.
 
-Subscription-backed execution is not treated as literally free. Conclave records it as a different cost source with quota/availability constraints rather than API token cost.
+Subscription-backed execution is not treated as literally free. Conclave records it as a different Connection cost source with quota/availability constraints rather than API token cost. Billing metadata is copied into the Attempt/Usage snapshot, not read from Worker identity.
 
 ## 5. Unified execution contract
 

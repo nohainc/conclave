@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { GoalRecord, RunRecord } from "@conclave/persistence";
-import type { WorkerResource } from "@conclave/core";
+import type { ConnectionResource, WorkerResource } from "@conclave/core";
 import type {
   ModelRequest,
   ModelResponse,
@@ -14,6 +14,24 @@ import {
   InMemoryForgePersistence,
   type ForgeRuntimeAdapter,
 } from "../src/index.js";
+
+const connection = (id: string): ConnectionResource => ({
+  id: `${id}-connection`,
+  name: `${id}-connection`,
+  transport: "provider_api",
+  provider: id,
+  adapterVersion: "1",
+  authMode: "api_key",
+  billingMode: "api_metered",
+  cost: {
+    currency: "USD",
+    estimatedCostMicrosPerAttempt: 1,
+    inputMicrosPerMillionTokens: 1,
+    outputMicrosPerMillionTokens: 1,
+  },
+  executionEnvironment: "cloud",
+  availability: "available",
+});
 
 const goal: GoalRecord = {
   id: "forge-goal",
@@ -73,19 +91,12 @@ function resource(
     id,
     name: `${id}-model`,
     type: "model",
-    provider: id,
-    adapterVersion: "1",
     capabilities,
     roles,
     permissions: ["repository_read", "repository_write"],
+    independenceKey: id,
+    connectionIds: [`${id}-connection`],
     availability: "available",
-    cost: {
-      currency: "USD",
-      estimatedCostMicrosPerAttempt: 1,
-      inputMicrosPerMillionTokens: 1,
-      outputMicrosPerMillionTokens: 1,
-    },
-    executionEnvironment: "cloud",
   };
 }
 
@@ -97,6 +108,10 @@ class FakeWorker implements ModelWorker {
     readonly resource: WorkerResource,
     private readonly outputs: readonly string[],
   ) {}
+
+  get connection(): ConnectionResource {
+    return connection(this.resource.id);
+  }
 
   complete(request: ModelRequest): Promise<ModelResponse> {
     this.requests.push(request);

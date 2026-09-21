@@ -6,18 +6,16 @@ import type {
   ModelWorker,
 } from "@conclave/providers";
 import { InMemoryMvpPersistence, executeTwoModelGoal } from "../src/index.js";
-import type { WorkerResource } from "@conclave/core";
+import type { ConnectionResource, WorkerResource } from "@conclave/core";
 
-const makeResource = (id: string, role: string): WorkerResource => ({
-  id,
-  name: `${id}-model`,
-  type: "model",
+const connection = (id: string): ConnectionResource => ({
+  id: `${id}-connection`,
+  name: `${id}-connection`,
+  transport: "provider_api",
   provider: id,
   adapterVersion: "1",
-  capabilities: [role === "lead" ? "planning" : "implementation", "evaluation"],
-  roles: [role],
-  permissions: ["repository_read"],
-  availability: "available",
+  authMode: "api_key",
+  billingMode: "api_metered",
   cost: {
     currency: "USD",
     estimatedCostMicrosPerAttempt: 1,
@@ -25,6 +23,19 @@ const makeResource = (id: string, role: string): WorkerResource => ({
     outputMicrosPerMillionTokens: 1,
   },
   executionEnvironment: "cloud",
+  availability: "available",
+});
+
+const makeResource = (id: string, role: string): WorkerResource => ({
+  id,
+  name: `${id}-model`,
+  type: "model",
+  capabilities: [role === "lead" ? "planning" : "implementation", "evaluation"],
+  roles: [role],
+  permissions: ["repository_read"],
+  independenceKey: id,
+  connectionIds: [`${id}-connection`],
+  availability: "available",
 });
 
 class FakeWorker implements ModelWorker {
@@ -35,6 +46,10 @@ class FakeWorker implements ModelWorker {
   constructor(resource: WorkerResource, outputs: readonly string[]) {
     this.resource = resource;
     this.outputs = outputs;
+  }
+
+  get connection(): ConnectionResource {
+    return connection(this.resource.id);
   }
 
   complete(request: ModelRequest): Promise<ModelResponse> {

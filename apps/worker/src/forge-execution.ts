@@ -14,6 +14,8 @@ import type {
   WorkerRegistry,
   WorkerRequirement,
   WorkerResource,
+  WorkerBinding,
+  ConnectionResource,
   WorkerAvailability,
   WorkerType,
   WorkerCostMetadata,
@@ -107,23 +109,36 @@ function workerResource(row: Record<string, unknown>): WorkerResource {
     id: String(row.id),
     name: String(row.name),
     type: String(row.kind) as WorkerType,
-    provider: String(row.provider),
-    adapterVersion: String(row.adapter_version),
     capabilities: parseJsonArray(row.capabilities_json),
     roles: parseJsonArray(row.roles_json),
     permissions: parseJsonArray(row.permissions_json),
+    independenceKey: String(row.independence_key),
+    connectionIds: [String(row.connection_id)],
     availability: String(row.availability) as WorkerAvailability,
+  };
+}
+
+function connectionResource(row: Record<string, unknown>): ConnectionResource {
+  return {
+    id: String(row.connection_id),
+    name: String(row.connection_name),
+    transport: String(row.transport) as ConnectionResource["transport"],
+    provider: typeof row.provider === "string" ? row.provider : null,
+    adapterVersion: String(row.connection_adapter_version),
+    authMode: String(row.auth_mode) as ConnectionResource["authMode"],
+    billingMode: String(row.billing_mode) as ConnectionResource["billingMode"],
+    cost: cost(row.cost_metadata_json),
     executionEnvironment: String(
       row.execution_environment,
     ) as ExecutionEnvironment,
-    cost: cost(row.cost_metadata_json),
+    availability: String(row.connection_availability) as WorkerAvailability,
   };
 }
 
 class D1WorkerRegistry implements WorkerRegistry {
-  private readonly workers: readonly WorkerResource[];
+  private readonly workers: readonly WorkerBinding[];
 
-  constructor(workers: readonly WorkerResource[]) {
+  constructor(workers: readonly WorkerBinding[]) {
     this.workers = workers;
   }
 
@@ -131,45 +146,52 @@ class D1WorkerRegistry implements WorkerRegistry {
     throw new Error("Forge worker registry is read-only during execution");
   }
 
-  list(): readonly WorkerResource[] {
+  list(): readonly WorkerBinding[] {
     return this.workers;
   }
 
-  resolve(requirement: WorkerRequirement): WorkerResource | null {
+  resolve(requirement: WorkerRequirement): WorkerBinding | null {
     return (
       [...this.workers]
-        .filter((worker) => worker.availability === "available")
-        .filter((worker) =>
+        .filter(
+          ({ worker, connection }) =>
+            worker.availability === "available" &&
+            connection.availability === "available",
+        )
+        .filter(({ worker }) =>
           worker.capabilities.includes(requirement.capability),
         )
         .filter(
-          (worker) =>
+          ({ worker }) =>
             requirement.role === undefined ||
             worker.roles.includes(requirement.role),
         )
         .filter(
-          (worker) =>
+          ({ worker }) =>
             requirement.permission === undefined ||
             worker.permissions.includes(requirement.permission),
         )
         .filter(
-          (worker) =>
+          ({ connection }) =>
             requirement.executionEnvironment === undefined ||
-            worker.executionEnvironment === requirement.executionEnvironment,
+            connection.executionEnvironment ===
+              requirement.executionEnvironment,
         )
         .filter(
-          (worker) =>
+          ({ connection }) =>
             requirement.maxEstimatedCostMicrosPerAttempt === undefined ||
-            (worker.cost.estimatedCostMicrosPerAttempt !== null &&
-              worker.cost.estimatedCostMicrosPerAttempt <=
+            (connection.cost.estimatedCostMicrosPerAttempt !== null &&
+              connection.cost.estimatedCostMicrosPerAttempt <=
                 requirement.maxEstimatedCostMicrosPerAttempt),
         )
         .sort(
           (left, right) =>
-            (left.cost.estimatedCostMicrosPerAttempt ??
+            (left.connection.cost.estimatedCostMicrosPerAttempt ??
               Number.MAX_SAFE_INTEGER) -
-              (right.cost.estimatedCostMicrosPerAttempt ??
-                Number.MAX_SAFE_INTEGER) || left.id.localeCompare(right.id),
+              (right.connection.cost.estimatedCostMicrosPerAttempt ??
+                Number.MAX_SAFE_INTEGER) ||
+            left.worker.id.localeCompare(right.worker.id) ||
+            left.connection.id.localeCompare(right.connection.id),
         )[0] ?? null
     );
   }
@@ -428,30 +450,35 @@ class RemoteLocalRuntime implements ForgeRuntimeAdapter {
 }
 
 function modelFor(
-  resource: WorkerResource,
+  binding: WorkerBinding,
   env: ForgeExecutionEnv,
   models: Readonly<Record<string, string>>,
 ): ModelWorker {
-  const model = models[resource.id] ?? resource.name;
-  if (resource.provider === "openai") {
+  const { worker: resource, connection } = binding;
+  const model = models[resource.id] ?? connection.name;
+  if (connection.provider === "openai") {
     if (!env.CONCLAVE_OPENAI_API_KEY)
       throw new Error("OpenAI API key is not configured");
     return new OpenAIResponsesWorker({
       apiKey: env.CONCLAVE_OPENAI_API_KEY,
       model,
       resource,
+      connection,
     });
   }
-  if (resource.provider === "anthropic") {
+  if (connection.provider === "anthropic") {
     if (!env.CONCLAVE_ANTHROPIC_API_KEY)
       throw new Error("Anthropic API key is not configured");
     return new AnthropicMessagesWorker({
       apiKey: env.CONCLAVE_ANTHROPIC_API_KEY,
       model,
       resource,
+      connection,
     });
   }
-  throw new Error(`Unsupported model provider: ${resource.provider}`);
+  throw new Error(
+    `Unsupported model provider: ${connection.provider ?? connection.transport}`,
+  );
 }
 
 async function readExecutionContext(
@@ -513,12 +540,26 @@ export async function executeForgeService(
     updatedAt: now,
   };
   const workers = await env.CONCLAVE_DB.prepare(
-    "SELECT id, name, kind, provider, adapter_version, roles_json, capabilities_json, permissions_json, independence_key, availability, execution_environment, cost_metadata_json FROM workers WHERE organization_id = ?1",
+    `SELECT
+       w.id, w.name, w.kind, w.roles_json, w.capabilities_json,
+       w.permissions_json, w.independence_key, w.availability,
+       c.id AS connection_id, c.name AS connection_name,
+       c.transport, c.provider, c.adapter_version AS connection_adapter_version,
+       c.auth_mode, c.billing_mode, c.cost_metadata_json,
+       c.execution_environment, c.availability AS connection_availability
+     FROM workers w
+     JOIN worker_connections wc ON wc.worker_id = w.id
+     JOIN connections c ON c.id = wc.connection_id
+     WHERE w.organization_id = ?1
+     ORDER BY wc.is_default DESC, c.id`,
   )
     .bind(context.organizationId)
     .all<Record<string, unknown>>();
   const registry: WorkerRegistry = new D1WorkerRegistry(
-    (workers.results ?? []).map(workerResource),
+    (workers.results ?? []).map((row) => ({
+      worker: workerResource(row),
+      connection: connectionResource(row),
+    })),
   );
   const leadResource =
     registry.resolve({ capability: "planning" }) ??
@@ -532,7 +573,7 @@ export async function executeForgeService(
       "Forge requires planning, implementation, and review workers",
     );
   }
-  if (reviewerResource.id === implementerResource.id) {
+  if (reviewerResource.worker.id === implementerResource.worker.id) {
     throw new Error("Forge requires independent worker resources");
   }
   const models = env.CONCLAVE_WORKER_MODELS

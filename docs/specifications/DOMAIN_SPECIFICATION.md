@@ -76,7 +76,7 @@ An Attempt may end as `succeeded`, `rejected`, `timed_out`, `cancelled`, `errore
 
 A **Worker** is an execution participant behind a provider-independent adapter. It may be an AI model, coding agent, local runtime, CI runner, tool, or human reviewer.
 
-A Worker has an identity, kind, adapter version, available Roles and Capabilities, permission boundary, trust/independence attributes, and operational limits. Worker credentials are referenced through secure configuration and are never part of task payloads or ordinary event data.
+A Worker has an identity, kind, available Roles and Capabilities, permission boundary, trust/independence attributes, availability, and operational limits. Transport, provider, authentication, billing, model endpoint, and execution environment belong to a separate Connection resource. A Worker may be bound to multiple Connections; Core selects and snapshots one binding for each Attempt. Worker credentials are referenced through secure connection configuration and are never part of task payloads or ordinary event data.
 
 Workers propose results and actions. Core validates the response against the task contract and decides whether to accept it.
 

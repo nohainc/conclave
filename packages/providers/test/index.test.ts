@@ -4,18 +4,28 @@ import {
   OpenAIResponsesWorker,
   type HttpTransport,
 } from "../src/index.js";
-import type { WorkerResource } from "@conclave/core";
+import type { ConnectionResource, WorkerResource } from "@conclave/core";
 
 const resource = (provider: string): WorkerResource => ({
   id: `${provider}-worker`,
   name: `${provider}-model`,
   type: "model",
-  provider,
-  adapterVersion: "1",
   capabilities: ["planning"],
   roles: ["lead"],
   permissions: [],
+  independenceKey: provider,
+  connectionIds: [`${provider}-connection`],
   availability: "available",
+});
+
+const connection = (provider: string): ConnectionResource => ({
+  id: `${provider}-connection`,
+  name: `${provider}-connection`,
+  transport: "provider_api",
+  provider,
+  adapterVersion: "1",
+  authMode: "api_key",
+  billingMode: "api_metered",
   cost: {
     currency: "USD",
     estimatedCostMicrosPerAttempt: 1,
@@ -23,6 +33,7 @@ const resource = (provider: string): WorkerResource => ({
     outputMicrosPerMillionTokens: 1,
   },
   executionEnvironment: "cloud",
+  availability: "available",
 });
 
 const message = {
@@ -54,6 +65,7 @@ describe("real model provider adapters", () => {
       apiKey: "openai-secret",
       model: "openai-model",
       resource: resource("openai"),
+      connection: connection("openai"),
       endpoint: "https://provider.test/openai",
       transport: {
         fetch: async (_input, init) => {
@@ -94,6 +106,7 @@ describe("real model provider adapters", () => {
       apiKey: "anthropic-secret",
       model: "anthropic-model",
       resource: resource("anthropic"),
+      connection: connection("anthropic"),
       endpoint: "https://provider.test/anthropic",
       transport: transport(
         JSON.stringify({

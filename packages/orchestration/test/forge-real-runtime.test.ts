@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import type { WorkerResource } from "@conclave/core";
+import type { ConnectionResource, WorkerResource } from "@conclave/core";
 import { LocalRuntime, type RuntimeOperation } from "@conclave/local-runtime";
 import type { GoalRecord, RunRecord } from "@conclave/persistence";
 import type {
@@ -79,12 +79,24 @@ function resource(
     id,
     name: `${id}-worker`,
     type: "model",
-    provider: id,
-    adapterVersion: "e2e-1",
     capabilities,
     roles,
     permissions: ["repository_read", "repository_write"],
+    independenceKey: id,
+    connectionIds: [`${id}-connection`],
     availability: "available",
+  };
+}
+
+function connection(id: string): ConnectionResource {
+  return {
+    id: `${id}-connection`,
+    name: `${id}-connection`,
+    transport: "provider_api",
+    provider: id,
+    adapterVersion: "e2e-1",
+    authMode: "api_key",
+    billingMode: "api_metered",
     cost: {
       currency: "USD",
       estimatedCostMicrosPerAttempt: 1,
@@ -92,6 +104,7 @@ function resource(
       outputMicrosPerMillionTokens: 1,
     },
     executionEnvironment: "cloud",
+    availability: "available",
   };
 }
 
@@ -124,6 +137,10 @@ class ScenarioModel implements ModelWorker {
   readonly requests: ModelRequest[] = [];
 
   constructor(readonly resource: WorkerResource) {}
+
+  get connection(): ConnectionResource {
+    return connection(this.resource.id);
+  }
 
   async complete(request: ModelRequest): Promise<ModelResponse> {
     this.requests.push(request);

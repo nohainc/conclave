@@ -19,6 +19,7 @@ import type {
   VerificationRecord,
   WorkflowTemplateRecord,
   WorkerRecord,
+  ConnectionRecord,
   RunAggregateRows,
   PersistenceRepositories,
 } from "./index.js";
@@ -109,6 +110,11 @@ export class D1ProjectRepository extends RecordRepository<ProjectRecord> {
 export class D1WorkerRepository extends RecordRepository<WorkerRecord> {
   constructor(store: D1RecordStore) {
     super(store, "workers");
+  }
+}
+export class D1ConnectionRepository extends RecordRepository<ConnectionRecord> {
+  constructor(store: D1RecordStore) {
+    super(store, "connections");
   }
 }
 export class D1PhaseRepository extends RecordRepository<PhaseRecord> {
@@ -322,6 +328,7 @@ export class D1PersistenceRepositories implements PersistenceRepositories {
   readonly store: D1RecordStore;
   readonly projects: D1ProjectRepository;
   readonly workers: D1WorkerRepository;
+  readonly connections: D1ConnectionRepository;
   readonly goals: D1GoalRepository;
   readonly runs: D1RunRepository;
   readonly phases: D1PhaseRepository;
@@ -349,6 +356,7 @@ export class D1PersistenceRepositories implements PersistenceRepositories {
     this.store = new D1RecordStore(db);
     this.projects = new D1ProjectRepository(this.store);
     this.workers = new D1WorkerRepository(this.store);
+    this.connections = new D1ConnectionRepository(this.store);
     this.goals = new D1GoalRepository(db);
     this.runs = new D1RunRepository(db, (runId) => this.loadAggregate(runId));
     this.phases = new D1PhaseRepository(this.store);

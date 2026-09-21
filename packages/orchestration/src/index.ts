@@ -307,7 +307,7 @@ export async function executeTwoModelGoal(
       "application/json",
       {
         kind: "provider_response",
-        provider: worker.resource.provider,
+        provider: worker.connection.provider ?? worker.connection.transport,
         providerRequestId: response.providerRequestId,
       },
       now(),
@@ -316,7 +316,7 @@ export async function executeTwoModelGoal(
       id: id(),
       attemptId,
       workerId: worker.resource.id,
-      provider: worker.resource.provider,
+      provider: worker.connection.provider ?? worker.connection.transport,
       model: worker.resource.name,
       requestArtifactId,
       responseArtifactId,
