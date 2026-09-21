@@ -6,6 +6,7 @@ export * from "./execution-policy.js";
 export * from "./read-only-roles.js";
 export * from "./quality-presets.js";
 export * from "./parallel-implementation.js";
+export * from "./external-workers.js";
 export * from "./task-graph.js";
 export * from "./verification.js";
 export * from "./completion.js";

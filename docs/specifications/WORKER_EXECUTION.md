@@ -313,7 +313,22 @@ Independent research/review must use isolated session/context unless policy expl
 
 Separate chats/sessions using the same underlying model can provide context independence but do not count as provider independence.
 
-## 12. Fallback routing
+## 12. Remote and manual workers
+
+Custom remote agents implement a small channel that accepts the unified
+`WorkerExecutionRequest` and returns a validated `WorkerExecutionResult`.
+Conclave records the remote execution ID and can request cancellation without
+knowing the agent's vendor or internal protocol.
+
+Unsupported AI services and human operators use the manual bridge. A manual
+execution first returns `waiting` with an execution ID. An imported result is
+accepted only after protocol schema validation and goal/run/worker/task
+correlation checks; rejected output leaves the execution pending for correction
+or resubmission. Manual and remote workers remain ordinary Worker/Connection
+resources and can participate in the same policies, synthesis, and review
+flows as API and local-agent workers.
+
+## 13. Fallback routing
 
 A Worker policy may define ordered fallbacks.
 
@@ -335,7 +350,7 @@ Fallback occurs only for defined failure classes such as:
 
 A content/verification failure is not silently converted into a provider fallback unless policy allows a retry or alternate worker.
 
-## 13. Initial implementation priority
+## 14. Initial implementation priority
 
 The first production transports should be:
 
