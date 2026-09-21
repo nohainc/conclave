@@ -21,4 +21,10 @@
       "bucket_name": "conclave-artifacts-development",
     },
   ],
+  "services": [
+    {
+      "binding": "CONCLAVE_API",
+      "service": "conclave-ax-app",
+    },
+  ],
 }

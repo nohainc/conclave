@@ -49,6 +49,7 @@ interface ForgeExecutionEnv {
   readonly CONCLAVE_ARTIFACTS: R2Bucket;
   readonly CONCLAVE_ARTIFACT_BUCKET_NAME?: string;
   readonly CONCLAVE_API_BASE_URL?: string;
+  readonly CONCLAVE_API?: Fetcher;
   readonly CONCLAVE_FORGE_CALLBACK_TOKEN?: string;
   readonly CONCLAVE_OPENAI_API_KEY?: string;
   readonly CONCLAVE_ANTHROPIC_API_KEY?: string;
@@ -711,9 +712,8 @@ class AgentGatewayWorkerExecutor implements WorkerExecutor {
       });
     }
 
-    const baseUrl = this.env.CONCLAVE_API_BASE_URL;
     const token = this.env.CONCLAVE_FORGE_CALLBACK_TOKEN;
-    if (!baseUrl || !token) {
+    if ((!this.env.CONCLAVE_API && !this.env.CONCLAVE_API_BASE_URL) || !token) {
       return {
         assignmentId: "",
         attemptId: "",
@@ -725,8 +725,10 @@ class AgentGatewayWorkerExecutor implements WorkerExecutor {
         error: "Agent Gateway or internal Forge dispatch is not configured",
       };
     }
-    const response = await fetch(
-      `${baseUrl.replace(/\/$/, "")}/api/internal/agent-assignments/dispatch`,
+    const dispatchRequest = new Request(
+      this.env.CONCLAVE_API
+        ? "https://conclave.internal/api/internal/agent-assignments/dispatch"
+        : `${this.env.CONCLAVE_API_BASE_URL!.replace(/\/$/, "")}/api/internal/agent-assignments/dispatch`,
       {
         method: "POST",
         headers: {
@@ -742,6 +744,9 @@ class AgentGatewayWorkerExecutor implements WorkerExecutor {
         }),
       },
     );
+    const response = await (this.env.CONCLAVE_API
+      ? this.env.CONCLAVE_API.fetch(dispatchRequest)
+      : fetch(dispatchRequest));
     const body = (await response.json()) as {
       assignment?: DispatchAssignmentResult;
       error?: string;
@@ -1064,15 +1069,18 @@ export class ConclaveForgeExecutionService {
     executionId: string,
   ): Promise<void> {
     const runId = String(params.runId ?? "");
-    const baseUrl = this.env.CONCLAVE_API_BASE_URL;
-    if (!baseUrl) throw new Error("CONCLAVE_API_BASE_URL is not configured");
+    if (!this.env.CONCLAVE_API && !this.env.CONCLAVE_API_BASE_URL) {
+      throw new Error(
+        "CONCLAVE_API or CONCLAVE_API_BASE_URL is not configured",
+      );
+    }
     try {
       const resultArtifactId = await executeForgeService(
         this.env,
         params,
         executionId,
       );
-      await this.notify(baseUrl, runId, {
+      await this.notify(runId, {
         eventId: crypto.randomUUID(),
         runId,
         executionId,
@@ -1080,7 +1088,7 @@ export class ConclaveForgeExecutionService {
         resultArtifactId,
       });
     } catch (error) {
-      await this.notify(baseUrl, runId, {
+      await this.notify(runId, {
         eventId: crypto.randomUUID(),
         runId,
         executionId,
@@ -1092,12 +1100,13 @@ export class ConclaveForgeExecutionService {
   }
 
   private async notify(
-    baseUrl: string,
     runId: string,
     payload: Record<string, unknown>,
   ): Promise<void> {
-    const response = await fetch(
-      `${baseUrl.replace(/\/$/, "")}/api/runs/${encodeURIComponent(runId)}/forge-events`,
+    const callbackRequest = new Request(
+      this.env.CONCLAVE_API
+        ? `https://conclave.internal/api/runs/${encodeURIComponent(runId)}/forge-events`
+        : `${this.env.CONCLAVE_API_BASE_URL!.replace(/\/$/, "")}/api/runs/${encodeURIComponent(runId)}/forge-events`,
       {
         method: "POST",
         headers: {
@@ -1111,6 +1120,9 @@ export class ConclaveForgeExecutionService {
         body: JSON.stringify(payload),
       },
     );
+    const response = await (this.env.CONCLAVE_API
+      ? this.env.CONCLAVE_API.fetch(callbackRequest)
+      : fetch(callbackRequest));
     if (!response.ok)
       throw new Error(`Forge callback failed with ${response.status}`);
   }
