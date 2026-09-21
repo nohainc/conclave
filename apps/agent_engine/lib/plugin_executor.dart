@@ -22,6 +22,9 @@ class PluginProcessSpec {
 
 typedef PluginProcessLauncher = Future<Process> Function(
     PluginProcessSpec spec);
+typedef PluginProcessResolver = FutureOr<PluginProcessSpec?> Function(
+  String pluginId,
+);
 
 class PluginProcessExecutor {
   PluginProcessExecutor({PluginProcessLauncher? launcher})
@@ -124,14 +127,14 @@ class PluginAssignmentHandler {
   });
 
   final PluginProcessExecutor executor;
-  final PluginProcessSpec? Function(String pluginId) resolve;
+  final PluginProcessResolver resolve;
 
   Future<AgentAssignmentResult> call(AgentAssignmentContext context) async {
     final pluginId = context.payload['pluginId'];
     if (pluginId is! String || pluginId.isEmpty) {
       throw StateError('assignment pluginId is required');
     }
-    final spec = resolve(pluginId);
+    final spec = await resolve(pluginId);
     if (spec == null) throw StateError('plugin is not installed: $pluginId');
     final output = await executor.execute(spec, context.payload);
     final summary = output['summary'];

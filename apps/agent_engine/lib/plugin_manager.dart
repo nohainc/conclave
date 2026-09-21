@@ -154,6 +154,12 @@ class PluginManager {
     );
   }
 
+  PluginAssignmentHandler assignmentHandler(PluginProcessExecutor executor) =>
+      PluginAssignmentHandler(
+        executor: executor,
+        resolve: activeProcessSpec,
+      );
+
   Future<void> _activate(
       String pluginId, String version, String? digest) async {
     final activeFile = File('${root.path}/$pluginId/active.json');
