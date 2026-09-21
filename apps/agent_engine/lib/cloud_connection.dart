@@ -41,6 +41,9 @@ class AgentCloudConnection {
     String? hostname,
     this.agentVersion = '0.1.0',
     Map<String, Object?>? capabilities,
+    this.installedPluginVersions = const {},
+    this.activeWorkerIds = const [],
+    this.unreconciledAssignmentIds = const [],
     this.heartbeat = const Duration(seconds: 15),
   })  : hostname = hostname ?? Platform.localHostname,
         capabilities = capabilities ?? _defaultCapabilities();
@@ -53,6 +56,9 @@ class AgentCloudConnection {
   final String hostname;
   final String agentVersion;
   final Map<String, Object?> capabilities;
+  final Map<String, String> installedPluginVersions;
+  final List<String> activeWorkerIds;
+  final List<String> unreconciledAssignmentIds;
   final Duration heartbeat;
   AgentCloudSocket? _socket;
   Timer? _heartbeatTimer;
@@ -61,6 +67,7 @@ class AgentCloudConnection {
   int reconnectCount = 0;
   String? sessionId;
   int _messageSequence = 0;
+  Map<String, Object?>? syncResponse;
 
   static const protocol = 'conclave.agent-protocol';
   static const protocolVersion = '2.0';
@@ -124,7 +131,8 @@ class AgentCloudConnection {
   Map<String, Object?> _envelope(String type, Map<String, Object?> payload) => {
         'protocol': protocol,
         'protocolVersion': protocolVersion,
-        'messageId': 'dart-${DateTime.now().microsecondsSinceEpoch}-${++_messageSequence}',
+        'messageId':
+            'dart-${DateTime.now().microsecondsSinceEpoch}-${++_messageSequence}',
         'timestamp': DateTime.now().toUtc().toIso8601String(),
         'type': type,
         'payload': payload,
@@ -142,8 +150,27 @@ class AgentCloudConnection {
       final payload = decoded['payload'];
       if (payload is Map<String, dynamic> && payload['sessionId'] is String) {
         sessionId = payload['sessionId'] as String;
+        _sendSyncRequest();
+      }
+    } else if (decoded['type'] == 'agent.sync.response') {
+      final payload = decoded['payload'];
+      if (payload is Map<String, dynamic>) {
+        syncResponse = Map<String, Object?>.from(payload);
       }
     }
+  }
+
+  void _sendSyncRequest() {
+    final socket = _socket;
+    if (socket == null || sessionId == null) return;
+    socket.send(jsonEncode(_envelope('agent.sync.request', {
+      'agentId': agentId,
+      'workspaceId': workspaceId,
+      'installedPluginVersions': installedPluginVersions,
+      'activeWorkerIds': activeWorkerIds,
+      if (unreconciledAssignmentIds.isNotEmpty)
+        'unreconciledAssignmentIds': unreconciledAssignmentIds,
+    })));
   }
 
   Future<void> _reconnect() async {

@@ -79,6 +79,13 @@ void main() {
       (heartbeats.first['payload'] as Map<String, dynamic>)['sessionId'],
       'session-1',
     );
+    final sync = socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .firstWhere((message) => message['type'] == 'agent.sync.request');
+    expect(
+      (sync['payload'] as Map<String, dynamic>)['agentId'],
+      'agent-1',
+    );
     await connection.close();
   });
 
