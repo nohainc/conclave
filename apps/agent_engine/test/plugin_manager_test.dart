@@ -36,7 +36,8 @@ void main() {
     await manager.remove('echo', '1.0.0');
     expect((await manager.inventory()).map((plugin) => plugin.version),
         contains('2.0.0'));
-    expect(() => manager.remove('echo', '2.0.0'), throwsA(isA<StateError>()));
+    await expectLater(
+        manager.remove('echo', '2.0.0'), throwsA(isA<StateError>()));
     await directory.delete(recursive: true);
   });
 
@@ -84,8 +85,8 @@ void main() {
         await Directory.systemTemp.createTemp('conclave-plugins-');
     final manager = PluginManager(directory, platformKey: 'linux-x64');
     final bytes = [7, 8, 9];
-    expect(
-      () => manager.install(PluginPackage(
+    await expectLater(
+      manager.install(PluginPackage(
         id: 'mac-only',
         version: '1.0.0',
         bytes: bytes,

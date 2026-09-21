@@ -5,11 +5,31 @@ import 'package:conclave_agent_engine/assignment_journal.dart';
 import 'package:conclave_agent_engine/cloud_connection.dart';
 import 'package:conclave_agent_engine/plugin_executor.dart';
 import 'package:conclave_agent_engine/plugin_manager.dart';
+import 'package:conclave_agent_engine/trust_policy.dart';
+
+Set<PluginPermission> _configuredPermissions() {
+  final configured = Platform.environment['CONCLAVE_PLUGIN_PERMISSIONS'];
+  if (configured == null) return {};
+  return configured
+      .split(',')
+      .map((permission) => permission.trim())
+      .map((permission) => PluginPermission.values
+          .where((candidate) => candidate.name == permission))
+      .expand((matches) => matches)
+      .toSet();
+}
 
 Future<void> main(List<String> args) async {
   final config = AgentEngineConfig.fromArgs(args);
+  final publisher =
+      Platform.environment['CONCLAVE_PLUGIN_TRUST_PUBLISHER'] ?? 'conclave';
+  final trustSecret = Platform.environment['CONCLAVE_PLUGIN_TRUST_SECRET'];
   final pluginManager = PluginManager(
     Directory('${config.dataDirectory.path}/plugins'),
+    trustPolicy: PluginTrustPolicy(
+      trustedSecrets: trustSecret == null ? {} : {publisher: trustSecret},
+    ),
+    allowedPermissions: _configuredPermissions(),
   );
   final pluginHandler = pluginManager.assignmentHandler(
     PluginProcessExecutor(),

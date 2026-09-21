@@ -123,10 +123,6 @@ class PluginManager {
       }
       trustPolicy!.requirePermissions(package.permissions, allowedPermissions);
     }
-    final target = Directory('${root.path}/${package.id}/${package.version}');
-    await target.create(recursive: true);
-    await File('${target.path}/package.bin')
-        .writeAsBytes(package.bytes, flush: true);
     final manifest = package.manifest ??
         PluginManifest(
           pluginId: package.id,
@@ -149,6 +145,10 @@ class PluginManager {
         !manifest.supportedPlatforms.contains(platformKey)) {
       throw StateError('plugin is not compatible with platform $platformKey');
     }
+    final target = Directory('${root.path}/${package.id}/${package.version}');
+    await target.create(recursive: true);
+    await File('${target.path}/package.bin')
+        .writeAsBytes(package.bytes, flush: true);
     await File('${target.path}/manifest.json').writeAsString(
       jsonEncode({...manifest.toJson(), 'digest': actual}),
       flush: true,
