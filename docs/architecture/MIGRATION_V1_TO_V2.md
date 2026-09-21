@@ -1,5 +1,7 @@
 # Architecture v2 Migration Map
 
+> **Historical: superseded by [Migration to Architecture v3](MIGRATION_TO_V3.md). Do not use this document to plan new work.**
+
 This document maps the current repository to Architecture v2.
 
 ## 1. Keep largely unchanged

@@ -1,5 +1,7 @@
 # Conclave AX Applications
 
+**Status:** Normative for Architecture v3
+
 ## Deployable applications
 
 ### Studio

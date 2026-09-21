@@ -1,6 +1,6 @@
 # Workspace Collaboration and Invitations
 
-**Status:** Normative Architecture v2 specification
+> **Superseded by Architecture v3.** Preserve for historical context; new collaboration work must follow the v3 roadmap.
 
 ## Membership lifecycle
 

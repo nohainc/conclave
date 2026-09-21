@@ -1,5 +1,7 @@
 # ADR-002: Architecture v2 — Cloud Orchestration, Agent Execution
 
+> **Superseded by [ADR-003](ADR-003-flutter-dart-agent.md).** This ADR remains as historical context only.
+
 **Status:** Superseded by ADR-003  
 **Date:** 2026-09-21
 

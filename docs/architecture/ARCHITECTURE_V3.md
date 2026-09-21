@@ -285,10 +285,11 @@ Cloudflare remains the Cloud control-plane platform:
 
 ## Source documents
 
-- [Technology Stack](docs/architecture/TECH_STACK.md)
-- [Migration to Architecture v3](docs/architecture/MIGRATION_TO_V3.md)
-- [Architecture v3 Implementation Roadmap](docs/roadmaps/ARCHITECTURE_V3_IMPLEMENTATION.md)
-- [Authentication and Multi-User](docs/specifications/AUTHENTICATION_MULTIUSER.md)
-- [Studio Chat and Projects](docs/specifications/STUDIO_CHAT_PROJECTS.md)
-- [Multi-Worker Orchestration](docs/specifications/MULTI_WORKER_ORCHESTRATION.md)
-- [Domain Specification](docs/specifications/DOMAIN_SPECIFICATION.md)
+- [Technology Stack](TECH_STACK.md)
+- [Applications](APPLICATIONS.md)
+- [Migration to Architecture v3](MIGRATION_TO_V3.md)
+- [Architecture v3 Implementation Roadmap](../roadmaps/ARCHITECTURE_V3_IMPLEMENTATION.md)
+- [Authentication and Multi-User](../specifications/AUTHENTICATION_MULTIUSER.md)
+- [Studio Chat and Projects](../specifications/STUDIO_CHAT_PROJECTS.md)
+- [Multi-Worker Orchestration](../specifications/MULTI_WORKER_ORCHESTRATION.md)
+- [Domain Specification](../specifications/DOMAIN_SPECIFICATION.md)

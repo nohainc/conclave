@@ -1,6 +1,6 @@
 # Chat Intent and Scoped Context
 
-**Status:** Normative Architecture v2 specification
+> **Superseded by Architecture v3.** Preserve for historical context; new intent/context work must follow the v3 roadmap and ADR-003.
 
 ## Message lifecycle
 
