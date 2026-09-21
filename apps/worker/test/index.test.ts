@@ -100,6 +100,51 @@ describe("Worker smoke tests", () => {
     expect(response.status).toBe(404);
   });
 
+  it("exposes an authenticated interactive connector session", async () => {
+    const connectorEnv = {
+      ...env,
+      CONCLAVE_CONNECTOR_REGISTRATION_TOKEN: "connector-secret",
+    } as unknown as Env;
+    const rejected = await worker.fetch(
+      new Request("https://conclave.test/api/connector/register_session", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer wrong-secret",
+        },
+        body: JSON.stringify({
+          organizationId: "org-1",
+          projectId: "project-1",
+          workerId: "web-reviewer",
+          capabilities: ["code_review"],
+        }),
+      }),
+      connectorEnv,
+    );
+    expect(rejected.status).toBe(400);
+
+    const response = await worker.fetch(
+      new Request("https://conclave.test/api/connector/register_session", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer connector-secret",
+        },
+        body: JSON.stringify({
+          organizationId: "org-1",
+          projectId: "project-1",
+          workerId: "web-reviewer",
+          capabilities: ["code_review"],
+        }),
+      }),
+      connectorEnv,
+    );
+    expect(response.status).toBe(200);
+    expect(
+      ((await response.json()) as { sessionToken?: string }).sessionToken,
+    ).toBeTruthy();
+  });
+
   it("fails closed when production authentication is missing", async () => {
     const productionEnv = {
       ...env,

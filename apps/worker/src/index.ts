@@ -1,5 +1,7 @@
 export { ConclaveRunWorkflow } from "./workflow.js";
 export { RuntimeConnection } from "./runtime-connection.js";
+export { handleConnectorRequest } from "./interactive-connector.js";
+import { handleConnectorRequest } from "./interactive-connector.js";
 import {
   authorize,
   type Permission,
@@ -88,6 +90,7 @@ type SecurityEnv = Env & {
   readonly CONCLAVE_RUNTIME_CONNECT_TOKEN?: string;
   readonly CONCLAVE_RUNTIME_OPERATION_TOKEN?: string;
   readonly CONCLAVE_RUNTIME_CONNECTION: DurableObjectNamespace;
+  readonly CONCLAVE_CONNECTOR_REGISTRATION_TOKEN?: string;
 };
 
 function anonymousDevelopment(env: SecurityEnv): boolean {
@@ -876,6 +879,16 @@ export default {
         const stub =
           securityEnv.CONCLAVE_RUNTIME_CONNECTION.getByName(runtimeId);
         return stub.fetch(new Request("https://runtime.internal/workers"));
+      }
+      const connectorMatch = url.pathname.match(
+        /^\/api\/connector\/(register_session|claim_task|get_task|get_context|get_next_message|submit_candidate|submit_result|submit_finding|report_status|release_task)$/,
+      );
+      if (request.method === "POST" && connectorMatch?.[1]) {
+        return await handleConnectorRequest(
+          request,
+          env as SecurityEnv,
+          connectorMatch[1],
+        );
       }
       if (request.method === "POST" && url.pathname === "/api/runs") {
         return await handleRunRequest(request, env, ctx);

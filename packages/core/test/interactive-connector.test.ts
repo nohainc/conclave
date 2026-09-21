@@ -1,0 +1,90 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  InteractiveConnector,
+  InteractiveConnectorError,
+} from "../src/index.js";
+
+describe("interactive connector", () => {
+  it("registers, leases, claims, exchanges, and releases a native-chat task", () => {
+    let now = 1_000_000;
+    const connector = new InteractiveConnector({
+      registrationToken: "register-secret",
+      now: () => now,
+      idFactory: (prefix) => `${prefix}-1`,
+    });
+    connector.registerTask({
+      taskId: "task-1",
+      goalId: "goal-1",
+      runId: "run-1",
+      objective: "Review the proposal",
+      context: [],
+      messages: [{ type: "review", text: "Inspect the candidate" }],
+    });
+    const session = connector.registerSession("register-secret", {
+      organizationId: "org-1",
+      projectId: "project-1",
+      workerId: "web-reviewer",
+      capabilities: ["code_review"],
+      leaseMs: 10_000,
+    });
+    expect(
+      connector.claimTask(session.sessionId, session.sessionToken).taskId,
+    ).toBe("task-1");
+    expect(
+      connector.getNextMessage(
+        session.sessionId,
+        session.sessionToken,
+        "task-1",
+      ),
+    ).toEqual({
+      type: "review",
+      text: "Inspect the candidate",
+    });
+    connector.submitCandidate(
+      session.sessionId,
+      session.sessionToken,
+      "task-1",
+      { summary: "looks good" },
+    );
+    connector.submitFinding(session.sessionId, session.sessionToken, "task-1", {
+      severity: "minor",
+    });
+    connector.reportStatus(session.sessionId, session.sessionToken, {
+      status: "waiting",
+    });
+    connector.releaseTask(session.sessionId, session.sessionToken, "task-1");
+    expect(() =>
+      connector.getTask(session.sessionId, session.sessionToken, "task-1"),
+    ).toThrow(InteractiveConnectorError);
+    now += 20_000;
+  });
+
+  it("rejects invalid registration and expired session leases", () => {
+    let now = 1_000_000;
+    const connector = new InteractiveConnector({
+      registrationToken: "register-secret",
+      now: () => now,
+      idFactory: (prefix) => `${prefix}-1`,
+    });
+    expect(() =>
+      connector.registerSession("wrong", {
+        organizationId: "org-1",
+        projectId: "project-1",
+        workerId: "web-worker",
+        capabilities: [],
+      }),
+    ).toThrow("authentication");
+    const session = connector.registerSession("register-secret", {
+      organizationId: "org-1",
+      projectId: "project-1",
+      workerId: "web-worker",
+      capabilities: [],
+      leaseMs: 1_000,
+    });
+    now += 1_001;
+    expect(() =>
+      connector.getContext(session.sessionId, session.sessionToken, "missing"),
+    ).toThrow("expired");
+  });
+});

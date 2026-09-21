@@ -350,7 +350,31 @@ Fallback occurs only for defined failure classes such as:
 
 A content/verification failure is not silently converted into a provider fallback unless policy allows a retry or alternate worker.
 
-## 14. Initial implementation priority
+## 14. Interactive web/cloud connector
+
+Native-chat Workers use the connector endpoints below rather than direct
+provider API billing through Conclave:
+
+```text
+register_session → claim_task → get_task/get_context/get_next_message
+                 → submit_candidate/submit_result/submit_finding
+                 → report_status → release_task
+```
+
+`register_session` requires the connector registration credential and returns a
+short-lived session token. Every other operation requires that token, checks
+the organization/project-scoped session, and renews its lease. A session can
+hold only one task at a time; claims, submissions, and release are rejected
+after lease expiry or from another session.
+
+The HTTP Worker exposes these operations under `/api/connector/*`. The same
+Core state machine can be mounted behind an MCP server or another native-chat
+bridge. Connector state must be hosted by a durable session service (such as a
+Durable Object or repository adapter) for production restart recovery; the
+Core implementation supplies the contract and lease behavior independently of
+that host.
+
+## 15. Initial implementation priority
 
 The first production transports should be:
 
