@@ -1219,3 +1219,11 @@ export type {
 } from "./codex.js";
 export { ClaudeCodeLocalAgent } from "./claude.js";
 export type { ClaudeCodeLocalAgentOptions } from "./claude.js";
+export { GitWorkspaceManager } from "./git-workspaces.js";
+export type {
+  GitCommandResult,
+  GitRunner,
+  GitWorkspace,
+  GitWorkspaceManagerOptions,
+} from "./git-workspaces.js";
+export { GitWorkspaceError } from "./git-workspaces.js";

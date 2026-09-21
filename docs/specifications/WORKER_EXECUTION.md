@@ -288,7 +288,21 @@ fails closed when the requested number of eligible Workers cannot be found.
 The selected Connection cost snapshot can be recorded with the Attempt and
 ModelCall for later usage accounting.
 
-## 10. Session isolation
+## 10. Parallel implementation workspaces
+
+Parallel implementation is enabled only after the read-only panel has produced
+its research, architecture, planning, or review evidence. Each implementation
+Worker receives a distinct Local Runtime repository ID backed by a detached Git
+worktree. Core rejects duplicate workspace IDs, duplicate Worker identities,
+and shared independence keys before starting execution.
+
+The Local Runtime creates worktrees only beneath its configured workspace root,
+accepts only safe repository/workspace ID segments, and removes only worktrees
+that it created and tracks. Results remain correlated to the Worker and
+workspace repository ID so proposals can be reviewed, compared, merged, or
+discarded without mutating the primary checkout.
+
+## 11. Session isolation
 
 A Worker execution may request:
 - a new isolated session;
@@ -299,7 +313,7 @@ Independent research/review must use isolated session/context unless policy expl
 
 Separate chats/sessions using the same underlying model can provide context independence but do not count as provider independence.
 
-## 11. Fallback routing
+## 12. Fallback routing
 
 A Worker policy may define ordered fallbacks.
 
@@ -321,7 +335,7 @@ Fallback occurs only for defined failure classes such as:
 
 A content/verification failure is not silently converted into a provider fallback unless policy allows a retry or alternate worker.
 
-## 12. Initial implementation priority
+## 13. Initial implementation priority
 
 The first production transports should be:
 
