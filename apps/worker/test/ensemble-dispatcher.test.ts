@@ -70,6 +70,22 @@ describe("Multi-Agent Ensemble Dispatcher (Cloud -> Multi-Agent -> Workers)", ()
           agentId: body.agentId,
           assignmentId: body.assignmentId,
         });
+        db.prepare(
+          `UPDATE worker_assignments
+           SET status = 'completed',
+               output_json = ?,
+               updated_at = ?
+           WHERE id = ?`,
+        ).run(
+          JSON.stringify({
+            status: "completed",
+            summary: "Fixture Agent completed the assignment",
+            output: { accepted: true },
+            artifactIds: [],
+          }),
+          new Date().toISOString(),
+          body.assignmentId,
+        );
         return new Response(
           JSON.stringify({
             accepted: true,

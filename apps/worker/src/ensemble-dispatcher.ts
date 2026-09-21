@@ -98,6 +98,52 @@ function toSelectedWorker(
   };
 }
 
+async function waitForAssignmentResult(
+  db: D1Database,
+  assignmentId: string,
+  timeoutMs: number,
+): Promise<
+  | { status: "completed"; result: Record<string, unknown> }
+  | { status: "failed"; error: string }
+  | { status: "timed_out"; error: string }
+> {
+  const deadline = Date.now() + Math.max(1000, timeoutMs);
+  while (Date.now() < deadline) {
+    const row = await db
+      .prepare(
+        "SELECT status, output_json, error_json FROM worker_assignments WHERE id = ?1",
+      )
+      .bind(assignmentId)
+      .first<{
+        status: string;
+        output_json: string | null;
+        error_json: string | null;
+      }>();
+    if (row?.status === "completed") {
+      try {
+        const result = JSON.parse(row.output_json || "{}");
+        if (typeof result === "object" && result !== null) {
+          return {
+            status: "completed",
+            result: result as Record<string, unknown>,
+          };
+        }
+      } catch {
+        // Fall through as a malformed terminal result.
+      }
+      return { status: "failed", error: "Agent returned malformed output" };
+    }
+    if (row?.status === "failed" || row?.status === "cancelled") {
+      return {
+        status: "failed",
+        error: row.error_json || `Assignment ended with status ${row.status}`,
+      };
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return { status: "timed_out", error: "Timed out waiting for Agent result" };
+}
+
 /**
  * Selects N candidate workers matching role and capabilities across online agents with distinct independence keys.
  */
@@ -219,15 +265,44 @@ function createWorkerDescriptor(
         };
       }
 
-      // In synchronous/mock DO flows or execution, return result
+      const completed = await waitForAssignmentResult(
+        env.CONCLAVE_DB,
+        dispatchRes.assignmentId,
+        taskReq.timeoutMs ?? 15 * 60_000,
+      );
+      if (completed.status !== "completed") {
+        return {
+          status: completed.status,
+          output: null,
+          error: {
+            code:
+              completed.status === "timed_out"
+                ? "ASSIGNMENT_TIMEOUT"
+                : "ASSIGNMENT_FAILED",
+            message: completed.error,
+            retryable: completed.status === "timed_out",
+          },
+        };
+      }
+      const result = completed.result;
+      const output =
+        typeof result.output === "object" && result.output !== null
+          ? (result.output as Record<string, unknown>)
+          : { summary: String(result.summary ?? "Agent assignment completed") };
       return {
         status: "succeeded",
         output: {
-          result: `Dispatched to ${worker.name} on ${worker.agentId}`,
+          ...output,
           assignmentId: dispatchRes.assignmentId,
           attemptId: dispatchRes.attemptId,
         },
-        usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+        rawOutput: JSON.stringify(result),
+        artifactIds: Array.isArray(result.artifactIds)
+          ? result.artifactIds.filter(
+              (value): value is string => typeof value === "string",
+            )
+          : [],
+        findings: Array.isArray(result.findings) ? result.findings : [],
       };
     },
   };
