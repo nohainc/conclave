@@ -57,6 +57,21 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('redacts configured secrets from command evidence', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-runtime-');
+    final runner = SafeCommandRunner(SafeWorkspace(directory));
+    final result = await runner.run(
+      ['printf', 'token-123'],
+      policy: const CommandPolicy(
+        allowedExecutables: {'printf'},
+        secretValues: {'token-123'},
+      ),
+    );
+    expect(result.stdout, '[REDACTED]');
+    await directory.delete(recursive: true);
+  });
+
   test('produces stable artifact hashes', () async {
     final directory =
         await Directory.systemTemp.createTemp('conclave-runtime-');

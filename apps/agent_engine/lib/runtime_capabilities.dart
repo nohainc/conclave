@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 
 import 'process_tree.dart';
+import 'trust_policy.dart';
 
 class RuntimeViolation implements Exception {
   const RuntimeViolation(this.message);
@@ -81,6 +82,7 @@ class CommandPolicy {
   const CommandPolicy(
       {required this.allowedExecutables,
       this.allowedArgumentPatterns = const {},
+      this.secretValues = const {},
       this.maxOutputBytes = 256 * 1024,
       this.timeout = const Duration(minutes: 2)});
   final Set<String> allowedExecutables;
@@ -88,6 +90,7 @@ class CommandPolicy {
   /// Optional per-executable argument allowlists. When configured, every
   /// argument must match at least one pattern for that executable.
   final Map<String, List<RegExp>> allowedArgumentPatterns;
+  final Set<String> secretValues;
   final int maxOutputBytes;
   final Duration timeout;
 }
@@ -153,10 +156,11 @@ class SafeCommandRunner {
       return -1;
     });
     return CommandResult(
-        exitCode: await exit,
-        stdout: await stdoutFuture,
-        stderr: await stderrFuture,
-        timedOut: timedOut);
+      exitCode: await exit,
+      stdout: redactSecrets(await stdoutFuture, policy.secretValues),
+      stderr: redactSecrets(await stderrFuture, policy.secretValues),
+      timedOut: timedOut,
+    );
   }
 
   Future<String> _bounded(Stream<List<int>> stream, int maxBytes,
