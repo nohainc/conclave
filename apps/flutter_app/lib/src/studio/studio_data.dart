@@ -21,6 +21,15 @@ abstract interface class StudioDataSource {
     required String projectId,
     required String title,
   });
+  Future<void> setWorkerEnabled({
+    required String workspaceId,
+    required String workerId,
+    required bool enabled,
+  });
+  Future<void> revokeAgent({
+    required String workspaceId,
+    required String agentId,
+  });
 }
 
 class StudioApiException implements Exception {
@@ -121,6 +130,35 @@ class StudioApiClient implements StudioDataSource {
     return StudioChat.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>);
   }
+
+  @override
+  Future<void> setWorkerEnabled({
+    required String workspaceId,
+    required String workerId,
+    required bool enabled,
+  }) async {
+    final response = await client.put(
+      Uri.parse('$baseUrl/workspaces/$workspaceId/workers/$workerId'),
+      headers: {'content-type': 'application/json'},
+      body: jsonEncode({'enabled': enabled}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException('Worker update failed (${response.statusCode})');
+    }
+  }
+
+  @override
+  Future<void> revokeAgent({
+    required String workspaceId,
+    required String agentId,
+  }) async {
+    final response = await client.delete(
+      Uri.parse('$baseUrl/workspaces/$workspaceId/agents/$agentId'),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException('Agent revoke failed (${response.statusCode})');
+    }
+  }
 }
 
 class DemoStudioDataSource implements StudioDataSource {
@@ -166,4 +204,17 @@ class DemoStudioDataSource implements StudioDataSource {
       messages: [],
     );
   }
+
+  @override
+  Future<void> setWorkerEnabled({
+    required String workspaceId,
+    required String workerId,
+    required bool enabled,
+  }) async {}
+
+  @override
+  Future<void> revokeAgent({
+    required String workspaceId,
+    required String agentId,
+  }) async {}
 }

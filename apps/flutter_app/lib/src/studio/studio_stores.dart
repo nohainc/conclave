@@ -50,11 +50,18 @@ class RunStore {
 class AgentStore {
   const AgentStore(this.source);
   final StudioDataSource source;
+
+  Future<void> revoke(String workspaceId, String agentId) =>
+      source.revokeAgent(workspaceId: workspaceId, agentId: agentId);
 }
 
 class WorkerStore {
   const WorkerStore(this.source);
   final StudioDataSource source;
+
+  Future<void> setEnabled(String workspaceId, String workerId, bool enabled) =>
+      source.setWorkerEnabled(
+          workspaceId: workspaceId, workerId: workerId, enabled: enabled);
 }
 
 class PluginStore {
