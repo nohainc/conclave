@@ -19,6 +19,16 @@ repository inspection
 
 The workflow persists each model request/response, Attempt, Model Call, Artifact, and Run Event through `ForgePersistence`. It validates every model response through the versioned protocol before using it as workflow state.
 
+## Model context assembly
+
+Runtime evidence is not useful to a model as an identifier alone. Before every Forge model call, the orchestration context builder resolves referenced Artifact IDs through the Artifact Store and attaches bounded context items to `ModelRequest`:
+
+```text
+Artifact Store -> ContextBuilder -> ModelRequest.context[] -> provider adapter
+```
+
+Each item includes the Artifact ID, media type, actual content, original length, truncation status, and an estimated token count. The builder deduplicates IDs and enforces artifact-count, per-artifact character, total-character, and estimated-token limits. Missing artifacts fail closed rather than sending an unresolved reference. The persisted protocol request retains the Artifact IDs for provenance, while the provider receives the assembled content.
+
 ## Worker separation
 
 The Lead owns research synthesis, planning, verification, and reporting. The Implementer changes the repository. The Reviewer performs the independent research challenge, review, and test-evidence interpretation. Forge rejects a configuration where the Reviewer and Implementer are the same Worker identity. The default Reviewer is the Lead, so the MVP works with two independent AI workers while still keeping implementation and review contexts separate.

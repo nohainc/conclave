@@ -22,6 +22,7 @@ import {
 } from "@conclave/protocol";
 
 export * from "./forge.js";
+export * from "./context.js";
 
 export interface MvpPersistence {
   saveGoal(goal: GoalRecord): Promise<void>;

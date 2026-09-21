@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { GoalRecord, RunRecord } from "@conclave/persistence";
 import type { WorkerResource } from "@conclave/core";
-import type { ModelResponse, ModelWorker } from "@conclave/providers";
+import type {
+  ModelRequest,
+  ModelResponse,
+  ModelWorker,
+} from "@conclave/providers";
 
 import {
   executeForgeGoal,
@@ -63,13 +67,15 @@ function resource(
 
 class FakeWorker implements ModelWorker {
   private cursor = 0;
+  readonly requests: ModelRequest[] = [];
 
   constructor(
     readonly resource: WorkerResource,
     private readonly outputs: readonly string[],
   ) {}
 
-  complete(): Promise<ModelResponse> {
+  complete(request: ModelRequest): Promise<ModelResponse> {
+    this.requests.push(request);
     const text = this.outputs[this.cursor++];
     if (text === undefined)
       throw new Error(`${this.resource.id} ran out of outputs`);
@@ -303,6 +309,26 @@ describe("Forge MVP workflow", () => {
     expect(
       new Set(persistence.modelCalls.map((call) => call.workerId)),
     ).toEqual(new Set(["lead", "implementer", "reviewer"]));
+    expect(lead.requests[0]?.context?.[0]).toMatchObject({
+      mediaType: "text/plain",
+      content: expect.stringContaining("src/greeting.ts contains the bug"),
+      truncated: false,
+      estimatedTokens: expect.any(Number),
+    });
+    expect(
+      reviewer.requests.some((request) =>
+        request.context?.some((item) =>
+          item.content.includes("pnpm test: 42 passed"),
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      persistence.artifacts.some(
+        (artifact) =>
+          artifact.payload.kind === "inline" &&
+          artifact.payload.content.includes("src/greeting.ts contains the bug"),
+      ),
+    ).toBe(true);
   });
 
   it("rejects a workflow that would let the implementer review itself", async () => {

@@ -48,24 +48,44 @@ function transport(body: string, status = 200): HttpTransport {
 
 describe("real model provider adapters", () => {
   it("adapts an OpenAI Responses JSON response", async () => {
+    let requestBody = "";
     const worker = new OpenAIResponsesWorker({
       apiKey: "openai-secret",
       model: "openai-model",
       resource: resource("openai"),
       endpoint: "https://provider.test/openai",
-      transport: transport(
-        JSON.stringify({
-          id: "resp-1",
-          output_text: JSON.stringify(message),
-          usage: { input_tokens: 4, output_tokens: 5 },
-        }),
-      ),
+      transport: {
+        fetch: async (_input, init) => {
+          requestBody = String(init?.body);
+          return new Response(
+            JSON.stringify({
+              id: "resp-1",
+              output_text: JSON.stringify(message),
+              usage: { input_tokens: 4, output_tokens: 5 },
+            }),
+            { status: 200 },
+          );
+        },
+      },
     });
 
-    const result = await worker.complete({ message });
+    const result = await worker.complete({
+      message,
+      context: [
+        {
+          artifactId: "artifact-1",
+          mediaType: "text/plain",
+          content: "actual repository evidence",
+          truncated: false,
+          originalLength: 26,
+          estimatedTokens: 7,
+        },
+      ],
+    });
     expect(result.providerRequestId).toBe("resp-1");
     expect(JSON.parse(result.text)).toEqual(message);
     expect(result.usage).toEqual({ inputTokens: 4, outputTokens: 5 });
+    expect(requestBody).toContain("actual repository evidence");
   });
 
   it("adapts an Anthropic Messages text response", async () => {

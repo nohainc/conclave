@@ -18,6 +18,11 @@ import {
 } from "@conclave/core";
 import type { ModelResponse, ModelWorker } from "@conclave/providers";
 import {
+  ContextBuilder,
+  type ArtifactResolver,
+  type ContextLimits,
+} from "./context.js";
+import {
   parseModelResult,
   type CompletionResult,
   type ImplementationResult,
@@ -74,6 +79,11 @@ export interface ForgePersistence {
   saveModelCall(call: ModelCallRecord): Promise<void>;
   saveArtifact(artifact: ArtifactRecord): Promise<void>;
   appendEvent(event: RunEventRecord): Promise<void>;
+  resolve(artifactId: string): Promise<{
+    readonly artifactId: string;
+    readonly mediaType: string;
+    readonly content: string;
+  } | null>;
 }
 
 export interface ForgeWorkflowInput {
@@ -89,6 +99,7 @@ export interface ForgeWorkflowInput {
   readonly maxReviewLoops?: number;
   readonly idFactory?: () => string;
   readonly now?: () => string;
+  readonly contextLimits?: ContextLimits;
 }
 
 export interface ForgeWorkflowResult {
@@ -146,6 +157,19 @@ export class InMemoryForgePersistence implements ForgePersistence {
     this.events.push(event);
     return Promise.resolve();
   }
+
+  resolve(artifactId: string) {
+    const artifact = this.artifacts.find(
+      (candidate) => candidate.id === artifactId,
+    );
+    if (!artifact || artifact.payload.kind !== "inline")
+      return Promise.resolve(null);
+    return Promise.resolve({
+      artifactId: artifact.id,
+      mediaType: artifact.mediaType,
+      content: artifact.payload.content,
+    });
+  }
 }
 
 function defaultId(): string {
@@ -187,6 +211,10 @@ export async function executeForgeGoal(
   const id = input.idFactory ?? defaultId;
   const now = input.now ?? (() => new Date().toISOString());
   const persistence = input.persistence;
+  const contextBuilder = new ContextBuilder(
+    input.persistence satisfies ArtifactResolver,
+    input.contextLimits,
+  );
   let sequence = 0;
   const phases = new Map<string, string>();
 
@@ -304,12 +332,17 @@ export async function executeForgeGoal(
     modelTask: TaskRecord,
     request: PlanRequest | TaskRequest,
     expected: T,
+    contextArtifactIds: readonly string[] = [],
   ): Promise<Extract<ModelResult, { messageType: T }>> => {
     const attemptId = id();
     const startedAt = now();
+    const modelRequest = {
+      message: request,
+      context: await contextBuilder.build(contextArtifactIds),
+    };
     const requestArtifactId = await artifact(
       modelTask.id,
-      JSON.stringify(request),
+      JSON.stringify(modelRequest),
       "application/json",
       {
         kind: "protocol_request",
@@ -336,7 +369,7 @@ export async function executeForgeGoal(
 
     let response: ModelResponse;
     try {
-      response = await worker.complete({ message: request });
+      response = await worker.complete(modelRequest);
     } catch (error) {
       await persistence.saveAttempt({
         id: attemptId,
@@ -479,6 +512,7 @@ export async function executeForgeGoal(
     researchTask,
     researchRequest,
     "ResearchResult",
+    [researchEvidenceId],
   );
 
   let secondaryResearch: ResearchResult | null = null;
@@ -512,6 +546,7 @@ export async function executeForgeGoal(
       secondResearchTask,
       secondRequest,
       "ResearchResult",
+      [researchEvidenceId],
     );
   }
 
@@ -588,8 +623,9 @@ export async function executeForgeGoal(
     implementationTask,
     implementationRequest,
     "ImplementationResult",
+    [researchEvidenceId],
   );
-  await runtimeArtifact(
+  let implementationEvidenceId = await runtimeArtifact(
     implementationTask.id,
     await input.runtime.apply({
       repositoryId: input.repositoryId,
@@ -647,6 +683,7 @@ export async function executeForgeGoal(
       reviewTask,
       reviewRequest,
       "ReviewResult",
+      [implementationEvidenceId],
     );
     reviews.push(review);
     activeFindingIds = [];
@@ -706,8 +743,9 @@ export async function executeForgeGoal(
       correctionTask,
       correctionRequest,
       "ImplementationResult",
+      [implementationEvidenceId],
     );
-    await runtimeArtifact(
+    implementationEvidenceId = await runtimeArtifact(
       correctionTask.id,
       await input.runtime.apply({
         repositoryId: input.repositoryId,
@@ -751,7 +789,9 @@ export async function executeForgeGoal(
       inputs: { runtimeEvidence: testEvidenceId, revision: input.revision },
     },
   };
-  const tests = await call(reviewer, testTask, testRequest, "TestResult");
+  const tests = await call(reviewer, testTask, testRequest, "TestResult", [
+    testEvidenceId,
+  ]);
   gate.recordVerification({
     verificationId: id(),
     taskId: implementationTask.id,
@@ -793,6 +833,7 @@ export async function executeForgeGoal(
     verificationTask,
     verificationRequest,
     "VerificationResult",
+    [testEvidenceId, implementationEvidenceId],
   );
   if (
     verification.payload.outcome !== "passed" ||
@@ -833,6 +874,7 @@ export async function executeForgeGoal(
     completionTask,
     completionRequest,
     "CompletionResult",
+    [testEvidenceId, implementationEvidenceId],
   );
   if (
     completion.payload.outcome !== "completed" ||

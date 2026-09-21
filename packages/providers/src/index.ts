@@ -1,8 +1,18 @@
 import type { WorkerResource } from "@conclave/core";
 import type { ProtocolMessage } from "@conclave/protocol";
 
+export interface ModelContextItem {
+  readonly artifactId: string;
+  readonly mediaType: string;
+  readonly content: string;
+  readonly truncated: boolean;
+  readonly originalLength: number;
+  readonly estimatedTokens: number;
+}
+
 export interface ModelRequest {
   readonly message: ProtocolMessage;
+  readonly context?: readonly ModelContextItem[];
   readonly systemPrompt?: string;
 }
 
@@ -133,7 +143,13 @@ export class OpenAIResponsesWorker implements ModelWorker {
           ...(request.systemPrompt
             ? [{ role: "developer", content: request.systemPrompt }]
             : []),
-          { role: "user", content: JSON.stringify(request.message) },
+          {
+            role: "user",
+            content: JSON.stringify({
+              message: request.message,
+              context: request.context ?? [],
+            }),
+          },
         ],
         text: { format: jsonResponseFormat() },
       }),
@@ -194,7 +210,15 @@ export class AnthropicMessagesWorker implements ModelWorker {
         model: this.model,
         max_tokens: 4096,
         ...(request.systemPrompt ? { system: request.systemPrompt } : {}),
-        messages: [{ role: "user", content: JSON.stringify(request.message) }],
+        messages: [
+          {
+            role: "user",
+            content: JSON.stringify({
+              message: request.message,
+              context: request.context ?? [],
+            }),
+          },
+        ],
       }),
     });
     const body: unknown = await response.json();
