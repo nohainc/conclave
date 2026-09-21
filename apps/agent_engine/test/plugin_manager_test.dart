@@ -308,6 +308,32 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('rechecks manifest compatibility before launching', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-plugins-');
+    final manager = PluginManager(directory, platformKey: 'macos-arm64');
+    final bytes = [20, 21, 22];
+    await manager.install(PluginPackage(
+      id: 'compatibility',
+      version: '1.0.0',
+      bytes: bytes,
+      digest: sha256.convert(bytes).toString(),
+    ));
+
+    final manifestFile = File(
+      '${directory.path}/compatibility/1.0.0/manifest.json',
+    );
+    final manifest =
+        jsonDecode(await manifestFile.readAsString()) as Map<String, dynamic>;
+    manifest['protocolVersion'] = 'future';
+    await manifestFile.writeAsString(jsonEncode(manifest), flush: true);
+    await expectLater(
+      manager.activeProcessSpec('compatibility'),
+      throwsA(isA<StateError>()),
+    );
+    await directory.delete(recursive: true);
+  });
+
   test('rejects a manifest that redirects execution outside the package',
       () async {
     final directory =

@@ -289,6 +289,18 @@ class PluginManager {
     if (manifest['pluginId'] != pluginId || manifest['version'] != version) {
       throw StateError('plugin manifest identity does not match installation');
     }
+    if (manifest['protocolVersion'] != protocolVersion ||
+        manifest['engineVersion'] is! String ||
+        !_satisfiesMinimumVersion(
+            engineVersion, manifest['engineVersion'] as String)) {
+      throw StateError('plugin is incompatible with this Agent Engine');
+    }
+    final supportedPlatforms = manifest['supportedPlatforms'];
+    if (supportedPlatforms is List &&
+        supportedPlatforms.isNotEmpty &&
+        !supportedPlatforms.contains(platformKey)) {
+      throw StateError('plugin is not compatible with platform $platformKey');
+    }
     final expectedDigest = manifest['digest'];
     if (expectedDigest is! String || expectedDigest.isEmpty) {
       throw StateError('plugin package digest is missing');
