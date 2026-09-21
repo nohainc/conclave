@@ -3963,10 +3963,38 @@ async function handleGetPluginVersion(
 }
 
 async function handleDownloadPluginVersion(
+  request: Request,
   env: SecurityEnv,
   pluginId: string,
   version: string,
+  ctx?: ExecutionContext,
 ): Promise<Response> {
+  if (!anonymousDevelopment(env)) {
+    const token = extractAuthToken(request.headers);
+    if (token) {
+      const tokenHash = await hashToken(token);
+      const agent = await env.CONCLAVE_DB.prepare(
+        `SELECT a.id, a.workspace_id
+         FROM agents a
+         JOIN workers w ON w.agent_id = a.id AND w.workspace_id = a.workspace_id
+         WHERE a.auth_token_hash = ?1
+           AND a.revoked_at IS NULL
+           AND w.plugin_id = ?2
+           AND w.enabled = 1
+         LIMIT 1`,
+      )
+        .bind(tokenHash, pluginId)
+        .first<{ id: string; workspace_id: string }>();
+      if (!agent) {
+        return json(
+          { error: "Agent is not authorized to download this plugin" },
+          { status: 403 },
+        );
+      }
+    } else {
+      await authorizeRequest(request, env, "workers:read", undefined, ctx);
+    }
+  }
   const row = await env.CONCLAVE_DB.prepare(
     "SELECT package_r2_key, package_digest, is_revoked FROM worker_plugin_versions WHERE plugin_id = ?1 AND version = ?2",
   )
@@ -5131,9 +5159,11 @@ export default {
         pluginDownloadMatch?.[2]
       ) {
         return await handleDownloadPluginVersion(
+          request,
           env as SecurityEnv,
           pluginDownloadMatch[1],
           pluginDownloadMatch[2],
+          ctx,
         );
       }
 

@@ -473,4 +473,19 @@ describe("Architecture v2 Cloud Plugin Registry", () => {
       .get() as { status: string };
     expect(row.status).toBe("deprecated");
   });
+
+  it("requires authentication for plugin downloads outside development", async () => {
+    const productionEnv = {
+      ...env,
+      CONCLAVE_ENVIRONMENT: "production",
+      CONCLAVE_ALLOW_ANONYMOUS_DEV: undefined,
+    } as unknown as TestEnv;
+    const response = await worker.fetch(
+      new Request(
+        "http://localhost/api/v2/plugins/conclave.codex/versions/1.0.0/download",
+      ),
+      productionEnv,
+    );
+    expect(response.status).toBe(401);
+  });
 });
