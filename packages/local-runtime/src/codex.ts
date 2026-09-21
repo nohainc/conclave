@@ -104,6 +104,10 @@ function parseEnvelope(output: string): ProtocolEnvelope | null {
         payload: value.payload as Record<string, unknown>,
       };
     }
+    if (typeof value.result === "string") {
+      const nested = parseEnvelope(value.result);
+      if (nested) return nested;
+    }
   }
   return null;
 }

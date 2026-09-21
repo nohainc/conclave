@@ -217,6 +217,15 @@ Because the local subscription does not expose token accounting to Conclave,
 the adapter reports unknown usage (`null`) until a future Codex execution
 interface provides authoritative usage metadata.
 
+### 6.2 Claude Code local-agent adapter
+
+Claude Code uses the same `LocalWorkerExecutor` interface. The default command
+is `claude -p --output-format json`; the adapter unwraps the structured CLI
+result, extracts the Conclave `{ messageType, payload }` envelope, and applies
+the same repository, timeout, cancellation, and output limits as Codex. Claude
+Code subscription credentials remain local, and Forge contains no Claude-
+specific execution logic.
+
 ## 7. Session isolation
 
 A Worker execution may request:

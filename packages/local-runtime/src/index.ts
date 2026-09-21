@@ -1217,3 +1217,5 @@ export type {
   CodexLocalAgentOptions,
   CodexSpawn,
 } from "./codex.js";
+export { ClaudeCodeLocalAgent } from "./claude.js";
+export type { ClaudeCodeLocalAgentOptions } from "./claude.js";
