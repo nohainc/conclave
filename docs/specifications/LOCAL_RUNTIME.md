@@ -1,30 +1,14 @@
 # Conclave Local Runtime
 
-The Local Runtime is the outbound desktop/runtime boundary for repository work. Cloud never opens an inbound port on the user's machine. The runtime establishes an outbound transport, receives an approved operation envelope, performs the operation inside a registered repository root, and sends back immutable structured evidence.
+> **Superseded by Architecture v3.**
 
-## Supported operations
+This document described an earlier Conclave architecture and is retained only so existing links do not break. Do not use it for new implementation.
 
-- `read_file` — bounded UTF-8 file reads;
-- `search` — bounded recursive text search, excluding `.git`, `node_modules`, and `.dart_tool`;
-- `write_file` — bounded writes with an optional expected content digest;
-- `git` — `status`, `diff`, and current `branch`;
-- `shell` — explicitly allowlisted executable/argument execution;
-- `check` and `build` — separately allowlisted command classes for tests and builds.
+Current source of truth:
+- [Architecture v3](../architecture/ARCHITECTURE_V3.md)
+- [Technology Stack](../architecture/TECH_STACK.md)
+- [Architecture v3 Implementation Roadmap](../roadmaps/ARCHITECTURE_V3_IMPLEMENTATION.md)
 
-Commands are passed as argument arrays and spawned with `shell: false`. The runtime never evaluates a command string through a shell. The policy controls which executable may run for each command class, the working directory is repository-root confined, and operation/request limits are enforced locally.
+Local Runtime is no longer a top-level product. Safe runtime capabilities move inside the Dart Agent Engine.
 
-## Approval and evidence
-
-Every request contains a request ID, repository ID, operation kind, and expiring approval. The approval must explicitly include the requested operation kind. A request outside the registered root, past its approval expiry, or outside the command allowlist is rejected and still returns evidence with the rejection reason.
-
-Evidence includes the request and repository IDs, operation, status, summary, bounded output, SHA-256 content digest, exit code, command arguments when applicable, timestamps, duration, approval ID, and the resolved repository root. This is the evidence Core can attach to an Attempt, Artifact, Verification, or Event.
-
-## Transport boundary
-
-`OutboundRuntimeSession` depends on a small `RuntimeTransport` interface. The current package does not prescribe WebSocket, long polling, or a desktop connector. A production adapter must authenticate the outbound connection, preserve request IDs for idempotency, reconnect safely, and never accept unauthenticated arbitrary operations. The transport carries commands and evidence; it does not bypass runtime policy.
-
-## Safety limits
-
-The runtime has bounded read/write/search sizes and command timeouts. Repository paths are resolved relative to a registered real root; absolute request paths and `..` escapes are rejected, and `realpath()` containment checks prevent symlink escapes. Existing targets are checked directly; new write targets are checked through the nearest existing parent directory before the filesystem is modified. Credentials are not part of runtime requests or evidence. Future coding-agent adapters must use the same operation and approval boundary rather than receiving unrestricted shell access.
-
-Process-tree termination, strict stdout/stderr byte caps, command-specific argument policies, and approvals bound to a run/task are separate hardening work items. They must be added before treating arbitrary long-running or high-output commands as generally safe.
+Full historical content remains available in Git history.
