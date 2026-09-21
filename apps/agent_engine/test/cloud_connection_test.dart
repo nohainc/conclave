@@ -93,6 +93,51 @@ void main() {
     await connection.close();
   });
 
+  test('includes recovered non-terminal assignments in sync', () async {
+    final socket = FakeSocket();
+    final directory = await Directory.systemTemp.createTemp('agent-sync-');
+    final journal =
+        AssignmentJournal(File('${directory.path}/assignments.jsonl'));
+    await journal.append(AssignmentRecord(
+      assignmentId: 'recovered-running',
+      status: AssignmentStatus.running,
+      updatedAt: DateTime.now().toUtc(),
+    ));
+    await journal.append(AssignmentRecord(
+      assignmentId: 'already-completed',
+      status: AssignmentStatus.completed,
+      updatedAt: DateTime.now().toUtc(),
+    ));
+    final connection = AgentCloudConnection(
+      uri: Uri.parse('wss://cloud.test/agent'),
+      agentId: 'agent-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      assignmentJournal: journal,
+      heartbeat: const Duration(hours: 1),
+    );
+
+    await connection.connect();
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.agent-protocol',
+      'protocolVersion': '2.0',
+      'messageId': 'server-1',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'agent.hello.ack',
+      'payload': {'sessionId': 'session-1'},
+    }));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+
+    final sync = socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .firstWhere((message) => message['type'] == 'agent.sync.request');
+    expect(
+      (sync['payload'] as Map<String, dynamic>)['unreconciledAssignmentIds'],
+      ['recovered-running'],
+    );
+    await connection.close();
+  });
+
   test('executes correlated assignments through the injected handler',
       () async {
     final socket = FakeSocket();

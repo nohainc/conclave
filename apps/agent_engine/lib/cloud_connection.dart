@@ -183,8 +183,8 @@ class AgentCloudConnection {
           'workspaceId': workspaceId,
           'sessionId': currentSessionId,
           'status': 'online',
-          'activeWorkers': 0,
-          'activeAssignments': 0,
+          'activeWorkers': activeWorkerIds.length,
+          'activeAssignments': _activeAssignments.length,
         }),
       }));
     });
@@ -217,7 +217,7 @@ class AgentCloudConnection {
       final payload = decoded['payload'];
       if (payload is Map<String, dynamic> && payload['sessionId'] is String) {
         sessionId = payload['sessionId'] as String;
-        _sendSyncRequest();
+        unawaited(_sendSyncRequest());
       }
     } else if (decoded['type'] == 'agent.sync.response') {
       final payload = decoded['payload'];
@@ -486,16 +486,27 @@ class AgentCloudConnection {
         ...correlation,
       };
 
-  void _sendSyncRequest() {
+  Future<void> _sendSyncRequest() async {
     final socket = _socket;
     if (socket == null || sessionId == null) return;
+    final recoveredAssignmentIds = <String>{...unreconciledAssignmentIds};
+    final journal = assignmentJournal;
+    if (journal != null) {
+      final records = await journal.reconcile();
+      for (final record in records.values) {
+        if (record.status == AssignmentStatus.received ||
+            record.status == AssignmentStatus.running) {
+          recoveredAssignmentIds.add(record.assignmentId);
+        }
+      }
+    }
     socket.send(jsonEncode(_envelope('agent.sync.request', {
       'agentId': agentId,
       'workspaceId': workspaceId,
       'installedPluginVersions': installedPluginVersions,
       'activeWorkerIds': activeWorkerIds,
-      if (unreconciledAssignmentIds.isNotEmpty)
-        'unreconciledAssignmentIds': unreconciledAssignmentIds,
+      if (recoveredAssignmentIds.isNotEmpty)
+        'unreconciledAssignmentIds': recoveredAssignmentIds.toList()..sort(),
     })));
   }
 
