@@ -11,7 +11,13 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { realpathSync } from "node:fs";
 import { spawn } from "node:child_process";
 
-import type { GoalSummary } from "@conclave/core";
+import type {
+  GoalSummary,
+  WorkerExecutionRequest,
+  WorkerExecutionResult,
+  WorkerType,
+  WorkerAvailability,
+} from "@conclave/core";
 import type { ImplementationOperation } from "@conclave/protocol";
 
 export interface RuntimeConfig {
@@ -160,11 +166,45 @@ export interface RuntimePolicy {
 
 export interface RuntimeTransport {
   connect(): Promise<void>;
-  receive(): AsyncIterable<RuntimeOperation | RuntimeControl>;
+  receive(): AsyncIterable<
+    RuntimeOperation | RuntimeControl | RuntimeWorkerExecutionRequest
+  >;
   send(evidence: RuntimeEvidence): Promise<void>;
+  announceWorkers?(workers: readonly RuntimeWorkerDescriptor[]): Promise<void>;
+  sendWorkerResult?(result: RuntimeWorkerExecutionResult): Promise<void>;
   acknowledge?(requestId: string): Promise<void>;
   reconnect?(): Promise<void>;
   disconnect?(): Promise<void>;
+}
+
+export interface RuntimeWorkerDescriptor {
+  readonly workerId: string;
+  readonly connectionId: string;
+  readonly name: string;
+  readonly type: Exclude<WorkerType, "runtime">;
+  readonly roles: readonly string[];
+  readonly capabilities: readonly string[];
+  readonly permissions: readonly string[];
+  readonly independenceKey: string;
+  readonly availability: WorkerAvailability;
+}
+
+export interface RuntimeWorkerExecutionRequest {
+  readonly type: "worker_execute";
+  readonly organizationId: string;
+  readonly projectId: string;
+  readonly request: WorkerExecutionRequest;
+}
+
+export interface RuntimeWorkerExecutionResult {
+  readonly type: "worker_result";
+  readonly requestId: string;
+  readonly result: WorkerExecutionResult;
+}
+
+export interface LocalWorkerExecutor {
+  readonly descriptor: RuntimeWorkerDescriptor;
+  execute(request: WorkerExecutionRequest): Promise<WorkerExecutionResult>;
 }
 
 export type RuntimeControl = {
@@ -178,15 +218,30 @@ export interface WebSocketRuntimeTransportOptions {
   readonly runtimeId: string;
   readonly organizationId: string;
   readonly projectId: string;
-  readonly runId: string;
-  readonly taskId: string;
-  readonly repositoryId: string;
+  readonly runId?: string;
+  readonly taskId?: string;
+  readonly repositoryId?: string;
 }
 
 type RuntimeTransportMessage =
   | RuntimeOperation
   | RuntimeControl
+  | RuntimeWorkerExecutionRequest
   | { readonly type: "ack"; readonly requestId: string };
+
+function isRuntimeWorkerExecutionRequest(
+  value: unknown,
+): value is RuntimeWorkerExecutionRequest {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.type === "worker_execute" &&
+    typeof record.organizationId === "string" &&
+    typeof record.projectId === "string" &&
+    typeof record.request === "object" &&
+    record.request !== null
+  );
+}
 
 class RuntimeMessageQueue {
   private readonly messages: RuntimeTransportMessage[] = [];
@@ -236,7 +291,7 @@ export class WebSocketRuntimeTransport implements RuntimeTransport {
       runId: this.options.runId,
       taskId: this.options.taskId,
       repositoryId: this.options.repositoryId,
-    })) {
+    }).filter((entry): entry is [string, string] => entry[1] !== undefined)) {
       url.searchParams.set(key, value);
     }
     this.queue = new RuntimeMessageQueue();
@@ -274,7 +329,9 @@ export class WebSocketRuntimeTransport implements RuntimeTransport {
     });
   }
 
-  async *receive(): AsyncIterable<RuntimeOperation | RuntimeControl> {
+  async *receive(): AsyncIterable<
+    RuntimeOperation | RuntimeControl | RuntimeWorkerExecutionRequest
+  > {
     while (true) {
       const message = await this.queue.next();
       if (
@@ -283,13 +340,26 @@ export class WebSocketRuntimeTransport implements RuntimeTransport {
         message.type === "ack"
       )
         continue;
-      yield message as RuntimeOperation | RuntimeControl;
+      yield message as
+        RuntimeOperation | RuntimeControl | RuntimeWorkerExecutionRequest;
     }
   }
 
   async send(evidence: RuntimeEvidence): Promise<void> {
     if (!this.socket) throw new Error("Runtime connection is not open");
     this.socket.send(JSON.stringify({ type: "evidence", evidence }));
+  }
+
+  async announceWorkers(
+    workers: readonly RuntimeWorkerDescriptor[],
+  ): Promise<void> {
+    if (!this.socket) throw new Error("Runtime connection is not open");
+    this.socket.send(JSON.stringify({ type: "workers", workers }));
+  }
+
+  async sendWorkerResult(result: RuntimeWorkerExecutionResult): Promise<void> {
+    if (!this.socket) throw new Error("Runtime connection is not open");
+    this.socket.send(JSON.stringify(result));
   }
 
   acknowledge(requestId: string): Promise<void> {
@@ -1047,14 +1117,24 @@ export class LocalRuntime {
 }
 
 export class OutboundRuntimeSession {
+  private readonly workers = new Map<string, LocalWorkerExecutor>();
+
   constructor(
     private readonly runtime: LocalRuntime,
     private readonly transport: RuntimeTransport,
-  ) {}
+    workers: readonly LocalWorkerExecutor[] = [],
+  ) {
+    for (const worker of workers)
+      this.workers.set(worker.descriptor.workerId, worker);
+  }
 
   async run(): Promise<void> {
     await this.transport.connect();
+    await this.transport.announceWorkers?.(
+      [...this.workers.values()].map((worker) => worker.descriptor),
+    );
     const replay = new Map<string, RuntimeEvidence>();
+    const workerReplay = new Map<string, WorkerExecutionResult>();
     try {
       while (true) {
         let received = false;
@@ -1067,6 +1147,48 @@ export class OutboundRuntimeSession {
               rawRequest.type === "cancel"
             ) {
               this.runtime.cancel(rawRequest.requestId);
+              continue;
+            }
+            if (isRuntimeWorkerExecutionRequest(rawRequest)) {
+              const worker = this.workers.get(rawRequest.request.workerId);
+              const previous = workerReplay.get(rawRequest.request.requestId);
+              const result =
+                previous ??
+                (worker
+                  ? await worker.execute(rawRequest.request).catch((error) => ({
+                      status: "failed" as const,
+                      output: null,
+                      rawOutput: null,
+                      usage: { inputTokens: null, outputTokens: null },
+                      evidenceArtifactIds: [],
+                      error: {
+                        code: "worker_execution_failed",
+                        message:
+                          error instanceof Error
+                            ? error.message
+                            : "Local worker execution failed",
+                        retryable: true,
+                      },
+                    }))
+                  : {
+                      status: "failed" as const,
+                      output: null,
+                      rawOutput: null,
+                      usage: { inputTokens: null, outputTokens: null },
+                      evidenceArtifactIds: [],
+                      error: {
+                        code: "worker_not_found",
+                        message: `Local worker ${rawRequest.request.workerId} is not registered`,
+                        retryable: false,
+                      },
+                    });
+              const workerResult = {
+                type: "worker_result",
+                requestId: rawRequest.request.requestId,
+                result,
+              } satisfies RuntimeWorkerExecutionResult;
+              workerReplay.set(rawRequest.request.requestId, result);
+              await this.transport.sendWorkerResult?.(workerResult);
               continue;
             }
             const request = parseRuntimeOperation(rawRequest);

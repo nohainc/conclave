@@ -847,7 +847,8 @@ export default {
       if (
         request.method === "POST" &&
         (url.pathname === "/api/runtime/operations" ||
-          url.pathname === "/api/runtime/cancel")
+          url.pathname === "/api/runtime/cancel" ||
+          url.pathname === "/api/runtime/worker-execute")
       ) {
         const securityEnv = env as SecurityEnv;
         runtimeToken(request, securityEnv, "CONCLAVE_RUNTIME_OPERATION_TOKEN");
@@ -855,7 +856,11 @@ export default {
         const stub =
           securityEnv.CONCLAVE_RUNTIME_CONNECTION.getByName(runtimeId);
         const target =
-          url.pathname === "/api/runtime/cancel" ? "/cancel" : "/execute";
+          url.pathname === "/api/runtime/cancel"
+            ? "/cancel"
+            : url.pathname === "/api/runtime/worker-execute"
+              ? "/worker-execute"
+              : "/execute";
         return stub.fetch(
           new Request(`https://runtime.internal${target}`, {
             method: "POST",
@@ -863,6 +868,14 @@ export default {
             body: await request.text(),
           }),
         );
+      }
+      if (request.method === "GET" && url.pathname === "/api/runtime/workers") {
+        const securityEnv = env as SecurityEnv;
+        runtimeToken(request, securityEnv, "CONCLAVE_RUNTIME_OPERATION_TOKEN");
+        const runtimeId = runtimeConnectionId(request);
+        const stub =
+          securityEnv.CONCLAVE_RUNTIME_CONNECTION.getByName(runtimeId);
+        return stub.fetch(new Request("https://runtime.internal/workers"));
       }
       if (request.method === "POST" && url.pathname === "/api/runs") {
         return await handleRunRequest(request, env, ctx);

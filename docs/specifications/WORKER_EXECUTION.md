@@ -172,6 +172,20 @@ Conclave AX Local Runtime
 
 Cloud must not copy or request browser/session credentials from the user's machine.
 
+The Local Runtime uses the same outbound persistent session for worker discovery and execution:
+
+```text
+Local Runtime connects outbound
+  -> announces local Worker descriptors
+  -> Cloud records the connected runtime/worker availability
+  -> Core selects a Worker/Connection binding
+  -> Cloud sends a correlated WorkerExecutionRequest
+  -> Local Runtime dispatches to the registered local agent
+  -> Local Runtime returns WorkerExecutionResult
+```
+
+The channel is scoped to the organization and project, while every request still carries its own run, task, attempt, worker, and connection IDs. Worker requests are replay-safe by request ID, return classified failures instead of being silently dropped, and are retried only by Core policy. A local worker is not considered available until its descriptor has been announced on the authenticated connection.
+
 The Local Runtime reports:
 - adapter identity/version;
 - worker availability;

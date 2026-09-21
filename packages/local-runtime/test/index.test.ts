@@ -12,6 +12,8 @@ import {
   parseRuntimeOperation,
   type RuntimeEvidence,
   type RuntimeOperation,
+  type RuntimeWorkerDescriptor,
+  type RuntimeWorkerExecutionRequest,
   type RuntimeTransport,
   loadRuntimeConfig,
 } from "../src/index.js";
@@ -316,5 +318,67 @@ describe("Local Runtime foundation", () => {
     expect(received).toHaveLength(1);
     expect(received[0]?.requestId).toBe("transport-1");
     expect(received[0]?.audit.actor).toBe("local-runtime");
+  });
+
+  it("announces local workers and executes a worker request over the outbound channel", async () => {
+    const root = await makeRoot();
+    const descriptor: RuntimeWorkerDescriptor = {
+      workerId: "local-codex",
+      connectionId: "runtime-connection",
+      name: "Local Codex",
+      type: "agent",
+      roles: ["implementer"],
+      capabilities: ["repository_write"],
+      permissions: ["repository_write"],
+      independenceKey: "local-codex",
+      availability: "available",
+    };
+    const request: RuntimeWorkerExecutionRequest = {
+      type: "worker_execute",
+      organizationId: "org-1",
+      projectId: "project-1",
+      request: {
+        requestId: "worker-request-1",
+        goalId: "goal-1",
+        runId: "run-1",
+        taskId: "task-1",
+        attemptId: "attempt-1",
+        workerId: "local-codex",
+        connectionId: "runtime-connection",
+        message: { objective: "implement" },
+        context: [],
+      },
+    };
+    const announced: RuntimeWorkerDescriptor[][] = [];
+    const results: string[] = [];
+    const transport: RuntimeTransport = {
+      async connect() {},
+      async *receive() {
+        yield request;
+      },
+      async send() {},
+      async announceWorkers(workers) {
+        announced.push([...workers]);
+      },
+      async sendWorkerResult(result) {
+        results.push(`${result.requestId}:${result.result.output}`);
+      },
+    };
+    await new OutboundRuntimeSession(runtime(root), transport, [
+      {
+        descriptor,
+        async execute() {
+          return {
+            status: "succeeded",
+            output: "local worker completed",
+            rawOutput: null,
+            usage: { inputTokens: 1, outputTokens: 1 },
+            evidenceArtifactIds: [],
+          };
+        },
+      },
+    ]).run();
+    expect(announced[0]?.[0]?.workerId).toBe("local-codex");
+    expect(results).toEqual(["worker-request-1:local worker completed"]);
   });
 });

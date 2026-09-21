@@ -17,6 +17,8 @@ import type {
   WorkerBinding,
   ConnectionResource,
   WorkerExecutor,
+  WorkerExecutionRequest,
+  WorkerExecutionResult,
   WorkerAvailability,
   WorkerType,
   WorkerCostMetadata,
@@ -49,6 +51,7 @@ interface ForgeExecutionEnv {
   readonly CONCLAVE_LOCAL_RUNTIME_URL?: string;
   readonly CONCLAVE_LOCAL_RUNTIME_TOKEN?: string;
   readonly CONCLAVE_RUNTIME_ID?: string;
+  readonly CONCLAVE_RUNTIME_OPERATION_TOKEN?: string;
   readonly CONCLAVE_TEST_COMMAND?: string;
   readonly CONCLAVE_RUNTIME_APPROVAL_ID?: string;
   readonly CONCLAVE_RUNTIME_APPROVAL_EXPIRES_AT?: string;
@@ -449,12 +452,118 @@ class RemoteLocalRuntime implements ForgeRuntimeAdapter {
   }
 }
 
+class RemoteLocalWorkerExecutor implements WorkerExecutor {
+  constructor(
+    readonly resource: WorkerResource,
+    readonly connection: ConnectionResource,
+    private readonly env: ForgeExecutionEnv,
+    private readonly context: ForgeExecutionContext,
+  ) {}
+
+  async execute(
+    request: WorkerExecutionRequest,
+  ): Promise<WorkerExecutionResult> {
+    const baseUrl =
+      this.env.CONCLAVE_API_BASE_URL ?? this.env.CONCLAVE_LOCAL_RUNTIME_URL;
+    const runtimeId = this.env.CONCLAVE_RUNTIME_ID;
+    const token =
+      this.env.CONCLAVE_RUNTIME_OPERATION_TOKEN ??
+      this.env.CONCLAVE_LOCAL_RUNTIME_TOKEN;
+    if (!baseUrl || !runtimeId || !token) {
+      return {
+        status: "failed",
+        output: null,
+        rawOutput: null,
+        usage: { inputTokens: null, outputTokens: null },
+        evidenceArtifactIds: [],
+        error: {
+          code: "local_runtime_not_configured",
+          message: "Local Runtime worker channel is not configured",
+          retryable: false,
+        },
+      };
+    }
+    const response = await fetch(
+      `${baseUrl.replace(/\/$/, "")}/api/runtime/worker-execute`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+          "x-conclave-runtime-id": runtimeId,
+        },
+        body: JSON.stringify({
+          type: "worker_execute",
+          organizationId: this.context.organizationId,
+          projectId: this.context.projectId,
+          request,
+        }),
+      },
+    );
+    const body: unknown = await response.json();
+    if (!response.ok) {
+      return {
+        status: "failed",
+        output: null,
+        rawOutput: null,
+        usage: { inputTokens: null, outputTokens: null },
+        evidenceArtifactIds: [],
+        error: {
+          code: "local_runtime_worker_request_failed",
+          message: `Local Runtime worker request failed with ${response.status}`,
+          retryable: response.status >= 500,
+        },
+      };
+    }
+    if (typeof body !== "object" || body === null) {
+      throw new Error("Local Runtime worker returned an invalid result");
+    }
+    return body as WorkerExecutionResult;
+  }
+}
+
+async function discoverLocalWorkers(
+  env: ForgeExecutionEnv,
+): Promise<ReadonlySet<string>> {
+  const baseUrl = env.CONCLAVE_API_BASE_URL ?? env.CONCLAVE_LOCAL_RUNTIME_URL;
+  const runtimeId = env.CONCLAVE_RUNTIME_ID;
+  const token =
+    env.CONCLAVE_RUNTIME_OPERATION_TOKEN ?? env.CONCLAVE_LOCAL_RUNTIME_TOKEN;
+  if (!baseUrl || !runtimeId || !token)
+    throw new Error("Local Runtime worker discovery is not configured");
+  const response = await fetch(
+    `${baseUrl.replace(/\/$/, "")}/api/runtime/workers`,
+    {
+      headers: {
+        authorization: `Bearer ${token}`,
+        "x-conclave-runtime-id": runtimeId,
+      },
+    },
+  );
+  if (!response.ok)
+    throw new Error(
+      `Local Runtime worker discovery failed with ${response.status}`,
+    );
+  const body = (await response.json()) as {
+    workers?: readonly { workerId?: unknown }[];
+  };
+  return new Set(
+    (body.workers ?? []).flatMap((worker) =>
+      typeof worker.workerId === "string" ? [worker.workerId] : [],
+    ),
+  );
+}
+
 function modelFor(
   binding: WorkerBinding,
   env: ForgeExecutionEnv,
   models: Readonly<Record<string, string>>,
+  context: ForgeExecutionContext,
 ): WorkerExecutor {
   const { worker: resource, connection } = binding;
+  if (connection.transport === "local_agent") {
+    return new RemoteLocalWorkerExecutor(resource, connection, env, context);
+  }
   const model = models[resource.id] ?? connection.name;
   if (connection.provider === "openai") {
     if (!env.CONCLAVE_OPENAI_API_KEY)
@@ -579,6 +688,20 @@ export async function executeForgeService(
   const models = env.CONCLAVE_WORKER_MODELS
     ? (JSON.parse(env.CONCLAVE_WORKER_MODELS) as Record<string, string>)
     : {};
+  const localBindings = [
+    leadResource,
+    implementerResource,
+    reviewerResource,
+  ].filter((binding) => binding.connection.transport === "local_agent");
+  const discoveredLocalWorkers =
+    localBindings.length > 0
+      ? await discoverLocalWorkers(env)
+      : new Set<string>();
+  for (const binding of localBindings) {
+    if (!discoveredLocalWorkers.has(binding.worker.id)) {
+      throw new Error(`Local Worker ${binding.worker.id} is not connected`);
+    }
+  }
   const persistence = new DurableForgePersistence(
     repositories,
     new R2ArtifactStore(
@@ -592,9 +715,9 @@ export async function executeForgeService(
       run,
       repositoryId: context.repositoryId,
       revision: context.revision,
-      lead: modelFor(leadResource, env, models),
-      implementer: modelFor(implementerResource, env, models),
-      reviewer: modelFor(reviewerResource, env, models),
+      lead: modelFor(leadResource, env, models, context),
+      implementer: modelFor(implementerResource, env, models, context),
+      reviewer: modelFor(reviewerResource, env, models, context),
       runtime: new RemoteLocalRuntime(env, context),
       persistence,
     });

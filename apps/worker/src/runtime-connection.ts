@@ -1,25 +1,35 @@
 import type {
   RuntimeEvidence,
   RuntimeOperation,
+  RuntimeWorkerDescriptor,
+  RuntimeWorkerExecutionRequest,
+  RuntimeWorkerExecutionResult,
 } from "@conclave/local-runtime";
 
 interface RuntimeConnectionScope {
   readonly organizationId: string;
   readonly projectId: string;
-  readonly runId: string;
-  readonly taskId: string;
-  readonly repositoryId: string;
+  readonly runId?: string;
+  readonly taskId?: string;
+  readonly repositoryId?: string;
 }
 
 type RuntimeMessage =
   | { readonly type: "operation"; readonly operation: RuntimeOperation }
   | { readonly type: "cancel"; readonly requestId: string }
   | { readonly type: "evidence"; readonly evidence: RuntimeEvidence }
+  | {
+      readonly type: "workers";
+      readonly workers: readonly RuntimeWorkerDescriptor[];
+    }
+  | RuntimeWorkerExecutionRequest
+  | RuntimeWorkerExecutionResult
   | { readonly type: "ack"; readonly requestId: string };
 
 export class RuntimeConnection implements DurableObject {
   private socket: WebSocket | null = null;
   private scope: RuntimeConnectionScope | null = null;
+  private workers: readonly RuntimeWorkerDescriptor[] = [];
   private readonly pending = new Map<
     string,
     {
@@ -56,6 +66,12 @@ export class RuntimeConnection implements DurableObject {
       );
       return Response.json({ acknowledged: true });
     }
+    if (request.method === "GET" && url.pathname === "/workers") {
+      return Response.json({ workers: this.workers });
+    }
+    if (request.method === "POST" && url.pathname === "/worker-execute") {
+      return this.executeWorker(await request.json());
+    }
     return Response.json({ error: "not_found" }, { status: 404 });
   }
 
@@ -80,6 +96,10 @@ export class RuntimeConnection implements DurableObject {
         pending.reject(new Error("Local Runtime connection closed"));
       }
       this.pending.clear();
+      for (const pending of this.pendingWorkers.values()) {
+        pending.reject(new Error("Local Runtime connection closed"));
+      }
+      this.pendingWorkers.clear();
     });
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
@@ -108,6 +128,52 @@ export class RuntimeConnection implements DurableObject {
     return Response.json(evidence);
   }
 
+  private async executeWorker(value: unknown): Promise<Response> {
+    if (!this.socket || !this.scope)
+      return Response.json(
+        { error: "Local Runtime is offline" },
+        { status: 503 },
+      );
+    if (typeof value !== "object" || value === null)
+      return Response.json(
+        { error: "worker request must be an object" },
+        { status: 400 },
+      );
+    const envelope = value as RuntimeWorkerExecutionRequest;
+    if (
+      envelope.type !== "worker_execute" ||
+      !this.matchesWorkerScope(envelope) ||
+      typeof envelope.request !== "object" ||
+      envelope.request === null
+    ) {
+      return Response.json(
+        { error: "Worker execution scope mismatch" },
+        { status: 403 },
+      );
+    }
+    const worker = this.workers.find(
+      (candidate) =>
+        candidate.workerId === envelope.request.workerId &&
+        candidate.connectionId === envelope.request.connectionId,
+    );
+    if (!worker || worker.availability !== "available") {
+      return Response.json(
+        { error: "Local worker is unavailable" },
+        { status: 503 },
+      );
+    }
+    const result = await new Promise<RuntimeWorkerExecutionResult>(
+      (resolve, reject) => {
+        this.pendingWorkers.set(envelope.request.requestId, {
+          resolve,
+          reject,
+        });
+        this.socket?.send(JSON.stringify(envelope));
+      },
+    );
+    return Response.json(result.result);
+  }
+
   private async receive(value: unknown): Promise<void> {
     let message: RuntimeMessage;
     try {
@@ -134,7 +200,25 @@ export class RuntimeConnection implements DurableObject {
         } satisfies RuntimeMessage),
       );
     }
+    if (message.type === "workers") {
+      this.workers = message.workers;
+      return;
+    }
+    if (message.type === "worker_result") {
+      const pending = this.pendingWorkers.get(message.requestId);
+      if (!pending) return;
+      this.pendingWorkers.delete(message.requestId);
+      pending.resolve(message);
+    }
   }
+
+  private readonly pendingWorkers = new Map<
+    string,
+    {
+      resolve: (result: RuntimeWorkerExecutionResult) => void;
+      reject: (error: Error) => void;
+    }
+  >();
 
   private parseScope(params: URLSearchParams): RuntimeConnectionScope | null {
     const values = {
@@ -144,11 +228,20 @@ export class RuntimeConnection implements DurableObject {
       taskId: params.get("taskId"),
       repositoryId: params.get("repositoryId"),
     };
-    return Object.values(values).every(
-      (value) => typeof value === "string" && value.length > 0,
+    if (
+      typeof values.organizationId !== "string" ||
+      typeof values.projectId !== "string" ||
+      values.organizationId.length === 0 ||
+      values.projectId.length === 0
     )
-      ? (values as RuntimeConnectionScope)
-      : null;
+      return null;
+    return {
+      organizationId: values.organizationId,
+      projectId: values.projectId,
+      ...(values.runId ? { runId: values.runId } : {}),
+      ...(values.taskId ? { taskId: values.taskId } : {}),
+      ...(values.repositoryId ? { repositoryId: values.repositoryId } : {}),
+    };
   }
 
   private matchesScope(value: unknown): boolean {
@@ -161,10 +254,19 @@ export class RuntimeConnection implements DurableObject {
       "runId",
       "taskId",
       "repositoryId",
-    ].every(
-      (field) =>
-        operation[field] ===
-        this.scope?.[field as keyof RuntimeConnectionScope],
+    ].every((field) => {
+      const scoped = this.scope?.[field as keyof RuntimeConnectionScope];
+      return scoped === undefined || operation[field] === scoped;
+    });
+  }
+
+  private matchesWorkerScope(value: unknown): boolean {
+    if (typeof value !== "object" || value === null || !this.scope)
+      return false;
+    const envelope = value as Record<string, unknown>;
+    return (
+      envelope.organizationId === this.scope.organizationId &&
+      envelope.projectId === this.scope.projectId
     );
   }
 }
