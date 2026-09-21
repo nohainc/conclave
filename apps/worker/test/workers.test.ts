@@ -187,6 +187,20 @@ describe("Worker Configuration REST API (Architecture v2)", () => {
       workers: Array<Record<string, unknown>>;
     };
     expect(listBody.workers.length).toBe(2);
+
+    const audits = db
+      .prepare(
+        "SELECT action, target_id FROM audit_log WHERE workspace_id = 'ws-test-1' ORDER BY created_at ASC",
+      )
+      .all() as Array<{ action: string; target_id: string }>;
+    expect(audits.map((audit) => audit.action)).toEqual([
+      "worker.created",
+      "worker.created",
+    ]);
+    expect(audits.map((audit) => audit.target_id)).toEqual([
+      "w-gpt-architect",
+      "w-gpt-reviewer",
+    ]);
   });
 
   it("updates and retrieves a worker configuration", async () => {

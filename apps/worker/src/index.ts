@@ -1873,6 +1873,15 @@ async function handleCreateAgentEnrollment(
     )
     .run();
 
+  await recordAudit(
+    env,
+    context,
+    "agent.enrollment.created",
+    "agent_enrollment",
+    enrollmentId,
+    { expiresAt, maxUses: body.maxUses ?? null },
+  );
+
   return json(
     {
       id: enrollmentId,
@@ -1920,6 +1929,14 @@ async function handleRevokeAgentEnrollment(
   )
     .bind(now, enrollmentId, workspaceId)
     .run();
+
+  await recordAudit(
+    env,
+    context,
+    "agent.enrollment.revoked",
+    "agent_enrollment",
+    enrollmentId,
+  );
 
   return json({ ok: true, revokedAt: now });
 }
@@ -2061,6 +2078,10 @@ async function handleRevokeAgent(
   )
     .bind(now, workspaceId, agentId)
     .run();
+
+  await recordAudit(env, context, "agent.revoked", "agent", agentId, {
+    revokedAt: now,
+  });
 
   return json({ ok: true, revokedAt: now });
 }
@@ -2283,6 +2304,12 @@ async function handleCreateWorker(
     )
     .run();
 
+  await recordAudit(env, context, "worker.created", "worker", id, {
+    agentId,
+    pluginId,
+    enabled,
+  });
+
   return json({ worker }, { status: 201 });
 }
 
@@ -2474,6 +2501,11 @@ async function handleUpdateWorker(
     )
     .run();
 
+  await recordAudit(env, context, "worker.updated", "worker", workerId, {
+    enabled,
+    availability,
+  });
+
   return json({ worker });
 }
 
@@ -2492,6 +2524,8 @@ async function handleDeleteWorker(
   )
     .bind(workspaceId, workerId)
     .run();
+
+  await recordAudit(env, context, "worker.deleted", "worker", workerId);
 
   return json({ ok: true });
 }
