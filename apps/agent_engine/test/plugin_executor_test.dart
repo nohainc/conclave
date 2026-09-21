@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:conclave_agent_engine/cloud_connection.dart';
 import 'package:conclave_agent_engine/plugin_executor.dart';
 import 'package:test/test.dart';
+import 'fixture_copy.dart';
 
 void main() {
   test('executes a real Worker Plugin through JSON-RPC', () async {
@@ -74,9 +75,7 @@ void main() {
   test('executes the Forge plugin against the real fixture repository',
       () async {
     final repository = Directory.current.parent.parent;
-    final fixture = Directory('${repository.path}/fixtures/conclave-e2e-fixture');
-    await Process.run('git', ['checkout', '--', 'lib/add.js'],
-        workingDirectory: fixture.path);
+    final fixture = await copyForgeFixture();
     try {
       final result = await PluginProcessExecutor().execute(
         PluginProcessSpec(
@@ -95,8 +94,7 @@ void main() {
       expect(result['status'], 'completed');
       expect(result['summary'], contains('Forge completed'));
     } finally {
-      await Process.run('git', ['checkout', '--', 'lib/add.js'],
-          workingDirectory: fixture.path);
+      await fixture.parent.delete(recursive: true);
     }
   });
 }

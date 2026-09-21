@@ -4,7 +4,9 @@ import 'dart:io';
 
 import 'package:conclave_agent_engine/assignment_journal.dart';
 import 'package:conclave_agent_engine/cloud_connection.dart';
+import 'package:conclave_agent_engine/plugin_executor.dart';
 import 'package:test/test.dart';
+import 'fixture_copy.dart';
 
 class FakeSocket implements AgentCloudSocket {
   final controller = StreamController<Object?>();
@@ -287,6 +289,79 @@ void main() {
     );
     await connection.close();
     await directory.delete(recursive: true);
+  });
+
+  test('runs Forge through Cloud assignment, plugin, and journal boundaries',
+      () async {
+    final repository = Directory.current.parent.parent;
+    final fixture = await copyForgeFixture();
+    final socket = FakeSocket();
+    final journalDirectory =
+        await Directory.systemTemp.createTemp('agent-journal-');
+    final journal =
+        AssignmentJournal(File('${journalDirectory.path}/assignments.jsonl'));
+    final handler = PluginAssignmentHandler(
+      executor: PluginProcessExecutor(),
+      resolve: (_) => PluginProcessSpec(
+        pluginId: 'conclave.forge',
+        executable: Platform.resolvedExecutable,
+        arguments: ['run', 'bin/forge_plugin.dart'],
+        workingDirectory: '${repository.path}/worker_plugins/forge',
+      ),
+    );
+    final connection = AgentCloudConnection(
+      uri: Uri.parse('wss://cloud.test/agent'),
+      agentId: 'agent-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      assignmentHandler: handler.call,
+      assignmentJournal: journal,
+    );
+    await connection.connect();
+    try {
+      socket.controller.add(jsonEncode({
+        'protocol': 'conclave.agent-protocol',
+        'protocolVersion': '2.0',
+        'messageId': 'forge-assignment-1',
+        'timestamp': DateTime.now().toUtc().toIso8601String(),
+        'type': 'assignment.start',
+        'workspaceId': 'workspace-1',
+        'agentId': 'agent-1',
+        'workerId': 'forge-worker',
+        'runId': 'run-forge-1',
+        'taskId': 'task-forge-1',
+        'attemptId': 'attempt-forge-1',
+        'assignmentId': 'assignment-forge-1',
+        'idempotencyKey': 'idem-forge-1',
+        'payload': {
+          'objective': 'Fix add and verify the implementation',
+          'role': 'implementer',
+          'pluginId': 'conclave.forge',
+          'resolvedPluginVersion': '0.1.0',
+          'input': {'repositoryPath': fixture.path},
+          'contextArtifactIds': [],
+          'timeoutMs': 60000,
+        },
+      }));
+      Map<String, dynamic>? result;
+      for (var attempt = 0; attempt < 120 && result == null; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        for (final message in socket.sent) {
+          final decoded = jsonDecode(message as String) as Map<String, dynamic>;
+          if (decoded['type'] == 'assignment.result') result = decoded;
+        }
+      }
+      expect(result, isNotNull);
+      final completedResult = result!;
+      expect((completedResult['payload'] as Map<String, dynamic>)['status'],
+          'completed');
+      expect((await journal.reconcile())['assignment-forge-1']!.status,
+          AssignmentStatus.completed);
+    } finally {
+      await connection.close();
+      await fixture.parent.delete(recursive: true);
+      await journalDirectory.delete(recursive: true);
+    }
   });
 
   test('reconnects after a dropped socket', () async {
