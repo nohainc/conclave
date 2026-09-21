@@ -10,6 +10,47 @@ abstract interface class AgentCloudSocket {
 
 typedef AgentCloudSocketFactory = Future<AgentCloudSocket> Function(Uri uri);
 
+class AgentAssignmentContext {
+  const AgentAssignmentContext({
+    required this.workspaceId,
+    required this.agentId,
+    required this.workerId,
+    required this.runId,
+    required this.taskId,
+    required this.attemptId,
+    required this.assignmentId,
+    required this.idempotencyKey,
+    required this.payload,
+  });
+
+  final String workspaceId;
+  final String agentId;
+  final String workerId;
+  final String runId;
+  final String taskId;
+  final String attemptId;
+  final String assignmentId;
+  final String idempotencyKey;
+  final Map<String, Object?> payload;
+}
+
+class AgentAssignmentResult {
+  const AgentAssignmentResult({
+    required this.summary,
+    this.output,
+    this.artifactIds = const [],
+    this.evidence,
+  });
+
+  final String summary;
+  final Map<String, Object?>? output;
+  final List<String> artifactIds;
+  final Map<String, Object?>? evidence;
+}
+
+typedef AgentAssignmentHandler = Future<AgentAssignmentResult> Function(
+    AgentAssignmentContext context);
+
 class IoAgentCloudSocket implements AgentCloudSocket {
   IoAgentCloudSocket(this.socket);
   final WebSocket socket;
@@ -44,6 +85,7 @@ class AgentCloudConnection {
     this.installedPluginVersions = const {},
     this.activeWorkerIds = const [],
     this.unreconciledAssignmentIds = const [],
+    this.assignmentHandler,
     this.heartbeat = const Duration(seconds: 15),
   })  : hostname = hostname ?? Platform.localHostname,
         capabilities = capabilities ?? _defaultCapabilities();
@@ -59,6 +101,7 @@ class AgentCloudConnection {
   final Map<String, String> installedPluginVersions;
   final List<String> activeWorkerIds;
   final List<String> unreconciledAssignmentIds;
+  final AgentAssignmentHandler? assignmentHandler;
   final Duration heartbeat;
   AgentCloudSocket? _socket;
   Timer? _heartbeatTimer;
@@ -157,8 +200,110 @@ class AgentCloudConnection {
       if (payload is Map<String, dynamic>) {
         syncResponse = Map<String, Object?>.from(payload);
       }
+    } else if (decoded['type'] == 'assignment.start') {
+      unawaited(_handleAssignmentStart(decoded));
     }
   }
+
+  Future<void> _handleAssignmentStart(Map<String, dynamic> message) async {
+    final socket = _socket;
+    final payload = message['payload'];
+    final requiredFields = [
+      'workspaceId',
+      'agentId',
+      'workerId',
+      'runId',
+      'taskId',
+      'attemptId',
+      'assignmentId',
+      'idempotencyKey',
+    ];
+    if (socket == null ||
+        payload is! Map<String, dynamic> ||
+        requiredFields.any((field) => message[field] is! String)) {
+      return;
+    }
+
+    final context = AgentAssignmentContext(
+      workspaceId: message['workspaceId'] as String,
+      agentId: message['agentId'] as String,
+      workerId: message['workerId'] as String,
+      runId: message['runId'] as String,
+      taskId: message['taskId'] as String,
+      attemptId: message['attemptId'] as String,
+      assignmentId: message['assignmentId'] as String,
+      idempotencyKey: message['idempotencyKey'] as String,
+      payload: Map<String, Object?>.from(payload),
+    );
+    final correlation = _assignmentCorrelation(message);
+
+    if (assignmentHandler == null) {
+      socket.send(jsonEncode(_assignmentEnvelope(
+        'assignment.ack',
+        correlation,
+        {'accepted': false, 'reason': 'no assignment handler configured'},
+      )));
+      return;
+    }
+
+    socket.send(jsonEncode(_assignmentEnvelope(
+      'assignment.ack',
+      correlation,
+      {'accepted': true, 'estimatedStartMs': 0},
+    )));
+    try {
+      final result = await assignmentHandler!(context);
+      socket.send(jsonEncode(_assignmentEnvelope(
+        'assignment.result',
+        correlation,
+        {
+          'status': 'completed',
+          'summary': result.summary,
+          'output': result.output,
+          'artifactIds': result.artifactIds,
+          if (result.evidence != null)
+            'evidence': {
+              'observedAt': DateTime.now().toUtc().toIso8601String(),
+              ...result.evidence!,
+            },
+        },
+      )));
+    } catch (error) {
+      socket.send(jsonEncode(_assignmentEnvelope(
+        'assignment.error',
+        correlation,
+        {
+          'status': 'failed',
+          'error': {
+            'code': 'agent_assignment_failed',
+            'message': '$error',
+            'retryable': true,
+          },
+        },
+      )));
+    }
+  }
+
+  Map<String, Object?> _assignmentCorrelation(Map<String, dynamic> message) => {
+        'workspaceId': message['workspaceId'],
+        'agentId': message['agentId'],
+        'workerId': message['workerId'],
+        'runId': message['runId'],
+        'taskId': message['taskId'],
+        'attemptId': message['attemptId'],
+        'assignmentId': message['assignmentId'],
+        'idempotencyKey': message['idempotencyKey'],
+      };
+
+  Map<String, Object?> _assignmentEnvelope(
+    String type,
+    Map<String, Object?> correlation,
+    Map<String, Object?> payload,
+  ) =>
+      {
+        ..._envelope(type, payload),
+        ...correlation,
+      };
 
   void _sendSyncRequest() {
     final socket = _socket;
