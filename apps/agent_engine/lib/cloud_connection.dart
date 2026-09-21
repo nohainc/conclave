@@ -37,19 +37,49 @@ class AgentCloudConnection {
     required this.agentId,
     required this.workspaceId,
     required this.factory,
+    this.name = 'Conclave Agent',
+    String? hostname,
+    this.agentVersion = '0.1.0',
+    Map<String, Object?>? capabilities,
     this.heartbeat = const Duration(seconds: 15),
-  });
+  })  : hostname = hostname ?? Platform.localHostname,
+        capabilities = capabilities ?? _defaultCapabilities();
 
   final Uri uri;
   final String agentId;
   final String workspaceId;
   final AgentCloudSocketFactory factory;
+  final String name;
+  final String hostname;
+  final String agentVersion;
+  final Map<String, Object?> capabilities;
   final Duration heartbeat;
   AgentCloudSocket? _socket;
   Timer? _heartbeatTimer;
   StreamSubscription<Object?>? _subscription;
   bool _closing = false;
   int reconnectCount = 0;
+  String? sessionId;
+  int _messageSequence = 0;
+
+  static const protocol = 'conclave.agent-protocol';
+  static const protocolVersion = '2.0';
+
+  static Map<String, Object?> _defaultCapabilities() {
+    final operatingSystem = switch (Platform.operatingSystem) {
+      'macos' => 'macos',
+      'linux' => 'linux',
+      'windows' => 'windows',
+      _ => 'linux',
+    };
+    return {
+      'os': operatingSystem,
+      'arch': 'x64',
+      'agentVersion': '0.1.0',
+      'supportedRuntimes': <String>['dart'],
+      'maxConcurrentWorkers': 1,
+    };
+  }
 
   Future<void> connect() async {
     _closing = false;
@@ -59,25 +89,61 @@ class AgentCloudConnection {
   Future<void> _open() async {
     final socket = await factory(uri);
     _socket = socket;
-    socket.send(jsonEncode({
-      'type': 'agent.hello',
-      'agentId': agentId,
-      'workspaceId': workspaceId,
-    }));
-    _heartbeatTimer?.cancel();
-    _heartbeatTimer = Timer.periodic(heartbeat, (_) {
-      socket.send(jsonEncode({
-        'type': 'agent.heartbeat',
-        'agentId': agentId,
-        'workspaceId': workspaceId,
-      }));
-    });
+    sessionId = null;
     await _subscription?.cancel();
     _subscription = socket.messages.listen(
-      (_) {},
+      _handleMessage,
       onDone: () => unawaited(_reconnect()),
       onError: (_) => unawaited(_reconnect()),
     );
+    socket.send(jsonEncode(_envelope('agent.hello', {
+      'agentId': agentId,
+      'workspaceId': workspaceId,
+      'name': name,
+      'hostname': hostname,
+      'agentVersion': agentVersion,
+      'capabilities': capabilities,
+    })));
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(heartbeat, (_) {
+      final currentSessionId = sessionId;
+      if (currentSessionId == null) return;
+      socket.send(jsonEncode({
+        ..._envelope('agent.heartbeat', {
+          'agentId': agentId,
+          'workspaceId': workspaceId,
+          'sessionId': currentSessionId,
+          'status': 'online',
+          'activeWorkers': 0,
+          'activeAssignments': 0,
+        }),
+      }));
+    });
+  }
+
+  Map<String, Object?> _envelope(String type, Map<String, Object?> payload) => {
+        'protocol': protocol,
+        'protocolVersion': protocolVersion,
+        'messageId': 'dart-${DateTime.now().microsecondsSinceEpoch}-${++_messageSequence}',
+        'timestamp': DateTime.now().toUtc().toIso8601String(),
+        'type': type,
+        'payload': payload,
+      };
+
+  void _handleMessage(Object? raw) {
+    if (raw is! String) return;
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map<String, dynamic>) return;
+    if (decoded['protocol'] != protocol ||
+        decoded['protocolVersion'] != protocolVersion) {
+      return;
+    }
+    if (decoded['type'] == 'agent.hello.ack') {
+      final payload = decoded['payload'];
+      if (payload is Map<String, dynamic> && payload['sessionId'] is String) {
+        sessionId = payload['sessionId'] as String;
+      }
+    }
   }
 
   Future<void> _reconnect() async {

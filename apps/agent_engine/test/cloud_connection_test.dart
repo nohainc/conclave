@@ -32,8 +32,53 @@ void main() {
     await connection.connect();
     final hello =
         jsonDecode(socket.sent.single as String) as Map<String, dynamic>;
+    expect(hello['protocol'], 'conclave.agent-protocol');
+    expect(hello['protocolVersion'], '2.0');
     expect(hello['type'], 'agent.hello');
-    expect(hello['agentId'], 'agent-1');
+    final payload = hello['payload'] as Map<String, dynamic>;
+    expect(payload['agentId'], 'agent-1');
+    expect(payload['workspaceId'], 'workspace-1');
+    expect(payload['capabilities'], isA<Map<String, dynamic>>());
+    await connection.close();
+  });
+
+  test('uses the Gateway session for protocol heartbeats', () async {
+    final socket = FakeSocket();
+    final connection = AgentCloudConnection(
+      uri: Uri.parse('wss://cloud.test/agent'),
+      agentId: 'agent-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      heartbeat: const Duration(milliseconds: 10),
+    );
+
+    await connection.connect();
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.agent-protocol',
+      'protocolVersion': '2.0',
+      'messageId': 'server-1',
+      'correlationId': 'client-1',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'agent.hello.ack',
+      'payload': {
+        'sessionId': 'session-1',
+        'heartbeatIntervalMs': 1000,
+        'serverTime': DateTime.now().toUtc().toIso8601String(),
+        'serverVersion': '2.0.0',
+      },
+    }));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+
+    final heartbeats = socket.sent
+        .skip(1)
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .where((message) => message['type'] == 'agent.heartbeat')
+        .toList();
+    expect(heartbeats, isNotEmpty);
+    expect(
+      (heartbeats.first['payload'] as Map<String, dynamic>)['sessionId'],
+      'session-1',
+    );
     await connection.close();
   });
 
