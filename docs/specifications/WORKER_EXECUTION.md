@@ -226,7 +226,28 @@ the same repository, timeout, cancellation, and output limits as Codex. Claude
 Code subscription credentials remain local, and Forge contains no Claude-
 specific execution logic.
 
-## 7. Session isolation
+## 7. Execution policy
+
+Core owns how many Workers participate in an execution. Adapters only execute
+one correlated `WorkerExecutionRequest` and do not know whether the request is
+part of Forge, research, review, or another workflow.
+
+Supported policies are:
+
+- `single`: exactly one selected Worker;
+- `parallel`: independent candidate Workers run concurrently, optionally in
+  bounded batches with `maxParallel`;
+- `synthesize`: candidates run independently, then a distinct synthesizer
+  receives their structured outputs;
+- `compare_and_select`: candidates run independently, then a distinct selector
+  receives their outputs and makes the comparison decision.
+
+Synthesis and comparison require at least two candidates and an independent
+Worker. Core rejects policies that reuse a candidate as the synthesizer or
+selector. Candidate and decision requests receive distinct request IDs and the
+selected Worker/Connection IDs, so every execution remains auditable.
+
+## 8. Session isolation
 
 A Worker execution may request:
 - a new isolated session;
@@ -237,7 +258,7 @@ Independent research/review must use isolated session/context unless policy expl
 
 Separate chats/sessions using the same underlying model can provide context independence but do not count as provider independence.
 
-## 8. Fallback routing
+## 9. Fallback routing
 
 A Worker policy may define ordered fallbacks.
 
@@ -259,7 +280,7 @@ Fallback occurs only for defined failure classes such as:
 
 A content/verification failure is not silently converted into a provider fallback unless policy allows a retry or alternate worker.
 
-## 9. Initial implementation priority
+## 10. Initial implementation priority
 
 The first production transports should be:
 
