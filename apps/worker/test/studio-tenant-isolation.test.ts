@@ -157,6 +157,18 @@ class Statement implements D1Statement {
     return null;
   }
   async all<T>(): Promise<{ results: readonly T[] }> {
+    if (this.query.includes("FROM organization_memberships")) {
+      const organizationId = this.values[0] as Tenant;
+      return {
+        results: [
+          {
+            organization_id: organizationId,
+            role: "owner",
+            status: "active",
+          } as T,
+        ],
+      };
+    }
     if (this.query.includes("project_memberships")) return { results: [] };
     if (
       this.query.includes("FROM projects p") ||
@@ -218,12 +230,10 @@ class TenantDb implements D1DatabaseLike {
   }
 }
 
-function environment(organizationId: Tenant, token: string) {
+function environment(organizationId: Tenant) {
   return {
     CONCLAVE_ENVIRONMENT: "production",
-    CONCLAVE_AUTH_TOKEN: token,
-    CONCLAVE_AUTH_USER_ID: `${organizationId}-user`,
-    CONCLAVE_AUTH_ORGANIZATION_ID: organizationId,
+    CONCLAVE_ACCESS_ORGANIZATION_ID: organizationId,
     CONCLAVE_DB: new TenantDb(),
   } as unknown as Env;
 }
@@ -231,9 +241,16 @@ function environment(organizationId: Tenant, token: string) {
 async function snapshot(organizationId: Tenant) {
   const response = await worker.fetch(
     new Request("https://conclave.test/api/studio/snapshot", {
-      headers: { authorization: `Bearer token-${organizationId}` },
+      headers: { accept: "application/json" },
     }),
-    environment(organizationId, `token-${organizationId}`),
+    environment(organizationId),
+    {
+      access: {
+        getIdentity: async () => ({
+          email: `${organizationId}-user@example.com`,
+        }),
+      },
+    } as never,
   );
   expect(response.status).toBe(200);
   return response.json() as Promise<{

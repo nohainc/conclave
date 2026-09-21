@@ -77,6 +77,7 @@ class HttpError extends Error {
 }
 
 type SecurityEnv = Env & {
+  readonly CONCLAVE_ACCESS_ORGANIZATION_ID?: string;
   readonly CONCLAVE_AUTH_TOKEN?: string;
   readonly CONCLAVE_AUTH_USER_ID?: string;
   readonly CONCLAVE_AUTH_ORGANIZATION_ID?: string;
@@ -100,9 +101,57 @@ function bearer(request: Request): string | null {
   return value?.startsWith("Bearer ") ? value.slice(7) : null;
 }
 
+async function accessSecurityContext(
+  env: SecurityEnv,
+  accessContext: ExecutionContext | undefined,
+): Promise<SecurityContext> {
+  const identity = await accessContext?.access?.getIdentity();
+  const userId = identity?.email?.trim().toLowerCase();
+  if (!userId)
+    throw new HttpError(401, "Cloudflare Access authentication required");
+
+  const organizationQuery = env.CONCLAVE_ACCESS_ORGANIZATION_ID
+    ? "SELECT organization_id, role, status FROM organization_memberships WHERE organization_id = ?1 AND user_id = ?2"
+    : "SELECT organization_id, role, status FROM organization_memberships WHERE user_id = ?1";
+  const membershipStatement = env.CONCLAVE_DB.prepare(organizationQuery);
+  const memberships = env.CONCLAVE_ACCESS_ORGANIZATION_ID
+    ? await membershipStatement
+        .bind(env.CONCLAVE_ACCESS_ORGANIZATION_ID, userId)
+        .all<{ organization_id: string; role: string; status: string }>()
+    : await membershipStatement
+        .bind(userId)
+        .all<{ organization_id: string; role: string; status: string }>();
+  const activeMemberships = (memberships.results ?? []).filter(
+    (membership) => membership.status === "active",
+  );
+  if (activeMemberships.length !== 1)
+    throw new HttpError(
+      activeMemberships.length === 0 ? 403 : 409,
+      activeMemberships.length === 0
+        ? "Organization membership is not active"
+        : "An organization must be selected for this identity",
+    );
+  const membership = activeMemberships[0]!;
+  const projects = await env.CONCLAVE_DB.prepare(
+    "SELECT project_id, role FROM project_memberships WHERE project_id IN (SELECT id FROM projects WHERE organization_id = ?1) AND user_id = ?2",
+  )
+    .bind(membership.organization_id, userId)
+    .all<{ project_id: string; role: string }>();
+  const projectRoles: Record<string, readonly Role[]> = {};
+  for (const project of projects.results ?? [])
+    projectRoles[project.project_id] = [project.role as Role];
+  return {
+    userId,
+    organizationId: membership.organization_id,
+    organizationRoles: [membership.role as Role],
+    projectRoles,
+  };
+}
+
 async function securityContext(
   request: Request,
   env: SecurityEnv,
+  accessContext?: ExecutionContext,
 ): Promise<SecurityContext> {
   if (anonymousDevelopment(env)) {
     return {
@@ -112,34 +161,29 @@ async function securityContext(
       projectRoles: {},
     };
   }
-  const token = bearer(request);
-  if (!token || !env.CONCLAVE_AUTH_TOKEN || token !== env.CONCLAVE_AUTH_TOKEN)
-    throw new HttpError(401, "Authentication required");
-  const userId = env.CONCLAVE_AUTH_USER_ID;
-  const organizationId = env.CONCLAVE_AUTH_ORGANIZATION_ID;
-  if (!userId || !organizationId)
-    throw new HttpError(503, "Authentication is not configured");
-  const membership = await env.CONCLAVE_DB.prepare(
-    "SELECT role, status FROM organization_memberships WHERE organization_id = ?1 AND user_id = ?2",
-  )
-    .bind(organizationId, userId)
-    .first<{ role: string; status: string }>();
-  if (!membership || membership.status !== "active")
-    throw new HttpError(403, "Organization membership is not active");
-  const projects = await env.CONCLAVE_DB.prepare(
-    "SELECT project_id, role FROM project_memberships WHERE project_id IN (SELECT id FROM projects WHERE organization_id = ?1) AND user_id = ?2",
-  )
-    .bind(organizationId, userId)
-    .all<{ project_id: string; role: string }>();
-  const projectRoles: Record<string, readonly Role[]> = {};
-  for (const project of projects.results ?? [])
-    projectRoles[project.project_id] = [project.role as Role];
-  return {
-    userId,
-    organizationId,
-    organizationRoles: [membership.role as Role],
-    projectRoles,
-  };
+  if (env.CONCLAVE_ENVIRONMENT === "development" && env.CONCLAVE_AUTH_TOKEN) {
+    const token = bearer(request);
+    if (!token || token !== env.CONCLAVE_AUTH_TOKEN)
+      throw new HttpError(401, "Authentication required");
+    const userId = env.CONCLAVE_AUTH_USER_ID;
+    const organizationId = env.CONCLAVE_AUTH_ORGANIZATION_ID;
+    if (!userId || !organizationId)
+      throw new HttpError(503, "Authentication is not configured");
+    const membership = await env.CONCLAVE_DB.prepare(
+      "SELECT role, status FROM organization_memberships WHERE organization_id = ?1 AND user_id = ?2",
+    )
+      .bind(organizationId, userId)
+      .first<{ role: string; status: string }>();
+    if (!membership || membership.status !== "active")
+      throw new HttpError(403, "Organization membership is not active");
+    return {
+      userId,
+      organizationId,
+      organizationRoles: [membership.role as Role],
+      projectRoles: {},
+    };
+  }
+  return accessSecurityContext(env, accessContext);
 }
 
 async function authorizeRequest(
@@ -147,8 +191,9 @@ async function authorizeRequest(
   env: SecurityEnv,
   permission: Permission,
   projectId?: string,
+  accessContext?: ExecutionContext,
 ): Promise<SecurityContext> {
-  const context = await securityContext(request, env);
+  const context = await securityContext(request, env, accessContext);
   if (projectId && !anonymousDevelopment(env)) {
     const project = await env.CONCLAVE_DB.prepare(
       "SELECT organization_id FROM projects WHERE id = ?1",
@@ -255,7 +300,11 @@ async function createOrGetRun(
 
 type ConclaveWorkflowParams = import("./workflow.js").ConclaveWorkflowParams;
 
-async function handleRunRequest(request: Request, env: Env): Promise<Response> {
+async function handleRunRequest(
+  request: Request,
+  env: Env,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
   const securityEnv = env as SecurityEnv;
   const body = (await request.json()) as Record<string, unknown>;
   const idempotencyKey = requiredString(
@@ -266,11 +315,23 @@ async function handleRunRequest(request: Request, env: Env): Promise<Response> {
     throw new Error("idempotencyKey must contain only letters, digits, _ or -");
   }
   const goalId = requiredString(body.goalId, "goalId");
-  const context = await authorizeRequest(request, securityEnv, "run:create");
+  const context = await authorizeRequest(
+    request,
+    securityEnv,
+    "run:create",
+    undefined,
+    accessContext,
+  );
   const projectId = anonymousDevelopment(securityEnv)
     ? undefined
     : await goalProjectId(securityEnv, goalId);
-  await authorizeRequest(request, securityEnv, "run:create", projectId);
+  await authorizeRequest(
+    request,
+    securityEnv,
+    "run:create",
+    projectId,
+    accessContext,
+  );
   const params: ConclaveWorkflowParams = {
     runId: requiredString(body.runId, "runId"),
     goalId,
@@ -292,6 +353,7 @@ async function handleStudioSnapshot(
   env: Env,
   request: Request,
   projectId: string | null,
+  accessContext?: ExecutionContext,
 ): Promise<Response> {
   const securityEnv = env as SecurityEnv;
   const context = await authorizeRequest(
@@ -299,6 +361,7 @@ async function handleStudioSnapshot(
     securityEnv,
     "project:read",
     projectId ?? undefined,
+    accessContext,
   );
   const isAnonymous = anonymousDevelopment(securityEnv);
   const projectFilter =
@@ -405,6 +468,7 @@ async function handleRunCommand(
   runId: string,
   command:
     "pause" | "resume" | "restart" | "event" | "ci-evidence" | "forge-terminal",
+  accessContext?: ExecutionContext,
 ): Promise<Response> {
   const securityEnv = env as SecurityEnv;
   if (command === "ci-evidence") requireCiAuthentication(request, securityEnv);
@@ -414,7 +478,13 @@ async function handleRunCommand(
     const projectId = anonymousDevelopment(securityEnv)
       ? undefined
       : await runProjectId(securityEnv, runId);
-    await authorizeRequest(request, securityEnv, "run:control", projectId);
+    await authorizeRequest(
+      request,
+      securityEnv,
+      "run:control",
+      projectId,
+      accessContext,
+    );
   }
   const workflowInstanceId = await resolveWorkflowInstanceId(env, runId);
   const instance = await env.CONCLAVE_RUN_WORKFLOW.get(workflowInstanceId);
@@ -453,7 +523,11 @@ async function handleRunCommand(
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(
+    request: Request,
+    env: Env,
+    ctx?: ExecutionContext,
+  ): Promise<Response> {
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/health") {
@@ -490,13 +564,14 @@ export default {
         );
       }
       if (request.method === "POST" && url.pathname === "/api/runs") {
-        return await handleRunRequest(request, env);
+        return await handleRunRequest(request, env, ctx);
       }
       if (request.method === "GET" && url.pathname === "/api/studio/snapshot") {
         return await handleStudioSnapshot(
           env,
           request,
           url.searchParams.get("projectId"),
+          ctx,
         );
       }
       const runMatch = url.pathname.match(
@@ -507,7 +582,13 @@ export default {
         const projectId = anonymousDevelopment(securityEnv)
           ? undefined
           : await runProjectId(securityEnv, runMatch[1]);
-        await authorizeRequest(request, securityEnv, "project:read", projectId);
+        await authorizeRequest(
+          request,
+          securityEnv,
+          "project:read",
+          projectId,
+          ctx,
+        );
         const workflowInstanceId = await resolveWorkflowInstanceId(
           env,
           runMatch[1],
@@ -529,7 +610,7 @@ export default {
               : runMatch[2] === "forge-events"
                 ? "forge-terminal"
                 : (runMatch[2] as "pause" | "resume" | "restart");
-        return await handleRunCommand(request, env, runMatch[1], command);
+        return await handleRunCommand(request, env, runMatch[1], command, ctx);
       }
     } catch (error) {
       return json(

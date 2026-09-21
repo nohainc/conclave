@@ -23,6 +23,9 @@ jobs:
       - run: flutter test
       - name: Build Flutter web
         run: flutter build web --release --dart-define=CONCLAVE_API_URL=https://app.conclaveax.com/api
+      - name: Verify browser bundle contains no server secrets
+        working-directory: .
+        run: node scripts/assert-no-browser-secrets.mjs apps/flutter_app/build/web
       - name: Install Wrangler
         run: npm install --global wrangler@4.38.0
       - name: Deploy app.conclaveax.com
