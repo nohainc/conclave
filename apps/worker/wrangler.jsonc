@@ -11,6 +11,20 @@
   "vars": {
     "CONCLAVE_ENVIRONMENT": "development",
   },
+  "d1_databases": [
+    {
+      "binding": "CONCLAVE_DB",
+      "database_name": "conclave-development",
+      "database_id": "local",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "CONCLAVE_ARTIFACTS",
+      "bucket_name": "conclave-artifacts-development",
+    },
+  ],
   "workflows": [
     {
       "name": "conclave-run",

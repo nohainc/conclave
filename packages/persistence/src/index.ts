@@ -443,3 +443,5 @@ export function reconstructRun(rows: RunAggregateRows): ReconstructedRun {
     eventSequence: events.map((event) => event.sequence),
   };
 }
+
+export * from "./d1.js";

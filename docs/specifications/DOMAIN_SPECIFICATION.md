@@ -145,6 +145,8 @@ Completion criteria are first-class records created with the Goal, not an unstru
 
 The verification policy specifies required roles, independence rules, minimum evidence, retry limits, timeout/budget limits, and approval requirements. A criterion may be marked `satisfied` only by accepted Verification evidence. Criteria may also be `failed`, `waived`, or `inconclusive`; `waived` requires an explicit Decision and cannot silently satisfy a mandatory criterion.
 
+The Cloudflare persistence boundary is concrete: D1 repositories store domain records and ordered Run Events, while R2 stores large Artifact payloads referenced by D1 metadata. Reconstructing a Run loads the Goal, criteria, phases, tasks, attempts, model calls, findings, verifications, artifacts, usage, and contiguous events from these adapters; in-memory repositories are test doubles only.
+
 The Lead may recommend completion, but its report is advisory. Core requires an exact criterion-id mapping and proves each criterion independently before allowing the terminal state. Run completion requires all of the following:
 
 1. every mandatory criterion is satisfied or explicitly approved as waived;
