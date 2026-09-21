@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:conclave_agent_engine/plugin_manager.dart';
 import 'package:crypto/crypto.dart';
+import 'package:conclave_agent_engine/trust_policy.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -42,6 +43,29 @@ void main() {
       )),
       throwsA(isA<StateError>()),
     );
+    await directory.delete(recursive: true);
+  });
+
+  test('enforces signature and permissions when trust policy is enabled',
+      () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-plugins-');
+    final bytes = [4, 5, 6];
+    final digest = sha256.convert(bytes).toString();
+    const policy = PluginTrustPolicy(trustedSecrets: {'publisher': 'root'});
+    final manager = PluginManager(directory,
+        trustPolicy: policy,
+        allowedPermissions: {PluginPermission.readWorkspace});
+    await manager.install(PluginPackage(
+      id: 'trusted',
+      version: '1.0.0',
+      bytes: bytes,
+      digest: digest,
+      publisher: 'publisher',
+      signature: policy.sign('publisher', digest),
+      permissions: [PluginPermission.readWorkspace],
+    ));
+    expect(await manager.activeVersion('trusted'), '1.0.0');
     await directory.delete(recursive: true);
   });
 }

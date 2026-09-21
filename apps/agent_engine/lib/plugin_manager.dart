@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'trust_policy.dart';
 
 class PluginPackage {
   const PluginPackage({
@@ -9,20 +10,40 @@ class PluginPackage {
     required this.version,
     required this.bytes,
     required this.digest,
+    this.publisher,
+    this.signature,
+    this.permissions = const [],
   });
   final String id;
   final String version;
   final List<int> bytes;
   final String digest;
+  final String? publisher;
+  final String? signature;
+  final List<PluginPermission> permissions;
 }
 
 class PluginManager {
-  PluginManager(this.root);
+  PluginManager(this.root,
+      {this.trustPolicy, this.allowedPermissions = const {}});
   final Directory root;
+  final PluginTrustPolicy? trustPolicy;
+  final Set<PluginPermission> allowedPermissions;
 
   Future<Directory> install(PluginPackage package) async {
     final actual = sha256.convert(package.bytes).toString();
     if (actual != package.digest) throw StateError('plugin digest mismatch');
+    if (trustPolicy != null) {
+      final publisher = package.publisher;
+      final signature = package.signature;
+      if (publisher == null ||
+          signature == null ||
+          !trustPolicy!.verify(
+              publisher: publisher, digest: actual, signature: signature)) {
+        throw StateError('plugin signature is not trusted');
+      }
+      trustPolicy!.requirePermissions(package.permissions, allowedPermissions);
+    }
     final target = Directory('${root.path}/${package.id}/${package.version}');
     await target.create(recursive: true);
     await File('${target.path}/package.bin')
