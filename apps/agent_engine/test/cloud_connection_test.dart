@@ -93,6 +93,56 @@ void main() {
     await connection.close();
   });
 
+  test('reports correlated plugin and Worker readiness', () async {
+    final socket = FakeSocket();
+    final connection = AgentCloudConnection(
+      uri: Uri.parse('wss://cloud.test/agent'),
+      agentId: 'agent-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      heartbeat: const Duration(hours: 1),
+    );
+
+    await connection.connect();
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.agent-protocol',
+      'protocolVersion': '2.0',
+      'messageId': 'server-1',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'agent.hello.ack',
+      'payload': {'sessionId': 'session-1'},
+    }));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    connection.reportPluginStatuses([
+      {
+        'pluginId': 'conclave.codex',
+        'version': '1.0.0',
+        'status': 'active',
+        'installedAt': DateTime.now().toUtc().toIso8601String(),
+      },
+    ]);
+    connection.reportWorkerStatus(
+      workerId: 'worker-1',
+      status: 'available',
+      activeAssignments: 0,
+    );
+    final messages = socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .toList();
+    final plugin = messages.lastWhere(
+      (message) => message['type'] == 'plugin.status',
+    );
+    expect((plugin['payload'] as Map<String, dynamic>)['plugins'], isNotEmpty);
+    final worker = messages.lastWhere(
+      (message) => message['type'] == 'worker.status',
+    );
+    final workerPayload = worker['payload'] as Map<String, dynamic>;
+    expect(workerPayload['agentId'], 'agent-1');
+    expect(workerPayload['workerId'], 'worker-1');
+    await connection.close();
+  });
+
   test('reconnects when Gateway heartbeat acknowledgements stop', () async {
     var socketCount = 0;
     final sockets = <FakeSocket>[];
