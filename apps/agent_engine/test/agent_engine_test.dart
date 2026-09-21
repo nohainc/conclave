@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:conclave_agent_engine/agent_engine.dart';
 import 'package:conclave_agent_engine/cloud_connection.dart';
 import 'package:conclave_agent_engine/local_ipc.dart';
+import 'package:conclave_agent_engine/secure_credentials.dart';
 import 'package:test/test.dart';
 
 class FakeSocket implements AgentCloudSocket {
@@ -19,6 +20,21 @@ class FakeSocket implements AgentCloudSocket {
 
   @override
   Future<void> close() => controller.close();
+}
+
+class FakeCredentialStore implements SecureCredentialStore {
+  FakeCredentialStore(this.value);
+
+  final String? value;
+
+  @override
+  String? readSync(String key) => value;
+
+  @override
+  Future<void> delete(String key) async {}
+
+  @override
+  Future<void> write(String key, String value) async {}
 }
 
 void main() {
@@ -69,6 +85,15 @@ void main() {
     expect(config.workspaceId, 'workspace-1');
     expect(config.ipcPort, 43210);
     expect(config.ipcToken, 'ipc-secret');
+  });
+
+  test('Agent Engine resolves an auth token from the secure credential store',
+      () {
+    final config = AgentEngineConfig.fromArgs(
+      ['--agent-id', 'agent-1'],
+      credentialStore: FakeCredentialStore('keychain-token'),
+    );
+    expect(config.authToken, 'keychain-token');
   });
 
   test('owns the Cloud connection across Engine lifecycle', () async {

@@ -5,6 +5,7 @@ import 'dart:math';
 
 import 'cloud_connection.dart';
 import 'local_ipc.dart';
+import 'secure_credentials.dart';
 
 typedef AgentEngineStatusProvider = Future<Map<String, Object?>> Function();
 
@@ -27,7 +28,10 @@ class AgentEngineConfig {
   final int? ipcPort;
   final String? ipcToken;
 
-  factory AgentEngineConfig.fromArgs(List<String> args) {
+  factory AgentEngineConfig.fromArgs(
+    List<String> args, {
+    SecureCredentialStore? credentialStore,
+  }) {
     final index = args.indexOf('--data-dir');
     final cloudIndex = args.indexOf('--cloud-url');
     final agentIndex = args.indexOf('--agent-id');
@@ -52,13 +56,16 @@ class AgentEngineConfig {
     final ipcToken = ipcTokenIndex >= 0 && ipcTokenIndex + 1 < args.length
         ? args[ipcTokenIndex + 1]
         : Platform.environment['CONCLAVE_AGENT_IPC_TOKEN'];
+    final secureStore =
+        credentialStore ?? const PlatformSecureCredentialStore();
+    final storedToken = agentId == null ? null : secureStore.readSync(agentId);
     return AgentEngineConfig(
       dataDirectory: Directory(path ??
           '${Platform.environment['HOME'] ?? Directory.current.path}/.conclave-agent'),
       cloudUri: cloudUrl == null ? null : Uri.tryParse(cloudUrl),
       agentId: agentId,
       workspaceId: workspaceId,
-      authToken: Platform.environment['CONCLAVE_AGENT_TOKEN'],
+      authToken: Platform.environment['CONCLAVE_AGENT_TOKEN'] ?? storedToken,
       ipcPort: ipcPortValue == null ? null : int.tryParse(ipcPortValue),
       ipcToken: ipcToken,
     );
