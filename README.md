@@ -2,45 +2,46 @@
 
 **AI execution and orchestration ecosystem where models and agents plan, delegate, build, review, test, and iterate toward verified outcomes.**
 
-Conclave AX turns a user request into a persistent **Goal** rather than a single prompt. It coordinates configured AI models, agents, tools, local runtimes, and CI systems through small tasks and independent verification loops.
+Conclave AX coordinates AI Workers and execution hosts around persistent Goals, Runs, Tasks, verification, and evidence.
 
 Primary domain: **conclaveax.com**
 
-## Ecosystem
+## Applications
 
-- **Conclave AX Core** — provider-independent orchestration domain and state machine.
-- **Conclave AX Studio** — Flutter desktop application.
-- **Conclave AX Cloud** — hosted control plane and Flutter web application.
-- **Conclave AX Local Runtime** — TypeScript runtime for repositories, Git, files, shell, tests, and local agents.
-- **Conclave AX Forge** — first workflow/application: AI-assisted software development.
-- **Conclave AX SDK** — extension and workflow integration surface.
+- **Conclave AX Studio** — Flutter/Dart web + desktop client.
+- **Conclave AX Cloud** — TypeScript control plane on Cloudflare.
+- **Conclave AX Agent App** — Flutter/Dart desktop host-management UI.
+- **Conclave AX Agent Engine** — Dart AOT native background process.
+- **Worker Plugins** — language-independent executable integrations; Dart is preferred for first-party plugins where practical.
+- **Conclave AX Forge** — first major workflow/application: AI-assisted software development.
 
-Internal package names remain `@conclave/*`; AX is the public product brand.
+## Technology stack
 
-## Initial stack
+- Flutter + Dart for Studio and Agent App.
+- Dart native executable for Agent Engine.
+- TypeScript for Cloud.
+- Cloudflare Workers + Workflows + Durable Objects.
+- Cloudflare D1 for structured Cloud state.
+- Cloudflare R2 for artifacts, plugin packages, and release packages.
+- JSON-RPC/structured process protocol for Worker Plugins.
+- GitHub Actions for CI/CD.
+- Wrangler for Cloudflare deployment.
 
-- Flutter for Studio and Cloud UI
-- TypeScript for Core, Cloud API, providers, and Local Runtime
-- Cloudflare Workers + Workflows
-- Cloudflare D1 for structured orchestration state
-- Cloudflare R2 for large artifacts
-- GitHub Actions for CI
-- Cloudflare Workers Static Assets for the web application
+## Architecture rule
 
-## Development approach
+> **Cloud orchestrates. Agent Engine executes. Worker Plugins integrate. Workers do the work. Flutter apps control and observe.**
 
-Conclave AX itself should be built the way it expects AI teams to work:
+The Agent App and Agent Engine are separate OS processes so closing the UI never stops active work.
 
-1. define architecture and contracts;
-2. divide work into small phases;
-3. implement;
-4. independently review;
-5. run real checks/tests;
-6. resolve findings;
-7. update documentation.
+Worker Plugins run as separate executable processes and may be written in Dart, TypeScript/Node.js, Rust, Python, Go, or another language.
 
-Start with [ARCHITECTURE.md](ARCHITECTURE.md), [ROADMAP.md](ROADMAP.md), and [AGENTS.md](AGENTS.md).
+## Read first
+
+- [Architecture](ARCHITECTURE.md)
+- [Technology Stack](docs/architecture/TECH_STACK.md)
+- [Applications](docs/architecture/APPLICATIONS.md)
+- [Migration to Architecture v3](docs/architecture/MIGRATION_TO_V3.md)
+- [Implementation Roadmap](ROADMAP.md)
+- [AI Development Rules](AGENTS.md)
 
 Deployment guidance is in [docs/deployment/CLOUDFLARE.md](docs/deployment/CLOUDFLARE.md).
-
-The first meaningful product milestone is **Conclave AX Forge MVP**: given a real Git repository and a development goal, Conclave AX uses at least two independent AI workers, decomposes the goal, delegates implementation, independently reviews the result, runs real tests, iterates on failures, and returns a completion report with evidence.
