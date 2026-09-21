@@ -15,6 +15,9 @@ export interface ConclaveWorkflowParams {
   readonly organizationId?: string;
   readonly repositoryId?: string;
   readonly revision?: string;
+  readonly expectedCommitSha?: string;
+  readonly expectedChecks?: readonly string[];
+  readonly allowedWorkflows?: readonly string[];
   readonly requireApproval?: boolean;
   readonly requireCiEvidence?: boolean;
   readonly startPaused?: boolean;
@@ -42,7 +45,9 @@ export interface ConclaveWorkflowCheckpoint {
     | "evidenceId"
     | "source"
     | "externalRunId"
-    | "revision"
+    | "runId"
+    | "repositoryId"
+    | "commitSha"
     | "workflow"
     | "conclusion"
     | "checks"
@@ -129,6 +134,31 @@ function isForgeTerminalEvent(value: unknown): value is ForgeTerminalEvent {
       typeof record.resultArtifactId === "string") &&
     (record.error === undefined || typeof record.error === "string")
   );
+}
+
+function validateMachineEvidence(
+  evidence: MachineEvidenceEvent,
+  params: ConclaveWorkflowParams,
+): void {
+  if (evidence.runId !== params.runId)
+    throw new Error("CI evidence does not belong to this run");
+  if (!params.repositoryId || evidence.repositoryId !== params.repositoryId)
+    throw new Error("CI evidence repository does not match this run");
+  if (
+    !params.expectedCommitSha ||
+    evidence.commitSha !== params.expectedCommitSha
+  )
+    throw new Error("CI evidence commit SHA does not match this run");
+  if (
+    params.allowedWorkflows &&
+    !params.allowedWorkflows.includes(evidence.workflow)
+  )
+    throw new Error("CI workflow is not allowed for this run");
+  const checkNames = new Set(evidence.checks.map((check) => check.name));
+  for (const expectedCheck of params.expectedChecks ?? []) {
+    if (!checkNames.has(expectedCheck))
+      throw new Error(`Expected CI check is missing: ${expectedCheck}`);
+  }
 }
 
 export class ConclaveRunWorkflow extends WorkflowEntrypoint<
@@ -307,6 +337,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
           `Invalid CI evidence: ${error instanceof Error ? error.message : "unknown"}`,
         );
       }
+      validateMachineEvidence(machineEvidence, params);
       if (machineEvidence.conclusion !== "success") {
         throw new Error(
           `Machine checks concluded ${machineEvidence.conclusion}`,

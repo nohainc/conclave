@@ -6,6 +6,7 @@ import {
   type Role,
   type SecurityContext,
 } from "@conclave/security";
+import { parseMachineCheckEvidence } from "@conclave/protocol";
 
 function json(data: unknown, init?: ResponseInit): Response {
   return Response.json(data, {
@@ -283,6 +284,42 @@ async function createOrGetRun(
   env: Env,
   params: ConclaveWorkflowParams,
 ): Promise<{ id: string; status: unknown }> {
+  const current = await env.CONCLAVE_DB.prepare(
+    "SELECT policy_snapshot_json FROM runs WHERE id = ?1",
+  )
+    .bind(params.runId)
+    .first<{ policy_snapshot_json: string }>();
+  let policy: Record<string, unknown> = {};
+  if (current?.policy_snapshot_json) {
+    try {
+      const parsed: unknown = JSON.parse(current.policy_snapshot_json);
+      if (typeof parsed === "object" && parsed !== null)
+        policy = parsed as Record<string, unknown>;
+    } catch {
+      policy = {};
+    }
+  }
+  await env.CONCLAVE_DB.prepare(
+    "UPDATE runs SET policy_snapshot_json = ?1, updated_at = ?2 WHERE id = ?3",
+  )
+    .bind(
+      JSON.stringify({
+        ...policy,
+        ...(params.repositoryId ? { repositoryId: params.repositoryId } : {}),
+        ...(params.expectedCommitSha
+          ? { expectedCommitSha: params.expectedCommitSha }
+          : {}),
+        ...(params.expectedChecks
+          ? { expectedChecks: params.expectedChecks }
+          : {}),
+        ...(params.allowedWorkflows
+          ? { allowedWorkflows: params.allowedWorkflows }
+          : {}),
+      }),
+      new Date().toISOString(),
+      params.runId,
+    )
+    .run();
   const id = await resolveWorkflowInstanceId(
     env,
     params.runId,
@@ -332,6 +369,22 @@ async function handleRunRequest(
     projectId,
     accessContext,
   );
+  const expectedCommitSha =
+    typeof body.commitSha === "string"
+      ? body.commitSha
+      : typeof body.revision === "string" &&
+          /^[a-f0-9]{7,64}$/i.test(body.revision)
+        ? body.revision
+        : undefined;
+  if (body.requireCiEvidence !== false && !expectedCommitSha) {
+    throw new HttpError(
+      400,
+      "A commitSha is required when CI evidence is enabled",
+    );
+  }
+  if (expectedCommitSha && !/^[a-f0-9]{7,64}$/i.test(expectedCommitSha)) {
+    throw new HttpError(400, "commitSha must be a hexadecimal Git commit SHA");
+  }
   const params: ConclaveWorkflowParams = {
     runId: requiredString(body.runId, "runId"),
     goalId,
@@ -341,6 +394,21 @@ async function handleRunRequest(
       ? { repositoryId: body.repositoryId }
       : {}),
     ...(typeof body.revision === "string" ? { revision: body.revision } : {}),
+    ...(expectedCommitSha ? { expectedCommitSha } : {}),
+    ...(Array.isArray(body.expectedChecks)
+      ? {
+          expectedChecks: body.expectedChecks.filter(
+            (value): value is string => typeof value === "string",
+          ),
+        }
+      : {}),
+    ...(Array.isArray(body.allowedWorkflows)
+      ? {
+          allowedWorkflows: body.allowedWorkflows.filter(
+            (value): value is string => typeof value === "string",
+          ),
+        }
+      : { allowedWorkflows: ["CI"] }),
     ...(body.requireApproval === true ? { requireApproval: true } : {}),
     ...(body.requireCiEvidence === false ? { requireCiEvidence: false } : {}),
     ...(body.startPaused === true ? { startPaused: true } : {}),
@@ -368,6 +436,9 @@ async function handleGoalRequest(
   const repositoryId =
     typeof body.repositoryId === "string" ? body.repositoryId : undefined;
   const revision = typeof body.revision === "string" ? body.revision : "HEAD";
+  const commitSha = requiredString(body.commitSha, "commitSha");
+  if (!/^[a-f0-9]{7,64}$/i.test(commitSha))
+    throw new HttpError(400, "commitSha must be a hexadecimal Git commit SHA");
   const criteria = Array.isArray(body.criteria)
     ? body.criteria.filter(
         (criterion): criterion is string =>
@@ -428,6 +499,8 @@ async function handleGoalRequest(
     organizationId: context.organizationId,
     ...(repositoryId ? { repositoryId } : {}),
     ...(revision ? { revision } : {}),
+    ...(commitSha ? { expectedCommitSha: commitSha } : {}),
+    allowedWorkflows: ["CI"],
   });
   return json({ goalId, runId, ...run }, { status: 202 });
 }
@@ -560,6 +633,102 @@ async function handleStudioSnapshot(
   });
 }
 
+async function validateAndClaimCiEvidence(
+  env: Env,
+  runId: string,
+  input: unknown,
+): Promise<string> {
+  let evidence;
+  try {
+    evidence = parseMachineCheckEvidence(input);
+  } catch (error) {
+    throw new HttpError(
+      400,
+      `Invalid CI evidence: ${error instanceof Error ? error.message : "unknown"}`,
+    );
+  }
+  if (evidence.runId !== runId)
+    throw new HttpError(409, "CI evidence does not belong to this run");
+  const expected = await env.CONCLAVE_DB.prepare(
+    `SELECT r.policy_snapshot_json, p.repository_id, p.organization_id
+     FROM runs r JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id
+     WHERE r.id = ?1`,
+  )
+    .bind(runId)
+    .first<{
+      policy_snapshot_json: string;
+      repository_id: string | null;
+      organization_id: string | null;
+    }>();
+  if (!expected) throw new HttpError(404, "Run not found");
+  let policy: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = JSON.parse(expected.policy_snapshot_json);
+    if (typeof parsed === "object" && parsed !== null)
+      policy = parsed as Record<string, unknown>;
+  } catch {
+    throw new HttpError(409, "Run has no valid CI correlation policy");
+  }
+  const expectedRepository =
+    typeof policy.repositoryId === "string"
+      ? policy.repositoryId
+      : expected.repository_id;
+  const expectedCommitSha =
+    typeof policy.expectedCommitSha === "string"
+      ? policy.expectedCommitSha
+      : undefined;
+  const allowedWorkflows = Array.isArray(policy.allowedWorkflows)
+    ? policy.allowedWorkflows.filter(
+        (value): value is string => typeof value === "string",
+      )
+    : ["CI"];
+  const expectedChecks = Array.isArray(policy.expectedChecks)
+    ? policy.expectedChecks.filter(
+        (value): value is string => typeof value === "string",
+      )
+    : [];
+  if (!expectedRepository || evidence.repositoryId !== expectedRepository)
+    throw new HttpError(409, "CI evidence repository does not match this run");
+  if (!expectedCommitSha || evidence.commitSha !== expectedCommitSha)
+    throw new HttpError(409, "CI evidence commit SHA does not match this run");
+  if (!allowedWorkflows.includes(evidence.workflow))
+    throw new HttpError(409, "CI workflow is not allowed for this run");
+  const receivedChecks = new Set(evidence.checks.map((check) => check.name));
+  for (const expectedCheck of expectedChecks) {
+    if (!receivedChecks.has(expectedCheck))
+      throw new HttpError(
+        409,
+        `Expected CI check is missing: ${expectedCheck}`,
+      );
+  }
+  if (!expected.organization_id)
+    throw new HttpError(409, "Run has no organization correlation");
+  try {
+    await env.CONCLAVE_DB.prepare(
+      `INSERT INTO run_ci_evidence
+       (evidence_id, run_id, organization_id, repository_id, commit_sha, workflow, external_run_id, status, claimed_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'claimed', ?8)`,
+    )
+      .bind(
+        evidence.evidenceId,
+        runId,
+        expected.organization_id,
+        evidence.repositoryId,
+        evidence.commitSha,
+        evidence.workflow,
+        evidence.externalRunId,
+        new Date().toISOString(),
+      )
+      .run();
+  } catch (error) {
+    throw new HttpError(
+      409,
+      `CI evidence was already received: ${errorMessage(error)}`,
+    );
+  }
+  return evidence.evidenceId;
+}
+
 async function handleRunCommand(
   request: Request,
   env: Env,
@@ -592,6 +761,15 @@ async function handleRunCommand(
   }
   const workflowInstanceId = await resolveWorkflowInstanceId(env, runId);
   const instance = await env.CONCLAVE_RUN_WORKFLOW.get(workflowInstanceId);
+  let claimedEvidenceId: string | undefined;
+  if (command === "ci-evidence") {
+    const body = (await request.clone().json()) as Record<string, unknown>;
+    claimedEvidenceId = await validateAndClaimCiEvidence(
+      env,
+      runId,
+      body.payload ?? body,
+    );
+  }
   if (command === "pause") await instance.pause();
   if (command === "resume") await instance.resume();
   if (command === "restart") await instance.restart();
@@ -620,6 +798,11 @@ async function handleRunCommand(
         type: "ci-evidence",
         payload: body.payload ?? body,
       });
+      await env.CONCLAVE_DB.prepare(
+        "UPDATE run_ci_evidence SET status = 'consumed', consumed_at = ?1 WHERE evidence_id = ?2 AND status = 'claimed'",
+      )
+        .bind(new Date().toISOString(), claimedEvidenceId)
+        .run();
     } else if (command === "forge-terminal") {
       await instance.sendEvent({
         type: "forge-terminal",

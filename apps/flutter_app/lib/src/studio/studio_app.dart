@@ -29,7 +29,7 @@ class _StudioAppState extends State<StudioApp> {
   bool showNewGoal = false;
   bool showWorkerDrawer = false;
   final objectiveController = TextEditingController();
-  final revisionController = TextEditingController(text: 'main');
+  final revisionController = TextEditingController();
 
   StudioProject? get selectedProject => snapshot.projects
       .where((project) => project.id == selectedProjectId)
@@ -47,11 +47,12 @@ class _StudioAppState extends State<StudioApp> {
 
   Future<void> _loadSnapshot(
       {String? projectId, bool showSpinner = true}) async {
-    if (showSpinner)
+    if (showSpinner) {
       setState(() {
         isLoading = true;
         loadError = null;
       });
+    }
     try {
       final loaded = await widget.dataSource.loadSnapshot(projectId: projectId);
       if (!mounted) return;
@@ -103,14 +104,19 @@ class _StudioAppState extends State<StudioApp> {
   Future<void> _createGoal() async {
     final projectId = selectedProjectId;
     final objective = objectiveController.text.trim();
-    if (projectId == null || objective.isEmpty) return;
+    final commitSha = revisionController.text.trim();
+    if (projectId == null || objective.isEmpty || commitSha.isEmpty) {
+      if (mounted) {
+        setState(
+            () => loadError = 'Enter an objective and expected commit SHA.');
+      }
+      return;
+    }
     try {
       await widget.dataSource.createGoal(
         projectId: projectId,
         objective: objective,
-        revision: revisionController.text.trim().isEmpty
-            ? 'HEAD'
-            : revisionController.text.trim(),
+        revision: commitSha,
       );
       objectiveController.clear();
       if (!mounted) return;
@@ -1046,8 +1052,8 @@ class _StudioAppState extends State<StudioApp> {
                 TextField(
                     controller: revisionController,
                     decoration: InputDecoration(
-                        labelText: 'Repository revision',
-                        hintText: 'main',
+                        labelText: 'Expected commit SHA',
+                        hintText: 'The commit CI must verify',
                         border: OutlineInputBorder())),
                 const SizedBox(height: 20),
                 Row(

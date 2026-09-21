@@ -78,4 +78,77 @@ describe("durable Forge lifecycle", () => {
       instance.run({ payload: params } as never, step),
     ).rejects.toThrow("does not match this run");
   });
+
+  it("accepts only CI evidence correlated to the run revision", async () => {
+    const correlatedParams = {
+      ...params,
+      repositoryId: "repo-1",
+      expectedCommitSha: "abc1234",
+      allowedWorkflows: ["CI"],
+      expectedChecks: ["typecheck"],
+      requireCiEvidence: true,
+    };
+    const { instance, step } = workflow([
+      {
+        eventId: "forge-event-4",
+        runId: "run-1",
+        executionId: "forge-execution-1",
+        status: "completed",
+      },
+      {
+        evidenceId: "evidence-1",
+        runId: "run-1",
+        repositoryId: "repo-1",
+        source: "github_actions",
+        externalRunId: "github-1",
+        commitSha: "abc1234",
+        workflow: "CI",
+        conclusion: "success",
+        checks: [{ name: "typecheck", status: "passed", artifactIds: [] }],
+        smokeTests: [],
+        healthChecks: [],
+        observedAt: "2026-09-21T10:00:00.000Z",
+      },
+    ]);
+    const result = await instance.run(
+      { payload: correlatedParams } as never,
+      step,
+    );
+    expect(result.stage).toBe("completed");
+    expect(result.machineEvidence?.commitSha).toBe("abc1234");
+  });
+
+  it("rejects CI evidence for an old commit", async () => {
+    const correlatedParams = {
+      ...params,
+      repositoryId: "repo-1",
+      expectedCommitSha: "abc1234",
+      requireCiEvidence: true,
+    };
+    const { instance, step } = workflow([
+      {
+        eventId: "forge-event-5",
+        runId: "run-1",
+        executionId: "forge-execution-1",
+        status: "completed",
+      },
+      {
+        evidenceId: "evidence-old",
+        runId: "run-1",
+        repositoryId: "repo-1",
+        source: "github_actions",
+        externalRunId: "github-old",
+        commitSha: "old000",
+        workflow: "CI",
+        conclusion: "success",
+        checks: [{ name: "typecheck", status: "passed", artifactIds: [] }],
+        smokeTests: [],
+        healthChecks: [],
+        observedAt: "2026-09-21T10:00:00.000Z",
+      },
+    ]);
+    await expect(
+      instance.run({ payload: correlatedParams } as never, step),
+    ).rejects.toThrow("commit SHA does not match");
+  });
 });

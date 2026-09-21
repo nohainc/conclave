@@ -70,6 +70,7 @@ class StudioApiClient implements StudioDataSource {
         'projectId': projectId,
         'objective': objective,
         'revision': revision,
+        'commitSha': revision,
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {

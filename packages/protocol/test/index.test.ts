@@ -153,9 +153,11 @@ describe("versioned protocol contracts", () => {
   it("accepts machine evidence and rejects unverified check claims", () => {
     const evidence = parseMachineCheckEvidence({
       evidenceId: "evidence-1",
+      runId: "run-1",
+      repositoryId: "repo-1",
       source: "github_actions",
       externalRunId: "run-100",
-      revision: "abc123",
+      commitSha: "abc123",
       workflow: "CI",
       conclusion: "success",
       checks: [

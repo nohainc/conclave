@@ -201,9 +201,11 @@ const checkResult = z
 const machineCheckEvidencePayload = z
   .object({
     evidenceId: id,
+    runId: id,
+    repositoryId: nonEmpty,
     source: z.enum(["github_actions", "local_runtime", "ci"]),
     externalRunId: nonEmpty,
-    revision: nonEmpty,
+    commitSha: nonEmpty,
     workflow: nonEmpty,
     conclusion: z.enum(["success", "failure", "cancelled", "neutral"]),
     checks: z.array(checkResult).min(1),

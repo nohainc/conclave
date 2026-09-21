@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import worker from "../src/index.js";
 
 const workflowExecutions = new Map<string, string>();
+const consumedEvidence = new Set<string>();
 const identityDb = {
   prepare(query: string) {
     let values: readonly unknown[] = [];
@@ -11,6 +12,17 @@ const identityDb = {
         return this;
       },
       async first<T>() {
+        if (query.includes("FROM runs r JOIN goals")) {
+          return {
+            policy_snapshot_json: JSON.stringify({
+              repositoryId: "repo-1",
+              expectedCommitSha: "abc1234",
+              allowedWorkflows: ["CI"],
+            }),
+            repository_id: "repo-1",
+            organization_id: "local-development",
+          } as T;
+        }
         if (query.includes("run_external_executions")) {
           const runId = String(values[0]);
           const workflowInstanceId = workflowExecutions.get(runId);
@@ -24,6 +36,14 @@ const identityDb = {
         return { results: [] as readonly T[] };
       },
       async run() {
+        if (query.includes("run_ci_evidence")) {
+          const evidenceId = String(values[0]);
+          if (consumedEvidence.has(evidenceId))
+            throw new Error(
+              "UNIQUE constraint failed: run_ci_evidence.evidence_id",
+            );
+          consumedEvidence.add(evidenceId);
+        }
         if (query.includes("run_external_executions")) {
           workflowExecutions.set(String(values[0]), String(values[1]));
         }
@@ -117,7 +137,12 @@ describe("Worker smoke tests", () => {
           "content-type": "application/json",
           "idempotency-key": "goal-1",
         },
-        body: JSON.stringify({ runId: "run-1", goalId: "goal-1" }),
+        body: JSON.stringify({
+          runId: "run-1",
+          goalId: "goal-1",
+          repositoryId: "repo-1",
+          commitSha: "abc1234",
+        }),
       }),
       env,
     );
@@ -133,6 +158,9 @@ describe("Worker smoke tests", () => {
         goalId: "goal-1",
         idempotencyKey: "goal-1",
         organizationId: "local-development",
+        repositoryId: "repo-1",
+        expectedCommitSha: "abc1234",
+        allowedWorkflows: ["CI"],
       },
     });
 
@@ -144,7 +172,12 @@ describe("Worker smoke tests", () => {
           "content-type": "application/json",
           "idempotency-key": "goal-1",
         },
-        body: JSON.stringify({ runId: "run-1", goalId: "goal-1" }),
+        body: JSON.stringify({
+          runId: "run-1",
+          goalId: "goal-1",
+          repositoryId: "repo-1",
+          commitSha: "abc1234",
+        }),
       }),
       env,
     );
@@ -231,9 +264,11 @@ describe("Worker smoke tests", () => {
 
     const ciEvidence = {
       evidenceId: "ci-evidence-1",
+      runId: "run-1",
+      repositoryId: "repo-1",
       source: "github_actions",
       externalRunId: "github-100",
-      revision: "abc123",
+      commitSha: "abc1234",
       workflow: "CI",
       conclusion: "success",
       checks: [
@@ -262,5 +297,14 @@ describe("Worker smoke tests", () => {
       type: "ci-evidence",
       payload: ciEvidence,
     });
+    const duplicateEvidenceResponse = await worker.fetch(
+      new Request("https://conclave.test/api/runs/run-1/ci-evidence", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(ciEvidence),
+      }),
+      env,
+    );
+    expect(duplicateEvidenceResponse.status).toBe(409);
   });
 });
