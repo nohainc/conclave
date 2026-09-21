@@ -47,12 +47,23 @@ class AssignmentJournal {
   Future<Map<String, AssignmentRecord>> reconcile() async {
     if (!await file.exists()) return {};
     final records = <String, AssignmentRecord>{};
-    for (final line in await file.readAsLines()) {
+    final lines = await file.readAsLines();
+    for (var index = 0; index < lines.length; index++) {
+      final line = lines[index];
       if (line.trim().isEmpty) continue;
-      final record = AssignmentRecord.fromJson(
-        Map<String, Object?>.from(jsonDecode(line) as Map),
-      );
-      records[record.assignmentId] = record;
+      try {
+        final record = AssignmentRecord.fromJson(
+          Map<String, Object?>.from(jsonDecode(line) as Map),
+        );
+        final previous = records[record.assignmentId];
+        if (previous == null || record.updatedAt.isAfter(previous.updatedAt)) {
+          records[record.assignmentId] = record;
+        }
+      } on Object {
+        if (index != lines.length - 1) rethrow;
+        // A crash may leave a partial final JSONL record. Earlier corruption
+        // remains fatal so durable state is not silently discarded.
+      }
     }
     return records;
   }
