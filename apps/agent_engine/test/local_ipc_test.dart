@@ -27,6 +27,45 @@ void main() {
     expect(() => parseLocalIpcMessage({'payload': {}}), throwsFormatException);
   });
 
+  test('closes a client that presents an invalid token', () async {
+    final server = LocalIpcServer(token: 'secret');
+    await server.start();
+    final socket =
+        await Socket.connect(InternetAddress.loopbackIPv4, server.port!);
+    final closed = Completer<void>();
+    socket.listen((_) {}, onDone: closed.complete);
+    socket.writeln(jsonEncode({'token': 'wrong'}));
+    await closed.future.timeout(const Duration(seconds: 2));
+    await server.close();
+  });
+
+  test('closes an unauthenticated client after the handshake timeout',
+      () async {
+    final server = LocalIpcServer(
+      token: 'secret',
+      authenticationTimeout: const Duration(milliseconds: 25),
+    );
+    await server.start();
+    final socket =
+        await Socket.connect(InternetAddress.loopbackIPv4, server.port!);
+    final closed = Completer<void>();
+    socket.listen((_) {}, onDone: closed.complete);
+    await closed.future.timeout(const Duration(seconds: 2));
+    await server.close();
+  });
+
+  test('closes clients that exceed the frame limit', () async {
+    final server = LocalIpcServer(token: 'secret', maxFrameBytes: 32);
+    await server.start();
+    final socket =
+        await Socket.connect(InternetAddress.loopbackIPv4, server.port!);
+    final closed = Completer<void>();
+    socket.listen((_) {}, onDone: closed.complete);
+    socket.write('x' * 64);
+    await closed.future.timeout(const Duration(seconds: 2));
+    await server.close();
+  });
+
   test('responds to authenticated commands without losing frame boundaries',
       () async {
     final response = Completer<Map<String, dynamic>>();

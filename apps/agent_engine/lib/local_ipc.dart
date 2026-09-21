@@ -122,13 +122,18 @@ class LocalIpcServer {
     required this.token,
     this.bindPort = 0,
     this.onCommand,
+    this.authenticationTimeout = const Duration(seconds: 2),
+    this.maxFrameBytes = 1024 * 1024,
   });
 
   final String token;
   final int bindPort;
   final LocalIpcCommandHandler? onCommand;
+  final Duration authenticationTimeout;
+  final int maxFrameBytes;
   ServerSocket? _server;
   final _messages = StreamController<LocalIpcMessage>.broadcast();
+  final _clients = <Socket>{};
 
   Stream<LocalIpcMessage> get messages => _messages.stream;
   int? get port => _server?.port;
@@ -139,9 +144,19 @@ class LocalIpcServer {
   }
 
   Future<void> _handleClient(Socket socket) async {
+    _clients.add(socket);
     var authenticated = false;
     var buffer = '';
+    Timer? authenticationTimer;
+    authenticationTimer = Timer(authenticationTimeout, () {
+      if (!authenticated) socket.destroy();
+    });
     socket.listen((bytes) {
+      if (bytes.length > maxFrameBytes ||
+          utf8.encode(buffer).length + bytes.length > maxFrameBytes) {
+        socket.destroy();
+        return;
+      }
       buffer += utf8.decode(bytes, allowMalformed: false);
       final lines = buffer.split('\n');
       buffer = lines.removeLast();
@@ -154,6 +169,7 @@ class LocalIpcServer {
               return;
             }
             authenticated = true;
+            authenticationTimer?.cancel();
             socket.writeln(jsonEncode({'ok': true}));
             continue;
           }
@@ -166,7 +182,11 @@ class LocalIpcServer {
           socket.writeln(jsonEncode({'ok': false, 'error': 'invalid_message'}));
         }
       }
-    }, onDone: socket.destroy);
+    }, onDone: () {
+      authenticationTimer?.cancel();
+      _clients.remove(socket);
+      socket.destroy();
+    });
   }
 
   Future<void> _respond(Socket socket, IpcCommand command) async {
@@ -190,6 +210,10 @@ class LocalIpcServer {
 
   Future<void> close() async {
     await _server?.close();
+    for (final client in _clients.toList()) {
+      client.destroy();
+    }
+    _clients.clear();
     await _messages.close();
   }
 }
