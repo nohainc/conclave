@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'cloud_connection.dart';
+import 'process_tree.dart';
 
 class PluginProcessSpec {
   const PluginProcessSpec({
@@ -35,7 +36,7 @@ class PluginProcessExecutor {
     PluginProcessLauncher? launcher,
     PluginProcessTerminator? terminator,
   })  : _launcher = launcher ?? _launch,
-        _terminator = terminator ?? _terminateTree;
+        _terminator = terminator ?? terminateProcessTree;
 
   final PluginProcessLauncher _launcher;
   final PluginProcessTerminator _terminator;
@@ -43,62 +44,13 @@ class PluginProcessExecutor {
   final _activeProcesses = <String, Process>{};
   final _activeResponses = <String, Completer<Map<String, Object?>>>{};
 
-  static Future<Process> _launch(PluginProcessSpec spec) async {
-    final environment = spec.environment.isEmpty ? null : spec.environment;
-    if (Platform.isWindows) {
-      return Process.start(
+  static Future<Process> _launch(PluginProcessSpec spec) =>
+      startIsolatedProcess(
         spec.executable,
         spec.arguments,
         workingDirectory: spec.workingDirectory,
-        environment: environment,
-        runInShell: false,
+        environment: spec.environment.isEmpty ? null : spec.environment,
       );
-    }
-
-    // setsid makes the plugin the leader of a new process group. This lets
-    // timeout/cancel terminate descendants instead of leaving orphaned tools.
-    try {
-      return await Process.start(
-        'setsid',
-        [spec.executable, ...spec.arguments],
-        workingDirectory: spec.workingDirectory,
-        environment: environment,
-        runInShell: false,
-      );
-    } on ProcessException {
-      // Keep development environments without setsid usable. The direct
-      // child is still terminated as a safe fallback.
-      return Process.start(
-        spec.executable,
-        spec.arguments,
-        workingDirectory: spec.workingDirectory,
-        environment: environment,
-        runInShell: false,
-      );
-    }
-  }
-
-  static Future<void> _terminateTree(
-    Process process, {
-    required bool force,
-  }) async {
-    if (Platform.isWindows) {
-      await Process.run('taskkill', [
-        '/PID',
-        '${process.pid}',
-        '/T',
-        if (force) '/F',
-      ]);
-      return;
-    }
-
-    // A negative PID addresses the isolated process group created by setsid.
-    final signal = force ? '-KILL' : '-TERM';
-    final result = await Process.run('kill', [signal, '-${process.pid}']);
-    if (result.exitCode != 0) {
-      process.kill(force ? ProcessSignal.sigkill : ProcessSignal.sigterm);
-    }
-  }
 
   Future<Map<String, Object?>> execute(
     PluginProcessSpec spec,

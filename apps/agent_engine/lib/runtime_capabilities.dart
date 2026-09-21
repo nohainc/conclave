@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
 
+import 'process_tree.dart';
+
 class RuntimeViolation implements Exception {
   const RuntimeViolation(this.message);
   final String message;
@@ -107,7 +109,7 @@ class SafeCommandRunner {
       throw const RuntimeViolation('command is not allowlisted');
     }
     final cwd = Directory(await workspace._contained(workingDirectory));
-    final process = await Process.start(
+    final process = await startIsolatedProcess(
       command.first,
       command.skip(1).toList(),
       workingDirectory: cwd.path,
@@ -118,7 +120,7 @@ class SafeCommandRunner {
     var timedOut = false;
     final exit = process.exitCode.timeout(policy.timeout, onTimeout: () {
       timedOut = true;
-      process.kill(ProcessSignal.sigkill);
+      unawaited(terminateProcessTree(process, force: true));
       return -1;
     });
     return CommandResult(
