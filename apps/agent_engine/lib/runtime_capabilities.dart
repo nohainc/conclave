@@ -67,6 +67,35 @@ class SafeWorkspace {
     await File(path).writeAsString(content, flush: true);
   }
 
+  Future<void> createDirectory(String relative) async {
+    final path = await _contained(relative, forWrite: true);
+    await Directory(path).create(recursive: true);
+  }
+
+  Future<void> patch(
+    String relative,
+    String oldContent,
+    String newContent, {
+    int expectedMatches = 1,
+  }) async {
+    if (expectedMatches <= 0) {
+      throw const RuntimeViolation('expected match count must be positive');
+    }
+    final path = await _contained(relative, forWrite: true);
+    final file = File(path);
+    final content = await file.readAsString();
+    final matches = oldContent.isEmpty
+        ? 0
+        : RegExp.escape(oldContent).allMatches(content).length;
+    if (matches != expectedMatches) {
+      throw RuntimeViolation(
+        'patch expected $expectedMatches matches but found $matches',
+      );
+    }
+    await file.writeAsString(content.replaceFirst(oldContent, newContent),
+        flush: true);
+  }
+
   Future<void> delete(String relative) async {
     final path = await _contained(relative, forWrite: true);
     await File(path).delete();
@@ -75,6 +104,59 @@ class SafeWorkspace {
   Future<String> digest(String relative) async {
     final path = await _contained(relative);
     return sha256.convert(await File(path).readAsBytes()).toString();
+  }
+
+  Future<List<String>> search(
+    String query, {
+    String relativeRoot = '.',
+    int maxResults = 100,
+    int maxFileBytes = 1024 * 1024,
+    Set<String> ignoredDirectories = const {
+      '.git',
+      '.dart_tool',
+      'node_modules'
+    },
+  }) async {
+    if (query.isEmpty || maxResults <= 0 || maxFileBytes <= 0) {
+      throw const RuntimeViolation('invalid search options');
+    }
+    final rootPath = await _contained(relativeRoot);
+    final searchRoot = Directory(rootPath);
+    if (!await searchRoot.exists()) {
+      throw const RuntimeViolation('search root does not exist');
+    }
+    final matches = <String>[];
+    await for (final entity
+        in searchRoot.list(recursive: true, followLinks: false)) {
+      if (matches.length >= maxResults) break;
+      if (entity is! File || await entity.length() > maxFileBytes) continue;
+      final relative = _relativePath(entity.path);
+      if (relative
+          .split(Platform.pathSeparator)
+          .any(ignoredDirectories.contains)) {
+        continue;
+      }
+      try {
+        await _contained(relative);
+        if ((await entity.readAsString()).contains(query)) {
+          matches.add(relative);
+        }
+      } on FormatException {
+        // Binary files are not text search candidates.
+      }
+    }
+    return matches;
+  }
+
+  String _relativePath(String absolutePath) {
+    final prefix = root.path.endsWith(Platform.pathSeparator)
+        ? root.path
+        : '${root.path}${Platform.pathSeparator}';
+    if (!absolutePath.startsWith(prefix)) {
+      throw const RuntimeViolation('path escapes workspace root');
+    }
+    final relative = absolutePath.substring(prefix.length);
+    return relative == '.' ? relative : relative.replaceFirst('./', '');
   }
 }
 
@@ -176,6 +258,49 @@ class SafeCommandRunner {
     }
     return utf8.decode(bytes, allowMalformed: true);
   }
+}
+
+class GitRepository {
+  GitRepository(this.workspace, {this.gitExecutable = 'git'});
+
+  final SafeWorkspace workspace;
+  final String gitExecutable;
+
+  Future<void> validate() async {
+    final result = await _run(['rev-parse', '--is-inside-work-tree']);
+    if (result.exitCode != 0 || result.stdout.trim() != 'true') {
+      throw const RuntimeViolation('workspace is not a Git repository');
+    }
+  }
+
+  Future<CommandResult> status() => _run(['status', '--short']);
+
+  Future<CommandResult> diff() => _run(['diff', '--no-ext-diff']);
+
+  Future<String> currentRevision() async {
+    final result = await _run(['rev-parse', 'HEAD']);
+    if (result.exitCode != 0) {
+      throw const RuntimeViolation('could not resolve Git revision');
+    }
+    return result.stdout.trim();
+  }
+
+  Future<String> branch() async {
+    final result = await _run(['branch', '--show-current']);
+    if (result.exitCode != 0) {
+      throw const RuntimeViolation('could not resolve Git branch');
+    }
+    return result.stdout.trim();
+  }
+
+  Future<CommandResult> _run(List<String> arguments) =>
+      SafeCommandRunner(workspace).run([gitExecutable, ...arguments],
+          policy: CommandPolicy(
+            allowedExecutables: {gitExecutable},
+            allowedArgumentPatterns: {
+              gitExecutable: [RegExp(r'^[A-Za-z0-9_./:@=-]+$')],
+            },
+          ));
 }
 
 class RuntimeArtifact {

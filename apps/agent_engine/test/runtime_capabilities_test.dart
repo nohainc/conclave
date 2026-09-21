@@ -13,6 +13,49 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('blocks symlink escapes for reads and writes', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-runtime-');
+    final outside =
+        await Directory.systemTemp.createTemp('conclave-runtime-outside-');
+    final secret = File('${outside.path}/secret.txt')
+      ..writeAsStringSync('private');
+    await Link('${directory.path}/linked.txt').create(secret.path);
+    final workspace = SafeWorkspace(directory);
+    await expectLater(
+        workspace.read('linked.txt'), throwsA(isA<RuntimeViolation>()));
+    await expectLater(workspace.write('linked.txt', 'overwrite'),
+        throwsA(isA<RuntimeViolation>()));
+    await directory.delete(recursive: true);
+    await outside.delete(recursive: true);
+  });
+
+  test('patches exact content and searches bounded text files', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-runtime-');
+    final workspace = SafeWorkspace(directory);
+    await workspace.write('lib/main.dart', 'return 1;\n');
+    await workspace.write('node_modules/ignored.txt', 'return 1;\n');
+    await workspace.patch('lib/main.dart', 'return 1;', 'return 2;');
+    expect(await workspace.read('lib/main.dart'), 'return 2;\n');
+    expect(await workspace.search('return'), ['lib/main.dart']);
+    await expectLater(
+      workspace.patch('lib/main.dart', 'missing', 'replacement'),
+      throwsA(isA<RuntimeViolation>()),
+    );
+    await directory.delete(recursive: true);
+  });
+
+  test('rejects an invalid Git repository', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-runtime-');
+    await expectLater(
+      GitRepository(SafeWorkspace(directory)).validate(),
+      throwsA(isA<RuntimeViolation>()),
+    );
+    await directory.delete(recursive: true);
+  });
+
   test('enforces command allowlist and output policy', () async {
     final directory =
         await Directory.systemTemp.createTemp('conclave-runtime-');
