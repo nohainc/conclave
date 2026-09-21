@@ -19,6 +19,48 @@ Set<PluginPermission> _configuredPermissions() {
       .toSet();
 }
 
+Future<List<int>> _downloadPlugin(
+  Uri cloudUri,
+  String? authToken,
+  String pluginId,
+  String version,
+  String packageR2Key,
+) async {
+  final scheme = cloudUri.scheme == 'wss' ? 'https' : 'http';
+  final uri = cloudUri.replace(
+    scheme: scheme,
+    pathSegments: [
+      'api',
+      'plugins',
+      pluginId,
+      'versions',
+      version,
+      'download',
+    ],
+    queryParameters: {'packageR2Key': packageR2Key},
+  );
+  final client = HttpClient();
+  try {
+    final request = await client.getUrl(uri);
+    if (authToken != null) {
+      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
+    }
+    final response = await request.close();
+    final bytes = await response.fold<List<int>>(
+      <int>[],
+      (buffer, chunk) => buffer..addAll(chunk),
+    );
+    if (response.statusCode != HttpStatus.ok) {
+      throw StateError(
+        'plugin download failed with HTTP ${response.statusCode}',
+      );
+    }
+    return bytes;
+  } finally {
+    client.close(force: true);
+  }
+}
+
 Future<void> main(List<String> args) async {
   final config = AgentEngineConfig.fromArgs(args);
   final publisher =
@@ -46,6 +88,23 @@ Future<void> main(List<String> args) async {
           assignmentJournal: AssignmentJournal(
             File('${config.dataDirectory.path}/assignments.jsonl'),
           ),
+          syncHandler: (payload) async {
+            final raw = payload['desiredPlugins'];
+            if (raw is! List) return;
+            final desired = raw
+                .whereType<Map>()
+                .map((item) => Map<String, Object?>.from(item));
+            await pluginManager.reconcile(
+              desired,
+              download: (pluginId, version, packageR2Key) => _downloadPlugin(
+                config.cloudUri!,
+                config.authToken,
+                pluginId,
+                version,
+                packageR2Key,
+              ),
+            );
+          },
           factory: (uri) => connectIoAgentCloudSocket(
             uri,
             authToken: config.authToken,

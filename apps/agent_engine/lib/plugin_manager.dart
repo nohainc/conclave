@@ -97,6 +97,57 @@ class PluginManager {
   final String engineVersion;
   final String protocolVersion;
 
+  /// Installs the versions requested by Cloud during Agent reconciliation.
+  /// The package bytes are fetched by the caller so transport/authentication
+  /// stays outside the plugin manager, while digest and signature admission
+  /// remains centralized here.
+  Future<void> reconcile(
+    Iterable<Map<String, Object?>> desired, {
+    required Future<List<int>> Function(
+      String pluginId,
+      String version,
+      String packageR2Key,
+    ) download,
+  }) async {
+    for (final item in desired) {
+      final pluginId = item['pluginId'];
+      final version = item['version'];
+      final publisher = item['publisher'];
+      final packageR2Key = item['packageR2Key'];
+      final digest = item['packageDigest'];
+      final signature = item['signature'];
+      final permissions = item['permissions'];
+      if (pluginId is! String ||
+          version is! String ||
+          publisher is! String ||
+          packageR2Key is! String ||
+          digest is! String ||
+          signature is! String ||
+          permissions is! List) {
+        throw StateError('Cloud returned an invalid desired plugin');
+      }
+      if (await activeVersion(pluginId) == version) continue;
+      final bytes = await download(pluginId, version, packageR2Key);
+      await install(PluginPackage(
+        id: pluginId,
+        version: version,
+        bytes: bytes,
+        digest: digest,
+        publisher: publisher,
+        signature: signature,
+        permissions: permissions
+            .whereType<String>()
+            .map((value) => PluginPermission.values.firstWhere(
+                  (permission) => permission.name == value,
+                  orElse: () => throw StateError(
+                    'desired plugin contains an unknown permission',
+                  ),
+                ))
+            .toList(),
+      ));
+    }
+  }
+
   static String _currentPlatformKey() {
     final os = switch (Platform.operatingSystem) {
       'macos' => 'macos',

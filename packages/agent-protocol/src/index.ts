@@ -110,6 +110,7 @@ export const DesiredPluginSchema = z
   .object({
     pluginId: nonEmptyStr,
     version: nonEmptyStr,
+    publisher: nonEmptyStr,
     packageR2Key: nonEmptyStr,
     packageDigest: nonEmptyStr,
     signature: nonEmptyStr,

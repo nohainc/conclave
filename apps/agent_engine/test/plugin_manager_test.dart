@@ -174,6 +174,40 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('reconciles signed desired plugins from Cloud', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-plugins-');
+    final bytes = [30, 31, 32];
+    final digest = sha256.convert(bytes).toString();
+    const policy = PluginTrustPolicy(trustedSecrets: {'publisher': 'root'});
+    final manager = PluginManager(
+      directory,
+      trustPolicy: policy,
+      allowedPermissions: {PluginPermission.readWorkspace},
+    );
+    await manager.reconcile(
+      [
+        {
+          'pluginId': 'cloud-plugin',
+          'version': '1.0.0',
+          'publisher': 'publisher',
+          'packageR2Key': 'plugins/cloud-plugin/1.0.0/package.bin',
+          'packageDigest': digest,
+          'signature': policy.sign('publisher', digest),
+          'permissions': ['readWorkspace'],
+        },
+      ],
+      download: (pluginId, version, packageR2Key) async {
+        expect(pluginId, 'cloud-plugin');
+        expect(version, '1.0.0');
+        expect(packageR2Key, contains('cloud-plugin'));
+        return bytes;
+      },
+    );
+    expect(await manager.activeVersion('cloud-plugin'), '1.0.0');
+    await directory.delete(recursive: true);
+  });
+
   test('rechecks signing revocation before launching an installed plugin',
       () async {
     final directory =

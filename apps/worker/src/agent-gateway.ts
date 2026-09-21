@@ -426,7 +426,7 @@ export class AgentGateway implements DurableObject {
           }));
 
           const pluginRows = await this.env.CONCLAVE_DB.prepare(
-            `SELECT pv.*, p.id as plugin_id FROM worker_plugin_versions pv
+            `SELECT pv.*, p.id as plugin_id, p.publisher as publisher FROM worker_plugin_versions pv
              JOIN worker_plugins p ON p.id = pv.plugin_id
              JOIN workers w ON w.plugin_id = p.id
              WHERE p.status = 'active'
@@ -439,6 +439,7 @@ export class AgentGateway implements DurableObject {
           desiredPlugins = (pluginRows.results || []).map((row) => ({
             pluginId: String(row.plugin_id),
             version: String(row.version),
+            publisher: String(row.publisher),
             packageR2Key: String(row.package_r2_key),
             packageDigest: String(row.package_digest),
             signature: String(row.signature),
