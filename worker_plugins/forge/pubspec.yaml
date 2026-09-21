@@ -1,0 +1,14 @@
+name: conclave_forge_plugin
+description: Forge Worker Plugin for the Dart Agent Engine acceptance path.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+
+dependencies:
+  conclave_agent_engine:
+    path: ../../apps/agent_engine
+
+dev_dependencies:
+  test: ^1.25.0

@@ -70,4 +70,33 @@ void main() {
       throwsA(isA<TimeoutException>()),
     );
   });
+
+  test('executes the Forge plugin against the real fixture repository',
+      () async {
+    final repository = Directory.current.parent.parent;
+    final fixture = Directory('${repository.path}/fixtures/conclave-e2e-fixture');
+    await Process.run('git', ['checkout', '--', 'lib/add.js'],
+        workingDirectory: fixture.path);
+    try {
+      final result = await PluginProcessExecutor().execute(
+        PluginProcessSpec(
+          pluginId: 'conclave.forge',
+          executable: Platform.resolvedExecutable,
+          arguments: ['run', 'bin/forge_plugin.dart'],
+          workingDirectory: '${repository.path}/worker_plugins/forge',
+        ),
+        {
+          'objective': 'Fix add and verify the implementation',
+          'pluginId': 'conclave.forge',
+          'input': {'repositoryPath': fixture.path},
+        },
+        timeout: const Duration(minutes: 1),
+      );
+      expect(result['status'], 'completed');
+      expect(result['summary'], contains('Forge completed'));
+    } finally {
+      await Process.run('git', ['checkout', '--', 'lib/add.js'],
+          workingDirectory: fixture.path);
+    }
+  });
 }
