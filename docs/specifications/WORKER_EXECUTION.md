@@ -249,7 +249,27 @@ Worker. Core rejects policies that reuse a candidate as the synthesizer or
 selector. Candidate and decision requests receive distinct request IDs and the
 selected Worker/Connection IDs, so every execution remains auditable.
 
-## 8. Session isolation
+## 8. Read-only multi-worker roles
+
+Before implementation or other write-capable work, Core can run an independent
+read-only panel with these roles:
+
+- `researcher` — repository and evidence discovery;
+- `architect` — architecture proposals;
+- `planner` — implementation/task proposals;
+- `reviewer` — independent review of the current evidence or proposal.
+
+Each role requires its declared capability and `repository_read` permission.
+Workers carrying write, shell, build, or runtime-write permissions are rejected
+from the panel. Workers must also have distinct independence keys, so a panel
+cannot claim independent perspectives from two bindings of the same underlying
+worker.
+
+The panel returns role-labelled, correlated `WorkerExecutionResult` values.
+Their outputs can then be passed to the generic synthesis/evaluation Task from
+the previous section; no Forge-specific worker selection is involved.
+
+## 9. Session isolation
 
 A Worker execution may request:
 - a new isolated session;
@@ -260,7 +280,7 @@ Independent research/review must use isolated session/context unless policy expl
 
 Separate chats/sessions using the same underlying model can provide context independence but do not count as provider independence.
 
-## 9. Fallback routing
+## 10. Fallback routing
 
 A Worker policy may define ordered fallbacks.
 
@@ -282,7 +302,7 @@ Fallback occurs only for defined failure classes such as:
 
 A content/verification failure is not silently converted into a provider fallback unless policy allows a retry or alternate worker.
 
-## 10. Initial implementation priority
+## 11. Initial implementation priority
 
 The first production transports should be:
 
