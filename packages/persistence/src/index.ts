@@ -54,6 +54,7 @@ export interface GoalRecord extends EntityRecord {
 
 export interface RunRecord extends EntityRecord {
   readonly goalId: string;
+  readonly workflowInstanceId?: string | null;
   readonly parentRunId: string | null;
   readonly policySnapshot: JsonValue;
   readonly currentPhaseId: string | null;

@@ -27,8 +27,43 @@ function requiredString(value: unknown, field: string): string {
   return value;
 }
 
-function workflowId(idempotencyKey: string): string {
-  return `run-${idempotencyKey}`;
+function workflowInstanceId(idempotencyKey: string): string {
+  return `workflow-${idempotencyKey}`;
+}
+
+interface WorkflowExecutionRow {
+  readonly workflow_instance_id: string;
+}
+
+async function resolveWorkflowInstanceId(
+  env: Env,
+  runId: string,
+  idempotencyKey?: string,
+): Promise<string> {
+  const existing = await env.CONCLAVE_DB.prepare(
+    "SELECT workflow_instance_id FROM run_external_executions WHERE run_id = ?1 AND execution_type = 'cloudflare_workflow'",
+  )
+    .bind(runId)
+    .first<WorkflowExecutionRow>();
+  if (existing) return existing.workflow_instance_id;
+  if (!idempotencyKey)
+    throw new HttpError(404, "Run workflow execution not found");
+  const candidate = workflowInstanceId(idempotencyKey);
+  await env.CONCLAVE_DB.prepare(
+    `INSERT INTO run_external_executions (run_id, execution_type, workflow_instance_id, external_run_id, status, created_at, updated_at)
+     VALUES (?1, 'cloudflare_workflow', ?2, NULL, 'created', ?3, ?3)
+     ON CONFLICT(run_id, execution_type) DO NOTHING`,
+  )
+    .bind(runId, candidate, new Date().toISOString())
+    .run();
+  const persisted = await env.CONCLAVE_DB.prepare(
+    "SELECT workflow_instance_id FROM run_external_executions WHERE run_id = ?1 AND execution_type = 'cloudflare_workflow'",
+  )
+    .bind(runId)
+    .first<WorkflowExecutionRow>();
+  if (!persisted)
+    throw new Error("Run workflow execution mapping was not persisted");
+  return persisted.workflow_instance_id;
 }
 
 class HttpError extends Error {
@@ -164,14 +199,18 @@ async function createOrGetRun(
   env: Env,
   params: ConclaveWorkflowParams,
 ): Promise<{ id: string; status: unknown }> {
-  const id = workflowId(params.idempotencyKey);
+  const id = await resolveWorkflowInstanceId(
+    env,
+    params.runId,
+    params.idempotencyKey,
+  );
   try {
     const instance = await env.CONCLAVE_RUN_WORKFLOW.create({ id, params });
-    return { id: instance.id, status: (await instance.status()).status };
+    return { id: params.runId, status: (await instance.status()).status };
   } catch (error) {
     if (!errorMessage(error).toLowerCase().includes("exist")) throw error;
     const instance = await env.CONCLAVE_RUN_WORKFLOW.get(id);
-    return { id: instance.id, status: (await instance.status()).status };
+    return { id: params.runId, status: (await instance.status()).status };
   }
 }
 
@@ -333,7 +372,8 @@ async function handleRunCommand(
     command === "ci-evidence" ? "run:control" : "run:control",
     projectId,
   );
-  const instance = await env.CONCLAVE_RUN_WORKFLOW.get(runId);
+  const workflowInstanceId = await resolveWorkflowInstanceId(env, runId);
+  const instance = await env.CONCLAVE_RUN_WORKFLOW.get(workflowInstanceId);
   if (command === "pause") await instance.pause();
   if (command === "resume") await instance.resume();
   if (command === "restart") await instance.restart();
@@ -352,7 +392,11 @@ async function handleRunCommand(
       await instance.sendEvent({ type, payload: body.payload });
     }
   }
-  return json({ id: instance.id, status: (await instance.status()).status });
+  return json({
+    id: runId,
+    workflowInstanceId,
+    status: (await instance.status()).status,
+  });
 }
 
 export default {
@@ -383,8 +427,17 @@ export default {
           ? undefined
           : await runProjectId(securityEnv, runMatch[1]);
         await authorizeRequest(request, securityEnv, "project:read", projectId);
-        const instance = await env.CONCLAVE_RUN_WORKFLOW.get(runMatch[1]);
-        return json({ id: instance.id, ...(await instance.status()) });
+        const workflowInstanceId = await resolveWorkflowInstanceId(
+          env,
+          runMatch[1],
+        );
+        const instance =
+          await env.CONCLAVE_RUN_WORKFLOW.get(workflowInstanceId);
+        return json({
+          id: runMatch[1],
+          workflowInstanceId,
+          ...(await instance.status()),
+        });
       }
       if (runMatch?.[1] && request.method === "POST" && runMatch[2]) {
         const command =

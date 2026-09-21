@@ -1,6 +1,41 @@
 import { describe, expect, it, vi } from "vitest";
 import worker from "../src/index.js";
 
+const workflowExecutions = new Map<string, string>();
+const identityDb = {
+  prepare(query: string) {
+    let values: readonly unknown[] = [];
+    return {
+      bind(...next: unknown[]) {
+        values = next;
+        return this;
+      },
+      async first<T>() {
+        if (query.includes("run_external_executions")) {
+          const runId = String(values[0]);
+          const workflowInstanceId = workflowExecutions.get(runId);
+          return workflowInstanceId
+            ? ({ workflow_instance_id: workflowInstanceId } as T)
+            : null;
+        }
+        return null;
+      },
+      async all<T>() {
+        return { results: [] as readonly T[] };
+      },
+      async run() {
+        if (query.includes("run_external_executions")) {
+          workflowExecutions.set(String(values[0]), String(values[1]));
+        }
+        return { success: true };
+      },
+    };
+  },
+  async batch() {
+    return [];
+  },
+};
+
 const instance = {
   id: "run-key-1",
   status: vi.fn(async () => ({ status: "waiting" })),
@@ -19,6 +54,7 @@ const env = {
   CONCLAVE_ENVIRONMENT: "development",
   CONCLAVE_ALLOW_ANONYMOUS_DEV: "true",
   CONCLAVE_RUN_WORKFLOW: workflowBinding,
+  CONCLAVE_DB: identityDb,
 } as unknown as Env;
 
 describe("Worker smoke tests", () => {
@@ -87,11 +123,11 @@ describe("Worker smoke tests", () => {
     );
     expect(response.status).toBe(202);
     expect(await response.json()).toEqual({
-      id: "run-key-1",
+      id: "run-1",
       status: "waiting",
     });
     expect(workflowBinding.create).toHaveBeenCalledWith({
-      id: "run-goal-1",
+      id: "workflow-goal-1",
       params: { runId: "run-1", goalId: "goal-1", idempotencyKey: "goal-1" },
     });
 
@@ -108,10 +144,10 @@ describe("Worker smoke tests", () => {
       env,
     );
     expect(duplicate.status).toBe(202);
-    expect(workflowBinding.get).toHaveBeenCalledWith("run-goal-1");
+    expect(workflowBinding.get).toHaveBeenCalledWith("workflow-goal-1");
 
     const eventResponse = await worker.fetch(
-      new Request("https://conclave.test/api/runs/run-goal-1/events", {
+      new Request("https://conclave.test/api/runs/run-1/events", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -128,19 +164,44 @@ describe("Worker smoke tests", () => {
     });
 
     await worker.fetch(
-      new Request("https://conclave.test/api/runs/run-goal-1/pause", {
+      new Request("https://conclave.test/api/runs/run-1/pause", {
         method: "POST",
       }),
       env,
     );
     await worker.fetch(
-      new Request("https://conclave.test/api/runs/run-goal-1/resume", {
+      new Request("https://conclave.test/api/runs/run-1/resume", {
+        method: "POST",
+      }),
+      env,
+    );
+    const statusResponse = await worker.fetch(
+      new Request("https://conclave.test/api/runs/run-1"),
+      {
+        ...env,
+        CONCLAVE_RUN_WORKFLOW: {
+          ...workflowBinding,
+          get: vi.fn(async (id: string) => {
+            expect(id).toBe("workflow-goal-1");
+            return instance;
+          }),
+        },
+      } as unknown as Env,
+    );
+    expect(await statusResponse.json()).toEqual({
+      id: "run-1",
+      workflowInstanceId: "workflow-goal-1",
+      status: "waiting",
+    });
+    await worker.fetch(
+      new Request("https://conclave.test/api/runs/run-1/restart", {
         method: "POST",
       }),
       env,
     );
     expect(instance.pause).toHaveBeenCalledOnce();
     expect(instance.resume).toHaveBeenCalledOnce();
+    expect(instance.restart).toHaveBeenCalledOnce();
 
     const ciEvidence = {
       evidenceId: "ci-evidence-1",
@@ -163,7 +224,7 @@ describe("Worker smoke tests", () => {
       observedAt: "2026-09-21T10:00:00.000Z",
     };
     const ciResponse = await worker.fetch(
-      new Request("https://conclave.test/api/runs/run-goal-1/ci-evidence", {
+      new Request("https://conclave.test/api/runs/run-1/ci-evidence", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(ciEvidence),

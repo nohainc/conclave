@@ -164,6 +164,11 @@ export class D1RunRepository {
     return {
       id: String(row.id),
       goalId: String(row.goal_id),
+      workflowInstanceId:
+        row.workflow_instance_id === null ||
+        row.workflow_instance_id === undefined
+          ? null
+          : String(row.workflow_instance_id),
       parentRunId:
         row.parent_run_id === null ? null : String(row.parent_run_id),
       policySnapshot: parse(row.policy_snapshot_json, {}),
@@ -178,11 +183,12 @@ export class D1RunRepository {
   async save(run: RunRecord): Promise<void> {
     await this.db
       .prepare(
-        `INSERT INTO runs (id, goal_id, parent_run_id, policy_snapshot_json, current_phase_id, status, started_at, finished_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10) ON CONFLICT(id) DO UPDATE SET status=excluded.status, current_phase_id=excluded.current_phase_id, started_at=excluded.started_at, finished_at=excluded.finished_at, updated_at=excluded.updated_at`,
+        `INSERT INTO runs (id, goal_id, workflow_instance_id, parent_run_id, policy_snapshot_json, current_phase_id, status, started_at, finished_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11) ON CONFLICT(id) DO UPDATE SET workflow_instance_id=excluded.workflow_instance_id, status=excluded.status, current_phase_id=excluded.current_phase_id, started_at=excluded.started_at, finished_at=excluded.finished_at, updated_at=excluded.updated_at`,
       )
       .bind(
         run.id,
         run.goalId,
+        run.workflowInstanceId ?? null,
         run.parentRunId,
         json(run.policySnapshot),
         run.currentPhaseId,
