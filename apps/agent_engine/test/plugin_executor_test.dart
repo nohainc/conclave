@@ -72,6 +72,23 @@ void main() {
     );
   });
 
+  test('cancels an active plugin process by operation ID', () async {
+    final executor = PluginProcessExecutor();
+    final execution = executor.execute(
+      PluginProcessSpec(
+        pluginId: 'silent',
+        executable: Platform.resolvedExecutable,
+        arguments: ['-e', 'Future<void>.delayed(Duration(seconds: 5));'],
+      ),
+      {},
+      operationId: 'assignment-cancel-1',
+      timeout: const Duration(seconds: 10),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(await executor.cancel('assignment-cancel-1'), isTrue);
+    await expectLater(execution, throwsA(isA<ProcessException>()));
+  });
+
   test('executes the Forge plugin against the real fixture repository',
       () async {
     final repository = Directory.current.parent.parent;

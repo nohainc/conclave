@@ -32,6 +32,8 @@ class PluginProcessExecutor {
 
   final PluginProcessLauncher _launcher;
   int _requestSequence = 0;
+  final _activeProcesses = <String, Process>{};
+  final _activeResponses = <String, Completer<Map<String, Object?>>>{};
 
   static Future<Process> _launch(PluginProcessSpec spec) => Process.start(
         spec.executable,
@@ -47,11 +49,15 @@ class PluginProcessExecutor {
     Duration timeout = const Duration(minutes: 5),
     int maxStdoutBytes = 1024 * 1024,
     int maxStderrBytes = 1024 * 1024,
+    String? operationId,
   }) async {
     final process = await _launcher(spec);
     final requestId = 'agent-${DateTime.now().microsecondsSinceEpoch}-'
         '${++_requestSequence}';
+    final processId = operationId ?? requestId;
+    _activeProcesses[processId] = process;
     final response = Completer<Map<String, Object?>>();
+    _activeResponses[processId] = response;
     var stdoutBytes = 0;
     var stderrBytes = 0;
     void fail(String message) {
@@ -116,7 +122,23 @@ class PluginProcessExecutor {
       await stdoutSubscription.cancel();
       await stderrSubscription.cancel();
       process.kill(ProcessSignal.sigterm);
+      _activeProcesses.remove(processId);
+      _activeResponses.remove(processId);
     }
+  }
+
+  Future<bool> cancel(String operationId) async {
+    final process = _activeProcesses[operationId];
+    if (process == null) return false;
+    _activeProcesses.remove(operationId);
+    final response = _activeResponses[operationId];
+    if (response != null && !response.isCompleted) {
+      response.completeError(
+        ProcessException('cancelled', const [], 'Plugin assignment cancelled'),
+      );
+    }
+    process.kill(ProcessSignal.sigterm);
+    return true;
   }
 }
 
@@ -136,7 +158,11 @@ class PluginAssignmentHandler {
     }
     final spec = await resolve(pluginId);
     if (spec == null) throw StateError('plugin is not installed: $pluginId');
-    final output = await executor.execute(spec, context.payload);
+    final output = await executor.execute(
+      spec,
+      context.payload,
+      operationId: context.assignmentId,
+    );
     final summary = output['summary'];
     final nestedOutput = output['output'];
     return AgentAssignmentResult(
@@ -151,4 +177,7 @@ class PluginAssignmentHandler {
           : const [],
     );
   }
+
+  Future<bool> cancel(String assignmentId, String reason) =>
+      executor.cancel(assignmentId);
 }

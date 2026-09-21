@@ -42,6 +42,7 @@ Future<void> main(List<String> args) async {
           agentId: config.agentId!,
           workspaceId: config.workspaceId!,
           assignmentHandler: pluginHandler.call,
+          assignmentCancellationHandler: pluginHandler.cancel,
           assignmentJournal: AssignmentJournal(
             File('${config.dataDirectory.path}/assignments.jsonl'),
           ),
