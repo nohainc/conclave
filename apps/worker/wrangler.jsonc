@@ -38,4 +38,18 @@
       "class_name": "ConclaveRunWorkflow",
     },
   ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "CONCLAVE_RUNTIME_CONNECTION",
+        "class_name": "RuntimeConnection",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1-runtime-connection",
+      "new_sqlite_classes": ["RuntimeConnection"],
+    },
+  ],
 }

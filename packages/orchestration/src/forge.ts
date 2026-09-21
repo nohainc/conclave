@@ -58,17 +58,20 @@ export interface ForgeRuntimeEvidence {
 
 export interface ForgeRuntimeAdapter {
   inspect(input: {
+    readonly taskId: string;
     readonly repositoryId: string;
     readonly revision: string;
     readonly objective: string;
   }): Promise<ForgeRuntimeEvidence>;
   apply(input: {
+    readonly taskId: string;
     readonly repositoryId: string;
     readonly revision: string;
     readonly implementation: ImplementationResult;
     readonly operations: readonly ImplementationOperation[];
   }): Promise<ForgeRuntimeEvidence>;
   test(input: {
+    readonly taskId: string;
     readonly repositoryId: string;
     readonly revision: string;
     readonly changedFiles: readonly string[];
@@ -565,6 +568,7 @@ export async function executeForgeGoal(
   const researchEvidenceId = await runtimeArtifact(
     researchTask.id,
     await input.runtime.inspect({
+      taskId: researchTask.id,
       repositoryId: input.repositoryId,
       revision: input.revision,
       objective: input.goal.objective,
@@ -732,6 +736,7 @@ export async function executeForgeGoal(
     implementationEvidenceId = await runtimeArtifact(
       implementationTask.id,
       await input.runtime.apply({
+        taskId: implementationTask.id,
         repositoryId: input.repositoryId,
         revision: input.revision,
         implementation,
@@ -881,6 +886,7 @@ export async function executeForgeGoal(
     implementationEvidenceId = await runtimeArtifact(
       correctionTask.id,
       await input.runtime.apply({
+        taskId: correctionTask.id,
         repositoryId: input.repositoryId,
         revision: input.revision,
         implementation,
@@ -904,6 +910,7 @@ export async function executeForgeGoal(
     "TestResult",
   );
   const machineEvidence = await input.runtime.test({
+    taskId: testTask.id,
     repositoryId: input.repositoryId,
     revision: input.revision,
     changedFiles: implementation.payload.changedFiles,

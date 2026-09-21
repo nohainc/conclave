@@ -1,4 +1,5 @@
 export { ConclaveRunWorkflow } from "./workflow.js";
+export { RuntimeConnection } from "./runtime-connection.js";
 import {
   authorize,
   type Permission,
@@ -82,6 +83,9 @@ type SecurityEnv = Env & {
   readonly CONCLAVE_ALLOW_ANONYMOUS_DEV?: string;
   readonly CONCLAVE_CI_INGEST_TOKEN?: string;
   readonly CONCLAVE_FORGE_CALLBACK_TOKEN?: string;
+  readonly CONCLAVE_RUNTIME_CONNECT_TOKEN?: string;
+  readonly CONCLAVE_RUNTIME_OPERATION_TOKEN?: string;
+  readonly CONCLAVE_RUNTIME_CONNECTION: DurableObjectNamespace;
 };
 
 function anonymousDevelopment(env: SecurityEnv): boolean {
@@ -183,6 +187,27 @@ function requireForgeCallbackAuthentication(
   ) {
     throw new HttpError(401, "Forge callback authentication required");
   }
+}
+
+function runtimeToken(
+  request: Request,
+  env: SecurityEnv,
+  tokenName: keyof SecurityEnv,
+): void {
+  const configured = env[tokenName];
+  const provided =
+    bearer(request) ?? new URL(request.url).searchParams.get("token");
+  if (!configured || provided !== configured) {
+    throw new HttpError(401, "Runtime authentication required");
+  }
+}
+
+function runtimeConnectionId(request: Request): string {
+  const value = request.headers.get("x-conclave-runtime-id");
+  if (!value || !/^[a-zA-Z0-9_-]{1,100}$/.test(value)) {
+    throw new HttpError(400, "Runtime connection ID is required");
+  }
+  return value;
 }
 
 async function runProjectId(
@@ -436,6 +461,34 @@ export default {
     }
 
     try {
+      if (request.method === "GET" && url.pathname === "/api/runtime/connect") {
+        const securityEnv = env as SecurityEnv;
+        runtimeToken(request, securityEnv, "CONCLAVE_RUNTIME_CONNECT_TOKEN");
+        const runtimeId = runtimeConnectionId(request);
+        const stub =
+          securityEnv.CONCLAVE_RUNTIME_CONNECTION.getByName(runtimeId);
+        return stub.fetch(request);
+      }
+      if (
+        request.method === "POST" &&
+        (url.pathname === "/api/runtime/operations" ||
+          url.pathname === "/api/runtime/cancel")
+      ) {
+        const securityEnv = env as SecurityEnv;
+        runtimeToken(request, securityEnv, "CONCLAVE_RUNTIME_OPERATION_TOKEN");
+        const runtimeId = runtimeConnectionId(request);
+        const stub =
+          securityEnv.CONCLAVE_RUNTIME_CONNECTION.getByName(runtimeId);
+        const target =
+          url.pathname === "/api/runtime/cancel" ? "/cancel" : "/execute";
+        return stub.fetch(
+          new Request(`https://runtime.internal${target}`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: await request.text(),
+          }),
+        );
+      }
       if (request.method === "POST" && url.pathname === "/api/runs") {
         return await handleRunRequest(request, env);
       }

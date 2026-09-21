@@ -37,15 +37,23 @@ async function makeRoot(): Promise<string> {
 function approval(...operationKinds: RuntimeOperation["kind"][]) {
   return {
     approvalId: "approval-1",
+    organizationId: "org-1",
+    projectId: "project-1",
+    runId: "run-1",
+    taskId: "task-1",
     operationKinds,
     expiresAt: new Date(Date.now() + 60_000).toISOString(),
   };
 }
 
-function runtime(root: string): LocalRuntime {
+function runtime(
+  root: string,
+  overrides: Partial<ConstructorParameters<typeof LocalRuntime>[0]> = {},
+): LocalRuntime {
   return new LocalRuntime({
     repositories: [{ id: "repo-1", root }],
     allowedCommands: { shell: ["node"], check: ["node"], build: ["node"] },
+    ...overrides,
   });
 }
 
@@ -69,7 +77,14 @@ describe("Local Runtime foundation", () => {
   it("reads, searches, and writes only inside an approved repository", async () => {
     const root = await makeRoot();
     const local = runtime(root);
-    const base = { requestId: "request-1", repositoryId: "repo-1" };
+    const base = {
+      requestId: "request-1",
+      organizationId: "org-1",
+      projectId: "project-1",
+      runId: "run-1",
+      taskId: "task-1",
+      repositoryId: "repo-1",
+    };
 
     const read = await local.execute({
       ...base,
@@ -119,6 +134,10 @@ describe("Local Runtime foundation", () => {
     const local = runtime(root);
     const result = await local.execute({
       requestId: "command-1",
+      organizationId: "org-1",
+      projectId: "project-1",
+      runId: "run-1",
+      taskId: "task-1",
       repositoryId: "repo-1",
       kind: "check",
       command: ["node", "-e", "process.stdout.write('check passed')"],
@@ -130,6 +149,10 @@ describe("Local Runtime foundation", () => {
 
     const rejected = await local.execute({
       requestId: "command-2",
+      organizationId: "org-1",
+      projectId: "project-1",
+      runId: "run-1",
+      taskId: "task-1",
       repositoryId: "repo-1",
       kind: "shell",
       command: ["sh", "-c", "echo unsafe"],
@@ -146,7 +169,14 @@ describe("Local Runtime foundation", () => {
     await writeFile(join(outside, "secret.txt"), "private", "utf8");
     await symlink(outside, join(root, "secret-link"));
     const local = runtime(root);
-    const base = { requestId: "symlink-1", repositoryId: "repo-1" };
+    const base = {
+      requestId: "symlink-1",
+      organizationId: "org-1",
+      projectId: "project-1",
+      runId: "run-1",
+      taskId: "task-1",
+      repositoryId: "repo-1",
+    };
 
     const read = await local.execute({
       ...base,
@@ -203,12 +233,20 @@ describe("Local Runtime foundation", () => {
     const local = runtime(root);
     const result = await local.execute({
       requestId: "approval-1",
+      organizationId: "org-1",
+      projectId: "project-1",
+      runId: "run-1",
+      taskId: "task-1",
       repositoryId: "repo-1",
       kind: "write_file",
       path: "blocked.txt",
       content: "nope",
       approval: {
         approvalId: "expired",
+        organizationId: "org-1",
+        projectId: "project-1",
+        runId: "run-1",
+        taskId: "task-1",
         operationKinds: ["read_file"],
         expiresAt: new Date(Date.now() - 1).toISOString(),
       },
@@ -221,10 +259,44 @@ describe("Local Runtime foundation", () => {
     ).toThrow("requestId is invalid");
   });
 
+  it("enforces output limits and supports cancellation by request ID", async () => {
+    const root = await makeRoot();
+    const local = runtime(root, { maxStdoutBytes: 16, maxStderrBytes: 16 });
+    const request = {
+      requestId: "bounded-1",
+      organizationId: "org-1",
+      projectId: "project-1",
+      runId: "run-1",
+      taskId: "task-1",
+      repositoryId: "repo-1",
+      kind: "check" as const,
+      command: ["node", "-e", "process.stdout.write('x'.repeat(100000))"],
+      approval: approval("check"),
+    };
+    const bounded = await local.execute(request);
+    expect(bounded.status).toBe("failed");
+    expect(bounded.stdoutTruncated).toBe(true);
+    expect(Buffer.byteLength(bounded.content)).toBeLessThanOrEqual(16);
+
+    const cancellable = {
+      ...request,
+      requestId: "cancel-1",
+      command: ["node", "-e", "setTimeout(() => {}, 30000)"],
+    };
+    const pending = local.execute(cancellable);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(local.cancel("cancel-1")).toBe(true);
+    expect((await pending).status).toBe("rejected");
+  });
+
   it("connects outbound and returns structured evidence for each request", async () => {
     const root = await makeRoot();
     const request: RuntimeOperation = {
       requestId: "transport-1",
+      organizationId: "org-1",
+      projectId: "project-1",
+      runId: "run-1",
+      taskId: "task-1",
       repositoryId: "repo-1",
       kind: "read_file",
       path: "README.md",

@@ -46,6 +46,7 @@ interface ForgeExecutionEnv {
   readonly CONCLAVE_WORKER_MODELS?: string;
   readonly CONCLAVE_LOCAL_RUNTIME_URL?: string;
   readonly CONCLAVE_LOCAL_RUNTIME_TOKEN?: string;
+  readonly CONCLAVE_RUNTIME_ID?: string;
   readonly CONCLAVE_TEST_COMMAND?: string;
   readonly CONCLAVE_RUNTIME_APPROVAL_ID?: string;
   readonly CONCLAVE_RUNTIME_APPROVAL_EXPIRES_AT?: string;
@@ -54,8 +55,10 @@ interface ForgeExecutionEnv {
 interface ForgeExecutionContext {
   readonly executionId: string;
   readonly runId: string;
+  readonly taskId: string;
   readonly goalId: string;
   readonly organizationId: string;
+  readonly projectId: string;
   readonly repositoryId: string;
   readonly revision: string;
 }
@@ -266,20 +269,23 @@ class RemoteLocalRuntime implements ForgeRuntimeAdapter {
   ) {}
 
   inspect(input: Parameters<ForgeRuntimeAdapter["inspect"]>[0]) {
-    return this.execute("search", { query: input.objective, path: "." }).then(
-      (result) =>
-        this.asForgeEvidence(
-          "research",
-          [result],
-          result.status === "succeeded" ? undefined : result,
-        ),
+    return this.execute(
+      "search",
+      { query: input.objective, path: "." },
+      input.taskId,
+    ).then((result) =>
+      this.asForgeEvidence(
+        "research",
+        [result],
+        result.status === "succeeded" ? undefined : result,
+      ),
     );
   }
 
   async apply(input: Parameters<ForgeRuntimeAdapter["apply"]>[0]) {
     const evidence: RuntimeEvidence[] = [];
     for (const operation of input.operations) {
-      const result = await this.executeOperation(operation);
+      const result = await this.executeOperation(operation, input.taskId);
       evidence.push(result);
       if (result.status !== "succeeded") break;
     }
@@ -288,12 +294,15 @@ class RemoteLocalRuntime implements ForgeRuntimeAdapter {
   }
 
   async test(input: Parameters<ForgeRuntimeAdapter["test"]>[0]) {
-    void input;
     const command = this.command();
-    const result = await this.execute("check", {
-      command,
-      cwd: ".",
-    });
+    const result = await this.execute(
+      "check",
+      {
+        command,
+        cwd: ".",
+      },
+      input.taskId,
+    );
     return this.asForgeEvidence(
       "test",
       [result],
@@ -301,27 +310,39 @@ class RemoteLocalRuntime implements ForgeRuntimeAdapter {
     );
   }
 
-  private async executeOperation(operation: ImplementationOperation) {
+  private async executeOperation(
+    operation: ImplementationOperation,
+    taskId: string,
+  ) {
     if (operation.kind === "write_file") {
-      return this.execute("write_file", operation);
+      return this.execute("write_file", operation, taskId);
     }
     if (operation.kind === "patch_file") {
-      return this.execute("patch_file", operation);
+      return this.execute("patch_file", operation, taskId);
     }
-    return this.execute("delete_file", operation);
+    return this.execute("delete_file", operation, taskId);
   }
 
   private async execute(
     kind: RuntimeOperation["kind"],
     details: Record<string, unknown>,
+    taskId = this.context.taskId,
   ): Promise<RuntimeEvidence> {
     const base = {
       requestId: crypto.randomUUID(),
+      organizationId: this.context.organizationId,
+      projectId: this.context.projectId,
+      runId: this.context.runId,
+      taskId,
       repositoryId: this.context.repositoryId,
       approval: {
         approvalId:
           this.env.CONCLAVE_RUNTIME_APPROVAL_ID ??
           `${this.context.runId}:${this.context.executionId}`,
+        organizationId: this.context.organizationId,
+        projectId: this.context.projectId,
+        runId: this.context.runId,
+        taskId,
         operationKinds: [kind],
         expiresAt:
           this.env.CONCLAVE_RUNTIME_APPROVAL_EXPIRES_AT ??
@@ -332,16 +353,27 @@ class RemoteLocalRuntime implements ForgeRuntimeAdapter {
     } as unknown as RuntimeOperation;
     const baseUrl = this.env.CONCLAVE_LOCAL_RUNTIME_URL;
     if (!baseUrl) throw new Error("Local Runtime URL is not configured");
-    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/operations`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(this.env.CONCLAVE_LOCAL_RUNTIME_TOKEN
-          ? { authorization: `Bearer ${this.env.CONCLAVE_LOCAL_RUNTIME_TOKEN}` }
-          : {}),
+    if (!this.env.CONCLAVE_RUNTIME_ID) {
+      throw new Error("CONCLAVE_RUNTIME_ID is not configured");
+    }
+    const response = await fetch(
+      `${baseUrl.replace(/\/$/, "")}/api/runtime/operations`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(this.env.CONCLAVE_RUNTIME_ID
+            ? { "x-conclave-runtime-id": this.env.CONCLAVE_RUNTIME_ID }
+            : {}),
+          ...(this.env.CONCLAVE_LOCAL_RUNTIME_TOKEN
+            ? {
+                authorization: `Bearer ${this.env.CONCLAVE_LOCAL_RUNTIME_TOKEN}`,
+              }
+            : {}),
+        },
+        body: JSON.stringify(base),
       },
-      body: JSON.stringify(base),
-    });
+    );
     const body: unknown = await response.json();
     if (!response.ok)
       throw new Error(`Local Runtime failed with ${response.status}`);
@@ -436,17 +468,19 @@ async function readExecutionContext(
     );
   }
   const project = await env.CONCLAVE_DB.prepare(
-    "SELECT p.repository_id FROM projects p JOIN goals g ON g.project_id = p.id WHERE g.id = ?1 AND p.organization_id = ?2",
+    "SELECT p.id AS project_id, p.repository_id FROM projects p JOIN goals g ON g.project_id = p.id WHERE g.id = ?1 AND p.organization_id = ?2",
   )
     .bind(goalId, organizationId)
-    .first<{ repository_id: string | null }>();
+    .first<{ project_id: string; repository_id: string | null }>();
   if (!project)
     throw new Error("Goal is not owned by the execution organization");
   return {
     executionId,
     runId,
+    taskId: String(params.taskId ?? `${runId}:runtime`),
     goalId,
     organizationId,
+    projectId: String(params.projectId ?? project.project_id),
     repositoryId: String(params.repositoryId ?? project.repository_id ?? ""),
     revision: String(params.revision ?? "HEAD"),
   };

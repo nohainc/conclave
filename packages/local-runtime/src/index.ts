@@ -48,12 +48,20 @@ export type RuntimeGitAction = "status" | "diff" | "branch";
 
 export interface RuntimeApproval {
   readonly approvalId: string;
+  readonly organizationId: string;
+  readonly projectId: string;
+  readonly runId: string;
+  readonly taskId: string;
   readonly operationKinds: readonly RuntimeOperationKind[];
   readonly expiresAt: string;
 }
 
 export interface RuntimeRequestBase {
   readonly requestId: string;
+  readonly organizationId: string;
+  readonly projectId: string;
+  readonly runId: string;
+  readonly taskId: string;
   readonly repositoryId: string;
   readonly approval: RuntimeApproval;
 }
@@ -106,6 +114,10 @@ export type RuntimeOperation =
 export interface RuntimeEvidence {
   readonly evidenceId: string;
   readonly requestId: string;
+  readonly organizationId: string;
+  readonly projectId: string;
+  readonly runId: string;
+  readonly taskId: string;
   readonly repositoryId: string;
   readonly operation: RuntimeOperationKind;
   readonly status: "succeeded" | "failed" | "rejected" | "timed_out";
@@ -123,6 +135,8 @@ export interface RuntimeEvidence {
     readonly root: string;
     readonly actor: "local-runtime";
   };
+  readonly stdoutTruncated?: boolean;
+  readonly stderrTruncated?: boolean;
 }
 
 export interface RuntimeRepository {
@@ -140,13 +154,162 @@ export interface RuntimePolicy {
   readonly maxWriteBytes?: number;
   readonly maxSearchResults?: number;
   readonly defaultTimeoutMs?: number;
+  readonly maxStdoutBytes?: number;
+  readonly maxStderrBytes?: number;
 }
 
 export interface RuntimeTransport {
   connect(): Promise<void>;
-  receive(): AsyncIterable<RuntimeOperation>;
+  receive(): AsyncIterable<RuntimeOperation | RuntimeControl>;
   send(evidence: RuntimeEvidence): Promise<void>;
+  acknowledge?(requestId: string): Promise<void>;
+  reconnect?(): Promise<void>;
   disconnect?(): Promise<void>;
+}
+
+export type RuntimeControl = {
+  readonly type: "cancel";
+  readonly requestId: string;
+};
+
+export interface WebSocketRuntimeTransportOptions {
+  readonly url: string | URL;
+  readonly token: string;
+  readonly runtimeId: string;
+  readonly organizationId: string;
+  readonly projectId: string;
+  readonly runId: string;
+  readonly taskId: string;
+  readonly repositoryId: string;
+}
+
+type RuntimeTransportMessage =
+  | RuntimeOperation
+  | RuntimeControl
+  | { readonly type: "ack"; readonly requestId: string };
+
+class RuntimeMessageQueue {
+  private readonly messages: RuntimeTransportMessage[] = [];
+  private readonly waiters: ((message: RuntimeTransportMessage) => void)[] = [];
+  private closed: Error | null = null;
+
+  push(message: RuntimeTransportMessage): void {
+    const waiter = this.waiters.shift();
+    if (waiter) waiter(message);
+    else this.messages.push(message);
+  }
+
+  close(error: Error): void {
+    this.closed = error;
+    while (this.waiters.length > 0) {
+      this.waiters.shift()?.({
+        type: "cancel",
+        requestId: "__connection_closed__",
+      });
+    }
+  }
+
+  async next(): Promise<RuntimeTransportMessage> {
+    if (this.messages.length > 0) return this.messages.shift()!;
+    if (this.closed) throw this.closed;
+    return new Promise((resolve) => this.waiters.push(resolve));
+  }
+}
+
+export class WebSocketRuntimeTransport implements RuntimeTransport {
+  private socket: WebSocket | null = null;
+  private queue = new RuntimeMessageQueue();
+  private readonly acknowledgements = new Map<
+    string,
+    { resolve: () => void; reject: (error: Error) => void }
+  >();
+
+  constructor(private readonly options: WebSocketRuntimeTransportOptions) {}
+
+  async connect(): Promise<void> {
+    const url = new URL(this.options.url);
+    url.searchParams.set("token", this.options.token);
+    url.searchParams.set("runtimeId", this.options.runtimeId);
+    for (const [key, value] of Object.entries({
+      organizationId: this.options.organizationId,
+      projectId: this.options.projectId,
+      runId: this.options.runId,
+      taskId: this.options.taskId,
+      repositoryId: this.options.repositoryId,
+    })) {
+      url.searchParams.set(key, value);
+    }
+    this.queue = new RuntimeMessageQueue();
+    const socket = new WebSocket(url);
+    this.socket = socket;
+    await new Promise<void>((resolve, reject) => {
+      socket.addEventListener("open", () => resolve(), { once: true });
+      socket.addEventListener(
+        "error",
+        () => reject(new Error("Runtime connection failed")),
+        { once: true },
+      );
+    });
+    socket.addEventListener("message", (event) => {
+      const message = JSON.parse(String(event.data)) as RuntimeTransportMessage;
+      if (
+        typeof message === "object" &&
+        "type" in message &&
+        message.type === "ack"
+      ) {
+        this.acknowledgements.get(message.requestId)?.resolve();
+        this.acknowledgements.delete(message.requestId);
+      } else {
+        this.queue.push(message);
+      }
+    });
+    socket.addEventListener("close", () => {
+      const error = new Error("Runtime connection closed");
+      this.queue.close(error);
+      for (const acknowledgement of this.acknowledgements.values()) {
+        acknowledgement.reject(error);
+      }
+      this.acknowledgements.clear();
+      this.socket = null;
+    });
+  }
+
+  async *receive(): AsyncIterable<RuntimeOperation | RuntimeControl> {
+    while (true) {
+      const message = await this.queue.next();
+      if (
+        typeof message === "object" &&
+        "type" in message &&
+        message.type === "ack"
+      )
+        continue;
+      yield message as RuntimeOperation | RuntimeControl;
+    }
+  }
+
+  async send(evidence: RuntimeEvidence): Promise<void> {
+    if (!this.socket) throw new Error("Runtime connection is not open");
+    this.socket.send(JSON.stringify({ type: "evidence", evidence }));
+  }
+
+  acknowledge(requestId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.acknowledgements.set(requestId, { resolve, reject });
+    });
+  }
+
+  async reconnect(): Promise<void> {
+    await this.connect();
+  }
+
+  async disconnect(): Promise<void> {
+    this.socket?.close();
+    this.socket = null;
+  }
+
+  cancel(requestId: string): void {
+    this.socket?.send(JSON.stringify({ type: "cancel", requestId }));
+  }
 }
 
 export class RuntimeSecurityError extends Error {
@@ -188,6 +351,10 @@ function parseApproval(value: unknown): RuntimeApproval {
   }
   return {
     approvalId: asString(record.approvalId, "approval.approvalId"),
+    organizationId: asString(record.organizationId, "approval.organizationId"),
+    projectId: asString(record.projectId, "approval.projectId"),
+    runId: asString(record.runId, "approval.runId"),
+    taskId: asString(record.taskId, "approval.taskId"),
     operationKinds: kinds as RuntimeOperationKind[],
     expiresAt: asString(record.expiresAt, "approval.expiresAt"),
   };
@@ -198,6 +365,10 @@ export function parseRuntimeOperation(value: unknown): RuntimeOperation {
   const kind = asString(record.kind, "kind") as RuntimeOperationKind;
   const base = {
     requestId: asString(record.requestId, "requestId"),
+    organizationId: asString(record.organizationId, "organizationId"),
+    projectId: asString(record.projectId, "projectId"),
+    runId: asString(record.runId, "runId"),
+    taskId: asString(record.taskId, "taskId"),
     repositoryId: asString(record.repositoryId, "repositoryId"),
     approval: parseApproval(record.approval),
   };
@@ -317,6 +488,10 @@ export function implementationOperationsToRuntimeOperations(
 ): readonly RuntimeOperation[] {
   return operations.map((operation, index) => ({
     requestId: `implementation-${index + 1}`,
+    organizationId: approval.organizationId,
+    projectId: approval.projectId,
+    runId: approval.runId,
+    taskId: approval.taskId,
     repositoryId,
     approval,
     ...operation,
@@ -373,11 +548,16 @@ function runCommand(
   command: readonly string[],
   cwd: string,
   timeoutMs: number,
+  maxStdoutBytes: number,
+  maxStderrBytes: number,
+  signal: AbortSignal,
 ): Promise<{
   stdout: string;
   stderr: string;
   exitCode: number | null;
   status: RuntimeEvidence["status"];
+  stdoutTruncated: boolean;
+  stderrTruncated: boolean;
 }> {
   return new Promise((resolvePromise) => {
     const executable = command[0];
@@ -387,6 +567,8 @@ function runCommand(
         stderr: "No command supplied",
         exitCode: null,
         status: "failed",
+        stdoutTruncated: false,
+        stderrTruncated: false,
       });
       return;
     }
@@ -394,40 +576,76 @@ function runCommand(
       cwd,
       shell: false,
       windowsHide: true,
+      detached: process.platform !== "win32",
     });
     let stdout = "";
     let stderr = "";
+    let stdoutTruncated = false;
+    let stderrTruncated = false;
     let timedOut = false;
+    let cancelled = false;
+    const terminate = () => {
+      if (process.platform === "win32" && child.pid) {
+        spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
+          windowsHide: true,
+        });
+      } else if (child.pid) {
+        try {
+          process.kill(-child.pid, "SIGTERM");
+        } catch {
+          child.kill("SIGTERM");
+        }
+      }
+    };
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGTERM");
+      terminate();
     }, timeoutMs);
+    const onAbort = () => {
+      cancelled = true;
+      terminate();
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
     child.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString();
+      const next = `${stdout}${chunk.toString()}`;
+      if (Buffer.byteLength(next) > maxStdoutBytes) stdoutTruncated = true;
+      stdout = next.slice(0, maxStdoutBytes);
+      if (stdoutTruncated) terminate();
     });
     child.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString();
+      const next = `${stderr}${chunk.toString()}`;
+      if (Buffer.byteLength(next) > maxStderrBytes) stderrTruncated = true;
+      stderr = next.slice(0, maxStderrBytes);
+      if (stderrTruncated) terminate();
     });
     child.on("error", (error: Error) => {
       clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
       resolvePromise({
         stdout,
         stderr: `${stderr}${error.message}`,
         exitCode: null,
-        status: "failed",
+        status: cancelled ? "rejected" : "failed",
+        stdoutTruncated,
+        stderrTruncated,
       });
     });
     child.on("close", (exitCode) => {
       clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
       resolvePromise({
         stdout,
         stderr,
         exitCode,
-        status: timedOut
-          ? "timed_out"
-          : exitCode === 0
-            ? "succeeded"
-            : "failed",
+        status: cancelled
+          ? "rejected"
+          : timedOut
+            ? "timed_out"
+            : exitCode === 0
+              ? "succeeded"
+              : "failed",
+        stdoutTruncated,
+        stderrTruncated,
       });
     });
   });
@@ -438,7 +656,12 @@ export class LocalRuntime {
   private readonly policy: Required<
     Pick<
       RuntimePolicy,
-      "maxReadBytes" | "maxWriteBytes" | "maxSearchResults" | "defaultTimeoutMs"
+      | "maxReadBytes"
+      | "maxWriteBytes"
+      | "maxSearchResults"
+      | "defaultTimeoutMs"
+      | "maxStdoutBytes"
+      | "maxStderrBytes"
     >
   > &
     RuntimePolicy;
@@ -450,6 +673,8 @@ export class LocalRuntime {
       maxWriteBytes: policy.maxWriteBytes ?? 512_000,
       maxSearchResults: policy.maxSearchResults ?? 200,
       defaultTimeoutMs: policy.defaultTimeoutMs ?? 120_000,
+      maxStdoutBytes: policy.maxStdoutBytes ?? 512_000,
+      maxStderrBytes: policy.maxStderrBytes ?? 512_000,
     };
     for (const repository of policy.repositories) {
       const root = resolve(repository.root);
@@ -463,15 +688,26 @@ export class LocalRuntime {
     }
   }
 
+  private readonly activeOperations = new Map<string, AbortController>();
+
+  cancel(requestId: string): boolean {
+    const controller = this.activeOperations.get(requestId);
+    if (!controller) return false;
+    controller.abort();
+    return true;
+  }
+
   async execute(request: RuntimeOperation): Promise<RuntimeEvidence> {
     const startedAt = new Date();
     const repository = this.repositories.get(request.repositoryId);
+    const controller = new AbortController();
+    this.activeOperations.set(request.requestId, controller);
     try {
       if (!repository) {
         throw new RuntimeSecurityError("Repository is not registered");
       }
       this.authorize(request, startedAt);
-      const result = await this.perform(request, repository);
+      const result = await this.perform(request, repository, controller.signal);
       return this.evidence(
         request,
         repository,
@@ -481,6 +717,8 @@ export class LocalRuntime {
         result.content,
         result.exitCode,
         result.command,
+        result.stdoutTruncated,
+        result.stderrTruncated,
       );
     } catch (error) {
       const message =
@@ -496,11 +734,25 @@ export class LocalRuntime {
         "",
         null,
         null,
+        false,
+        false,
       );
+    } finally {
+      this.activeOperations.delete(request.requestId);
     }
   }
 
   private authorize(request: RuntimeOperation, now: Date): void {
+    if (
+      request.organizationId !== request.approval.organizationId ||
+      request.projectId !== request.approval.projectId ||
+      request.runId !== request.approval.runId ||
+      request.taskId !== request.approval.taskId
+    ) {
+      throw new RuntimeSecurityError(
+        "Runtime request is outside its approval scope",
+      );
+    }
     if (!request.approval.operationKinds.includes(request.kind)) {
       throw new RuntimeSecurityError(
         "Operation is not covered by the approval",
@@ -543,12 +795,15 @@ export class LocalRuntime {
   private async perform(
     request: RuntimeOperation,
     repository: RuntimeRepository,
+    signal: AbortSignal,
   ): Promise<{
     status: RuntimeEvidence["status"];
     summary: string;
     content: string;
     exitCode: number | null;
     command: readonly string[] | null;
+    stdoutTruncated?: boolean;
+    stderrTruncated?: boolean;
   }> {
     switch (request.kind) {
       case "read_file": {
@@ -708,6 +963,9 @@ export class LocalRuntime {
           args,
           cwd,
           this.policy.defaultTimeoutMs,
+          this.policy.maxStdoutBytes,
+          this.policy.maxStderrBytes,
+          signal,
         );
         return {
           ...result,
@@ -730,6 +988,9 @@ export class LocalRuntime {
           request.command,
           cwd,
           request.timeoutMs ?? this.policy.defaultTimeoutMs,
+          this.policy.maxStdoutBytes,
+          this.policy.maxStderrBytes,
+          signal,
         );
         return {
           ...result,
@@ -750,12 +1011,18 @@ export class LocalRuntime {
     content: string,
     exitCode: number | null,
     command: readonly string[] | null,
+    stdoutTruncated = false,
+    stderrTruncated = false,
   ): RuntimeEvidence {
     const finishedAt = new Date();
     const contentDigest = digest(content);
     return {
       evidenceId: idFor(request.requestId, contentDigest),
       requestId: request.requestId,
+      organizationId: request.organizationId,
+      projectId: request.projectId,
+      runId: request.runId,
+      taskId: request.taskId,
       repositoryId: request.repositoryId,
       operation: request.kind,
       status,
@@ -773,6 +1040,8 @@ export class LocalRuntime {
         root: repository?.root ?? "unresolved",
         actor: "local-runtime",
       },
+      stdoutTruncated,
+      stderrTruncated,
     };
   }
 }
@@ -785,10 +1054,34 @@ export class OutboundRuntimeSession {
 
   async run(): Promise<void> {
     await this.transport.connect();
+    const replay = new Map<string, RuntimeEvidence>();
     try {
-      for await (const rawRequest of this.transport.receive()) {
-        const request = parseRuntimeOperation(rawRequest);
-        await this.transport.send(await this.runtime.execute(request));
+      while (true) {
+        let received = false;
+        try {
+          for await (const rawRequest of this.transport.receive()) {
+            received = true;
+            if (
+              typeof rawRequest === "object" &&
+              "type" in rawRequest &&
+              rawRequest.type === "cancel"
+            ) {
+              this.runtime.cancel(rawRequest.requestId);
+              continue;
+            }
+            const request = parseRuntimeOperation(rawRequest);
+            const previous = replay.get(request.requestId);
+            const evidence = previous ?? (await this.runtime.execute(request));
+            replay.set(request.requestId, evidence);
+            await this.transport.send(evidence);
+            await this.transport.acknowledge?.(request.requestId);
+          }
+        } catch (error) {
+          if (!this.transport.reconnect) throw error;
+        }
+        if (!this.transport.reconnect || !received) break;
+        await this.transport.disconnect?.();
+        await this.transport.reconnect();
       }
     } finally {
       await this.transport.disconnect?.();
