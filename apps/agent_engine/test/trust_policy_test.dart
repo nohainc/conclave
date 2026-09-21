@@ -27,4 +27,37 @@ void main() {
     expect(redactSecrets('Authorization: secret', ['secret']),
         'Authorization: [REDACTED]');
   });
+
+  test('supports signing-key rotation and key revocation', () {
+    const policy = PluginTrustPolicy(
+      trustedKeys: {
+        'conclave': {'old': 'old-key', 'new': 'new-key'},
+      },
+    );
+    final oldSignature = policy.sign('conclave', 'digest', keyId: 'old');
+    final newSignature = policy.sign('conclave', 'digest', keyId: 'new');
+    expect(
+        policy.verify(
+            publisher: 'conclave', digest: 'digest', signature: oldSignature),
+        isTrue);
+    expect(
+        policy.verify(
+            publisher: 'conclave', digest: 'digest', signature: newSignature),
+        isTrue);
+
+    const rotated = PluginTrustPolicy(
+      trustedKeys: {
+        'conclave': {'old': 'old-key', 'new': 'new-key'},
+      },
+      revokedKeyIds: {'old'},
+    );
+    expect(
+        rotated.verify(
+            publisher: 'conclave', digest: 'digest', signature: oldSignature),
+        isFalse);
+    expect(
+        rotated.verify(
+            publisher: 'conclave', digest: 'digest', signature: newSignature),
+        isTrue);
+  });
 }
