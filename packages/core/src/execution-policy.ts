@@ -107,6 +107,7 @@ async function runCandidates(
           worker.execute({
             ...request,
             requestId: `${request.requestId}:${worker.resource.id}`,
+            attemptId: `${request.attemptId}:candidate:${worker.resource.id}`,
             workerId: worker.resource.id,
             connectionId: worker.connection.id,
           }),
@@ -157,8 +158,8 @@ function decisionRequest(
     request: {
       ...request,
       requestId: `${request.requestId}:${mode}`,
+      attemptId: `${request.attemptId}:decision:${mode}`,
       taskId,
-      attemptId: `${request.attemptId}:${mode}`,
       workerId: worker.resource.id,
       connectionId: worker.connection.id,
       message: task,
