@@ -58,6 +58,79 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('does not overwrite an installed version with a different payload',
+      () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-plugins-');
+    final manager = PluginManager(directory);
+    final firstBytes = [31, 32, 33];
+    final secondBytes = [34, 35, 36];
+    await manager.install(PluginPackage(
+      id: 'immutable',
+      version: '1.0.0',
+      bytes: firstBytes,
+      digest: sha256.convert(firstBytes).toString(),
+    ));
+
+    await expectLater(
+      manager.install(PluginPackage(
+        id: 'immutable',
+        version: '1.0.0',
+        bytes: secondBytes,
+        digest: sha256.convert(secondBytes).toString(),
+      )),
+      throwsA(isA<StateError>()),
+    );
+    expect(
+      await File('${directory.path}/immutable/1.0.0/package.bin').readAsBytes(),
+      firstBytes,
+    );
+    expect(
+      (await directory
+              .list(recursive: true, followLinks: false)
+              .where((entity) => entity.path.contains('.staging-'))
+              .toList())
+          .isEmpty,
+      isTrue,
+    );
+    await directory.delete(recursive: true);
+  });
+
+  test('accepts a repeated install of the same immutable payload', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-plugins-');
+    final manager = PluginManager(directory);
+    final bytes = [37, 38, 39];
+    final package = PluginPackage(
+      id: 'repeatable',
+      version: '1.0.0',
+      bytes: bytes,
+      digest: sha256.convert(bytes).toString(),
+    );
+    final first = await manager.install(package);
+    final second = await manager.install(package);
+    expect(second.path, first.path);
+    expect(await manager.activeVersion('repeatable'), '1.0.0');
+    await directory.delete(recursive: true);
+  });
+
+  test('rejects plugin path traversal identifiers', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-plugins-');
+    final manager = PluginManager(directory);
+    final bytes = [40];
+    await expectLater(
+      manager.install(PluginPackage(
+        id: '../outside',
+        version: '1.0.0',
+        bytes: bytes,
+        digest: sha256.convert(bytes).toString(),
+      )),
+      throwsA(isA<StateError>()),
+    );
+    await directory.delete(recursive: true);
+  });
+
   test('enforces permissions even without a signing policy', () async {
     final directory =
         await Directory.systemTemp.createTemp('conclave-plugins-');

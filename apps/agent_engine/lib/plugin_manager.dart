@@ -110,6 +110,8 @@ class PluginManager {
   }
 
   Future<Directory> install(PluginPackage package) async {
+    _validatePathComponent(package.id, 'plugin id');
+    _validatePathComponent(package.version, 'plugin version');
     final actual = sha256.convert(package.bytes).toString();
     if (actual != package.digest) throw StateError('plugin digest mismatch');
     if (trustPolicy != null) {
@@ -151,20 +153,66 @@ class PluginManager {
         !manifest.supportedPlatforms.contains(platformKey)) {
       throw StateError('plugin is not compatible with platform $platformKey');
     }
-    final target = Directory('${root.path}/${package.id}/${package.version}');
-    await target.create(recursive: true);
-    await File('${target.path}/package.bin')
-        .writeAsBytes(package.bytes, flush: true);
-    await File('${target.path}/manifest.json').writeAsString(
-      jsonEncode({
-        ...manifest.toJson(),
-        'digest': actual,
-        if (package.signature != null) 'signature': package.signature,
-      }),
-      flush: true,
+    final versionRoot = Directory('${root.path}/${package.id}');
+    final target = Directory('${versionRoot.path}/${package.version}');
+    if (await target.exists()) {
+      final installedDigest = await _installedDigest(target);
+      if (installedDigest == actual) {
+        await _activate(package.id, package.version, actual);
+        return target;
+      }
+      throw StateError('plugin version is already installed');
+    }
+
+    await versionRoot.create(recursive: true);
+    final staging = Directory(
+      '${versionRoot.path}/.${package.version}.staging-'
+      '${DateTime.now().microsecondsSinceEpoch}',
     );
+    try {
+      await staging.create(recursive: true);
+      await File('${staging.path}/package.bin')
+          .writeAsBytes(package.bytes, flush: true);
+      await File('${staging.path}/manifest.json').writeAsString(
+        jsonEncode({
+          ...manifest.toJson(),
+          'digest': actual,
+          if (package.signature != null) 'signature': package.signature,
+        }),
+        flush: true,
+      );
+      // A version directory is immutable once visible. Rename is the
+      // activation point, so readers never observe a partially written one.
+      await staging.rename(target.path);
+    } catch (_) {
+      if (await staging.exists()) await staging.delete(recursive: true);
+      rethrow;
+    }
     await _activate(package.id, package.version, actual);
     return target;
+  }
+
+  Future<String?> _installedDigest(Directory target) async {
+    final packageFile = File('${target.path}/package.bin');
+    final manifestFile = File('${target.path}/manifest.json');
+    if (!await packageFile.exists() || !await manifestFile.exists()) {
+      return null;
+    }
+    final manifest = jsonDecode(await manifestFile.readAsString()) as Map;
+    final digest = manifest['digest'];
+    if (digest is! String || digest.isEmpty) return null;
+    final actual = sha256.convert(await packageFile.readAsBytes()).toString();
+    return actual == digest ? actual : null;
+  }
+
+  void _validatePathComponent(String value, String label) {
+    if (value.isEmpty ||
+        value == '.' ||
+        value == '..' ||
+        value.contains('/') ||
+        value.contains('\\')) {
+      throw StateError('$label must be a single path component');
+    }
   }
 
   Future<String?> activeVersion(String pluginId) async {
