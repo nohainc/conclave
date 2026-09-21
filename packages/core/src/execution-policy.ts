@@ -3,6 +3,15 @@ import type {
   WorkerExecutionResult,
   WorkerExecutor,
 } from "./worker-execution.js";
+import {
+  DecisionResultSchema,
+  PROTOCOL_NAME,
+  PROTOCOL_VERSION,
+  TaskRequestSchema,
+  validateResponseContext,
+  type DecisionResult,
+  type TaskRequest,
+} from "@conclave/protocol";
 
 export type ExecutionPolicyMode =
   "single" | "parallel" | "synthesize" | "compare_and_select";
@@ -28,6 +37,10 @@ export interface ExecutionPolicyResult {
   readonly candidateResults: readonly WorkerExecutionResult[];
   /** The synthesis or comparison decision, when the policy has one. */
   readonly decisionResult: WorkerExecutionResult | null;
+  /** Parsed Core decision emitted by the ordinary synthesis Task. */
+  readonly decision: DecisionResult | null;
+  /** The ordinary TaskRequest used to ask for synthesis/evaluation. */
+  readonly decisionTask: TaskRequest | null;
 }
 
 export class ExecutionPolicyError extends Error {
@@ -109,22 +122,48 @@ function decisionRequest(
   mode: "synthesize" | "compare_and_select",
   candidateResults: readonly WorkerExecutionResult[],
   worker: WorkerExecutor,
-): WorkerExecutionRequest {
-  return {
-    ...request,
-    requestId: `${request.requestId}:${mode}`,
+): { request: WorkerExecutionRequest; task: TaskRequest } {
+  const taskId = `${request.taskId}:${mode}`;
+  const task = TaskRequestSchema.parse({
+    protocol: PROTOCOL_NAME,
+    version: PROTOCOL_VERSION,
+    messageId: `${request.requestId}:${mode}:task`,
+    goalId: request.goalId,
+    runId: request.runId,
     workerId: worker.resource.id,
-    connectionId: worker.connection.id,
-    message: {
-      type: mode,
-      originalMessage: request.message,
-      candidates: candidateResults.map((result, index) => ({
-        index,
-        status: result.status,
-        output: result.output,
-        error: result.error ?? null,
-      })),
+    createdAt: new Date().toISOString(),
+    messageType: "TaskRequest",
+    payload: {
+      taskId,
+      objective:
+        mode === "synthesize"
+          ? "Synthesize the candidate outputs into one decision"
+          : "Compare the candidate outputs and select the strongest result",
+      role: mode === "synthesize" ? "synthesizer" : "evaluator",
+      requiredCapabilities: [mode],
+      contextArtifactIds: request.context.map((item) => item.artifactId),
+      inputs: {
+        sourceTaskId: request.taskId,
+        candidates: candidateResults.map((result, index) => ({
+          index,
+          status: result.status,
+          output: result.output,
+          error: result.error ?? null,
+        })),
+      },
     },
+  });
+  return {
+    request: {
+      ...request,
+      requestId: `${request.requestId}:${mode}`,
+      taskId,
+      attemptId: `${request.attemptId}:${mode}`,
+      workerId: worker.resource.id,
+      connectionId: worker.connection.id,
+      message: task,
+    },
+    task,
   };
 }
 
@@ -138,17 +177,49 @@ export async function executeWithPolicy(
     input.policy.maxParallel,
   );
   if (input.policy.mode === "single" || input.policy.mode === "parallel") {
-    return { mode: input.policy.mode, candidateResults, decisionResult: null };
+    return {
+      mode: input.policy.mode,
+      candidateResults,
+      decisionResult: null,
+      decision: null,
+      decisionTask: null,
+    };
   }
   const decisionWorker =
     input.policy.mode === "synthesize" ? input.synthesizer : input.selector;
-  const decisionResult = await decisionWorker!.execute(
-    decisionRequest(
-      input.request,
-      input.policy.mode,
-      candidateResults,
-      decisionWorker!,
-    ),
+  const decisionRequestValue = decisionRequest(
+    input.request,
+    input.policy.mode,
+    candidateResults,
+    decisionWorker!,
   );
-  return { mode: input.policy.mode, candidateResults, decisionResult };
+  const decisionResult = await decisionWorker!.execute(
+    decisionRequestValue.request,
+  );
+  if (decisionResult.status !== "succeeded" || decisionResult.output === null) {
+    return {
+      mode: input.policy.mode,
+      candidateResults,
+      decisionResult,
+      decision: null,
+      decisionTask: decisionRequestValue.task,
+    };
+  }
+  const decision = DecisionResultSchema.parse(
+    JSON.parse(decisionResult.output) as unknown,
+  );
+  validateResponseContext(decision, {
+    goalId: input.request.goalId,
+    runId: input.request.runId,
+    workerId: decisionWorker!.resource.id,
+    taskId: decisionRequestValue.task.payload.taskId,
+    expectedMessageType: "DecisionResult",
+  });
+  return {
+    mode: input.policy.mode,
+    candidateResults,
+    decisionResult,
+    decision,
+    decisionTask: decisionRequestValue.task,
+  };
 }

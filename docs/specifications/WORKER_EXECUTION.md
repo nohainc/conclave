@@ -238,9 +238,11 @@ Supported policies are:
 - `parallel`: independent candidate Workers run concurrently, optionally in
   bounded batches with `maxParallel`;
 - `synthesize`: candidates run independently, then a distinct synthesizer
-  receives their structured outputs;
+  receives an ordinary `TaskRequest` containing their structured outputs and
+  returns a validated `DecisionResult`;
 - `compare_and_select`: candidates run independently, then a distinct selector
-  receives their outputs and makes the comparison decision.
+  receives an ordinary evaluation `TaskRequest` and returns a validated
+  `DecisionResult`.
 
 Synthesis and comparison require at least two candidates and an independent
 Worker. Core rejects policies that reuse a candidate as the synthesizer or

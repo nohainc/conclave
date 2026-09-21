@@ -245,6 +245,7 @@ const verificationResultPayload = z
 
 const decisionResultPayload = z
   .object({
+    taskId: id,
     decisionType: z.enum([
       "accept_plan",
       "retry",

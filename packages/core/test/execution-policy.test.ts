@@ -38,6 +38,44 @@ function worker(id: string, output = id): WorkerExecutor {
       availability: "available",
     },
     async execute(request) {
+      const requestMessage = request.message as {
+        messageType?: string;
+        payload?: { taskId?: string };
+      };
+      if (id === "synthesizer" || id === "selector") {
+        const taskId = requestMessage.payload?.taskId ?? "decision-task";
+        return {
+          status: "succeeded",
+          output: JSON.stringify({
+            protocol: "conclave.protocol",
+            version: "0.1",
+            messageId: `${id}-decision`,
+            goalId: request.goalId,
+            runId: request.runId,
+            workerId: id,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            messageType: "DecisionResult",
+            payload: {
+              taskId,
+              decisionType: "complete",
+              outcome: "accepted",
+              rationale: "Candidate outputs agree",
+              evidenceArtifactIds: [],
+              transitions: [
+                {
+                  entityType: "task",
+                  entityId: taskId,
+                  from: "running",
+                  to: "completed",
+                },
+              ],
+            },
+          }),
+          rawOutput: null,
+          usage: { inputTokens: null, outputTokens: null },
+          evidenceArtifactIds: [],
+        };
+      }
       return {
         status: "succeeded",
         output: JSON.stringify({ worker: output, message: request.message }),
@@ -89,7 +127,10 @@ describe("execution policies", () => {
     });
 
     expect(result.decisionResult?.status).toBe("succeeded");
-    expect(result.decisionResult?.output).toContain("synthesize");
+    expect(result.decisionResult?.output).toContain("DecisionResult");
+    expect(result.decision?.messageType).toBe("DecisionResult");
+    expect(result.decisionTask?.messageType).toBe("TaskRequest");
+    expect(result.decisionTask?.payload.inputs.sourceTaskId).toBe("task-1");
   });
 
   it("requires an independent selector for compare_and_select", async () => {
