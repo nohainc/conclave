@@ -29,7 +29,7 @@ jobs:
       - run: ../../node_modules/.bin/wrangler check startup --config forge-execution.wrangler.jsonc
         working-directory: apps/worker
 
-  flutter:
+  studio-flutter:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -44,9 +44,34 @@ jobs:
       - run: flutter analyze
       - run: flutter test
 
+  agent-flutter:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/agent_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+
+  agent-engine-dart:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/agent_engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+      - run: dart pub get
+      - run: dart analyze
+
   publish-evidence:
     if: ${{ vars.CONCLAVE_CI_INGEST_URL != '' && vars.CONCLAVE_RUN_ID != '' }}
-    needs: [typescript, flutter]
+    needs: [typescript, studio-flutter, agent-flutter, agent-engine-dart]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -75,12 +100,13 @@ jobs:
               conclusion: "success",
               checks: [
                 {name: "TypeScript checks", status: "passed", command: "pnpm check", exitCode: 0, artifactIds: []},
-                {name: "Worker startup", status: "passed", command: "wrangler check startup", exitCode: 0, artifactIds: []},
-                {name: "Flutter analyze", status: "passed", command: "flutter analyze", exitCode: 0, artifactIds: []},
-                {name: "Flutter tests", status: "passed", command: "flutter test", exitCode: 0, artifactIds: []}
+                {name: "Cloudflare startup", status: "passed", command: "wrangler check startup", exitCode: 0, artifactIds: []},
+                {name: "Studio Flutter", status: "passed", command: "flutter analyze && flutter test", exitCode: 0, artifactIds: []},
+                {name: "Agent App Flutter", status: "passed", command: "flutter analyze", exitCode: 0, artifactIds: []},
+                {name: "Agent Engine Dart", status: "passed", command: "dart analyze", exitCode: 0, artifactIds: []}
               ],
-              smokeTests: ["Worker health smoke test"],
-              healthChecks: ["Worker startup analysis passed"],
+              smokeTests: ["Cloud startup analysis passed"],
+              healthChecks: ["Architecture v3 CI checks passed"],
               observedAt: $observedAt
             }')
           curl --fail-with-body --silent --show-error \
