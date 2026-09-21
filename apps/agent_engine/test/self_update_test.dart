@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:conclave_agent_engine/self_update.dart';
 import 'package:crypto/crypto.dart';
@@ -110,6 +111,65 @@ void main() {
       throwsA(isA<StateError>()),
     );
     expect(await File('${root.path}/agent.active').readAsBytes(), currentBytes);
+    await root.delete(recursive: true);
+  });
+
+  test('keeps release versions immutable and records provenance', () async {
+    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final bytes = [2, 4, 6];
+    final digest = sha256.convert(bytes).toString();
+    final package = ReleasePackage(
+      version: '3.0.0',
+      channel: 'stable',
+      bytes: bytes,
+      digest: digest,
+      operatingSystem: 'macos',
+      architecture: 'arm64',
+      releaseNotes: 'Security update',
+      packageUrl: 'https://example.test/agent.tgz',
+    );
+    await AgentUpdater(root).apply(package, healthCheck: (_) async => true);
+    await AgentUpdater(root).apply(package, healthCheck: (_) async => false);
+    expect(await File('${root.path}/agent.active').readAsBytes(), bytes);
+    final metadata =
+        jsonDecode(await File('${root.path}/release.json').readAsString())
+            as Map<String, dynamic>;
+    expect(metadata['operatingSystem'], 'macos');
+    expect(metadata['architecture'], 'arm64');
+    expect(metadata['releaseNotes'], 'Security update');
+
+    final different = [2, 4, 7];
+    await expectLater(
+      AgentUpdater(root).apply(
+        ReleasePackage(
+          version: '3.0.0',
+          channel: 'stable',
+          bytes: different,
+          digest: sha256.convert(different).toString(),
+        ),
+        healthCheck: (_) async => true,
+      ),
+      throwsA(isA<StateError>()),
+    );
+    await root.delete(recursive: true);
+  });
+
+  test('rejects malformed release versions before staging', () async {
+    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final bytes = [8];
+    await expectLater(
+      AgentUpdater(root).apply(
+        ReleasePackage(
+          version: '../escape',
+          channel: 'stable',
+          bytes: bytes,
+          digest: sha256.convert(bytes).toString(),
+        ),
+        healthCheck: (_) async => true,
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect((await root.list().toList()), isEmpty);
     await root.delete(recursive: true);
   });
 }
