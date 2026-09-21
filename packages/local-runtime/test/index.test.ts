@@ -345,6 +345,7 @@ describe("Local Runtime foundation", () => {
         attemptId: "attempt-1",
         workerId: "local-codex",
         connectionId: "runtime-connection",
+        repositoryId: "repo-1",
         message: { objective: "implement" },
         context: [],
       },

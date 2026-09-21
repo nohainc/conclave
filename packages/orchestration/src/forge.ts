@@ -413,6 +413,7 @@ export async function executeForgeGoal(
         attemptId,
         workerId: worker.resource.id,
         connectionId: worker.connection.id,
+        repositoryId: input.repositoryId,
         message: request,
         context: modelRequest.context ?? [],
       });

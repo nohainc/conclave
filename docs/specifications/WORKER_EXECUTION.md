@@ -195,6 +195,28 @@ The Local Runtime reports:
 - execution evidence;
 - usage/cost metadata when available.
 
+### 6.1 Codex local-agent adapter
+
+The first subscription-backed adapter launches the locally installed Codex CLI
+with `codex exec --json --full-auto`. The subscription login/session is owned by
+the local Codex installation; it is never sent through the Cloud connection or
+stored by Conclave.
+
+The adapter resolves `request.repositoryId` against a pre-registered,
+realpath-checked repository map. It does not accept a working directory from
+the model prompt. Process output is byte-limited, cancellation and timeouts
+terminate the process group, and stderr/exit status are retained as classified
+worker failures.
+
+Codex is prompted to return one Conclave protocol envelope. JSONL status events
+are ignored unless they contain the final `{ messageType, payload }` envelope.
+An execution is successful only when that envelope is present; plain text,
+partial output, or an unregistered repository cannot enter Core state.
+
+Because the local subscription does not expose token accounting to Conclave,
+the adapter reports unknown usage (`null`) until a future Codex execution
+interface provides authoritative usage metadata.
+
 ## 7. Session isolation
 
 A Worker execution may request:

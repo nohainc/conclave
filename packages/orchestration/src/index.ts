@@ -287,6 +287,7 @@ export async function executeTwoModelGoal(
         attemptId,
         workerId: worker.resource.id,
         connectionId: worker.connection.id,
+        repositoryId: input.repositoryId,
         message: request,
         context: [],
       });

@@ -1210,3 +1210,10 @@ export class OutboundRuntimeSession {
     }
   }
 }
+
+export { CodexLocalAgent } from "./codex.js";
+export type {
+  CodexChild,
+  CodexLocalAgentOptions,
+  CodexSpawn,
+} from "./codex.js";

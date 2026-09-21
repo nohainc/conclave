@@ -15,6 +15,7 @@ export interface WorkerExecutionRequest {
   readonly attemptId: string;
   readonly workerId: string;
   readonly connectionId: string;
+  readonly repositoryId: string;
   readonly message: unknown;
   readonly context: readonly WorkerExecutionContextItem[];
   readonly systemPrompt?: string;
