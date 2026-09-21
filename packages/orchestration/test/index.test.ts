@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { GoalRecord, RunRecord } from "@conclave/persistence";
-import type { ModelResponse, ModelWorker } from "@conclave/providers";
+import type {
+  ModelRequest,
+  ModelResponse,
+  ModelWorker,
+} from "@conclave/providers";
 import { InMemoryMvpPersistence, executeTwoModelGoal } from "../src/index.js";
 import type { WorkerResource } from "@conclave/core";
 
@@ -33,9 +37,23 @@ class FakeWorker implements ModelWorker {
     this.outputs = outputs;
   }
 
-  complete(): Promise<ModelResponse> {
-    const text = this.outputs[this.cursor++];
-    if (text === undefined) throw new Error("No fake model output remaining");
+  complete(request: ModelRequest): Promise<ModelResponse> {
+    const output = this.outputs[this.cursor++];
+    if (output === undefined) throw new Error("No fake model output remaining");
+    const parsed = JSON.parse(output) as {
+      payload?: Record<string, unknown>;
+    };
+    const requestPayload = request.message.payload;
+    if (
+      typeof requestPayload === "object" &&
+      requestPayload !== null &&
+      "taskId" in requestPayload &&
+      typeof requestPayload.taskId === "string" &&
+      parsed.payload
+    ) {
+      parsed.payload.taskId = requestPayload.taskId;
+    }
+    const text = JSON.stringify(parsed);
     return Promise.resolve({
       providerRequestId: `${this.resource.id}-request-${this.cursor}`,
       text,

@@ -13,6 +13,7 @@ import { validateTaskGraph } from "@conclave/core";
 import type { ModelResponse, ModelWorker } from "@conclave/providers";
 import {
   parseModelResult,
+  validateResponseContext,
   type CompletionResult,
   type ModelResult,
   type PlanRequest,
@@ -45,6 +46,8 @@ export interface TwoModelGoalInput {
   readonly persistence: MvpPersistence;
   readonly idFactory?: () => string;
   readonly now?: () => string;
+  readonly maxValidationAttempts?: number;
+  readonly validationFallbackWorker?: ModelWorker;
 }
 
 export interface TwoModelGoalResult {
@@ -158,12 +161,22 @@ function expectedResult<T extends ModelResult["messageType"]>(
   return result as Extract<ModelResult, { messageType: T }>;
 }
 
+class ModelResponseValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ModelResponseValidationError";
+  }
+}
+
 export async function executeTwoModelGoal(
   input: TwoModelGoalInput,
 ): Promise<TwoModelGoalResult> {
   const id = input.idFactory ?? defaultId;
   const now = input.now ?? (() => new Date().toISOString());
   const persistence = input.persistence;
+  const maxValidationAttempts = input.maxValidationAttempts ?? 2;
+  if (maxValidationAttempts < 1)
+    throw new Error("maxValidationAttempts must be positive");
   let sequence = 0;
 
   const event = async (
@@ -220,11 +233,12 @@ export async function executeTwoModelGoal(
   };
   await persistence.saveTask(planTask);
 
-  const call = async <T extends ModelResult["messageType"]>(
+  const callOnce = async <T extends ModelResult["messageType"]>(
     worker: ModelWorker,
     task: TaskRecord,
     request: PlanRequest | TaskRequest,
     expected: T,
+    attemptNumber = 1,
   ): Promise<Extract<ModelResult, { messageType: T }>> => {
     const attemptId = id();
     const startedAt = now();
@@ -251,7 +265,7 @@ export async function executeTwoModelGoal(
       id: attemptId,
       taskId: task.id,
       workerId: worker.resource.id,
-      attemptNumber: 1,
+      attemptNumber,
       inputSnapshot: jsonObject(request),
       outputArtifactIds: [requestArtifactId],
       status: "running",
@@ -268,7 +282,7 @@ export async function executeTwoModelGoal(
         id: attemptId,
         taskId: task.id,
         workerId: worker.resource.id,
-        attemptNumber: 1,
+        attemptNumber,
         inputSnapshot: jsonObject(request),
         outputArtifactIds: [requestArtifactId],
         status: "errored",
@@ -317,13 +331,20 @@ export async function executeTwoModelGoal(
     let accepted: Extract<ModelResult, { messageType: T }>;
     try {
       result = parseModelResult(JSON.parse(response.text) as unknown);
+      validateResponseContext(result, {
+        goalId: request.goalId,
+        runId: request.runId,
+        workerId: worker.resource.id,
+        taskId: task.id,
+        expectedMessageType: expected,
+      });
       accepted = expectedResult(result, expected);
     } catch (error) {
       await persistence.saveAttempt({
         id: attemptId,
         taskId: task.id,
         workerId: worker.resource.id,
-        attemptNumber: 1,
+        attemptNumber,
         inputSnapshot: jsonObject(request),
         outputArtifactIds: [requestArtifactId, responseArtifactId],
         status: "rejected",
@@ -335,14 +356,18 @@ export async function executeTwoModelGoal(
         messageType: request.messageType,
         reason: error instanceof Error ? error.message : "unknown",
       });
-      throw error;
+      throw new ModelResponseValidationError(
+        error instanceof Error
+          ? error.message
+          : "Model response validation failed",
+      );
     }
 
     await persistence.saveAttempt({
       id: attemptId,
       taskId: task.id,
       workerId: worker.resource.id,
-      attemptNumber: 1,
+      attemptNumber,
       inputSnapshot: jsonObject(request),
       outputArtifactIds: [requestArtifactId, responseArtifactId],
       status: "succeeded",
@@ -357,6 +382,47 @@ export async function executeTwoModelGoal(
     return accepted;
   };
 
+  const call = async <T extends ModelResult["messageType"]>(
+    worker: ModelWorker,
+    task: TaskRecord,
+    request: PlanRequest | TaskRequest,
+    expected: T,
+  ): Promise<Extract<ModelResult, { messageType: T }>> => {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= maxValidationAttempts; attempt += 1) {
+      const activeWorker =
+        attempt > 1 && input.validationFallbackWorker
+          ? input.validationFallbackWorker
+          : worker;
+      const activeRequest =
+        activeWorker.resource.id === request.workerId
+          ? request
+          : { ...request, workerId: activeWorker.resource.id };
+      try {
+        return await callOnce(
+          activeWorker,
+          task,
+          activeRequest,
+          expected,
+          attempt,
+        );
+      } catch (error) {
+        if (!(error instanceof ModelResponseValidationError)) throw error;
+        lastError = error;
+        await event("ModelValidationRetry", "task", task.id, {
+          attempt,
+          maxAttempts: maxValidationAttempts,
+          messageType: expected,
+          rerouted: activeWorker.resource.id !== worker.resource.id,
+          reason: error.message,
+        });
+      }
+    }
+    throw new Error(
+      `Model response validation exhausted after ${maxValidationAttempts} attempts: ${lastError instanceof Error ? lastError.message : "unknown"}`,
+    );
+  };
+
   const planRequest: PlanRequest = {
     protocol: "conclave.protocol",
     version: "0.1",
@@ -367,6 +433,7 @@ export async function executeTwoModelGoal(
     createdAt: now(),
     messageType: "PlanRequest",
     payload: {
+      taskId: planTaskId,
       objective: input.goal.objective,
       constraints: [...input.goal.constraints],
       repository: {

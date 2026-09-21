@@ -25,6 +25,7 @@ import {
 import {
   parseModelResult,
   parseImplementationResult,
+  validateResponseContext,
   type CompletionResult,
   type ImplementationOperation,
   type ImplementationResult,
@@ -112,11 +113,13 @@ export interface ForgeWorkflowInput {
   readonly reviewer?: ModelWorker;
   readonly runtime: ForgeRuntimeAdapter;
   readonly implementationAgent?: ForgeImplementationAgent;
+  readonly validationFallbackWorker?: ModelWorker;
   readonly persistence: ForgePersistence;
   readonly maxReviewLoops?: number;
   readonly idFactory?: () => string;
   readonly now?: () => string;
   readonly contextLimits?: ContextLimits;
+  readonly maxValidationAttempts?: number;
 }
 
 export interface ForgeWorkflowResult {
@@ -215,6 +218,13 @@ function expectedResult<T extends ModelResult["messageType"]>(
   return result as Extract<ModelResult, { messageType: T }>;
 }
 
+class ModelResponseValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ModelResponseValidationError";
+  }
+}
+
 export async function executeForgeGoal(
   input: ForgeWorkflowInput,
 ): Promise<ForgeWorkflowResult> {
@@ -232,6 +242,10 @@ export async function executeForgeGoal(
     input.persistence satisfies ArtifactResolver,
     input.contextLimits,
   );
+  const maxValidationAttempts = input.maxValidationAttempts ?? 2;
+  if (maxValidationAttempts < 1) {
+    throw new Error("maxValidationAttempts must be positive");
+  }
   let sequence = 0;
   const phases = new Map<string, string>();
 
@@ -344,12 +358,13 @@ export async function executeForgeGoal(
     });
   };
 
-  const call = async <T extends ModelResult["messageType"]>(
+  const callOnce = async <T extends ModelResult["messageType"]>(
     worker: ModelWorker,
     modelTask: TaskRecord,
     request: PlanRequest | TaskRequest,
     expected: T,
     contextArtifactIds: readonly string[] = [],
+    attemptNumber = 1,
   ): Promise<Extract<ModelResult, { messageType: T }>> => {
     const attemptId = id();
     const startedAt = now();
@@ -371,7 +386,7 @@ export async function executeForgeGoal(
       id: attemptId,
       taskId: modelTask.id,
       workerId: worker.resource.id,
-      attemptNumber: 1,
+      attemptNumber,
       inputSnapshot: jsonObject(request),
       outputArtifactIds: [requestArtifactId],
       status: "running",
@@ -392,7 +407,7 @@ export async function executeForgeGoal(
         id: attemptId,
         taskId: modelTask.id,
         workerId: worker.resource.id,
-        attemptNumber: 1,
+        attemptNumber,
         inputSnapshot: jsonObject(request),
         outputArtifactIds: [requestArtifactId],
         status: "errored",
@@ -431,15 +446,20 @@ export async function executeForgeGoal(
       finishedAt: now(),
     });
     try {
-      const accepted = expectedResult(
-        parseModelResult(JSON.parse(response.text) as unknown),
-        expected,
-      );
+      const parsed = parseModelResult(JSON.parse(response.text) as unknown);
+      validateResponseContext(parsed, {
+        goalId: request.goalId,
+        runId: request.runId,
+        workerId: worker.resource.id,
+        taskId: modelTask.id,
+        expectedMessageType: expected,
+      });
+      const accepted = expectedResult(parsed, expected);
       await persistence.saveAttempt({
         id: attemptId,
         taskId: modelTask.id,
         workerId: worker.resource.id,
-        attemptNumber: 1,
+        attemptNumber,
         inputSnapshot: jsonObject(request),
         outputArtifactIds: [requestArtifactId, responseArtifactId],
         status: "succeeded",
@@ -457,7 +477,7 @@ export async function executeForgeGoal(
         id: attemptId,
         taskId: modelTask.id,
         workerId: worker.resource.id,
-        attemptNumber: 1,
+        attemptNumber,
         inputSnapshot: jsonObject(request),
         outputArtifactIds: [requestArtifactId, responseArtifactId],
         status: "rejected",
@@ -468,8 +488,55 @@ export async function executeForgeGoal(
       await event("ModelResultRejected", "attempt", attemptId, {
         reason: error instanceof Error ? error.message : "unknown",
       });
-      throw error;
+      throw new ModelResponseValidationError(
+        error instanceof Error
+          ? error.message
+          : "Model response validation failed",
+      );
     }
+  };
+
+  const call = async <T extends ModelResult["messageType"]>(
+    worker: ModelWorker,
+    modelTask: TaskRecord,
+    request: PlanRequest | TaskRequest,
+    expected: T,
+    contextArtifactIds: readonly string[] = [],
+  ): Promise<Extract<ModelResult, { messageType: T }>> => {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= maxValidationAttempts; attempt += 1) {
+      const activeWorker =
+        attempt > 1 && input.validationFallbackWorker
+          ? input.validationFallbackWorker
+          : worker;
+      const activeRequest =
+        activeWorker.resource.id === request.workerId
+          ? request
+          : { ...request, workerId: activeWorker.resource.id };
+      try {
+        return await callOnce(
+          activeWorker,
+          modelTask,
+          activeRequest,
+          expected,
+          contextArtifactIds,
+          attempt,
+        );
+      } catch (error) {
+        if (!(error instanceof ModelResponseValidationError)) throw error;
+        lastError = error;
+        await event("ModelValidationRetry", "task", modelTask.id, {
+          attempt,
+          maxAttempts: maxValidationAttempts,
+          messageType: expected,
+          rerouted: activeWorker.resource.id !== worker.resource.id,
+          reason: error.message,
+        });
+      }
+    }
+    throw new Error(
+      `Model response validation exhausted after ${maxValidationAttempts} attempts: ${lastError instanceof Error ? lastError.message : "unknown"}`,
+    );
   };
 
   await persistence.saveGoal(input.goal);
@@ -589,6 +656,7 @@ export async function executeForgeGoal(
     createdAt: now(),
     messageType: "PlanRequest",
     payload: {
+      taskId: planningTask.id,
       objective: input.goal.objective,
       constraints: [...input.goal.constraints],
       repository: {

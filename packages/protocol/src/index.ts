@@ -37,6 +37,7 @@ const message = <TMessageType extends string, TPayload extends z.ZodType>(
 
 const planRequestPayload = z
   .object({
+    taskId: id,
     objective: nonEmpty,
     constraints: z.array(nonEmpty),
     repository: repositoryContext,
@@ -66,6 +67,7 @@ const phasePlan = z
 
 const planResultPayload = z
   .object({
+    taskId: id,
     phases: z.array(phasePlan).min(1),
     assumptions: z.array(nonEmpty),
     risks: z.array(nonEmpty),
@@ -95,6 +97,7 @@ const taskResultPayload = z
 
 const researchResultPayload = z
   .object({
+    taskId: id,
     summary: nonEmpty,
     relevantPaths: z.array(nonEmpty),
     observations: z
@@ -147,6 +150,7 @@ const implementationOperation = z.discriminatedUnion("kind", [
 
 const implementationResultPayload = z
   .object({
+    taskId: id,
     status: z.enum(["succeeded", "blocked", "failed"]),
     revision: nonEmpty,
     changedFiles: z.array(nonEmpty),
@@ -175,6 +179,7 @@ const finding = z
 
 const reviewResultPayload = z
   .object({
+    taskId: id,
     outcome: z.enum(["pass", "changes_requested", "blocked"]),
     reviewedArtifactIds: artifactIds,
     resolvedFindingIds: artifactIds,
@@ -212,6 +217,7 @@ const machineCheckEvidencePayload = z
 
 const testResultPayload = z
   .object({
+    taskId: id,
     revision: nonEmpty,
     outcome: z.enum(["pass", "fail", "inconclusive"]),
     checks: z.array(checkResult).min(1),
@@ -221,6 +227,7 @@ const testResultPayload = z
 
 const verificationResultPayload = z
   .object({
+    taskId: id,
     criterionId: id,
     method: z.enum([
       "executable_check",
@@ -266,6 +273,7 @@ const decisionResultPayload = z
 
 const completionResultPayload = z
   .object({
+    taskId: id,
     outcome: z.enum(["completed", "failed"]),
     criteria: z
       .array(
@@ -353,6 +361,45 @@ export type DecisionResult = z.infer<typeof DecisionResultSchema>;
 export type CompletionResult = z.infer<typeof CompletionResultSchema>;
 export type ModelResult = z.infer<typeof ModelResultSchema>;
 export type ProtocolMessage = z.infer<typeof ProtocolMessageSchema>;
+
+export interface ResponseContext {
+  readonly goalId: string;
+  readonly runId: string;
+  readonly workerId: string;
+  readonly taskId: string;
+  readonly expectedMessageType: ModelResult["messageType"];
+}
+
+export class ResponseContextError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ResponseContextError";
+  }
+}
+
+export function validateResponseContext(
+  response: ModelResult,
+  expected: ResponseContext,
+): void {
+  if (response.messageType !== expected.expectedMessageType) {
+    throw new ResponseContextError(
+      `Expected ${expected.expectedMessageType}, received ${response.messageType}`,
+    );
+  }
+  const payload = response.payload as { readonly taskId?: unknown };
+  for (const [field, actual, wanted] of [
+    ["goalId", response.goalId, expected.goalId],
+    ["runId", response.runId, expected.runId],
+    ["workerId", response.workerId, expected.workerId],
+    ["taskId", payload.taskId, expected.taskId],
+  ] as const) {
+    if (actual !== wanted) {
+      throw new ResponseContextError(
+        `Response ${field} ${String(actual)} does not match ${String(wanted)}`,
+      );
+    }
+  }
+}
 
 export function parsePlanRequest(input: unknown): PlanRequest {
   return PlanRequestSchema.parse(input);

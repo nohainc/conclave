@@ -16,6 +16,7 @@ const plan = PlanResultSchema.parse({
   createdAt: "2026-09-21T10:00:00.000Z",
   messageType: "PlanResult",
   payload: {
+    taskId: "task-1",
     phases: [
       {
         phaseId: "phase-1",

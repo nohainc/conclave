@@ -35,6 +35,7 @@ const message = {
   createdAt: "2026-09-21T10:00:00.000Z",
   messageType: "PlanRequest" as const,
   payload: {
+    taskId: "task-plan",
     objective: "Plan",
     constraints: [],
     repository: { repositoryId: "repo-1", revision: "main" },

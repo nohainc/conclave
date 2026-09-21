@@ -77,9 +77,23 @@ class FakeWorker implements ModelWorker {
 
   complete(request: ModelRequest): Promise<ModelResponse> {
     this.requests.push(request);
-    const text = this.outputs[this.cursor++];
-    if (text === undefined)
+    const output = this.outputs[this.cursor++];
+    if (output === undefined)
       throw new Error(`${this.resource.id} ran out of outputs`);
+    const parsed = JSON.parse(output) as {
+      payload?: Record<string, unknown>;
+    };
+    const requestPayload = request.message.payload;
+    if (
+      typeof requestPayload === "object" &&
+      requestPayload !== null &&
+      "taskId" in requestPayload &&
+      typeof requestPayload.taskId === "string" &&
+      parsed.payload
+    ) {
+      parsed.payload.taskId = requestPayload.taskId;
+    }
+    const text = JSON.stringify(parsed);
     return Promise.resolve({
       providerRequestId: `${this.resource.id}-${this.cursor}`,
       text,
@@ -148,6 +162,7 @@ describe("Forge MVP workflow", () => {
     const lead = new FakeWorker(
       resource("lead", ["lead"], ["planning", "evaluation", "repository_read"]),
       [
+        "{}",
         envelope("ResearchResult", "lead", {
           summary: "The greeting path has a missing null guard.",
           relevantPaths: ["src/greeting.ts", "test/greeting.test.ts"],
@@ -332,9 +347,14 @@ describe("Forge MVP workflow", () => {
     expect(appliedOperations.every((operations) => operations.length > 0)).toBe(
       true,
     );
-    expect(persistence.modelCalls).toHaveLength(10);
+    expect(persistence.modelCalls).toHaveLength(11);
     expect(persistence.artifacts.length).toBeGreaterThan(15);
     expect(persistence.events.at(-1)?.eventType).toBe("RunCompleted");
+    expect(
+      persistence.events.some(
+        (event) => event.eventType === "ModelValidationRetry",
+      ),
+    ).toBe(true);
     expect(
       new Set(persistence.modelCalls.map((call) => call.workerId)),
     ).toEqual(new Set(["lead", "implementer", "reviewer"]));

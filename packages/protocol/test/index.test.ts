@@ -8,6 +8,7 @@ import {
   PROTOCOL_NAME,
   PROTOCOL_VERSION,
   ReviewResultSchema,
+  validateResponseContext,
 } from "../src/index.js";
 
 const envelope = {
@@ -24,6 +25,7 @@ const validPlanResult = {
   ...envelope,
   messageType: "PlanResult",
   payload: {
+    taskId: "task-plan",
     phases: [
       {
         phaseId: "phase-1",
@@ -52,6 +54,28 @@ describe("versioned protocol contracts", () => {
     expect(result.messageType).toBe("PlanResult");
     const plan = PlanResultSchema.parse(result);
     expect(plan.payload.phases[0]?.tasks[0]?.taskId).toBe("task-1");
+  });
+
+  it("rejects a validly-shaped response from another run or task", () => {
+    const result = parseModelResult(validPlanResult);
+    expect(() =>
+      validateResponseContext(result, {
+        goalId: "goal-1",
+        runId: "run-1",
+        workerId: "worker-1",
+        taskId: "different-task",
+        expectedMessageType: "PlanResult",
+      }),
+    ).toThrow("taskId");
+    expect(() =>
+      validateResponseContext(result, {
+        goalId: "different-goal",
+        runId: "run-1",
+        workerId: "worker-1",
+        taskId: "task-plan",
+        expectedMessageType: "PlanResult",
+      }),
+    ).toThrow("goalId");
   });
 
   it.each([
@@ -87,6 +111,7 @@ describe("versioned protocol contracts", () => {
       ...envelope,
       messageType: "ReviewResult",
       payload: {
+        taskId: "task-review",
         outcome: "pass",
         reviewedArtifactIds: [],
         resolvedFindingIds: [],
@@ -108,6 +133,7 @@ describe("versioned protocol contracts", () => {
       ...envelope,
       messageType: "PlanRequest",
       payload: {
+        taskId: "task-plan",
         objective: "Add protocol validation",
         constraints: [],
         repository: { repositoryId: "repo-1", revision: "main" },
@@ -160,6 +186,7 @@ describe("versioned protocol contracts", () => {
       ...envelope,
       messageType: "ImplementationResult",
       payload: {
+        taskId: "task-implementation",
         status: "succeeded",
         revision: "main",
         changedFiles: ["src/file.ts"],

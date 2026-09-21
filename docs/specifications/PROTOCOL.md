@@ -37,3 +37,5 @@ The runtime schemas live in `@conclave/protocol`. They reject the wrong version,
 ## Admission rule
 
 Core accepts only the return value of `admitModelResult(input: unknown)`. A parse failure is a validation failure: the Attempt is rejected and may be retried or rerouted under the Run policy. No raw model object may be persisted as a state transition or used to mark a Task, Phase, Run, or Goal complete.
+
+After parsing, orchestration validates response correlation against the active request: `goalId`, `runId`, `workerId`, expected message type, and task ID must all match. Task-scoped result payloads carry their `taskId`; a syntactically valid result from another run or task is rejected. Forge and the two-model runner retry validation failures up to their configured attempt limit, persist each rejected Attempt, and emit a retry event before failing the task when the limit is exhausted.
