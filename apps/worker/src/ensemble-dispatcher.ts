@@ -41,6 +41,63 @@ export interface SelectedEnsembleWorker {
   readonly independenceKey: string;
 }
 
+function roleTask(
+  task: TaskToDispatch,
+  role: string,
+  capability: string,
+): TaskToDispatch {
+  return { ...task, role, capabilities: [capability] };
+}
+
+function jsonStrings(value: unknown): string[] {
+  if (typeof value !== "string") return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function matchesTask(
+  row: Record<string, unknown>,
+  task: TaskToDispatch,
+): boolean {
+  const requiredRole = task.role.toLowerCase();
+  const roles = jsonStrings(row.roles_json).map((role) => role.toLowerCase());
+  const capabilities = jsonStrings(row.capabilities_json).map((capability) =>
+    capability.toLowerCase(),
+  );
+  const matchesRole =
+    roles.includes(requiredRole) ||
+    roles.includes("implementer") ||
+    roles.includes("coder") ||
+    roles.includes("architect");
+  return (
+    matchesRole &&
+    (task.capabilities || [])
+      .map((capability) => capability.toLowerCase())
+      .every((capability) => capabilities.includes(capability))
+  );
+}
+
+function toSelectedWorker(
+  row: Record<string, unknown>,
+  task: TaskToDispatch,
+): SelectedEnsembleWorker {
+  return {
+    id: String(row.id),
+    agentId: String(row.agent_id),
+    pluginId: String(row.plugin_id),
+    name: String(row.name),
+    role: task.role,
+    capabilities: jsonStrings(row.capabilities_json),
+    independenceKey: String(row.independence_key),
+  };
+}
+
 /**
  * Selects N candidate workers matching role and capabilities across online agents with distinct independence keys.
  */
@@ -66,15 +123,20 @@ export async function selectEnsembleCandidateWorkers(
       .bind(workspaceId, ...explicitWorkerIds)
       .all<Record<string, unknown>>();
 
-    return (rows.results || []).map((row) => ({
-      id: String(row.id),
-      agentId: String(row.agent_id),
-      pluginId: String(row.plugin_id),
-      name: String(row.name),
-      role: task.role,
-      capabilities: JSON.parse(String(row.capabilities_json || "[]")),
-      independenceKey: String(row.independence_key),
-    }));
+    const selected: SelectedEnsembleWorker[] = [];
+    const usedIndependenceKeys = new Set<string>();
+    for (const row of rows.results || []) {
+      if (
+        !matchesTask(row, task) ||
+        usedIndependenceKeys.has(String(row.independence_key))
+      ) {
+        continue;
+      }
+      usedIndependenceKeys.add(String(row.independence_key));
+      selected.push(toSelectedWorker(row, task));
+      if (selected.length >= count) break;
+    }
+    return selected;
   }
 
   const rows = await db
@@ -83,51 +145,26 @@ export async function selectEnsembleCandidateWorkers(
               w.roles_json, w.capabilities_json, w.status as worker_status, a.status as agent_status
        FROM workers w
        JOIN agents a ON a.id = w.agent_id
-       WHERE w.workspace_id = ?1 AND w.enabled = 1 AND w.status != 'disabled' AND a.status = 'online'`,
+       WHERE w.workspace_id = ?1 AND w.enabled = 1 AND w.status != 'disabled'
+         AND a.status = 'online' AND a.revoked_at IS NULL`,
     )
     .bind(workspaceId)
     .all<Record<string, unknown>>();
 
-  const requiredRole = task.role.toLowerCase();
-  const requiredCaps = (task.capabilities || []).map((c) => c.toLowerCase());
   const selected: SelectedEnsembleWorker[] = [];
   const usedIndependenceKeys = new Set<string>();
 
   for (const row of rows.results || []) {
     if (selected.length >= count) break;
 
-    const roles = (JSON.parse(String(row.roles_json || "[]")) as string[]).map(
-      (r) => r.toLowerCase(),
-    );
-    const caps = (
-      JSON.parse(String(row.capabilities_json || "[]")) as string[]
-    ).map((c) => c.toLowerCase());
     const indepKey = String(row.independence_key);
 
-    if (usedIndependenceKeys.has(indepKey)) {
+    if (!matchesTask(row, task) || usedIndependenceKeys.has(indepKey)) {
       continue;
     }
 
-    const matchesRole =
-      roles.includes(requiredRole) ||
-      roles.includes("implementer") ||
-      roles.includes("coder") ||
-      roles.includes("architect");
-    if (!matchesRole) continue;
-
-    const hasAllCaps = requiredCaps.every((c) => caps.includes(c));
-    if (!hasAllCaps) continue;
-
     usedIndependenceKeys.add(indepKey);
-    selected.push({
-      id: String(row.id),
-      agentId: String(row.agent_id),
-      pluginId: String(row.plugin_id),
-      name: String(row.name),
-      role: task.role,
-      capabilities: caps,
-      independenceKey: indepKey,
-    });
+    selected.push(toSelectedWorker(row, task));
   }
 
   return selected;
@@ -236,7 +273,7 @@ export async function dispatchEnsembleTaskAssignment(
       await selectEnsembleCandidateWorkers(
         env.CONCLAVE_DB,
         workspaceId,
-        { ...task, role: "synthesizer" },
+        roleTask(task, "synthesizer", "synthesis"),
         1,
         [params.synthesizerWorkerId],
       )
@@ -259,7 +296,7 @@ export async function dispatchEnsembleTaskAssignment(
       await selectEnsembleCandidateWorkers(
         env.CONCLAVE_DB,
         workspaceId,
-        { ...task, role: "evaluator" },
+        roleTask(task, "evaluator", "evaluation"),
         1,
         [params.selectorWorkerId],
       )
@@ -281,7 +318,7 @@ export async function dispatchEnsembleTaskAssignment(
     const revWorkers = await selectEnsembleCandidateWorkers(
       env.CONCLAVE_DB,
       workspaceId,
-      { ...task, role: "reviewer" },
+      roleTask(task, "reviewer", "code_review"),
       params.reviewerWorkerIds.length,
       params.reviewerWorkerIds,
     );
