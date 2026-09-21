@@ -52,6 +52,10 @@ class AgentAssignmentResult {
 
 typedef AgentAssignmentHandler = Future<AgentAssignmentResult> Function(
     AgentAssignmentContext context);
+typedef AgentAssignmentCancellationHandler = Future<bool> Function(
+  String assignmentId,
+  String reason,
+);
 
 class IoAgentCloudSocket implements AgentCloudSocket {
   IoAgentCloudSocket(this.socket);
@@ -96,6 +100,7 @@ class AgentCloudConnection {
     this.activeWorkerIds = const [],
     this.unreconciledAssignmentIds = const [],
     this.assignmentHandler,
+    this.assignmentCancellationHandler,
     this.assignmentJournal,
     this.heartbeat = const Duration(seconds: 15),
   })  : hostname = hostname ?? Platform.localHostname,
@@ -113,6 +118,7 @@ class AgentCloudConnection {
   final List<String> activeWorkerIds;
   final List<String> unreconciledAssignmentIds;
   final AgentAssignmentHandler? assignmentHandler;
+  final AgentAssignmentCancellationHandler? assignmentCancellationHandler;
   final AssignmentJournal? assignmentJournal;
   final Duration heartbeat;
   AgentCloudSocket? _socket;
@@ -123,6 +129,7 @@ class AgentCloudConnection {
   String? sessionId;
   int _messageSequence = 0;
   Map<String, Object?>? syncResponse;
+  final _activeAssignments = <String>{};
 
   static const protocol = 'conclave.agent-protocol';
   static const protocolVersion = '2.0';
@@ -219,6 +226,8 @@ class AgentCloudConnection {
       }
     } else if (decoded['type'] == 'assignment.start') {
       unawaited(_handleAssignmentStart(decoded));
+    } else if (decoded['type'] == 'assignment.cancel') {
+      unawaited(_handleAssignmentCancel(decoded));
     }
   }
 
@@ -311,6 +320,7 @@ class AgentCloudConnection {
     }
 
     await _recordAssignment(context.assignmentId, AssignmentStatus.running);
+    _activeAssignments.add(context.assignmentId);
     socket.send(jsonEncode(_assignmentEnvelope(
       'assignment.ack',
       correlation,
@@ -356,7 +366,38 @@ class AgentCloudConnection {
         AssignmentStatus.failed,
         result: {'error': '$error'},
       );
+    } finally {
+      _activeAssignments.remove(context.assignmentId);
     }
+  }
+
+  Future<void> _handleAssignmentCancel(Map<String, dynamic> message) async {
+    final socket = _socket;
+    if (socket == null ||
+        message['assignmentId'] is! String ||
+        message['workspaceId'] != workspaceId ||
+        message['agentId'] != agentId) {
+      return;
+    }
+    final assignmentId = message['assignmentId'] as String;
+    final payload = message['payload'];
+    final reason = payload is Map && payload['reason'] is String
+        ? payload['reason'] as String
+        : 'Cloud requested cancellation';
+    var cancelled = false;
+    if (_activeAssignments.contains(assignmentId) &&
+        assignmentCancellationHandler != null) {
+      cancelled = await assignmentCancellationHandler!(assignmentId, reason);
+    }
+    final alreadyTerminated = !_activeAssignments.contains(assignmentId);
+    socket.send(jsonEncode(_assignmentEnvelope(
+      'assignment.cancel.ack',
+      _assignmentCorrelation(message),
+      {
+        'cancelled': cancelled,
+        'alreadyTerminated': alreadyTerminated,
+      },
+    )));
   }
 
   String? _validateAssignmentPayload(Object? rawPayload) {

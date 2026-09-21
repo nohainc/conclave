@@ -291,6 +291,42 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('acknowledges cancellation for an already completed assignment',
+      () async {
+    final socket = FakeSocket();
+    final connection = AgentCloudConnection(
+      uri: Uri.parse('wss://cloud.test/agent'),
+      agentId: 'agent-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+    );
+    await connection.connect();
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.agent-protocol',
+      'protocolVersion': '2.0',
+      'messageId': 'cancel-1',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'assignment.cancel',
+      'workspaceId': 'workspace-1',
+      'agentId': 'agent-1',
+      'workerId': 'worker-1',
+      'runId': 'run-1',
+      'taskId': 'task-1',
+      'attemptId': 'attempt-1',
+      'assignmentId': 'assignment-done',
+      'idempotencyKey': 'idem-done',
+      'payload': {'reason': 'user cancelled', 'gracePeriodMs': 1000},
+    }));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    final ack = socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .firstWhere((message) => message['type'] == 'assignment.cancel.ack');
+    expect((ack['payload'] as Map<String, dynamic>)['cancelled'], isFalse);
+    expect(
+        (ack['payload'] as Map<String, dynamic>)['alreadyTerminated'], isTrue);
+    await connection.close();
+  });
+
   test('runs Forge through Cloud assignment, plugin, and journal boundaries',
       () async {
     final repository = Directory.current.parent.parent;
