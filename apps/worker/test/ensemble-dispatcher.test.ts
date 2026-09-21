@@ -57,6 +57,7 @@ describe("Multi-Agent Ensemble Dispatcher (Cloud -> Multi-Agent -> Workers)", ()
     agentId: string;
     assignmentId: string;
   }> = [];
+  let completeAssignments = true;
 
   const mockGatewayStub = {
     async fetch(url: string, init?: RequestInit) {
@@ -70,22 +71,24 @@ describe("Multi-Agent Ensemble Dispatcher (Cloud -> Multi-Agent -> Workers)", ()
           agentId: body.agentId,
           assignmentId: body.assignmentId,
         });
-        db.prepare(
-          `UPDATE worker_assignments
-           SET status = 'completed',
-               output_json = ?,
-               updated_at = ?
-           WHERE id = ?`,
-        ).run(
-          JSON.stringify({
-            status: "completed",
-            summary: "Fixture Agent completed the assignment",
-            output: { accepted: true },
-            artifactIds: [],
-          }),
-          new Date().toISOString(),
-          body.assignmentId,
-        );
+        if (completeAssignments) {
+          db.prepare(
+            `UPDATE worker_assignments
+             SET status = 'completed',
+                 output_json = ?,
+                 updated_at = ?
+             WHERE id = ?`,
+          ).run(
+            JSON.stringify({
+              status: "completed",
+              summary: "Fixture Agent completed the assignment",
+              output: { accepted: true },
+              artifactIds: [],
+            }),
+            new Date().toISOString(),
+            body.assignmentId,
+          );
+        }
         return new Response(
           JSON.stringify({
             accepted: true,
@@ -112,6 +115,7 @@ describe("Multi-Agent Ensemble Dispatcher (Cloud -> Multi-Agent -> Workers)", ()
     db.exec(sql);
     d1 = createD1Mock(db) as unknown as D1Database;
     dispatchedAssignments.length = 0;
+    completeAssignments = true;
 
     env = {
       CONCLAVE_ENVIRONMENT: "development",
@@ -361,6 +365,31 @@ describe("Multi-Agent Ensemble Dispatcher (Cloud -> Multi-Agent -> Workers)", ()
       expect(ensembleRes.mode).toBe("compare_and_select");
       expect(ensembleRes.selectedCandidateIndex).toBeDefined();
       expect(ensembleRes.selectedWorkerId).toBeDefined();
+    });
+
+    it("cancels an assignment when an ensemble Worker times out", async () => {
+      completeAssignments = false;
+      const ensembleRes = await dispatchEnsembleTaskAssignment(env, {
+        workspaceId: "ws-1",
+        runId: "run-1",
+        taskId: "task-arch",
+        task: {
+          id: "task-arch",
+          role: "architect",
+          objective: "Design Architecture",
+          capabilities: ["architecture"],
+          timeoutMs: 1000,
+        },
+        policy: { mode: "single" },
+      });
+
+      expect(ensembleRes.candidates[0]?.result.status).toBe("timed_out");
+      const assignment = db
+        .prepare(
+          "SELECT status FROM worker_assignments WHERE task_id = 'task-arch'",
+        )
+        .get() as { status: string };
+      expect(assignment.status).toBe("cancelled");
     });
   });
 

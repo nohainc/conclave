@@ -13,6 +13,7 @@ import {
   type MultiAgentTaskRequest,
 } from "@conclave/core";
 import {
+  cancelTaskAssignment,
   dispatchTaskAssignment,
   type AssignmentDispatcherEnv,
   type TaskToDispatch,
@@ -271,6 +272,13 @@ function createWorkerDescriptor(
         taskReq.timeoutMs ?? 15 * 60_000,
       );
       if (completed.status !== "completed") {
+        if (completed.status === "timed_out") {
+          await cancelTaskAssignment(
+            env,
+            dispatchRes.assignmentId,
+            "Ensemble worker result timed out",
+          );
+        }
         return {
           status: completed.status,
           output: null,
