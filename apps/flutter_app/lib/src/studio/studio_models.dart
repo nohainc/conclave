@@ -14,11 +14,99 @@ enum FindingSeverity { blocker, major, minor, note }
 
 enum FindingStatus { open, fixed, verified }
 
-String _string(Map<String, dynamic> json, String key,
-    [String fallback = '—']) {
+enum StudioQualityPreset {
+  economy,
+  balanced,
+  highAssurance,
+  exploration,
+  custom
+}
+
+class StudioPolicy {
+  const StudioPolicy({
+    required this.preset,
+    required this.mode,
+    required this.candidateCount,
+    required this.maxParallel,
+    required this.costCeiling,
+    required this.requiresSynthesis,
+  });
+
+  final StudioQualityPreset preset;
+  final String mode;
+  final int candidateCount;
+  final int maxParallel;
+  final String costCeiling;
+  final bool requiresSynthesis;
+
+  factory StudioPolicy.fromJson(Map<String, dynamic> json) => StudioPolicy(
+        preset: switch (_string(json, 'preset')) {
+          'economy' => StudioQualityPreset.economy,
+          'high_assurance' => StudioQualityPreset.highAssurance,
+          'exploration' => StudioQualityPreset.exploration,
+          'custom' => StudioQualityPreset.custom,
+          _ => StudioQualityPreset.balanced,
+        },
+        mode: _string(json, 'mode', 'parallel'),
+        candidateCount: json['candidateCount'] as int? ?? 2,
+        maxParallel: json['maxParallel'] as int? ?? 2,
+        costCeiling: _string(json, 'costCeiling', 'No ceiling'),
+        requiresSynthesis: json['requiresSynthesis'] as bool? ?? false,
+      );
+}
+
+class StudioCandidateOutput {
+  const StudioCandidateOutput({
+    required this.worker,
+    required this.role,
+    required this.status,
+    required this.summary,
+    required this.artifactCount,
+  });
+
+  final String worker;
+  final String role;
+  final String status;
+  final String summary;
+  final int artifactCount;
+
+  factory StudioCandidateOutput.fromJson(Map<String, dynamic> json) =>
+      StudioCandidateOutput(
+        worker: _string(json, 'worker'),
+        role: _string(json, 'role'),
+        status: _string(json, 'status'),
+        summary: _string(json, 'summary'),
+        artifactCount: json['artifactCount'] as int? ?? 0,
+      );
+}
+
+class StudioSynthesisDecision {
+  const StudioSynthesisDecision({
+    required this.status,
+    required this.summary,
+    required this.worker,
+    required this.evidence,
+  });
+
+  final String status;
+  final String summary;
+  final String worker;
+  final String evidence;
+
+  factory StudioSynthesisDecision.fromJson(Map<String, dynamic> json) =>
+      StudioSynthesisDecision(
+        status: _string(json, 'status'),
+        summary: _string(json, 'summary'),
+        worker: _string(json, 'worker'),
+        evidence: _string(json, 'evidence'),
+      );
+}
+
+String _string(Map<String, dynamic> json, String key, [String fallback = '—']) {
   final value = json[key];
   return value == null ? fallback : value.toString();
 }
+
 List<String> _strings(Map<String, dynamic> json, String key) =>
     List<String>.from(json[key] as List? ?? const []);
 
@@ -273,6 +361,9 @@ class StudioSnapshot {
     required this.events,
     required this.artifacts,
     required this.modelCalls,
+    this.policy,
+    this.candidateOutputs = const [],
+    this.synthesisDecision,
   });
 
   final String? activeRunId;
@@ -284,6 +375,9 @@ class StudioSnapshot {
   final List<StudioEvent> events;
   final List<StudioArtifact> artifacts;
   final List<StudioModelCall> modelCalls;
+  final StudioPolicy? policy;
+  final List<StudioCandidateOutput> candidateOutputs;
+  final StudioSynthesisDecision? synthesisDecision;
 
   static StudioSnapshot empty() => const StudioSnapshot(
       projects: [],
@@ -327,6 +421,18 @@ class StudioSnapshot {
             .map((item) => StudioModelCall.fromJson(
                 Map<String, dynamic>.from(item as Map)))
             .toList(),
+        policy: json['policy'] == null
+            ? null
+            : StudioPolicy.fromJson(
+                Map<String, dynamic>.from(json['policy'] as Map)),
+        candidateOutputs: (json['candidateOutputs'] as List? ?? const [])
+            .map((item) => StudioCandidateOutput.fromJson(
+                Map<String, dynamic>.from(item as Map)))
+            .toList(),
+        synthesisDecision: json['synthesisDecision'] == null
+            ? null
+            : StudioSynthesisDecision.fromJson(
+                Map<String, dynamic>.from(json['synthesisDecision'] as Map)),
       );
 
   static StudioSnapshot demo() => const StudioSnapshot(
@@ -522,5 +628,35 @@ class StudioSnapshot {
               duration: '38s',
               status: 'Complete'),
         ],
+        policy: StudioPolicy(
+          preset: StudioQualityPreset.balanced,
+          mode: 'parallel',
+          candidateCount: 2,
+          maxParallel: 2,
+          costCeiling: '\$0.04 / attempt',
+          requiresSynthesis: true,
+        ),
+        candidateOutputs: [
+          StudioCandidateOutput(
+            worker: 'Lead',
+            role: 'researcher',
+            status: 'Complete',
+            summary: 'Mapped repository boundaries and Flutter entry points.',
+            artifactCount: 3,
+          ),
+          StudioCandidateOutput(
+            worker: 'Reviewer',
+            role: 'architect',
+            status: 'Complete',
+            summary: 'Identified the API boundary and persistence handoff.',
+            artifactCount: 2,
+          ),
+        ],
+        synthesisDecision: StudioSynthesisDecision(
+          status: 'Accepted',
+          summary: 'Both candidates agree on the next implementation boundary.',
+          worker: 'Lead · Synthesizer',
+          evidence: 'DecisionResult · 2 candidate outputs',
+        ),
       );
 }

@@ -28,6 +28,8 @@ class _StudioAppState extends State<StudioApp> {
   int navigationIndex = 0;
   bool showNewGoal = false;
   bool showWorkerDrawer = false;
+  StudioQualityPreset selectedQuality = StudioQualityPreset.balanced;
+  final Map<String, bool> workerEnabled = {};
   final objectiveController = TextEditingController();
   final revisionController = TextEditingController();
 
@@ -59,6 +61,7 @@ class _StudioAppState extends State<StudioApp> {
       setState(() {
         snapshot = loaded;
         optimisticRunStatus = null;
+        selectedQuality = loaded.policy?.preset ?? selectedQuality;
         selectedProjectId = loaded.projects.any(
                 (project) => project.id == (projectId ?? selectedProjectId))
             ? (projectId ?? selectedProjectId)
@@ -432,16 +435,24 @@ class _StudioAppState extends State<StudioApp> {
       const SizedBox(height: 25),
       _runHeader(compact),
       const SizedBox(height: 16),
+      _policyCard(),
+      const SizedBox(height: 16),
       if (compact) ...[
         _executionCard(),
         const SizedBox(height: 16),
-        _taskDetailsCard()
+        _taskDetailsCard(),
+        const SizedBox(height: 16),
+        _candidateOutputsCard()
       ] else
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(flex: 6, child: _executionCard()),
           const SizedBox(width: 16),
           Expanded(flex: 4, child: _taskDetailsCard())
         ]),
+      if (!compact) ...[
+        const SizedBox(height: 16),
+        _candidateOutputsCard(),
+      ],
       const SizedBox(height: 16),
       if (compact) ...[
         _timelineCard(),
@@ -578,6 +589,121 @@ class _StudioAppState extends State<StudioApp> {
         trailing: _statusChip('$completed / ${snapshot.tasks.length} tasks',
             const Color(0xff6254d9)),
         child: Column(children: snapshot.tasks.map(_taskRow).toList()));
+  }
+
+  String _qualityLabel(StudioQualityPreset preset) => switch (preset) {
+        StudioQualityPreset.highAssurance => 'High Assurance',
+        StudioQualityPreset.exploration => 'Exploration',
+        StudioQualityPreset.custom => 'Custom',
+        StudioQualityPreset.economy => 'Economy',
+        StudioQualityPreset.balanced => 'Balanced',
+      };
+
+  Widget _policyCard() {
+    final policy = snapshot.policy;
+    return _panel(
+      title: 'Execution policy',
+      subtitle: 'Configure worker routing for this run',
+      trailing: _statusChip(
+        policy?.mode ?? 'parallel',
+        const Color(0xff6254d9),
+      ),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          ...StudioQualityPreset.values.map(
+            (preset) => ChoiceChip(
+              label: Text(_qualityLabel(preset)),
+              selected: selectedQuality == preset,
+              onSelected: (_) => setState(() => selectedQuality = preset),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            policy == null
+                ? 'No server policy attached'
+                : '${policy.candidateCount} candidates · ${policy.maxParallel} parallel · ${policy.costCeiling}',
+            style: const TextStyle(color: Color(0xff777683), fontSize: 11),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _candidateOutputsCard() {
+    final outputs = snapshot.candidateOutputs;
+    final decision = snapshot.synthesisDecision;
+    if (outputs.isEmpty && decision == null) {
+      return _panel(
+        title: 'Candidate outputs',
+        subtitle: 'Read-only ensemble and synthesis',
+        child: const Text(
+            'Candidate outputs will appear when a multi-worker policy runs.'),
+      );
+    }
+    return _panel(
+      title: 'Candidate outputs',
+      subtitle: '${outputs.length} independent results',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ...outputs.map(
+            (output) => Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xfffafaff),
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: const Color(0xffe6e3f8)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.account_tree_outlined,
+                      size: 18, color: Color(0xff6254d9)),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${output.worker} · ${output.role}',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 12)),
+                        const SizedBox(height: 4),
+                        Text(output.summary,
+                            style: const TextStyle(
+                                color: Color(0xff777683), fontSize: 11)),
+                      ],
+                    ),
+                  ),
+                  _statusChip(output.status, const Color(0xff43b17f)),
+                ],
+              ),
+            ),
+          ),
+          if (decision != null) ...[
+            const SizedBox(height: 4),
+            Row(children: [
+              const Icon(Icons.auto_awesome,
+                  color: Color(0xff6254d9), size: 18),
+              const SizedBox(width: 8),
+              const Text('Synthesis decision',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+              const Spacer(),
+              _statusChip(decision.status, const Color(0xff43b17f)),
+            ]),
+            const SizedBox(height: 6),
+            Text(decision.summary,
+                style: const TextStyle(color: Color(0xff777683), fontSize: 11)),
+            const SizedBox(height: 4),
+            Text('${decision.worker} · ${decision.evidence}',
+                style: const TextStyle(color: Color(0xff9a98a3), fontSize: 10)),
+          ],
+        ],
+      ),
+    );
   }
 
   Widget _phaseRow(String number, String name, String detail, bool complete) =>
@@ -924,6 +1050,8 @@ class _StudioAppState extends State<StudioApp> {
           const Text('Configured resources resolved by role and capability.',
               style: TextStyle(color: Color(0xff777683), fontSize: 13)),
           const SizedBox(height: 24),
+          _policyCard(),
+          const SizedBox(height: 16),
           ...snapshot.workers.map(
             (worker) => Card(
               margin: const EdgeInsets.only(bottom: 12),
@@ -943,7 +1071,12 @@ class _StudioAppState extends State<StudioApp> {
                     style: const TextStyle(fontWeight: FontWeight.w700)),
                 subtitle: Text(
                     '${worker.provider} · ${worker.role} · ${worker.capabilities.join(' · ')}'),
-                trailing: _statusChip(worker.status, const Color(0xff43b17f)),
+                trailing: Switch(
+                  value: workerEnabled[worker.id] ??
+                      worker.status.toLowerCase() != 'offline',
+                  onChanged: (value) =>
+                      setState(() => workerEnabled[worker.id] = value),
+                ),
               ),
             ),
           ),
