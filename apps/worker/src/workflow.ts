@@ -14,6 +14,7 @@ export interface ConclaveWorkflowParams {
   readonly idempotencyKey: string;
   readonly requireApproval?: boolean;
   readonly requireCiEvidence?: boolean;
+  readonly startPaused?: boolean;
 }
 
 export interface ConclaveWorkflowCheckpoint {
@@ -46,7 +47,17 @@ export interface ConclaveWorkflowCheckpoint {
     | "healthChecks"
     | "observedAt"
   >;
+  readonly executionId?: string;
+  readonly executionStatus?: "started" | "completed";
 }
+
+interface ForgeExecutionService {
+  fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
+}
+
+type ExecutionEnv = Env & {
+  readonly CONCLAVE_FORGE_EXECUTION?: ForgeExecutionService;
+};
 
 interface RunControlEvent {
   readonly eventId: string;
@@ -107,20 +118,24 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
       }),
     );
 
-    const controlEvent = await step.waitForEvent<RunControlEvent>(
-      "wait for run control",
-      { type: "run-control", timeout: "365 days" },
-    );
-    if (!isRunControlEvent(controlEvent.payload)) {
-      throw new Error("Invalid run-control event payload");
+    let controlEvent: RunControlEvent | undefined;
+    if (params.startPaused) {
+      const event = await step.waitForEvent<RunControlEvent>(
+        "wait for initial run control",
+        { type: "run-control", timeout: "365 days" },
+      );
+      if (!isRunControlEvent(event.payload)) {
+        throw new Error("Invalid run-control event payload");
+      }
+      controlEvent = event.payload;
     }
-    if (controlEvent.payload.action === "cancel") {
+    if (controlEvent?.action === "cancel") {
       return step.do("checkpoint:cancelled", stepConfig, async () => ({
         ...started,
         stage: "cancelled" as const,
         status: "cancelled" as const,
-        eventId: controlEvent.payload.eventId,
-        eventAction: controlEvent.payload.action,
+        eventId: controlEvent.eventId,
+        eventAction: controlEvent.action,
       }));
     }
 
@@ -131,15 +146,69 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
         ...started,
         stage: "research" as const,
         status: "active" as const,
-        eventId: controlEvent.payload.eventId,
-        eventAction: controlEvent.payload.action,
+        ...(controlEvent
+          ? { eventId: controlEvent.eventId, eventAction: controlEvent.action }
+          : {}),
       }),
     );
+    if (params.requireApproval) {
+      const approvalEvent = await step.waitForEvent<ApprovalEvent>(
+        "wait for external approval",
+        { type: "run-approval", timeout: "365 days" },
+      );
+      if (!isApprovalEvent(approvalEvent.payload)) {
+        throw new Error("Invalid run-approval event payload");
+      }
+      if (!approvalEvent.payload.approved) {
+        return step.do(
+          "checkpoint:cancelled-after-approval",
+          stepConfig,
+          async () => ({
+            ...research,
+            stage: "cancelled" as const,
+            status: "cancelled" as const,
+            eventId: approvalEvent.payload.eventId,
+            eventAction: "approval_rejected",
+          }),
+        );
+      }
+    }
+
+    const execution = await step.do("forge:execute", stepConfig, async () => {
+      const service = (this.env as ExecutionEnv).CONCLAVE_FORGE_EXECUTION;
+      if (!service) {
+        throw new Error(
+          "Forge execution service is not configured; refusing to complete a checkpoint-only run",
+        );
+      }
+      const response = await service.fetch(
+        "https://conclave.internal/execute",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(params),
+        },
+      );
+      if (!response.ok) {
+        throw new Error(
+          `Forge execution failed with status ${response.status}`,
+        );
+      }
+      const body = (await response.json()) as { executionId?: unknown };
+      if (typeof body.executionId !== "string") {
+        throw new Error("Forge execution returned no executionId");
+      }
+      return {
+        ...research,
+        executionId: body.executionId,
+        executionStatus: "started" as const,
+      };
+    });
     const planning = await step.do(
       "checkpoint:planning",
       stepConfig,
       async () => ({
-        ...research,
+        ...execution,
         stage: "planning" as const,
       }),
     );
@@ -179,29 +248,6 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
       machineEvidence = evidenceCheckpoint.machineEvidence;
     }
 
-    if (params.requireApproval) {
-      const approvalEvent = await step.waitForEvent<ApprovalEvent>(
-        "wait for external approval",
-        { type: "run-approval", timeout: "365 days" },
-      );
-      if (!isApprovalEvent(approvalEvent.payload)) {
-        throw new Error("Invalid run-approval event payload");
-      }
-      if (!approvalEvent.payload.approved) {
-        return step.do(
-          "checkpoint:cancelled-after-approval",
-          stepConfig,
-          async () => ({
-            ...implementation,
-            stage: "cancelled" as const,
-            status: "cancelled" as const,
-            eventId: approvalEvent.payload.eventId,
-            eventAction: "approval_rejected",
-          }),
-        );
-      }
-    }
-
     const verification = await step.do(
       "checkpoint:verification",
       stepConfig,
@@ -215,6 +261,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
       ...verification,
       stage: "completed" as const,
       status: "completed" as const,
+      executionStatus: "completed" as const,
     }));
   }
 }

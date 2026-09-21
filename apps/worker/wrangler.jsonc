@@ -25,6 +25,12 @@
       "bucket_name": "conclave-artifacts-development",
     },
   ],
+  "services": [
+    {
+      "binding": "CONCLAVE_FORGE_EXECUTION",
+      "service": "conclave-forge-execution",
+    },
+  ],
   "workflows": [
     {
       "name": "conclave-run",

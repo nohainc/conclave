@@ -57,6 +57,7 @@ async function handleRunRequest(request: Request, env: Env): Promise<Response> {
     idempotencyKey,
     ...(body.requireApproval === true ? { requireApproval: true } : {}),
     ...(body.requireCiEvidence === false ? { requireCiEvidence: false } : {}),
+    ...(body.startPaused === true ? { startPaused: true } : {}),
   };
   const run = await createOrGetRun(env, params);
   return json(run, { status: 202 });
