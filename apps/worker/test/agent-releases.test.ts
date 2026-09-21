@@ -403,4 +403,17 @@ describe("Architecture v2 Cloud Agent Releases & Self-Update Registry", () => {
     const checkData = (await checkRes.json()) as { release: unknown };
     expect(checkData.release).toBeNull();
   });
+
+  it("requires authentication for release downloads outside development", async () => {
+    const productionEnv = {
+      ...env,
+      CONCLAVE_ENVIRONMENT: "production",
+      CONCLAVE_ALLOW_ANONYMOUS_DEV: undefined,
+    };
+    const response = await worker.fetch(
+      new Request("https://conclave.test/api/v2/agent-releases/1.3.0/download"),
+      productionEnv as never,
+    );
+    expect(response.status).toBe(401);
+  });
 });

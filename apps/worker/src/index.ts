@@ -4394,9 +4394,32 @@ async function handleGetAgentRelease(
 }
 
 async function handleDownloadAgentRelease(
+  request: Request,
   env: SecurityEnv,
   version: string,
+  ctx?: ExecutionContext,
 ): Promise<Response> {
+  if (!anonymousDevelopment(env)) {
+    const token = extractAuthToken(request.headers);
+    if (token) {
+      const tokenHash = await hashToken(token);
+      const agent = await env.CONCLAVE_DB.prepare(
+        `SELECT id FROM agents
+         WHERE auth_token_hash = ?1 AND revoked_at IS NULL
+         LIMIT 1`,
+      )
+        .bind(tokenHash)
+        .first<{ id: string }>();
+      if (!agent) {
+        return json(
+          { error: "Invalid or revoked Agent credential" },
+          { status: 401 },
+        );
+      }
+    } else {
+      await authorizeRequest(request, env, "agents:read", undefined, ctx);
+    }
+  }
   const row = await env.CONCLAVE_DB.prepare(
     `SELECT package_r2_key, package_digest, is_revoked, revocation_reason FROM agent_releases WHERE version = ?1`,
   )
@@ -5242,8 +5265,10 @@ export default {
       );
       if (request.method === "GET" && agentReleaseDownloadMatch?.[1]) {
         return await handleDownloadAgentRelease(
+          request,
           env as SecurityEnv,
           agentReleaseDownloadMatch[1],
+          ctx,
         );
       }
       const agentReleaseRevokeMatch = url.pathname.match(
