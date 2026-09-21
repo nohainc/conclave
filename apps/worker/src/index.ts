@@ -1,4 +1,10 @@
 export { ConclaveRunWorkflow } from "./workflow.js";
+import {
+  authorize,
+  type Permission,
+  type Role,
+  type SecurityContext,
+} from "@conclave/security";
 
 function json(data: unknown, init?: ResponseInit): Response {
   return Response.json(data, {
@@ -25,6 +31,135 @@ function workflowId(idempotencyKey: string): string {
   return `run-${idempotencyKey}`;
 }
 
+class HttpError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+type SecurityEnv = Env & {
+  readonly CONCLAVE_AUTH_TOKEN?: string;
+  readonly CONCLAVE_AUTH_USER_ID?: string;
+  readonly CONCLAVE_AUTH_ORGANIZATION_ID?: string;
+  readonly CONCLAVE_ALLOW_ANONYMOUS_DEV?: string;
+  readonly CONCLAVE_CI_INGEST_TOKEN?: string;
+};
+
+function anonymousDevelopment(env: SecurityEnv): boolean {
+  return (
+    env.CONCLAVE_ENVIRONMENT === "development" &&
+    env.CONCLAVE_ALLOW_ANONYMOUS_DEV === "true"
+  );
+}
+
+function bearer(request: Request): string | null {
+  const value = request.headers.get("authorization");
+  return value?.startsWith("Bearer ") ? value.slice(7) : null;
+}
+
+async function securityContext(
+  request: Request,
+  env: SecurityEnv,
+): Promise<SecurityContext> {
+  if (anonymousDevelopment(env)) {
+    return {
+      userId: "local-development",
+      organizationId: "local-development",
+      organizationRoles: ["owner"],
+      projectRoles: {},
+    };
+  }
+  const token = bearer(request);
+  if (!token || !env.CONCLAVE_AUTH_TOKEN || token !== env.CONCLAVE_AUTH_TOKEN)
+    throw new HttpError(401, "Authentication required");
+  const userId = env.CONCLAVE_AUTH_USER_ID;
+  const organizationId = env.CONCLAVE_AUTH_ORGANIZATION_ID;
+  if (!userId || !organizationId)
+    throw new HttpError(503, "Authentication is not configured");
+  const membership = await env.CONCLAVE_DB.prepare(
+    "SELECT role, status FROM organization_memberships WHERE organization_id = ?1 AND user_id = ?2",
+  )
+    .bind(organizationId, userId)
+    .first<{ role: string; status: string }>();
+  if (!membership || membership.status !== "active")
+    throw new HttpError(403, "Organization membership is not active");
+  const projects = await env.CONCLAVE_DB.prepare(
+    "SELECT project_id, role FROM project_memberships WHERE project_id IN (SELECT id FROM projects WHERE organization_id = ?1) AND user_id = ?2",
+  )
+    .bind(organizationId, userId)
+    .all<{ project_id: string; role: string }>();
+  const projectRoles: Record<string, readonly Role[]> = {};
+  for (const project of projects.results ?? [])
+    projectRoles[project.project_id] = [project.role as Role];
+  return {
+    userId,
+    organizationId,
+    organizationRoles: [membership.role as Role],
+    projectRoles,
+  };
+}
+
+async function authorizeRequest(
+  request: Request,
+  env: SecurityEnv,
+  permission: Permission,
+  projectId?: string,
+): Promise<SecurityContext> {
+  const context = await securityContext(request, env);
+  if (projectId && !anonymousDevelopment(env)) {
+    const project = await env.CONCLAVE_DB.prepare(
+      "SELECT organization_id FROM projects WHERE id = ?1",
+    )
+      .bind(projectId)
+      .first<{ organization_id: string | null }>();
+    if (!project || project.organization_id !== context.organizationId)
+      throw new HttpError(404, "Resource not found");
+  }
+  try {
+    authorize(context, permission, projectId);
+  } catch (error) {
+    throw new HttpError(
+      403,
+      error instanceof Error ? error.message : "Forbidden",
+    );
+  }
+  return context;
+}
+
+function requireCiAuthentication(request: Request, env: SecurityEnv): void {
+  const configuredToken = env.CONCLAVE_CI_INGEST_TOKEN;
+  if (anonymousDevelopment(env) && !configuredToken) return;
+  if (!configuredToken || bearer(request) !== configuredToken)
+    throw new HttpError(401, "CI evidence authentication required");
+}
+
+async function runProjectId(
+  env: SecurityEnv,
+  runId: string,
+): Promise<string | undefined> {
+  const row = await env.CONCLAVE_DB.prepare(
+    "SELECT p.id AS project_id FROM runs r JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE r.id = ?1",
+  )
+    .bind(runId)
+    .first<{ project_id: string }>();
+  return row?.project_id;
+}
+
+async function goalProjectId(
+  env: SecurityEnv,
+  goalId: string,
+): Promise<string | undefined> {
+  const row = await env.CONCLAVE_DB.prepare(
+    "SELECT project_id FROM goals WHERE id = ?1",
+  )
+    .bind(goalId)
+    .first<{ project_id: string }>();
+  return row?.project_id;
+}
+
 async function createOrGetRun(
   env: Env,
   params: ConclaveWorkflowParams,
@@ -43,6 +178,7 @@ async function createOrGetRun(
 type ConclaveWorkflowParams = import("./workflow.js").ConclaveWorkflowParams;
 
 async function handleRunRequest(request: Request, env: Env): Promise<Response> {
+  const securityEnv = env as SecurityEnv;
   const body = (await request.json()) as Record<string, unknown>;
   const idempotencyKey = requiredString(
     request.headers.get("idempotency-key") ?? body.idempotencyKey,
@@ -51,9 +187,15 @@ async function handleRunRequest(request: Request, env: Env): Promise<Response> {
   if (!/^[a-zA-Z0-9_-]{1,80}$/.test(idempotencyKey)) {
     throw new Error("idempotencyKey must contain only letters, digits, _ or -");
   }
+  const goalId = requiredString(body.goalId, "goalId");
+  await authorizeRequest(request, securityEnv, "run:create");
+  const projectId = anonymousDevelopment(securityEnv)
+    ? undefined
+    : await goalProjectId(securityEnv, goalId);
+  await authorizeRequest(request, securityEnv, "run:create", projectId);
   const params: ConclaveWorkflowParams = {
     runId: requiredString(body.runId, "runId"),
-    goalId: requiredString(body.goalId, "goalId"),
+    goalId,
     idempotencyKey,
     ...(body.requireApproval === true ? { requireApproval: true } : {}),
     ...(body.requireCiEvidence === false ? { requireCiEvidence: false } : {}),
@@ -65,10 +207,28 @@ async function handleRunRequest(request: Request, env: Env): Promise<Response> {
 
 async function handleStudioSnapshot(
   env: Env,
+  request: Request,
   projectId: string | null,
 ): Promise<Response> {
-  const projectFilter = projectId === null ? "" : " WHERE p.id = ?1";
-  const bind = projectId === null ? [] : [projectId];
+  const securityEnv = env as SecurityEnv;
+  const context = await authorizeRequest(
+    request,
+    securityEnv,
+    "project:read",
+    projectId ?? undefined,
+  );
+  const projectFilter =
+    projectId === null
+      ? anonymousDevelopment(securityEnv)
+        ? ""
+        : " WHERE p.organization_id = ?1"
+      : " WHERE p.id = ?1 AND p.organization_id = ?2";
+  const bind =
+    projectId === null
+      ? anonymousDevelopment(securityEnv)
+        ? []
+        : [context.organizationId]
+      : [projectId, context.organizationId];
   const [
     projects,
     workers,
@@ -134,24 +294,22 @@ async function handleRunCommand(
   runId: string,
   command: "pause" | "resume" | "restart" | "event" | "ci-evidence",
 ): Promise<Response> {
+  const securityEnv = env as SecurityEnv;
+  if (command === "ci-evidence") requireCiAuthentication(request, securityEnv);
+  const projectId = anonymousDevelopment(securityEnv)
+    ? undefined
+    : await runProjectId(securityEnv, runId);
+  await authorizeRequest(
+    request,
+    securityEnv,
+    command === "ci-evidence" ? "run:control" : "run:control",
+    projectId,
+  );
   const instance = await env.CONCLAVE_RUN_WORKFLOW.get(runId);
   if (command === "pause") await instance.pause();
   if (command === "resume") await instance.resume();
   if (command === "restart") await instance.restart();
   if (command === "event" || command === "ci-evidence") {
-    if (command === "ci-evidence") {
-      const configuredToken = (
-        env as Env & {
-          CONCLAVE_CI_INGEST_TOKEN?: string;
-        }
-      ).CONCLAVE_CI_INGEST_TOKEN;
-      if (
-        configuredToken !== undefined &&
-        request.headers.get("authorization") !== `Bearer ${configuredToken}`
-      ) {
-        throw new Error("CI evidence authorization failed");
-      }
-    }
     const body = (await request.json()) as Record<string, unknown>;
     if (command === "ci-evidence") {
       await instance.sendEvent({
@@ -184,6 +342,7 @@ export default {
       if (request.method === "GET" && url.pathname === "/api/studio/snapshot") {
         return await handleStudioSnapshot(
           env,
+          request,
           url.searchParams.get("projectId"),
         );
       }
@@ -191,6 +350,11 @@ export default {
         /^\/api\/runs\/([^/]+)(?:\/(pause|resume|restart|events|ci-evidence))?$/,
       );
       if (runMatch?.[1] && request.method === "GET" && !runMatch[2]) {
+        const securityEnv = env as SecurityEnv;
+        const projectId = anonymousDevelopment(securityEnv)
+          ? undefined
+          : await runProjectId(securityEnv, runMatch[1]);
+        await authorizeRequest(request, securityEnv, "project:read", projectId);
         const instance = await env.CONCLAVE_RUN_WORKFLOW.get(runMatch[1]);
         return json({ id: instance.id, ...(await instance.status()) });
       }
@@ -204,7 +368,19 @@ export default {
         return await handleRunCommand(request, env, runMatch[1], command);
       }
     } catch (error) {
-      return json({ error: errorMessage(error) }, { status: 400 });
+      return json(
+        { error: errorMessage(error) },
+        {
+          status:
+            error instanceof HttpError ||
+            (typeof error === "object" &&
+              error !== null &&
+              "status" in error &&
+              typeof error.status === "number")
+              ? (error as { status: number }).status
+              : 400,
+        },
+      );
     }
 
     return json({ error: "not_found" }, { status: 404 });

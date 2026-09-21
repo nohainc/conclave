@@ -38,6 +38,9 @@ importers:
       '@conclave/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@conclave/security':
+        specifier: workspace:*
+        version: link:../../packages/security
 
   packages/core:
     dependencies:

@@ -10,6 +10,7 @@
     "check:startup": "wrangler check startup"
   },
   "dependencies": {
-    "@conclave/protocol": "workspace:*"
+    "@conclave/protocol": "workspace:*",
+    "@conclave/security": "workspace:*"
   }
 }

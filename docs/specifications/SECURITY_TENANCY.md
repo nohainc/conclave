@@ -6,7 +6,7 @@ Phase 13 defines the security boundary for a multi-user Conclave deployment. The
 
 Every organization-scoped record carries an organization identifier. Projects belong to one organization, and project membership is explicit. Organization owners and administrators may manage organization resources; project roles grant only the permissions assigned to that project. A suspended organization or user cannot create, control, or inspect runs.
 
-The shared security package is the policy source for roles and permissions. Worker identity must come from a configured identity provider (Cloudflare Access or an equivalent verified JWT boundary). Development-only identity headers are not a production authentication mechanism.
+The shared security package is the policy source for roles and permissions. The Worker now requires a configured bearer token in production, maps it to `CONCLAVE_AUTH_USER_ID` and `CONCLAVE_AUTH_ORGANIZATION_ID`, and loads active organization/project memberships from D1. Anonymous access is allowed only when `CONCLAVE_ENVIRONMENT=development` and `CONCLAVE_ALLOW_ANONYMOUS_DEV=true`. A verified identity-provider/JWT adapter remains the next production identity upgrade; development-only bypass is never accepted in production.
 
 ## Credentials
 
@@ -34,4 +34,4 @@ Authorization decisions, credential changes, run controls, budget decisions, and
 
 ## Production readiness conditions
 
-Before exposing a deployment to multiple external organizations, configure a verified identity provider, implement the D1-backed membership lookup at the Worker boundary, set non-zero retention policies, rotate the KEK, enable encrypted transport and access logging, and exercise cross-tenant authorization tests against the deployed Worker.
+Before exposing a deployment to multiple external organizations, replace the bootstrap bearer-token identity with a verified identity provider, set `CONCLAVE_AUTH_TOKEN`/identity secrets, configure a CI ingest token, set non-zero retention policies, rotate the KEK, enable encrypted transport and access logging, and exercise cross-tenant authorization tests against the deployed Worker. Run and artifact lookups are organization-scoped through their project relationship before D1/R2-backed data is returned.

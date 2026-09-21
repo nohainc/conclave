@@ -17,6 +17,7 @@ const workflowBinding = {
 
 const env = {
   CONCLAVE_ENVIRONMENT: "development",
+  CONCLAVE_ALLOW_ANONYMOUS_DEV: "true",
   CONCLAVE_RUN_WORKFLOW: workflowBinding,
 } as unknown as Env;
 
@@ -41,6 +42,35 @@ describe("Worker smoke tests", () => {
     );
 
     expect(response.status).toBe(404);
+  });
+
+  it("fails closed when production authentication is missing", async () => {
+    const productionEnv = {
+      ...env,
+      CONCLAVE_ENVIRONMENT: "production",
+      CONCLAVE_ALLOW_ANONYMOUS_DEV: undefined,
+    } as unknown as Env;
+    const response = await worker.fetch(
+      new Request("https://conclave.test/api/runs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          runId: "run-1",
+          goalId: "goal-1",
+          idempotencyKey: "key-1",
+        }),
+      }),
+      productionEnv,
+    );
+    expect(response.status).toBe(401);
+
+    const ciResponse = await worker.fetch(
+      new Request("https://conclave.test/api/runs/run-1/ci-evidence", {
+        method: "POST",
+      }),
+      productionEnv,
+    );
+    expect(ciResponse.status).toBe(401);
   });
 
   it("creates an idempotent durable run and sends control events", async () => {
