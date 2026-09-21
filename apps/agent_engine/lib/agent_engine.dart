@@ -6,6 +6,8 @@ import 'dart:math';
 import 'cloud_connection.dart';
 import 'local_ipc.dart';
 
+typedef AgentEngineStatusProvider = Future<Map<String, Object?>> Function();
+
 class AgentEngineConfig {
   const AgentEngineConfig({
     required this.dataDirectory,
@@ -83,10 +85,12 @@ class AgentEngine {
     required this.config,
     IOSink? logOutput,
     this.cloudConnection,
+    this.statusProvider,
   }) : _log = AgentEngineLogger(logOutput ?? stdout);
 
   final AgentEngineConfig config;
   final AgentCloudConnection? cloudConnection;
+  final AgentEngineStatusProvider? statusProvider;
   final AgentEngineLogger _log;
   RandomAccessFile? _lock;
   LocalIpcServer? _ipc;
@@ -101,6 +105,7 @@ class AgentEngine {
     if (command.type != 'engine.status') {
       throw StateError('unsupported engine command: ${command.type}');
     }
+    final provided = await statusProvider?.call() ?? const <String, Object?>{};
     return {
       'online': _running,
       'status': _running ? 'running' : 'stopped',
@@ -108,6 +113,7 @@ class AgentEngine {
       'plugins': 0,
       'activeTasks': 0,
       'version': '0.1.0',
+      ...provided,
     };
   }
 

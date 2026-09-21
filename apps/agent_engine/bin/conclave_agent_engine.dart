@@ -52,7 +52,17 @@ Future<void> main(List<String> args) async {
           ),
         )
       : null;
-  final engine = AgentEngine(config: config, cloudConnection: connection);
+  final engine = AgentEngine(
+    config: config,
+    cloudConnection: connection,
+    statusProvider: () async {
+      final plugins = await pluginManager.inventory();
+      return {
+        'plugins': plugins.length,
+        'pluginIds': plugins.map((plugin) => plugin.pluginId).toList(),
+      };
+    },
+  );
   await engine.start();
   if (args.contains('--once')) await engine.stop();
 }

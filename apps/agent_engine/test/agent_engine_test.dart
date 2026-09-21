@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:conclave_agent_engine/agent_engine.dart';
 import 'package:conclave_agent_engine/cloud_connection.dart';
+import 'package:conclave_agent_engine/local_ipc.dart';
 import 'package:test/test.dart';
 
 class FakeSocket implements AgentCloudSocket {
@@ -89,6 +90,32 @@ void main() {
     expect(hello['type'], 'agent.hello');
     await engine.stop();
     expect(engine.isRunning, isFalse);
+    await directory.delete(recursive: true);
+  });
+
+  test('IPC status includes values supplied by the Engine status provider',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('conclave-engine-');
+    final engine = AgentEngine(
+      config: AgentEngineConfig(dataDirectory: directory),
+      statusProvider: () async => {
+        'plugins': 2,
+        'pluginIds': ['conclave.codex', 'conclave.forge'],
+      },
+    );
+    await engine.start();
+    final metadata = jsonDecode(
+      await File('${directory.path}/ipc.json').readAsString(),
+    ) as Map<String, dynamic>;
+    final client = await LocalIpcClient.connect(
+      port: metadata['port'] as int,
+      token: metadata['token'] as String,
+    );
+    final status = await client.command('engine.status', const {});
+    expect(status['plugins'], 2);
+    expect(status['pluginIds'], ['conclave.codex', 'conclave.forge']);
+    await client.close();
+    await engine.stop();
     await directory.delete(recursive: true);
   });
 }
