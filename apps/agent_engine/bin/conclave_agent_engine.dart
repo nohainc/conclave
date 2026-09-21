@@ -87,7 +87,8 @@ Future<void> main(List<String> args) async {
   final pluginHandler = pluginManager.assignmentHandler(
     PluginProcessExecutor(),
   );
-  final connection = config.cloudUri != null &&
+  late final AgentCloudConnection? connection;
+  connection = config.cloudUri != null &&
           config.agentId != null &&
           config.workspaceId != null
       ? AgentCloudConnection(
@@ -106,25 +107,66 @@ Future<void> main(List<String> args) async {
             final desired = raw
                 .whereType<Map>()
                 .map((item) => Map<String, Object?>.from(item));
-            await pluginManager.reconcile(
-              desired,
-              download: (pluginId, version, packageR2Key) => _downloadPlugin(
-                config.cloudUri!,
-                config.authToken,
-                pluginId,
-                version,
-                packageR2Key,
-              ),
-            );
-            final rawWorkers = payload['desiredWorkers'];
-            if (rawWorkers is List) {
-              final desiredWorkers = rawWorkers
-                  .whereType<Map>()
-                  .map((item) => Map<String, Object?>.from(item));
-              final ids = await workerStore.reconcile(desiredWorkers);
-              activeWorkerIds
-                ..clear()
-                ..addAll(ids);
+            try {
+              await pluginManager.reconcile(
+                desired,
+                download: (pluginId, version, packageR2Key) => _downloadPlugin(
+                  config.cloudUri!,
+                  config.authToken,
+                  pluginId,
+                  version,
+                  packageR2Key,
+                ),
+              );
+              final rawWorkers = payload['desiredWorkers'];
+              if (rawWorkers is List) {
+                final desiredWorkers = rawWorkers
+                    .whereType<Map>()
+                    .map((item) => Map<String, Object?>.from(item))
+                    .toList();
+                final ids = await workerStore.reconcile(desiredWorkers);
+                activeWorkerIds
+                  ..clear()
+                  ..addAll(ids);
+                for (final worker in desiredWorkers) {
+                  final workerId = worker['workerId'];
+                  if (workerId is! String) continue;
+                  final enabled = worker['enabled'] == true;
+                  connection?.reportWorkerStatus(
+                    workerId: workerId,
+                    status: enabled ? 'available' : 'disabled',
+                    activeAssignments: 0,
+                  );
+                }
+              }
+              final inventory = await pluginManager.inventory();
+              connection?.reportPluginStatuses(
+                inventory
+                    .map((plugin) => {
+                          'pluginId': plugin.pluginId,
+                          'version': plugin.version,
+                          'status': plugin.active ? 'active' : 'installed',
+                          'installedAt':
+                              DateTime.now().toUtc().toIso8601String(),
+                        })
+                    .toList(),
+              );
+            } catch (error) {
+              for (final plugin in desired) {
+                final pluginId = plugin['pluginId'];
+                final version = plugin['version'];
+                if (pluginId is! String || version is! String) continue;
+                connection?.reportPluginStatuses([
+                  {
+                    'pluginId': pluginId,
+                    'version': version,
+                    'status': 'error',
+                    'error': '$error',
+                    'installedAt': DateTime.now().toUtc().toIso8601String(),
+                  },
+                ]);
+              }
+              rethrow;
             }
           },
           factory: (uri) => connectIoAgentCloudSocket(

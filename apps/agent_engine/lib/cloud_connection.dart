@@ -146,6 +146,33 @@ class AgentCloudConnection {
   Map<String, Object?>? syncResponse;
   final _activeAssignments = <String>{};
 
+  void reportPluginStatuses(List<Map<String, Object?>> plugins) {
+    _sendIfConnected('plugin.status', {'plugins': plugins});
+  }
+
+  void reportWorkerStatus({
+    required String workerId,
+    required String status,
+    required int activeAssignments,
+    String? healthDetail,
+    List<String>? missingSecrets,
+  }) {
+    _sendIfConnected('worker.status', {
+      'workerId': workerId,
+      'agentId': agentId,
+      'status': status,
+      'activeAssignments': activeAssignments,
+      if (healthDetail != null) 'healthDetail': healthDetail,
+      if (missingSecrets != null) 'missingSecrets': missingSecrets,
+    });
+  }
+
+  void _sendIfConnected(String type, Map<String, Object?> payload) {
+    final socket = _socket;
+    if (socket == null || sessionId == null) return;
+    socket.send(jsonEncode(_envelope(type, payload)));
+  }
+
   static const protocol = 'conclave.agent-protocol';
   static const protocolVersion = '2.0';
 
