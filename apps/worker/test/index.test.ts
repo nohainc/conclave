@@ -128,7 +128,12 @@ describe("Worker smoke tests", () => {
     });
     expect(workflowBinding.create).toHaveBeenCalledWith({
       id: "workflow-goal-1",
-      params: { runId: "run-1", goalId: "goal-1", idempotencyKey: "goal-1" },
+      params: {
+        runId: "run-1",
+        goalId: "goal-1",
+        idempotencyKey: "goal-1",
+        organizationId: "local-development",
+      },
     });
 
     workflowBinding.create.mockRejectedValueOnce(new Error("already exists"));

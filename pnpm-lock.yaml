@@ -35,9 +35,24 @@ importers:
 
   apps/worker:
     dependencies:
+      '@conclave/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@conclave/local-runtime':
+        specifier: workspace:*
+        version: link:../../packages/local-runtime
+      '@conclave/orchestration':
+        specifier: workspace:*
+        version: link:../../packages/orchestration
+      '@conclave/persistence':
+        specifier: workspace:*
+        version: link:../../packages/persistence
       '@conclave/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@conclave/providers':
+        specifier: workspace:*
+        version: link:../../packages/providers
       '@conclave/security':
         specifier: workspace:*
         version: link:../../packages/security

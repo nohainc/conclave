@@ -24,6 +24,8 @@ jobs:
       - run: pnpm check
       - run: ../../node_modules/.bin/wrangler check startup
         working-directory: apps/worker
+      - run: ../../node_modules/.bin/wrangler check startup --config forge-execution.wrangler.jsonc
+        working-directory: apps/worker
 
   flutter:
     runs-on: ubuntu-latest

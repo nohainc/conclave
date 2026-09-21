@@ -10,7 +10,12 @@
     "check:startup": "wrangler check startup"
   },
   "dependencies": {
+    "@conclave/core": "workspace:*",
+    "@conclave/local-runtime": "workspace:*",
+    "@conclave/orchestration": "workspace:*",
+    "@conclave/persistence": "workspace:*",
     "@conclave/protocol": "workspace:*",
+    "@conclave/providers": "workspace:*",
     "@conclave/security": "workspace:*"
   }
 }

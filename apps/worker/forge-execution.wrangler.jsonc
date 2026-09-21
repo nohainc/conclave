@@ -1,0 +1,24 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "conclave-forge-execution",
+  "main": "src/forge-execution.ts",
+  "compatibility_date": "2026-09-21",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "CONCLAVE_ENVIRONMENT": "development",
+  },
+  "d1_databases": [
+    {
+      "binding": "CONCLAVE_DB",
+      "database_name": "conclave-development",
+      "database_id": "local",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "CONCLAVE_ARTIFACTS",
+      "bucket_name": "conclave-artifacts-development",
+    },
+  ],
+}

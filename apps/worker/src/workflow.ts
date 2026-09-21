@@ -12,6 +12,9 @@ export interface ConclaveWorkflowParams {
   readonly runId: string;
   readonly goalId: string;
   readonly idempotencyKey: string;
+  readonly organizationId?: string;
+  readonly repositoryId?: string;
+  readonly revision?: string;
   readonly requireApproval?: boolean;
   readonly requireCiEvidence?: boolean;
   readonly startPaused?: boolean;

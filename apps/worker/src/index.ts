@@ -81,6 +81,7 @@ type SecurityEnv = Env & {
   readonly CONCLAVE_AUTH_ORGANIZATION_ID?: string;
   readonly CONCLAVE_ALLOW_ANONYMOUS_DEV?: string;
   readonly CONCLAVE_CI_INGEST_TOKEN?: string;
+  readonly CONCLAVE_FORGE_CALLBACK_TOKEN?: string;
 };
 
 function anonymousDevelopment(env: SecurityEnv): boolean {
@@ -171,6 +172,19 @@ function requireCiAuthentication(request: Request, env: SecurityEnv): void {
     throw new HttpError(401, "CI evidence authentication required");
 }
 
+function requireForgeCallbackAuthentication(
+  request: Request,
+  env: SecurityEnv,
+): void {
+  if (anonymousDevelopment(env) && !env.CONCLAVE_FORGE_CALLBACK_TOKEN) return;
+  if (
+    !env.CONCLAVE_FORGE_CALLBACK_TOKEN ||
+    bearer(request) !== env.CONCLAVE_FORGE_CALLBACK_TOKEN
+  ) {
+    throw new HttpError(401, "Forge callback authentication required");
+  }
+}
+
 async function runProjectId(
   env: SecurityEnv,
   runId: string,
@@ -227,7 +241,7 @@ async function handleRunRequest(request: Request, env: Env): Promise<Response> {
     throw new Error("idempotencyKey must contain only letters, digits, _ or -");
   }
   const goalId = requiredString(body.goalId, "goalId");
-  await authorizeRequest(request, securityEnv, "run:create");
+  const context = await authorizeRequest(request, securityEnv, "run:create");
   const projectId = anonymousDevelopment(securityEnv)
     ? undefined
     : await goalProjectId(securityEnv, goalId);
@@ -236,6 +250,11 @@ async function handleRunRequest(request: Request, env: Env): Promise<Response> {
     runId: requiredString(body.runId, "runId"),
     goalId,
     idempotencyKey,
+    organizationId: context.organizationId,
+    ...(typeof body.repositoryId === "string"
+      ? { repositoryId: body.repositoryId }
+      : {}),
+    ...(typeof body.revision === "string" ? { revision: body.revision } : {}),
     ...(body.requireApproval === true ? { requireApproval: true } : {}),
     ...(body.requireCiEvidence === false ? { requireCiEvidence: false } : {}),
     ...(body.startPaused === true ? { startPaused: true } : {}),
@@ -364,15 +383,14 @@ async function handleRunCommand(
 ): Promise<Response> {
   const securityEnv = env as SecurityEnv;
   if (command === "ci-evidence") requireCiAuthentication(request, securityEnv);
-  const projectId = anonymousDevelopment(securityEnv)
-    ? undefined
-    : await runProjectId(securityEnv, runId);
-  await authorizeRequest(
-    request,
-    securityEnv,
-    command === "ci-evidence" ? "run:control" : "run:control",
-    projectId,
-  );
+  if (command === "forge-terminal") {
+    requireForgeCallbackAuthentication(request, securityEnv);
+  } else {
+    const projectId = anonymousDevelopment(securityEnv)
+      ? undefined
+      : await runProjectId(securityEnv, runId);
+    await authorizeRequest(request, securityEnv, "run:control", projectId);
+  }
   const workflowInstanceId = await resolveWorkflowInstanceId(env, runId);
   const instance = await env.CONCLAVE_RUN_WORKFLOW.get(workflowInstanceId);
   if (command === "pause") await instance.pause();
