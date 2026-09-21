@@ -310,6 +310,9 @@ class StudioWorker {
     required this.capabilities,
     required this.status,
     required this.cost,
+    this.agentName = '—',
+    this.pluginName = '—',
+    this.roles = const [],
   });
 
   final String id;
@@ -319,6 +322,9 @@ class StudioWorker {
   final List<String> capabilities;
   final String status;
   final String cost;
+  final String agentName;
+  final String pluginName;
+  final List<String> roles;
 
   factory StudioWorker.fromJson(Map<String, dynamic> json) => StudioWorker(
       id: _string(json, 'id'),
@@ -327,7 +333,70 @@ class StudioWorker {
       role: _string(json, 'role'),
       capabilities: _strings(json, 'capabilities'),
       status: _string(json, 'status'),
-      cost: _string(json, 'cost'));
+      cost: _string(json, 'cost'),
+      agentName: _string(json, 'agentName'),
+      pluginName: _string(json, 'pluginName'),
+      roles: _strings(json, 'roles'));
+}
+
+class StudioAgent {
+  const StudioAgent({
+    required this.id,
+    required this.name,
+    required this.hostname,
+    required this.status,
+    required this.version,
+    required this.pluginCount,
+    required this.workerCount,
+    required this.activeTaskCount,
+  });
+
+  final String id;
+  final String name;
+  final String hostname;
+  final String status;
+  final String version;
+  final int pluginCount;
+  final int workerCount;
+  final int activeTaskCount;
+
+  factory StudioAgent.fromJson(Map<String, dynamic> json) => StudioAgent(
+        id: _string(json, 'id'),
+        name: _string(json, 'name'),
+        hostname: _string(json, 'hostname'),
+        status: _string(json, 'status'),
+        version: _string(json, 'version'),
+        pluginCount: json['pluginCount'] as int? ?? 0,
+        workerCount: json['workerCount'] as int? ?? 0,
+        activeTaskCount: json['activeTaskCount'] as int? ?? 0,
+      );
+}
+
+class StudioPlugin {
+  const StudioPlugin({
+    required this.id,
+    required this.name,
+    required this.version,
+    required this.status,
+    required this.roles,
+    required this.capabilities,
+  });
+
+  final String id;
+  final String name;
+  final String version;
+  final String status;
+  final List<String> roles;
+  final List<String> capabilities;
+
+  factory StudioPlugin.fromJson(Map<String, dynamic> json) => StudioPlugin(
+        id: _string(json, 'id'),
+        name: _string(json, 'name'),
+        version: _string(json, 'version'),
+        status: _string(json, 'status'),
+        roles: _strings(json, 'roles'),
+        capabilities: _strings(json, 'capabilities'),
+      );
 }
 
 class StudioTask {
@@ -522,6 +591,8 @@ class StudioSnapshot {
     this.run,
     required this.projects,
     required this.workers,
+    this.agents = const [],
+    this.plugins = const [],
     required this.tasks,
     required this.findings,
     required this.events,
@@ -537,6 +608,8 @@ class StudioSnapshot {
   final StudioRun? run;
   final List<StudioProject> projects;
   final List<StudioWorker> workers;
+  final List<StudioAgent> agents;
+  final List<StudioPlugin> plugins;
   final List<StudioTask> tasks;
   final List<StudioFinding> findings;
   final List<StudioEvent> events;
@@ -561,6 +634,8 @@ class StudioSnapshot {
   static StudioSnapshot empty() => const StudioSnapshot(
       projects: [],
       workers: [],
+      agents: [],
+      plugins: [],
       tasks: [],
       findings: [],
       events: [],
@@ -580,6 +655,14 @@ class StudioSnapshot {
         workers: (json['workers'] as List? ?? const [])
             .map((item) =>
                 StudioWorker.fromJson(Map<String, dynamic>.from(item as Map)))
+            .toList(),
+        agents: (json['agents'] as List? ?? const [])
+            .map((item) =>
+                StudioAgent.fromJson(Map<String, dynamic>.from(item as Map)))
+            .toList(),
+        plugins: (json['plugins'] as List? ?? const [])
+            .map((item) =>
+                StudioPlugin.fromJson(Map<String, dynamic>.from(item as Map)))
             .toList(),
         tasks: (json['tasks'] as List? ?? const [])
             .map((item) =>
@@ -772,6 +855,62 @@ class StudioSnapshot {
             status: 'Connected',
             cost: 'Local',
           ),
+        ],
+        agents: [
+          StudioAgent(
+            id: 'agent-macbook',
+            name: 'Vitalii MacBook',
+            hostname: 'vitalii-macbook.local',
+            status: 'ONLINE',
+            version: '1.5.0',
+            pluginCount: 3,
+            workerCount: 5,
+            activeTaskCount: 1,
+          ),
+        ],
+        plugins: [
+          StudioPlugin(
+              id: 'codex',
+              name: 'Codex',
+              version: '1.2.0',
+              status: 'Installed',
+              roles: ['Implementation', 'Research'],
+              capabilities: ['repository_write', 'tests']),
+          StudioPlugin(
+              id: 'claude-code',
+              name: 'Claude Code',
+              version: '1.0.4',
+              status: 'Installed',
+              roles: ['Review', 'Research'],
+              capabilities: ['code_review', 'repository_read']),
+          StudioPlugin(
+              id: 'openai',
+              name: 'OpenAI',
+              version: 'API',
+              status: 'Available',
+              roles: ['Planning'],
+              capabilities: ['planning']),
+          StudioPlugin(
+              id: 'anthropic',
+              name: 'Anthropic',
+              version: 'API',
+              status: 'Available',
+              roles: ['Review'],
+              capabilities: ['code_review']),
+          StudioPlugin(
+              id: 'git',
+              name: 'Git',
+              version: 'builtin',
+              status: 'Installed',
+              roles: ['Tool'],
+              capabilities: ['git', 'diff']),
+          StudioPlugin(
+              id: 'docker',
+              name: 'Docker',
+              version: 'builtin',
+              status: 'Available',
+              roles: ['Tool'],
+              capabilities: ['build', 'sandbox']),
         ],
         tasks: [
           StudioTask(

@@ -68,6 +68,7 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.menu_rounded));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Atlas API', skipOffstage: false));
     await tester.tap(find.text('Atlas API'));
     await tester.pumpAndSettle();
     await tester
@@ -84,5 +85,33 @@ void main() {
     await tester.pumpAndSettle();
     expect(
         find.text('Compare the migration rollback strategies.'), findsWidgets);
+  });
+
+  testWidgets('opens separate Agent, Plugin, and Worker management pages',
+      (WidgetTester tester) async {
+    await tester
+        .pumpWidget(const ConclaveApp(dataSource: DemoStudioDataSource()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.menu_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Agents'));
+    await tester.pumpAndSettle();
+    expect(find.text('Vitalii MacBook'), findsOneWidget);
+    expect(find.text('3 plugins'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.menu_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Plugins'));
+    await tester.pumpAndSettle();
+    expect(find.text('Claude Code'), findsOneWidget);
+    expect(find.text('Docker'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.menu_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Workers'));
+    await tester.pumpAndSettle();
+    expect(find.text('Configured resources'), findsOneWidget);
+    expect(find.text('Lead'), findsOneWidget);
   });
 }

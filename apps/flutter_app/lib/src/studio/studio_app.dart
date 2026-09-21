@@ -248,8 +248,10 @@ class _StudioAppState extends State<StudioApp> {
           _navItem(Icons.track_changes_rounded, 'Goals', 1,
               badge:
                   '${snapshot.projects.fold<int>(0, (total, project) => total + project.activeGoals)}'),
-          _navItem(Icons.people_alt_outlined, 'Workers', 2),
-          _navItem(Icons.folder_copy_outlined, 'Artifacts', 3),
+          _navItem(Icons.computer_outlined, 'Agents', 2),
+          _navItem(Icons.extension_outlined, 'Plugins', 3),
+          _navItem(Icons.people_alt_outlined, 'Workers', 4),
+          _navItem(Icons.folder_copy_outlined, 'Artifacts', 5),
           const SizedBox(height: 26),
           Expanded(
             child: SingleChildScrollView(
@@ -273,7 +275,7 @@ class _StudioAppState extends State<StudioApp> {
             ),
           ),
           if (compact) _navItem(Icons.close_rounded, 'Close menu', -1),
-          _navItem(Icons.settings_outlined, 'Settings', 4),
+          _navItem(Icons.settings_outlined, 'Settings', 6),
           const SizedBox(height: 6),
           const Row(children: [
             CircleAvatar(
@@ -308,7 +310,13 @@ class _StudioAppState extends State<StudioApp> {
     final active = navigationIndex == index;
     return InkWell(
       onTap: () {
-        if (index >= 0) setState(() => navigationIndex = index);
+        if (index >= 0) {
+          setState(() {
+            navigationIndex = index;
+            showRunDetails = index != 0;
+          });
+          Scaffold.maybeOf(context)?.closeDrawer();
+        }
       },
       borderRadius: BorderRadius.circular(9),
       child: Container(
@@ -479,9 +487,11 @@ class _StudioAppState extends State<StudioApp> {
   }
 
   Widget _dashboard(bool compact) {
-    if (navigationIndex == 2) return _workersView();
-    if (navigationIndex == 3) return _artifactsView();
-    if (navigationIndex == 4) return _settingsView();
+    if (navigationIndex == 2) return _agentsView();
+    if (navigationIndex == 3) return _pluginsView();
+    if (navigationIndex == 4) return _workersView();
+    if (navigationIndex == 5) return _artifactsView();
+    if (navigationIndex == 6) return _settingsView();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Expanded(
@@ -1344,45 +1354,169 @@ class _StudioAppState extends State<StudioApp> {
                   label: Text('${worker.name} · ${worker.provider}')))
               .toList()));
 
+  Widget _fleetHeader(String title, String subtitle, IconData icon) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+                color: const Color(0xffeeecff),
+                borderRadius: BorderRadius.circular(12)),
+            child: Icon(icon, color: const Color(0xff6254d9)),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title,
+                  style: const TextStyle(
+                      fontSize: 25, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 5),
+              Text(subtitle,
+                  style:
+                      const TextStyle(color: Color(0xff777683), fontSize: 13)),
+            ]),
+          ),
+        ],
+      );
+
+  Widget _agentsView() => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _fleetHeader('Agents', 'Execution hosts connected to this workspace.',
+              Icons.computer_outlined),
+          const SizedBox(height: 24),
+          if (snapshot.agents.isEmpty)
+            _emptyFleetCard('No agents enrolled',
+                'Enroll a Conclave Agent to host local workers.')
+          else
+            ...snapshot.agents.map((agent) => Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(children: [
+                            Expanded(
+                                child: Text(agent.name,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 16))),
+                            _statusChip(
+                                agent.status,
+                                agent.status.toLowerCase() == 'online'
+                                    ? const Color(0xff3ca879)
+                                    : const Color(0xff9a98a5)),
+                          ]),
+                          const SizedBox(height: 8),
+                          Text('${agent.hostname} · Agent ${agent.version}',
+                              style: const TextStyle(color: Color(0xff777683))),
+                          const SizedBox(height: 14),
+                          Wrap(spacing: 20, runSpacing: 8, children: [
+                            Text('${agent.pluginCount} plugins'),
+                            Text('${agent.workerCount} workers'),
+                            Text('${agent.activeTaskCount} active task'),
+                          ]),
+                        ]),
+                  ),
+                )),
+        ],
+      );
+
+  Widget _pluginsView() => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _fleetHeader(
+              'Plugins',
+              'Installed integrations and execution capabilities.',
+              Icons.extension_outlined),
+          const SizedBox(height: 24),
+          if (snapshot.plugins.isEmpty)
+            _emptyFleetCard('No plugins available',
+                'Plugins will appear when an Agent reports its inventory.')
+          else
+            ...snapshot.plugins.map((plugin) => Card(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  child: ListTile(
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 18, vertical: 5),
+                    leading: CircleAvatar(
+                        backgroundColor: const Color(0xffeeecff),
+                        child: const Icon(Icons.extension_outlined,
+                            color: Color(0xff6254d9))),
+                    title: Text(plugin.name,
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: Text(
+                        '${plugin.version} · ${plugin.roles.join(', ')}\n${plugin.capabilities.join(' · ')}'),
+                    isThreeLine: true,
+                    trailing: _statusChip(
+                        plugin.status,
+                        plugin.status.toLowerCase() == 'installed'
+                            ? const Color(0xff3ca879)
+                            : const Color(0xff777683)),
+                  ),
+                )),
+        ],
+      );
+
+  Widget _emptyFleetCard(String title, String subtitle) => _panel(
+        title: title,
+        subtitle: subtitle,
+        child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 22),
+            child: Text('Nothing to configure yet.',
+                style: const TextStyle(color: Color(0xff777683)))),
+      );
+
   Widget _workersView() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Workers',
-              style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 6),
-          const Text('Configured resources resolved by role and capability.',
-              style: TextStyle(color: Color(0xff777683), fontSize: 13)),
+          _fleetHeader(
+              'Workers',
+              'Configured resources resolved by role, capability, and Agent.',
+              Icons.people_alt_outlined),
           const SizedBox(height: 24),
-          _policyCard(),
-          const SizedBox(height: 16),
-          ...snapshot.workers.map(
-            (worker) => Card(
-              margin: const EdgeInsets.only(bottom: 12),
-              child: ListTile(
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-                leading: CircleAvatar(
-                  backgroundColor: const Color(0xffeeecff),
-                  child: Icon(
-                      worker.role == 'reviewer'
-                          ? Icons.rate_review_outlined
-                          : Icons.smart_toy_outlined,
-                      color: const Color(0xff6254d9),
-                      size: 20),
-                ),
-                title: Text(worker.name,
-                    style: const TextStyle(fontWeight: FontWeight.w700)),
-                subtitle: Text(
-                    '${worker.provider} · ${worker.role} · ${worker.capabilities.join(' · ')}'),
-                trailing: Switch(
-                  value: workerEnabled[worker.id] ??
-                      worker.status.toLowerCase() != 'offline',
-                  onChanged: (value) =>
-                      setState(() => workerEnabled[worker.id] = value),
+          if (snapshot.workers.isEmpty)
+            _emptyFleetCard('No workers configured',
+                'Create a Worker after connecting an Agent and Plugin.')
+          else ...[
+            const Text('Configured resources',
+                style: TextStyle(color: Color(0xff777683), fontSize: 13)),
+            const SizedBox(height: 24),
+            _policyCard(),
+            const SizedBox(height: 16),
+            ...snapshot.workers.map(
+              (worker) => Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+                  leading: CircleAvatar(
+                    backgroundColor: const Color(0xffeeecff),
+                    child: Icon(
+                        worker.role == 'reviewer'
+                            ? Icons.rate_review_outlined
+                            : Icons.smart_toy_outlined,
+                        color: const Color(0xff6254d9),
+                        size: 20),
+                  ),
+                  title: Text(worker.name,
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: Text(
+                      '${worker.agentName} · ${worker.pluginName}\n${worker.roles.isEmpty ? worker.role : worker.roles.join(', ')} · ${worker.capabilities.join(' · ')}'),
+                  isThreeLine: true,
+                  trailing: Switch(
+                    value: workerEnabled[worker.id] ??
+                        worker.status.toLowerCase() != 'offline',
+                    onChanged: (value) =>
+                        setState(() => workerEnabled[worker.id] = value),
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
         ],
       );
 
