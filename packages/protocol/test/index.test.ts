@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   PlanResultSchema,
   parseMachineCheckEvidence,
@@ -21,6 +24,16 @@ const envelope = {
   workerId: "worker-1",
   createdAt: "2026-09-21T10:00:00.000Z",
 };
+
+const canonicalTaskRequest = JSON.parse(
+  fs.readFileSync(
+    path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "../fixtures/task-request.json",
+    ),
+    "utf8",
+  ),
+) as Record<string, unknown>;
 
 const validPlanResult = {
   ...envelope,
@@ -189,6 +202,12 @@ describe("versioned protocol contracts", () => {
         checks: [],
       }),
     ).toThrow();
+  });
+
+  it("parses the canonical cross-language task fixture", () => {
+    const parsed = parseProtocolMessage(canonicalTaskRequest);
+    expect(parsed.messageType).toBe("TaskRequest");
+    expect(parsed.payload.taskId).toBe("task-1");
   });
 
   it("requires executable operations for successful implementations", () => {

@@ -1,5 +1,7 @@
 import 'package:conclave_protocol/conclave_protocol.dart';
 import 'package:test/test.dart';
+import 'dart:convert';
+import 'dart:io';
 
 void main() {
   final message = <String, Object?>{
@@ -25,7 +27,8 @@ void main() {
 
   test('rejects missing correlation fields', () {
     final invalid = Map<String, Object?>.from(message)..remove('runId');
-    expect(() => ProtocolEnvelope.parse(invalid), throwsA(isA<ProtocolException>()));
+    expect(() => ProtocolEnvelope.parse(invalid),
+        throwsA(isA<ProtocolException>()));
   });
 
   test('rejects incompatible major versions', () {
@@ -34,8 +37,7 @@ void main() {
   });
 
   test('accepts a compatible minor version in the envelope', () {
-    final compatible = Map<String, Object?>.from(message)
-      ..['version'] = '0.2';
+    final compatible = Map<String, Object?>.from(message)..['version'] = '0.2';
     expect(ProtocolEnvelope.parse(compatible).version, equals('0.2'));
 
     final incompatible = Map<String, Object?>.from(message)
@@ -44,5 +46,14 @@ void main() {
       () => ProtocolEnvelope.parse(incompatible),
       throwsA(isA<ProtocolException>()),
     );
+  });
+
+  test('parses the canonical cross-language task fixture', () {
+    final fixture = jsonDecode(
+      File('../../protocol/fixtures/task-request.json').readAsStringSync(),
+    );
+    final parsed = ProtocolEnvelope.parse(fixture);
+    expect(parsed.messageType, equals('TaskRequest'));
+    expect(parsed.payload['taskId'], equals('task-1'));
   });
 }
