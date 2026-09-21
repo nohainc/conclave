@@ -207,7 +207,9 @@ function connectionResource(row: Record<string, unknown>): ConnectionResource {
     cost: cost(row.cost_metadata_json),
     executionEnvironment: "local" as ExecutionEnvironment,
     availability:
-      row.enabled !== 0 && agentStatus === "online" && workerStatus === "available"
+      row.enabled !== 0 &&
+      agentStatus === "online" &&
+      workerStatus === "available"
         ? "available"
         : (workerStatus as WorkerAvailability),
   };
@@ -996,7 +998,11 @@ export async function executeForgeService(
       reviewer: modelFor(reviewerResource, env, context),
       ...(secondaryResearchResource
         ? {
-            secondaryResearcher: modelFor(secondaryResearchResource, env, context),
+            secondaryResearcher: modelFor(
+              secondaryResearchResource,
+              env,
+              context,
+            ),
           }
         : {}),
       requireSecondaryResearch: executionMode === "multi_agent",

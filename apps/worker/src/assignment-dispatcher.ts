@@ -85,8 +85,7 @@ export async function selectWorkerForTask(
 
     if (
       !row ||
-      Number(row.active_assignments || 0) >=
-        Number(row.concurrency_limit || 1)
+      Number(row.active_assignments || 0) >= Number(row.concurrency_limit || 1)
     ) {
       return null;
     }
@@ -131,8 +130,7 @@ export async function selectWorkerForTask(
     const indepKey = String(row.independence_key);
 
     if (
-      Number(row.active_assignments || 0) >=
-      Number(row.concurrency_limit || 1)
+      Number(row.active_assignments || 0) >= Number(row.concurrency_limit || 1)
     ) {
       continue;
     }
