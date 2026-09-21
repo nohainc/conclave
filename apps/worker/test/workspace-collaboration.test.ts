@@ -119,6 +119,10 @@ describe("V2-21 workspace collaboration", () => {
       async put(key: string, value: string) {
         storedBackups.set(key, value);
       },
+      async get(key: string) {
+        const value = storedBackups.get(key);
+        return value == null ? null : { text: async () => value };
+      },
     } as unknown as R2Bucket;
 
     const projectResponse = await worker.fetch(
@@ -300,6 +304,31 @@ describe("V2-21 workspace collaboration", () => {
     expect(storedBackups.get(backupBody.storageKey)).toContain(
       '"workspaceId":"' + workspaceId + '"',
     );
+
+    const restoreDrill = await worker.fetch(
+      new Request(
+        `https://cloud/api/workspaces/${workspaceId}/backup/restore-drill`,
+        {
+          method: "POST",
+          headers: {
+            ...headers(alice, workspaceId),
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ storageKey: backupBody.storageKey }),
+        },
+      ),
+      env,
+    );
+    expect(restoreDrill.status).toBe(200);
+    const restoreBody = (await restoreDrill.json()) as {
+      format: string;
+      digest: string;
+      tableCounts: Record<string, number>;
+    };
+    expect(restoreBody.format).toBe("conclave-backup-restore-drill-v1");
+    expect(restoreBody.digest).toBe(backupBody.digest);
+    expect(restoreBody.tableCounts.workspaces).toBe(1);
+    expect(restoreBody.tableCounts.projects).toBe(1);
 
     const memberBackup = await worker.fetch(
       new Request(`https://cloud/api/workspaces/${workspaceId}/backup`, {

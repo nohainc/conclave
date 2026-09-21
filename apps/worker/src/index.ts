@@ -1044,6 +1044,28 @@ function encodeBase64(bytes: Uint8Array): string {
   return btoa(value);
 }
 
+function decodeBase64(value: string): Uint8Array {
+  const decoded = atob(value);
+  return Uint8Array.from(decoded, (character) => character.charCodeAt(0));
+}
+
+async function workspaceBackupKey(
+  secret: string,
+  workspaceId: string,
+): Promise<CryptoKey> {
+  const keyMaterial = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`${secret}:${workspaceId}`),
+  );
+  return await crypto.subtle.importKey(
+    "raw",
+    keyMaterial,
+    { name: "AES-GCM" },
+    false,
+    ["decrypt"],
+  );
+}
+
 async function createEncryptedWorkspaceBackup(
   env: SecurityEnv,
   workspaceId: string,
@@ -1103,6 +1125,100 @@ async function createEncryptedWorkspaceBackup(
     },
   });
   return { key: objectKey, digest, sizeBytes: envelope.length };
+}
+
+async function handleVerifyWorkspaceBackup(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const context = await workspaceMemberContext(
+    request,
+    env,
+    workspaceId,
+    "audit:read",
+    accessContext,
+  );
+  const bucket = env.CONCLAVE_ARTIFACTS;
+  const secret = env.CONCLAVE_SECURITY_KEY;
+  if (!bucket || !secret) {
+    throw new HttpError(503, "Encrypted backup storage is not configured");
+  }
+  const body = (await request.json()) as Record<string, unknown>;
+  const storageKey = requiredString(body.storageKey, "storageKey");
+  const expectedPrefix = `backups/${workspaceId}/`;
+  if (!storageKey.startsWith(expectedPrefix)) {
+    throw new HttpError(404, "Backup not found");
+  }
+  const object = await bucket.get(storageKey);
+  if (!object) throw new HttpError(404, "Backup not found");
+  let envelope: Record<string, unknown>;
+  try {
+    envelope = JSON.parse(await object.text()) as Record<string, unknown>;
+  } catch {
+    throw new HttpError(422, "Backup envelope is invalid");
+  }
+  if (
+    envelope.format !== "conclave-encrypted-backup-v1" ||
+    envelope.workspaceId !== workspaceId ||
+    envelope.algorithm !== "AES-GCM" ||
+    typeof envelope.digest !== "string" ||
+    typeof envelope.iv !== "string" ||
+    typeof envelope.ciphertext !== "string"
+  ) {
+    throw new HttpError(422, "Backup envelope does not match this workspace");
+  }
+  let payload: Record<string, unknown>;
+  try {
+    const plaintext = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: decodeBase64(envelope.iv) as BufferSource },
+      await workspaceBackupKey(secret, workspaceId),
+      decodeBase64(envelope.ciphertext) as BufferSource,
+    );
+    payload = JSON.parse(new TextDecoder().decode(plaintext)) as Record<
+      string,
+      unknown
+    >;
+  } catch {
+    throw new HttpError(422, "Backup decryption failed");
+  }
+  if (
+    payload.format !== "conclave-workspace-backup-p1" ||
+    payload.workspaceId !== workspaceId ||
+    typeof payload.tables !== "object" ||
+    payload.tables === null
+  ) {
+    throw new HttpError(422, "Backup payload is invalid");
+  }
+  const payloadText = JSON.stringify(payload);
+  const digest = await computePackageDigest(payloadText);
+  if (digest !== envelope.digest) {
+    throw new HttpError(422, "Backup digest mismatch");
+  }
+  const tables = payload.tables as Record<string, unknown>;
+  const tableCounts = Object.fromEntries(
+    Object.entries(tables).map(([name, rows]) => [
+      name,
+      Array.isArray(rows) ? rows.length : 0,
+    ]),
+  );
+  await recordAudit(
+    env,
+    context,
+    "workspace.backup.restore_verified",
+    "workspace",
+    workspaceId,
+    { digest, storageKey, tableCounts },
+  );
+  return json({
+    format: "conclave-backup-restore-drill-v1",
+    workspaceId,
+    storageKey,
+    digest,
+    tableCounts,
+    validatedAt: new Date().toISOString(),
+  });
 }
 
 async function handleCreateWorkspaceBackup(
@@ -4656,6 +4772,17 @@ export default {
           request,
           env as SecurityEnv,
           backupMatch[1],
+          ctx,
+        );
+      }
+      const backupRestoreDrillMatch = url.pathname.match(
+        /^\/api\/workspaces\/([^/]+)\/backup\/restore-drill$/,
+      );
+      if (request.method === "POST" && backupRestoreDrillMatch?.[1]) {
+        return await handleVerifyWorkspaceBackup(
+          request,
+          env as SecurityEnv,
+          backupRestoreDrillMatch[1],
           ctx,
         );
       }
