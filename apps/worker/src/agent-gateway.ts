@@ -248,6 +248,16 @@ export class AgentGateway implements DurableObject {
     switch (message.type) {
       case "agent.hello": {
         const payload = message.payload as AgentHelloPayload;
+        if (
+          payload.agentId !== this.agentId ||
+          payload.workspaceId !== this.workspaceId
+        ) {
+          this.sendError(
+            "Agent hello identity does not match the authenticated socket",
+          );
+          this.socket?.close(1008, "Agent identity mismatch");
+          return;
+        }
         // Update agent record with hostname, version and capabilities
         try {
           await this.env.CONCLAVE_DB.prepare(
@@ -284,6 +294,17 @@ export class AgentGateway implements DurableObject {
 
       case "agent.heartbeat": {
         const payload = message.payload as AgentHeartbeatPayload;
+        if (
+          payload.agentId !== this.agentId ||
+          payload.workspaceId !== this.workspaceId ||
+          payload.sessionId !== this.sessionId
+        ) {
+          this.sendError(
+            "Agent heartbeat identity does not match the authenticated session",
+          );
+          this.socket?.close(1008, "Agent session mismatch");
+          return;
+        }
         try {
           await this.env.CONCLAVE_DB.prepare(
             `UPDATE agents SET status = ?1, last_heartbeat_at = ?2, updated_at = ?2 WHERE id = ?3`,
