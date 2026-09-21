@@ -196,6 +196,7 @@ type SecurityEnv = Env & {
   readonly CONCLAVE_AUTH_TOKEN?: string;
   readonly CONCLAVE_PLUGIN_SIGNING_KEY?: string;
   readonly CONCLAVE_AGENT_SIGNING_KEY?: string;
+  readonly CONCLAVE_SECURITY_KEY?: string;
   readonly CONCLAVE_AUTH_USER_ID?: string;
   readonly CONCLAVE_AUTH_ORGANIZATION_ID?: string;
   readonly CONCLAVE_ALLOW_ANONYMOUS_DEV?: string;
@@ -954,6 +955,192 @@ async function handleExportWorkspaceAudit(
       createdAt: row.createdAt,
     })),
   });
+}
+
+type WorkspaceBackupQuery = {
+  readonly name: string;
+  readonly sql: string;
+};
+
+const WORKSPACE_BACKUP_QUERIES: readonly WorkspaceBackupQuery[] = [
+  { name: "workspaces", sql: "SELECT * FROM workspaces WHERE id = ?1" },
+  {
+    name: "workspace_memberships",
+    sql: "SELECT * FROM workspace_memberships WHERE workspace_id = ?1",
+  },
+  {
+    name: "workspace_invitations",
+    sql: "SELECT * FROM workspace_invitations WHERE workspace_id = ?1",
+  },
+  { name: "projects", sql: "SELECT * FROM projects WHERE workspace_id = ?1" },
+  {
+    name: "project_memberships",
+    sql: "SELECT pm.* FROM project_memberships pm JOIN projects p ON p.id = pm.project_id WHERE p.workspace_id = ?1",
+  },
+  { name: "chats", sql: "SELECT * FROM chats WHERE workspace_id = ?1" },
+  { name: "goals", sql: "SELECT * FROM goals WHERE workspace_id = ?1" },
+  {
+    name: "chat_messages",
+    sql: "SELECT cm.* FROM chat_messages cm JOIN chats c ON c.id = cm.chat_id WHERE c.workspace_id = ?1",
+  },
+  { name: "runs", sql: "SELECT * FROM runs WHERE workspace_id = ?1" },
+  {
+    name: "phases",
+    sql: "SELECT ph.* FROM phases ph JOIN runs r ON r.id = ph.run_id WHERE r.workspace_id = ?1",
+  },
+  {
+    name: "tasks",
+    sql: "SELECT t.* FROM tasks t JOIN phases ph ON ph.id = t.phase_id JOIN runs r ON r.id = ph.run_id WHERE r.workspace_id = ?1",
+  },
+  {
+    name: "task_dependencies",
+    sql: "SELECT td.* FROM task_dependencies td JOIN tasks t ON t.id = td.task_id JOIN phases ph ON ph.id = t.phase_id JOIN runs r ON r.id = ph.run_id WHERE r.workspace_id = ?1",
+  },
+  { name: "agents", sql: "SELECT * FROM agents WHERE workspace_id = ?1" },
+  {
+    name: "agent_enrollments",
+    sql: "SELECT * FROM agent_enrollments WHERE workspace_id = ?1",
+  },
+  {
+    name: "agent_sessions",
+    sql: "SELECT * FROM agent_sessions WHERE workspace_id = ?1",
+  },
+  { name: "workers", sql: "SELECT * FROM workers WHERE workspace_id = ?1" },
+  {
+    name: "attempts",
+    sql: "SELECT a.* FROM attempts a JOIN tasks t ON t.id = a.task_id JOIN phases ph ON ph.id = t.phase_id JOIN runs r ON r.id = ph.run_id WHERE r.workspace_id = ?1",
+  },
+  {
+    name: "worker_assignments",
+    sql: "SELECT * FROM worker_assignments WHERE workspace_id = ?1",
+  },
+  {
+    name: "completion_criteria",
+    sql: "SELECT cc.* FROM completion_criteria cc JOIN goals g ON g.id = cc.goal_id WHERE g.workspace_id = ?1",
+  },
+  {
+    name: "verifications",
+    sql: "SELECT * FROM verifications WHERE workspace_id = ?1",
+  },
+  { name: "artifacts", sql: "SELECT * FROM artifacts WHERE workspace_id = ?1" },
+  { name: "findings", sql: "SELECT * FROM findings WHERE workspace_id = ?1" },
+  { name: "events", sql: "SELECT * FROM events WHERE workspace_id = ?1" },
+  { name: "budgets", sql: "SELECT * FROM budgets WHERE workspace_id = ?1" },
+  { name: "usage", sql: "SELECT * FROM usage WHERE workspace_id = ?1" },
+  { name: "audit_log", sql: "SELECT * FROM audit_log WHERE workspace_id = ?1" },
+  {
+    name: "ci_evidence",
+    sql: "SELECT * FROM ci_evidence WHERE workspace_id = ?1",
+  },
+  {
+    name: "persistence_records",
+    sql: "SELECT * FROM persistence_records WHERE organization_id = ?1",
+  },
+];
+
+function encodeBase64(bytes: Uint8Array): string {
+  let value = "";
+  for (const byte of bytes) value += String.fromCharCode(byte);
+  return btoa(value);
+}
+
+async function createEncryptedWorkspaceBackup(
+  env: SecurityEnv,
+  workspaceId: string,
+): Promise<{ key: string; digest: string; sizeBytes: number }> {
+  const secret = env.CONCLAVE_SECURITY_KEY;
+  const bucket = env.CONCLAVE_ARTIFACTS;
+  if (!secret || !bucket) {
+    throw new HttpError(503, "Encrypted backup storage is not configured");
+  }
+  const tables: Record<string, unknown[]> = {};
+  for (const query of WORKSPACE_BACKUP_QUERIES) {
+    const result = await env.CONCLAVE_DB.prepare(query.sql)
+      .bind(workspaceId)
+      .all<Record<string, unknown>>();
+    tables[query.name] = result.results ?? [];
+  }
+  const plaintext = JSON.stringify({
+    format: "conclave-workspace-backup-p1",
+    workspaceId,
+    exportedAt: new Date().toISOString(),
+    tables,
+  });
+  const digest = await computePackageDigest(plaintext);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const keyMaterial = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`${secret}:${workspaceId}`),
+  );
+  const key = await crypto.subtle.importKey(
+    "raw",
+    keyMaterial,
+    { name: "AES-GCM" },
+    false,
+    ["encrypt"],
+  );
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    new TextEncoder().encode(plaintext),
+  );
+  const envelope = JSON.stringify({
+    format: "conclave-encrypted-backup-v1",
+    workspaceId,
+    digest,
+    algorithm: "AES-GCM",
+    keyDerivation: "SHA-256(secret:workspaceId)",
+    iv: encodeBase64(iv),
+    ciphertext: encodeBase64(new Uint8Array(ciphertext)),
+  });
+  const objectKey = `backups/${workspaceId}/${Date.now()}-${crypto.randomUUID()}.json`;
+  await bucket.put(objectKey, envelope, {
+    httpMetadata: { contentType: "application/json" },
+    customMetadata: {
+      workspaceId,
+      digest,
+      format: "conclave-encrypted-backup-v1",
+    },
+  });
+  return { key: objectKey, digest, sizeBytes: envelope.length };
+}
+
+async function handleCreateWorkspaceBackup(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const context = await workspaceMemberContext(
+    request,
+    env,
+    workspaceId,
+    "audit:read",
+    accessContext,
+  );
+  const backup = await createEncryptedWorkspaceBackup(env, workspaceId);
+  await recordAudit(
+    env,
+    context,
+    "workspace.backup.exported",
+    "workspace",
+    workspaceId,
+    {
+      digest: backup.digest,
+      storageKey: backup.key,
+      sizeBytes: backup.sizeBytes,
+    },
+  );
+  return json(
+    {
+      format: "conclave-encrypted-backup-v1",
+      workspaceId,
+      storageKey: backup.key,
+      digest: backup.digest,
+      sizeBytes: backup.sizeBytes,
+    },
+    { status: 201 },
+  );
 }
 
 type CollaboratorRole = "admin" | "member" | "viewer";
@@ -4458,6 +4645,17 @@ export default {
           request,
           env as SecurityEnv,
           auditExportMatch[1],
+          ctx,
+        );
+      }
+      const backupMatch = url.pathname.match(
+        /^\/api\/workspaces\/([^/]+)\/backup$/,
+      );
+      if (request.method === "POST" && backupMatch?.[1]) {
+        return await handleCreateWorkspaceBackup(
+          request,
+          env as SecurityEnv,
+          backupMatch[1],
           ctx,
         );
       }

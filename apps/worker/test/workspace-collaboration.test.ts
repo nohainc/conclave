@@ -111,6 +111,15 @@ describe("V2-21 workspace collaboration", () => {
       workspace: { id: string };
     };
     const workspaceId = workspace.id;
+    const storedBackups = new Map<string, string>();
+    (
+      env as unknown as { CONCLAVE_SECURITY_KEY: string }
+    ).CONCLAVE_SECURITY_KEY = "test-backup-key";
+    (env as unknown as { CONCLAVE_ARTIFACTS: R2Bucket }).CONCLAVE_ARTIFACTS = {
+      async put(key: string, value: string) {
+        storedBackups.set(key, value);
+      },
+    } as unknown as R2Bucket;
 
     const projectResponse = await worker.fetch(
       new Request("https://cloud/api/projects", {
@@ -269,5 +278,36 @@ describe("V2-21 workspace collaboration", () => {
       env,
     );
     expect(memberAuditExport.status).toBe(403);
+
+    const backupResponse = await worker.fetch(
+      new Request(`https://cloud/api/workspaces/${workspaceId}/backup`, {
+        method: "POST",
+        headers: headers(alice, workspaceId),
+      }),
+      env,
+    );
+    expect(backupResponse.status).toBe(201);
+    const backupBody = (await backupResponse.json()) as {
+      format: string;
+      workspaceId: string;
+      storageKey: string;
+      digest: string;
+    };
+    expect(backupBody.format).toBe("conclave-encrypted-backup-v1");
+    expect(backupBody.workspaceId).toBe(workspaceId);
+    expect(backupBody.digest).toMatch(/^sha256:/);
+    expect(storedBackups.has(backupBody.storageKey)).toBe(true);
+    expect(storedBackups.get(backupBody.storageKey)).toContain(
+      '"workspaceId":"' + workspaceId + '"',
+    );
+
+    const memberBackup = await worker.fetch(
+      new Request(`https://cloud/api/workspaces/${workspaceId}/backup`, {
+        method: "POST",
+        headers: headers(bob, workspaceId),
+      }),
+      env,
+    );
+    expect(memberBackup.status).toBe(403);
   });
 });
