@@ -20,14 +20,24 @@ const identityDb = {
               allowedWorkflows: ["CI"],
             }),
             repository_id: "repo-1",
+            workspace_id: "local-development",
             organization_id: "local-development",
           } as T;
         }
-        if (query.includes("run_external_executions")) {
+        if (
+          query.includes("run_external_executions") ||
+          query.includes("persistence_records")
+        ) {
           const runId = String(values[0]);
           const workflowInstanceId = workflowExecutions.get(runId);
           return workflowInstanceId
-            ? ({ workflow_instance_id: workflowInstanceId } as T)
+            ? ({
+                workflow_instance_id: workflowInstanceId,
+                record_json: JSON.stringify({
+                  workflowInstanceId,
+                  workflow_instance_id: workflowInstanceId,
+                }),
+              } as T)
             : null;
         }
         return null;
@@ -36,16 +46,33 @@ const identityDb = {
         return { results: [] as readonly T[] };
       },
       async run() {
-        if (query.includes("run_ci_evidence")) {
+        if (query.includes("ci_evidence")) {
           const evidenceId = String(values[0]);
           if (consumedEvidence.has(evidenceId))
             throw new Error(
-              "UNIQUE constraint failed: run_ci_evidence.evidence_id",
+              "UNIQUE constraint failed: ci_evidence.evidence_id",
             );
           consumedEvidence.add(evidenceId);
         }
-        if (query.includes("run_external_executions")) {
-          workflowExecutions.set(String(values[0]), String(values[1]));
+        if (
+          query.includes("run_external_executions") ||
+          query.includes("persistence_records")
+        ) {
+          const runId = String(values[0]);
+          const jsonVal = typeof values[1] === "string" ? values[1] : "";
+          try {
+            const parsed = JSON.parse(jsonVal) as {
+              workflowInstanceId?: string;
+              workflow_instance_id?: string;
+            };
+            const wId =
+              parsed.workflowInstanceId ??
+              parsed.workflow_instance_id ??
+              String(values[1]);
+            workflowExecutions.set(runId, wId);
+          } catch {
+            workflowExecutions.set(runId, String(values[1]));
+          }
         }
         return { success: true };
       },

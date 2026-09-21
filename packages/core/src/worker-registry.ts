@@ -1,6 +1,7 @@
 export type WorkerType =
   "model" | "agent" | "runtime" | "ci" | "tool" | "human";
-export type WorkerAvailability = "available" | "busy" | "disabled" | "offline";
+export type WorkerAvailability =
+  "available" | "busy" | "disabled" | "offline" | "draining";
 export type ExecutionEnvironment = "cloud" | "local" | "ci" | "human";
 export type ConnectionTransport =
   | "provider_api"
@@ -21,10 +22,11 @@ export type ConnectionBillingMode =
   "api_metered" | "subscription" | "local_compute" | "external" | "manual";
 
 export interface WorkerCostMetadata {
-  readonly currency: string;
+  readonly currency?: string;
   readonly estimatedCostMicrosPerAttempt: number | null;
-  readonly inputMicrosPerMillionTokens: number | null;
-  readonly outputMicrosPerMillionTokens: number | null;
+  readonly inputMicrosPerMillionTokens?: number | null;
+  readonly outputMicrosPerMillionTokens?: number | null;
+  readonly [key: string]: unknown;
 }
 
 export interface ConnectionResource {

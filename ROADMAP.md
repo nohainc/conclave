@@ -1,5 +1,7 @@
 # Conclave Development Roadmap
 
+> **Architecture v2 Implementation:** For the current normative v2 phased execution roadmap, see [docs/roadmaps/ARCHITECTURE_V2_IMPLEMENTATION.md](docs/roadmaps/ARCHITECTURE_V2_IMPLEMENTATION.md).
+
 This roadmap is ordered for AI delegation. Do not skip foundational phases merely to reach UI or provider integration faster.
 
 ## Phase 0 — Product and domain specification

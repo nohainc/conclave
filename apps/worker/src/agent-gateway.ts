@@ -1,0 +1,626 @@
+import {
+  AGENT_PROTOCOL_NAME,
+  AGENT_PROTOCOL_VERSION,
+  parseAgentMessage,
+  serializeAgentMessage,
+  type AgentProtocolMessage,
+  type AgentHelloPayload,
+  type AgentHeartbeatPayload,
+  type AgentSyncRequestPayload,
+  type DesiredWorker,
+  type DesiredPlugin,
+  type AssignmentStartPayload,
+  type AssignmentCancelPayload,
+  type AssignmentResultPayload,
+  type AssignmentFailurePayload,
+} from "@conclave/agent-protocol";
+import {
+  recordAssignmentResult,
+  recordAssignmentError,
+} from "./assignment-dispatcher.js";
+
+export interface GatewayEnv {
+  CONCLAVE_DB: D1Database;
+  CONCLAVE_ENVIRONMENT?: string;
+}
+
+export class AgentGateway implements DurableObject {
+  private socket: WebSocket | null = null;
+  private agentId: string | null = null;
+  private workspaceId: string | null = null;
+  private sessionId: string | null = null;
+  private readonly pendingAcks = new Map<
+    string,
+    {
+      resolve: (value: unknown) => void;
+      reject: (error: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
+
+  constructor(
+    private readonly state: DurableObjectState,
+    private readonly env: GatewayEnv,
+  ) {}
+
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+
+    // 1. WebSocket Upgrade from Agent
+    if (request.headers.get("Upgrade")?.toLowerCase() === "websocket") {
+      return this.handleWebSocketConnect(request, url);
+    }
+
+    // 2. Internal DO RPC: Query live status
+    if (request.method === "GET" && url.pathname === "/status") {
+      return Response.json({
+        online: this.socket !== null,
+        agentId: this.agentId,
+        workspaceId: this.workspaceId,
+        sessionId: this.sessionId,
+        pendingAcksCount: this.pendingAcks.size,
+      });
+    }
+
+    // 3. Internal DO RPC: Dispatch assignment
+    if (request.method === "POST" && url.pathname === "/dispatch-assignment") {
+      return this.handleDispatchAssignment(request);
+    }
+
+    // 4. Internal DO RPC: Cancel assignment
+    if (request.method === "POST" && url.pathname === "/cancel-assignment") {
+      return this.handleCancelAssignment(request);
+    }
+
+    // 5. Internal DO RPC: Post generic message envelope
+    if (request.method === "POST" && url.pathname === "/post-message") {
+      return this.handlePostMessage(request);
+    }
+
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
+
+  /**
+   * Handles incoming WebSocket connection upgrade from an enrolled Conclave Agent.
+   */
+  private async handleWebSocketConnect(
+    request: Request,
+    url: URL,
+  ): Promise<Response> {
+    const agentId = url.searchParams.get("agentId");
+    const workspaceId = url.searchParams.get("workspaceId");
+
+    if (!agentId || !workspaceId) {
+      return Response.json(
+        { error: "agentId and workspaceId query parameters are required" },
+        { status: 400 },
+      );
+    }
+
+    // Close any previous stale socket for this agent instance
+    if (this.socket) {
+      try {
+        this.socket.close(1000, "Superceded by new connection");
+      } catch {
+        // ignore
+      }
+      this.socket = null;
+    }
+
+    const pair = new WebSocketPair();
+    const client = pair[0];
+    const server = pair[1];
+
+    server.accept();
+    this.socket = server;
+    this.agentId = agentId;
+    this.workspaceId = workspaceId;
+    this.sessionId = `sess-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    const now = new Date().toISOString();
+
+    // Update D1 database
+    try {
+      await this.env.CONCLAVE_DB.prepare(
+        `UPDATE agents SET status = 'online', last_heartbeat_at = ?1, updated_at = ?1 WHERE id = ?2`,
+      )
+        .bind(now, agentId)
+        .run();
+
+      await this.env.CONCLAVE_DB.prepare(
+        `INSERT INTO agent_sessions (id, agent_id, workspace_id, client_version, protocol_version, ip_address, connected_at, last_heartbeat_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)`,
+      )
+        .bind(
+          this.sessionId,
+          agentId,
+          workspaceId,
+          "0.2.0",
+          AGENT_PROTOCOL_VERSION,
+          request.headers.get("CF-Connecting-IP") || "127.0.0.1",
+          now,
+        )
+        .run();
+    } catch (err) {
+      console.error("Failed to record agent session in D1", err);
+    }
+
+    server.addEventListener("message", (event) => {
+      void this.handleIncomingMessage(event.data);
+    });
+
+    server.addEventListener("close", () => {
+      this.handleSocketClose();
+    });
+
+    server.addEventListener("error", (err) => {
+      console.error("Agent Gateway WebSocket error", err);
+      this.handleSocketClose();
+    });
+
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  /**
+   * Cleans up state on socket close.
+   */
+  private handleSocketClose(): void {
+    if (!this.socket) return;
+    this.socket = null;
+    const now = new Date().toISOString();
+
+    if (this.agentId && this.sessionId) {
+      void this.env.CONCLAVE_DB.prepare(
+        `UPDATE agents SET status = 'offline', updated_at = ?1 WHERE id = ?2`,
+      )
+        .bind(now, this.agentId)
+        .run();
+
+      void this.env.CONCLAVE_DB.prepare(
+        `UPDATE agent_sessions SET disconnected_at = ?1 WHERE id = ?2`,
+      )
+        .bind(now, this.sessionId)
+        .run();
+    }
+
+    for (const [key, pending] of this.pendingAcks.entries()) {
+      clearTimeout(pending.timer);
+      pending.reject(
+        new Error("Agent WebSocket closed during pending operation"),
+      );
+      this.pendingAcks.delete(key);
+    }
+  }
+
+  /**
+   * Processes messages incoming over the Agent WebSocket.
+   */
+  private async handleIncomingMessage(data: unknown): Promise<void> {
+    let parsedJson: unknown;
+    try {
+      const text =
+        typeof data === "string"
+          ? data
+          : new TextDecoder().decode(data as ArrayBuffer);
+      parsedJson = JSON.parse(text);
+    } catch {
+      this.sendError("Malformed JSON payload received");
+      return;
+    }
+
+    let message: AgentProtocolMessage;
+    try {
+      message = parseAgentMessage(parsedJson);
+    } catch (err) {
+      this.sendError(
+        err instanceof Error ? err.message : "Invalid agent protocol message",
+      );
+      return;
+    }
+
+    const now = new Date().toISOString();
+
+    switch (message.type) {
+      case "agent.hello": {
+        const payload = message.payload as AgentHelloPayload;
+        // Update agent record with hostname, version and capabilities
+        try {
+          await this.env.CONCLAVE_DB.prepare(
+            `UPDATE agents SET hostname = ?1, version = ?2, capabilities_json = ?3, last_heartbeat_at = ?4, updated_at = ?4 WHERE id = ?5`,
+          )
+            .bind(
+              payload.hostname,
+              payload.agentVersion,
+              JSON.stringify(payload.capabilities),
+              now,
+              this.agentId,
+            )
+            .run();
+        } catch (err) {
+          console.error("Failed to update agent info on hello", err);
+        }
+
+        this.sendProtocolMessage({
+          protocol: AGENT_PROTOCOL_NAME,
+          protocolVersion: AGENT_PROTOCOL_VERSION,
+          messageId: `msg-${Date.now()}`,
+          correlationId: message.messageId,
+          timestamp: now,
+          type: "agent.hello.ack",
+          payload: {
+            sessionId: this.sessionId ?? `sess-${Date.now()}`,
+            heartbeatIntervalMs: 15000,
+            serverTime: now,
+            serverVersion: "2.0.0",
+          },
+        });
+        break;
+      }
+
+      case "agent.heartbeat": {
+        const payload = message.payload as AgentHeartbeatPayload;
+        try {
+          await this.env.CONCLAVE_DB.prepare(
+            `UPDATE agents SET status = ?1, last_heartbeat_at = ?2, updated_at = ?2 WHERE id = ?3`,
+          )
+            .bind(payload.status, now, this.agentId)
+            .run();
+
+          if (this.sessionId) {
+            await this.env.CONCLAVE_DB.prepare(
+              `UPDATE agent_sessions SET last_heartbeat_at = ?1 WHERE id = ?2`,
+            )
+              .bind(now, this.sessionId)
+              .run();
+          }
+        } catch (err) {
+          console.error("Failed to update agent heartbeat", err);
+        }
+
+        this.sendProtocolMessage({
+          protocol: AGENT_PROTOCOL_NAME,
+          protocolVersion: AGENT_PROTOCOL_VERSION,
+          messageId: `msg-${Date.now()}`,
+          correlationId: message.messageId,
+          timestamp: now,
+          type: "agent.heartbeat.ack",
+          payload: {
+            acknowledged: true,
+            serverTime: now,
+          },
+        });
+        break;
+      }
+
+      case "agent.sync.request": {
+        const payload = message.payload as AgentSyncRequestPayload;
+        // Fetch desired workers from D1
+        let desiredWorkers: DesiredWorker[] = [];
+        let desiredPlugins: DesiredPlugin[] = [];
+
+        try {
+          const workerRows = await this.env.CONCLAVE_DB.prepare(
+            `SELECT * FROM workers WHERE (agent_id = ?1 OR workspace_id = ?2) AND enabled = 1`,
+          )
+            .bind(payload.agentId, payload.workspaceId)
+            .all<Record<string, unknown>>();
+
+          desiredWorkers = (workerRows.results || []).map((row) => ({
+            id: String(row.id),
+            workerId: String(row.id),
+            workspaceId: String(row.workspace_id || payload.workspaceId),
+            agentId: String(row.agent_id || payload.agentId),
+            pluginId: String(row.plugin_id),
+            pluginVersionPolicy: String(row.plugin_version_policy || "latest"),
+            name: String(row.name),
+            roles: JSON.parse(String(row.roles_json || "[]")),
+            capabilities: JSON.parse(String(row.capabilities_json || "[]")),
+            config: JSON.parse(String(row.config_json || "{}")),
+            secretRefs: JSON.parse(String(row.secret_refs_json || "[]")),
+            billingMode: row.billing_mode as DesiredWorker["billingMode"],
+            costMetadata: JSON.parse(String(row.cost_metadata_json || "{}")),
+            independenceKey: String(row.independence_key),
+            concurrencyLimit: Number(row.concurrency_limit || 1),
+            sessionPolicy:
+              (row.session_policy as DesiredWorker["sessionPolicy"]) ||
+              "stateless",
+            availability:
+              (row.status as DesiredWorker["availability"]) || "available",
+            enabled: Number(row.enabled) === 1,
+          }));
+
+          const pluginRows = await this.env.CONCLAVE_DB.prepare(
+            `SELECT pv.*, p.id as plugin_id FROM worker_plugin_versions pv
+             JOIN worker_plugins p ON p.id = pv.plugin_id
+             WHERE p.status = 'active'`,
+          ).all<Record<string, unknown>>();
+
+          desiredPlugins = (pluginRows.results || []).map((row) => ({
+            pluginId: String(row.plugin_id),
+            version: String(row.version),
+            packageR2Key: String(row.package_r2_key),
+            packageDigest: String(row.package_digest),
+            signature: String(row.signature),
+            permissions: JSON.parse(String(row.permissions_json || "[]")),
+          }));
+        } catch (err) {
+          console.error("Failed to query desired fleet config from D1", err);
+        }
+
+        this.sendProtocolMessage({
+          protocol: AGENT_PROTOCOL_NAME,
+          protocolVersion: AGENT_PROTOCOL_VERSION,
+          messageId: `msg-${Date.now()}`,
+          correlationId: message.messageId,
+          timestamp: now,
+          type: "agent.sync.response",
+          payload: {
+            desiredPlugins,
+            desiredWorkers,
+            activeAssignmentIds: [],
+          },
+        });
+        break;
+      }
+
+      case "worker.status": {
+        const payload = message.payload as {
+          workerId: string;
+          status: string;
+        };
+        try {
+          await this.env.CONCLAVE_DB.prepare(
+            `UPDATE workers SET status = ?1, updated_at = ?2 WHERE id = ?3`,
+          )
+            .bind(payload.status, now, payload.workerId)
+            .run();
+        } catch (err) {
+          console.error("Failed to update worker status", err);
+        }
+        break;
+      }
+
+      case "assignment.ack": {
+        const pending = this.pendingAcks.get(message.assignmentId);
+        if (pending) {
+          clearTimeout(pending.timer);
+          pending.resolve(message.payload);
+          this.pendingAcks.delete(message.assignmentId);
+        }
+
+        try {
+          const accepted = (message.payload as { accepted: boolean }).accepted;
+          const status = accepted ? "acknowledged" : "failed";
+          await this.env.CONCLAVE_DB.prepare(
+            `UPDATE worker_assignments SET status = ?1, updated_at = ?2 WHERE id = ?3`,
+          )
+            .bind(status, now, message.assignmentId)
+            .run();
+        } catch (err) {
+          console.error("Failed to update assignment ack in D1", err);
+        }
+        break;
+      }
+
+      case "assignment.progress": {
+        // Can be routed to persistent event logs or websocket subscribers
+        break;
+      }
+
+      case "assignment.result": {
+        try {
+          await recordAssignmentResult(
+            this.env.CONCLAVE_DB,
+            message.assignmentId,
+            message.payload as AssignmentResultPayload,
+          );
+        } catch (err) {
+          console.error("Failed to record assignment result in D1", err);
+        }
+        break;
+      }
+
+      case "assignment.error": {
+        try {
+          await recordAssignmentError(
+            this.env.CONCLAVE_DB,
+            message.assignmentId,
+            message.payload as AssignmentFailurePayload,
+          );
+        } catch (err) {
+          console.error("Failed to record assignment failure in D1", err);
+        }
+        break;
+      }
+
+      case "assignment.cancel.ack": {
+        const pending = this.pendingAcks.get(`cancel:${message.assignmentId}`);
+        if (pending) {
+          clearTimeout(pending.timer);
+          pending.resolve(message.payload);
+          this.pendingAcks.delete(`cancel:${message.assignmentId}`);
+        }
+        break;
+      }
+
+      default:
+        break;
+    }
+  }
+
+  /**
+   * Internal DO RPC: Dispatches an assignment to the connected Agent.
+   */
+  private async handleDispatchAssignment(request: Request): Promise<Response> {
+    if (!this.socket) {
+      return Response.json(
+        { error: "Agent is currently offline" },
+        { status: 503 },
+      );
+    }
+
+    const body = (await request.json()) as {
+      workspaceId: string;
+      agentId: string;
+      workerId: string;
+      runId: string;
+      taskId: string;
+      attemptId: string;
+      assignmentId: string;
+      idempotencyKey: string;
+      payload: AssignmentStartPayload;
+    };
+
+    const envelope: AgentProtocolMessage = {
+      protocol: AGENT_PROTOCOL_NAME,
+      protocolVersion: AGENT_PROTOCOL_VERSION,
+      messageId: `msg-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      workspaceId: body.workspaceId,
+      agentId: body.agentId,
+      workerId: body.workerId,
+      runId: body.runId,
+      taskId: body.taskId,
+      attemptId: body.attemptId,
+      assignmentId: body.assignmentId,
+      idempotencyKey: body.idempotencyKey,
+      type: "assignment.start",
+      payload: body.payload,
+    };
+
+    // Await ack from agent
+    const ackPromise = new Promise<{ accepted: boolean; reason?: string }>(
+      (resolve, reject) => {
+        const timer = setTimeout(() => {
+          this.pendingAcks.delete(body.assignmentId);
+          reject(
+            new Error("Timeout waiting for agent assignment acknowledgment"),
+          );
+        }, 10000);
+
+        this.pendingAcks.set(body.assignmentId, {
+          resolve: resolve as (value: unknown) => void,
+          reject,
+          timer,
+        });
+      },
+    );
+
+    this.sendProtocolMessage(envelope);
+
+    try {
+      const ack = await ackPromise;
+      return Response.json(ack);
+    } catch (err) {
+      return Response.json(
+        { error: err instanceof Error ? err.message : String(err) },
+        { status: 504 },
+      );
+    }
+  }
+
+  /**
+   * Internal DO RPC: Cancels a running assignment on the Agent.
+   */
+  private async handleCancelAssignment(request: Request): Promise<Response> {
+    if (!this.socket) {
+      return Response.json(
+        { error: "Agent is currently offline" },
+        { status: 503 },
+      );
+    }
+
+    const body = (await request.json()) as {
+      workspaceId: string;
+      agentId: string;
+      workerId: string;
+      runId: string;
+      taskId: string;
+      attemptId: string;
+      assignmentId: string;
+      idempotencyKey: string;
+      payload: AssignmentCancelPayload;
+    };
+
+    const envelope: AgentProtocolMessage = {
+      protocol: AGENT_PROTOCOL_NAME,
+      protocolVersion: AGENT_PROTOCOL_VERSION,
+      messageId: `msg-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      workspaceId: body.workspaceId,
+      agentId: body.agentId,
+      workerId: body.workerId,
+      runId: body.runId,
+      taskId: body.taskId,
+      attemptId: body.attemptId,
+      assignmentId: body.assignmentId,
+      idempotencyKey: body.idempotencyKey,
+      type: "assignment.cancel",
+      payload: body.payload,
+    };
+
+    const cancelKey = `cancel:${body.assignmentId}`;
+    const ackPromise = new Promise<{ cancelled: boolean }>(
+      (resolve, reject) => {
+        const timer = setTimeout(() => {
+          this.pendingAcks.delete(cancelKey);
+          reject(new Error("Timeout waiting for agent cancel acknowledgment"));
+        }, 10000);
+
+        this.pendingAcks.set(cancelKey, {
+          resolve: resolve as (value: unknown) => void,
+          reject,
+          timer,
+        });
+      },
+    );
+
+    this.sendProtocolMessage(envelope);
+
+    try {
+      const ack = await ackPromise;
+      return Response.json(ack);
+    } catch (err) {
+      return Response.json(
+        { error: err instanceof Error ? err.message : String(err) },
+        { status: 504 },
+      );
+    }
+  }
+
+  /**
+   * Internal DO RPC: Sends an arbitrary protocol envelope.
+   */
+  private async handlePostMessage(request: Request): Promise<Response> {
+    if (!this.socket) {
+      return Response.json(
+        { error: "Agent is currently offline" },
+        { status: 503 },
+      );
+    }
+
+    const body = (await request.json()) as AgentProtocolMessage;
+    const valid = parseAgentMessage(body);
+    this.sendProtocolMessage(valid);
+    return Response.json({ delivered: true });
+  }
+
+  private sendProtocolMessage(message: AgentProtocolMessage): void {
+    if (!this.socket) return;
+    try {
+      const serialized = serializeAgentMessage(message);
+      this.socket.send(serialized);
+    } catch (err) {
+      console.error("Failed to send protocol message over WebSocket", err);
+    }
+  }
+
+  private sendError(error: string): void {
+    if (!this.socket) return;
+    try {
+      this.socket.send(JSON.stringify({ error }));
+    } catch {
+      // ignore
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "@conclave/plugin-sdk",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@conclave/agent-protocol": "workspace:*",
+    "@conclave/core": "workspace:*",
+    "@conclave/security": "workspace:*",
+    "zod": "^3.24.2"
+  }
+}

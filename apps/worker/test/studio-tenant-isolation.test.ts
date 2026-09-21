@@ -146,6 +146,7 @@ class Statement implements D1Statement {
     if (this.query.includes("SELECT r.id FROM runs")) {
       if (
         !this.query.includes("p.organization_id = ?1") &&
+        !this.query.includes("p.workspace_id = ?1") &&
         !this.query.includes("p.id = ?1")
       ) {
         throw new Error("unscoped Studio run query");
@@ -182,6 +183,8 @@ class Statement implements D1Statement {
       const scoped =
         this.query.includes("organization_id = ?1") ||
         this.query.includes("p.organization_id = ?1") ||
+        this.query.includes("workspace_id = ?1") ||
+        this.query.includes("p.workspace_id = ?1") ||
         this.query.includes("p.id = ?1");
       if (!scoped) throw new Error("unscoped Studio query");
     }

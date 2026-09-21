@@ -1,5 +1,9 @@
 # Conclave AX Architecture
 
+> **Normative Architecture:** Architecture v2 is the authoritative architecture for Conclave AX. See [docs/architecture/ARCHITECTURE_V2.md](docs/architecture/ARCHITECTURE_V2.md), [Migration Map](docs/architecture/MIGRATION_V1_TO_V2.md), and [ADR-002](docs/decisions/ADR-002-architecture-v2.md).
+> The rule is: *Cloud orchestrates. Agents execute. Plugins integrate. Workers do the actual work. Studio controls and observes.*
+> Legacy ConnectionResource direct-execution concepts described below are frozen and superseded by Conclave Agent + Worker Plugins.
+
 ## Purpose
 Conclave AX is a goal-oriented AI execution and orchestration ecosystem. A user submits a goal through a conversational interface. Conclave AX decomposes that goal into smaller work, delegates work to configured AI models, agents, tools, CI runners, or humans, gathers evidence, independently reviews results, and iterates until completion criteria are met.
 
