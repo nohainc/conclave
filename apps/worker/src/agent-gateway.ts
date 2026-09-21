@@ -395,7 +395,8 @@ export class AgentGateway implements DurableObject {
 
         try {
           const workerRows = await this.env.CONCLAVE_DB.prepare(
-            `SELECT * FROM workers WHERE (agent_id = ?1 OR workspace_id = ?2) AND enabled = 1`,
+            `SELECT * FROM workers
+             WHERE agent_id = ?1 AND workspace_id = ?2 AND enabled = 1`,
           )
             .bind(payload.agentId, payload.workspaceId)
             .all<Record<string, unknown>>();
@@ -427,8 +428,13 @@ export class AgentGateway implements DurableObject {
           const pluginRows = await this.env.CONCLAVE_DB.prepare(
             `SELECT pv.*, p.id as plugin_id FROM worker_plugin_versions pv
              JOIN worker_plugins p ON p.id = pv.plugin_id
-             WHERE p.status = 'active'`,
-          ).all<Record<string, unknown>>();
+             JOIN workers w ON w.plugin_id = p.id
+             WHERE p.status = 'active'
+               AND w.agent_id = ?1 AND w.workspace_id = ?2 AND w.enabled = 1
+             GROUP BY pv.id`,
+          )
+            .bind(payload.agentId, payload.workspaceId)
+            .all<Record<string, unknown>>();
 
           desiredPlugins = (pluginRows.results || []).map((row) => ({
             pluginId: String(row.plugin_id),
@@ -461,13 +467,25 @@ export class AgentGateway implements DurableObject {
       case "worker.status": {
         const payload = message.payload as {
           workerId: string;
+          agentId: string;
           status: string;
         };
         try {
+          if (payload.agentId !== this.agentId) {
+            this.sendError("Worker status identity does not match the session");
+            break;
+          }
           await this.env.CONCLAVE_DB.prepare(
-            `UPDATE workers SET status = ?1, updated_at = ?2 WHERE id = ?3`,
+            `UPDATE workers SET status = ?1, updated_at = ?2
+             WHERE id = ?3 AND agent_id = ?4 AND workspace_id = ?5`,
           )
-            .bind(payload.status, now, payload.workerId)
+            .bind(
+              payload.status,
+              now,
+              payload.workerId,
+              this.agentId,
+              this.workspaceId,
+            )
             .run();
         } catch (err) {
           console.error("Failed to update worker status", err);
