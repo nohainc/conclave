@@ -1,7 +1,24 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:conclave_agent_engine/agent_engine.dart';
+import 'package:conclave_agent_engine/cloud_connection.dart';
 import 'package:test/test.dart';
+
+class FakeSocket implements AgentCloudSocket {
+  final controller = StreamController<Object?>();
+  final sent = <Object>[];
+
+  @override
+  Stream<Object?> get messages => controller.stream;
+
+  @override
+  void send(Object message) => sent.add(message);
+
+  @override
+  Future<void> close() => controller.close();
+}
 
 void main() {
   test('Agent Engine starts, persists state, and stops cleanly', () async {
@@ -25,5 +42,27 @@ void main() {
         AgentEngineConfig.fromArgs(['--data-dir', '/tmp/conclave-agent-test']);
     expect(config.dataDirectory.path, '/tmp/conclave-agent-test');
     expect(Platform.operatingSystem, isNotEmpty);
+  });
+
+  test('owns the Cloud connection across Engine lifecycle', () async {
+    final directory = await Directory.systemTemp.createTemp('conclave-engine-');
+    final socket = FakeSocket();
+    final connection = AgentCloudConnection(
+      uri: Uri.parse('wss://cloud.test/agent'),
+      agentId: 'agent-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+    );
+    final engine = AgentEngine(
+      config: AgentEngineConfig(dataDirectory: directory),
+      cloudConnection: connection,
+    );
+
+    await engine.start();
+    final hello = jsonDecode(socket.sent.single as String) as Map;
+    expect(hello['type'], 'agent.hello');
+    await engine.stop();
+    expect(engine.isRunning, isFalse);
+    await directory.delete(recursive: true);
   });
 }

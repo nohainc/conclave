@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'cloud_connection.dart';
+
 class AgentEngineConfig {
   const AgentEngineConfig({required this.dataDirectory});
 
@@ -35,10 +37,14 @@ class AgentEngineLogger {
 }
 
 class AgentEngine {
-  AgentEngine({required this.config, IOSink? logOutput})
-      : _log = AgentEngineLogger(logOutput ?? stdout);
+  AgentEngine({
+    required this.config,
+    IOSink? logOutput,
+    this.cloudConnection,
+  }) : _log = AgentEngineLogger(logOutput ?? stdout);
 
   final AgentEngineConfig config;
+  final AgentCloudConnection? cloudConnection;
   final AgentEngineLogger _log;
   RandomAccessFile? _lock;
   bool _running = false;
@@ -68,6 +74,12 @@ class AgentEngine {
     _running = true;
     _sigint = ProcessSignal.sigint.watch().listen((_) => unawaited(stop()));
     _sigterm = ProcessSignal.sigterm.watch().listen((_) => unawaited(stop()));
+    try {
+      await cloudConnection?.connect();
+    } on Object {
+      await stop();
+      rethrow;
+    }
     _log.info(
         'Agent Engine started', {'dataDirectory': config.dataDirectory.path});
   }
@@ -77,6 +89,7 @@ class AgentEngine {
     _running = false;
     await _sigint?.cancel();
     await _sigterm?.cancel();
+    await cloudConnection?.close();
     await File('${config.dataDirectory.path}/engine-state.json').writeAsString(
       jsonEncode({
         'status': 'stopped',
