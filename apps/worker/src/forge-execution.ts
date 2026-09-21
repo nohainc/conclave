@@ -68,6 +68,29 @@ interface ForgeExecutionContext {
   readonly revision: string;
 }
 
+export function assertSingleAgentForgeBindings(
+  bindings: readonly WorkerBinding[],
+  agentIds: ReadonlyMap<string, string>,
+): void {
+  if (bindings.length !== 3) {
+    throw new Error("Single-agent Forge requires lead, implementation, and review workers");
+  }
+  if (bindings.some(({ connection }) => connection.transport !== "local_agent")) {
+    throw new Error("Single-agent Forge does not permit direct cloud model workers");
+  }
+  const resolvedAgentIdList = bindings
+    .map(({ worker }) => agentIds.get(worker.id))
+    .filter((id): id is string => Boolean(id));
+  if (resolvedAgentIdList.length !== bindings.length) {
+    throw new Error("Single-agent Forge requires every worker to resolve to an agent");
+  }
+  const resolvedAgentIds = new Set(resolvedAgentIdList);
+  const uniqueAgentCount = [...resolvedAgentIds].length;
+  if (uniqueAgentCount !== 1) {
+    throw new Error("Single-agent Forge requires all workers to run on one Agent");
+  }
+}
+
 function digest(value: string): string {
   return [...new Uint8Array(new TextEncoder().encode(value))]
     .map((byte) => byte.toString(16).padStart(2, "0"))
@@ -684,6 +707,27 @@ export async function executeForgeService(
   }
   if (reviewerResource.worker.id === implementerResource.worker.id) {
     throw new Error("Forge requires independent worker resources");
+  }
+  const executionMode = params.executionMode === "cloud_api" ? "cloud_api" : "single_agent";
+  if (executionMode === "single_agent") {
+    const selectedWorkerIds = [
+      leadResource.worker.id,
+      implementerResource.worker.id,
+      reviewerResource.worker.id,
+    ];
+    const placeholders = selectedWorkerIds.map(() => "?").join(",");
+    const agentRows = await env.CONCLAVE_DB.prepare(
+      `SELECT id, agent_id FROM workers WHERE organization_id = ?1 AND id IN (${placeholders})`,
+    )
+      .bind(context.organizationId, ...selectedWorkerIds)
+      .all<{ id: string; agent_id: string }>();
+    const agentIds = new Map(
+      (agentRows.results ?? []).map((row) => [row.id, row.agent_id]),
+    );
+    assertSingleAgentForgeBindings(
+      [leadResource, implementerResource, reviewerResource],
+      agentIds,
+    );
   }
   const models = env.CONCLAVE_WORKER_MODELS
     ? (JSON.parse(env.CONCLAVE_WORKER_MODELS) as Record<string, string>)

@@ -21,6 +21,8 @@ export interface ConclaveWorkflowParams {
   readonly requireApproval?: boolean;
   readonly requireCiEvidence?: boolean;
   readonly startPaused?: boolean;
+  /** Defaults to the local single-agent path; cloud API workers are opt-in. */
+  readonly executionMode?: "single_agent" | "cloud_api";
 }
 
 export interface ConclaveWorkflowCheckpoint {
