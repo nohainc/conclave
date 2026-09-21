@@ -1,0 +1,274 @@
+import { describe, expect, it } from "vitest";
+import worker from "../src/index.js";
+import type {
+  D1DatabaseLike,
+  D1Statement,
+} from "../../../packages/persistence/src/index.js";
+
+type Tenant = "org-a" | "org-b";
+
+const projects = [
+  { id: "project-a", organization_id: "org-a", name: "A" },
+  { id: "project-b", organization_id: "org-b", name: "B" },
+];
+const rowsByTenant: Record<
+  Tenant,
+  Record<string, readonly Record<string, unknown>[]>
+> = {
+  "org-a": {
+    workers: [
+      {
+        id: "worker-a",
+        name: "Worker A",
+        provider: "a",
+        roles_json: '["lead"]',
+        capabilities_json: "[]",
+        status: "available",
+        cost: "",
+      },
+    ],
+    tasks: [
+      {
+        id: "task-a",
+        title: "Task A",
+        phase: "Research",
+        status: "completed",
+        worker: "worker-a",
+        detail: "A",
+        progress: 1,
+        dependencies: "[]",
+        tokens: "1",
+        cost: "0",
+      },
+    ],
+    findings: [
+      {
+        id: "finding-a",
+        title: "Finding A",
+        description: "A",
+        severity: "minor",
+        status: "open",
+        taskId: "task-a",
+        author: "Unknown",
+      },
+    ],
+    events: [
+      { time: "now", title: "RunStarted", detail: "run-a", kind: "RunStarted" },
+    ],
+    artifacts: [
+      { name: "artifact-a", type: "text/plain", size: 1, source: "Conclave" },
+    ],
+    modelCalls: [
+      {
+        worker: "worker-a",
+        model: "model-a",
+        task: "attempt-a",
+        tokens: 1,
+        cost: 0,
+        duration: "—",
+        status: "completed",
+      },
+    ],
+  },
+  "org-b": {
+    workers: [
+      {
+        id: "worker-b",
+        name: "Worker B",
+        provider: "b",
+        roles_json: '["reviewer"]',
+        capabilities_json: "[]",
+        status: "available",
+        cost: "",
+      },
+    ],
+    tasks: [
+      {
+        id: "task-b",
+        title: "Task B",
+        phase: "Research",
+        status: "completed",
+        worker: "worker-b",
+        detail: "B",
+        progress: 1,
+        dependencies: "[]",
+        tokens: "1",
+        cost: "0",
+      },
+    ],
+    findings: [
+      {
+        id: "finding-b",
+        title: "Finding B",
+        description: "B",
+        severity: "major",
+        status: "open",
+        taskId: "task-b",
+        author: "Unknown",
+      },
+    ],
+    events: [
+      { time: "now", title: "RunStarted", detail: "run-b", kind: "RunStarted" },
+    ],
+    artifacts: [
+      { name: "artifact-b", type: "text/plain", size: 1, source: "Conclave" },
+    ],
+    modelCalls: [
+      {
+        worker: "worker-b",
+        model: "model-b",
+        task: "attempt-b",
+        tokens: 1,
+        cost: 0,
+        duration: "—",
+        status: "completed",
+      },
+    ],
+  },
+};
+
+const runs = [
+  { id: "run-a", organization_id: "org-a", status: "running" },
+  { id: "run-b", organization_id: "org-b", status: "running" },
+];
+
+class Statement implements D1Statement {
+  private values: readonly unknown[] = [];
+  constructor(private readonly query: string) {}
+  bind(...values: unknown[]): D1Statement {
+    this.values = values;
+    return this;
+  }
+  async first<T>(): Promise<T | null> {
+    if (this.query.includes("organization_memberships")) {
+      return { role: "owner", status: "active" } as T;
+    }
+    if (this.query.includes("SELECT r.id FROM runs")) {
+      if (
+        !this.query.includes("p.organization_id = ?1") &&
+        !this.query.includes("p.id = ?1")
+      ) {
+        throw new Error("unscoped Studio run query");
+      }
+      const tenant = this.tenant();
+      return (runs.find((run) => run.organization_id === tenant) ??
+        null) as T | null;
+    }
+    return null;
+  }
+  async all<T>(): Promise<{ results: readonly T[] }> {
+    if (this.query.includes("project_memberships")) return { results: [] };
+    if (
+      this.query.includes("FROM projects p") ||
+      this.query.includes("FROM workers") ||
+      this.query.includes("FROM tasks t") ||
+      this.query.includes("FROM findings f") ||
+      this.query.includes("FROM run_events e") ||
+      this.query.includes("FROM artifacts a") ||
+      this.query.includes("FROM model_calls mc")
+    ) {
+      const scoped =
+        this.query.includes("organization_id = ?1") ||
+        this.query.includes("p.organization_id = ?1") ||
+        this.query.includes("p.id = ?1");
+      if (!scoped) throw new Error("unscoped Studio query");
+    }
+    if (this.query.includes("FROM projects p")) {
+      const tenant = this.tenant();
+      return {
+        results: projects.filter(
+          (project) => project.organization_id === tenant,
+        ) as T[],
+      };
+    }
+    if (this.query.includes("FROM workers"))
+      return { results: this.rows("workers") as T[] };
+    if (this.query.includes("FROM tasks t"))
+      return { results: this.rows("tasks") as T[] };
+    if (this.query.includes("FROM findings f"))
+      return { results: this.rows("findings") as T[] };
+    if (this.query.includes("FROM run_events e"))
+      return { results: this.rows("events") as T[] };
+    if (this.query.includes("FROM artifacts a"))
+      return { results: this.rows("artifacts") as T[] };
+    if (this.query.includes("FROM model_calls mc"))
+      return { results: this.rows("modelCalls") as T[] };
+    return { results: [] };
+  }
+  async run(): Promise<{ success: boolean }> {
+    return { success: true };
+  }
+  private tenant(): Tenant {
+    const candidate = this.values.find(
+      (value): value is Tenant => value === "org-a" || value === "org-b",
+    );
+    return candidate ?? "org-a";
+  }
+  private rows(kind: string): readonly Record<string, unknown>[] {
+    return rowsByTenant[this.tenant()][kind] ?? [];
+  }
+}
+
+class TenantDb implements D1DatabaseLike {
+  prepare(query: string): D1Statement {
+    return new Statement(query);
+  }
+  async batch(): Promise<readonly { success: boolean }[]> {
+    return [];
+  }
+}
+
+function environment(organizationId: Tenant, token: string) {
+  return {
+    CONCLAVE_ENVIRONMENT: "production",
+    CONCLAVE_AUTH_TOKEN: token,
+    CONCLAVE_AUTH_USER_ID: `${organizationId}-user`,
+    CONCLAVE_AUTH_ORGANIZATION_ID: organizationId,
+    CONCLAVE_DB: new TenantDb(),
+  } as unknown as Env;
+}
+
+async function snapshot(organizationId: Tenant) {
+  const response = await worker.fetch(
+    new Request("https://conclave.test/api/studio/snapshot", {
+      headers: { authorization: `Bearer token-${organizationId}` },
+    }),
+    environment(organizationId, `token-${organizationId}`),
+  );
+  expect(response.status).toBe(200);
+  return response.json() as Promise<{
+    activeRunId: string | null;
+    projects: readonly { id: string }[];
+    workers: readonly { id: string }[];
+    tasks: readonly { id: string }[];
+    findings: readonly { id: string }[];
+    events: readonly { detail: string }[];
+    artifacts: readonly { name: string }[];
+    modelCalls: readonly { worker: string }[];
+  }>;
+}
+
+describe("Studio tenant isolation", () => {
+  it("does not expose another organization's workers or run data", async () => {
+    const a = await snapshot("org-a");
+    const b = await snapshot("org-b");
+
+    expect(a.projects.map((row) => row.id)).toEqual(["project-a"]);
+    expect(a.workers.map((row) => row.id)).toEqual(["worker-a"]);
+    expect(a.tasks.map((row) => row.id)).toEqual(["task-a"]);
+    expect(a.findings.map((row) => row.id)).toEqual(["finding-a"]);
+    expect(a.events.map((row) => row.detail)).toEqual(["run-a"]);
+    expect(a.artifacts.map((row) => row.name)).toEqual(["artifact-a"]);
+    expect(a.modelCalls.map((row) => row.worker)).toEqual(["worker-a"]);
+    expect(a.activeRunId).toBe("run-a");
+
+    expect(b.projects.map((row) => row.id)).toEqual(["project-b"]);
+    expect(b.workers.map((row) => row.id)).toEqual(["worker-b"]);
+    expect(b.tasks.map((row) => row.id)).toEqual(["task-b"]);
+    expect(b.findings.map((row) => row.id)).toEqual(["finding-b"]);
+    expect(b.events.map((row) => row.detail)).toEqual(["run-b"]);
+    expect(b.artifacts.map((row) => row.name)).toEqual(["artifact-b"]);
+    expect(b.modelCalls.map((row) => row.worker)).toEqual(["worker-b"]);
+    expect(b.activeRunId).toBe("run-b");
+  });
+});

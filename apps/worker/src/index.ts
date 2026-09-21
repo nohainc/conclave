@@ -217,18 +217,32 @@ async function handleStudioSnapshot(
     "project:read",
     projectId ?? undefined,
   );
+  const isAnonymous = anonymousDevelopment(securityEnv);
   const projectFilter =
     projectId === null
-      ? anonymousDevelopment(securityEnv)
+      ? isAnonymous
         ? ""
         : " WHERE p.organization_id = ?1"
-      : " WHERE p.id = ?1 AND p.organization_id = ?2";
+      : isAnonymous
+        ? " WHERE p.id = ?1"
+        : " WHERE p.id = ?2 AND p.organization_id = ?1";
   const bind =
     projectId === null
-      ? anonymousDevelopment(securityEnv)
+      ? isAnonymous
         ? []
         : [context.organizationId]
-      : [projectId, context.organizationId];
+      : isAnonymous
+        ? [projectId]
+        : [context.organizationId, projectId];
+  const ownership =
+    projectId === null
+      ? isAnonymous
+        ? "1 = 1"
+        : "p.organization_id = ?1"
+      : isAnonymous
+        ? "p.id = ?1"
+        : "p.organization_id = ?1 AND p.id = ?2";
+  const ownershipBind = bind;
   const [
     projects,
     workers,
@@ -245,26 +259,40 @@ async function handleStudioSnapshot(
       .bind(...bind)
       .all(),
     env.CONCLAVE_DB.prepare(
-      "SELECT id, name, provider, roles_json, capabilities_json, availability AS status, '' AS cost FROM workers ORDER BY name",
-    ).all(),
+      "SELECT id, name, provider, roles_json, capabilities_json, availability AS status, '' AS cost FROM workers WHERE organization_id = ?1 ORDER BY name",
+    )
+      .bind(context.organizationId)
+      .all(),
     env.CONCLAVE_DB.prepare(
-      "SELECT t.id, t.objective AS title, p.name AS phase, t.status, t.role AS worker, t.objective AS detail, CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END AS progress, '[]' AS dependencies, '—' AS tokens, '—' AS cost FROM tasks t JOIN phases p ON p.id = t.phase_id ORDER BY t.created_at DESC LIMIT 100",
-    ).all(),
+      `SELECT t.id, t.objective AS title, ph.name AS phase, t.status, t.role AS worker, t.objective AS detail, CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END AS progress, '[]' AS dependencies, '—' AS tokens, '—' AS cost FROM tasks t JOIN phases ph ON ph.id = t.phase_id JOIN runs r ON r.id = ph.run_id JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${ownership} ORDER BY t.created_at DESC LIMIT 100`,
+    )
+      .bind(...ownershipBind)
+      .all(),
     env.CONCLAVE_DB.prepare(
-      "SELECT id, description AS title, description, severity, status, COALESCE(task_id, '') AS taskId, 'Unknown' AS author FROM findings ORDER BY created_at DESC LIMIT 100",
-    ).all(),
+      `SELECT f.id, f.description AS title, f.description, f.severity, f.status, COALESCE(f.task_id, '') AS taskId, 'Unknown' AS author FROM findings f JOIN runs r ON r.id = f.run_id JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${ownership} ORDER BY f.created_at DESC LIMIT 100`,
+    )
+      .bind(...ownershipBind)
+      .all(),
     env.CONCLAVE_DB.prepare(
-      "SELECT occurred_at AS time, event_type AS title, entity_id AS detail, event_type AS kind FROM run_events ORDER BY occurred_at DESC LIMIT 100",
-    ).all(),
+      `SELECT e.occurred_at AS time, e.event_type AS title, e.entity_id AS detail, e.event_type AS kind FROM run_events e JOIN runs r ON r.id = e.run_id JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${ownership} ORDER BY e.occurred_at DESC LIMIT 100`,
+    )
+      .bind(...ownershipBind)
+      .all(),
     env.CONCLAVE_DB.prepare(
-      "SELECT id AS name, media_type AS type, size_bytes AS size, 'Conclave' AS source FROM artifacts ORDER BY created_at DESC LIMIT 100",
-    ).all(),
+      `SELECT a.id AS name, a.media_type AS type, a.size_bytes AS size, 'Conclave' AS source FROM artifacts a JOIN runs r ON r.id = a.run_id JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${ownership} ORDER BY a.created_at DESC LIMIT 100`,
+    )
+      .bind(...ownershipBind)
+      .all(),
     env.CONCLAVE_DB.prepare(
-      "SELECT worker_id AS worker, model, attempt_id AS task, input_tokens + output_tokens AS tokens, estimated_cost_micros AS cost, '—' AS duration, status FROM model_calls ORDER BY started_at DESC LIMIT 100",
-    ).all(),
+      `SELECT mc.worker_id AS worker, mc.model, mc.attempt_id AS task, u.input_tokens + u.output_tokens AS tokens, u.estimated_cost_micros AS cost, '—' AS duration, mc.status FROM model_calls mc JOIN attempts a ON a.id = mc.attempt_id JOIN tasks t ON t.id = a.task_id JOIN phases ph ON ph.id = t.phase_id JOIN runs r ON r.id = ph.run_id JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id LEFT JOIN usage u ON u.attempt_id = a.id WHERE ${ownership} ORDER BY mc.started_at DESC LIMIT 100`,
+    )
+      .bind(...ownershipBind)
+      .all(),
     env.CONCLAVE_DB.prepare(
-      "SELECT id FROM runs WHERE status IN ('active', 'running', 'waiting') ORDER BY created_at DESC LIMIT 1",
-    ).first<{ id: string }>(),
+      `SELECT r.id FROM runs r JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${ownership} AND r.status IN ('active', 'running', 'waiting') ORDER BY r.created_at DESC LIMIT 1`,
+    )
+      .bind(...ownershipBind)
+      .first<{ id: string }>(),
   ]);
   const mapJson = (value: unknown): string[] =>
     typeof value === "string" ? (JSON.parse(value) as string[]) : [];
