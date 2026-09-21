@@ -137,6 +137,9 @@ No new execution Goal is required. Cloud can answer from persisted run state or 
 
 The Lead/intent logic proposes which behavior applies; Core validates the transition.
 
+The normative transition and scoped context rules are defined in
+[Chat Intent and Scoped Context](CHAT_INTENT_CONTEXT.md).
+
 ## 7. Studio layout
 
 Recommended desktop/web layout:

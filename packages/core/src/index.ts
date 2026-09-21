@@ -12,6 +12,9 @@ export * from "./interactive-connector.js";
 export * from "./task-graph.js";
 export * from "./verification.js";
 export * from "./completion.js";
+export * from "./v2-entities.js";
+export * from "./multi-agent-ensemble.js";
+export * from "./chat-lifecycle.js";
 
 export const CORE_PROTOCOL_VERSION = "0.1";
 
