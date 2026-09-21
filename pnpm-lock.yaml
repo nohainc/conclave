@@ -50,6 +50,9 @@ importers:
       '@conclave/core':
         specifier: workspace:*
         version: link:../core
+      '@conclave/protocol':
+        specifier: workspace:*
+        version: link:../protocol
 
   packages/orchestration:
     dependencies:

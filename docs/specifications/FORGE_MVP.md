@@ -43,7 +43,12 @@ Forge does not read or mutate a repository directly. It receives a `ForgeRuntime
 - `apply` applies or records an implementation result;
 - `test` runs the requested checks and returns executable evidence.
 
-The Phase 9 Local Runtime is the intended production implementation of this adapter. It must use approved `read_file`, `search`, `write_file`, Git, check, and build operations and return the resulting evidence with its content digest, command, revision, and exit status.
+The Phase 9 Local Runtime is the intended production implementation of this adapter. It must use approved `read_file`, `search`, `write_file`, `patch_file`, `delete_file`, Git, check, and build operations and return the resulting evidence with its content digest, command, revision, and exit status.
+
+Implementation has two explicit execution modes:
+
+1. In model-proposal mode, the Implementer returns a validated `ImplementationResult` containing concrete file operations. Forge passes those operations to `runtime.apply`; a summary or changed-file list without operations is rejected.
+2. In agent-execution mode, an implementation agent receives a bounded runtime interface and performs approved operations itself. The host records each operation and evidence, then supplies Forge with the resulting implementation and runtime evidence. The agent may execute; the model result alone may only propose.
 
 ## Review and correction
 

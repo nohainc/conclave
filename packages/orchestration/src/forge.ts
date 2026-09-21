@@ -24,7 +24,9 @@ import {
 } from "./context.js";
 import {
   parseModelResult,
+  parseImplementationResult,
   type CompletionResult,
+  type ImplementationOperation,
   type ImplementationResult,
   type ModelResult,
   type PlanRequest,
@@ -62,12 +64,26 @@ export interface ForgeRuntimeAdapter {
     readonly repositoryId: string;
     readonly revision: string;
     readonly implementation: ImplementationResult;
+    readonly operations: readonly ImplementationOperation[];
   }): Promise<ForgeRuntimeEvidence>;
   test(input: {
     readonly repositoryId: string;
     readonly revision: string;
     readonly changedFiles: readonly string[];
   }): Promise<ForgeRuntimeEvidence>;
+}
+
+export interface ForgeImplementationAgent {
+  execute(input: {
+    readonly task: TaskRecord;
+    readonly plan: PlanResult;
+    readonly research: ResearchResult;
+    readonly secondaryResearch: ResearchResult | null;
+    readonly runtime: ForgeRuntimeAdapter;
+  }): Promise<{
+    readonly implementation: ImplementationResult;
+    readonly evidence: ForgeRuntimeEvidence;
+  }>;
 }
 
 export interface ForgePersistence {
@@ -95,6 +111,7 @@ export interface ForgeWorkflowInput {
   readonly implementer: ModelWorker;
   readonly reviewer?: ModelWorker;
   readonly runtime: ForgeRuntimeAdapter;
+  readonly implementationAgent?: ForgeImplementationAgent;
   readonly persistence: ForgePersistence;
   readonly maxReviewLoops?: number;
   readonly idFactory?: () => string;
@@ -618,21 +635,39 @@ export async function executeForgeGoal(
       },
     },
   };
-  let implementation = await call(
-    input.implementer,
-    implementationTask,
-    implementationRequest,
-    "ImplementationResult",
-    [researchEvidenceId],
-  );
-  let implementationEvidenceId = await runtimeArtifact(
-    implementationTask.id,
-    await input.runtime.apply({
-      repositoryId: input.repositoryId,
-      revision: input.revision,
-      implementation,
-    }),
-  );
+  let implementation: ImplementationResult;
+  let implementationEvidenceId: string;
+  if (input.implementationAgent) {
+    const agentResult = await input.implementationAgent.execute({
+      task: implementationTask,
+      plan,
+      research,
+      secondaryResearch,
+      runtime: input.runtime,
+    });
+    implementation = parseImplementationResult(agentResult.implementation);
+    implementationEvidenceId = await runtimeArtifact(
+      implementationTask.id,
+      agentResult.evidence,
+    );
+  } else {
+    implementation = await call(
+      input.implementer,
+      implementationTask,
+      implementationRequest,
+      "ImplementationResult",
+      [researchEvidenceId],
+    );
+    implementationEvidenceId = await runtimeArtifact(
+      implementationTask.id,
+      await input.runtime.apply({
+        repositoryId: input.repositoryId,
+        revision: input.revision,
+        implementation,
+        operations: implementation.payload.proposedOperations,
+      }),
+    );
+  }
 
   const reviewPhase = await phase(
     "review",
@@ -751,6 +786,7 @@ export async function executeForgeGoal(
         repositoryId: input.repositoryId,
         revision: input.revision,
         implementation,
+        operations: implementation.payload.proposedOperations,
       }),
     );
     for (const findingId of activeFindingIds) gate.verifyFinding(findingId);

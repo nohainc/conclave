@@ -7,6 +7,7 @@ import type {
   ModelResponse,
   ModelWorker,
 } from "@conclave/providers";
+import type { ImplementationOperation } from "@conclave/protocol";
 
 import {
   executeForgeGoal,
@@ -106,6 +107,8 @@ function envelope(
   });
 }
 
+const appliedOperations: ImplementationOperation[][] = [];
+
 const runtime: ForgeRuntimeAdapter = {
   async inspect() {
     return {
@@ -117,7 +120,8 @@ const runtime: ForgeRuntimeAdapter = {
       contentDigest: "research-digest",
     };
   },
-  async apply() {
+  async apply(input) {
+    appliedOperations.push([...input.operations]);
     return {
       operation: "apply",
       status: "succeeded",
@@ -211,7 +215,19 @@ describe("Forge MVP workflow", () => {
           revision: "main",
           changedFiles: ["src/greeting.ts"],
           artifactIds: [],
-          testsAdded: [],
+          proposedOperations: [
+            {
+              kind: "patch_file",
+              path: "src/greeting.ts",
+              patches: [
+                {
+                  oldText: "return greeting",
+                  newText: 'return greeting ?? ""',
+                },
+              ],
+            },
+          ],
+          testsRequested: [],
           summary: "Implemented the null guard.",
           risks: [],
         }),
@@ -220,7 +236,14 @@ describe("Forge MVP workflow", () => {
           revision: "main",
           changedFiles: ["src/greeting.ts", "test/greeting.test.ts"],
           artifactIds: [],
-          testsAdded: ["test/greeting.test.ts"],
+          proposedOperations: [
+            {
+              kind: "write_file",
+              path: "test/greeting.test.ts",
+              content: 'test("null greeting", () => {});',
+            },
+          ],
+          testsRequested: ["test/greeting.test.ts"],
           summary: "Added the regression test and fixed the guard.",
           risks: [],
         }),
@@ -303,6 +326,10 @@ describe("Forge MVP workflow", () => {
     expect(result.secondaryResearch).not.toBeNull();
     expect(result.reviews).toHaveLength(2);
     expect(result.correctionLoops).toBe(1);
+    expect(appliedOperations).toHaveLength(2);
+    expect(appliedOperations.every((operations) => operations.length > 0)).toBe(
+      true,
+    );
     expect(persistence.modelCalls).toHaveLength(10);
     expect(persistence.artifacts.length).toBeGreaterThan(15);
     expect(persistence.events.at(-1)?.eventType).toBe("RunCompleted");

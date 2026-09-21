@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   PlanResultSchema,
-  parseModelResult,
   parseMachineCheckEvidence,
+  parseModelResult,
   parsePlanRequest,
   parseProtocolMessage,
   PROTOCOL_NAME,
@@ -152,5 +152,34 @@ describe("versioned protocol contracts", () => {
         checks: [],
       }),
     ).toThrow();
+  });
+
+  it("requires executable operations for successful implementations", () => {
+    const implementation = {
+      ...envelope,
+      messageType: "ImplementationResult",
+      payload: {
+        status: "succeeded",
+        revision: "main",
+        changedFiles: ["src/file.ts"],
+        proposedOperations: [],
+        artifactIds: [],
+        testsRequested: [],
+        summary: "Changed the file",
+        risks: [],
+      },
+    };
+    expect(() => parseModelResult(implementation)).toThrow();
+    expect(
+      parseModelResult({
+        ...implementation,
+        payload: {
+          ...implementation.payload,
+          proposedOperations: [
+            { kind: "write_file", path: "src/file.ts", content: "export {};" },
+          ],
+        },
+      }).messageType,
+    ).toBe("ImplementationResult");
   });
 });

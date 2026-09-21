@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
-import { readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { spawn } from "node:child_process";
 
 import type { GoalSummary } from "@conclave/core";
+import type { ImplementationOperation } from "@conclave/protocol";
 
 export interface RuntimeConfig {
   readonly environment: string;
@@ -25,7 +26,15 @@ export function describeRuntimeGoal(goal: GoalSummary): string {
 }
 
 export type RuntimeOperationKind =
-  "read_file" | "search" | "write_file" | "git" | "shell" | "check" | "build";
+  | "read_file"
+  | "search"
+  | "write_file"
+  | "patch_file"
+  | "delete_file"
+  | "git"
+  | "shell"
+  | "check"
+  | "build";
 
 export type RuntimeGitAction = "status" | "diff" | "branch";
 
@@ -57,6 +66,21 @@ export type RuntimeOperation =
       readonly kind: "write_file";
       readonly path: string;
       readonly content: string;
+      readonly expectedDigest?: string;
+    })
+  | (RuntimeRequestBase & {
+      readonly kind: "patch_file";
+      readonly path: string;
+      readonly patches: readonly {
+        readonly oldText: string;
+        readonly newText: string;
+        readonly maxReplacements?: number;
+      }[];
+      readonly expectedDigest?: string;
+    })
+  | (RuntimeRequestBase & {
+      readonly kind: "delete_file";
+      readonly path: string;
       readonly expectedDigest?: string;
     })
   | (RuntimeRequestBase & {
@@ -194,6 +218,54 @@ export function parseRuntimeOperation(value: unknown): RuntimeOperation {
                 "Runtime request field content is invalid",
               );
             })(),
+      ...(typeof record.expectedDigest === "string"
+        ? { expectedDigest: record.expectedDigest }
+        : {}),
+    };
+  }
+  if (kind === "patch_file") {
+    const patches = record.patches;
+    if (
+      !Array.isArray(patches) ||
+      patches.length === 0 ||
+      patches.some((patch) => {
+        if (typeof patch !== "object" || patch === null) return true;
+        const value = patch as Record<string, unknown>;
+        return (
+          typeof value.oldText !== "string" || typeof value.newText !== "string"
+        );
+      })
+    ) {
+      throw new RuntimeSecurityError("Runtime patch_file patches are invalid");
+    }
+    const parsedPatches = patches.map((patch) => {
+      const value = patch as Record<string, unknown>;
+      return {
+        oldText: value.oldText as string,
+        newText: value.newText as string,
+        ...(typeof value.maxReplacements === "number"
+          ? { maxReplacements: value.maxReplacements }
+          : {}),
+      };
+    });
+    return {
+      ...base,
+      kind,
+      path: asString(record.path, "path"),
+      patches: parsedPatches,
+      ...(typeof record.expectedDigest === "string"
+        ? { expectedDigest: record.expectedDigest }
+        : {}),
+    };
+  }
+  if (kind === "delete_file") {
+    return {
+      ...base,
+      kind,
+      path: asString(record.path, "path"),
+      ...(typeof record.expectedDigest === "string"
+        ? { expectedDigest: record.expectedDigest }
+        : {}),
     };
   }
   if (kind === "git") {
@@ -228,6 +300,19 @@ export function parseRuntimeOperation(value: unknown): RuntimeOperation {
     };
   }
   throw new RuntimeSecurityError(`Runtime operation ${kind} is not supported`);
+}
+
+export function implementationOperationsToRuntimeOperations(
+  repositoryId: string,
+  approval: RuntimeApproval,
+  operations: readonly ImplementationOperation[],
+): readonly RuntimeOperation[] {
+  return operations.map((operation, index) => ({
+    requestId: `implementation-${index + 1}`,
+    repositoryId,
+    approval,
+    ...operation,
+  })) as RuntimeOperation[];
 }
 
 function isWithin(root: string, candidate: string): boolean {
@@ -504,6 +589,65 @@ export class LocalRuntime {
             digest: digest(request.content),
             bytes: Buffer.byteLength(request.content),
           }),
+          exitCode: 0,
+          command: null,
+        };
+      }
+      case "patch_file": {
+        const path = this.resolvePath(repository, request.path);
+        const current = await readFile(path, "utf8").catch(() => null);
+        if (current === null)
+          throw new RuntimeSecurityError("File does not exist");
+        if (
+          request.expectedDigest &&
+          digest(current) !== request.expectedDigest
+        ) {
+          throw new RuntimeSecurityError("Expected file digest does not match");
+        }
+        let content = current;
+        for (const patch of request.patches) {
+          const occurrences = content.split(patch.oldText).length - 1;
+          const maxReplacements = patch.maxReplacements ?? 1;
+          if (occurrences === 0) {
+            throw new RuntimeSecurityError("Patch text was not found");
+          }
+          if (occurrences > maxReplacements) {
+            throw new RuntimeSecurityError("Patch text is ambiguous");
+          }
+          content = content.replace(patch.oldText, patch.newText);
+        }
+        if (Buffer.byteLength(content) > this.policy.maxWriteBytes) {
+          throw new RuntimeSecurityError("File exceeds the write limit");
+        }
+        await writeFile(path, content, "utf8");
+        return {
+          status: "succeeded",
+          summary: `Patched ${relative(repository.root, path)}`,
+          content: JSON.stringify({
+            path: relative(repository.root, path),
+            digest: digest(content),
+            bytes: Buffer.byteLength(content),
+          }),
+          exitCode: 0,
+          command: null,
+        };
+      }
+      case "delete_file": {
+        const path = this.resolvePath(repository, request.path);
+        const current = await readFile(path, "utf8").catch(() => null);
+        if (current === null)
+          throw new RuntimeSecurityError("File does not exist");
+        if (
+          request.expectedDigest &&
+          digest(current) !== request.expectedDigest
+        ) {
+          throw new RuntimeSecurityError("Expected file digest does not match");
+        }
+        await unlink(path);
+        return {
+          status: "succeeded",
+          summary: `Deleted ${relative(repository.root, path)}`,
+          content: JSON.stringify({ path: relative(repository.root, path) }),
           exitCode: 0,
           command: null,
         };

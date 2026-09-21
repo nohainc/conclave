@@ -111,17 +111,57 @@ const researchResultPayload = z
   })
   .strict();
 
+const filePatch = z
+  .object({
+    oldText: z.string(),
+    newText: z.string(),
+    maxReplacements: z.number().int().min(1).optional(),
+  })
+  .strict();
+
+const implementationOperation = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("write_file"),
+      path: nonEmpty,
+      content: z.string(),
+      expectedDigest: id.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("patch_file"),
+      path: nonEmpty,
+      patches: z.array(filePatch).min(1),
+      expectedDigest: id.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("delete_file"),
+      path: nonEmpty,
+      expectedDigest: id.optional(),
+    })
+    .strict(),
+]);
+
 const implementationResultPayload = z
   .object({
     status: z.enum(["succeeded", "blocked", "failed"]),
     revision: nonEmpty,
     changedFiles: z.array(nonEmpty),
+    proposedOperations: z.array(implementationOperation),
     artifactIds,
-    testsAdded: z.array(nonEmpty),
+    testsRequested: z.array(nonEmpty),
     summary: nonEmpty,
     risks: z.array(nonEmpty),
   })
-  .strict();
+  .strict()
+  .refine(
+    (value) =>
+      value.status !== "succeeded" || value.proposedOperations.length > 0,
+    "A successful implementation must propose at least one operation",
+  );
 
 const finding = z
   .object({
@@ -303,6 +343,7 @@ export type TaskRequest = z.infer<typeof TaskRequestSchema>;
 export type TaskResult = z.infer<typeof TaskResultSchema>;
 export type ResearchResult = z.infer<typeof ResearchResultSchema>;
 export type ImplementationResult = z.infer<typeof ImplementationResultSchema>;
+export type ImplementationOperation = z.infer<typeof implementationOperation>;
 export type ReviewResult = z.infer<typeof ReviewResultSchema>;
 export type TestResult = z.infer<typeof TestResultSchema>;
 export type MachineCheckEvidence = z.infer<typeof MachineCheckEvidenceSchema>;
@@ -318,6 +359,12 @@ export function parsePlanRequest(input: unknown): PlanRequest {
 
 export function parseTaskRequest(input: unknown): TaskRequest {
   return TaskRequestSchema.parse(input);
+}
+
+export function parseImplementationResult(
+  input: unknown,
+): ImplementationResult {
+  return ImplementationResultSchema.parse(input);
 }
 
 export function parseMachineCheckEvidence(

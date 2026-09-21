@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   describeRuntimeGoal,
+  implementationOperationsToRuntimeOperations,
   LocalRuntime,
   OutboundRuntimeSession,
   parseRuntimeOperation,
@@ -136,6 +137,33 @@ describe("Local Runtime foundation", () => {
     });
     expect(rejected.status).toBe("rejected");
     expect(rejected.summary).toContain("not allowed");
+  });
+
+  it("executes explicit implementation operations with evidence", async () => {
+    const root = await makeRoot();
+    const local = runtime(root);
+    const approvalRecord = approval("patch_file", "delete_file");
+    const operations = implementationOperationsToRuntimeOperations(
+      "repo-1",
+      approvalRecord,
+      [
+        {
+          kind: "patch_file",
+          path: "README.md",
+          patches: [
+            { oldText: "local runtime", newText: "implemented runtime" },
+          ],
+        },
+        { kind: "delete_file", path: "config.txt" },
+      ],
+    );
+    expect(operations).toHaveLength(2);
+    expect((await local.execute(operations[0]!)).status).toBe("succeeded");
+    expect(await readFile(join(root, "README.md"), "utf8")).toContain(
+      "implemented runtime",
+    );
+    expect((await local.execute(operations[1]!)).status).toBe("succeeded");
+    await expect(readFile(join(root, "config.txt"), "utf8")).rejects.toThrow();
   });
 
   it("rejects expired or incomplete approvals at the runtime boundary", async () => {

@@ -11,6 +11,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@conclave/core": "workspace:*"
+    "@conclave/core": "workspace:*",
+    "@conclave/protocol": "workspace:*"
   }
 }
