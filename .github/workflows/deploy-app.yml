@@ -26,8 +26,8 @@ jobs:
       - name: Install Wrangler
         run: npm install --global wrangler@4.38.0
       - name: Deploy app.conclaveax.com
-        working-directory: ../../
+        working-directory: .
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: wrangler deploy --config infra/cloudflare/app.wrangler.jsonc
+        run: wrangler deploy --config "$GITHUB_WORKSPACE/infra/cloudflare/app.wrangler.jsonc"
