@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../platform/platform_services.dart';
@@ -5,7 +7,8 @@ import 'studio_models.dart';
 import 'studio_data.dart';
 
 class StudioApp extends StatefulWidget {
-  const StudioApp({super.key, required this.services, required this.dataSource});
+  const StudioApp(
+      {super.key, required this.services, required this.dataSource});
 
   final PlatformServices services;
   final StudioDataSource dataSource;
@@ -16,14 +19,21 @@ class StudioApp extends StatefulWidget {
 
 class _StudioAppState extends State<StudioApp> {
   late StudioSnapshot snapshot;
-  late StudioProject selectedProject;
+  String? selectedProjectId;
+  RunStatus? optimisticRunStatus;
+  Timer? refreshTimer;
   bool isLoading = true;
   String? loadError;
   String? selectedTaskId = 'implement';
   int navigationIndex = 0;
-  bool isPaused = false;
   bool showNewGoal = false;
   bool showWorkerDrawer = false;
+  final objectiveController = TextEditingController();
+  final revisionController = TextEditingController(text: 'main');
+
+  StudioProject? get selectedProject => snapshot.projects
+      .where((project) => project.id == selectedProjectId)
+      .firstOrNull;
 
   StudioTask? get selectedTask =>
       snapshot.tasks.where((task) => task.id == selectedTaskId).firstOrNull;
@@ -35,19 +45,79 @@ class _StudioAppState extends State<StudioApp> {
     _loadSnapshot();
   }
 
-  Future<void> _loadSnapshot() async {
-    setState(() { isLoading = true; loadError = null; });
+  Future<void> _loadSnapshot(
+      {String? projectId, bool showSpinner = true}) async {
+    if (showSpinner)
+      setState(() {
+        isLoading = true;
+        loadError = null;
+      });
     try {
-      final loaded = await widget.dataSource.loadSnapshot();
+      final loaded = await widget.dataSource.loadSnapshot(projectId: projectId);
       if (!mounted) return;
       setState(() {
         snapshot = loaded;
-        selectedProject = loaded.projects.first;
+        optimisticRunStatus = null;
+        selectedProjectId = loaded.projects.any(
+                (project) => project.id == (projectId ?? selectedProjectId))
+            ? (projectId ?? selectedProjectId)
+            : loaded.projects.firstOrNull?.id;
         isLoading = false;
+        if (loaded.run?.status == RunStatus.paused) {
+          // The API is the source of truth; no local pause state is maintained.
+        }
       });
+      _scheduleRefresh(loaded);
     } catch (error) {
       if (!mounted) return;
-      setState(() { isLoading = false; loadError = error.toString(); });
+      setState(() {
+        isLoading = false;
+        loadError = error.toString();
+      });
+    }
+  }
+
+  void _scheduleRefresh(StudioSnapshot loaded) {
+    refreshTimer?.cancel();
+    if (loaded.run != null &&
+        {
+          RunStatus.active,
+          RunStatus.running,
+          RunStatus.waiting,
+          RunStatus.paused
+        }.contains(loaded.run!.status)) {
+      refreshTimer = Timer(const Duration(seconds: 5), () {
+        _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    refreshTimer?.cancel();
+    objectiveController.dispose();
+    revisionController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _createGoal() async {
+    final projectId = selectedProjectId;
+    final objective = objectiveController.text.trim();
+    if (projectId == null || objective.isEmpty) return;
+    try {
+      await widget.dataSource.createGoal(
+        projectId: projectId,
+        objective: objective,
+        revision: revisionController.text.trim().isEmpty
+            ? 'HEAD'
+            : revisionController.text.trim(),
+      );
+      objectiveController.clear();
+      if (!mounted) return;
+      setState(() => showNewGoal = false);
+      await _loadSnapshot(projectId: projectId);
+    } catch (error) {
+      if (mounted) setState(() => loadError = error.toString());
     }
   }
 
@@ -61,6 +131,7 @@ class _StudioAppState extends State<StudioApp> {
         builder: (context, constraints) {
           if (isLoading) return _loadingScaffold();
           if (loadError != null) return _errorScaffold();
+          if (snapshot.projects.isEmpty) return _emptyWorkspaceScaffold();
           final compact = constraints.maxWidth < 900;
           return Scaffold(
             backgroundColor: const Color(0xfff7f8fa),
@@ -77,9 +148,12 @@ class _StudioAppState extends State<StudioApp> {
     );
   }
 
-  Widget _loadingScaffold() => const Scaffold(body: Center(child: CircularProgressIndicator()));
+  Widget _loadingScaffold() =>
+      const Scaffold(body: Center(child: CircularProgressIndicator()));
 
-  Widget _errorScaffold() => Scaffold(body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+  Widget _errorScaffold() => Scaffold(
+          body: Center(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
         const Icon(Icons.cloud_off_rounded, size: 40),
         const SizedBox(height: 12),
         const Text('Studio could not load live data'),
@@ -88,6 +162,29 @@ class _StudioAppState extends State<StudioApp> {
         const SizedBox(height: 16),
         FilledButton(onPressed: _loadSnapshot, child: const Text('Retry')),
       ])));
+
+  Widget _emptyWorkspaceScaffold() => Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.folder_open_outlined,
+                  size: 48, color: Color(0xff6254d9)),
+              const SizedBox(height: 14),
+              const Text('No projects yet',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              const Text('Create a project before starting a Conclave goal.',
+                  textAlign: TextAlign.center),
+              const SizedBox(height: 18),
+              OutlinedButton.icon(
+                  onPressed: _loadSnapshot,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Reload')),
+            ]),
+          ),
+        ),
+      );
 
   ThemeData _theme() => ThemeData(
         useMaterial3: true,
@@ -126,7 +223,9 @@ class _StudioAppState extends State<StudioApp> {
           const SizedBox(height: 32),
           _sidebarLabel('WORKSPACE'),
           _navItem(Icons.grid_view_rounded, 'Overview', 0),
-          _navItem(Icons.track_changes_rounded, 'Goals', 1, badge: '1'),
+          _navItem(Icons.track_changes_rounded, 'Goals', 1,
+              badge:
+                  '${snapshot.projects.fold<int>(0, (total, project) => total + project.activeGoals)}'),
           _navItem(Icons.people_alt_outlined, 'Workers', 2),
           _navItem(Icons.folder_copy_outlined, 'Artifacts', 3),
           const SizedBox(height: 26),
@@ -208,9 +307,12 @@ class _StudioAppState extends State<StudioApp> {
   }
 
   Widget _projectItem(StudioProject project) {
-    final active = selectedProject.id == project.id;
+    final active = selectedProject?.id == project.id;
     return InkWell(
-      onTap: () => setState(() => selectedProject = project),
+      onTap: () {
+        setState(() => selectedProjectId = project.id);
+        _loadSnapshot(projectId: project.id);
+      },
       borderRadius: BorderRadius.circular(9),
       child: Container(
         margin: const EdgeInsets.only(bottom: 3),
@@ -278,7 +380,8 @@ class _StudioAppState extends State<StudioApp> {
             onPressed: () =>
                 setState(() => showWorkerDrawer = !showWorkerDrawer),
             icon: const Icon(Icons.circle, size: 8, color: Color(0xff55bf8f)),
-            label: const Text('3 workers online'),
+            label: Text(
+                '${snapshot.workers.where((worker) => worker.status.toLowerCase() == 'available' || worker.status.toLowerCase() == 'online').length} workers online'),
             style: OutlinedButton.styleFrom(
                 foregroundColor: const Color(0xff565665),
                 side: const BorderSide(color: Color(0xffe2e2e8)),
@@ -297,10 +400,10 @@ class _StudioAppState extends State<StudioApp> {
         Expanded(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(selectedProject.name,
+          Text(selectedProject!.name,
               style: const TextStyle(color: Color(0xff777683), fontSize: 12)),
           const SizedBox(height: 7),
-          const Text('Good morning, Vitalii',
+          const Text('Workspace overview',
               style: TextStyle(
                   fontSize: 25,
                   fontWeight: FontWeight.w700,
@@ -349,7 +452,46 @@ class _StudioAppState extends State<StudioApp> {
     ]);
   }
 
+  Color _runStatusColor(RunStatus status) => switch (status) {
+        RunStatus.completed => const Color(0xff43b17f),
+        RunStatus.failed || RunStatus.cancelled => const Color(0xffbd6565),
+        RunStatus.paused || RunStatus.waiting => const Color(0xffedb84d),
+        _ => const Color(0xff6254d9),
+      };
+
+  String _statusLabel(RunStatus status) =>
+      status.name[0].toUpperCase() + status.name.substring(1);
+
+  Future<void> _controlRun(String command) async {
+    final runId = snapshot.run?.id ?? snapshot.activeRunId;
+    if (runId == null) return;
+    try {
+      await widget.dataSource.controlRun(runId, command);
+      if (!mounted) return;
+      setState(() {
+        optimisticRunStatus = switch (command) {
+          'pause' => RunStatus.paused,
+          'resume' => RunStatus.running,
+          'cancel' => RunStatus.cancelled,
+          _ => optimisticRunStatus,
+        };
+      });
+    } catch (error) {
+      if (mounted) setState(() => loadError = error.toString());
+    }
+  }
+
   Widget _runHeader(bool compact) {
+    final run = snapshot.run;
+    final status = optimisticRunStatus ?? run?.status ?? RunStatus.completed;
+    final canControl = run != null &&
+        {
+          RunStatus.active,
+          RunStatus.running,
+          RunStatus.waiting,
+          RunStatus.paused
+        }.contains(status);
+    final paused = status == RunStatus.paused;
     return Card(
         child: Padding(
             padding: const EdgeInsets.all(18),
@@ -360,55 +502,43 @@ class _StudioAppState extends State<StudioApp> {
                 children: [
                   const Icon(Icons.bolt_rounded,
                       color: Color(0xff6254d9), size: 24),
-                  const Column(
+                  Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Build a useful Conclave Studio UI',
+                        Text(run?.objective ?? 'No goal has been started',
                             style: TextStyle(
                                 fontWeight: FontWeight.w700, fontSize: 14)),
                         SizedBox(height: 4),
-                        Text('Run R-042  ·  Forge  ·  started 2 min ago',
+                        Text(
+                            run == null
+                                ? 'Select New goal to begin'
+                                : 'Run ${run.id} · Forge',
                             style: TextStyle(
                                 color: Color(0xff898896), fontSize: 11))
                       ]),
-                  _statusChip(
-                      isPaused ? 'Paused' : 'Running',
-                      isPaused
-                          ? const Color(0xffedb84d)
-                          : const Color(0xff40ae7d)),
+                  _statusChip(_statusLabel(status), _runStatusColor(status)),
                   const SizedBox(width: 5),
                   if (!compact)
-                    const Text('Standard verification',
+                    Text(
+                        '${run?.verifiedCriterionCount ?? 0} / ${run?.criterionCount ?? 0} criteria verified',
                         style:
                             TextStyle(color: Color(0xff777683), fontSize: 11)),
                   OutlinedButton.icon(
-                  onPressed: () async {
-                    final command = isPaused ? 'resume' : 'pause';
-                    final runId = snapshot.activeRunId;
-                    if (runId == null) return;
-                    setState(() => isPaused = !isPaused);
-                    try {
-                      await widget.dataSource.controlRun(runId, command);
-                    } catch (error) {
-                      if (mounted) {
-                        setState(() {
-                          isPaused = !isPaused;
-                          loadError = error.toString();
-                        });
-                      }
-                    }
-                  },
+                      onPressed: canControl
+                          ? () => _controlRun(paused ? 'resume' : 'pause')
+                          : null,
                       icon: Icon(
-                          isPaused
+                          paused
                               ? Icons.play_arrow_rounded
                               : Icons.pause_rounded,
                           size: 16),
-                      label: Text(isPaused ? 'Resume' : 'Pause'),
+                      label: Text(paused ? 'Resume' : 'Pause'),
                       style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 9))),
                   OutlinedButton.icon(
-                      onPressed: () {},
+                      onPressed:
+                          canControl ? () => _controlRun('cancel') : null,
                       icon: const Icon(Icons.close_rounded, size: 16),
                       label: const Text('Cancel'),
                       style: OutlinedButton.styleFrom(
@@ -420,19 +550,28 @@ class _StudioAppState extends State<StudioApp> {
   }
 
   Widget _executionCard() {
+    final run = snapshot.run;
+    if (snapshot.tasks.isEmpty) {
+      return _panel(
+        title: 'Execution tree',
+        subtitle: 'Live run state',
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          child: Text(run == null
+              ? 'No active run for this project.'
+              : 'The run has not created tasks yet.'),
+        ),
+      );
+    }
+    final completed = snapshot.tasks
+        .where((task) => task.status == TaskStatus.completed)
+        .length;
     return _panel(
         title: 'Execution tree',
         subtitle: 'Live run state',
-        trailing: _statusChip('68% complete', const Color(0xff6254d9)),
-        child: Column(children: [
-          _phaseRow('01', 'Understand', '1 / 1 tasks complete', true),
-          _taskRow(snapshot.tasks[0]),
-          _phaseRow('02', 'Build', '1 / 1 tasks active', true),
-          _taskRow(snapshot.tasks[1], selected: true),
-          _phaseRow('03', 'Verify', '0 / 2 tasks started', false),
-          _taskRow(snapshot.tasks[2]),
-          _taskRow(snapshot.tasks[3]),
-        ]));
+        trailing: _statusChip('$completed / ${snapshot.tasks.length} tasks',
+            const Color(0xff6254d9)),
+        child: Column(children: snapshot.tasks.map(_taskRow).toList()));
   }
 
   Widget _phaseRow(String number, String name, String detail, bool complete) =>
@@ -527,7 +666,14 @@ class _StudioAppState extends State<StudioApp> {
   }
 
   Widget _taskDetailsCard() {
-    final task = selectedTask ?? snapshot.tasks.first;
+    final task = selectedTask ?? snapshot.tasks.firstOrNull;
+    if (task == null) {
+      return _panel(
+        title: 'Task details',
+        subtitle: 'No task selected',
+        child: const Text('Tasks will appear here when a run begins.'),
+      );
+    }
     return _panel(
         title: 'Task details',
         subtitle: task.id.toUpperCase(),
@@ -633,15 +779,17 @@ class _StudioAppState extends State<StudioApp> {
 
   Widget _evidenceCard() => _panel(
       title: 'Evidence & findings',
-      subtitle: '2 findings · 3 artifacts',
+      subtitle:
+          '${snapshot.findings.length} findings · ${snapshot.artifacts.length} artifacts',
       trailing: TextButton(
           onPressed: () => setState(() => navigationIndex = 3),
           child: const Text('Open evidence')),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          _metric('Tokens', '32.5k'),
-          _metric('Cost', '\$0.65'),
-          _metric('Checks', '0 / 2')
+          _metric('Tokens', _formatNumber(snapshot.run?.tokens ?? 0)),
+          _metric('Cost', _formatCost(snapshot.run?.costMicros ?? 0)),
+          _metric('Checks',
+              '${snapshot.run?.verifiedCriterionCount ?? 0} / ${snapshot.run?.criterionCount ?? 0}')
         ]),
         const SizedBox(height: 16),
         ...snapshot.findings.map((finding) => _findingRow(finding))
@@ -659,6 +807,13 @@ class _StudioAppState extends State<StudioApp> {
                 fontWeight: FontWeight.w700,
                 color: Color(0xff393743)))
       ]));
+
+  String _formatNumber(int value) => value == 0
+      ? '0'
+      : '${(value / 1000).toStringAsFixed(value >= 10000 ? 1 : 2)}k';
+
+  String _formatCost(int micros) =>
+      '\$${(micros / 1000000).toStringAsFixed(2)}';
 
   Widget _findingRow(StudioFinding finding) => Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -800,8 +955,10 @@ class _StudioAppState extends State<StudioApp> {
               style: TextStyle(color: Color(0xff777683), fontSize: 13)),
           const SizedBox(height: 24),
           _panel(
-            title: 'Run R-042',
-            subtitle: 'Forge · 3 artifacts',
+            title: snapshot.run == null
+                ? 'No run selected'
+                : 'Run ${snapshot.run!.id}',
+            subtitle: 'Forge · ${snapshot.artifacts.length} artifacts',
             child: Column(
               children: snapshot.artifacts
                   .map(
@@ -879,13 +1036,15 @@ class _StudioAppState extends State<StudioApp> {
                 const Text('Start a new run in the selected project.',
                     style: TextStyle(color: Color(0xff777683), fontSize: 12)),
                 const SizedBox(height: 18),
-                const TextField(
+                TextField(
+                    controller: objectiveController,
                     decoration: InputDecoration(
                         labelText: 'What should Conclave accomplish?',
                         hintText: 'Describe the outcome, not just the task',
                         border: OutlineInputBorder())),
                 const SizedBox(height: 14),
-                const TextField(
+                TextField(
+                    controller: revisionController,
                     decoration: InputDecoration(
                         labelText: 'Repository revision',
                         hintText: 'main',
@@ -899,7 +1058,7 @@ class _StudioAppState extends State<StudioApp> {
                         child: const Text('Cancel')),
                     const SizedBox(width: 8),
                     FilledButton(
-                        onPressed: () => setState(() => showNewGoal = false),
+                        onPressed: _createGoal,
                         child: const Text('Create goal')),
                   ],
                 ),

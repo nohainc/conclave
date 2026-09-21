@@ -1,4 +1,12 @@
-enum RunStatus { running, paused, completed, failed, cancelled }
+enum RunStatus {
+  active,
+  running,
+  waiting,
+  paused,
+  completed,
+  failed,
+  cancelled
+}
 
 enum TaskStatus { completed, running, ready, blocked, pending }
 
@@ -6,8 +14,13 @@ enum FindingSeverity { blocker, major, minor, note }
 
 enum FindingStatus { open, fixed, verified }
 
-String _string(Map<String, dynamic> json, String key, [String fallback = '—']) => json[key] as String? ?? fallback;
-List<String> _strings(Map<String, dynamic> json, String key) => List<String>.from(json[key] as List? ?? const []);
+String _string(Map<String, dynamic> json, String key,
+    [String fallback = '—']) {
+  final value = json[key];
+  return value == null ? fallback : value.toString();
+}
+List<String> _strings(Map<String, dynamic> json, String key) =>
+    List<String>.from(json[key] as List? ?? const []);
 
 class StudioProject {
   const StudioProject({
@@ -26,7 +39,13 @@ class StudioProject {
   final int activeGoals;
   final String lastActivity;
 
-  factory StudioProject.fromJson(Map<String, dynamic> json) => StudioProject(id: _string(json, 'id'), name: _string(json, 'name'), repository: _string(json, 'repository'), branch: _string(json, 'branch'), activeGoals: json['activeGoals'] as int? ?? 0, lastActivity: _string(json, 'lastActivity'));
+  factory StudioProject.fromJson(Map<String, dynamic> json) => StudioProject(
+      id: _string(json, 'id'),
+      name: _string(json, 'name'),
+      repository: _string(json, 'repository'),
+      branch: _string(json, 'branch'),
+      activeGoals: json['activeGoals'] as int? ?? 0,
+      lastActivity: _string(json, 'lastActivity'));
 }
 
 class StudioWorker {
@@ -48,7 +67,14 @@ class StudioWorker {
   final String status;
   final String cost;
 
-  factory StudioWorker.fromJson(Map<String, dynamic> json) => StudioWorker(id: _string(json, 'id'), name: _string(json, 'name'), provider: _string(json, 'provider'), role: _string(json, 'role'), capabilities: _strings(json, 'capabilities'), status: _string(json, 'status'), cost: _string(json, 'cost'));
+  factory StudioWorker.fromJson(Map<String, dynamic> json) => StudioWorker(
+      id: _string(json, 'id'),
+      name: _string(json, 'name'),
+      provider: _string(json, 'provider'),
+      role: _string(json, 'role'),
+      capabilities: _strings(json, 'capabilities'),
+      status: _string(json, 'status'),
+      cost: _string(json, 'cost'));
 }
 
 class StudioTask {
@@ -76,7 +102,19 @@ class StudioTask {
   final String tokens;
   final String cost;
 
-  factory StudioTask.fromJson(Map<String, dynamic> json) => StudioTask(id: _string(json, 'id'), title: _string(json, 'title'), phase: _string(json, 'phase'), status: TaskStatus.values.firstWhere((value) => value.name == json['status'], orElse: () => TaskStatus.pending), worker: _string(json, 'worker'), detail: _string(json, 'detail'), progress: (json['progress'] as num?)?.toDouble() ?? 0, dependencies: _strings(json, 'dependencies'), tokens: _string(json, 'tokens'), cost: _string(json, 'cost'));
+  factory StudioTask.fromJson(Map<String, dynamic> json) => StudioTask(
+      id: _string(json, 'id'),
+      title: _string(json, 'title'),
+      phase: _string(json, 'phase'),
+      status: TaskStatus.values.firstWhere(
+          (value) => value.name == json['status'],
+          orElse: () => TaskStatus.pending),
+      worker: _string(json, 'worker'),
+      detail: _string(json, 'detail'),
+      progress: (json['progress'] as num?)?.toDouble() ?? 0,
+      dependencies: _strings(json, 'dependencies'),
+      tokens: _string(json, 'tokens'),
+      cost: _string(json, 'cost'));
 }
 
 class StudioFinding {
@@ -98,7 +136,18 @@ class StudioFinding {
   final String taskId;
   final String author;
 
-  factory StudioFinding.fromJson(Map<String, dynamic> json) => StudioFinding(id: _string(json, 'id'), title: _string(json, 'title'), description: _string(json, 'description'), severity: FindingSeverity.values.firstWhere((value) => value.name == json['severity'], orElse: () => FindingSeverity.note), status: FindingStatus.values.firstWhere((value) => value.name == json['status'], orElse: () => FindingStatus.open), taskId: _string(json, 'taskId'), author: _string(json, 'author'));
+  factory StudioFinding.fromJson(Map<String, dynamic> json) => StudioFinding(
+      id: _string(json, 'id'),
+      title: _string(json, 'title'),
+      description: _string(json, 'description'),
+      severity: FindingSeverity.values.firstWhere(
+          (value) => value.name == json['severity'],
+          orElse: () => FindingSeverity.note),
+      status: FindingStatus.values.firstWhere(
+          (value) => value.name == json['status'],
+          orElse: () => FindingStatus.open),
+      taskId: _string(json, 'taskId'),
+      author: _string(json, 'author'));
 }
 
 class StudioEvent {
@@ -114,7 +163,11 @@ class StudioEvent {
   final String detail;
   final String kind;
 
-  factory StudioEvent.fromJson(Map<String, dynamic> json) => StudioEvent(time: _string(json, 'time'), title: _string(json, 'title'), detail: _string(json, 'detail'), kind: _string(json, 'kind'));
+  factory StudioEvent.fromJson(Map<String, dynamic> json) => StudioEvent(
+      time: _string(json, 'time'),
+      title: _string(json, 'title'),
+      detail: _string(json, 'detail'),
+      kind: _string(json, 'kind'));
 }
 
 class StudioArtifact {
@@ -130,7 +183,11 @@ class StudioArtifact {
   final String size;
   final String source;
 
-  factory StudioArtifact.fromJson(Map<String, dynamic> json) => StudioArtifact(name: _string(json, 'name'), type: _string(json, 'type'), size: _string(json, 'size'), source: _string(json, 'source'));
+  factory StudioArtifact.fromJson(Map<String, dynamic> json) => StudioArtifact(
+      name: _string(json, 'name'),
+      type: _string(json, 'type'),
+      size: _string(json, 'size'),
+      source: _string(json, 'source'));
 }
 
 class StudioModelCall {
@@ -152,12 +209,63 @@ class StudioModelCall {
   final String duration;
   final String status;
 
-  factory StudioModelCall.fromJson(Map<String, dynamic> json) => StudioModelCall(worker: _string(json, 'worker'), model: _string(json, 'model'), task: _string(json, 'task'), tokens: _string(json, 'tokens'), cost: _string(json, 'cost'), duration: _string(json, 'duration'), status: _string(json, 'status'));
+  factory StudioModelCall.fromJson(Map<String, dynamic> json) =>
+      StudioModelCall(
+          worker: _string(json, 'worker'),
+          model: _string(json, 'model'),
+          task: _string(json, 'task'),
+          tokens: _string(json, 'tokens'),
+          cost: _string(json, 'cost'),
+          duration: _string(json, 'duration'),
+          status: _string(json, 'status'));
+}
+
+class StudioRun {
+  const StudioRun({
+    required this.id,
+    required this.status,
+    required this.objective,
+    required this.taskCount,
+    required this.completedTaskCount,
+    required this.openFindingCount,
+    required this.verifiedCriterionCount,
+    required this.criterionCount,
+    required this.tokens,
+    required this.costMicros,
+  });
+
+  final String id;
+  final RunStatus status;
+  final String objective;
+  final int taskCount;
+  final int completedTaskCount;
+  final int openFindingCount;
+  final int verifiedCriterionCount;
+  final int criterionCount;
+  final int tokens;
+  final int costMicros;
+
+  factory StudioRun.fromJson(Map<String, dynamic> json) => StudioRun(
+        id: _string(json, 'id'),
+        status: RunStatus.values.firstWhere(
+          (value) => value.name == json['status'],
+          orElse: () => RunStatus.running,
+        ),
+        objective: _string(json, 'objective'),
+        taskCount: json['taskCount'] as int? ?? 0,
+        completedTaskCount: json['completedTaskCount'] as int? ?? 0,
+        openFindingCount: json['openFindingCount'] as int? ?? 0,
+        verifiedCriterionCount: json['verifiedCriterionCount'] as int? ?? 0,
+        criterionCount: json['criterionCount'] as int? ?? 0,
+        tokens: json['tokens'] as int? ?? 0,
+        costMicros: json['costMicros'] as int? ?? 0,
+      );
 }
 
 class StudioSnapshot {
   const StudioSnapshot({
     this.activeRunId,
+    this.run,
     required this.projects,
     required this.workers,
     required this.tasks,
@@ -168,6 +276,7 @@ class StudioSnapshot {
   });
 
   final String? activeRunId;
+  final StudioRun? run;
   final List<StudioProject> projects;
   final List<StudioWorker> workers;
   final List<StudioTask> tasks;
@@ -176,21 +285,64 @@ class StudioSnapshot {
   final List<StudioArtifact> artifacts;
   final List<StudioModelCall> modelCalls;
 
-  static StudioSnapshot empty() => const StudioSnapshot(projects: [], workers: [], tasks: [], findings: [], events: [], artifacts: [], modelCalls: []);
+  static StudioSnapshot empty() => const StudioSnapshot(
+      projects: [],
+      workers: [],
+      tasks: [],
+      findings: [],
+      events: [],
+      artifacts: [],
+      modelCalls: []);
 
   factory StudioSnapshot.fromJson(Map<String, dynamic> json) => StudioSnapshot(
         activeRunId: json['activeRunId'] as String?,
-        projects: (json['projects'] as List? ?? const []).map((item) => StudioProject.fromJson(Map<String, dynamic>.from(item as Map))).toList(),
-        workers: (json['workers'] as List? ?? const []).map((item) => StudioWorker.fromJson(Map<String, dynamic>.from(item as Map))).toList(),
-        tasks: (json['tasks'] as List? ?? const []).map((item) => StudioTask.fromJson(Map<String, dynamic>.from(item as Map))).toList(),
-        findings: (json['findings'] as List? ?? const []).map((item) => StudioFinding.fromJson(Map<String, dynamic>.from(item as Map))).toList(),
-        events: (json['events'] as List? ?? const []).map((item) => StudioEvent.fromJson(Map<String, dynamic>.from(item as Map))).toList(),
-        artifacts: (json['artifacts'] as List? ?? const []).map((item) => StudioArtifact.fromJson(Map<String, dynamic>.from(item as Map))).toList(),
-        modelCalls: (json['modelCalls'] as List? ?? const []).map((item) => StudioModelCall.fromJson(Map<String, dynamic>.from(item as Map))).toList(),
+        run: json['run'] == null
+            ? null
+            : StudioRun.fromJson(Map<String, dynamic>.from(json['run'] as Map)),
+        projects: (json['projects'] as List? ?? const [])
+            .map((item) =>
+                StudioProject.fromJson(Map<String, dynamic>.from(item as Map)))
+            .toList(),
+        workers: (json['workers'] as List? ?? const [])
+            .map((item) =>
+                StudioWorker.fromJson(Map<String, dynamic>.from(item as Map)))
+            .toList(),
+        tasks: (json['tasks'] as List? ?? const [])
+            .map((item) =>
+                StudioTask.fromJson(Map<String, dynamic>.from(item as Map)))
+            .toList(),
+        findings: (json['findings'] as List? ?? const [])
+            .map((item) =>
+                StudioFinding.fromJson(Map<String, dynamic>.from(item as Map)))
+            .toList(),
+        events: (json['events'] as List? ?? const [])
+            .map((item) =>
+                StudioEvent.fromJson(Map<String, dynamic>.from(item as Map)))
+            .toList(),
+        artifacts: (json['artifacts'] as List? ?? const [])
+            .map((item) =>
+                StudioArtifact.fromJson(Map<String, dynamic>.from(item as Map)))
+            .toList(),
+        modelCalls: (json['modelCalls'] as List? ?? const [])
+            .map((item) => StudioModelCall.fromJson(
+                Map<String, dynamic>.from(item as Map)))
+            .toList(),
       );
 
   static StudioSnapshot demo() => const StudioSnapshot(
         activeRunId: 'run-demo',
+        run: StudioRun(
+          id: 'run-demo',
+          status: RunStatus.running,
+          objective: 'Build a useful Conclave Studio UI',
+          taskCount: 4,
+          completedTaskCount: 1,
+          openFindingCount: 1,
+          verifiedCriterionCount: 0,
+          criterionCount: 2,
+          tokens: 32500,
+          costMicros: 650000,
+        ),
         projects: [
           StudioProject(
             id: 'forge',

@@ -349,6 +349,89 @@ async function handleRunRequest(
   return json(run, { status: 202 });
 }
 
+async function handleGoalRequest(
+  request: Request,
+  env: Env,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const securityEnv = env as SecurityEnv;
+  const body = (await request.json()) as Record<string, unknown>;
+  const projectId = requiredString(body.projectId, "projectId");
+  const context = await authorizeRequest(
+    request,
+    securityEnv,
+    "project:write",
+    projectId,
+    accessContext,
+  );
+  const objective = requiredString(body.objective, "objective");
+  const repositoryId =
+    typeof body.repositoryId === "string" ? body.repositoryId : undefined;
+  const revision = typeof body.revision === "string" ? body.revision : "HEAD";
+  const criteria = Array.isArray(body.criteria)
+    ? body.criteria.filter(
+        (criterion): criterion is string =>
+          typeof criterion === "string" && criterion.trim().length > 0,
+      )
+    : [objective];
+  const now = new Date().toISOString();
+  const goalId = `goal-${crypto.randomUUID()}`;
+  const runId = `run-${crypto.randomUUID()}`;
+  const criterionRows = criteria.map((description, index) => ({
+    id: `${goalId}-criterion-${index + 1}`,
+    description,
+  }));
+  const goal = {
+    id: goalId,
+    projectId,
+    originalMessage: objective,
+    objective,
+    constraints: [],
+    completionCriteria: criterionRows.map((criterion) => criterion.id),
+    verificationPolicy: { mode: "standard" },
+    status: "running",
+    createdAt: now,
+    updatedAt: now,
+  };
+  const statements = [
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO goals (id, project_id, original_message, objective, constraints_json, completion_criteria_json, verification_policy_json, status, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
+    ).bind(
+      goal.id,
+      goal.projectId,
+      goal.originalMessage,
+      goal.objective,
+      JSON.stringify(goal.constraints),
+      JSON.stringify(goal.completionCriteria),
+      JSON.stringify(goal.verificationPolicy),
+      goal.status,
+      now,
+      now,
+    ),
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO runs (id, goal_id, policy_snapshot_json, status, started_at, created_at, updated_at)
+         VALUES (?1, ?2, ?3, 'running', ?4, ?4, ?4)`,
+    ).bind(runId, goalId, JSON.stringify(goal.verificationPolicy), now),
+    ...criterionRows.map((criterion) =>
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO completion_criteria (id, goal_id, description, verification_requirement, status, evidence_artifact_ids_json, created_at, updated_at)
+           VALUES (?1, ?2, ?3, 'independent verification', 'pending', '[]', ?4, ?4)`,
+      ).bind(criterion.id, goalId, criterion.description, now),
+    ),
+  ];
+  await env.CONCLAVE_DB.batch(statements);
+  const run = await createOrGetRun(env, {
+    runId,
+    goalId,
+    idempotencyKey: runId,
+    organizationId: context.organizationId,
+    ...(repositoryId ? { repositoryId } : {}),
+    ...(revision ? { revision } : {}),
+  });
+  return json({ goalId, runId, ...run }, { status: 202 });
+}
+
 async function handleStudioSnapshot(
   env: Env,
   request: Request,
@@ -398,6 +481,7 @@ async function handleStudioSnapshot(
     artifacts,
     modelCalls,
     activeRun,
+    latestRun,
   ] = await Promise.all([
     env.CONCLAVE_DB.prepare(
       `SELECT p.id, p.name, COALESCE(p.repository_id, '') AS repository, '' AS branch, (SELECT COUNT(*) FROM goals g WHERE g.project_id = p.id AND g.status IN ('running', 'waiting')) AS activeGoals, p.updated_at AS lastActivity FROM projects p${projectFilter} ORDER BY p.updated_at DESC`,
@@ -439,11 +523,25 @@ async function handleStudioSnapshot(
     )
       .bind(...ownershipBind)
       .first<{ id: string }>(),
+    env.CONCLAVE_DB.prepare(
+      `SELECT r.id, r.status, g.objective AS objective, r.created_at AS createdAt, r.started_at AS startedAt, r.finished_at AS finishedAt,
+        (SELECT COUNT(*) FROM tasks t JOIN phases ph ON ph.id = t.phase_id WHERE ph.run_id = r.id) AS taskCount,
+        (SELECT COUNT(*) FROM tasks t JOIN phases ph ON ph.id = t.phase_id WHERE ph.run_id = r.id AND t.status = 'completed') AS completedTaskCount,
+        (SELECT COUNT(*) FROM findings f WHERE f.run_id = r.id AND f.status IN ('open', 'fixed')) AS openFindingCount,
+        (SELECT COUNT(*) FROM completion_criteria cc WHERE cc.goal_id = g.id AND cc.status = 'verified') AS verifiedCriterionCount,
+        (SELECT COUNT(*) FROM completion_criteria cc WHERE cc.goal_id = g.id) AS criterionCount,
+        COALESCE((SELECT SUM(input_tokens + output_tokens) FROM usage u WHERE u.run_id = r.id), 0) AS tokens,
+        COALESCE((SELECT SUM(estimated_cost_micros) FROM usage u WHERE u.run_id = r.id), 0) AS costMicros
+       FROM runs r JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${ownership} ORDER BY r.created_at DESC LIMIT 1`,
+    )
+      .bind(...ownershipBind)
+      .first(),
   ]);
   const mapJson = (value: unknown): string[] =>
     typeof value === "string" ? (JSON.parse(value) as string[]) : [];
   return json({
     activeRunId: activeRun?.id ?? null,
+    run: latestRun ?? null,
     projects: projects.results ?? [],
     workers: (workers.results ?? []).map((row) => ({
       ...row,
@@ -467,7 +565,13 @@ async function handleRunCommand(
   env: Env,
   runId: string,
   command:
-    "pause" | "resume" | "restart" | "event" | "ci-evidence" | "forge-terminal",
+    | "pause"
+    | "resume"
+    | "restart"
+    | "cancel"
+    | "event"
+    | "ci-evidence"
+    | "forge-terminal",
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   const securityEnv = env as SecurityEnv;
@@ -491,6 +595,20 @@ async function handleRunCommand(
   if (command === "pause") await instance.pause();
   if (command === "resume") await instance.resume();
   if (command === "restart") await instance.restart();
+  if (command === "cancel") await instance.terminate();
+  if (command === "pause" || command === "resume" || command === "cancel") {
+    const status =
+      command === "pause"
+        ? "paused"
+        : command === "cancel"
+          ? "cancelled"
+          : "running";
+    await env.CONCLAVE_DB.prepare(
+      "UPDATE runs SET status = ?1, finished_at = CASE WHEN ?1 = 'cancelled' THEN ?2 ELSE finished_at END, updated_at = ?2 WHERE id = ?3",
+    )
+      .bind(status, new Date().toISOString(), runId)
+      .run();
+  }
   if (
     command === "event" ||
     command === "ci-evidence" ||
@@ -566,6 +684,9 @@ export default {
       if (request.method === "POST" && url.pathname === "/api/runs") {
         return await handleRunRequest(request, env, ctx);
       }
+      if (request.method === "POST" && url.pathname === "/api/goals") {
+        return await handleGoalRequest(request, env, ctx);
+      }
       if (request.method === "GET" && url.pathname === "/api/studio/snapshot") {
         return await handleStudioSnapshot(
           env,
@@ -575,7 +696,7 @@ export default {
         );
       }
       const runMatch = url.pathname.match(
-        /^\/api\/runs\/([^/]+)(?:\/(pause|resume|restart|events|ci-evidence|forge-events))?$/,
+        /^\/api\/runs\/([^/]+)(?:\/(pause|resume|restart|cancel|events|ci-evidence|forge-events))?$/,
       );
       if (runMatch?.[1] && request.method === "GET" && !runMatch[2]) {
         const securityEnv = env as SecurityEnv;
@@ -609,7 +730,7 @@ export default {
               ? "ci-evidence"
               : runMatch[2] === "forge-events"
                 ? "forge-terminal"
-                : (runMatch[2] as "pause" | "resume" | "restart");
+                : (runMatch[2] as "pause" | "resume" | "restart" | "cancel");
         return await handleRunCommand(request, env, runMatch[1], command, ctx);
       }
     } catch (error) {
