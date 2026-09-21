@@ -62,7 +62,10 @@ jobs:
       - run: flutter test
 
   agent-engine-dart:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         working-directory: apps/agent_engine
@@ -72,6 +75,14 @@ jobs:
       - run: dart pub get
       - run: dart analyze
       - run: dart test
+      - name: Compile native Agent Engine
+        shell: bash
+        run: |
+          output_path="$RUNNER_TEMP/conclave-agent-engine"
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            output_path="$RUNNER_TEMP/conclave-agent-engine.exe"
+          fi
+          dart compile exe bin/conclave_agent_engine.dart -o "$output_path"
 
   publish-evidence:
     if: ${{ vars.CONCLAVE_CI_INGEST_URL != '' && vars.CONCLAVE_RUN_ID != '' }}
