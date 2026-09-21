@@ -38,6 +38,10 @@ import type {
   RuntimeEvidence,
   RuntimeOperation,
 } from "@conclave/local-runtime";
+import {
+  dispatchTaskAssignment,
+  type AssignmentDispatcherEnv,
+} from "./assignment-dispatcher.js";
 
 interface ForgeExecutionEnv {
   readonly CONCLAVE_DB: D1DatabaseLike;
@@ -55,6 +59,7 @@ interface ForgeExecutionEnv {
   readonly CONCLAVE_TEST_COMMAND?: string;
   readonly CONCLAVE_RUNTIME_APPROVAL_ID?: string;
   readonly CONCLAVE_RUNTIME_APPROVAL_EXPIRES_AT?: string;
+  readonly CONCLAVE_AGENT_GATEWAY?: DurableObjectNamespace;
 }
 
 interface ForgeExecutionContext {
@@ -586,36 +591,149 @@ class RemoteLocalWorkerExecutor implements WorkerExecutor {
   }
 }
 
+class AgentGatewayWorkerExecutor implements WorkerExecutor {
+  constructor(
+    readonly resource: WorkerResource,
+    readonly connection: ConnectionResource,
+    private readonly env: ForgeExecutionEnv,
+    private readonly context: ForgeExecutionContext,
+  ) {}
+
+  async execute(
+    request: WorkerExecutionRequest,
+  ): Promise<WorkerExecutionResult> {
+    const message =
+      typeof request.message === "object" && request.message !== null
+        ? (request.message as Record<string, unknown>)
+        : {};
+    const payload =
+      typeof message.payload === "object" && message.payload !== null
+        ? (message.payload as Record<string, unknown>)
+        : {};
+    const objective =
+      typeof payload.objective === "string"
+        ? payload.objective
+        : `Execute ${String(message.messageType ?? "worker task")}`;
+    const role =
+      typeof payload.role === "string"
+        ? payload.role
+        : (this.resource.roles[0] ?? "worker");
+    const capabilities = Array.isArray(payload.requiredCapabilities)
+      ? payload.requiredCapabilities.filter(
+          (value): value is string => typeof value === "string",
+        )
+      : this.resource.capabilities;
+    const dispatched = await dispatchTaskAssignment(
+      this.env as unknown as AssignmentDispatcherEnv,
+      {
+        workspaceId: this.context.organizationId,
+        runId: request.runId,
+        taskId: request.taskId,
+        explicitWorkerId: this.resource.id,
+        task: {
+          id: request.taskId,
+          role,
+          objective,
+          capabilities,
+          contextArtifactIds: request.context.map((item) => item.artifactId),
+          timeoutMs: this.deadline(request),
+          input: {
+            request,
+            message: request.message,
+            context: request.context,
+          },
+        },
+      },
+    );
+    if (!dispatched.accepted) {
+      return this.failed(dispatched.error ?? "Agent assignment was rejected");
+    }
+
+    const deadline = Date.now() + this.deadline(request);
+    while (Date.now() < deadline) {
+      const row = await this.env.CONCLAVE_DB.prepare(
+        `SELECT status, output_json, error_json
+         FROM worker_assignments WHERE id = ?1`,
+      )
+        .bind(dispatched.assignmentId)
+        .first<{
+          status: string;
+          output_json: string | null;
+          error_json: string | null;
+        }>();
+      if (row?.status === "completed" && row.output_json) {
+        const result = JSON.parse(row.output_json) as {
+          output?: unknown;
+          artifactIds?: unknown;
+          summary?: unknown;
+        };
+        const output =
+          typeof result.output === "string"
+            ? result.output
+            : JSON.stringify(result.output ?? { summary: result.summary });
+        return {
+          status: "succeeded",
+          output,
+          rawOutput: output,
+          executionId: dispatched.assignmentId,
+          usage: { inputTokens: null, outputTokens: null },
+          evidenceArtifactIds: Array.isArray(result.artifactIds)
+            ? result.artifactIds.filter(
+                (value): value is string => typeof value === "string",
+              )
+            : [],
+        };
+      }
+      if (row?.status === "failed" || row?.status === "cancelled") {
+        return this.failed(
+          this.assignmentError(row.error_json) ??
+            `Agent assignment ended with status ${row.status}`,
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    return this.failed("Timed out waiting for Agent assignment result", true);
+  }
+
+  private deadline(request: WorkerExecutionRequest): number {
+    if (!request.deadlineAt) return 15 * 60_000;
+    return Math.max(1000, new Date(request.deadlineAt).getTime() - Date.now());
+  }
+
+  private failed(message: string, retryable = false): WorkerExecutionResult {
+    return {
+      status: "failed",
+      output: null,
+      rawOutput: null,
+      usage: { inputTokens: null, outputTokens: null },
+      evidenceArtifactIds: [],
+      error: { code: "agent_assignment_failed", message, retryable },
+    };
+  }
+
+  private assignmentError(value: string | null): string | null {
+    if (!value) return null;
+    try {
+      const parsed = JSON.parse(value) as { error?: { message?: unknown } };
+      return typeof parsed.error?.message === "string"
+        ? parsed.error.message
+        : null;
+    } catch {
+      return null;
+    }
+  }
+}
+
 async function discoverLocalWorkers(
   env: ForgeExecutionEnv,
 ): Promise<ReadonlySet<string>> {
-  const baseUrl = env.CONCLAVE_API_BASE_URL ?? env.CONCLAVE_LOCAL_RUNTIME_URL;
-  const runtimeId = env.CONCLAVE_RUNTIME_ID;
-  const token =
-    env.CONCLAVE_RUNTIME_OPERATION_TOKEN ?? env.CONCLAVE_LOCAL_RUNTIME_TOKEN;
-  if (!baseUrl || !runtimeId || !token)
-    throw new Error("Local Runtime worker discovery is not configured");
-  const response = await fetch(
-    `${baseUrl.replace(/\/$/, "")}/api/runtime/workers`,
-    {
-      headers: {
-        authorization: `Bearer ${token}`,
-        "x-conclave-runtime-id": runtimeId,
-      },
-    },
-  );
-  if (!response.ok)
-    throw new Error(
-      `Local Runtime worker discovery failed with ${response.status}`,
-    );
-  const body = (await response.json()) as {
-    workers?: readonly { workerId?: unknown }[];
-  };
-  return new Set(
-    (body.workers ?? []).flatMap((worker) =>
-      typeof worker.workerId === "string" ? [worker.workerId] : [],
-    ),
-  );
+  const rows = await env.CONCLAVE_DB.prepare(
+    `SELECT w.id
+     FROM workers w JOIN agents a ON a.id = w.agent_id
+     WHERE w.enabled = 1 AND w.status = 'available'
+       AND a.status = 'online' AND a.revoked_at IS NULL`,
+  ).all<{ id: string }>();
+  return new Set((rows.results ?? []).map((row) => row.id));
 }
 
 function modelFor(
@@ -626,7 +744,7 @@ function modelFor(
 ): WorkerExecutor {
   const { worker: resource, connection } = binding;
   if (connection.transport === "local_agent") {
-    return new RemoteLocalWorkerExecutor(resource, connection, env, context);
+    return new AgentGatewayWorkerExecutor(resource, connection, env, context);
   }
   const model = models[resource.id] ?? connection.name;
   if (connection.provider === "openai") {
