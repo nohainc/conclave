@@ -117,6 +117,9 @@ class PluginManager {
       final digest = item['packageDigest'];
       final signature = item['signature'];
       final permissions = item['permissions'];
+      final protocolVersion = item['protocolVersion'];
+      final minAgentVersion = item['minAgentVersion'];
+      final supportedPlatforms = item['supportedPlatforms'];
       if (pluginId is! String ||
           version is! String ||
           publisher is! String ||
@@ -144,6 +147,29 @@ class PluginManager {
                   ),
                 ))
             .toList(),
+        manifest: PluginManifest(
+          pluginId: pluginId,
+          version: version,
+          protocolVersion: protocolVersion is String
+              ? protocolVersion
+              : this.protocolVersion,
+          engineVersion:
+              minAgentVersion is String ? '>=$minAgentVersion' : '>=0.1.0',
+          executable: 'package.bin',
+          publisher: publisher,
+          permissions: permissions
+              .whereType<String>()
+              .map((value) => PluginPermission.values.firstWhere(
+                    (permission) => permission.name == value,
+                    orElse: () => throw StateError(
+                      'desired plugin contains an unknown permission',
+                    ),
+                  ))
+              .toList(),
+          supportedPlatforms: supportedPlatforms is List
+              ? supportedPlatforms.whereType<String>().toList()
+              : const [],
+        ),
       ));
     }
   }

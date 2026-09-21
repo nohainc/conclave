@@ -23,6 +23,18 @@ import {
   hashToken,
 } from "../../../packages/security/src/index.js";
 
+function parseJsonArray(value: unknown): string[] {
+  if (typeof value !== "string") return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 export interface GatewayEnv {
   CONCLAVE_DB: D1Database;
   CONCLAVE_ENVIRONMENT?: string;
@@ -440,6 +452,15 @@ export class AgentGateway implements DurableObject {
             pluginId: String(row.plugin_id),
             version: String(row.version),
             publisher: String(row.publisher),
+            protocolVersion: String(row.protocol_version),
+            minAgentVersion: String(row.min_agent_version),
+            supportedPlatforms: [
+              ...parseJsonArray(row.supported_os_json),
+            ].flatMap((os) =>
+              parseJsonArray(row.supported_arch_json).map(
+                (arch) => `${os}-${arch}`,
+              ),
+            ),
             packageR2Key: String(row.package_r2_key),
             packageDigest: String(row.package_digest),
             signature: String(row.signature),
