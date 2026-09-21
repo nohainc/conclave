@@ -44,6 +44,22 @@ void main() {
     expect(Platform.operatingSystem, isNotEmpty);
   });
 
+  test('Agent Engine config reads Cloud enrollment settings', () {
+    final config = AgentEngineConfig.fromArgs([
+      '--data-dir',
+      '/tmp/conclave-agent-test',
+      '--cloud-url',
+      'wss://cloud.example/agent',
+      '--agent-id',
+      'agent-1',
+      '--workspace-id',
+      'workspace-1',
+    ]);
+    expect(config.cloudUri, Uri.parse('wss://cloud.example/agent'));
+    expect(config.agentId, 'agent-1');
+    expect(config.workspaceId, 'workspace-1');
+  });
+
   test('owns the Cloud connection across Engine lifecycle', () async {
     final directory = await Directory.systemTemp.createTemp('conclave-engine-');
     final socket = FakeSocket();

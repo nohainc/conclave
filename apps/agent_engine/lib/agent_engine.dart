@@ -5,18 +5,44 @@ import 'dart:io';
 import 'cloud_connection.dart';
 
 class AgentEngineConfig {
-  const AgentEngineConfig({required this.dataDirectory});
+  const AgentEngineConfig({
+    required this.dataDirectory,
+    this.cloudUri,
+    this.agentId,
+    this.workspaceId,
+    this.authToken,
+  });
 
   final Directory dataDirectory;
+  final Uri? cloudUri;
+  final String? agentId;
+  final String? workspaceId;
+  final String? authToken;
 
   factory AgentEngineConfig.fromArgs(List<String> args) {
     final index = args.indexOf('--data-dir');
+    final cloudIndex = args.indexOf('--cloud-url');
+    final agentIndex = args.indexOf('--agent-id');
+    final workspaceIndex = args.indexOf('--workspace-id');
     final path = index >= 0 && index + 1 < args.length
         ? args[index + 1]
         : Platform.environment['CONCLAVE_AGENT_DATA_DIR'];
+    final cloudUrl = cloudIndex >= 0 && cloudIndex + 1 < args.length
+        ? args[cloudIndex + 1]
+        : Platform.environment['CONCLAVE_AGENT_CLOUD_URL'];
+    final agentId = agentIndex >= 0 && agentIndex + 1 < args.length
+        ? args[agentIndex + 1]
+        : Platform.environment['CONCLAVE_AGENT_ID'];
+    final workspaceId = workspaceIndex >= 0 && workspaceIndex + 1 < args.length
+        ? args[workspaceIndex + 1]
+        : Platform.environment['CONCLAVE_AGENT_WORKSPACE_ID'];
     return AgentEngineConfig(
       dataDirectory: Directory(path ??
           '${Platform.environment['HOME'] ?? Directory.current.path}/.conclave-agent'),
+      cloudUri: cloudUrl == null ? null : Uri.tryParse(cloudUrl),
+      agentId: agentId,
+      workspaceId: workspaceId,
+      authToken: Platform.environment['CONCLAVE_AGENT_TOKEN'],
     );
   }
 }
