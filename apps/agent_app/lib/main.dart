@@ -94,6 +94,7 @@ class SocketAgentEngineConnection implements AgentEngineConnection {
           cloudConnected: result['cloudConnected'] == true,
           pluginIds: _strings(result['pluginIds']),
           activeAssignmentIds: _strings(result['activeAssignmentIds']),
+          healthWarnings: _strings(result['healthWarnings']),
         );
       } finally {
         await client.close();
@@ -126,6 +127,7 @@ class AgentSnapshot {
     this.cloudConnected = false,
     this.pluginIds = const [],
     this.activeAssignmentIds = const [],
+    this.healthWarnings = const [],
     this.version,
     this.updateAvailable,
     this.error,
@@ -139,6 +141,7 @@ class AgentSnapshot {
   final bool cloudConnected;
   final List<String> pluginIds;
   final List<String> activeAssignmentIds;
+  final List<String> healthWarnings;
   final String? version;
   final String? updateAvailable;
   final String? error;
@@ -248,6 +251,15 @@ class _OverviewPage extends StatelessWidget {
   Widget build(BuildContext context) => _Page(
         title: 'Agent overview',
         children: [
+          if (!snapshot.online)
+            const Card(
+              child: ListTile(
+                leading: Icon(Icons.warning_amber_outlined),
+                title: Text('Agent Engine offline'),
+                subtitle: Text(
+                    'Start the Agent Engine to receive assignments on this machine.'),
+              ),
+            ),
           _Metric(label: 'Workers', value: '${snapshot.workers} configured'),
           _Metric(label: 'Plugins', value: '${snapshot.plugins} installed'),
           _Metric(label: 'Active tasks', value: '${snapshot.activeTasks}'),
@@ -259,6 +271,14 @@ class _OverviewPage extends StatelessWidget {
           if (snapshot.updateAvailable != null)
             _Metric(
                 label: 'Update available', value: snapshot.updateAvailable!),
+          if (snapshot.healthWarnings.isNotEmpty)
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.health_and_safety_outlined),
+                title: const Text('Health warnings'),
+                subtitle: Text(snapshot.healthWarnings.join('\n')),
+              ),
+            ),
         ],
       );
 }
@@ -270,9 +290,27 @@ class _WorkersPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _Page(title: 'Workers', children: [
-        const Text('Workers registered with this Agent will appear here.'),
-        const SizedBox(height: 12),
-        Text('Configured workers: ${snapshot.workers}'),
+        if (!snapshot.online)
+          const Text(
+              'Workers are unavailable while the Agent Engine is offline.'),
+        if (snapshot.online && snapshot.workers == 0)
+          const Text('No Workers are configured on this Agent.'),
+        if (snapshot.workers > 0)
+          _Metric(label: 'Configured Workers', value: '${snapshot.workers}'),
+        _Metric(
+          label: 'Active assignments',
+          value: '${snapshot.activeTasks}',
+        ),
+        if (snapshot.activeAssignmentIds.isNotEmpty)
+          ...snapshot.activeAssignmentIds.map(
+            (id) => Card(
+              child: ListTile(
+                leading: const Icon(Icons.play_circle_outline),
+                title: Text(id),
+                subtitle: const Text('Assignment running'),
+              ),
+            ),
+          ),
       ]);
 }
 
@@ -283,13 +321,21 @@ class _PluginsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _Page(title: 'Plugins', children: [
-        const Text('Plugin installation and health will appear here.'),
-        const SizedBox(height: 12),
-        Text('Installed plugins: ${snapshot.plugins}'),
-        if (snapshot.pluginIds.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          ...snapshot.pluginIds.map(Text.new),
-        ],
+        if (!snapshot.online)
+          const Text(
+              'Plugin inventory is unavailable while the Agent Engine is offline.'),
+        if (snapshot.online && snapshot.plugins == 0)
+          const Text('No plugins are installed on this Agent.'),
+        _Metric(label: 'Installed plugins', value: '${snapshot.plugins}'),
+        ...snapshot.pluginIds.map(
+          (id) => Card(
+            child: ListTile(
+              leading: const Icon(Icons.extension_outlined),
+              title: Text(id),
+              subtitle: const Text('Installed on this Agent'),
+            ),
+          ),
+        ),
       ]);
 }
 
@@ -297,8 +343,13 @@ class _LogsPage extends StatelessWidget {
   const _LogsPage();
 
   @override
-  Widget build(BuildContext context) => const _Page(
-      title: 'Logs', children: [Text('Engine logs will appear here.')]);
+  Widget build(BuildContext context) => const _Page(title: 'Logs', children: [
+        Text(
+            'Logs are written by the Agent Engine and available in its local data directory.'),
+        SizedBox(height: 12),
+        Text(
+            'Live log streaming will be enabled when the engine log channel is connected.'),
+      ]);
 }
 
 class _SettingsPage extends StatelessWidget {
