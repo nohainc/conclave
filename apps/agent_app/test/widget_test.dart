@@ -6,6 +6,7 @@ void main() {
     await tester.pumpWidget(
       ConclaveAgentApp(connection: AgentEngineConnection.unavailable()),
     );
+    await tester.pumpAndSettle();
 
     expect(find.text('Conclave AX Agent'), findsOneWidget);
     expect(find.text('Agent overview'), findsOneWidget);

@@ -19,7 +19,9 @@ class ConclaveAgentApp extends StatelessWidget {
 }
 
 abstract interface class AgentEngineConnection {
-  Future<bool> isOnline();
+  Future<AgentSnapshot> snapshot();
+
+  Future<bool> isOnline() async => (await snapshot()).online;
 
   factory AgentEngineConnection.unavailable() =
       UnavailableAgentEngineConnection;
@@ -28,6 +30,37 @@ abstract interface class AgentEngineConnection {
 class UnavailableAgentEngineConnection implements AgentEngineConnection {
   @override
   Future<bool> isOnline() async => false;
+
+  @override
+  Future<AgentSnapshot> snapshot() async => const AgentSnapshot(
+        online: false,
+        status: 'offline',
+        workers: 0,
+        plugins: 0,
+        activeTasks: 0,
+      );
+}
+
+class AgentSnapshot {
+  const AgentSnapshot({
+    required this.online,
+    required this.status,
+    required this.workers,
+    required this.plugins,
+    required this.activeTasks,
+    this.version,
+    this.updateAvailable,
+    this.error,
+  });
+
+  final bool online;
+  final String status;
+  final int workers;
+  final int plugins;
+  final int activeTasks;
+  final String? version;
+  final String? updateAvailable;
+  final String? error;
 }
 
 class AgentHome extends StatefulWidget {
@@ -41,96 +74,135 @@ class AgentHome extends StatefulWidget {
 
 class _AgentHomeState extends State<AgentHome> {
   int _selectedIndex = 0;
-  late Future<bool> _online;
-
-  static const pages = <Widget>[
-    _OverviewPage(),
-    _WorkersPage(),
-    _PluginsPage(),
-    _LogsPage(),
-    _SettingsPage(),
-  ];
+  late Future<AgentSnapshot> _snapshot;
 
   @override
   void initState() {
     super.initState();
-    _online = widget.connection.isOnline();
+    _snapshot = widget.connection.snapshot();
   }
+
+  void _refresh() => setState(() => _snapshot = widget.connection.snapshot());
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Conclave AX Agent')),
-      body: Row(
-        children: [
-          NavigationRail(
-            selectedIndex: _selectedIndex,
-            onDestinationSelected: (index) =>
-                setState(() => _selectedIndex = index),
-            labelType: NavigationRailLabelType.all,
-            destinations: const [
-              NavigationRailDestination(
-                  icon: Icon(Icons.home_outlined), label: Text('Overview')),
-              NavigationRailDestination(
-                  icon: Icon(Icons.people_outline), label: Text('Workers')),
-              NavigationRailDestination(
-                  icon: Icon(Icons.extension_outlined), label: Text('Plugins')),
-              NavigationRailDestination(
-                  icon: Icon(Icons.article_outlined), label: Text('Logs')),
-              NavigationRailDestination(
-                  icon: Icon(Icons.settings_outlined), label: Text('Settings')),
-            ],
-          ),
-          const VerticalDivider(width: 1),
-          Expanded(child: pages[_selectedIndex]),
+      appBar: AppBar(
+        title: const Text('Conclave AX Agent'),
+        actions: [
+          IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh))
         ],
       ),
-      bottomNavigationBar: FutureBuilder<bool>(
-        future: _online,
-        builder: (context, snapshot) => ListTile(
-          leading:
-              Icon(snapshot.data == true ? Icons.cloud_done : Icons.cloud_off),
-          title: Text(snapshot.data == true
-              ? 'Agent Engine online'
-              : 'Agent Engine offline'),
-          subtitle: const Text(
-              'The UI and execution engine run as separate processes.'),
-        ),
+      body: FutureBuilder<AgentSnapshot>(
+        future: _snapshot,
+        builder: (context, state) {
+          if (state.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (state.hasError || !state.hasData) {
+            return const Center(
+                child: Text('Unable to read Agent Engine status.'));
+          }
+          final snapshot = state.data!;
+          return Row(
+            children: [
+              _navigationRail(),
+              const VerticalDivider(width: 1),
+              Expanded(child: _pageFor(snapshot)),
+            ],
+          );
+        },
+      ),
+      bottomNavigationBar: FutureBuilder<AgentSnapshot>(
+        future: _snapshot,
+        builder: (context, state) {
+          final snapshot = state.data;
+          final online = snapshot?.online == true;
+          return ListTile(
+            leading: Icon(online ? Icons.cloud_done : Icons.cloud_off),
+            title:
+                Text(online ? 'Agent Engine online' : 'Agent Engine offline'),
+            subtitle: Text(snapshot?.error ??
+                'The UI and execution engine run as separate processes.'),
+          );
+        },
       ),
     );
   }
+
+  NavigationRail _navigationRail() => NavigationRail(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (index) =>
+            setState(() => _selectedIndex = index),
+        labelType: NavigationRailLabelType.all,
+        destinations: const [
+          NavigationRailDestination(
+              icon: Icon(Icons.home_outlined), label: Text('Overview')),
+          NavigationRailDestination(
+              icon: Icon(Icons.people_outline), label: Text('Workers')),
+          NavigationRailDestination(
+              icon: Icon(Icons.extension_outlined), label: Text('Plugins')),
+          NavigationRailDestination(
+              icon: Icon(Icons.article_outlined), label: Text('Logs')),
+          NavigationRailDestination(
+              icon: Icon(Icons.settings_outlined), label: Text('Settings')),
+        ],
+      );
+
+  Widget _pageFor(AgentSnapshot snapshot) => switch (_selectedIndex) {
+        0 => _OverviewPage(snapshot: snapshot),
+        1 => _WorkersPage(snapshot: snapshot),
+        2 => _PluginsPage(snapshot: snapshot),
+        3 => const _LogsPage(),
+        _ => _SettingsPage(snapshot: snapshot),
+      };
 }
 
 class _OverviewPage extends StatelessWidget {
-  const _OverviewPage();
+  const _OverviewPage({required this.snapshot});
+
+  final AgentSnapshot snapshot;
 
   @override
-  Widget build(BuildContext context) => const _Page(
+  Widget build(BuildContext context) => _Page(
         title: 'Agent overview',
         children: [
-          _Metric(label: 'Workers', value: '0 configured'),
-          _Metric(label: 'Plugins', value: '0 installed'),
-          _Metric(label: 'Active tasks', value: '0'),
+          _Metric(label: 'Workers', value: '${snapshot.workers} configured'),
+          _Metric(label: 'Plugins', value: '${snapshot.plugins} installed'),
+          _Metric(label: 'Active tasks', value: '${snapshot.activeTasks}'),
+          if (snapshot.version != null)
+            _Metric(label: 'Engine version', value: snapshot.version!),
+          if (snapshot.updateAvailable != null)
+            _Metric(
+                label: 'Update available', value: snapshot.updateAvailable!),
         ],
       );
 }
 
 class _WorkersPage extends StatelessWidget {
-  const _WorkersPage();
+  const _WorkersPage({required this.snapshot});
+
+  final AgentSnapshot snapshot;
 
   @override
-  Widget build(BuildContext context) => const _Page(
-      title: 'Workers',
-      children: [Text('Workers registered with this Agent will appear here.')]);
+  Widget build(BuildContext context) => _Page(title: 'Workers', children: [
+        const Text('Workers registered with this Agent will appear here.'),
+        const SizedBox(height: 12),
+        Text('Configured workers: ${snapshot.workers}'),
+      ]);
 }
 
 class _PluginsPage extends StatelessWidget {
-  const _PluginsPage();
+  const _PluginsPage({required this.snapshot});
+
+  final AgentSnapshot snapshot;
 
   @override
-  Widget build(BuildContext context) => const _Page(
-      title: 'Plugins',
-      children: [Text('Plugin installation and health will appear here.')]);
+  Widget build(BuildContext context) => _Page(title: 'Plugins', children: [
+        const Text('Plugin installation and health will appear here.'),
+        const SizedBox(height: 12),
+        Text('Installed plugins: ${snapshot.plugins}'),
+      ]);
 }
 
 class _LogsPage extends StatelessWidget {
@@ -142,12 +214,16 @@ class _LogsPage extends StatelessWidget {
 }
 
 class _SettingsPage extends StatelessWidget {
-  const _SettingsPage();
+  const _SettingsPage({required this.snapshot});
+
+  final AgentSnapshot snapshot;
 
   @override
-  Widget build(BuildContext context) =>
-      const _Page(title: 'Settings', children: [
-        Text('Connection, permissions, and update settings will appear here.')
+  Widget build(BuildContext context) => _Page(title: 'Settings', children: [
+        const Text(
+            'Connection, permissions, and update settings will appear here.'),
+        const SizedBox(height: 12),
+        Text('Connection status: ${snapshot.status}'),
       ]);
 }
 
