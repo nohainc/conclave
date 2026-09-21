@@ -120,6 +120,7 @@ class AgentEngine {
   Future<void> start() async {
     if (_running) return;
     await config.dataDirectory.create(recursive: true);
+    await _restrictPermissions(config.dataDirectory.path, directory: true);
     final lockFile = File('${config.dataDirectory.path}/engine.lock');
     try {
       _lock = await lockFile.open(mode: FileMode.writeOnlyAppend);
@@ -142,10 +143,12 @@ class AgentEngine {
       onCommand: _handleIpcCommand,
     );
     await _ipc!.start();
-    await File('${config.dataDirectory.path}/ipc.json').writeAsString(
+    final ipcFile = File('${config.dataDirectory.path}/ipc.json');
+    await ipcFile.writeAsString(
       jsonEncode({'port': _ipc!.port, 'token': token}),
       flush: true,
     );
+    await _restrictPermissions(ipcFile.path);
     _running = true;
     _sigint = ProcessSignal.sigint.watch().listen((_) => unawaited(stop()));
     _sigterm = ProcessSignal.sigterm.watch().listen((_) => unawaited(stop()));
@@ -184,4 +187,16 @@ class AgentEngine {
   String _newIpcToken() => base64UrlEncode(
         List<int>.generate(32, (_) => Random.secure().nextInt(256)),
       );
+
+  Future<void> _restrictPermissions(String path,
+      {bool directory = false}) async {
+    if (Platform.isWindows) return;
+    final result = await Process.run(
+      'chmod',
+      [directory ? '700' : '600', path],
+    );
+    if (result.exitCode != 0) {
+      throw StateError('failed to restrict permissions for $path');
+    }
+  }
 }

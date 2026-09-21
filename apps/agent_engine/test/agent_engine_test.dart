@@ -118,4 +118,24 @@ void main() {
     await engine.stop();
     await directory.delete(recursive: true);
   });
+
+  test('restricts IPC metadata to the current user on POSIX', () async {
+    if (Platform.isWindows) return;
+    final directory = await Directory.systemTemp.createTemp('conclave-engine-');
+    final engine = AgentEngine(
+      config: AgentEngineConfig(
+        dataDirectory: directory,
+        ipcToken: 'ipc-secret',
+      ),
+    );
+    await engine.start();
+    try {
+      final metadata = File('${directory.path}/ipc.json');
+      expect((await metadata.stat()).mode & 0x1ff, 0x180); // 0600
+      expect((await directory.stat()).mode & 0x1ff, 0x1c0); // 0700
+    } finally {
+      await engine.stop();
+      await directory.delete(recursive: true);
+    }
+  });
 }
