@@ -84,10 +84,26 @@ class InstalledPlugin {
 
 class PluginManager {
   PluginManager(this.root,
-      {this.trustPolicy, this.allowedPermissions = const {}});
+      {this.trustPolicy,
+      this.allowedPermissions = const {},
+      String? platformKey})
+      : platformKey = platformKey ?? _currentPlatformKey();
   final Directory root;
   final PluginTrustPolicy? trustPolicy;
   final Set<PluginPermission> allowedPermissions;
+  final String platformKey;
+
+  static String _currentPlatformKey() {
+    final os = switch (Platform.operatingSystem) {
+      'macos' => 'macos',
+      'linux' => 'linux',
+      'windows' => 'windows',
+      final other => other,
+    };
+    final arch =
+        Platform.version.toLowerCase().contains('arm64') ? 'arm64' : 'x64';
+    return '$os-$arch';
+  }
 
   Future<Directory> install(PluginPackage package) async {
     final actual = sha256.convert(package.bytes).toString();
@@ -117,6 +133,14 @@ class PluginManager {
           publisher: package.publisher,
           permissions: package.permissions,
         );
+    if (manifest.pluginId != package.id ||
+        manifest.version != package.version) {
+      throw StateError('plugin manifest identity does not match package');
+    }
+    if (manifest.supportedPlatforms.isNotEmpty &&
+        !manifest.supportedPlatforms.contains(platformKey)) {
+      throw StateError('plugin is not compatible with platform $platformKey');
+    }
     await File('${target.path}/manifest.json').writeAsString(
       jsonEncode({...manifest.toJson(), 'digest': actual}),
       flush: true,

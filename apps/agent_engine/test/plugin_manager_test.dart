@@ -78,4 +78,29 @@ void main() {
     expect(await manager.activeVersion('trusted'), '1.0.0');
     await directory.delete(recursive: true);
   });
+
+  test('rejects a plugin that does not support the Agent platform', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-plugins-');
+    final manager = PluginManager(directory, platformKey: 'linux-x64');
+    final bytes = [7, 8, 9];
+    expect(
+      () => manager.install(PluginPackage(
+        id: 'mac-only',
+        version: '1.0.0',
+        bytes: bytes,
+        digest: sha256.convert(bytes).toString(),
+        manifest: const PluginManifest(
+          pluginId: 'mac-only',
+          version: '1.0.0',
+          protocolVersion: '2.0',
+          engineVersion: '>=0.1.0',
+          executable: 'package.bin',
+          supportedPlatforms: ['macos-arm64'],
+        ),
+      )),
+      throwsA(isA<StateError>()),
+    );
+    await directory.delete(recursive: true);
+  });
 }
