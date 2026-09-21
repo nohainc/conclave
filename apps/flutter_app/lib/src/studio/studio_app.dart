@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../platform/platform_services.dart';
 import 'studio_models.dart';
 import 'studio_data.dart';
+import 'studio_stores.dart';
 
 class StudioApp extends StatefulWidget {
   const StudioApp(
@@ -37,6 +38,7 @@ class _StudioAppState extends State<StudioApp> {
   final revisionController = TextEditingController();
   final chatController = TextEditingController();
   final List<StudioChatMessage> localChatMessages = [];
+  late final StudioStore store;
 
   StudioProject? get selectedProject => snapshot.projects
       .where((project) => project.id == selectedProjectId)
@@ -54,6 +56,7 @@ class _StudioAppState extends State<StudioApp> {
   @override
   void initState() {
     super.initState();
+    store = StudioStore(widget.dataSource);
     snapshot = StudioSnapshot.empty();
     _loadSnapshot();
   }
@@ -67,7 +70,7 @@ class _StudioAppState extends State<StudioApp> {
       });
     }
     try {
-      final loaded = await widget.dataSource.loadSnapshot(projectId: projectId);
+      final loaded = await store.reload(projectId: projectId);
       if (!mounted) return;
       setState(() {
         snapshot = loaded;
@@ -129,7 +132,7 @@ class _StudioAppState extends State<StudioApp> {
       return;
     }
     try {
-      await widget.dataSource.createGoal(
+      await store.dataSource.createGoal(
         projectId: projectId,
         objective: objective,
         revision: commitSha,
@@ -462,7 +465,7 @@ class _StudioAppState extends State<StudioApp> {
                   icon: const Icon(Icons.menu_rounded))),
         Expanded(
             child: Text(showRunDetails ? 'Run details' : 'Studio',
-                style: TextStyle(
+                style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
                     color: Color(0xff20202c)))),
@@ -571,11 +574,7 @@ class _StudioAppState extends State<StudioApp> {
       ));
     });
     try {
-      final response = await widget.dataSource.sendChatMessage(
-        projectId: chat.projectId,
-        chatId: chat.id,
-        text: text,
-      );
+      final response = await store.chats.send(chat.projectId, chat.id, text);
       if (!mounted) return;
       setState(() => localChatMessages.add(response));
     } catch (error) {
@@ -611,8 +610,7 @@ class _StudioAppState extends State<StudioApp> {
     titleController.dispose();
     if (title == null || title.isEmpty) return;
     try {
-      final chat = await widget.dataSource
-          .createChat(projectId: projectId, title: title);
+      final chat = await store.chats.create(projectId, title);
       if (!mounted) return;
       setState(() {
         selectedChatId = chat.id;
@@ -831,7 +829,7 @@ class _StudioAppState extends State<StudioApp> {
     final runId = snapshot.run?.id ?? snapshot.activeRunId;
     if (runId == null) return;
     try {
-      await widget.dataSource.controlRun(runId, command);
+      await store.runs.control(runId, command);
       if (!mounted) return;
       setState(() {
         optimisticRunStatus = switch (command) {
@@ -1442,9 +1440,9 @@ class _StudioAppState extends State<StudioApp> {
                   child: ListTile(
                     contentPadding:
                         const EdgeInsets.symmetric(horizontal: 18, vertical: 5),
-                    leading: CircleAvatar(
-                        backgroundColor: const Color(0xffeeecff),
-                        child: const Icon(Icons.extension_outlined,
+                    leading: const CircleAvatar(
+                        backgroundColor: Color(0xffeeecff),
+                        child: Icon(Icons.extension_outlined,
                             color: Color(0xff6254d9))),
                     title: Text(plugin.name,
                         style: const TextStyle(fontWeight: FontWeight.w700)),
@@ -1464,10 +1462,10 @@ class _StudioAppState extends State<StudioApp> {
   Widget _emptyFleetCard(String title, String subtitle) => _panel(
         title: title,
         subtitle: subtitle,
-        child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 22),
+        child: const Padding(
+            padding: EdgeInsets.symmetric(vertical: 22),
             child: Text('Nothing to configure yet.',
-                style: const TextStyle(color: Color(0xff777683)))),
+                style: TextStyle(color: Color(0xff777683)))),
       );
 
   Widget _workersView() => Column(
