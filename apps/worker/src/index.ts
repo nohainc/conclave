@@ -359,7 +359,8 @@ async function handleRunCommand(
   request: Request,
   env: Env,
   runId: string,
-  command: "pause" | "resume" | "restart" | "event" | "ci-evidence",
+  command:
+    "pause" | "resume" | "restart" | "event" | "ci-evidence" | "forge-terminal",
 ): Promise<Response> {
   const securityEnv = env as SecurityEnv;
   if (command === "ci-evidence") requireCiAuthentication(request, securityEnv);
@@ -377,11 +378,20 @@ async function handleRunCommand(
   if (command === "pause") await instance.pause();
   if (command === "resume") await instance.resume();
   if (command === "restart") await instance.restart();
-  if (command === "event" || command === "ci-evidence") {
+  if (
+    command === "event" ||
+    command === "ci-evidence" ||
+    command === "forge-terminal"
+  ) {
     const body = (await request.json()) as Record<string, unknown>;
     if (command === "ci-evidence") {
       await instance.sendEvent({
         type: "ci-evidence",
+        payload: body.payload ?? body,
+      });
+    } else if (command === "forge-terminal") {
+      await instance.sendEvent({
+        type: "forge-terminal",
         payload: body.payload ?? body,
       });
     } else {
@@ -419,7 +429,7 @@ export default {
         );
       }
       const runMatch = url.pathname.match(
-        /^\/api\/runs\/([^/]+)(?:\/(pause|resume|restart|events|ci-evidence))?$/,
+        /^\/api\/runs\/([^/]+)(?:\/(pause|resume|restart|events|ci-evidence|forge-events))?$/,
       );
       if (runMatch?.[1] && request.method === "GET" && !runMatch[2]) {
         const securityEnv = env as SecurityEnv;
@@ -445,7 +455,9 @@ export default {
             ? "event"
             : runMatch[2] === "ci-evidence"
               ? "ci-evidence"
-              : (runMatch[2] as "pause" | "resume" | "restart");
+              : runMatch[2] === "forge-events"
+                ? "forge-terminal"
+                : (runMatch[2] as "pause" | "resume" | "restart");
         return await handleRunCommand(request, env, runMatch[1], command);
       }
     } catch (error) {

@@ -163,6 +163,27 @@ describe("Worker smoke tests", () => {
       payload: { eventId: "event-1", action: "continue" },
     });
 
+    const forgeTerminal = {
+      eventId: "forge-event-1",
+      runId: "run-1",
+      executionId: "forge-execution-1",
+      status: "completed",
+      resultArtifactId: "artifact-result-1",
+    };
+    const forgeResponse = await worker.fetch(
+      new Request("https://conclave.test/api/runs/run-1/forge-events", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(forgeTerminal),
+      }),
+      env,
+    );
+    expect(forgeResponse.status).toBe(200);
+    expect(instance.sendEvent).toHaveBeenCalledWith({
+      type: "forge-terminal",
+      payload: forgeTerminal,
+    });
+
     await worker.fetch(
       new Request("https://conclave.test/api/runs/run-1/pause", {
         method: "POST",

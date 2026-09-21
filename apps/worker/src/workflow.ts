@@ -28,8 +28,10 @@ export interface ConclaveWorkflowCheckpoint {
     | "implementation"
     | "verification"
     | "completed"
-    | "cancelled";
-  readonly status: "active" | "waiting" | "completed" | "cancelled";
+    | "cancelled"
+    | "failed"
+    | "needs_input";
+  readonly status: "active" | "waiting" | "completed" | "cancelled" | "failed";
   readonly eventId?: string;
   readonly eventAction?: string;
   readonly machineEvidence?: Pick<
@@ -48,7 +50,10 @@ export interface ConclaveWorkflowCheckpoint {
     | "observedAt"
   >;
   readonly executionId?: string;
-  readonly executionStatus?: "started" | "completed";
+  readonly executionStatus?:
+    "started" | "completed" | "failed" | "cancelled" | "needs_input";
+  readonly resultArtifactId?: string;
+  readonly failureReason?: string;
 }
 
 interface ForgeExecutionService {
@@ -70,6 +75,15 @@ interface ApprovalEvent {
 }
 
 type MachineEvidenceEvent = MachineCheckEvidence;
+
+interface ForgeTerminalEvent {
+  readonly eventId: string;
+  readonly runId: string;
+  readonly executionId: string;
+  readonly status: "completed" | "failed" | "cancelled" | "needs_input";
+  readonly resultArtifactId?: string;
+  readonly error?: string;
+}
 
 const stepConfig = {
   retries: {
@@ -94,6 +108,23 @@ function isApprovalEvent(value: unknown): value is ApprovalEvent {
   const record = value as Record<string, unknown>;
   return (
     typeof record.eventId === "string" && typeof record.approved === "boolean"
+  );
+}
+
+function isForgeTerminalEvent(value: unknown): value is ForgeTerminalEvent {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.eventId === "string" &&
+    typeof record.runId === "string" &&
+    typeof record.executionId === "string" &&
+    (record.status === "completed" ||
+      record.status === "failed" ||
+      record.status === "cancelled" ||
+      record.status === "needs_input") &&
+    (record.resultArtifactId === undefined ||
+      typeof record.resultArtifactId === "string") &&
+    (record.error === undefined || typeof record.error === "string")
   );
 }
 
@@ -204,6 +235,48 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
         executionStatus: "started" as const,
       };
     });
+    let forgeTerminal: ForgeTerminalEvent;
+    while (true) {
+      const terminalEvent = await step.waitForEvent<ForgeTerminalEvent>(
+        "wait for Forge terminal result",
+        { type: "forge-terminal", timeout: "365 days" },
+      );
+      if (!isForgeTerminalEvent(terminalEvent.payload)) {
+        throw new Error("Invalid Forge terminal event payload");
+      }
+      if (
+        terminalEvent.payload.runId !== params.runId ||
+        terminalEvent.payload.executionId !== execution.executionId
+      ) {
+        throw new Error("Forge terminal event does not match this run");
+      }
+      forgeTerminal = await step.do(
+        `forge:terminal:${terminalEvent.payload.eventId}`,
+        stepConfig,
+        async () => terminalEvent.payload,
+      );
+      if (forgeTerminal.status !== "needs_input") break;
+    }
+
+    if (forgeTerminal.status !== "completed") {
+      return step.do("checkpoint:forge-terminal", stepConfig, async () => ({
+        ...execution,
+        stage:
+          forgeTerminal.status === "failed"
+            ? ("failed" as const)
+            : ("cancelled" as const),
+        status:
+          forgeTerminal.status === "failed"
+            ? ("failed" as const)
+            : ("cancelled" as const),
+        executionStatus: forgeTerminal.status,
+        ...(forgeTerminal.error ? { failureReason: forgeTerminal.error } : {}),
+        ...(forgeTerminal.resultArtifactId
+          ? { resultArtifactId: forgeTerminal.resultArtifactId }
+          : {}),
+      }));
+    }
+
     const planning = await step.do(
       "checkpoint:planning",
       stepConfig,
@@ -254,6 +327,10 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
       async () => ({
         ...implementation,
         stage: "verification" as const,
+        executionStatus: "completed" as const,
+        ...(forgeTerminal.resultArtifactId
+          ? { resultArtifactId: forgeTerminal.resultArtifactId }
+          : {}),
         ...(machineEvidence ? { machineEvidence } : {}),
       }),
     );
