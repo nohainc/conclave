@@ -93,6 +93,40 @@ void main() {
     await connection.close();
   });
 
+  test('reconnects when Gateway heartbeat acknowledgements stop', () async {
+    var socketCount = 0;
+    final sockets = <FakeSocket>[];
+    final connection = AgentCloudConnection(
+      uri: Uri.parse('wss://cloud.test/agent'),
+      agentId: 'agent-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async {
+        final socket = FakeSocket();
+        sockets.add(socket);
+        socketCount += 1;
+        return socket;
+      },
+      heartbeat: const Duration(milliseconds: 10),
+      reconnectBaseDelay: const Duration(milliseconds: 1),
+      reconnectMaxDelay: const Duration(milliseconds: 5),
+    );
+
+    await connection.connect();
+    sockets.first.controller.add(jsonEncode({
+      'protocol': 'conclave.agent-protocol',
+      'protocolVersion': '2.0',
+      'messageId': 'server-ack',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'agent.hello.ack',
+      'payload': {'sessionId': 'session-1'},
+    }));
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+
+    expect(socketCount, greaterThan(1));
+    expect(connection.reconnectCount, greaterThan(0));
+    await connection.close();
+  });
+
   test('includes recovered non-terminal assignments in sync', () async {
     final socket = FakeSocket();
     final directory = await Directory.systemTemp.createTemp('agent-sync-');

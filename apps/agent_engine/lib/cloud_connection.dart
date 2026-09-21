@@ -127,6 +127,7 @@ class AgentCloudConnection {
   final Duration reconnectMaxDelay;
   AgentCloudSocket? _socket;
   Timer? _heartbeatTimer;
+  Timer? _heartbeatTimeoutTimer;
   StreamSubscription<Object?>? _subscription;
   bool _closing = false;
   bool _reconnecting = false;
@@ -187,6 +188,10 @@ class AgentCloudConnection {
     _heartbeatTimer = Timer.periodic(heartbeat, (_) {
       final currentSessionId = sessionId;
       if (currentSessionId == null) return;
+      _heartbeatTimeoutTimer ??= Timer(heartbeat * 2, () {
+        _heartbeatTimeoutTimer = null;
+        unawaited(_socket?.close());
+      });
       socket.send(jsonEncode({
         ..._envelope('agent.heartbeat', {
           'agentId': agentId,
@@ -234,6 +239,9 @@ class AgentCloudConnection {
       if (payload is Map<String, dynamic>) {
         syncResponse = Map<String, Object?>.from(payload);
       }
+    } else if (decoded['type'] == 'agent.heartbeat.ack') {
+      _heartbeatTimeoutTimer?.cancel();
+      _heartbeatTimeoutTimer = null;
     } else if (decoded['type'] == 'assignment.start') {
       unawaited(_handleAssignmentStart(decoded));
     } else if (decoded['type'] == 'assignment.cancel') {
@@ -548,6 +556,7 @@ class AgentCloudConnection {
   Future<void> close() async {
     _closing = true;
     _heartbeatTimer?.cancel();
+    _heartbeatTimeoutTimer?.cancel();
     await _subscription?.cancel();
     await _socket?.close();
     _socket = null;
