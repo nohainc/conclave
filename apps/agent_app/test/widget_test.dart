@@ -3,9 +3,13 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets('renders the Agent App scaffold', (tester) async {
-    await tester.pumpWidget(const ConclaveAgentApp());
+    await tester.pumpWidget(
+      ConclaveAgentApp(connection: AgentEngineConnection.unavailable()),
+    );
 
     expect(find.text('Conclave AX Agent'), findsOneWidget);
-    expect(find.text('Agent Engine migration in progress'), findsOneWidget);
+    expect(find.text('Agent overview'), findsOneWidget);
+    expect(find.text('Agent Engine offline'), findsOneWidget);
+    expect(find.text('Workers'), findsNWidgets(2));
   });
 }
