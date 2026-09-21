@@ -11,6 +11,7 @@ These concepts must remain separate.
 
 A worker may be:
 - an online model accessed through a provider API;
+- an interactive web/cloud AI using a Conclave app/connector;
 - a locally installed AI agent such as Codex or Claude Code;
 - a remote/self-hosted agent;
 - a local model;
@@ -83,6 +84,13 @@ A remote/self-hosted agent service that implements a Conclave-compatible adapter
 
 ### local_model
 A locally hosted model endpoint/runtime.
+
+### web_app
+A subscription-backed AI running in its normal web/cloud chat surface and connected to Conclave through an official app/plugin/connector/MCP or other supported tool integration.
+
+The web AI keeps its native conversation, while Conclave keeps the authoritative WorkerSession, Task, Attempt, mailbox, Artifacts, and result state. Baseline continuation is pull-based through Conclave tools; true server push is used only when the provider officially supports it.
+
+See [WEB_APP_WORKERS.md](WEB_APP_WORKERS.md).
 
 ### manual
 A human-assisted bridge for a model/application without supported automation. Conclave renders the task and validates the imported result, but does not automate consumer web UI.
@@ -209,7 +217,8 @@ The first production transports should be:
 2. Local Runtime transport;
 3. Codex local-agent adapter;
 4. Claude Code local-agent adapter;
-5. remote agent transport;
-6. manual transport.
+5. interactive web/cloud worker connector;
+6. remote agent transport;
+7. manual transport.
 
 Additional provider APIs should not take priority over completing the local-agent path.
