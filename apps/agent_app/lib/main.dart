@@ -91,6 +91,9 @@ class SocketAgentEngineConnection implements AgentEngineConnection {
           plugins: _integer(result['plugins']),
           activeTasks: _integer(result['activeTasks']),
           version: result['version'] as String?,
+          cloudConnected: result['cloudConnected'] == true,
+          pluginIds: _strings(result['pluginIds']),
+          activeAssignmentIds: _strings(result['activeAssignmentIds']),
         );
       } finally {
         await client.close();
@@ -108,6 +111,9 @@ class SocketAgentEngineConnection implements AgentEngineConnection {
   }
 
   static int _integer(Object? value) => value is int ? value : 0;
+
+  static List<String> _strings(Object? value) =>
+      value is List ? value.whereType<String>().toList() : const [];
 }
 
 class AgentSnapshot {
@@ -117,6 +123,9 @@ class AgentSnapshot {
     required this.workers,
     required this.plugins,
     required this.activeTasks,
+    this.cloudConnected = false,
+    this.pluginIds = const [],
+    this.activeAssignmentIds = const [],
     this.version,
     this.updateAvailable,
     this.error,
@@ -127,6 +136,9 @@ class AgentSnapshot {
   final int workers;
   final int plugins;
   final int activeTasks;
+  final bool cloudConnected;
+  final List<String> pluginIds;
+  final List<String> activeAssignmentIds;
   final String? version;
   final String? updateAvailable;
   final String? error;
@@ -239,6 +251,9 @@ class _OverviewPage extends StatelessWidget {
           _Metric(label: 'Workers', value: '${snapshot.workers} configured'),
           _Metric(label: 'Plugins', value: '${snapshot.plugins} installed'),
           _Metric(label: 'Active tasks', value: '${snapshot.activeTasks}'),
+          _Metric(
+              label: 'Cloud',
+              value: snapshot.cloudConnected ? 'Connected' : 'Disconnected'),
           if (snapshot.version != null)
             _Metric(label: 'Engine version', value: snapshot.version!),
           if (snapshot.updateAvailable != null)
@@ -271,6 +286,10 @@ class _PluginsPage extends StatelessWidget {
         const Text('Plugin installation and health will appear here.'),
         const SizedBox(height: 12),
         Text('Installed plugins: ${snapshot.plugins}'),
+        if (snapshot.pluginIds.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          ...snapshot.pluginIds.map(Text.new),
+        ],
       ]);
 }
 

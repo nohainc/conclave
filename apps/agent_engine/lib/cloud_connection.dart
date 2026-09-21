@@ -127,6 +127,9 @@ class AgentCloudConnection {
   bool _closing = false;
   int reconnectCount = 0;
   String? sessionId;
+  bool get isConnected => sessionId != null;
+  int get activeAssignmentCount => _activeAssignments.length;
+  List<String> get activeAssignmentIds => _activeAssignments.toList()..sort();
   int _messageSequence = 0;
   Map<String, Object?>? syncResponse;
   final _activeAssignments = <String>{};

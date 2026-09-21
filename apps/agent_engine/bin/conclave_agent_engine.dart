@@ -60,6 +60,9 @@ Future<void> main(List<String> args) async {
       return {
         'plugins': plugins.length,
         'pluginIds': plugins.map((plugin) => plugin.pluginId).toList(),
+        'activeTasks': connection?.activeAssignmentCount ?? 0,
+        'activeAssignmentIds': connection?.activeAssignmentIds ?? const [],
+        'cloudConnected': connection?.isConnected ?? false,
       };
     },
   );
