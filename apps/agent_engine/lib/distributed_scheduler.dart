@@ -1,4 +1,10 @@
-enum SchedulingMode { single, parallel, compareAndSelect }
+enum SchedulingMode {
+  single,
+  parallel,
+  synthesize,
+  compareAndSelect,
+  competitiveImplementation,
+}
 
 class WorkerCandidate {
   const WorkerCandidate(
@@ -6,12 +12,15 @@ class WorkerCandidate {
       required this.agentId,
       required this.capabilities,
       this.online = true,
-      this.cost = 0});
+      this.cost = 0,
+      String? workspaceKey})
+      : workspaceKey = workspaceKey ?? workerId;
   final String workerId;
   final String agentId;
   final Set<String> capabilities;
   final bool online;
   final int cost;
+  final String workspaceKey;
 }
 
 class WorkerCandidateResult {
@@ -24,6 +33,10 @@ class WorkerCandidateResult {
 }
 
 typedef WorkerExecutor = Future<Object?> Function(WorkerCandidate worker);
+typedef CandidateSynthesizer = Future<Object?> Function(
+    List<WorkerCandidateResult> candidates);
+typedef CandidateSelector = Future<WorkerCandidateResult> Function(
+    List<WorkerCandidateResult> candidates);
 
 class DistributedScheduler {
   Future<List<WorkerCandidateResult>> execute({
@@ -33,19 +46,53 @@ class DistributedScheduler {
     SchedulingMode mode = SchedulingMode.parallel,
     int maxCandidates = 2,
     int maxCost = 100,
+    CandidateSynthesizer? synthesize,
+    CandidateSelector? select,
   }) async {
-    final eligible = workers
+    var eligible = workers
         .where((worker) =>
             worker.online &&
             requiredCapabilities.every(worker.capabilities.contains))
         .where((worker) => worker.cost <= maxCost)
+        .toList();
+    if (mode == SchedulingMode.competitiveImplementation) {
+      final workspaces = <String>{};
+      eligible = eligible
+          .where((worker) => workspaces.add(worker.workspaceKey))
+          .toList();
+    }
+    eligible = eligible
         .take(mode == SchedulingMode.single ? 1 : maxCandidates)
         .toList();
     if (eligible.isEmpty) throw StateError('no eligible online Worker');
     if (mode == SchedulingMode.single) {
       return [await _run(eligible.first, executor)];
     }
-    return Future.wait(eligible.map((worker) => _run(worker, executor)));
+    final results = await Future.wait(
+      eligible.map((worker) => _run(worker, executor)),
+    );
+    if (mode == SchedulingMode.synthesize) {
+      final synthesizer = synthesize;
+      if (synthesizer == null) {
+        throw StateError('synthesize mode requires a synthesizer');
+      }
+      final output = await synthesizer(results);
+      return [
+        ...results,
+        WorkerCandidateResult(
+          worker: WorkerCandidate(
+            workerId: 'synthesizer',
+            agentId: 'scheduler',
+            capabilities: const {},
+          ),
+          output: output,
+        ),
+      ];
+    }
+    if (mode == SchedulingMode.compareAndSelect && select != null) {
+      return [await select(results)];
+    }
+    return results;
   }
 
   Future<WorkerCandidateResult> _run(

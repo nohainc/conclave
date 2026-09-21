@@ -57,4 +57,64 @@ void main() {
             .output,
         'fallback');
   });
+
+  test('synthesizes candidate outputs through an explicit policy hook',
+      () async {
+    final results = await DistributedScheduler().execute(
+      workers: workers,
+      requiredCapabilities: {'research'},
+      mode: SchedulingMode.synthesize,
+      executor: (worker) async => worker.workerId,
+      synthesize: (candidates) async => candidates
+          .where((candidate) => candidate.succeeded)
+          .map((candidate) => candidate.output)
+          .join(','),
+    );
+    expect(results.last.worker.workerId, 'synthesizer');
+    expect(results.last.output, 'worker-a,worker-b');
+  });
+
+  test('compare-and-select returns the policy-selected candidate', () async {
+    final results = await DistributedScheduler().execute(
+      workers: workers,
+      requiredCapabilities: {'research'},
+      mode: SchedulingMode.compareAndSelect,
+      executor: (worker) async => worker.workerId,
+      select: (candidates) async => candidates.last,
+    );
+    expect(results, hasLength(1));
+    expect(results.single.output, 'worker-b');
+  });
+
+  test('competitive implementation uses distinct workspaces', () async {
+    const candidates = [
+      WorkerCandidate(
+        workerId: 'a',
+        agentId: 'agent-a',
+        workspaceKey: 'workspace-a',
+        capabilities: {'code'},
+      ),
+      WorkerCandidate(
+        workerId: 'a-review',
+        agentId: 'agent-a',
+        workspaceKey: 'workspace-a',
+        capabilities: {'code'},
+      ),
+      WorkerCandidate(
+        workerId: 'b',
+        agentId: 'agent-b',
+        workspaceKey: 'workspace-b',
+        capabilities: {'code'},
+      ),
+    ];
+    final results = await DistributedScheduler().execute(
+      workers: candidates,
+      requiredCapabilities: {'code'},
+      mode: SchedulingMode.competitiveImplementation,
+      executor: (worker) async => worker.workerId,
+      maxCandidates: 3,
+    );
+    expect(results.map((result) => result.output), containsAll(['a', 'b']));
+    expect(results, hasLength(2));
+  });
 }
