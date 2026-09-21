@@ -1,10 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:conclave_app/main.dart';
+import 'package:conclave_app/src/studio/studio_data.dart';
 
 void main() {
   testWidgets('renders the Studio run dashboard', (WidgetTester tester) async {
-    await tester.pumpWidget(const ConclaveApp());
+    await tester.pumpWidget(const ConclaveApp(dataSource: DemoStudioDataSource()));
+    await tester.pumpAndSettle();
     expect(find.text('Studio'), findsOneWidget);
     expect(find.text('Build a useful Conclave Studio UI'), findsWidgets);
     expect(find.text('Execution tree'), findsOneWidget);
@@ -13,7 +15,8 @@ void main() {
 
   testWidgets('can pause a run and open goal creation',
       (WidgetTester tester) async {
-    await tester.pumpWidget(const ConclaveApp());
+    await tester.pumpWidget(const ConclaveApp(dataSource: DemoStudioDataSource()));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Pause'));
     await tester.pump();

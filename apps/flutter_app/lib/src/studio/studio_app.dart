@@ -2,19 +2,23 @@ import 'package:flutter/material.dart';
 
 import '../platform/platform_services.dart';
 import 'studio_models.dart';
+import 'studio_data.dart';
 
 class StudioApp extends StatefulWidget {
-  const StudioApp({super.key, required this.services});
+  const StudioApp({super.key, required this.services, required this.dataSource});
 
   final PlatformServices services;
+  final StudioDataSource dataSource;
 
   @override
   State<StudioApp> createState() => _StudioAppState();
 }
 
 class _StudioAppState extends State<StudioApp> {
-  final StudioSnapshot snapshot = StudioSnapshot.demo();
+  late StudioSnapshot snapshot;
   late StudioProject selectedProject;
+  bool isLoading = true;
+  String? loadError;
   String? selectedTaskId = 'implement';
   int navigationIndex = 0;
   bool isPaused = false;
@@ -27,7 +31,24 @@ class _StudioAppState extends State<StudioApp> {
   @override
   void initState() {
     super.initState();
-    selectedProject = snapshot.projects.first;
+    snapshot = StudioSnapshot.empty();
+    _loadSnapshot();
+  }
+
+  Future<void> _loadSnapshot() async {
+    setState(() { isLoading = true; loadError = null; });
+    try {
+      final loaded = await widget.dataSource.loadSnapshot();
+      if (!mounted) return;
+      setState(() {
+        snapshot = loaded;
+        selectedProject = loaded.projects.first;
+        isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() { isLoading = false; loadError = error.toString(); });
+    }
   }
 
   @override
@@ -38,6 +59,8 @@ class _StudioAppState extends State<StudioApp> {
       theme: _theme(),
       home: LayoutBuilder(
         builder: (context, constraints) {
+          if (isLoading) return _loadingScaffold();
+          if (loadError != null) return _errorScaffold();
           final compact = constraints.maxWidth < 900;
           return Scaffold(
             backgroundColor: const Color(0xfff7f8fa),
@@ -53,6 +76,18 @@ class _StudioAppState extends State<StudioApp> {
       ),
     );
   }
+
+  Widget _loadingScaffold() => const Scaffold(body: Center(child: CircularProgressIndicator()));
+
+  Widget _errorScaffold() => Scaffold(body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.cloud_off_rounded, size: 40),
+        const SizedBox(height: 12),
+        const Text('Studio could not load live data'),
+        const SizedBox(height: 6),
+        Text(loadError ?? '', style: const TextStyle(color: Colors.grey)),
+        const SizedBox(height: 16),
+        FilledButton(onPressed: _loadSnapshot, child: const Text('Retry')),
+      ])));
 
   ThemeData _theme() => ThemeData(
         useMaterial3: true,
@@ -347,7 +382,22 @@ class _StudioAppState extends State<StudioApp> {
                         style:
                             TextStyle(color: Color(0xff777683), fontSize: 11)),
                   OutlinedButton.icon(
-                      onPressed: () => setState(() => isPaused = !isPaused),
+                  onPressed: () async {
+                    final command = isPaused ? 'resume' : 'pause';
+                    final runId = snapshot.activeRunId;
+                    if (runId == null) return;
+                    setState(() => isPaused = !isPaused);
+                    try {
+                      await widget.dataSource.controlRun(runId, command);
+                    } catch (error) {
+                      if (mounted) {
+                        setState(() {
+                          isPaused = !isPaused;
+                          loadError = error.toString();
+                        });
+                      }
+                    }
+                  },
                       icon: Icon(
                           isPaused
                               ? Icons.play_arrow_rounded

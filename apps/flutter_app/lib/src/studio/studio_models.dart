@@ -6,6 +6,9 @@ enum FindingSeverity { blocker, major, minor, note }
 
 enum FindingStatus { open, fixed, verified }
 
+String _string(Map<String, dynamic> json, String key, [String fallback = '—']) => json[key] as String? ?? fallback;
+List<String> _strings(Map<String, dynamic> json, String key) => List<String>.from(json[key] as List? ?? const []);
+
 class StudioProject {
   const StudioProject({
     required this.id,
@@ -22,6 +25,8 @@ class StudioProject {
   final String branch;
   final int activeGoals;
   final String lastActivity;
+
+  factory StudioProject.fromJson(Map<String, dynamic> json) => StudioProject(id: _string(json, 'id'), name: _string(json, 'name'), repository: _string(json, 'repository'), branch: _string(json, 'branch'), activeGoals: json['activeGoals'] as int? ?? 0, lastActivity: _string(json, 'lastActivity'));
 }
 
 class StudioWorker {
@@ -42,6 +47,8 @@ class StudioWorker {
   final List<String> capabilities;
   final String status;
   final String cost;
+
+  factory StudioWorker.fromJson(Map<String, dynamic> json) => StudioWorker(id: _string(json, 'id'), name: _string(json, 'name'), provider: _string(json, 'provider'), role: _string(json, 'role'), capabilities: _strings(json, 'capabilities'), status: _string(json, 'status'), cost: _string(json, 'cost'));
 }
 
 class StudioTask {
@@ -68,6 +75,8 @@ class StudioTask {
   final List<String> dependencies;
   final String tokens;
   final String cost;
+
+  factory StudioTask.fromJson(Map<String, dynamic> json) => StudioTask(id: _string(json, 'id'), title: _string(json, 'title'), phase: _string(json, 'phase'), status: TaskStatus.values.firstWhere((value) => value.name == json['status'], orElse: () => TaskStatus.pending), worker: _string(json, 'worker'), detail: _string(json, 'detail'), progress: (json['progress'] as num?)?.toDouble() ?? 0, dependencies: _strings(json, 'dependencies'), tokens: _string(json, 'tokens'), cost: _string(json, 'cost'));
 }
 
 class StudioFinding {
@@ -88,6 +97,8 @@ class StudioFinding {
   final FindingStatus status;
   final String taskId;
   final String author;
+
+  factory StudioFinding.fromJson(Map<String, dynamic> json) => StudioFinding(id: _string(json, 'id'), title: _string(json, 'title'), description: _string(json, 'description'), severity: FindingSeverity.values.firstWhere((value) => value.name == json['severity'], orElse: () => FindingSeverity.note), status: FindingStatus.values.firstWhere((value) => value.name == json['status'], orElse: () => FindingStatus.open), taskId: _string(json, 'taskId'), author: _string(json, 'author'));
 }
 
 class StudioEvent {
@@ -102,6 +113,8 @@ class StudioEvent {
   final String title;
   final String detail;
   final String kind;
+
+  factory StudioEvent.fromJson(Map<String, dynamic> json) => StudioEvent(time: _string(json, 'time'), title: _string(json, 'title'), detail: _string(json, 'detail'), kind: _string(json, 'kind'));
 }
 
 class StudioArtifact {
@@ -116,6 +129,8 @@ class StudioArtifact {
   final String type;
   final String size;
   final String source;
+
+  factory StudioArtifact.fromJson(Map<String, dynamic> json) => StudioArtifact(name: _string(json, 'name'), type: _string(json, 'type'), size: _string(json, 'size'), source: _string(json, 'source'));
 }
 
 class StudioModelCall {
@@ -136,10 +151,13 @@ class StudioModelCall {
   final String cost;
   final String duration;
   final String status;
+
+  factory StudioModelCall.fromJson(Map<String, dynamic> json) => StudioModelCall(worker: _string(json, 'worker'), model: _string(json, 'model'), task: _string(json, 'task'), tokens: _string(json, 'tokens'), cost: _string(json, 'cost'), duration: _string(json, 'duration'), status: _string(json, 'status'));
 }
 
 class StudioSnapshot {
   const StudioSnapshot({
+    this.activeRunId,
     required this.projects,
     required this.workers,
     required this.tasks,
@@ -149,6 +167,7 @@ class StudioSnapshot {
     required this.modelCalls,
   });
 
+  final String? activeRunId;
   final List<StudioProject> projects;
   final List<StudioWorker> workers;
   final List<StudioTask> tasks;
@@ -157,7 +176,21 @@ class StudioSnapshot {
   final List<StudioArtifact> artifacts;
   final List<StudioModelCall> modelCalls;
 
+  static StudioSnapshot empty() => const StudioSnapshot(projects: [], workers: [], tasks: [], findings: [], events: [], artifacts: [], modelCalls: []);
+
+  factory StudioSnapshot.fromJson(Map<String, dynamic> json) => StudioSnapshot(
+        activeRunId: json['activeRunId'] as String?,
+        projects: (json['projects'] as List? ?? const []).map((item) => StudioProject.fromJson(Map<String, dynamic>.from(item as Map))).toList(),
+        workers: (json['workers'] as List? ?? const []).map((item) => StudioWorker.fromJson(Map<String, dynamic>.from(item as Map))).toList(),
+        tasks: (json['tasks'] as List? ?? const []).map((item) => StudioTask.fromJson(Map<String, dynamic>.from(item as Map))).toList(),
+        findings: (json['findings'] as List? ?? const []).map((item) => StudioFinding.fromJson(Map<String, dynamic>.from(item as Map))).toList(),
+        events: (json['events'] as List? ?? const []).map((item) => StudioEvent.fromJson(Map<String, dynamic>.from(item as Map))).toList(),
+        artifacts: (json['artifacts'] as List? ?? const []).map((item) => StudioArtifact.fromJson(Map<String, dynamic>.from(item as Map))).toList(),
+        modelCalls: (json['modelCalls'] as List? ?? const []).map((item) => StudioModelCall.fromJson(Map<String, dynamic>.from(item as Map))).toList(),
+      );
+
   static StudioSnapshot demo() => const StudioSnapshot(
+        activeRunId: 'run-demo',
         projects: [
           StudioProject(
             id: 'forge',

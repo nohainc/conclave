@@ -62,6 +62,71 @@ async function handleRunRequest(request: Request, env: Env): Promise<Response> {
   return json(run, { status: 202 });
 }
 
+async function handleStudioSnapshot(
+  env: Env,
+  projectId: string | null,
+): Promise<Response> {
+  const projectFilter = projectId === null ? "" : " WHERE p.id = ?1";
+  const bind = projectId === null ? [] : [projectId];
+  const [
+    projects,
+    workers,
+    tasks,
+    findings,
+    events,
+    artifacts,
+    modelCalls,
+    activeRun,
+  ] = await Promise.all([
+    env.CONCLAVE_DB.prepare(
+      `SELECT p.id, p.name, COALESCE(p.repository_id, '') AS repository, '' AS branch, (SELECT COUNT(*) FROM goals g WHERE g.project_id = p.id AND g.status IN ('running', 'waiting')) AS activeGoals, p.updated_at AS lastActivity FROM projects p${projectFilter} ORDER BY p.updated_at DESC`,
+    )
+      .bind(...bind)
+      .all(),
+    env.CONCLAVE_DB.prepare(
+      "SELECT id, name, provider, roles_json, capabilities_json, availability AS status, '' AS cost FROM workers ORDER BY name",
+    ).all(),
+    env.CONCLAVE_DB.prepare(
+      "SELECT t.id, t.objective AS title, p.name AS phase, t.status, t.role AS worker, t.objective AS detail, CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END AS progress, '[]' AS dependencies, '—' AS tokens, '—' AS cost FROM tasks t JOIN phases p ON p.id = t.phase_id ORDER BY t.created_at DESC LIMIT 100",
+    ).all(),
+    env.CONCLAVE_DB.prepare(
+      "SELECT id, description AS title, description, severity, status, COALESCE(task_id, '') AS taskId, 'Unknown' AS author FROM findings ORDER BY created_at DESC LIMIT 100",
+    ).all(),
+    env.CONCLAVE_DB.prepare(
+      "SELECT occurred_at AS time, event_type AS title, entity_id AS detail, event_type AS kind FROM run_events ORDER BY occurred_at DESC LIMIT 100",
+    ).all(),
+    env.CONCLAVE_DB.prepare(
+      "SELECT id AS name, media_type AS type, size_bytes AS size, 'Conclave' AS source FROM artifacts ORDER BY created_at DESC LIMIT 100",
+    ).all(),
+    env.CONCLAVE_DB.prepare(
+      "SELECT worker_id AS worker, model, attempt_id AS task, input_tokens + output_tokens AS tokens, estimated_cost_micros AS cost, '—' AS duration, status FROM model_calls ORDER BY started_at DESC LIMIT 100",
+    ).all(),
+    env.CONCLAVE_DB.prepare(
+      "SELECT id FROM runs WHERE status IN ('active', 'running', 'waiting') ORDER BY created_at DESC LIMIT 1",
+    ).first<{ id: string }>(),
+  ]);
+  const mapJson = (value: unknown): string[] =>
+    typeof value === "string" ? (JSON.parse(value) as string[]) : [];
+  return json({
+    activeRunId: activeRun?.id ?? null,
+    projects: projects.results ?? [],
+    workers: (workers.results ?? []).map((row) => ({
+      ...row,
+      role: mapJson(row.roles_json)[0] ?? "worker",
+      capabilities: mapJson(row.capabilities_json),
+      status: row.status ?? "unknown",
+    })),
+    tasks: (tasks.results ?? []).map((row) => ({
+      ...row,
+      dependencies: mapJson(row.dependencies),
+    })),
+    findings: findings.results ?? [],
+    events: events.results ?? [],
+    artifacts: artifacts.results ?? [],
+    modelCalls: modelCalls.results ?? [],
+  });
+}
+
 async function handleRunCommand(
   request: Request,
   env: Env,
@@ -114,6 +179,12 @@ export default {
     try {
       if (request.method === "POST" && url.pathname === "/api/runs") {
         return await handleRunRequest(request, env);
+      }
+      if (request.method === "GET" && url.pathname === "/api/studio/snapshot") {
+        return await handleStudioSnapshot(
+          env,
+          url.searchParams.get("projectId"),
+        );
       }
       const runMatch = url.pathname.match(
         /^\/api\/runs\/([^/]+)(?:\/(pause|resume|restart|events|ci-evidence))?$/,
