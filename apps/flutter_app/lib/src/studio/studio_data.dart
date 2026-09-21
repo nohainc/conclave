@@ -44,10 +44,9 @@ class StudioApiException implements Exception {
 class StudioApiClient implements StudioDataSource {
   StudioApiClient({String? baseUrl, http.Client? client})
       : baseUrl = baseUrl ??
-            const String.fromEnvironment(
-              'CONCLAVE_API_URL',
-              defaultValue: 'http://localhost:8787/api',
-            ),
+            (const String.fromEnvironment('CONCLAVE_API_URL').isNotEmpty
+                ? const String.fromEnvironment('CONCLAVE_API_URL')
+                : platform.defaultStudioApiBaseUrl()),
         client = client ?? platform.createPlatformHttpClient();
 
   final String baseUrl;
