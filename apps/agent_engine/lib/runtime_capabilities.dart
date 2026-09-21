@@ -18,6 +18,17 @@ class SafeWorkspace {
     if (relative.isEmpty || relative.contains('\u0000')) {
       throw const RuntimeViolation('invalid workspace path');
     }
+    final lexical = Uri.file(root.path.endsWith(Platform.pathSeparator)
+            ? root.path
+            : '${root.path}${Platform.pathSeparator}')
+        .resolve(relative)
+        .toFilePath();
+    final lexicalRoot = root.path.endsWith(Platform.pathSeparator)
+        ? root.path
+        : '${root.path}${Platform.pathSeparator}';
+    if (!lexical.startsWith(lexicalRoot) && lexical != root.path) {
+      throw const RuntimeViolation('path escapes workspace root');
+    }
     final candidate = File('${root.path}/$relative').absolute;
     final rootReal = await root.resolveSymbolicLinks();
     final existing = await candidate.exists();
@@ -96,9 +107,12 @@ class SafeCommandRunner {
       throw const RuntimeViolation('command is not allowlisted');
     }
     final cwd = Directory(await workspace._contained(workingDirectory));
-    final process = await Process.start(command.first, command.skip(1).toList(),
-        workingDirectory: cwd.path,
-        environment: const {'PATH': '/usr/bin:/bin'});
+    final process = await Process.start(
+      command.first,
+      command.skip(1).toList(),
+      workingDirectory: cwd.path,
+      environment: {'PATH': Platform.environment['PATH'] ?? '/usr/bin:/bin'},
+    );
     final stdoutFuture = _bounded(process.stdout, policy.maxOutputBytes);
     final stderrFuture = _bounded(process.stderr, policy.maxOutputBytes);
     var timedOut = false;
