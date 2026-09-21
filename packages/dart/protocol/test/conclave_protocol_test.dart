@@ -32,4 +32,17 @@ void main() {
     expect(isCompatibleVersion('1.2.0', '1.3.0'), isTrue);
     expect(isCompatibleVersion('1.2.0', '2.0.0'), isFalse);
   });
+
+  test('accepts a compatible minor version in the envelope', () {
+    final compatible = Map<String, Object?>.from(message)
+      ..['version'] = '0.2';
+    expect(ProtocolEnvelope.parse(compatible).version, equals('0.2'));
+
+    final incompatible = Map<String, Object?>.from(message)
+      ..['version'] = '1.0';
+    expect(
+      () => ProtocolEnvelope.parse(incompatible),
+      throwsA(isA<ProtocolException>()),
+    );
+  });
 }

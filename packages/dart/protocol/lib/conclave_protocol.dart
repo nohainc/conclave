@@ -61,6 +61,9 @@ class ProtocolEnvelope {
       throw const ProtocolException('unsupported protocol name');
     }
     final version = _requiredString(map, 'version');
+    if (!isCompatibleVersion(protocolVersion, version)) {
+      throw const ProtocolException('unsupported protocol version');
+    }
     final messageId = _requiredString(map, 'messageId');
     final goalId = _requiredString(map, 'goalId');
     final runId = _requiredString(map, 'runId');

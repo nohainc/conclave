@@ -3,12 +3,37 @@ import { z } from "zod";
 export const PROTOCOL_NAME = "conclave.protocol" as const;
 export const PROTOCOL_VERSION = "0.1" as const;
 
+const protocolVersionPattern = /^\d+\.\d+(?:\.\d+)?$/;
+
+function protocolVersionParts(version: string): [number, number, number] {
+  if (!protocolVersionPattern.test(version)) {
+    throw new Error(`Invalid protocol version: ${version}`);
+  }
+  const parts = version.split(".").map(Number);
+  return [parts[0] ?? 0, parts[1] ?? 0, parts[2] ?? 0];
+}
+
+export function isCompatibleProtocolVersion(
+  local: string,
+  remote: string,
+): boolean {
+  const [localMajor, localMinor] = protocolVersionParts(local);
+  const [remoteMajor, remoteMinor] = protocolVersionParts(remote);
+  return localMajor === remoteMajor && remoteMinor >= localMinor;
+}
+
+function assertCompatibleProtocolVersion(version: string): void {
+  if (!isCompatibleProtocolVersion(PROTOCOL_VERSION, version)) {
+    throw new Error(`Unsupported protocol version: ${version}`);
+  }
+}
+
 const id = z.string().min(1);
 const nonEmpty = z.string().min(1);
 const artifactIds = z.array(id);
 const envelopeFields = {
   protocol: z.literal(PROTOCOL_NAME),
-  version: z.literal(PROTOCOL_VERSION),
+  version: z.string().regex(protocolVersionPattern),
   messageId: id,
   goalId: id,
   runId: id,
@@ -405,17 +430,23 @@ export function validateResponseContext(
 }
 
 export function parsePlanRequest(input: unknown): PlanRequest {
-  return PlanRequestSchema.parse(input);
+  const parsed = PlanRequestSchema.parse(input);
+  assertCompatibleProtocolVersion(parsed.version);
+  return parsed;
 }
 
 export function parseTaskRequest(input: unknown): TaskRequest {
-  return TaskRequestSchema.parse(input);
+  const parsed = TaskRequestSchema.parse(input);
+  assertCompatibleProtocolVersion(parsed.version);
+  return parsed;
 }
 
 export function parseImplementationResult(
   input: unknown,
 ): ImplementationResult {
-  return ImplementationResultSchema.parse(input);
+  const parsed = ImplementationResultSchema.parse(input);
+  assertCompatibleProtocolVersion(parsed.version);
+  return parsed;
 }
 
 export function parseMachineCheckEvidence(
@@ -425,9 +456,13 @@ export function parseMachineCheckEvidence(
 }
 
 export function parseModelResult(input: unknown): ModelResult {
-  return ModelResultSchema.parse(input);
+  const parsed = ModelResultSchema.parse(input);
+  assertCompatibleProtocolVersion(parsed.version);
+  return parsed;
 }
 
 export function parseProtocolMessage(input: unknown): ProtocolMessage {
-  return ProtocolMessageSchema.parse(input);
+  const parsed = ProtocolMessageSchema.parse(input);
+  assertCompatibleProtocolVersion(parsed.version);
+  return parsed;
 }

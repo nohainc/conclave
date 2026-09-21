@@ -8,6 +8,7 @@ import {
   PROTOCOL_NAME,
   PROTOCOL_VERSION,
   ReviewResultSchema,
+  isCompatibleProtocolVersion,
   validateResponseContext,
 } from "../src/index.js";
 
@@ -79,7 +80,6 @@ describe("versioned protocol contracts", () => {
   });
 
   it.each([
-    ["missing protocol version", { ...validPlanResult, version: "0.2" }],
     ["unknown envelope field", { ...validPlanResult, unexpected: true }],
     [
       "missing required payload",
@@ -145,9 +145,17 @@ describe("versioned protocol contracts", () => {
       "Add protocol validation",
     );
     expect(parseProtocolMessage(request).messageType).toBe("PlanRequest");
-    expect(() =>
-      parseProtocolMessage({ ...request, version: "0.2" }),
-    ).toThrow();
+    expect(() => parseProtocolMessage({ ...request, version: "1.0" })).toThrow(
+      "Unsupported protocol version",
+    );
+    expect(parseProtocolMessage({ ...request, version: "0.2" }).version).toBe(
+      "0.2",
+    );
+  });
+
+  it("accepts compatible minor versions and rejects incompatible majors", () => {
+    expect(isCompatibleProtocolVersion("0.1", "0.2")).toBe(true);
+    expect(isCompatibleProtocolVersion("0.1", "1.0")).toBe(false);
   });
 
   it("accepts machine evidence and rejects unverified check claims", () => {
