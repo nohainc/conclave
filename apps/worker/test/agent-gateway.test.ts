@@ -7,6 +7,7 @@ import worker from "../src/index.js";
 import {
   AgentGateway,
   assignmentContextMatches,
+  assignmentIsActive,
 } from "../src/agent-gateway.js";
 import { hashToken } from "../../../packages/security/src/index.js";
 import {
@@ -85,6 +86,13 @@ describe("Agent Enrollment & Agent Gateway (Architecture v2)", () => {
     expect(
       assignmentContextMatches({ ...message, taskId: "other-task" }, row),
     ).toBe(false);
+  });
+
+  it("rejects terminal assignments from internal Gateway operations", () => {
+    expect(assignmentIsActive({ status: "dispatched" })).toBe(true);
+    expect(assignmentIsActive({ status: "running" })).toBe(true);
+    expect(assignmentIsActive({ status: "completed" })).toBe(false);
+    expect(assignmentIsActive({ status: "cancelled" })).toBe(false);
   });
   let db: DatabaseSync;
   let d1: D1Database;

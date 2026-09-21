@@ -55,6 +55,10 @@ export function assignmentContextMatches(
   );
 }
 
+export function assignmentIsActive(row: Record<string, unknown>): boolean {
+  return !["completed", "failed", "cancelled"].includes(String(row.status));
+}
+
 export class AgentGateway implements DurableObject {
   private socket: WebSocket | null = null;
   private agentId: string | null = null;
@@ -562,6 +566,9 @@ export class AgentGateway implements DurableObject {
       payload: AssignmentStartPayload;
     };
 
+    const validation = await this.validateInternalAssignment(body);
+    if (validation) return validation;
+
     const envelope: AgentProtocolMessage = {
       protocol: AGENT_PROTOCOL_NAME,
       protocolVersion: AGENT_PROTOCOL_VERSION,
@@ -633,6 +640,9 @@ export class AgentGateway implements DurableObject {
       payload: AssignmentCancelPayload;
     };
 
+    const validation = await this.validateInternalAssignment(body);
+    if (validation) return validation;
+
     const envelope: AgentProtocolMessage = {
       protocol: AGENT_PROTOCOL_NAME,
       protocolVersion: AGENT_PROTOCOL_VERSION,
@@ -694,6 +704,34 @@ export class AgentGateway implements DurableObject {
     const valid = parseAgentMessage(body);
     this.sendProtocolMessage(valid);
     return Response.json({ delivered: true });
+  }
+
+  private async validateInternalAssignment(
+    body: AssignmentCorrelation,
+  ): Promise<Response | null> {
+    const assignment = await this.env.CONCLAVE_DB.prepare(
+      `SELECT id, workspace_id, agent_id, worker_id, run_id, task_id,
+              attempt_id, idempotency_key, status
+       FROM worker_assignments WHERE id = ?1`,
+    )
+      .bind(body.assignmentId)
+      .first<Record<string, unknown>>();
+
+    if (!assignment || !assignmentContextMatches(body, assignment)) {
+      return Response.json(
+        { error: "Assignment correlation does not match persisted state" },
+        { status: 409 },
+      );
+    }
+
+    if (!assignmentIsActive(assignment)) {
+      return Response.json(
+        { error: "Assignment is already terminal" },
+        { status: 409 },
+      );
+    }
+
+    return null;
   }
 
   private sendProtocolMessage(message: AgentProtocolMessage): void {
