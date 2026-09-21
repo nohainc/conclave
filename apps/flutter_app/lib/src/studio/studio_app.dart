@@ -280,24 +280,33 @@ class _StudioAppState extends State<StudioApp> {
           if (compact) _navItem(Icons.close_rounded, 'Close menu', -1),
           _navItem(Icons.settings_outlined, 'Settings', 6),
           const SizedBox(height: 6),
-          const Row(children: [
+          Row(children: [
             CircleAvatar(
                 radius: 15,
-                backgroundColor: Color(0xffd8d2ff),
-                child: Text('VN',
-                    style: TextStyle(
+                backgroundColor: const Color(0xffd8d2ff),
+                child: Text(_viewerInitials,
+                    style: const TextStyle(
                         fontSize: 10,
                         color: Color(0xff4238a0),
                         fontWeight: FontWeight.bold))),
-            SizedBox(width: 9),
+            const SizedBox(width: 9),
             Expanded(
-                child: Text('Vitalii Noha',
-                    style: TextStyle(color: Colors.white70, fontSize: 12))),
-            Icon(Icons.more_horiz, color: Colors.white38, size: 18),
+                child: Text(snapshot.viewer?.displayName ?? 'Signed-out user',
+                    style:
+                        const TextStyle(color: Colors.white70, fontSize: 12))),
+            const Icon(Icons.more_horiz, color: Colors.white38, size: 18),
           ]),
         ],
       ),
     );
+  }
+
+  String get _viewerInitials {
+    final name = snapshot.viewer?.displayName.trim() ?? '';
+    if (name.isEmpty) return '?';
+    final parts = name.split(RegExp(r'\s+')).where((part) => part.isNotEmpty);
+    final initials = parts.take(2).map((part) => part[0]).join();
+    return initials.toUpperCase();
   }
 
   Widget _sidebarLabel(String text) => Padding(

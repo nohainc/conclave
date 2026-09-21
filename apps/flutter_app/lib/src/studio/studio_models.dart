@@ -584,8 +584,27 @@ class StudioRun {
       );
 }
 
+class StudioViewer {
+  const StudioViewer({
+    required this.id,
+    required this.displayName,
+    required this.email,
+  });
+
+  final String id;
+  final String displayName;
+  final String email;
+
+  factory StudioViewer.fromJson(Map<String, dynamic> json) => StudioViewer(
+        id: _string(json, 'id'),
+        displayName: _string(json, 'displayName'),
+        email: _string(json, 'email'),
+      );
+}
+
 class StudioSnapshot {
   const StudioSnapshot({
+    this.viewer,
     this.activeRunId,
     this.activeChatId,
     this.run,
@@ -604,6 +623,7 @@ class StudioSnapshot {
   });
 
   final String? activeRunId;
+  final StudioViewer? viewer;
   final String? activeChatId;
   final StudioRun? run;
   final List<StudioProject> projects;
@@ -643,6 +663,10 @@ class StudioSnapshot {
       modelCalls: []);
 
   factory StudioSnapshot.fromJson(Map<String, dynamic> json) => StudioSnapshot(
+        viewer: json['viewer'] == null
+            ? null
+            : StudioViewer.fromJson(
+                Map<String, dynamic>.from(json['viewer'] as Map)),
         activeRunId: json['activeRunId'] as String?,
         activeChatId: json['activeChatId'] as String?,
         run: json['run'] == null

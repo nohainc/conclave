@@ -3436,6 +3436,11 @@ async function handleStudioSnapshot(
   const mapJson = (value: unknown): string[] =>
     typeof value === "string" ? (JSON.parse(value) as string[]) : [];
   return json({
+    viewer: {
+      id: context.userId,
+      displayName: context.user.displayName,
+      email: context.user.email,
+    },
     activeRunId: activeRun?.id ?? null,
     run: latestRun ?? null,
     projects: projects.results ?? [],
