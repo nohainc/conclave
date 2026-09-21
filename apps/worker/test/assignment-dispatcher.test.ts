@@ -209,6 +209,26 @@ describe("Assignment Dispatcher (Cloud -> Agent -> Worker)", () => {
       expect(selected?.pluginId).toBe("conclave.echo-worker");
     });
 
+    it("does not select a worker at its concurrency limit", async () => {
+      const now = new Date().toISOString();
+      db.prepare(
+        `INSERT INTO attempts (id, task_id, worker_id, attempt_number, input_snapshot_json, status, started_at)
+         VALUES ('att-active', 'task-1', 'worker-implementer', 1, '{}', 'running', ?)`,
+      ).run(now);
+      db.prepare(
+        `INSERT INTO worker_assignments (id, workspace_id, run_id, task_id, attempt_id, agent_id, worker_id, plugin_id, resolved_plugin_version, status, input_json, idempotency_key, timeout_ms, created_at, updated_at)
+         VALUES ('asg-active', 'ws-1', 'run-1', 'task-1', 'att-active', 'ag-1', 'worker-implementer', 'conclave.echo-worker', 'latest', 'running', '{}', 'idem-active', 60000, ?, ?)`,
+      ).run(now, now);
+
+      const selected = await selectWorkerForTask(d1, "ws-1", {
+        id: "task-next",
+        role: "implementer",
+        objective: "Build another feature",
+        capabilities: ["test_echo"],
+      });
+      expect(selected).toBeNull();
+    });
+
     it("enforces anti-collusion by excluding specified independence keys for reviewer", async () => {
       // Implementer has independence_key 'indep-impl'.
       // When verifying, we exclude 'indep-impl'.

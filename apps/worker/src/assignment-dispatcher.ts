@@ -70,7 +70,10 @@ export async function selectWorkerForTask(
       .prepare(
         `SELECT w.id, w.agent_id, w.plugin_id, w.plugin_version_policy, w.name,
                 w.independence_key, w.concurrency_limit, w.roles_json, w.capabilities_json,
-                a.status as agent_status
+                a.status as agent_status,
+                (SELECT COUNT(*) FROM worker_assignments wa
+                 WHERE wa.worker_id = w.id
+                   AND wa.status IN ('created', 'dispatched', 'acknowledged', 'running')) AS active_assignments
          FROM workers w
          JOIN agents a ON a.id = w.agent_id
          WHERE w.workspace_id = ?1 AND w.id = ?2 AND w.enabled = 1
@@ -80,7 +83,13 @@ export async function selectWorkerForTask(
       .bind(workspaceId, options.explicitWorkerId)
       .first<Record<string, unknown>>();
 
-    if (!row) return null;
+    if (
+      !row ||
+      Number(row.active_assignments || 0) >=
+        Number(row.concurrency_limit || 1)
+    ) {
+      return null;
+    }
 
     return {
       id: String(row.id),
@@ -97,7 +106,10 @@ export async function selectWorkerForTask(
     .prepare(
       `SELECT w.id, w.agent_id, w.plugin_id, w.plugin_version_policy, w.name,
               w.independence_key, w.concurrency_limit, w.roles_json, w.capabilities_json,
-              w.status as worker_status, a.status as agent_status
+              w.status as worker_status, a.status as agent_status,
+              (SELECT COUNT(*) FROM worker_assignments wa
+               WHERE wa.worker_id = w.id
+                 AND wa.status IN ('created', 'dispatched', 'acknowledged', 'running')) AS active_assignments
        FROM workers w
        JOIN agents a ON a.id = w.agent_id
        WHERE w.workspace_id = ?1 AND w.enabled = 1 AND w.status != 'disabled' AND a.status = 'online'`,
@@ -117,6 +129,13 @@ export async function selectWorkerForTask(
       JSON.parse(String(row.capabilities_json || "[]")) as string[]
     ).map((c) => c.toLowerCase());
     const indepKey = String(row.independence_key);
+
+    if (
+      Number(row.active_assignments || 0) >=
+      Number(row.concurrency_limit || 1)
+    ) {
+      continue;
+    }
 
     if (excludedKeys.has(indepKey)) {
       continue;
