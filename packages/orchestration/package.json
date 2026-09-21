@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@conclave/core": "workspace:*",
+    "@conclave/local-runtime": "workspace:*",
     "@conclave/persistence": "workspace:*",
     "@conclave/providers": "workspace:*",
     "@conclave/protocol": "workspace:*"

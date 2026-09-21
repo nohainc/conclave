@@ -67,7 +67,7 @@ export interface ForgeRuntimeAdapter {
     readonly taskId: string;
     readonly repositoryId: string;
     readonly revision: string;
-    readonly implementation: ImplementationResult;
+    readonly implementation: ImplementationResult["payload"];
     readonly operations: readonly ImplementationOperation[];
   }): Promise<ForgeRuntimeEvidence>;
   test(input: {
@@ -739,7 +739,7 @@ export async function executeForgeGoal(
         taskId: implementationTask.id,
         repositoryId: input.repositoryId,
         revision: input.revision,
-        implementation,
+        implementation: implementation.payload,
         operations: implementation.payload.proposedOperations,
       }),
     );
@@ -889,7 +889,7 @@ export async function executeForgeGoal(
         taskId: correctionTask.id,
         repositoryId: input.repositoryId,
         revision: input.revision,
-        implementation,
+        implementation: implementation.payload,
         operations: implementation.payload.proposedOperations,
       }),
     );
