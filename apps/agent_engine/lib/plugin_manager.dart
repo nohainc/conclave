@@ -86,12 +86,16 @@ class PluginManager {
   PluginManager(this.root,
       {this.trustPolicy,
       this.allowedPermissions = const {},
-      String? platformKey})
+      String? platformKey,
+      this.engineVersion = '0.1.0',
+      this.protocolVersion = '2.0'})
       : platformKey = platformKey ?? _currentPlatformKey();
   final Directory root;
   final PluginTrustPolicy? trustPolicy;
   final Set<PluginPermission> allowedPermissions;
   final String platformKey;
+  final String engineVersion;
+  final String protocolVersion;
 
   static String _currentPlatformKey() {
     final os = switch (Platform.operatingSystem) {
@@ -136,6 +140,10 @@ class PluginManager {
     if (manifest.pluginId != package.id ||
         manifest.version != package.version) {
       throw StateError('plugin manifest identity does not match package');
+    }
+    if (manifest.protocolVersion != protocolVersion ||
+        !_satisfiesMinimumVersion(engineVersion, manifest.engineVersion)) {
+      throw StateError('plugin is incompatible with this Agent Engine');
     }
     if (manifest.supportedPlatforms.isNotEmpty &&
         !manifest.supportedPlatforms.contains(platformKey)) {
@@ -248,4 +256,25 @@ class PluginManager {
     );
     await temporaryFile.rename(activeFile.path);
   }
+
+  bool _satisfiesMinimumVersion(String current, String requirement) {
+    final minimum =
+        requirement.startsWith('>=') ? requirement.substring(2) : requirement;
+    final currentParts = _versionParts(current);
+    final minimumParts = _versionParts(minimum);
+    for (var index = 0; index < 3; index++) {
+      if (currentParts[index] != minimumParts[index]) {
+        return currentParts[index] > minimumParts[index];
+      }
+    }
+    return true;
+  }
+
+  List<int> _versionParts(String version) => version
+      .split('.')
+      .take(3)
+      .map((part) => int.tryParse(part.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0)
+      .followedBy(const [0, 0, 0])
+      .take(3)
+      .toList();
 }

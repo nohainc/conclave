@@ -103,4 +103,28 @@ void main() {
     );
     await directory.delete(recursive: true);
   });
+
+  test('rejects incompatible protocol and engine versions', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-plugins-');
+    final manager = PluginManager(directory, engineVersion: '0.1.0');
+    final bytes = [10, 11, 12];
+    expect(
+      () => manager.install(PluginPackage(
+        id: 'future',
+        version: '1.0.0',
+        bytes: bytes,
+        digest: sha256.convert(bytes).toString(),
+        manifest: const PluginManifest(
+          pluginId: 'future',
+          version: '1.0.0',
+          protocolVersion: '9.0',
+          engineVersion: '>=9.0.0',
+          executable: 'package.bin',
+        ),
+      )),
+      throwsA(isA<StateError>()),
+    );
+    await directory.delete(recursive: true);
+  });
 }
