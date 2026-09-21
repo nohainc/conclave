@@ -6,6 +6,7 @@ import 'package:conclave_agent_engine/cloud_connection.dart';
 import 'package:conclave_agent_engine/plugin_executor.dart';
 import 'package:conclave_agent_engine/plugin_manager.dart';
 import 'package:conclave_agent_engine/trust_policy.dart';
+import 'package:conclave_agent_engine/worker_configuration.dart';
 
 Set<PluginPermission> _configuredPermissions() {
   final configured = Platform.environment['CONCLAVE_PLUGIN_PERMISSIONS'];
@@ -73,6 +74,16 @@ Future<void> main(List<String> args) async {
     ),
     allowedPermissions: _configuredPermissions(),
   );
+  final workerStore = WorkerConfigurationStore(
+    Directory('${config.dataDirectory.path}/workers'),
+    workspaceId: config.workspaceId ?? '',
+    agentId: config.agentId ?? '',
+  );
+  final activeWorkerIds = (await workerStore.read())
+      .where((worker) => worker['enabled'] == true)
+      .map((worker) => worker['workerId'])
+      .whereType<String>()
+      .toList();
   final pluginHandler = pluginManager.assignmentHandler(
     PluginProcessExecutor(),
   );
@@ -83,6 +94,7 @@ Future<void> main(List<String> args) async {
           uri: config.cloudUri!,
           agentId: config.agentId!,
           workspaceId: config.workspaceId!,
+          activeWorkerIds: activeWorkerIds,
           assignmentHandler: pluginHandler.call,
           assignmentCancellationHandler: pluginHandler.cancel,
           assignmentJournal: AssignmentJournal(
@@ -104,6 +116,16 @@ Future<void> main(List<String> args) async {
                 packageR2Key,
               ),
             );
+            final rawWorkers = payload['desiredWorkers'];
+            if (rawWorkers is List) {
+              final desiredWorkers = rawWorkers
+                  .whereType<Map>()
+                  .map((item) => Map<String, Object?>.from(item));
+              final ids = await workerStore.reconcile(desiredWorkers);
+              activeWorkerIds
+                ..clear()
+                ..addAll(ids);
+            }
           },
           factory: (uri) => connectIoAgentCloudSocket(
             uri,
@@ -117,6 +139,7 @@ Future<void> main(List<String> args) async {
     statusProvider: () async {
       final plugins = await pluginManager.inventory();
       return {
+        'workers': activeWorkerIds.length,
         'plugins': plugins.length,
         'pluginIds': plugins.map((plugin) => plugin.pluginId).toList(),
         'activeTasks': connection?.activeAssignmentCount ?? 0,
