@@ -185,6 +185,10 @@ class Statement implements D1Statement {
       return {
         results: [
           {
+            user_id: `user-${organizationId}`,
+            email: `${organizationId}-user@example.com`,
+            display_name: "Test User",
+            user_status: "active",
             workspace_id: organizationId,
             role: "owner",
             status: "active",

@@ -254,15 +254,23 @@ async function accessSecurityContext(
 
   const targetOrgOrWs = env.CONCLAVE_ACCESS_ORGANIZATION_ID;
   const membershipQuery = targetOrgOrWs
-    ? `SELECT wm.workspace_id, wm.role, wm.status, w.status AS workspace_status
+    ? `SELECT u.id AS user_id, u.email, u.display_name, u.status AS user_status,
+              wm.workspace_id, wm.role, wm.status, w.status AS workspace_status
        FROM workspace_memberships wm
+       JOIN users u ON u.id = wm.user_id
        JOIN workspaces w ON w.id = wm.workspace_id
-       WHERE wm.workspace_id = ?1 AND wm.user_id = ?2`
-    : `SELECT wm.workspace_id, wm.role, wm.status, w.status AS workspace_status
+       WHERE wm.workspace_id = ?1 AND u.email = ?2`
+    : `SELECT u.id AS user_id, u.email, u.display_name, u.status AS user_status,
+              wm.workspace_id, wm.role, wm.status, w.status AS workspace_status
        FROM workspace_memberships wm
+       JOIN users u ON u.id = wm.user_id
        JOIN workspaces w ON w.id = wm.workspace_id
-       WHERE wm.user_id = ?1`;
+       WHERE u.email = ?1`;
   type AccessMembership = {
+    user_id: string;
+    email: string;
+    display_name: string;
+    user_status: string;
     workspace_id: string;
     role: string;
     status?: string;
@@ -277,14 +285,18 @@ async function accessSecurityContext(
   } catch {
     // Older development databases do not yet have membership status.
     const legacyMembershipQuery = targetOrgOrWs
-      ? `SELECT wm.workspace_id, wm.role, w.status AS workspace_status
+      ? `SELECT u.id AS user_id, u.email, u.display_name, u.status AS user_status,
+                wm.workspace_id, wm.role, w.status AS workspace_status
          FROM workspace_memberships wm
+         JOIN users u ON u.id = wm.user_id
          JOIN workspaces w ON w.id = wm.workspace_id
-         WHERE wm.workspace_id = ?1 AND wm.user_id = ?2`
-      : `SELECT wm.workspace_id, wm.role, w.status AS workspace_status
+         WHERE wm.workspace_id = ?1 AND u.email = ?2`
+      : `SELECT u.id AS user_id, u.email, u.display_name, u.status AS user_status,
+                wm.workspace_id, wm.role, w.status AS workspace_status
          FROM workspace_memberships wm
+         JOIN users u ON u.id = wm.user_id
          JOIN workspaces w ON w.id = wm.workspace_id
-         WHERE wm.user_id = ?1`;
+         WHERE u.email = ?1`;
     const statement = env.CONCLAVE_DB.prepare(legacyMembershipQuery);
     memberships = targetOrgOrWs
       ? await statement.bind(targetOrgOrWs, userId).all<AccessMembership>()
@@ -304,21 +316,24 @@ async function accessSecurityContext(
     );
   const membership = activeMemberships[0]!;
   const wsId = membership.workspace_id;
+  if (membership.user_status !== "active")
+    throw new HttpError(403, "User account is not active");
+  const resolvedUserId = membership.user_id;
   const projects = await env.CONCLAVE_DB.prepare(
     "SELECT pm.project_id, pm.role FROM project_memberships pm JOIN projects p ON p.id = pm.project_id WHERE p.workspace_id = ?1 AND pm.user_id = ?2",
   )
-    .bind(wsId, userId)
+    .bind(wsId, resolvedUserId)
     .all<{ project_id: string; role: string }>();
   const projectRoles: Record<string, "lead" | "collaborator" | "viewer"> = {};
   for (const project of projects.results ?? [])
     projectRoles[project.project_id] = project.role as
       "lead" | "collaborator" | "viewer";
   return {
-    userId,
+    userId: resolvedUserId,
     user: {
-      id: userId,
-      email: userId,
-      displayName: userId,
+      id: resolvedUserId,
+      email: membership.email,
+      displayName: membership.display_name,
       status: "active",
     },
     workspaceId: wsId,
