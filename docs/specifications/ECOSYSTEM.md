@@ -4,6 +4,8 @@ Phase 14 turns Conclave into an extension platform while keeping Core responsibl
 
 ## Extension types
 
+Versioned resources have two identities: a globally unique row id for audit and references, and a tenant-scoped logical id plus version. This allows multiple immutable versions such as `provider.openai` 1 and 2 to coexist. The D1 uniqueness rules are `(organization_id, extension_id, version)` and `(organization_id, template_id, version)`.
+
 - Providers adapt model or service APIs to versioned protocol payloads. A provider never writes Core state directly.
 - Agents package a specialized execution strategy behind an objective/input/output contract.
 - Tools expose bounded external operations and declare required permissions. Tool inputs and outputs are persisted as evidence.

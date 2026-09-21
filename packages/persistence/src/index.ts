@@ -254,6 +254,7 @@ export interface RetentionPolicyRecord extends EntityRecord {
 
 export interface ExtensionRecord extends EntityRecord {
   readonly organizationId: string;
+  readonly extensionId: string;
   readonly kind: "provider" | "agent" | "tool" | "ci" | "human";
   readonly name: string;
   readonly version: string;
@@ -263,6 +264,7 @@ export interface ExtensionRecord extends EntityRecord {
 
 export interface WorkflowTemplateRecord extends EntityRecord {
   readonly organizationId: string;
+  readonly templateId: string;
   readonly name: string;
   readonly version: number;
   readonly template: JsonValue;
