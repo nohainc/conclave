@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -137,6 +137,38 @@ describe("Local Runtime foundation", () => {
     });
     expect(rejected.status).toBe("rejected");
     expect(rejected.summary).toContain("not allowed");
+  });
+
+  it("rejects symlink escapes for reads and writes", async () => {
+    const root = await makeRoot();
+    const outside = await mkdtemp(join(tmpdir(), "conclave-runtime-outside-"));
+    temporaryRoots.push(outside);
+    await writeFile(join(outside, "secret.txt"), "private", "utf8");
+    await symlink(outside, join(root, "secret-link"));
+    const local = runtime(root);
+    const base = { requestId: "symlink-1", repositoryId: "repo-1" };
+
+    const read = await local.execute({
+      ...base,
+      kind: "read_file",
+      path: "secret-link/secret.txt",
+      approval: approval("read_file"),
+    });
+    expect(read.status).toBe("rejected");
+    expect(read.summary).toContain("symlink");
+
+    const write = await local.execute({
+      ...base,
+      requestId: "symlink-2",
+      kind: "write_file",
+      path: "secret-link/new.txt",
+      content: "must not escape",
+      approval: approval("write_file"),
+    });
+    expect(write.status).toBe("rejected");
+    expect(
+      await readFile(join(outside, "new.txt"), "utf8").catch(() => null),
+    ).toBeNull();
   });
 
   it("executes explicit implementation operations with evidence", async () => {

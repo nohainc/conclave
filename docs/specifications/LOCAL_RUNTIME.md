@@ -25,4 +25,6 @@ Evidence includes the request and repository IDs, operation, status, summary, bo
 
 ## Safety limits
 
-The runtime has bounded read/write/search sizes and command timeouts. Repository paths are resolved relative to a registered absolute root; absolute request paths and `..` escapes are rejected. Credentials are not part of runtime requests or evidence. Future coding-agent adapters must use the same operation and approval boundary rather than receiving unrestricted shell access.
+The runtime has bounded read/write/search sizes and command timeouts. Repository paths are resolved relative to a registered real root; absolute request paths and `..` escapes are rejected, and `realpath()` containment checks prevent symlink escapes. Existing targets are checked directly; new write targets are checked through the nearest existing parent directory before the filesystem is modified. Credentials are not part of runtime requests or evidence. Future coding-agent adapters must use the same operation and approval boundary rather than receiving unrestricted shell access.
+
+Process-tree termination, strict stdout/stderr byte caps, command-specific argument policies, and approvals bound to a run/task are separate hardening work items. They must be added before treating arbitrary long-running or high-output commands as generally safe.

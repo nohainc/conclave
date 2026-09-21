@@ -1,6 +1,14 @@
 import { createHash } from "node:crypto";
-import { readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import {
+  realpath,
+  readFile,
+  readdir,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { realpathSync } from "node:fs";
 import { spawn } from "node:child_process";
 
 import type { GoalSummary } from "@conclave/core";
@@ -321,6 +329,20 @@ function isWithin(root: string, candidate: string): boolean {
   return path === root || path.startsWith(prefix);
 }
 
+async function nearestExistingPath(path: string): Promise<string> {
+  let current = path;
+  while (true) {
+    try {
+      return await realpath(current);
+    } catch {
+      const parent = dirname(current);
+      if (parent === current)
+        throw new RuntimeSecurityError("Path does not have an existing parent");
+      current = parent;
+    }
+  }
+}
+
 async function collectFiles(
   root: string,
   current: string,
@@ -434,7 +456,10 @@ export class LocalRuntime {
       if (this.repositories.has(repository.id)) {
         throw new RuntimeSecurityError(`Duplicate repository ${repository.id}`);
       }
-      this.repositories.set(repository.id, { ...repository, root });
+      this.repositories.set(repository.id, {
+        ...repository,
+        root: realpathSync(root),
+      });
     }
   }
 
@@ -486,13 +511,31 @@ export class LocalRuntime {
     }
   }
 
-  private resolvePath(repository: RuntimeRepository, path = "."): string {
+  private async resolvePath(
+    repository: RuntimeRepository,
+    path = ".",
+  ): Promise<string> {
     if (isAbsolute(path)) {
       throw new RuntimeSecurityError("Absolute paths are not allowed");
     }
     const candidate = resolve(repository.root, path);
     if (!isWithin(repository.root, candidate)) {
       throw new RuntimeSecurityError("Path escapes the registered repository");
+    }
+    const existing = await realpath(candidate).catch(() => null);
+    if (existing !== null) {
+      if (!isWithin(repository.root, existing)) {
+        throw new RuntimeSecurityError(
+          "Path escapes the registered repository through a symlink",
+        );
+      }
+      return existing;
+    }
+    const parent = await nearestExistingPath(dirname(candidate));
+    if (!isWithin(repository.root, parent)) {
+      throw new RuntimeSecurityError(
+        "Path escapes the registered repository through a symlink",
+      );
     }
     return candidate;
   }
@@ -509,7 +552,7 @@ export class LocalRuntime {
   }> {
     switch (request.kind) {
       case "read_file": {
-        const path = this.resolvePath(repository, request.path);
+        const path = await this.resolvePath(repository, request.path);
         const content = await readFile(path, "utf8");
         if (
           Buffer.byteLength(content) >
@@ -529,7 +572,7 @@ export class LocalRuntime {
         };
       }
       case "search": {
-        const start = this.resolvePath(repository, request.path);
+        const start = await this.resolvePath(repository, request.path);
         const info = await stat(start);
         const files: string[] = [];
         if (info.isDirectory()) {
@@ -549,10 +592,11 @@ export class LocalRuntime {
         );
         for (const file of files) {
           if (matches.length >= limit) break;
-          const content = await readFile(
-            resolve(repository.root, file),
-            "utf8",
-          ).catch(() => null);
+          const safeFile = await this.resolvePath(repository, file).catch(
+            () => null,
+          );
+          if (safeFile === null) continue;
+          const content = await readFile(safeFile, "utf8").catch(() => null);
           if (content === null) continue;
           content.split(/\r?\n/).forEach((line, index) => {
             if (line.includes(request.query) && matches.length < limit) {
@@ -569,7 +613,7 @@ export class LocalRuntime {
         };
       }
       case "write_file": {
-        const path = this.resolvePath(repository, request.path);
+        const path = await this.resolvePath(repository, request.path);
         if (Buffer.byteLength(request.content) > this.policy.maxWriteBytes) {
           throw new RuntimeSecurityError("File exceeds the write limit");
         }
@@ -594,7 +638,7 @@ export class LocalRuntime {
         };
       }
       case "patch_file": {
-        const path = this.resolvePath(repository, request.path);
+        const path = await this.resolvePath(repository, request.path);
         const current = await readFile(path, "utf8").catch(() => null);
         if (current === null)
           throw new RuntimeSecurityError("File does not exist");
@@ -633,7 +677,7 @@ export class LocalRuntime {
         };
       }
       case "delete_file": {
-        const path = this.resolvePath(repository, request.path);
+        const path = await this.resolvePath(repository, request.path);
         const current = await readFile(path, "utf8").catch(() => null);
         if (current === null)
           throw new RuntimeSecurityError("File does not exist");
@@ -659,7 +703,7 @@ export class LocalRuntime {
             : request.action === "diff"
               ? ["git", "diff", "--no-ext-diff"]
               : ["git", "branch", "--show-current"];
-        const cwd = this.resolvePath(repository, request.path);
+        const cwd = await this.resolvePath(repository, request.path);
         const result = await runCommand(
           args,
           cwd,
@@ -681,7 +725,7 @@ export class LocalRuntime {
             `Command ${request.command[0] ?? ""} is not allowed for ${request.kind}`,
           );
         }
-        const cwd = this.resolvePath(repository, request.cwd);
+        const cwd = await this.resolvePath(repository, request.cwd);
         const result = await runCommand(
           request.command,
           cwd,
