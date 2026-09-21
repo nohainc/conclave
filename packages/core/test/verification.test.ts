@@ -73,7 +73,7 @@ describe("independent verification", () => {
       taskId: "task-1",
       severity: "major",
       description: "Missing test",
-      authorWorkerId: "reviewer-1",
+      authorWorkerId: "implementer-1",
       status: "open",
     });
     state.recordVerification(review);
@@ -84,7 +84,14 @@ describe("independent verification", () => {
     expect(() =>
       state.completeTask("task-1", "2026-09-21T10:01:00.000Z", 1),
     ).toThrow("blocking_finding");
-    state.verifyFinding("finding-1");
+    expect(() => state.verifyFinding("finding-1", "reviewer-1")).toThrow(
+      "passed independent review",
+    );
+    state.recordVerification({
+      ...review,
+      verificationId: "verification-rereview",
+    });
+    state.verifyFinding("finding-1", "reviewer-1");
     expect(
       state.completeTask("task-1", "2026-09-21T10:02:00.000Z", 1).status,
     ).toBe("succeeded");
@@ -103,6 +110,23 @@ describe("independent verification", () => {
       independent: false,
     });
     expect(high.canComplete("task-1")).toBe(true);
+
+    const unauthorized = new VerificationGate(
+      getVerificationPolicy("standard"),
+    );
+    unauthorized.openFinding({
+      findingId: "finding-2",
+      taskId: "task-1",
+      severity: "major",
+      description: "Needs review",
+      authorWorkerId: "implementer-1",
+      status: "open",
+    });
+    unauthorized.fixFinding("finding-2");
+    unauthorized.recordVerification(review);
+    expect(() =>
+      unauthorized.verifyFinding("finding-2", "other-reviewer"),
+    ).toThrow("passed independent review");
 
     const critical = new VerificationGate(getVerificationPolicy("critical"));
     critical.recordVerification(review);

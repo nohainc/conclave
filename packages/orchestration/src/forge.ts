@@ -692,6 +692,7 @@ export async function executeForgeGoal(
   const reviews: ReviewResult[] = [];
   let correctionLoops = 0;
   let activeFindingIds: string[] = [];
+  const pendingReReviewIds = new Set<string>();
   while (true) {
     const reviewRequest: TaskRequest = {
       ...researchRequest,
@@ -721,20 +722,6 @@ export async function executeForgeGoal(
       [implementationEvidenceId],
     );
     reviews.push(review);
-    activeFindingIds = [];
-    for (const protocolFinding of review.payload.findings) {
-      const finding: Finding = {
-        findingId: protocolFinding.findingId,
-        taskId: implementationTask.id,
-        severity: protocolFinding.severity,
-        description: protocolFinding.description,
-        authorWorkerId: reviewer.resource.id,
-        status: "open",
-      };
-      gate.openFinding(finding);
-      if (gate.policy.blockingSeverities.includes(finding.severity))
-        activeFindingIds.push(finding.findingId);
-    }
     gate.recordVerification({
       verificationId: id(),
       taskId: implementationTask.id,
@@ -743,14 +730,54 @@ export async function executeForgeGoal(
       verifierWorkerId: reviewer.resource.id,
       independent: true,
     });
-    if (review.payload.outcome === "pass" && activeFindingIds.length === 0)
+    for (const findingId of review.payload.resolvedFindingIds) {
+      if (!pendingReReviewIds.has(findingId)) {
+        throw new Error(
+          `Reviewer resolved finding ${findingId} without a pending fix`,
+        );
+      }
+      gate.verifyFinding(findingId, reviewer.resource.id);
+      pendingReReviewIds.delete(findingId);
+    }
+    activeFindingIds = [];
+    for (const protocolFinding of review.payload.findings) {
+      const finding: Finding = {
+        findingId: protocolFinding.findingId,
+        taskId: implementationTask.id,
+        severity: protocolFinding.severity,
+        description: protocolFinding.description,
+        authorWorkerId: input.implementer.resource.id,
+        status: "open",
+      };
+      const existing = gate
+        .listFindings(implementationTask.id)
+        .find((candidate) => candidate.findingId === finding.findingId);
+      if (existing) {
+        if (existing.status === "fixed") gate.reopenFinding(finding.findingId);
+        else if (existing.status !== "reopened" && existing.status !== "open") {
+          throw new Error(
+            `Reviewer returned finding ${finding.findingId} in invalid state ${existing.status}`,
+          );
+        }
+      } else {
+        gate.openFinding(finding);
+      }
+      if (gate.policy.blockingSeverities.includes(finding.severity))
+        activeFindingIds.push(finding.findingId);
+    }
+    if (review.payload.outcome === "pass" && activeFindingIds.length === 0) {
+      if (pendingReReviewIds.size > 0) {
+        throw new Error(
+          `Reviewer passed without resolving findings: ${[...pendingReReviewIds].join(", ")}`,
+        );
+      }
       break;
+    }
     if (correctionLoops >= maxReviewLoops)
       throw new Error(
         `Forge review loop exhausted with findings: ${activeFindingIds.join(", ")}`,
       );
     correctionLoops += 1;
-    for (const findingId of activeFindingIds) gate.fixFinding(findingId);
     const correctionTask = await task(
       implementationPhase.id,
       "Fix blocking independent review findings",
@@ -789,7 +816,8 @@ export async function executeForgeGoal(
         operations: implementation.payload.proposedOperations,
       }),
     );
-    for (const findingId of activeFindingIds) gate.verifyFinding(findingId);
+    for (const findingId of activeFindingIds) gate.fixFinding(findingId);
+    for (const findingId of activeFindingIds) pendingReReviewIds.add(findingId);
   }
 
   const verificationPhase = await phase(

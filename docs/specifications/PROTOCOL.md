@@ -26,7 +26,7 @@ The runtime schemas live in `@conclave/protocol`. They reject the wrong version,
 - `TaskRequest` / `TaskResult` — assign one typed Task and report its accepted output references.
 - `ResearchResult` — repository observations, relevant paths, evidence, and risks.
 - `ImplementationResult` — a proposed revision, changed files, explicit `write_file`, `patch_file`, or `delete_file` operations, requested tests, artifacts, and risks. A successful result must contain at least one proposed operation; a summary alone is never executable.
-- `ReviewResult` — independent review outcome and typed Findings.
+- `ReviewResult` — independent review outcome, typed Findings, and explicit `resolvedFindingIds` for fixes the reviewer accepts after re-review.
 - `TestResult` — executable check outcomes tied to a revision and evidence Artifacts.
 - `VerificationResult` — criterion-level verification method, outcome, rationale, and evidence.
 - `DecisionResult` — a proposed state decision with rationale and explicit transitions.

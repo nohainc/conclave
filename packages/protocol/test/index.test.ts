@@ -89,6 +89,7 @@ describe("versioned protocol contracts", () => {
       payload: {
         outcome: "pass",
         reviewedArtifactIds: [],
+        resolvedFindingIds: [],
         findings: [],
         summary: "No issues found",
         hallucinatedClaim: "tests passed",

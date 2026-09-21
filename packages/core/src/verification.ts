@@ -96,7 +96,12 @@ export function isBlockingFinding(
 
 export class VerificationGate {
   private readonly findings = new Map<string, Finding>();
-  private readonly verifications = new Map<string, VerificationRecord>();
+  private readonly verifications = new Map<
+    string,
+    VerificationRecord & { readonly sequence: number }
+  >();
+  private readonly fixedAfterVerificationSequence = new Map<string, number>();
+  private verificationSequence = 0;
 
   constructor(readonly policy: VerificationPolicy) {}
 
@@ -116,13 +121,35 @@ export class VerificationGate {
     }
     const fixed = { ...finding, status: "fixed" as const };
     this.findings.set(findingId, fixed);
+    this.fixedAfterVerificationSequence.set(
+      findingId,
+      this.verificationSequence,
+    );
     return fixed;
   }
 
-  verifyFinding(findingId: string): Finding {
+  verifyFinding(findingId: string, verifierWorkerId: string): Finding {
     const finding = this.requireFinding(findingId);
     if (finding.status !== "fixed") {
       throw new Error(`Finding ${findingId} requires a fix before re-review`);
+    }
+    if (
+      ![...this.verifications.values()]
+        .filter((verification) => verification.taskId === finding.taskId)
+        .some(
+          (verification) =>
+            verification.method === "independent_review" &&
+            verification.outcome === "passed" &&
+            verification.independent &&
+            verification.verifierWorkerId === verifierWorkerId &&
+            verification.verifierWorkerId !== finding.authorWorkerId &&
+            verification.sequence >
+              (this.fixedAfterVerificationSequence.get(findingId) ?? 0),
+        )
+    ) {
+      throw new Error(
+        `Finding ${findingId} requires a passed independent review by ${verifierWorkerId}`,
+      );
     }
     const verified = { ...finding, status: "verified" as const };
     this.findings.set(findingId, verified);
@@ -147,7 +174,10 @@ export class VerificationGate {
     if (record.method === "independent_review" && !record.independent) {
       throw new Error("Required review must be independent");
     }
-    this.verifications.set(record.verificationId, record);
+    this.verifications.set(record.verificationId, {
+      ...record,
+      sequence: ++this.verificationSequence,
+    });
   }
 
   listFindings(taskId?: string): readonly Finding[] {

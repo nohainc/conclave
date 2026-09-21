@@ -270,6 +270,7 @@ describe("Forge MVP workflow", () => {
         envelope("ReviewResult", "reviewer", {
           outcome: "changes_requested",
           reviewedArtifactIds: [],
+          resolvedFindingIds: [],
           findings: [
             {
               findingId: "finding-1",
@@ -284,6 +285,7 @@ describe("Forge MVP workflow", () => {
         envelope("ReviewResult", "reviewer", {
           outcome: "pass",
           reviewedArtifactIds: [],
+          resolvedFindingIds: ["finding-1"],
           findings: [],
           summary: "The correction is complete and independently reviewed.",
         }),

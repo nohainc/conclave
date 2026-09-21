@@ -20,3 +20,5 @@ open -> fixed -> verified
 ```
 
 Core refuses to mark a Task complete when required verification is missing or any blocking finding remains unresolved. Reopening a Task returns it to `pending`; the correction attempt and re-review must satisfy the gate again.
+
+An Implementer correction only transitions a Finding to `fixed`. The independent Reviewer must return its ID in `resolvedFindingIds` on a subsequent passing `ReviewResult`; only then may Core transition it to `verified`. A passing review that omits a pending finding is not treated as implicit acceptance.

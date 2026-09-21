@@ -326,10 +326,10 @@ export class TaskGraphState {
     return this.verification.fixFinding(findingId);
   }
 
-  verifyFinding(findingId: string): Finding {
+  verifyFinding(findingId: string, verifierWorkerId: string): Finding {
     if (this.verification === null)
       throw new Error("No verification policy is configured");
-    return this.verification.verifyFinding(findingId);
+    return this.verification.verifyFinding(findingId, verifierWorkerId);
   }
 
   reopenFinding(findingId: string): Finding {

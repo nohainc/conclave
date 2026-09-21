@@ -177,6 +177,7 @@ const reviewResultPayload = z
   .object({
     outcome: z.enum(["pass", "changes_requested", "blocked"]),
     reviewedArtifactIds: artifactIds,
+    resolvedFindingIds: artifactIds,
     findings: z.array(finding),
     summary: nonEmpty,
   })
