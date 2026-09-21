@@ -41,6 +41,7 @@ import type {
 import {
   dispatchTaskAssignment,
   type AssignmentDispatcherEnv,
+  type DispatchAssignmentResult,
 } from "./assignment-dispatcher.js";
 
 interface ForgeExecutionEnv {
@@ -623,28 +624,20 @@ class AgentGatewayWorkerExecutor implements WorkerExecutor {
           (value): value is string => typeof value === "string",
         )
       : this.resource.capabilities;
-    const dispatched = await dispatchTaskAssignment(
-      this.env as unknown as AssignmentDispatcherEnv,
-      {
-        workspaceId: this.context.organizationId,
-        runId: request.runId,
-        taskId: request.taskId,
-        explicitWorkerId: this.resource.id,
-        task: {
-          id: request.taskId,
-          role,
-          objective,
-          capabilities,
-          contextArtifactIds: request.context.map((item) => item.artifactId),
-          timeoutMs: this.deadline(request),
-          input: {
-            request,
-            message: request.message,
-            context: request.context,
-          },
-        },
+    const task = {
+      id: request.taskId,
+      role,
+      objective,
+      capabilities,
+      contextArtifactIds: request.context.map((item) => item.artifactId),
+      timeoutMs: this.deadline(request),
+      input: {
+        request,
+        message: request.message,
+        context: request.context,
       },
-    );
+    };
+    const dispatched = await this.dispatch(request, task);
     if (!dispatched.accepted) {
       return this.failed(dispatched.error ?? "Agent assignment was rejected");
     }
@@ -693,6 +686,80 @@ class AgentGatewayWorkerExecutor implements WorkerExecutor {
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
     return this.failed("Timed out waiting for Agent assignment result", true);
+  }
+
+  private async dispatch(
+    request: WorkerExecutionRequest,
+    task: {
+      id: string;
+      role: string;
+      objective: string;
+      capabilities: readonly string[];
+      contextArtifactIds: readonly string[];
+      timeoutMs: number;
+      input: Record<string, unknown>;
+    },
+  ): Promise<DispatchAssignmentResult> {
+    const dispatcherEnv = this.env as unknown as AssignmentDispatcherEnv;
+    if (this.env.CONCLAVE_AGENT_GATEWAY) {
+      return dispatchTaskAssignment(dispatcherEnv, {
+        workspaceId: this.context.organizationId,
+        runId: request.runId,
+        taskId: request.taskId,
+        explicitWorkerId: this.resource.id,
+        task,
+      });
+    }
+
+    const baseUrl = this.env.CONCLAVE_API_BASE_URL;
+    const token = this.env.CONCLAVE_FORGE_CALLBACK_TOKEN;
+    if (!baseUrl || !token) {
+      return {
+        assignmentId: "",
+        attemptId: "",
+        workerId: this.resource.id,
+        agentId: "",
+        pluginId: this.resource.id,
+        status: "failed",
+        accepted: false,
+        error: "Agent Gateway or internal Forge dispatch is not configured",
+      };
+    }
+    const response = await fetch(
+      `${baseUrl.replace(/\/$/, "")}/api/internal/agent-assignments/dispatch`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          workspaceId: this.context.organizationId,
+          runId: request.runId,
+          taskId: request.taskId,
+          workerId: this.resource.id,
+          task,
+        }),
+      },
+    );
+    const body = (await response.json()) as {
+      assignment?: DispatchAssignmentResult;
+      error?: string;
+    };
+    if (!response.ok || !body.assignment) {
+      return {
+        assignmentId: "",
+        attemptId: "",
+        workerId: this.resource.id,
+        agentId: "",
+        pluginId: this.resource.id,
+        status: "failed",
+        accepted: false,
+        error:
+          body.error ?? `Internal Forge dispatch failed (${response.status})`,
+      };
+    }
+    return body.assignment;
   }
 
   private deadline(request: WorkerExecutionRequest): number {

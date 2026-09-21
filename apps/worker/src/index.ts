@@ -2612,6 +2612,50 @@ async function handleDispatchTaskAssignment(
   return json({ assignment: result }, { status: 200 });
 }
 
+async function handleInternalDispatchTaskAssignment(
+  request: Request,
+  env: SecurityEnv,
+): Promise<Response> {
+  const configuredToken = env.CONCLAVE_FORGE_CALLBACK_TOKEN;
+  if (!configuredToken || bearer(request) !== configuredToken) {
+    throw new HttpError(401, "Internal Forge dispatch authentication required");
+  }
+
+  const body = ((await request.json().catch(() => ({}))) || {}) as Record<
+    string,
+    unknown
+  >;
+  const workspaceId = requiredString(body.workspaceId, "workspaceId");
+  const taskId = requiredString(body.taskId, "taskId");
+  const runId = requiredString(body.runId, "runId");
+  const task = body.task;
+  if (typeof task !== "object" || task === null) {
+    return json({ error: "task is required" }, { status: 400 });
+  }
+
+  const result = await dispatchTaskAssignment(
+    env as unknown as AssignmentDispatcherEnv,
+    {
+      workspaceId,
+      runId,
+      taskId,
+      explicitWorkerId:
+        typeof body.workerId === "string" ? body.workerId : undefined,
+      task: task as TaskToDispatch,
+    },
+  );
+  if (result.status === "failed") {
+    return json(
+      {
+        error: result.error || "Failed to dispatch task assignment",
+        assignment: result,
+      },
+      { status: 422 },
+    );
+  }
+  return json({ assignment: result });
+}
+
 async function handleCancelTaskAssignment(
   request: Request,
   env: SecurityEnv,
@@ -4410,6 +4454,15 @@ export default {
       }
 
       // Agent Gateway & Protocol routes
+      if (
+        request.method === "POST" &&
+        url.pathname === "/api/internal/agent-assignments/dispatch"
+      ) {
+        return await handleInternalDispatchTaskAssignment(
+          request,
+          env as SecurityEnv,
+        );
+      }
       if (
         request.method === "GET" &&
         (url.pathname === "/api/agent-gateway/connect" ||
