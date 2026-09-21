@@ -13,14 +13,19 @@ class WorkerCandidate {
       required this.capabilities,
       this.online = true,
       this.cost = 0,
-      String? workspaceKey})
-      : workspaceKey = workspaceKey ?? workerId;
+      String? workspaceKey,
+      String? independenceKey,
+      this.billingMode = 'unknown'})
+      : workspaceKey = workspaceKey ?? workerId,
+        independenceKey = independenceKey ?? workerId;
   final String workerId;
   final String agentId;
   final Set<String> capabilities;
   final bool online;
   final int cost;
   final String workspaceKey;
+  final String independenceKey;
+  final String billingMode;
 }
 
 class WorkerCandidateResult {
@@ -48,6 +53,7 @@ class DistributedScheduler {
     int maxCost = 100,
     CandidateSynthesizer? synthesize,
     CandidateSelector? select,
+    bool requireIndependent = false,
   }) async {
     var eligible = workers
         .where((worker) =>
@@ -59,6 +65,12 @@ class DistributedScheduler {
       final workspaces = <String>{};
       eligible = eligible
           .where((worker) => workspaces.add(worker.workspaceKey))
+          .toList();
+    }
+    if (requireIndependent || mode == SchedulingMode.compareAndSelect) {
+      final independenceKeys = <String>{};
+      eligible = eligible
+          .where((worker) => independenceKeys.add(worker.independenceKey))
           .toList();
     }
     eligible = eligible

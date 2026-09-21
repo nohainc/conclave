@@ -117,4 +117,38 @@ void main() {
     expect(results.map((result) => result.output), containsAll(['a', 'b']));
     expect(results, hasLength(2));
   });
+
+  test('compare-and-select can require provider independence', () async {
+    const candidates = [
+      WorkerCandidate(
+        workerId: 'provider-a-1',
+        agentId: 'agent-a',
+        independenceKey: 'provider-a',
+        capabilities: {'research'},
+      ),
+      WorkerCandidate(
+        workerId: 'provider-a-2',
+        agentId: 'agent-b',
+        independenceKey: 'provider-a',
+        capabilities: {'research'},
+      ),
+      WorkerCandidate(
+        workerId: 'provider-b',
+        agentId: 'agent-c',
+        independenceKey: 'provider-b',
+        capabilities: {'research'},
+      ),
+    ];
+    final results = await DistributedScheduler().execute(
+      workers: candidates,
+      requiredCapabilities: {'research'},
+      mode: SchedulingMode.compareAndSelect,
+      maxCandidates: 3,
+      requireIndependent: true,
+      executor: (worker) async => worker.workerId,
+    );
+    expect(results, hasLength(2));
+    expect(results.map((result) => result.output),
+        containsAll(['provider-a-1', 'provider-b']));
+  });
 }
