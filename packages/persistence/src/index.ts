@@ -388,6 +388,16 @@ export interface PersistenceRepositories {
   readonly artifacts: ArtifactRepository;
   readonly events: RunEventRepository;
   readonly usage: UsageRepository;
+  readonly organizations: OrganizationRepository;
+  readonly memberships: MembershipRepository;
+  readonly projectMemberships: ProjectMembershipRepository;
+  readonly auditLog: AuditLogRepository;
+  readonly budgets: BudgetRepository;
+  readonly credentials: EncryptedCredentialRepository;
+  readonly retentionPolicies: RetentionPolicyRepository;
+  readonly extensions: ExtensionRepository;
+  readonly workflowTemplates: WorkflowTemplateRepository;
+  readonly humanApprovals: HumanApprovalRepository;
 }
 
 export interface ArtifactPayloadStore {
@@ -447,3 +457,4 @@ export function reconstructRun(rows: RunAggregateRows): ReconstructedRun {
 }
 
 export * from "./d1.js";
+export * from "./repositories.js";

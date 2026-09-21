@@ -149,7 +149,12 @@ function toCriterion(row: Record<string, unknown>): CompletionCriterionRecord {
 }
 
 export class D1RunRepository {
-  constructor(private readonly db: D1DatabaseLike) {}
+  constructor(
+    private readonly db: D1DatabaseLike,
+    private readonly aggregateLoader?: (
+      runId: string,
+    ) => Promise<import("./index.js").ReconstructedRun | null>,
+  ) {}
   async get(id: string): Promise<RunRecord | null> {
     const row = await this.db
       .prepare("SELECT * FROM runs WHERE id = ?1")
@@ -197,6 +202,15 @@ export class D1RunRepository {
     return Promise.all(
       (rows.results ?? []).map((row) => this.get(row.id)),
     ).then((runs) => runs.filter((run): run is RunRecord => run !== null));
+  }
+
+  async loadAggregate(
+    runId: string,
+  ): Promise<import("./index.js").ReconstructedRun | null> {
+    if (!this.aggregateLoader) {
+      throw new Error("D1RunRepository requires an aggregate loader");
+    }
+    return this.aggregateLoader(runId);
   }
 }
 

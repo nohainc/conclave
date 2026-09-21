@@ -3,6 +3,7 @@ import {
   D1GoalRepository,
   D1EventRepository,
   R2ArtifactStore,
+  ThresholdArtifactStore,
   type D1DatabaseLike,
   type D1Statement,
 } from "../src/index.js";
@@ -114,5 +115,43 @@ describe("Cloudflare persistence adapters", () => {
         (await store.get(reference)) ?? new Uint8Array(),
       ),
     ).toBe("artifact");
+  });
+
+  it("keeps small artifacts inline and promotes larger artifacts to R2", async () => {
+    const uploads: string[] = [];
+    const store = new ThresholdArtifactStore(4, {
+      put: async (key, content, mediaType) => {
+        uploads.push(`${key}:${mediaType}:${content.byteLength}`);
+        return {
+          kind: "r2",
+          bucket: "artifacts",
+          key,
+          sizeBytes: content.byteLength,
+        };
+      },
+    });
+    const base = {
+      id: "artifact-1",
+      runId: "run-1",
+      taskId: null,
+      attemptId: null,
+      mediaType: "text/plain",
+      contentDigest: "digest",
+      provenance: {},
+      createdAt: "now",
+    } as const;
+
+    const inline = await store.persist(base, "1234");
+    const external = await store.persist(
+      { ...base, id: "artifact-2" },
+      "12345",
+    );
+
+    expect(inline.payload).toEqual({ kind: "inline", content: "1234" });
+    expect(external.payload).toMatchObject({
+      kind: "r2",
+      key: "run-1/artifact-2",
+    });
+    expect(uploads).toEqual(["run-1/artifact-2:text/plain:5"]);
   });
 });
