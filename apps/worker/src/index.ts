@@ -893,6 +893,69 @@ async function handleGetWorkspace(
   return json({ workspace: row });
 }
 
+async function handleExportWorkspaceAudit(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const context = await workspaceMemberContext(
+    request,
+    env,
+    workspaceId,
+    "audit:read",
+    accessContext,
+  );
+  const url = new URL(request.url);
+  const requestedLimit = Number.parseInt(
+    url.searchParams.get("limit") ?? "100",
+    10,
+  );
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(Math.max(requestedLimit, 1), 500)
+    : 100;
+  const rows = await env.CONCLAVE_DB.prepare(
+    `SELECT id, workspace_id AS workspaceId, actor_type AS actorType,
+            actor_id AS actorId, action, target_type AS targetType,
+            target_id AS targetId, details_json AS detailsJson,
+            ip_address AS ipAddress, created_at AS createdAt
+     FROM audit_log
+     WHERE workspace_id = ?1
+     ORDER BY created_at DESC, id DESC
+     LIMIT ?2`,
+  )
+    .bind(workspaceId, limit)
+    .all<{
+      id: string;
+      workspaceId: string;
+      actorType: string;
+      actorId: string;
+      action: string;
+      targetType: string;
+      targetId: string;
+      detailsJson: string;
+      ipAddress: string | null;
+      createdAt: string;
+    }>();
+  return json({
+    format: "conclave-audit-log-v1",
+    workspaceId: context.workspaceId,
+    exportedAt: new Date().toISOString(),
+    entries: (rows.results ?? []).map((row) => ({
+      id: row.id,
+      workspaceId: row.workspaceId,
+      actorType: row.actorType,
+      actorId: row.actorId,
+      action: row.action,
+      targetType: row.targetType,
+      targetId: row.targetId,
+      details: parseJson<Record<string, unknown>>(row.detailsJson, {}),
+      ipAddress: row.ipAddress,
+      createdAt: row.createdAt,
+    })),
+  });
+}
+
 type CollaboratorRole = "admin" | "member" | "viewer";
 
 async function workspaceMemberContext(
@@ -906,7 +969,14 @@ async function workspaceMemberContext(
   if (!anonymousDevelopment(env) && context.workspaceId !== workspaceId) {
     throw new HttpError(404, "Workspace not found");
   }
-  authorize(context, permission, workspaceId);
+  try {
+    authorize(context, permission, workspaceId);
+  } catch (error) {
+    throw new HttpError(
+      403,
+      error instanceof Error ? error.message : "Forbidden",
+    );
+  }
   return context;
 }
 
@@ -4379,6 +4449,17 @@ export default {
       }
       if (request.method === "POST" && url.pathname === "/api/workspaces") {
         return await handleCreateWorkspace(request, env as SecurityEnv, ctx);
+      }
+      const auditExportMatch = url.pathname.match(
+        /^\/api\/workspaces\/([^/]+)\/audit-export$/,
+      );
+      if (request.method === "GET" && auditExportMatch?.[1]) {
+        return await handleExportWorkspaceAudit(
+          request,
+          env as SecurityEnv,
+          auditExportMatch[1],
+          ctx,
+        );
       }
       const workspaceInvitationsMatch = url.pathname.match(
         /^\/api\/workspaces\/([^/]+)\/invitations$/,

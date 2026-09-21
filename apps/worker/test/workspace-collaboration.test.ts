@@ -242,5 +242,32 @@ describe("V2-21 workspace collaboration", () => {
       action: "run.pause",
       target_id: runId,
     });
+
+    const auditExport = await worker.fetch(
+      new Request(`https://cloud/api/workspaces/${workspaceId}/audit-export`, {
+        headers: headers(alice, workspaceId),
+      }),
+      env,
+    );
+    expect(auditExport.status).toBe(200);
+    const exportBody = (await auditExport.json()) as {
+      format: string;
+      workspaceId: string;
+      entries: Array<{ workspaceId: string; actorId: string }>;
+    };
+    expect(exportBody.format).toBe("conclave-audit-log-v1");
+    expect(exportBody.workspaceId).toBe(workspaceId);
+    expect(exportBody.entries.length).toBeGreaterThan(0);
+    expect(
+      exportBody.entries.every((entry) => entry.workspaceId === workspaceId),
+    ).toBe(true);
+
+    const memberAuditExport = await worker.fetch(
+      new Request(`https://cloud/api/workspaces/${workspaceId}/audit-export`, {
+        headers: headers(bob, workspaceId),
+      }),
+      env,
+    );
+    expect(memberAuditExport.status).toBe(403);
   });
 });
