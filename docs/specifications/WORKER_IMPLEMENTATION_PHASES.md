@@ -113,7 +113,39 @@ Persist the resolved policy snapshot for audit/replay.
 
 **Exit:** changing a quality preset changes worker count/diversity without workflow code changes.
 
-## W10 — Isolated parallel implementation
+## W10 — Interactive web/cloud Worker connector
+
+Implement the first-class `web_app` Connection described in [WEB_APP_WORKERS.md](WEB_APP_WORKERS.md).
+
+Add:
+- authenticated remote connector/app/MCP surface;
+- WorkerSession registration and leases;
+- task claiming;
+- bounded context retrieval;
+- durable worker mailbox;
+- structured candidate/result submission;
+- follow-up message retrieval;
+- optional external conversation reference;
+- capability discovery including whether provider push/background continuation is supported.
+
+Do not require Conclave to know or control the provider's internal chat id.
+
+**Exit:** a subscription-backed web AI can claim a read-only Conclave Task from its native chat, submit a valid candidate result, receive a follow-up through the Conclave mailbox, and continue the same logical WorkerSession without direct provider API billing.
+
+## W11 — Web-worker ensemble acceptance
+
+Enable web/cloud Workers in generic Execution Policies and quality presets.
+
+Acceptance:
+- at least two isolated web workers independently execute one Research/Architecture Task;
+- candidates remain separate Attempts;
+- a Synthesizer receives both candidates;
+- Conclave records provider/surface diversity and subscription billing mode;
+- quota/unavailability can reroute to a configured API/local fallback.
+
+**Exit:** Exploration mode can use multiple web subscription workers for design/research without special Forge logic.
+
+## W12 — Isolated parallel implementation
 
 Support competitive implementation only after read-only ensembles are stable.
 
@@ -125,7 +157,7 @@ Run tests/checks independently per candidate. Then:
 
 **Exit:** two Implementers can propose real competing repository changes without interfering with each other.
 
-## W11 — Studio configuration and observability
+## W13 — Studio configuration and observability
 
 Expose:
 - Worker connections/transports;
@@ -142,7 +174,7 @@ Do not expose credentials or local session tokens.
 
 **Exit:** a user can understand why Conclave selected one or several Workers and what each candidate contributed.
 
-## W12 — Manual and remote transports
+## W14 — Manual and remote transports
 
 Add:
 - remote Conclave-compatible agent transport;
@@ -152,7 +184,7 @@ Manual flow exports a structured task and imports/validates the response. Do not
 
 **Exit:** unsupported providers can participate without weakening Core contracts.
 
-## W13 — Ensemble end-to-end acceptance
+## W15 — Ensemble end-to-end acceptance
 
 Run acceptance scenarios:
 
@@ -181,15 +213,17 @@ W6 Execution Policy
 W7 Synthesis/evaluation
 W8 Parallel read-only roles
 W9 Quality presets/cost routing
+W10 Interactive web/cloud Worker connector
+W11 Web-worker ensemble acceptance
 I4 Real Forge execution service using these abstractions
-W10 Isolated parallel implementation
+W12 Isolated parallel implementation
 I6 Production authentication
 I7 Studio functional completion
-W11 Studio worker/ensemble UI
+W13 Studio worker/ensemble UI
 I8 CI evidence
 I9 End-to-end acceptance
-W12 Manual/remote transports
-W13 Ensemble acceptance
+W14 Manual/remote transports
+W15 Ensemble acceptance
 I10 Production hardening
 ```
 
