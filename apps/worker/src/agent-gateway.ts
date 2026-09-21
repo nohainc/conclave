@@ -18,6 +18,10 @@ import {
   recordAssignmentResult,
   recordAssignmentError,
 } from "./assignment-dispatcher.js";
+import {
+  extractAuthToken,
+  hashToken,
+} from "../../../packages/security/src/index.js";
 
 export interface GatewayEnv {
   CONCLAVE_DB: D1Database;
@@ -94,6 +98,27 @@ export class AgentGateway implements DurableObject {
       return Response.json(
         { error: "agentId and workspaceId query parameters are required" },
         { status: 400 },
+      );
+    }
+
+    const token = extractAuthToken(request.headers);
+    if (!token) {
+      return Response.json(
+        { error: "Agent authentication required" },
+        { status: 401 },
+      );
+    }
+    const tokenHash = await hashToken(token);
+    const enrolledAgent = await this.env.CONCLAVE_DB.prepare(
+      `SELECT id, workspace_id FROM agents
+       WHERE id = ?1 AND workspace_id = ?2 AND auth_token_hash = ?3 AND revoked_at IS NULL`,
+    )
+      .bind(agentId, workspaceId, tokenHash)
+      .first<{ id: string; workspace_id: string }>();
+    if (!enrolledAgent) {
+      return Response.json(
+        { error: "Invalid or revoked Agent credential" },
+        { status: 401 },
       );
     }
 

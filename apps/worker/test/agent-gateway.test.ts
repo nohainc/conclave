@@ -131,6 +131,28 @@ describe("Agent Enrollment & Agent Gateway (Architecture v2)", () => {
     ).run(adminTokenHash, now, now);
   });
 
+  it("fails closed for unauthenticated WebSocket upgrades", async () => {
+    const gateway = new AgentGateway(
+      {
+        storage: {
+          get: async () => undefined,
+          put: async () => {},
+          delete: async () => true,
+        },
+      } as unknown as DurableObjectState,
+      { CONCLAVE_DB: d1 },
+    );
+    const response = await gateway.fetch(
+      new Request(
+        "http://localhost/agent?agentId=agent-1&workspaceId=ws-test-1",
+        {
+          headers: { Upgrade: "websocket" },
+        },
+      ),
+    );
+    expect(response.status).toBe(401);
+  });
+
   it("creates agent enrollment tokens and lists them", async () => {
     const createReq = new Request(
       "http://localhost/api/v2/workspaces/ws-test-1/agent-enrollments",

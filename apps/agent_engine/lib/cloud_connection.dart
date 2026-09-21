@@ -69,8 +69,16 @@ class IoAgentCloudSocket implements AgentCloudSocket {
   }
 }
 
-Future<AgentCloudSocket> connectIoAgentCloudSocket(Uri uri) async {
-  final socket = await WebSocket.connect(uri.toString());
+Future<AgentCloudSocket> connectIoAgentCloudSocket(
+  Uri uri, {
+  String? authToken,
+}) async {
+  final socket = await WebSocket.connect(
+    uri.toString(),
+    headers: authToken == null
+        ? null
+        : <String, String>{'Authorization': 'Bearer $authToken'},
+  );
   return IoAgentCloudSocket(socket);
 }
 
