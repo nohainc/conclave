@@ -262,3 +262,26 @@ The core invariant is:
 > One Task may produce one or many candidate Attempts, but exactly one accepted Task result (or one explicit combined result) is admitted to the downstream graph.
 
 This keeps the task graph deterministic while allowing broad model diversity.
+
+
+## 12. Interactive web/cloud candidates
+
+Interactive web/cloud workers participate in the same candidate model as every other transport.
+
+Example:
+
+```text
+Architecture Task
+  +-- Attempt A -> ChatGPT web worker
+  +-- Attempt B -> Claude web worker
+  +-- Attempt C -> another supported web worker
+        |
+        v
+     Synthesizer
+```
+
+Conclave does not need direct provider API billing for these candidates when the user's subscription-backed web surface and Conclave connector support the work.
+
+Web workers are particularly suitable for Research, Architecture, Planning proposals, Review, and Synthesis. Their availability may be interactive rather than continuously autonomous, so Execution Policy must allow waiting, notification, or fallback.
+
+See [WEB_APP_WORKERS.md](WEB_APP_WORKERS.md).
