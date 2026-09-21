@@ -14,8 +14,8 @@ import type {
   WorkerRegistry,
   WorkerRequirement,
   WorkerResource,
-  WorkerBinding,
-  ConnectionResource,
+  WorkerExecutionBinding,
+  ExecutionChannel,
   WorkerExecutor,
   WorkerExecutionRequest,
   WorkerExecutionResult,
@@ -69,7 +69,7 @@ interface ForgeExecutionContext {
 }
 
 export function assertSingleAgentForgeBindings(
-  bindings: readonly WorkerBinding[],
+  bindings: readonly WorkerExecutionBinding[],
   agentIds: ReadonlyMap<string, string>,
 ): void {
   if (bindings.length !== 3) {
@@ -102,7 +102,7 @@ export function assertSingleAgentForgeBindings(
 }
 
 export function assertMultiAgentForgeBindings(
-  bindings: readonly WorkerBinding[],
+  bindings: readonly WorkerExecutionBinding[],
   agentIds: ReadonlyMap<string, string>,
 ): void {
   if (bindings.length < 3) {
@@ -192,7 +192,7 @@ function workerResource(row: Record<string, unknown>): WorkerResource {
   };
 }
 
-function connectionResource(row: Record<string, unknown>): ConnectionResource {
+function connectionResource(row: Record<string, unknown>): ExecutionChannel {
   const workerStatus = String(row.worker_status ?? "offline");
   const agentStatus =
     row.revoked_at == null ? String(row.agent_status ?? "offline") : "offline";
@@ -203,7 +203,7 @@ function connectionResource(row: Record<string, unknown>): ConnectionResource {
     provider: null,
     adapterVersion: String(row.plugin_version_policy ?? "latest"),
     authMode: "local_session",
-    billingMode: String(row.billing_mode) as ConnectionResource["billingMode"],
+    billingMode: String(row.billing_mode) as ExecutionChannel["billingMode"],
     cost: cost(row.cost_metadata_json),
     executionEnvironment: "local" as ExecutionEnvironment,
     availability:
@@ -216,9 +216,9 @@ function connectionResource(row: Record<string, unknown>): ConnectionResource {
 }
 
 class D1WorkerRegistry implements WorkerRegistry {
-  private readonly workers: readonly WorkerBinding[];
+  private readonly workers: readonly WorkerExecutionBinding[];
 
-  constructor(workers: readonly WorkerBinding[]) {
+  constructor(workers: readonly WorkerExecutionBinding[]) {
     this.workers = workers;
   }
 
@@ -226,11 +226,11 @@ class D1WorkerRegistry implements WorkerRegistry {
     throw new Error("Forge worker registry is read-only during execution");
   }
 
-  list(): readonly WorkerBinding[] {
+  list(): readonly WorkerExecutionBinding[] {
     return this.workers;
   }
 
-  resolve(requirement: WorkerRequirement): WorkerBinding | null {
+  resolve(requirement: WorkerRequirement): WorkerExecutionBinding | null {
     return (
       [...this.workers]
         .filter(
@@ -532,7 +532,7 @@ class RemoteLocalRuntime implements ForgeRuntimeAdapter {
 class AgentGatewayWorkerExecutor implements WorkerExecutor {
   constructor(
     readonly resource: WorkerResource,
-    readonly connection: ConnectionResource,
+    readonly connection: ExecutionChannel,
     private readonly env: ForgeExecutionEnv,
     private readonly context: ForgeExecutionContext,
   ) {}
@@ -745,7 +745,7 @@ async function discoverLocalWorkers(
 }
 
 function modelFor(
-  binding: WorkerBinding,
+  binding: WorkerExecutionBinding,
   env: ForgeExecutionEnv,
   context: ForgeExecutionContext,
 ): WorkerExecutor {

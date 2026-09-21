@@ -46,6 +46,6 @@ export interface WorkerExecutionResult {
 
 export interface WorkerExecutor {
   readonly resource: import("./worker-registry.js").WorkerResource;
-  readonly connection: import("./worker-registry.js").ConnectionResource;
+  readonly connection: import("./worker-registry.js").ExecutionChannel;
   execute(request: WorkerExecutionRequest): Promise<WorkerExecutionResult>;
 }

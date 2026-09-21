@@ -29,7 +29,7 @@ export interface WorkerCostMetadata {
   readonly [key: string]: unknown;
 }
 
-export interface ConnectionResource {
+export interface ExecutionChannel {
   readonly id: string;
   readonly name: string;
   readonly transport: ConnectionTransport;
@@ -41,6 +41,9 @@ export interface ConnectionResource {
   readonly executionEnvironment: ExecutionEnvironment;
   readonly availability: WorkerAvailability;
 }
+
+/** @deprecated Use ExecutionChannel. Kept for protocol/package compatibility. */
+export type ConnectionResource = ExecutionChannel;
 
 export interface WorkerResource {
   readonly id: string;
@@ -62,27 +65,30 @@ export interface WorkerRequirement {
   readonly maxEstimatedCostMicrosPerAttempt?: number;
 }
 
-export interface WorkerBinding {
+export interface WorkerExecutionBinding {
   readonly worker: WorkerResource;
-  readonly connection: ConnectionResource;
+  readonly connection: ExecutionChannel;
 }
+
+/** @deprecated Use WorkerExecutionBinding. */
+export type WorkerBinding = WorkerExecutionBinding;
 
 export interface WorkerRegistry {
   upsert(
     worker: WorkerResource,
-    connections?: readonly ConnectionResource[],
+    connections?: readonly ExecutionChannel[],
   ): void;
-  list(): readonly WorkerBinding[];
-  resolve(requirement: WorkerRequirement): WorkerBinding | null;
+  list(): readonly WorkerExecutionBinding[];
+  resolve(requirement: WorkerRequirement): WorkerExecutionBinding | null;
 }
 
 export class InMemoryWorkerRegistry implements WorkerRegistry {
   private readonly workers = new Map<string, WorkerResource>();
-  private readonly connections = new Map<string, ConnectionResource>();
+  private readonly connections = new Map<string, ExecutionChannel>();
 
   upsert(
     worker: WorkerResource,
-    connections: readonly ConnectionResource[] = [],
+    connections: readonly ExecutionChannel[] = [],
   ): void {
     if (worker.id.length === 0 || worker.connectionIds.length === 0) {
       throw new Error("Worker id and at least one connection are required");
@@ -92,7 +98,7 @@ export class InMemoryWorkerRegistry implements WorkerRegistry {
       this.connections.set(connection.id, connection);
   }
 
-  list(): readonly WorkerBinding[] {
+  list(): readonly WorkerExecutionBinding[] {
     return [...this.workers.values()].flatMap((worker) =>
       worker.connectionIds.flatMap((connectionId) => {
         const connection = this.connections.get(connectionId);
@@ -101,7 +107,7 @@ export class InMemoryWorkerRegistry implements WorkerRegistry {
     );
   }
 
-  resolve(requirement: WorkerRequirement): WorkerBinding | null {
+  resolve(requirement: WorkerRequirement): WorkerExecutionBinding | null {
     const matches = this.list()
       .filter(
         ({ worker, connection }) =>
