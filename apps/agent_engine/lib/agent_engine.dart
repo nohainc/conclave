@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'cloud_connection.dart';
+import 'local_ipc.dart';
 
 class AgentEngineConfig {
   const AgentEngineConfig({
@@ -11,6 +13,8 @@ class AgentEngineConfig {
     this.agentId,
     this.workspaceId,
     this.authToken,
+    this.ipcPort,
+    this.ipcToken,
   });
 
   final Directory dataDirectory;
@@ -18,6 +22,8 @@ class AgentEngineConfig {
   final String? agentId;
   final String? workspaceId;
   final String? authToken;
+  final int? ipcPort;
+  final String? ipcToken;
 
   factory AgentEngineConfig.fromArgs(List<String> args) {
     final index = args.indexOf('--data-dir');
@@ -36,6 +42,14 @@ class AgentEngineConfig {
     final workspaceId = workspaceIndex >= 0 && workspaceIndex + 1 < args.length
         ? args[workspaceIndex + 1]
         : Platform.environment['CONCLAVE_AGENT_WORKSPACE_ID'];
+    final ipcPortIndex = args.indexOf('--ipc-port');
+    final ipcTokenIndex = args.indexOf('--ipc-token');
+    final ipcPortValue = ipcPortIndex >= 0 && ipcPortIndex + 1 < args.length
+        ? args[ipcPortIndex + 1]
+        : Platform.environment['CONCLAVE_AGENT_IPC_PORT'];
+    final ipcToken = ipcTokenIndex >= 0 && ipcTokenIndex + 1 < args.length
+        ? args[ipcTokenIndex + 1]
+        : Platform.environment['CONCLAVE_AGENT_IPC_TOKEN'];
     return AgentEngineConfig(
       dataDirectory: Directory(path ??
           '${Platform.environment['HOME'] ?? Directory.current.path}/.conclave-agent'),
@@ -43,6 +57,8 @@ class AgentEngineConfig {
       agentId: agentId,
       workspaceId: workspaceId,
       authToken: Platform.environment['CONCLAVE_AGENT_TOKEN'],
+      ipcPort: ipcPortValue == null ? null : int.tryParse(ipcPortValue),
+      ipcToken: ipcToken,
     );
   }
 }
@@ -73,11 +89,27 @@ class AgentEngine {
   final AgentCloudConnection? cloudConnection;
   final AgentEngineLogger _log;
   RandomAccessFile? _lock;
+  LocalIpcServer? _ipc;
   bool _running = false;
   StreamSubscription<ProcessSignal>? _sigint;
   StreamSubscription<ProcessSignal>? _sigterm;
 
   bool get isRunning => _running;
+  int? get ipcPort => _ipc?.port;
+
+  Future<Map<String, Object?>> _handleIpcCommand(IpcCommand command) async {
+    if (command.type != 'engine.status') {
+      throw StateError('unsupported engine command: ${command.type}');
+    }
+    return {
+      'online': _running,
+      'status': _running ? 'running' : 'stopped',
+      'workers': 0,
+      'plugins': 0,
+      'activeTasks': 0,
+      'version': '0.1.0',
+    };
+  }
 
   Future<void> start() async {
     if (_running) return;
@@ -96,6 +128,17 @@ class AgentEngine {
         'status': 'running',
         'startedAt': DateTime.now().toUtc().toIso8601String()
       }),
+    );
+    final token = config.ipcToken ?? _newIpcToken();
+    _ipc = LocalIpcServer(
+      token: token,
+      bindPort: config.ipcPort ?? 0,
+      onCommand: _handleIpcCommand,
+    );
+    await _ipc!.start();
+    await File('${config.dataDirectory.path}/ipc.json').writeAsString(
+      jsonEncode({'port': _ipc!.port, 'token': token}),
+      flush: true,
     );
     _running = true;
     _sigint = ProcessSignal.sigint.watch().listen((_) => unawaited(stop()));
@@ -116,6 +159,10 @@ class AgentEngine {
     await _sigint?.cancel();
     await _sigterm?.cancel();
     await cloudConnection?.close();
+    await _ipc?.close();
+    _ipc = null;
+    final ipcFile = File('${config.dataDirectory.path}/ipc.json');
+    if (await ipcFile.exists()) await ipcFile.delete();
     await File('${config.dataDirectory.path}/engine-state.json').writeAsString(
       jsonEncode({
         'status': 'stopped',
@@ -127,4 +174,8 @@ class AgentEngine {
     _lock = null;
     _log.info('Agent Engine stopped');
   }
+
+  String _newIpcToken() => base64UrlEncode(
+        List<int>.generate(32, (_) => Random.secure().nextInt(256)),
+      );
 }

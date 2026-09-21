@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -24,5 +25,46 @@ void main() {
 
   test('rejects an invalid message shape', () {
     expect(() => parseLocalIpcMessage({'payload': {}}), throwsFormatException);
+  });
+
+  test('responds to authenticated commands without losing frame boundaries',
+      () async {
+    final response = Completer<Map<String, dynamic>>();
+    final server = LocalIpcServer(
+      token: 'secret',
+      onCommand: (command) async => {
+        'echoType': command.type,
+        'echoPayload': command.payload,
+      },
+    );
+    await server.start();
+    final socket =
+        await Socket.connect(InternetAddress.loopbackIPv4, server.port!);
+    socket
+        .map((bytes) => bytes.toList())
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen((line) {
+      final decoded = jsonDecode(line) as Map<String, dynamic>;
+      if (decoded['type'] == 'engine.status') response.complete(decoded);
+    });
+    socket.write(jsonEncode({'token': 'secret'}));
+    socket.write('\n');
+    socket.write(jsonEncode(IpcCommand(
+      'engine.status',
+      {'request': 'status'},
+      requestId: 'request-1',
+    ).toJson()));
+    socket.write('\n');
+
+    final decoded = await response.future.timeout(const Duration(seconds: 2));
+    expect(decoded['ok'], isTrue);
+    expect(decoded['requestId'], 'request-1');
+    expect(
+      (decoded['payload'] as Map<String, dynamic>)['echoPayload'],
+      {'request': 'status'},
+    );
+    await socket.close();
+    await server.close();
   });
 }

@@ -29,11 +29,15 @@ void main() {
     await engine.start();
     expect(engine.isRunning, isTrue);
     expect(File('${directory.path}/engine-state.json').existsSync(), isTrue);
+    final ipcFile = File('${directory.path}/ipc.json');
+    expect(ipcFile.existsSync(), isTrue);
+    expect(engine.ipcPort, isNotNull);
 
     await engine.stop();
     expect(engine.isRunning, isFalse);
     expect(await File('${directory.path}/engine-state.json').readAsString(),
         contains('stopped'));
+    expect(ipcFile.existsSync(), isFalse);
     await directory.delete(recursive: true);
   });
 
@@ -54,10 +58,16 @@ void main() {
       'agent-1',
       '--workspace-id',
       'workspace-1',
+      '--ipc-port',
+      '43210',
+      '--ipc-token',
+      'ipc-secret',
     ]);
     expect(config.cloudUri, Uri.parse('wss://cloud.example/agent'));
     expect(config.agentId, 'agent-1');
     expect(config.workspaceId, 'workspace-1');
+    expect(config.ipcPort, 43210);
+    expect(config.ipcToken, 'ipc-secret');
   });
 
   test('owns the Cloud connection across Engine lifecycle', () async {

@@ -11,7 +11,15 @@ sealed class LocalIpcMessage {
 }
 
 class IpcCommand extends LocalIpcMessage {
-  const IpcCommand(super.type, super.payload);
+  const IpcCommand(super.type, super.payload, {this.requestId});
+
+  final String? requestId;
+
+  @override
+  Map<String, Object?> toJson() => {
+        ...super.toJson(),
+        if (requestId != null) 'requestId': requestId,
+      };
 }
 
 class IpcEvent extends LocalIpcMessage {
@@ -27,13 +35,26 @@ LocalIpcMessage parseLocalIpcMessage(Object? value) {
   final payload = Map<String, Object?>.from(value['payload'] as Map);
   return type.startsWith('event.')
       ? IpcEvent(type, payload)
-      : IpcCommand(type, payload);
+      : IpcCommand(type, payload,
+          requestId: value['requestId'] is String
+              ? value['requestId'] as String
+              : null);
 }
 
+typedef LocalIpcCommandHandler = Future<Map<String, Object?>> Function(
+  IpcCommand command,
+);
+
 class LocalIpcServer {
-  LocalIpcServer({required this.token});
+  LocalIpcServer({
+    required this.token,
+    this.bindPort = 0,
+    this.onCommand,
+  });
 
   final String token;
+  final int bindPort;
+  final LocalIpcCommandHandler? onCommand;
   ServerSocket? _server;
   final _messages = StreamController<LocalIpcMessage>.broadcast();
 
@@ -41,15 +62,18 @@ class LocalIpcServer {
   int? get port => _server?.port;
 
   Future<void> start() async {
-    _server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    _server = await ServerSocket.bind(InternetAddress.loopbackIPv4, bindPort);
     _server!.listen(_handleClient);
   }
 
   Future<void> _handleClient(Socket socket) async {
     var authenticated = false;
+    var buffer = '';
     socket.listen((bytes) {
-      for (final line
-          in utf8.decode(bytes).split('\n').where((line) => line.isNotEmpty)) {
+      buffer += utf8.decode(bytes, allowMalformed: false);
+      final lines = buffer.split('\n');
+      buffer = lines.removeLast();
+      for (final line in lines.where((line) => line.trim().isNotEmpty)) {
         try {
           final decoded = jsonDecode(line);
           if (!authenticated) {
@@ -61,12 +85,35 @@ class LocalIpcServer {
             socket.writeln(jsonEncode({'ok': true}));
             continue;
           }
-          _messages.add(parseLocalIpcMessage(decoded));
+          final message = parseLocalIpcMessage(decoded);
+          _messages.add(message);
+          if (message is IpcCommand && onCommand != null) {
+            unawaited(_respond(socket, message));
+          }
         } on Object {
           socket.writeln(jsonEncode({'ok': false, 'error': 'invalid_message'}));
         }
       }
     }, onDone: socket.destroy);
+  }
+
+  Future<void> _respond(Socket socket, IpcCommand command) async {
+    try {
+      final payload = await onCommand!(command);
+      socket.writeln(jsonEncode({
+        'ok': true,
+        'requestId': command.requestId,
+        'type': command.type,
+        'payload': payload,
+      }));
+    } on Object catch (error) {
+      socket.writeln(jsonEncode({
+        'ok': false,
+        'requestId': command.requestId,
+        'type': command.type,
+        'error': '$error',
+      }));
+    }
   }
 
   Future<void> close() async {
