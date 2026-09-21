@@ -181,13 +181,7 @@ class PluginManager {
   Future<PluginProcessSpec?> activeProcessSpec(String pluginId) async {
     final version = await activeVersion(pluginId);
     if (version == null) return null;
-    final manifestFile = File(
-      '${root.path}/$pluginId/$version/manifest.json',
-    );
-    if (!await manifestFile.exists()) {
-      throw StateError('plugin manifest is missing');
-    }
-    final manifest = jsonDecode(await manifestFile.readAsString()) as Map;
+    final manifest = await _verifiedManifest(pluginId, version);
     final executable = manifest['executable'];
     if (executable is! String || executable.isEmpty) {
       throw StateError('plugin executable is missing');
@@ -200,6 +194,37 @@ class PluginManager {
           arguments is List ? arguments.whereType<String>().toList() : const [],
       workingDirectory: '${root.path}/$pluginId/$version',
     );
+  }
+
+  /// Re-check the immutable package payload before every process launch.
+  /// Installation-time verification alone is insufficient because a local
+  /// attacker or a broken updater could modify the package afterward.
+  Future<Map<String, Object?>> _verifiedManifest(
+    String pluginId,
+    String version,
+  ) async {
+    final directory = Directory('${root.path}/$pluginId/$version');
+    final manifestFile = File('${directory.path}/manifest.json');
+    final packageFile = File('${directory.path}/package.bin');
+    if (!await manifestFile.exists() || !await packageFile.exists()) {
+      throw StateError('plugin package is incomplete');
+    }
+    final manifest = Map<String, Object?>.from(
+      jsonDecode(await manifestFile.readAsString()) as Map,
+    );
+    if (manifest['pluginId'] != pluginId || manifest['version'] != version) {
+      throw StateError('plugin manifest identity does not match installation');
+    }
+    final expectedDigest = manifest['digest'];
+    if (expectedDigest is! String || expectedDigest.isEmpty) {
+      throw StateError('plugin package digest is missing');
+    }
+    final actualDigest =
+        sha256.convert(await packageFile.readAsBytes()).toString();
+    if (actualDigest != expectedDigest) {
+      throw StateError('plugin package was modified after installation');
+    }
+    return manifest;
   }
 
   Future<List<InstalledPlugin>> inventory() async {

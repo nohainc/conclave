@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:conclave_agent_engine/plugin_manager.dart';
@@ -124,6 +125,53 @@ void main() {
           executable: 'package.bin',
         ),
       )),
+      throwsA(isA<StateError>()),
+    );
+    await directory.delete(recursive: true);
+  });
+
+  test('rejects a package modified after installation', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-plugins-');
+    final bytes = [13, 14, 15];
+    final manager = PluginManager(directory);
+    await manager.install(PluginPackage(
+      id: 'tampered',
+      version: '1.0.0',
+      bytes: bytes,
+      digest: sha256.convert(bytes).toString(),
+    ));
+
+    await File('${directory.path}/tampered/1.0.0/package.bin')
+        .writeAsBytes([99], flush: true);
+    await expectLater(
+      manager.activeProcessSpec('tampered'),
+      throwsA(isA<StateError>()),
+    );
+    await directory.delete(recursive: true);
+  });
+
+  test('rejects a manifest whose identity was modified', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-plugins-');
+    final bytes = [16, 17, 18];
+    final manager = PluginManager(directory);
+    await manager.install(PluginPackage(
+      id: 'identity',
+      version: '1.0.0',
+      bytes: bytes,
+      digest: sha256.convert(bytes).toString(),
+    ));
+
+    final manifestFile = File(
+      '${directory.path}/identity/1.0.0/manifest.json',
+    );
+    final manifest =
+        jsonDecode(await manifestFile.readAsString()) as Map<String, dynamic>;
+    manifest['pluginId'] = 'other-plugin';
+    await manifestFile.writeAsString(jsonEncode(manifest), flush: true);
+    await expectLater(
+      manager.activeProcessSpec('identity'),
       throwsA(isA<StateError>()),
     );
     await directory.delete(recursive: true);
