@@ -150,7 +150,15 @@ describe("Architecture v2 Security & Authentication Suite", () => {
   });
 
   describe("Database-Backed Security Context Resolution", () => {
-    function createMockDb(token: string, tokenHash: string): DatabaseAdapter {
+    function createMockDb(
+      token: string,
+      tokenHash: string,
+      sessionOverrides: Partial<{
+        expires_at: string;
+        revoked_at: string | null;
+        user_status: string;
+      }> = {},
+    ): DatabaseAdapter {
       return {
         prepare(query: string) {
           let boundValues: unknown[] = [];
@@ -173,6 +181,7 @@ describe("Architecture v2 Security & Authentication Suite", () => {
                     display_name: "Alice",
                     avatar_url: null,
                     user_status: "active",
+                    ...sessionOverrides,
                   } as T;
                 }
                 return null;
@@ -268,6 +277,20 @@ describe("Architecture v2 Security & Authentication Suite", () => {
     it("rejects invalid or non-existent token", async () => {
       const token = "unknown-token";
       const mockDb = createMockDb("token", "different-hash");
+
+      await expect(resolveSecurityContextFromDb(mockDb, token)).rejects.toThrow(
+        AuthenticationError,
+      );
+    });
+
+    it.each([
+      ["expired", { expires_at: "2000-01-01T00:00:00.000Z" }],
+      ["revoked", { revoked_at: "2026-01-01T00:00:00.000Z" }],
+      ["inactive user", { user_status: "suspended" }],
+    ])("rejects a %s session identity", async (_label, sessionOverrides) => {
+      const token = "invalid-session-state";
+      const tokenHash = await hashToken(token);
+      const mockDb = createMockDb(token, tokenHash, sessionOverrides);
 
       await expect(resolveSecurityContextFromDb(mockDb, token)).rejects.toThrow(
         AuthenticationError,
