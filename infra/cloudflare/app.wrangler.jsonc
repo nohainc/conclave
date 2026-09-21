@@ -1,0 +1,15 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "conclave-ax-app",
+  "compatibility_date": "2026-09-21",
+  "assets": {
+    "directory": "../../apps/flutter_app/build/web",
+    "not_found_handling": "single-page-application"
+  },
+  "routes": [
+    {
+      "pattern": "app.conclaveax.com",
+      "custom_domain": true
+    }
+  ]
+}
