@@ -142,6 +142,7 @@ class PluginManager {
         manifest.publisher != package.publisher) {
       throw StateError('plugin manifest publisher does not match package');
     }
+    _requirePermissions(manifest.permissions);
     if (manifest.protocolVersion != protocolVersion ||
         !_satisfiesMinimumVersion(engineVersion, manifest.engineVersion)) {
       throw StateError('plugin is incompatible with this Agent Engine');
@@ -234,6 +235,7 @@ class PluginManager {
       throw StateError('plugin package was modified after installation');
     }
     final policy = trustPolicy;
+    _requirePermissions(_permissionsFromManifest(manifest['permissions']));
     if (policy != null) {
       final publisher = manifest['publisher'];
       final signature = manifest['signature'];
@@ -252,6 +254,11 @@ class PluginManager {
       );
     }
     return manifest;
+  }
+
+  void _requirePermissions(Iterable<PluginPermission> permissions) {
+    const policy = PluginTrustPolicy();
+    policy.requirePermissions(permissions, allowedPermissions);
   }
 
   List<PluginPermission> _permissionsFromManifest(Object? raw) {

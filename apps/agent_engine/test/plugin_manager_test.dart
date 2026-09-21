@@ -58,6 +58,26 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('enforces permissions even without a signing policy', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-plugins-');
+    final manager = PluginManager(directory);
+    final bytes = [7, 8, 9];
+    final digest = sha256.convert(bytes).toString();
+
+    await expectLater(
+      manager.install(PluginPackage(
+        id: 'shell-plugin',
+        version: '1.0.0',
+        bytes: bytes,
+        digest: digest,
+        permissions: const [PluginPermission.shell],
+      )),
+      throwsA(isA<StateError>()),
+    );
+    await directory.delete(recursive: true);
+  });
+
   test('enforces signature and permissions when trust policy is enabled',
       () async {
     final directory =
