@@ -4,7 +4,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import worker from "../src/index.js";
-import { AgentGateway } from "../src/agent-gateway.js";
+import {
+  AgentGateway,
+  assignmentContextMatches,
+} from "../src/agent-gateway.js";
 import { hashToken } from "../../../packages/security/src/index.js";
 import {
   AGENT_PROTOCOL_NAME,
@@ -57,6 +60,32 @@ interface TestEnv extends Env {
 }
 
 describe("Agent Enrollment & Agent Gateway (Architecture v2)", () => {
+  it("requires every assignment correlation field to match D1", () => {
+    const row = {
+      id: "assignment-1",
+      workspace_id: "workspace-1",
+      agent_id: "agent-1",
+      worker_id: "worker-1",
+      run_id: "run-1",
+      task_id: "task-1",
+      attempt_id: "attempt-1",
+      idempotency_key: "idem-1",
+    };
+    const message = {
+      workspaceId: "workspace-1",
+      agentId: "agent-1",
+      workerId: "worker-1",
+      runId: "run-1",
+      taskId: "task-1",
+      attemptId: "attempt-1",
+      assignmentId: "assignment-1",
+      idempotencyKey: "idem-1",
+    };
+    expect(assignmentContextMatches(message, row)).toBe(true);
+    expect(
+      assignmentContextMatches({ ...message, taskId: "other-task" }, row),
+    ).toBe(false);
+  });
   let db: DatabaseSync;
   let d1: D1Database;
   let mockEnv: TestEnv;

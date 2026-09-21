@@ -28,6 +28,33 @@ export interface GatewayEnv {
   CONCLAVE_ENVIRONMENT?: string;
 }
 
+export interface AssignmentCorrelation {
+  workspaceId: string;
+  agentId: string;
+  workerId: string;
+  runId: string;
+  taskId: string;
+  attemptId: string;
+  assignmentId: string;
+  idempotencyKey: string;
+}
+
+export function assignmentContextMatches(
+  message: AssignmentCorrelation,
+  row: Record<string, unknown>,
+): boolean {
+  return (
+    message.workspaceId === String(row.workspace_id) &&
+    message.agentId === String(row.agent_id) &&
+    message.workerId === String(row.worker_id) &&
+    message.runId === String(row.run_id) &&
+    message.taskId === String(row.task_id) &&
+    message.attemptId === String(row.attempt_id) &&
+    message.assignmentId === String(row.id) &&
+    message.idempotencyKey === String(row.idempotency_key)
+  );
+}
+
 export class AgentGateway implements DurableObject {
   private socket: WebSocket | null = null;
   private agentId: string | null = null;
@@ -244,6 +271,24 @@ export class AgentGateway implements DurableObject {
     }
 
     const now = new Date().toISOString();
+
+    if (message.type.startsWith("assignment.")) {
+      const assignmentMessage = message as unknown as AssignmentCorrelation;
+      const assignment = await this.env.CONCLAVE_DB.prepare(
+        `SELECT id, workspace_id, agent_id, worker_id, run_id, task_id,
+                attempt_id, idempotency_key
+         FROM worker_assignments WHERE id = ?1`,
+      )
+        .bind(assignmentMessage.assignmentId)
+        .first<Record<string, unknown>>();
+      if (
+        !assignment ||
+        !assignmentContextMatches(assignmentMessage, assignment)
+      ) {
+        this.sendError("Assignment correlation does not match persisted state");
+        return;
+      }
+    }
 
     switch (message.type) {
       case "agent.hello": {
