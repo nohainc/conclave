@@ -1,7 +1,17 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:conclave_agent_engine/local_ipc.dart';
 
 void main() {
-  runApp(ConclaveAgentApp(connection: AgentEngineConnection.unavailable()));
+  runApp(ConclaveAgentApp(
+    connection: SocketAgentEngineConnection(
+      dataDirectory: Directory(
+        '${Platform.environment['HOME'] ?? Directory.current.path}/.conclave-agent',
+      ),
+    ),
+  ));
 }
 
 class ConclaveAgentApp extends StatelessWidget {
@@ -39,6 +49,65 @@ class UnavailableAgentEngineConnection implements AgentEngineConnection {
         plugins: 0,
         activeTasks: 0,
       );
+}
+
+class SocketAgentEngineConnection implements AgentEngineConnection {
+  const SocketAgentEngineConnection({required this.dataDirectory});
+
+  final Directory dataDirectory;
+
+  @override
+  Future<bool> isOnline() async => (await snapshot()).online;
+
+  @override
+  Future<AgentSnapshot> snapshot() async {
+    final metadataFile = File('${dataDirectory.path}/ipc.json');
+    if (!await metadataFile.exists()) {
+      return const AgentSnapshot(
+        online: false,
+        status: 'offline',
+        workers: 0,
+        plugins: 0,
+        activeTasks: 0,
+      );
+    }
+    try {
+      final metadata =
+          jsonDecode(await metadataFile.readAsString()) as Map<String, dynamic>;
+      final port = metadata['port'];
+      final token = metadata['token'];
+      if (port is! int || token is! String || token.isEmpty) {
+        throw const FormatException('invalid Agent Engine IPC metadata');
+      }
+      final client = await LocalIpcClient.connect(port: port, token: token);
+      try {
+        final result = await client.command('engine.status', const {});
+        return AgentSnapshot(
+          online: result['online'] == true,
+          status: result['status'] is String
+              ? result['status'] as String
+              : 'unknown',
+          workers: _integer(result['workers']),
+          plugins: _integer(result['plugins']),
+          activeTasks: _integer(result['activeTasks']),
+          version: result['version'] as String?,
+        );
+      } finally {
+        await client.close();
+      }
+    } on Object catch (error) {
+      return AgentSnapshot(
+        online: false,
+        status: 'error',
+        workers: 0,
+        plugins: 0,
+        activeTasks: 0,
+        error: 'Agent Engine unavailable: $error',
+      );
+    }
+  }
+
+  static int _integer(Object? value) => value is int ? value : 0;
 }
 
 class AgentSnapshot {

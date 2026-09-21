@@ -45,6 +45,78 @@ typedef LocalIpcCommandHandler = Future<Map<String, Object?>> Function(
   IpcCommand command,
 );
 
+class LocalIpcClient {
+  LocalIpcClient._(this._socket, this._lines);
+
+  final Socket _socket;
+  final StreamIterator<String> _lines;
+  int _requestSequence = 0;
+
+  static Future<LocalIpcClient> connect({
+    required int port,
+    required String token,
+    Duration timeout = const Duration(seconds: 2),
+  }) async {
+    final socket = await Socket.connect(
+      InternetAddress.loopbackIPv4,
+      port,
+      timeout: timeout,
+    );
+    final lines = StreamIterator<String>(
+      socket.map((bytes) => bytes.toList()).transform(utf8.decoder).transform(
+            const LineSplitter(),
+          ),
+    );
+    socket.writeln(jsonEncode({'token': token}));
+    if (!await lines.moveNext().timeout(timeout)) {
+      await lines.cancel();
+      await socket.close();
+      throw const FormatException('local IPC did not acknowledge');
+    }
+    final acknowledgement = jsonDecode(lines.current);
+    if (acknowledgement is! Map || acknowledgement['ok'] != true) {
+      await lines.cancel();
+      await socket.close();
+      throw const FormatException('local IPC authentication failed');
+    }
+    return LocalIpcClient._(socket, lines);
+  }
+
+  Future<Map<String, Object?>> command(
+    String type,
+    Map<String, Object?> payload, {
+    Duration timeout = const Duration(seconds: 2),
+  }) async {
+    final requestId = 'ipc-${DateTime.now().microsecondsSinceEpoch}-'
+        '${++_requestSequence}';
+    _socket.writeln(jsonEncode(
+      IpcCommand(type, payload, requestId: requestId).toJson(),
+    ));
+    while (true) {
+      if (!await _lines.moveNext().timeout(timeout)) {
+        throw StateError('local IPC connection closed');
+      }
+      final decoded = jsonDecode(_lines.current);
+      if (decoded is! Map || decoded['requestId'] != requestId) continue;
+      if (decoded['ok'] != true) {
+        throw StateError(
+          decoded['error']?.toString() ?? 'local IPC command failed',
+        );
+      }
+      final response = decoded['payload'];
+      if (response is! Map) {
+        throw const FormatException('local IPC response payload is invalid');
+      }
+      return Map<String, Object?>.from(response);
+    }
+  }
+
+  Future<void> close() async {
+    await _lines.cancel();
+    await _socket.close();
+  }
+}
+
 class LocalIpcServer {
   LocalIpcServer({
     required this.token,

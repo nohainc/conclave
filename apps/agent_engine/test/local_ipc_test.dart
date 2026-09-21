@@ -67,4 +67,20 @@ void main() {
     await socket.close();
     await server.close();
   });
+
+  test('client authenticates and receives a typed command response', () async {
+    final server = LocalIpcServer(
+      token: 'client-secret',
+      onCommand: (command) async => {'status': command.type},
+    );
+    await server.start();
+    final client = await LocalIpcClient.connect(
+      port: server.port!,
+      token: 'client-secret',
+    );
+    final result = await client.command('engine.status', const {});
+    expect(result['status'], 'engine.status');
+    await client.close();
+    await server.close();
+  });
 }
