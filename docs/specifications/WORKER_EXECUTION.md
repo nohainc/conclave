@@ -269,7 +269,26 @@ The panel returns role-labelled, correlated `WorkerExecutionResult` values.
 Their outputs can then be passed to the generic synthesis/evaluation Task from
 the previous section; no Forge-specific worker selection is involved.
 
-## 9. Session isolation
+## 9. Quality presets and cost routing
+
+Core exposes named quality policies so callers choose an outcome profile rather
+than a provider:
+
+- `economy`: one eligible, lowest-cost Worker;
+- `balanced`: two independent candidates in parallel;
+- `high_assurance`: two independent candidates followed by synthesis/evaluation;
+- `exploration`: three independent candidates followed by synthesis/evaluation;
+- `custom`: explicitly supplied mode, candidate count, concurrency, independence,
+  and cost ceiling.
+
+Routing filters by capability, role, permission, availability, execution
+environment, and the preset cost ceiling. It orders eligible bindings by
+estimated attempt cost, skips duplicate independence keys when required, and
+fails closed when the requested number of eligible Workers cannot be found.
+The selected Connection cost snapshot can be recorded with the Attempt and
+ModelCall for later usage accounting.
+
+## 10. Session isolation
 
 A Worker execution may request:
 - a new isolated session;
@@ -280,7 +299,7 @@ Independent research/review must use isolated session/context unless policy expl
 
 Separate chats/sessions using the same underlying model can provide context independence but do not count as provider independence.
 
-## 10. Fallback routing
+## 11. Fallback routing
 
 A Worker policy may define ordered fallbacks.
 
@@ -302,7 +321,7 @@ Fallback occurs only for defined failure classes such as:
 
 A content/verification failure is not silently converted into a provider fallback unless policy allows a retry or alternate worker.
 
-## 11. Initial implementation priority
+## 12. Initial implementation priority
 
 The first production transports should be:
 
