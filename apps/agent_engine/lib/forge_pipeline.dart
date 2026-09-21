@@ -50,8 +50,16 @@ class DartForgePipeline {
     evidence.add(const ForgeEvidence(
         phase: 'independent_review',
         summary: 'Review worker accepted the corrected diff'));
-    final tests = await SafeCommandRunner(workspace).run(['node', '--test'],
-        policy: const CommandPolicy(allowedExecutables: {'node'}));
+    final diff = await SafeCommandRunner(workspace).run(
+      ['git', 'diff', '--', 'lib/add.js'],
+      policy: const CommandPolicy(allowedExecutables: {'git'}),
+    );
+    evidence.add(ForgeEvidence(
+        phase: 'diff', summary: diff.stdout, exitCode: diff.exitCode));
+    final tests = await SafeCommandRunner(workspace).run(
+      ['node', '--test'],
+      policy: const CommandPolicy(allowedExecutables: {'node'}),
+    );
     evidence.add(ForgeEvidence(
         phase: 'tests',
         summary: tests.timedOut ? 'Tests timed out' : tests.stdout,

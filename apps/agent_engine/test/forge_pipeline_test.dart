@@ -18,8 +18,10 @@ void main() {
         'plan',
         'implementation',
         'independent_review',
+        'diff',
         'tests',
       ]);
+      expect(result.evidence[4].summary, contains('return a + b'));
       expect(result.evidence.last.exitCode, 0);
     } finally {
       await source
