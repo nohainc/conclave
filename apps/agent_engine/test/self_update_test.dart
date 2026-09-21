@@ -81,4 +81,35 @@ void main() {
     );
     await root.delete(recursive: true);
   });
+
+  test('rejects a signed or valid release downgrade', () async {
+    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final currentBytes = [1, 1, 1];
+    final currentDigest = sha256.convert(currentBytes).toString();
+    await AgentUpdater(root).apply(
+      ReleasePackage(
+        version: '2.0.0',
+        channel: 'stable',
+        bytes: currentBytes,
+        digest: currentDigest,
+      ),
+      healthCheck: (_) async => true,
+    );
+
+    final olderBytes = [0, 0, 1];
+    await expectLater(
+      AgentUpdater(root).apply(
+        ReleasePackage(
+          version: '1.9.9',
+          channel: 'stable',
+          bytes: olderBytes,
+          digest: sha256.convert(olderBytes).toString(),
+        ),
+        healthCheck: (_) async => true,
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect(await File('${root.path}/agent.active').readAsBytes(), currentBytes);
+    await root.delete(recursive: true);
+  });
 }

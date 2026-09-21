@@ -57,6 +57,23 @@ class AgentUpdater {
       throw StateError('agent release requires an incompatible protocol');
     }
     await root.create(recursive: true);
+    final releaseMetadata = File('${root.path}/release.json');
+    if (await releaseMetadata.exists()) {
+      try {
+        final metadata =
+            jsonDecode(await releaseMetadata.readAsString()) as Map;
+        final activeVersion = metadata['version'];
+        if (activeVersion is String &&
+            _compareVersions(release.version, activeVersion) < 0) {
+          throw StateError(
+              'agent release rollback is not permitted: ${release.version} < $activeVersion');
+        }
+      } on StateError {
+        rethrow;
+      } on Object {
+        throw StateError('active agent release metadata is invalid');
+      }
+    }
     final staged = File('${root.path}/agent-${release.version}.staged');
     final active = File('${root.path}/agent.active');
     final backup = File('${root.path}/agent.previous');
@@ -92,6 +109,17 @@ class AgentUpdater {
       }
     }
     return true;
+  }
+
+  int _compareVersions(String left, String right) {
+    final leftParts = _versionParts(left);
+    final rightParts = _versionParts(right);
+    for (var index = 0; index < 3; index++) {
+      if (leftParts[index] != rightParts[index]) {
+        return leftParts[index].compareTo(rightParts[index]);
+      }
+    }
+    return 0;
   }
 
   List<int> _versionParts(String version) => version
