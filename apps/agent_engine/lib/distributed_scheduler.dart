@@ -51,10 +51,17 @@ class DistributedScheduler {
     SchedulingMode mode = SchedulingMode.parallel,
     int maxCandidates = 2,
     int maxCost = 100,
+    int maxTotalCost = 100,
     CandidateSynthesizer? synthesize,
     CandidateSelector? select,
     bool requireIndependent = false,
   }) async {
+    if (maxCandidates <= 0 || maxCost < 0 || maxTotalCost < 0) {
+      throw ArgumentError('scheduler limits must be non-negative and usable');
+    }
+    if (mode == SchedulingMode.compareAndSelect && select == null) {
+      throw StateError('compareAndSelect mode requires a selector');
+    }
     var eligible = workers
         .where((worker) =>
             worker.online &&
@@ -73,9 +80,17 @@ class DistributedScheduler {
           .where((worker) => independenceKeys.add(worker.independenceKey))
           .toList();
     }
-    eligible = eligible
-        .take(mode == SchedulingMode.single ? 1 : maxCandidates)
-        .toList();
+    final selected = <WorkerCandidate>[];
+    var totalCost = 0;
+    for (final worker in eligible) {
+      if (selected.length >= (mode == SchedulingMode.single ? 1 : maxCandidates)) {
+        break;
+      }
+      if (totalCost + worker.cost > maxTotalCost) continue;
+      selected.add(worker);
+      totalCost += worker.cost;
+    }
+    eligible = selected;
     if (eligible.isEmpty) throw StateError('no eligible online Worker');
     if (mode == SchedulingMode.single) {
       return [await _run(eligible.first, executor)];
@@ -101,8 +116,8 @@ class DistributedScheduler {
         ),
       ];
     }
-    if (mode == SchedulingMode.compareAndSelect && select != null) {
-      return [await select(results)];
+    if (mode == SchedulingMode.compareAndSelect) {
+      return [await select!(results)];
     }
     return results;
   }

@@ -145,10 +145,34 @@ void main() {
       mode: SchedulingMode.compareAndSelect,
       maxCandidates: 3,
       requireIndependent: true,
+      select: (candidates) async => candidates.last,
       executor: (worker) async => worker.workerId,
     );
-    expect(results, hasLength(2));
-    expect(results.map((result) => result.output),
-        containsAll(['provider-a-1', 'provider-b']));
+    expect(results, hasLength(1));
+    expect(results.single.output, 'provider-b');
+  });
+
+  test('stops candidate selection at the total cost budget', () async {
+    final results = await DistributedScheduler().execute(
+      workers: workers,
+      requiredCapabilities: {'research'},
+      mode: SchedulingMode.parallel,
+      maxCandidates: 3,
+      maxTotalCost: 4,
+      executor: (worker) async => worker.workerId,
+    );
+    expect(results.map((result) => result.output), ['worker-a']);
+  });
+
+  test('requires a selector for compare-and-select policy', () async {
+    expect(
+      () => DistributedScheduler().execute(
+        workers: workers,
+        requiredCapabilities: {'research'},
+        mode: SchedulingMode.compareAndSelect,
+        executor: (worker) async => worker.workerId,
+      ),
+      throwsStateError,
+    );
   });
 }
