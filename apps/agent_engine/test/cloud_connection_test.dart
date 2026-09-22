@@ -22,6 +22,19 @@ class FakeSocket implements AgentCloudSocket {
   Future<void> close() => controller.close();
 }
 
+Future<void> waitFor(
+  bool Function() condition, {
+  Duration timeout = const Duration(seconds: 2),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (!condition()) {
+    if (DateTime.now().isAfter(deadline)) {
+      throw TimeoutException('condition was not met before $timeout');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+}
+
 void main() {
   test('connects outbound and sends hello', () async {
     final socket = FakeSocket();
@@ -569,19 +582,16 @@ void main() {
         };
 
     socket.controller.add(jsonEncode(assignment()));
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await waitFor(() => executions == 1);
+    await waitFor(() => socket.sent.where((message) =>
+        (jsonDecode(message as String) as Map<String, dynamic>)['type'] ==
+        'assignment.result').length == 1);
     socket.controller.add(jsonEncode(assignment()));
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await waitFor(() => socket.sent.where((message) =>
+        (jsonDecode(message as String) as Map<String, dynamic>)['type'] ==
+        'assignment.result').length == 2);
 
     expect(executions, 1);
-    expect(
-      socket.sent
-          .where((message) =>
-              (jsonDecode(message as String) as Map<String, dynamic>)['type'] ==
-              'assignment.result')
-          .length,
-      2,
-    );
     await connection.close();
     await directory.delete(recursive: true);
   });
@@ -633,10 +643,16 @@ void main() {
       },
     };
     socket.controller.add(jsonEncode(assignment));
-    await Future<void>.delayed(const Duration(milliseconds: 10));
+    await waitFor(() => executions == 1);
     socket.controller
         .add(jsonEncode({...assignment, 'messageId': 'server-running-2'}));
-    await Future<void>.delayed(const Duration(milliseconds: 10));
+    await waitFor(() => socket.sent.any((message) {
+          final decoded =
+              jsonDecode(message as String) as Map<String, dynamic>;
+          return decoded['type'] == 'assignment.ack' &&
+              (decoded['payload'] as Map<String, dynamic>)['accepted'] ==
+                  false;
+        }));
 
     expect(executions, 1);
     final duplicateAck = socket.sent

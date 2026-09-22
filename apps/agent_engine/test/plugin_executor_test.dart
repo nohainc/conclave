@@ -167,9 +167,11 @@ void main() {
         operationId: 'assignment-cancel-1',
         timeout: const Duration(seconds: 10),
       );
+      final cancellationExpectation =
+          expectLater(execution, throwsA(isA<ProcessException>()));
       await Future<void>.delayed(const Duration(milliseconds: 100));
       expect(await executor.cancel('assignment-cancel-1'), isTrue);
-      await expectLater(execution, throwsA(isA<ProcessException>()));
+      await cancellationExpectation;
     } finally {
       await directory.delete(recursive: true);
     }

@@ -44,16 +44,12 @@
         "name": "CONCLAVE_AGENT_GATEWAY",
         "class_name": "AgentGateway",
       },
-      {
-        "name": "CONCLAVE_RUNTIME_CONNECTION",
-        "class_name": "RuntimeConnection",
-      },
     ],
   },
   "migrations": [
     {
-      "tag": "v1-runtime-connection",
-      "new_sqlite_classes": ["RuntimeConnection", "AgentGateway"],
+      "tag": "v1-agent-gateway",
+      "new_sqlite_classes": ["AgentGateway"],
     },
   ],
 }

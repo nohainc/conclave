@@ -1,5 +1,4 @@
 export { ConclaveRunWorkflow } from "./workflow.js";
-export { RuntimeConnection } from "./runtime-connection.js";
 export { AgentGateway } from "./agent-gateway.js";
 export {
   selectWorkerForTask,
@@ -208,9 +207,6 @@ type SecurityEnv = Env & {
   readonly CONCLAVE_ALLOW_ANONYMOUS_DEV?: string;
   readonly CONCLAVE_CI_INGEST_TOKEN?: string;
   readonly CONCLAVE_FORGE_CALLBACK_TOKEN?: string;
-  readonly CONCLAVE_RUNTIME_CONNECT_TOKEN?: string;
-  readonly CONCLAVE_RUNTIME_OPERATION_TOKEN?: string;
-  readonly CONCLAVE_RUNTIME_CONNECTION: DurableObjectNamespace;
   readonly CONCLAVE_AGENT_GATEWAY: DurableObjectNamespace;
   readonly CONCLAVE_CONNECTOR_REGISTRATION_TOKEN?: string;
 };
@@ -559,27 +555,6 @@ function requireForgeCallbackAuthentication(
   ) {
     throw new HttpError(401, "Forge callback authentication required");
   }
-}
-
-function runtimeToken(
-  request: Request,
-  env: SecurityEnv,
-  tokenName: keyof SecurityEnv,
-): void {
-  const configured = env[tokenName];
-  const provided =
-    bearer(request) ?? new URL(request.url).searchParams.get("token");
-  if (!configured || provided !== configured) {
-    throw new HttpError(401, "Runtime authentication required");
-  }
-}
-
-function runtimeConnectionId(request: Request): string {
-  const value = request.headers.get("x-conclave-runtime-id");
-  if (!value || !/^[a-zA-Z0-9_-]{1,100}$/.test(value)) {
-    throw new HttpError(400, "Runtime connection ID is required");
-  }
-  return value;
 }
 
 async function runProjectId(
@@ -5473,47 +5448,6 @@ export default {
       }
       if (request.method === "POST" && url.pathname === "/api/session/logout") {
         return await handleSessionLogout(request, env as SecurityEnv, ctx);
-      }
-      if (request.method === "GET" && url.pathname === "/api/runtime/connect") {
-        const securityEnv = env as SecurityEnv;
-        runtimeToken(request, securityEnv, "CONCLAVE_RUNTIME_CONNECT_TOKEN");
-        const runtimeId = runtimeConnectionId(request);
-        const stub =
-          securityEnv.CONCLAVE_RUNTIME_CONNECTION.getByName(runtimeId);
-        return stub.fetch(request);
-      }
-      if (
-        request.method === "POST" &&
-        (url.pathname === "/api/runtime/operations" ||
-          url.pathname === "/api/runtime/cancel" ||
-          url.pathname === "/api/runtime/worker-execute")
-      ) {
-        const securityEnv = env as SecurityEnv;
-        runtimeToken(request, securityEnv, "CONCLAVE_RUNTIME_OPERATION_TOKEN");
-        const runtimeId = runtimeConnectionId(request);
-        const stub =
-          securityEnv.CONCLAVE_RUNTIME_CONNECTION.getByName(runtimeId);
-        const target =
-          url.pathname === "/api/runtime/cancel"
-            ? "/cancel"
-            : url.pathname === "/api/runtime/worker-execute"
-              ? "/worker-execute"
-              : "/execute";
-        return stub.fetch(
-          new Request(`https://runtime.internal${target}`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: await request.text(),
-          }),
-        );
-      }
-      if (request.method === "GET" && url.pathname === "/api/runtime/workers") {
-        const securityEnv = env as SecurityEnv;
-        runtimeToken(request, securityEnv, "CONCLAVE_RUNTIME_OPERATION_TOKEN");
-        const runtimeId = runtimeConnectionId(request);
-        const stub =
-          securityEnv.CONCLAVE_RUNTIME_CONNECTION.getByName(runtimeId);
-        return stub.fetch(new Request("https://runtime.internal/workers"));
       }
       const connectorMatch = url.pathname.match(
         /^\/api\/connector\/(register_session|claim_task|get_task|get_context|get_next_message|submit_candidate|submit_result|submit_finding|report_status|release_task)$/,
