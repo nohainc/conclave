@@ -1,60 +1,116 @@
 # Conclave AX Applications
 
-**Status:** Normative for Architecture v3
+**Status:** Normative for Architecture v4
 
-## Deployable applications
+Conclave AX has three primary applications and one extension type.
 
-### Studio
-Path: `apps/flutter_app` (planned rename to `apps/studio`)
+## 1. Conclave Studio
 
-Technology:
+**Path:** `apps/studio` after v4 migration  
+**Current transitional path:** `apps/flutter_app`
+
+**Technology**
 - Flutter;
-- Dart.
+- Dart;
+- Web.
 
-Purpose:
-- user authentication;
-- Workspaces/Projects/Chats;
-- Run progress/results;
-- centralized Agent/Worker/Plugin management.
+**Purpose**
+- human authentication;
+- Workspaces;
+- Projects and Chats;
+- Goals/Runs;
+- Host management;
+- Worker catalog;
+- Accounts / Credential Profiles;
+- usage/cost;
+- approvals and evidence.
 
-### Cloud
-Path: `apps/worker`
+Studio is web-first in v4. Desktop Studio is not a product requirement.
 
-Technology:
+Studio communicates only with Cloud.
+
+## 2. Conclave Cloud
+
+**Path:** `apps/cloud` after v4 migration  
+**Current transitional path:** `apps/worker`
+
+**Technology**
 - TypeScript;
-- Cloudflare Workers/Workflows/Durable Objects/D1/R2.
+- Cloudflare Workers;
+- Cloudflare Workflows;
+- Durable Objects;
+- D1;
+- R2.
 
-Purpose:
-- authoritative state and orchestration;
-- multi-user API;
-- Agent Gateway;
-- plugin registry;
-- audit/evidence.
+**Purpose**
+- authoritative multi-user state;
+- orchestration;
+- Host Gateway;
+- Worker catalog/package registry;
+- Credential Profile authorization;
+- assignment scheduling;
+- audit/evidence;
+- artifacts;
+- budgets/usage.
 
-### Agent App
-Path: `apps/agent_app`
+Cloud never executes an external AI/model/tool directly.
 
-Technology:
+## 3. Conclave Host
+
+**Path:** `apps/host` after v4 migration
+
+**Technology**
 - Flutter;
-- Dart.
+- Dart;
+- native desktop application.
 
-Purpose:
-- local host setup and monitoring UI.
+**Targets**
+- macOS first;
+- Windows;
+- Linux.
 
-### Agent Engine
-Path: `apps/agent_engine`
-
-Technology:
-- Dart native executable.
-
-Purpose:
-- long-running host service;
+**Purpose**
+- one machine identity;
+- pairing;
 - Cloud connection;
-- assignments;
-- plugin/worker process supervision;
-- local credentials/runtime;
-- updates.
+- Worker installation/update/removal;
+- secure local credentials;
+- assignment journal;
+- Worker process supervision;
+- repository/filesystem permissions;
+- logs;
+- Host updates;
+- minimal local UX.
 
-## Non-app packages
+One Host is installed per machine. Users do not log in/out of Host accounts; Cloud authorization determines who may use the Host.
 
-Core, protocols, persistence, security, orchestration, and plugin SDKs remain libraries and must not be treated as deployable applications.
+## 4. Workers
+
+**Path:** `workers/<worker-id>` after v4 migration  
+**Current transitional path:** `worker_plugins/*`
+
+A Worker is an installable execution integration.
+
+Examples:
+- Codex;
+- Claude Code;
+- OpenAI;
+- Anthropic;
+- Ollama;
+- Web AI;
+- Git/Test.
+
+Workers execute out-of-process under Host supervision.
+
+Workers are language-independent executable packages. First-party Workers use Dart when practical.
+
+## Removed v4 product concepts
+
+Architecture v4 does not expose these as product/domain concepts:
+- Agent;
+- Agent Engine;
+- Plugin;
+- configured Worker instance;
+- Connection.
+
+Their useful responsibilities are represented by Host, Worker, Credential Profile, and Assignment.
