@@ -12,7 +12,6 @@
   "dependencies": {
     "@conclave/agent-protocol": "workspace:*",
     "@conclave/core": "workspace:*",
-    "@conclave/local-runtime": "workspace:*",
     "@conclave/orchestration": "workspace:*",
     "@conclave/persistence": "workspace:*",
     "@conclave/plugin-sdk": "workspace:*",

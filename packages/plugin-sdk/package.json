@@ -11,9 +11,6 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@conclave/agent-protocol": "workspace:*",
-    "@conclave/core": "workspace:*",
-    "@conclave/security": "workspace:*",
     "zod": "^3.24.2"
   }
 }
