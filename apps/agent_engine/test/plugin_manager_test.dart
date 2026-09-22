@@ -208,6 +208,36 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('rejects traversal identifiers before checking the active version',
+      () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-plugins-');
+    final manager = PluginManager(directory);
+    var downloaded = false;
+    await expectLater(
+      manager.reconcile(
+        [
+          {
+            'pluginId': '../outside',
+            'version': '1.0.0',
+            'publisher': 'publisher',
+            'packageR2Key': 'plugins/outside/1.0.0/package.bin',
+            'packageDigest': 'digest',
+            'signature': 'signature',
+            'permissions': <String>[],
+          },
+        ],
+        download: (_, __, ___) async {
+          downloaded = true;
+          return const [1];
+        },
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect(downloaded, isFalse);
+    await directory.delete(recursive: true);
+  });
+
   test('rechecks signing revocation before launching an installed plugin',
       () async {
     final directory =

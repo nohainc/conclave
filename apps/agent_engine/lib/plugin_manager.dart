@@ -129,6 +129,8 @@ class PluginManager {
           permissions is! List) {
         throw StateError('Cloud returned an invalid desired plugin');
       }
+      _validatePathComponent(pluginId, 'plugin id');
+      _validatePathComponent(version, 'plugin version');
       if (await activeVersion(pluginId) == version) continue;
       final bytes = await download(pluginId, version, packageR2Key);
       await install(PluginPackage(
@@ -293,6 +295,7 @@ class PluginManager {
   }
 
   Future<String?> activeVersion(String pluginId) async {
+    _validatePathComponent(pluginId, 'plugin id');
     final file = File('${root.path}/$pluginId/active.json');
     if (!await file.exists()) return null;
     final json = jsonDecode(await file.readAsString()) as Map;
@@ -300,6 +303,8 @@ class PluginManager {
   }
 
   Future<void> rollback(String pluginId, String version) async {
+    _validatePathComponent(pluginId, 'plugin id');
+    _validatePathComponent(version, 'plugin version');
     if (!await Directory('${root.path}/$pluginId/$version').exists()) {
       throw StateError('plugin version is not installed');
     }
@@ -457,6 +462,8 @@ class PluginManager {
   }
 
   Future<void> remove(String pluginId, String version) async {
+    _validatePathComponent(pluginId, 'plugin id');
+    _validatePathComponent(version, 'plugin version');
     if (await activeVersion(pluginId) == version) {
       throw StateError('cannot remove the active plugin version');
     }
