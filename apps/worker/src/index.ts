@@ -3362,7 +3362,8 @@ async function handleStudioSnapshot(
       .bind(...bind)
       .all(),
     env.CONCLAVE_DB.prepare(
-      `SELECT w.id, w.name, w.roles_json, w.capabilities_json, w.status, '' AS cost,
+      `SELECT w.id, w.name, w.agent_id AS agentId, w.plugin_id AS pluginId,
+              w.roles_json, w.capabilities_json, w.status, '' AS cost,
               COALESCE(a.name, 'Unassigned') AS agentName,
               COALESCE(wp.display_name, 'Unassigned') AS pluginName
        FROM workers w
@@ -3374,6 +3375,10 @@ async function handleStudioSnapshot(
       .all(),
     env.CONCLAVE_DB.prepare(
       `SELECT a.id, a.name, a.hostname, a.status, a.version,
+              COALESCE(json_extract(a.capabilities_json, '$.os'), '—') AS os,
+              COALESCE(json_extract(a.capabilities_json, '$.arch'), '—') AS architecture,
+              a.version AS appVersion, 'stable' AS updateChannel,
+              COALESCE(a.last_heartbeat_at, a.updated_at) AS lastSeen,
               (SELECT COUNT(*) FROM agent_plugin_installs i WHERE i.agent_id = a.id) AS pluginCount,
               (SELECT COUNT(*) FROM workers w WHERE w.agent_id = a.id) AS workerCount,
               (SELECT COUNT(*) FROM worker_assignments wa JOIN workers w ON w.id = wa.worker_id

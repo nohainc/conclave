@@ -32,6 +32,16 @@ abstract interface class StudioDataSource {
     required String workspaceId,
     required String agentId,
   });
+  Future<void> saveWorker({
+    required String workspaceId,
+    String? workerId,
+    required String name,
+    required String agentId,
+    required String pluginId,
+    required List<String> roles,
+    required List<String> capabilities,
+    required bool enabled,
+  });
 }
 
 class StudioApiException implements Exception {
@@ -199,6 +209,44 @@ class StudioApiClient implements StudioDataSource {
       throw StudioApiException('Agent revoke failed (${response.statusCode})');
     }
   }
+
+  @override
+  Future<void> saveWorker({
+    required String workspaceId,
+    String? workerId,
+    required String name,
+    required String agentId,
+    required String pluginId,
+    required List<String> roles,
+    required List<String> capabilities,
+    required bool enabled,
+  }) async {
+    final uri = workerId == null
+        ? Uri.parse('$baseUrl/workspaces/$workspaceId/workers')
+        : Uri.parse('$baseUrl/workspaces/$workspaceId/workers/$workerId');
+    final response = workerId == null
+        ? await client.post(uri,
+            headers: {'content-type': 'application/json'},
+            body: jsonEncode({
+              'name': name,
+              'agentId': agentId,
+              'pluginId': pluginId,
+              'roles': roles,
+              'capabilities': capabilities,
+              'enabled': enabled,
+            }))
+        : await client.put(uri,
+            headers: {'content-type': 'application/json'},
+            body: jsonEncode({
+              'name': name,
+              'roles': roles,
+              'capabilities': capabilities,
+              'enabled': enabled,
+            }));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException('Worker save failed (${response.statusCode})');
+    }
+  }
 }
 
 class DemoStudioDataSource implements StudioDataSource {
@@ -256,5 +304,17 @@ class DemoStudioDataSource implements StudioDataSource {
   Future<void> revokeAgent({
     required String workspaceId,
     required String agentId,
+  }) async {}
+
+  @override
+  Future<void> saveWorker({
+    required String workspaceId,
+    String? workerId,
+    required String name,
+    required String agentId,
+    required String pluginId,
+    required List<String> roles,
+    required List<String> capabilities,
+    required bool enabled,
   }) async {}
 }

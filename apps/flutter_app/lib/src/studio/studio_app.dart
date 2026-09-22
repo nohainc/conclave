@@ -133,6 +133,126 @@ class _StudioAppState extends State<StudioApp> {
     }
   }
 
+  Future<void> _editWorker([StudioWorker? existing]) async {
+    final workspaceId = snapshot.workspaceId;
+    if (workspaceId == null || workspaceId.isEmpty) return;
+    final nameController = TextEditingController(text: existing?.name ?? '');
+    final rolesController = TextEditingController(
+        text: (existing?.roles.isNotEmpty == true
+                ? existing!.roles
+                : const ['researcher'])
+            .join(', '));
+    final capabilitiesController = TextEditingController(
+        text: (existing?.capabilities.isNotEmpty == true
+                ? existing!.capabilities
+                : const ['repository_read'])
+            .join(', '));
+    var agentId = existing?.agentId.isNotEmpty == true
+        ? existing!.agentId
+        : snapshot.agents.firstOrNull?.id;
+    var pluginId = existing?.pluginId.isNotEmpty == true
+        ? existing!.pluginId
+        : snapshot.plugins.firstOrNull?.id;
+    var enabled = existing?.status.toLowerCase() != 'disabled';
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(existing == null ? 'Create Worker' : 'Edit Worker'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(
+                  controller: nameController,
+                  onChanged: (_) => setDialogState(() {}),
+                  decoration: const InputDecoration(labelText: 'Name')),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: agentId,
+                decoration: const InputDecoration(labelText: 'Agent'),
+                items: snapshot.agents
+                    .map((agent) => DropdownMenuItem(
+                        value: agent.id, child: Text(agent.name)))
+                    .toList(),
+                onChanged: (value) => setDialogState(() => agentId = value),
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: pluginId,
+                decoration: const InputDecoration(labelText: 'Plugin'),
+                items: snapshot.plugins
+                    .map((plugin) => DropdownMenuItem(
+                        value: plugin.id, child: Text(plugin.name)))
+                    .toList(),
+                onChanged: (value) => setDialogState(() => pluginId = value),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                  controller: rolesController,
+                  decoration: const InputDecoration(
+                      labelText: 'Roles (comma separated)')),
+              const SizedBox(height: 10),
+              TextField(
+                  controller: capabilitiesController,
+                  decoration: const InputDecoration(
+                      labelText: 'Capabilities (comma separated)')),
+              SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Enabled'),
+                  value: enabled,
+                  onChanged: (value) => setDialogState(() => enabled = value)),
+            ]),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed: nameController.text.trim().isEmpty ||
+                      agentId == null ||
+                      pluginId == null
+                  ? null
+                  : () => Navigator.pop(dialogContext, true),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (saved != true || agentId == null || pluginId == null) {
+      nameController.dispose();
+      rolesController.dispose();
+      capabilitiesController.dispose();
+      return;
+    }
+    try {
+      await store.workers.save(
+        workspaceId: workspaceId,
+        workerId: existing?.id,
+        name: nameController.text.trim(),
+        agentId: agentId!,
+        pluginId: pluginId!,
+        roles: rolesController.text
+            .split(',')
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty)
+            .toList(),
+        capabilities: capabilitiesController.text
+            .split(',')
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty)
+            .toList(),
+        enabled: enabled,
+      );
+      await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
+    } catch (error) {
+      if (mounted) setState(() => loadError = error.toString());
+    } finally {
+      nameController.dispose();
+      rolesController.dispose();
+      capabilitiesController.dispose();
+    }
+  }
+
   @override
   void dispose() {
     refreshTimer?.cancel();
@@ -1450,6 +1570,9 @@ class _StudioAppState extends State<StudioApp> {
                               style: const TextStyle(color: Color(0xff777683))),
                           const SizedBox(height: 14),
                           Wrap(spacing: 20, runSpacing: 8, children: [
+                            Text('${agent.os} · ${agent.architecture}'),
+                            Text('Channel: ${agent.updateChannel}'),
+                            Text('Last seen: ${agent.lastSeen}'),
                             Text('${agent.pluginCount} plugins'),
                             Text('${agent.workerCount} workers'),
                             Text('${agent.activeTaskCount} active task'),
@@ -1522,6 +1645,15 @@ class _StudioAppState extends State<StudioApp> {
               'Configured resources resolved by role, capability, and Agent.',
               Icons.people_alt_outlined),
           const SizedBox(height: 24),
+          Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.icon(
+                  onPressed: snapshot.agents.isEmpty || snapshot.plugins.isEmpty
+                      ? null
+                      : () => _editWorker(),
+                  icon: const Icon(Icons.add),
+                  label: const Text('New Worker'))),
+          const SizedBox(height: 16),
           if (snapshot.workers.isEmpty)
             _emptyFleetCard('No workers configured',
                 'Create a Worker after connecting an Agent and Plugin.')
@@ -1551,14 +1683,20 @@ class _StudioAppState extends State<StudioApp> {
                   subtitle: Text(
                       '${worker.agentName} · ${worker.pluginName}\n${worker.roles.isEmpty ? worker.role : worker.roles.join(', ')} · ${worker.capabilities.join(' · ')}'),
                   isThreeLine: true,
-                  trailing: Switch(
-                    value: workerEnabled[worker.id] ??
-                        worker.status.toLowerCase() != 'offline',
-                    onChanged: (value) {
-                      setState(() => workerEnabled[worker.id] = value);
-                      _setWorkerEnabled(worker.id, value);
-                    },
-                  ),
+                  trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                    IconButton(
+                        tooltip: 'Edit Worker',
+                        onPressed: () => _editWorker(worker),
+                        icon: const Icon(Icons.edit_outlined)),
+                    Switch(
+                      value: workerEnabled[worker.id] ??
+                          worker.status.toLowerCase() != 'offline',
+                      onChanged: (value) {
+                        setState(() => workerEnabled[worker.id] = value);
+                        _setWorkerEnabled(worker.id, value);
+                      },
+                    ),
+                  ]),
                 ),
               ),
             ),

@@ -62,6 +62,26 @@ class WorkerStore {
   Future<void> setEnabled(String workspaceId, String workerId, bool enabled) =>
       source.setWorkerEnabled(
           workspaceId: workspaceId, workerId: workerId, enabled: enabled);
+
+  Future<void> save({
+    required String workspaceId,
+    String? workerId,
+    required String name,
+    required String agentId,
+    required String pluginId,
+    required List<String> roles,
+    required List<String> capabilities,
+    required bool enabled,
+  }) =>
+      source.saveWorker(
+          workspaceId: workspaceId,
+          workerId: workerId,
+          name: name,
+          agentId: agentId,
+          pluginId: pluginId,
+          roles: roles,
+          capabilities: capabilities,
+          enabled: enabled);
 }
 
 class PluginStore {

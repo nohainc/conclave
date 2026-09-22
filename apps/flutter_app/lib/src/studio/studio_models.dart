@@ -313,6 +313,8 @@ class StudioWorker {
     this.agentName = '—',
     this.pluginName = '—',
     this.roles = const [],
+    this.agentId = '',
+    this.pluginId = '',
   });
 
   final String id;
@@ -325,6 +327,8 @@ class StudioWorker {
   final String agentName;
   final String pluginName;
   final List<String> roles;
+  final String agentId;
+  final String pluginId;
 
   factory StudioWorker.fromJson(Map<String, dynamic> json) => StudioWorker(
       id: _string(json, 'id'),
@@ -336,7 +340,9 @@ class StudioWorker {
       cost: _string(json, 'cost'),
       agentName: _string(json, 'agentName'),
       pluginName: _string(json, 'pluginName'),
-      roles: _strings(json, 'roles'));
+      roles: _strings(json, 'roles'),
+      agentId: _string(json, 'agentId'),
+      pluginId: _string(json, 'pluginId'));
 }
 
 class StudioAgent {
@@ -349,6 +355,11 @@ class StudioAgent {
     required this.pluginCount,
     required this.workerCount,
     required this.activeTaskCount,
+    this.os = '—',
+    this.architecture = '—',
+    this.appVersion = '—',
+    this.updateChannel = '—',
+    this.lastSeen = '—',
   });
 
   final String id;
@@ -359,6 +370,11 @@ class StudioAgent {
   final int pluginCount;
   final int workerCount;
   final int activeTaskCount;
+  final String os;
+  final String architecture;
+  final String appVersion;
+  final String updateChannel;
+  final String lastSeen;
 
   factory StudioAgent.fromJson(Map<String, dynamic> json) => StudioAgent(
         id: _string(json, 'id'),
@@ -369,6 +385,11 @@ class StudioAgent {
         pluginCount: json['pluginCount'] as int? ?? 0,
         workerCount: json['workerCount'] as int? ?? 0,
         activeTaskCount: json['activeTaskCount'] as int? ?? 0,
+        os: _string(json, 'os'),
+        architecture: _string(json, 'architecture'),
+        appVersion: _string(json, 'appVersion'),
+        updateChannel: _string(json, 'updateChannel'),
+        lastSeen: _string(json, 'lastSeen'),
       );
 }
 
