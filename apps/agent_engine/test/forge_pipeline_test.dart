@@ -18,6 +18,8 @@ void main() {
         'verification',
       ]);
       expect(result.evidence[4].summary, contains('return a + b'));
+      expect(result.evidence[2].artifacts,
+          containsAll(['lib/add.js', 'test/add.test.js']));
       expect(
           result.evidence.first.revision, matches(RegExp(r'^[0-9a-f]{40}$')));
       expect(result.evidence[4].command, ['git', 'diff', '--', 'lib/add.js']);

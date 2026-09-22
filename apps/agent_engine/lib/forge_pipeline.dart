@@ -68,11 +68,20 @@ class DartForgePipeline {
         summary:
             'Replace subtraction with addition and preserve regression coverage'));
     await workspace.patch('lib/add.js', 'return a - b;', 'return a + b;');
+    const regressionTest = '''import test from "node:test";
+import assert from "node:assert/strict";
+import { add } from "../lib/add.js";
+
+test("adds two numbers", () => {
+  assert.equal(add(2, 3), 5);
+});
+''';
+    await workspace.write('test/add.test.js', regressionTest);
     evidence.add(const ForgeEvidence(
         phase: 'implementation',
         summary:
-            'Agent patched the implementation through the safe workspace API',
-        artifacts: ['lib/add.js']));
+            'Agent patched the implementation and added regression coverage through the safe workspace API',
+        artifacts: ['lib/add.js', 'test/add.test.js']));
     final reviewRepository = await _copyWorkspace(repository);
     try {
       final reviewWorkspace = SafeWorkspace(reviewRepository);
