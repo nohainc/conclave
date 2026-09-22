@@ -1,6 +1,7 @@
 # Chat Intent and Scoped Context
 
-> **Superseded by Architecture v3.** Preserve for historical context; new intent/context work must follow the v3 roadmap and ADR-003.
+This is the current message-intent and bounded-context specification for
+Architecture v3.
 
 ## Message lifecycle
 

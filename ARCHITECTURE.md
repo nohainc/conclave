@@ -19,4 +19,4 @@ Architecture v3 is the authoritative architecture.
 - [Migration to v3](docs/architecture/MIGRATION_TO_V3.md)
 - [Implementation Roadmap](docs/roadmaps/ARCHITECTURE_V3_IMPLEMENTATION.md)
 
-Architecture v2 and earlier ConnectionResource/Local Runtime documents are historical and must not guide new implementation.
+The repository keeps only current Architecture v3 guidance in active documentation.

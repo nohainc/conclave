@@ -2,7 +2,7 @@
 
 **Status:** Accepted (Normative)  
 **Date:** 2026-09-21  
-**Supersedes:** ADR-002 where Agent implementation technology/lifecycle differs
+This is the current Agent implementation decision for Architecture v3.
 
 ## Decision
 

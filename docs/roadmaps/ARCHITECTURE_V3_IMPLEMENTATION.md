@@ -1,6 +1,6 @@
 # Architecture v3 Implementation Roadmap
 
-This roadmap supersedes Architecture v2 implementation phases where they conflict with the Flutter/Dart Agent design.
+This roadmap is the current implementation plan for the Flutter/Dart Agent design.
 
 Architecture v3 principle:
 

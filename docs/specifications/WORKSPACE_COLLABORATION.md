@@ -1,6 +1,7 @@
 # Workspace Collaboration and Invitations
 
-> **Superseded by Architecture v3.** Preserve for historical context; new collaboration work must follow the v3 roadmap.
+This is the current workspace collaboration and invitation specification for
+Architecture v3.
 
 ## Membership lifecycle
 
