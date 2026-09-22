@@ -1,0 +1,726 @@
+export type RouteHandler = (...args: unknown[]) => Promise<Response>;
+export type WorkerRouteHandlers = Record<string, RouteHandler>;
+
+export interface WorkerRouteDependencies {
+  readonly json: (data: unknown, init?: ResponseInit) => Response;
+  readonly requireSameOriginForCookieMutation: (request: Request) => void;
+  readonly anonymousDevelopment: (env: Env) => boolean;
+  readonly runProjectId: (
+    env: Env,
+    runId: string,
+  ) => Promise<string | undefined>;
+  readonly authorizeRequest: (...args: unknown[]) => Promise<void>;
+  readonly resolveWorkflowInstanceId: (
+    env: Env,
+    runId: string,
+  ) => Promise<string>;
+  readonly errorMessage: (error: unknown) => string;
+  readonly HttpError: new (...args: unknown[]) => Error;
+}
+
+export async function routeWorkerRequest(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext | undefined,
+  handlers: WorkerRouteHandlers,
+  deps: WorkerRouteDependencies,
+): Promise<Response> {
+  const url = new URL(request.url);
+  try {
+    if (
+      request.method === "POST" ||
+      request.method === "PUT" ||
+      request.method === "PATCH" ||
+      request.method === "DELETE"
+    ) {
+      deps.requireSameOriginForCookieMutation(request);
+    }
+    if (request.method === "GET" && url.pathname === "/api/session") {
+      return await handlers.handleSession!(request, env, ctx);
+    }
+    if (request.method === "POST" && url.pathname === "/api/session/logout") {
+      return await handlers.handleSessionLogout!(request, env, ctx);
+    }
+    const connectorMatch = url.pathname.match(
+      /^\/api\/connector\/(register_session|claim_task|get_task|get_context|get_next_message|submit_candidate|submit_result|submit_finding|report_status|release_task)$/,
+    );
+    if (request.method === "POST" && connectorMatch?.[1]) {
+      return await handlers.handleConnectorRequest!(
+        request,
+        env,
+        connectorMatch[1],
+      );
+    }
+    if (
+      request.method === "POST" &&
+      url.pathname === "/api/connector/tasks/register"
+    ) {
+      return await handlers.handleConnectorTaskRequest!(
+        request,
+        env,
+        undefined,
+      );
+    }
+    const connectorTaskStatusMatch = url.pathname.match(
+      /^\/api\/connector\/tasks\/([^/]+)\/status$/,
+    );
+    if (request.method === "GET" && connectorTaskStatusMatch?.[1]) {
+      return await handlers.handleConnectorTaskRequest!(
+        request,
+        env,
+        connectorTaskStatusMatch[1],
+      );
+    }
+    if (request.method === "GET" && url.pathname === "/api/workspaces") {
+      return await handlers.handleListWorkspaces!(request, env, ctx);
+    }
+    if (request.method === "POST" && url.pathname === "/api/workspaces") {
+      return await handlers.handleCreateWorkspace!(request, env, ctx);
+    }
+    const auditExportMatch = url.pathname.match(
+      /^\/api\/workspaces\/([^/]+)\/audit-export$/,
+    );
+    if (request.method === "GET" && auditExportMatch?.[1]) {
+      return await handlers.handleExportWorkspaceAudit!(
+        request,
+        env,
+        auditExportMatch[1],
+        ctx,
+      );
+    }
+    const backupMatch = url.pathname.match(
+      /^\/api\/workspaces\/([^/]+)\/backup$/,
+    );
+    if (request.method === "POST" && backupMatch?.[1]) {
+      return await handlers.handleCreateWorkspaceBackup!(
+        request,
+        env,
+        backupMatch[1],
+        ctx,
+      );
+    }
+    const backupRestoreDrillMatch = url.pathname.match(
+      /^\/api\/workspaces\/([^/]+)\/backup\/restore-drill$/,
+    );
+    if (request.method === "POST" && backupRestoreDrillMatch?.[1]) {
+      return await handlers.handleVerifyWorkspaceBackup!(
+        request,
+        env,
+        backupRestoreDrillMatch[1],
+        ctx,
+      );
+    }
+    const workspaceInvitationsMatch = url.pathname.match(
+      /^\/api\/workspaces\/([^/]+)\/invitations$/,
+    );
+    if (workspaceInvitationsMatch?.[1]) {
+      if (request.method === "GET") {
+        return await handlers.handleListWorkspaceInvitations!(
+          request,
+          env,
+          workspaceInvitationsMatch[1],
+          ctx,
+        );
+      }
+      if (request.method === "POST") {
+        return await handlers.handleCreateWorkspaceInvitation!(
+          request,
+          env,
+          workspaceInvitationsMatch[1],
+          ctx,
+        );
+      }
+    }
+    const invitationExpireMatch = url.pathname.match(
+      /^\/api\/workspaces\/([^/]+)\/invitations\/([^/]+)\/expire$/,
+    );
+    if (
+      request.method === "POST" &&
+      invitationExpireMatch?.[1] &&
+      invitationExpireMatch[2]
+    ) {
+      return await handlers.handleExpireWorkspaceInvitation!(
+        request,
+        env,
+        invitationExpireMatch[1],
+        invitationExpireMatch[2],
+        ctx,
+      );
+    }
+    const invitationAcceptMatch = url.pathname.match(
+      /^\/api\/invitations\/([^/]+)\/accept$/,
+    );
+    if (request.method === "POST" && invitationAcceptMatch?.[1]) {
+      return await handlers.handleAcceptWorkspaceInvitation!(
+        request,
+        env,
+        invitationAcceptMatch[1],
+        ctx,
+      );
+    }
+    const memberRoleMatch = url.pathname.match(
+      /^\/api\/workspaces\/([^/]+)\/members\/([^/]+)\/role$/,
+    );
+    if (
+      request.method === "PATCH" &&
+      memberRoleMatch?.[1] &&
+      memberRoleMatch[2]
+    ) {
+      return await handlers.handleChangeWorkspaceMemberRole!(
+        request,
+        env,
+        memberRoleMatch[1],
+        memberRoleMatch[2],
+        ctx,
+      );
+    }
+    const memberStatusMatch = url.pathname.match(
+      /^\/api\/workspaces\/([^/]+)\/members\/([^/]+)\/(suspend|remove|activate)$/,
+    );
+    if (
+      request.method === "POST" &&
+      memberStatusMatch?.[1] &&
+      memberStatusMatch[2] &&
+      memberStatusMatch[3]
+    ) {
+      const status =
+        memberStatusMatch[3] === "suspend"
+          ? "suspended"
+          : memberStatusMatch[3] === "remove"
+            ? "removed"
+            : "active";
+      return await handlers.handleWorkspaceMemberStatus!(
+        request,
+        env,
+        memberStatusMatch[1],
+        memberStatusMatch[2],
+        status,
+        ctx,
+      );
+    }
+
+    // Agent Gateway & Protocol routes
+    if (
+      request.method === "POST" &&
+      url.pathname === "/api/internal/agent-assignments/dispatch"
+    ) {
+      return await handlers.handleInternalDispatchTaskAssignment!(request, env);
+    }
+    if (
+      request.method === "GET" &&
+      (url.pathname === "/api/agent-gateway/connect" ||
+        url.pathname === "/api/v2/agent-gateway/connect")
+    ) {
+      return await handlers.handleAgentGatewayConnect!(request, env);
+    }
+    if (
+      request.method === "POST" &&
+      (url.pathname === "/api/agent-protocol/messages" ||
+        url.pathname === "/api/v2/agent-protocol/messages")
+    ) {
+      return await handlers.handleAgentProtocolMessage!(request, env);
+    }
+    if (
+      request.method === "POST" &&
+      (url.pathname === "/api/agents/enroll" ||
+        url.pathname === "/api/v2/agents/enroll")
+    ) {
+      return await handlers.handleEnrollAgent!(request, env);
+    }
+
+    // Workspace Agent Enrollments
+    const agentEnrollmentsMatch = url.pathname.match(
+      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/agent-enrollments$/,
+    );
+    if (request.method === "GET" && agentEnrollmentsMatch?.[1]) {
+      return await handlers.handleListAgentEnrollments!(
+        request,
+        env,
+        agentEnrollmentsMatch[1],
+        ctx,
+      );
+    }
+    if (request.method === "POST" && agentEnrollmentsMatch?.[1]) {
+      return await handlers.handleCreateAgentEnrollment!(
+        request,
+        env,
+        agentEnrollmentsMatch[1],
+        ctx,
+      );
+    }
+    const revokeEnrollmentMatch = url.pathname.match(
+      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/agent-enrollments\/([^/]+)$/,
+    );
+    if (
+      request.method === "DELETE" &&
+      revokeEnrollmentMatch?.[1] &&
+      revokeEnrollmentMatch?.[2]
+    ) {
+      return await handlers.handleRevokeAgentEnrollment!(
+        request,
+        env,
+        revokeEnrollmentMatch[1],
+        revokeEnrollmentMatch[2],
+        ctx,
+      );
+    }
+
+    // Workspace Agents Fleet
+    const agentsMatch = url.pathname.match(
+      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/agents$/,
+    );
+    if (request.method === "GET" && agentsMatch?.[1]) {
+      return await handlers.handleListAgents!(
+        request,
+        env,
+        agentsMatch[1],
+        ctx,
+      );
+    }
+    const singleAgentMatch = url.pathname.match(
+      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/agents\/([^/]+)$/,
+    );
+    if (
+      request.method === "GET" &&
+      singleAgentMatch?.[1] &&
+      singleAgentMatch?.[2]
+    ) {
+      return await handlers.handleGetAgent!(
+        request,
+        env,
+        singleAgentMatch[1],
+        singleAgentMatch[2],
+        ctx,
+      );
+    }
+    if (
+      request.method === "DELETE" &&
+      singleAgentMatch?.[1] &&
+      singleAgentMatch?.[2]
+    ) {
+      return await handlers.handleRevokeAgent!(
+        request,
+        env,
+        singleAgentMatch[1],
+        singleAgentMatch[2],
+        ctx,
+      );
+    }
+    const agentUpdateMatch = url.pathname.match(
+      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/agents\/([^/]+)\/update$/,
+    );
+    if (
+      request.method === "POST" &&
+      agentUpdateMatch?.[1] &&
+      agentUpdateMatch?.[2]
+    ) {
+      return await handlers.handleAnnounceAgentUpdate!(
+        request,
+        env,
+        agentUpdateMatch[1],
+        agentUpdateMatch[2],
+        ctx,
+      );
+    }
+
+    // Workspace Workers Fleet (Architecture v2)
+    const workersMatch = url.pathname.match(
+      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/workers$/,
+    );
+    if (request.method === "GET" && workersMatch?.[1]) {
+      return await handlers.handleListWorkers!(
+        request,
+        env,
+        workersMatch[1],
+        ctx,
+      );
+    }
+    if (request.method === "POST" && workersMatch?.[1]) {
+      return await handlers.handleCreateWorker!(
+        request,
+        env,
+        workersMatch[1],
+        ctx,
+      );
+    }
+    const singleWorkerMatch = url.pathname.match(
+      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/workers\/([^/]+)$/,
+    );
+    if (
+      request.method === "GET" &&
+      singleWorkerMatch?.[1] &&
+      singleWorkerMatch?.[2]
+    ) {
+      return await handlers.handleGetWorker!(
+        request,
+        env,
+        singleWorkerMatch[1],
+        singleWorkerMatch[2],
+        ctx,
+      );
+    }
+    if (
+      request.method === "PUT" &&
+      singleWorkerMatch?.[1] &&
+      singleWorkerMatch?.[2]
+    ) {
+      return await handlers.handleUpdateWorker!(
+        request,
+        env,
+        singleWorkerMatch[1],
+        singleWorkerMatch[2],
+        ctx,
+      );
+    }
+    if (
+      request.method === "DELETE" &&
+      singleWorkerMatch?.[1] &&
+      singleWorkerMatch?.[2]
+    ) {
+      return await handlers.handleDeleteWorker!(
+        request,
+        env,
+        singleWorkerMatch[1],
+        singleWorkerMatch[2],
+        ctx,
+      );
+    }
+
+    // Task Assignment Dispatcher (Architecture v2)
+    const taskEnsembleDispatchMatch = url.pathname.match(
+      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/tasks\/([^/]+)\/ensemble-dispatch$/,
+    );
+    if (
+      request.method === "POST" &&
+      taskEnsembleDispatchMatch?.[1] &&
+      taskEnsembleDispatchMatch?.[2]
+    ) {
+      return await handlers.handleDispatchEnsembleTaskAssignment!(
+        request,
+        env,
+        taskEnsembleDispatchMatch[1],
+        taskEnsembleDispatchMatch[2],
+        ctx,
+      );
+    }
+
+    const taskDispatchMatch = url.pathname.match(
+      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/tasks\/([^/]+)\/dispatch$/,
+    );
+    if (
+      request.method === "POST" &&
+      taskDispatchMatch?.[1] &&
+      taskDispatchMatch?.[2]
+    ) {
+      return await handlers.handleDispatchTaskAssignment!(
+        request,
+        env,
+        taskDispatchMatch[1],
+        taskDispatchMatch[2],
+        ctx,
+      );
+    }
+
+    const assignmentCancelMatch = url.pathname.match(
+      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/assignments\/([^/]+)\/cancel$/,
+    );
+    if (
+      request.method === "POST" &&
+      assignmentCancelMatch?.[1] &&
+      assignmentCancelMatch?.[2]
+    ) {
+      return await handlers.handleCancelTaskAssignment!(
+        request,
+        env,
+        assignmentCancelMatch[1],
+        assignmentCancelMatch[2],
+        ctx,
+      );
+    }
+
+    // Plugin Registry routes (Architecture v2)
+    if (
+      request.method === "GET" &&
+      (url.pathname === "/api/plugins" || url.pathname === "/api/v2/plugins")
+    ) {
+      return await handlers.handleListPlugins!(request, env);
+    }
+    if (
+      request.method === "POST" &&
+      (url.pathname === "/api/plugins/publish" ||
+        url.pathname === "/api/v2/plugins/publish")
+    ) {
+      return await handlers.handlePublishPlugin!(request, env, ctx);
+    }
+
+    const pluginDownloadMatch = url.pathname.match(
+      /^\/api(?:\/v2)?\/plugins\/([^/]+)\/versions\/([^/]+)\/download$/,
+    );
+    if (
+      request.method === "GET" &&
+      pluginDownloadMatch?.[1] &&
+      pluginDownloadMatch?.[2]
+    ) {
+      return await handlers.handleDownloadPluginVersion!(
+        request,
+        env,
+        pluginDownloadMatch[1],
+        pluginDownloadMatch[2],
+        ctx,
+      );
+    }
+
+    const pluginRevokeMatch = url.pathname.match(
+      /^\/api(?:\/v2)?\/plugins\/([^/]+)\/versions\/([^/]+)\/revoke$/,
+    );
+    if (
+      request.method === "POST" &&
+      pluginRevokeMatch?.[1] &&
+      pluginRevokeMatch?.[2]
+    ) {
+      return await handlers.handleRevokePluginVersion!(
+        request,
+        env,
+        pluginRevokeMatch[1],
+        pluginRevokeMatch[2],
+        ctx,
+      );
+    }
+
+    const pluginVersionMatch = url.pathname.match(
+      /^\/api(?:\/v2)?\/plugins\/([^/]+)\/versions\/([^/]+)$/,
+    );
+    if (
+      request.method === "GET" &&
+      pluginVersionMatch?.[1] &&
+      pluginVersionMatch?.[2]
+    ) {
+      return await handlers.handleGetPluginVersion!(
+        env,
+        pluginVersionMatch[1],
+        pluginVersionMatch[2],
+      );
+    }
+
+    const pluginDeprecateMatch = url.pathname.match(
+      /^\/api(?:\/v2)?\/plugins\/([^/]+)\/deprecate$/,
+    );
+    if (request.method === "POST" && pluginDeprecateMatch?.[1]) {
+      return await handlers.handleDeprecatePlugin!(
+        request,
+        env,
+        pluginDeprecateMatch[1],
+        ctx,
+      );
+    }
+
+    const singlePluginMatch = url.pathname.match(
+      /^\/api(?:\/v2)?\/plugins\/([^/]+)$/,
+    );
+    if (request.method === "GET" && singlePluginMatch?.[1]) {
+      return await handlers.handleGetPlugin!(env, singlePluginMatch[1]);
+    }
+
+    // Agent Releases routes (Architecture v2 Self-Update)
+    if (
+      request.method === "GET" &&
+      (url.pathname === "/api/agent-releases/latest" ||
+        url.pathname === "/api/v2/agent-releases/latest")
+    ) {
+      return await handlers.handleGetLatestAgentRelease!(request, env);
+    }
+    if (
+      request.method === "POST" &&
+      (url.pathname === "/api/agent-releases/publish" ||
+        url.pathname === "/api/v2/agent-releases/publish")
+    ) {
+      return await handlers.handlePublishAgentRelease!(request, env, ctx);
+    }
+    const agentReleaseDownloadMatch = url.pathname.match(
+      /^\/api(?:\/v2)?\/agent-releases\/([^/]+)\/download$/,
+    );
+    if (request.method === "GET" && agentReleaseDownloadMatch?.[1]) {
+      return await handlers.handleDownloadAgentRelease!(
+        request,
+        env,
+        agentReleaseDownloadMatch[1],
+        ctx,
+      );
+    }
+    const agentReleaseRevokeMatch = url.pathname.match(
+      /^\/api(?:\/v2)?\/agent-releases\/([^/]+)\/revoke$/,
+    );
+    if (request.method === "POST" && agentReleaseRevokeMatch?.[1]) {
+      return await handlers.handleRevokeAgentRelease!(
+        request,
+        env,
+        agentReleaseRevokeMatch[1],
+        ctx,
+      );
+    }
+    const singleAgentReleaseMatch = url.pathname.match(
+      /^\/api(?:\/v2)?\/agent-releases\/([^/]+)$/,
+    );
+    if (request.method === "GET" && singleAgentReleaseMatch?.[1]) {
+      return await handlers.handleGetAgentRelease!(
+        env,
+        singleAgentReleaseMatch[1],
+      );
+    }
+
+    const workspaceMatch = url.pathname.match(/^\/api\/workspaces\/([^/]+)$/);
+    if (request.method === "GET" && workspaceMatch?.[1]) {
+      return await handlers.handleGetWorkspace!(
+        request,
+        env,
+        workspaceMatch[1],
+        ctx,
+      );
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/projects") {
+      return await handlers.handleListProjects!(request, env, ctx);
+    }
+    if (request.method === "POST" && url.pathname === "/api/projects") {
+      return await handlers.handleCreateProject!(request, env, ctx);
+    }
+    const projectChatsMatch = url.pathname.match(
+      /^\/api\/projects\/([^/]+)\/chats$/,
+    );
+    if (request.method === "GET" && projectChatsMatch?.[1]) {
+      return await handlers.handleListChats!(
+        request,
+        env,
+        projectChatsMatch[1],
+        ctx,
+      );
+    }
+    if (request.method === "POST" && projectChatsMatch?.[1]) {
+      return await handlers.handleCreateChat!(
+        request,
+        env,
+        projectChatsMatch[1],
+        ctx,
+      );
+    }
+    const projectMatch = url.pathname.match(/^\/api\/projects\/([^/]+)$/);
+    if (request.method === "GET" && projectMatch?.[1]) {
+      return await handlers.handleGetProject!(
+        request,
+        env,
+        projectMatch[1],
+        ctx,
+      );
+    }
+
+    const chatGoalsMatch = url.pathname.match(/^\/api\/chats\/([^/]+)\/goals$/);
+    if (request.method === "GET" && chatGoalsMatch?.[1]) {
+      return await handlers.handleListChatGoals!(
+        request,
+        env,
+        chatGoalsMatch[1],
+        ctx,
+      );
+    }
+    const chatMessagesMatch = url.pathname.match(
+      /^\/api\/chats\/([^/]+)\/messages$/,
+    );
+    if (request.method === "GET" && chatMessagesMatch?.[1]) {
+      return await handlers.handleListChatMessages!(
+        request,
+        env,
+        chatMessagesMatch[1],
+        ctx,
+      );
+    }
+    if (request.method === "POST" && chatMessagesMatch?.[1]) {
+      return await handlers.handleCreateChatMessage!(
+        request,
+        env,
+        chatMessagesMatch[1],
+        ctx,
+      );
+    }
+    const chatMatch = url.pathname.match(/^\/api\/chats\/([^/]+)$/);
+    if (request.method === "GET" && chatMatch?.[1]) {
+      return await handlers.handleGetChat!(request, env, chatMatch[1], ctx);
+    }
+    if (request.method === "PATCH" && chatMatch?.[1]) {
+      return await handlers.handleUpdateChat!(request, env, chatMatch[1], ctx);
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/runs") {
+      return await handlers.handleRunRequest!(request, env, ctx);
+    }
+    if (request.method === "POST" && url.pathname === "/api/goals") {
+      return await handlers.handleGoalRequest!(request, env, ctx);
+    }
+    if (request.method === "GET" && url.pathname === "/api/studio/snapshot") {
+      return await handlers.handleStudioSnapshot!(
+        env,
+        request,
+        url.searchParams.get("projectId"),
+        ctx,
+      );
+    }
+    const runMatch = url.pathname.match(
+      /^\/api\/runs\/([^/]+)(?:\/(pause|resume|restart|cancel|events|ci-evidence|forge-events))?$/,
+    );
+    if (runMatch?.[1] && request.method === "GET" && !runMatch[2]) {
+      const securityEnv = env;
+      const projectId = deps.anonymousDevelopment(securityEnv)
+        ? undefined
+        : await deps.runProjectId(securityEnv, runMatch[1]);
+      await deps.authorizeRequest(
+        request,
+        securityEnv,
+        "project:read",
+        projectId,
+        ctx,
+      );
+      const workflowInstanceId = await deps.resolveWorkflowInstanceId(
+        env,
+        runMatch[1],
+      );
+      const instance = await env.CONCLAVE_RUN_WORKFLOW.get(workflowInstanceId);
+      return deps.json({
+        id: runMatch[1],
+        workflowInstanceId,
+        ...(await instance.status()),
+      });
+    }
+    if (runMatch?.[1] && request.method === "POST" && runMatch[2]) {
+      const command =
+        runMatch[2] === "events"
+          ? "event"
+          : runMatch[2] === "ci-evidence"
+            ? "ci-evidence"
+            : runMatch[2] === "forge-events"
+              ? "forge-terminal"
+              : (runMatch[2] as "pause" | "resume" | "restart" | "cancel");
+      return await handlers.handleRunCommand!(
+        request,
+        env,
+        runMatch[1],
+        command,
+        ctx,
+      );
+    }
+  } catch (error) {
+    return deps.json(
+      { error: deps.errorMessage(error) },
+      {
+        status:
+          error instanceof deps.HttpError ||
+          (typeof error === "object" &&
+            error !== null &&
+            "status" in error &&
+            typeof error.status === "number")
+            ? (error as { status: number }).status
+            : 400,
+      },
+    );
+  }
+
+  return deps.json({ error: "not_found" }, { status: 404 });
+}

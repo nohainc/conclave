@@ -80,6 +80,21 @@ Cloud owns:
 
 Cloud never directly executes external AI/model/tool work.
 
+### Cloud Worker module boundaries
+
+The Cloud Worker entrypoint owns Worker bindings, shared security/policy
+helpers, handler registration, and the health response. HTTP method/path
+matching and common route error handling are implemented in
+`apps/worker/src/routes/router.ts`. Handler implementations are registered
+explicitly at the composition boundary, so route changes do not require
+duplicating binding or error-handling logic. Further domain-handler extraction
+should preserve this boundary.
+
+New endpoints should be added to the responsible route/domain module and
+registered through the route handler map. Compatibility aliases should only be
+retained when an active Studio, Agent, connector, or deployment client still
+uses them.
+
 ### Conclave AX Agent App
 Cross-platform host-management application.
 
