@@ -89,12 +89,12 @@ Future<void> main(List<String> args) async {
       .map((worker) => worker['workerId'])
       .whereType<String>()
       .toList();
-  final repositoryRegistry = config.repositoriesFile == null
-      ? null
-      : await LocalRepositoryRegistry.load(File(config.repositoriesFile!));
+  final repositoryRegistry = await LocalRepositoryRegistry.load(File(
+    config.repositoriesFile ?? '${config.dataDirectory.path}/repositories.json',
+  ));
   final pluginHandler = pluginManager.assignmentHandler(
     PluginProcessExecutor(),
-    resolveRepositoryPath: repositoryRegistry?.resolve,
+    resolveRepositoryPath: repositoryRegistry.resolve,
   );
   String? updateAvailable;
   var lastUpdateCheck = DateTime.fromMillisecondsSinceEpoch(0);
