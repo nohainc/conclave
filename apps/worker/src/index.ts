@@ -226,8 +226,21 @@ function bearer(request: Request): string | null {
   return value?.startsWith("Bearer ") ? value.slice(7) : null;
 }
 
-function requireSameOriginForCookieMutation(request: Request): void {
+export function requireSameOriginForCookieMutation(request: Request): void {
   if (!request.headers.get("cookie") || bearer(request)) return;
+
+  // Cloudflare Access service-token calls are machine-to-machine requests.
+  // Access may attach its CF_Authorization cookie while forwarding the
+  // request, but these callers cannot provide a browser Origin/Referer.
+  // The service-token headers are still authenticated by Access before the
+  // request reaches this Worker; authorization remains enforced below.
+  const serviceTokenClientId = request.headers
+    .get("cf-access-client-id")
+    ?.trim();
+  const serviceTokenClientSecret = request.headers
+    .get("cf-access-client-secret")
+    ?.trim();
+  if (serviceTokenClientId && serviceTokenClientSecret) return;
 
   const requestOrigin = new URL(request.url).origin;
   const origin = request.headers.get("origin");

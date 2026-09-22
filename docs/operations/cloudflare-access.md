@@ -13,6 +13,15 @@ Conclave AX uses Cloudflare Access as the browser authentication boundary during
 
 The Worker also checks the Access identity through `ctx.access.getIdentity()` and then performs the organization and project membership checks in D1. It does not trust a client-supplied identity header.
 
+## Machine-to-machine API calls
+
+For CLI and plugin administration calls, create a separate Cloudflare Access
+application for the exact route and attach a `Service Auth` policy that
+includes the intended Access service token. Send the token credentials as
+`CF-Access-Client-Id` and `CF-Access-Client-Secret` headers. Do not put the
+secret in Studio or browser assets. The Worker accepts this as a machine
+request and still performs its normal workspace and permission checks.
+
 ## Local development
 
 Local development can use the existing anonymous development mode. A development-only bearer token is accepted only when `CONCLAVE_ENVIRONMENT=development`; it is never a browser build input and is rejected by the production authentication path.

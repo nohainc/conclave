@@ -3,7 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import worker from "../src/index.js";
+import worker, { requireSameOriginForCookieMutation } from "../src/index.js";
 import { hashToken } from "../../../packages/security/src/index.js";
 import type {
   Workspace,
@@ -78,6 +78,22 @@ describe("Projects and Chats API (Architecture v2)", () => {
         }),
       },
     } as unknown as Env;
+  });
+
+  it("allows Access service-token requests through the cookie CSRF guard", () => {
+    const request = new Request(
+      "https://cloud.conclave.internal/api/workspaces",
+      {
+        method: "POST",
+        headers: {
+          cookie: "CF_Authorization=access-session",
+          "cf-access-client-id": "publisher.example.access",
+          "cf-access-client-secret": "service-secret",
+        },
+      },
+    );
+
+    expect(() => requireSameOriginForCookieMutation(request)).not.toThrow();
   });
 
   async function seedUserAndSession(userId: string, email: string) {
