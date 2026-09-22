@@ -2,37 +2,20 @@ import { describe, expect, it } from "vitest";
 
 import type { GoalRecord, RunRecord } from "@conclave/persistence";
 import type {
-  ConnectionResource,
-  WorkerExecutionRequest,
-  WorkerExecutionResult,
-  WorkerExecutor,
-  WorkerResource,
+  ConclaveAgent,
+  Worker,
+  WorkerAssignmentResult,
 } from "@conclave/core";
+import type { ModelRequest, ModelResponse } from "@conclave/providers";
 import type { ImplementationOperation } from "@conclave/protocol";
 
 import {
   executeForgeGoal,
   InMemoryForgePersistence,
+  type ForgeWorker,
+  type ForgeWorkerRequest,
   type ForgeRuntimeAdapter,
 } from "../src/index.js";
-
-const connection = (id: string): ConnectionResource => ({
-  id: `${id}-connection`,
-  name: `${id}-connection`,
-  transport: "provider_api",
-  provider: id,
-  adapterVersion: "1",
-  authMode: "api_key",
-  billingMode: "api_metered",
-  cost: {
-    currency: "USD",
-    estimatedCostMicrosPerAttempt: 1,
-    inputMicrosPerMillionTokens: 1,
-    outputMicrosPerMillionTokens: 1,
-  },
-  executionEnvironment: "cloud",
-  availability: "available",
-});
 
 const goal: GoalRecord = {
   id: "forge-goal",
@@ -87,49 +70,88 @@ function resource(
   id: string,
   roles: readonly string[],
   capabilities: readonly string[],
-): WorkerResource {
+): Worker {
   return {
     id,
+    workspaceId: "workspace-1",
+    agentId: "agent-test",
+    pluginId: "plugin-test",
+    pluginVersionPolicy: "latest",
     name: `${id}-model`,
-    type: "model",
     capabilities,
     roles,
-    permissions: ["repository_read", "repository_write"],
+    config: {},
+    secretRefs: [],
+    enabled: true,
+    billingMode: "subscription",
     independenceKey: id,
-    connectionIds: [`${id}-connection`],
+    concurrencyLimit: 1,
+    sessionPolicy: "stateless",
     availability: "available",
+    createdAt: "2026-09-21T00:00:00.000Z",
+    updatedAt: "2026-09-21T00:00:00.000Z",
   };
 }
 
-class FakeWorker implements WorkerExecutor {
+const agent: ConclaveAgent = {
+  id: "agent-test",
+  workspaceId: "workspace-1",
+  name: "Test Agent",
+  hostname: "test",
+  status: "online",
+  version: "0.1.0",
+  capabilities: {
+    os: "macos",
+    arch: "arm64",
+    version: "0.1.0",
+    supportedRuntimes: [],
+    maxConcurrentWorkers: 3,
+  },
+  enrolledAt: "2026-09-21T00:00:00.000Z",
+  lastHeartbeatAt: "2026-09-21T00:00:00.000Z",
+  revokedAt: null,
+};
+
+class FakeWorker implements ForgeWorker {
   private cursor = 0;
-  readonly requests: WorkerExecutionRequest[] = [];
+  readonly requests: ModelRequest[] = [];
 
   constructor(
-    readonly resource: WorkerResource,
+    readonly worker: Worker,
     private readonly outputs: readonly string[],
   ) {}
 
-  get connection(): ConnectionResource {
-    return connection(this.resource.id);
+  readonly agent = agent;
+
+  async execute(request: ForgeWorkerRequest): Promise<WorkerAssignmentResult> {
+    const response = await this.complete({
+      message: request.message as ModelRequest["message"],
+      context: request.context,
+    });
+    return {
+      assignmentId: `${request.taskId}-assignment`,
+      workspaceId: this.worker.workspaceId,
+      runId: request.runId,
+      taskId: request.taskId,
+      attemptId: request.attemptId,
+      agentId: this.agent.id,
+      workerId: this.worker.id,
+      status: "completed",
+      output: JSON.parse(response.text) as Record<string, unknown>,
+      artifactIds: [],
+      completedAt: "2026-09-21T10:05:00.000Z",
+    };
   }
 
-  async execute(
-    request: WorkerExecutionRequest,
-  ): Promise<WorkerExecutionResult> {
+  complete(request: ModelRequest): Promise<ModelResponse> {
     this.requests.push(request);
     const output = this.outputs[this.cursor++];
-    if (output === undefined) {
-      throw new Error(`${this.resource.id} ran out of outputs`);
-    }
-
+    if (output === undefined)
+      throw new Error(`${this.worker.id} ran out of outputs`);
     const parsed = JSON.parse(output) as {
       payload?: Record<string, unknown>;
     };
-    const requestMessage = request.message as {
-      payload?: Record<string, unknown>;
-    };
-    const requestPayload = requestMessage.payload;
+    const requestPayload = request.message.payload;
     if (
       typeof requestPayload === "object" &&
       requestPayload !== null &&
@@ -139,16 +161,13 @@ class FakeWorker implements WorkerExecutor {
     ) {
       parsed.payload.taskId = requestPayload.taskId;
     }
-
     const text = JSON.stringify(parsed);
-    return {
-      status: "succeeded",
-      output: text,
-      rawOutput: JSON.stringify({ output_text: text }),
-      providerRequestId: `${this.resource.id}-${this.cursor}`,
+    return Promise.resolve({
+      providerRequestId: `${this.worker.id}-${this.cursor}`,
+      text,
+      rawResponse: JSON.stringify({ output_text: text }),
       usage: { inputTokens: 10, outputTokens: 20 },
-      evidenceArtifactIds: [],
-    };
+    });
   }
 }
 

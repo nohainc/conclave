@@ -2,37 +2,48 @@ import { describe, expect, it } from "vitest";
 import {
   assertSingleAgentForgeBindings,
   resolveForgeExecutionMode,
+  type ForgeWorkerBinding,
 } from "../src/forge-execution.js";
-import type { WorkerBinding } from "@conclave/core";
 
-function binding(
-  id: string,
-  transport: "local_agent" | "provider_api",
-): WorkerBinding {
+function binding(id: string, agentId = "agent-mac"): ForgeWorkerBinding {
   return {
     worker: {
       id,
+      workspaceId: "workspace-1",
+      agentId,
+      pluginId: "plugin-test",
+      pluginVersionPolicy: "latest",
       name: id,
-      type: "agent",
       capabilities: ["planning", "repository_write", "code_review"],
       roles: ["architect", "implementer", "reviewer"],
-      permissions: [],
+      config: {},
+      secretRefs: [],
+      enabled: true,
+      billingMode: "subscription",
       independenceKey: id,
-      connectionIds: [`connection-${id}`],
+      concurrencyLimit: 1,
+      sessionPolicy: "stateless",
       availability: "available",
+      createdAt: "2026-09-21T00:00:00.000Z",
+      updatedAt: "2026-09-21T00:00:00.000Z",
     },
-    connection: {
-      id: `connection-${id}`,
-      name: id,
-      transport,
-      provider: transport === "provider_api" ? "openai" : null,
-      adapterVersion: "1",
-      authMode: transport === "provider_api" ? "api_key" : "local_session",
-      billingMode:
-        transport === "provider_api" ? "api_metered" : "subscription",
-      cost: { estimatedCostMicrosPerAttempt: null },
-      executionEnvironment: "local",
-      availability: "available",
+    agent: {
+      id: agentId,
+      workspaceId: "workspace-1",
+      name: agentId,
+      hostname: agentId,
+      status: "online",
+      version: "0.1.0",
+      capabilities: {
+        os: "macos",
+        arch: "arm64",
+        version: "0.1.0",
+        supportedRuntimes: [],
+        maxConcurrentWorkers: 3,
+      },
+      enrolledAt: "2026-09-21T00:00:00.000Z",
+      lastHeartbeatAt: "2026-09-21T00:00:00.000Z",
+      revokedAt: null,
     },
   };
 }
@@ -43,57 +54,22 @@ describe("single-agent Forge policy", () => {
       "direct cloud model execution has been retired",
     );
   });
-  it("requires three local workers on the same Agent", () => {
-    const bindings = [
-      binding("lead", "local_agent"),
-      binding("implementer", "local_agent"),
-      binding("reviewer", "local_agent"),
-    ];
+  it("requires three workers on the same Agent", () => {
     expect(() =>
-      assertSingleAgentForgeBindings(
-        bindings,
-        new Map([
-          ["lead", "agent-mac"],
-          ["implementer", "agent-mac"],
-          ["reviewer", "agent-mac"],
-        ]),
-      ),
+      assertSingleAgentForgeBindings([
+        binding("lead"),
+        binding("implementer"),
+        binding("reviewer"),
+      ]),
     ).not.toThrow();
   });
-
-  it("rejects provider API workers", () => {
-    const bindings = [
-      binding("lead", "local_agent"),
-      binding("implementer", "provider_api"),
-      binding("reviewer", "local_agent"),
-    ];
-    expect(() =>
-      assertSingleAgentForgeBindings(
-        bindings,
-        new Map([
-          ["lead", "agent-mac"],
-          ["implementer", "agent-mac"],
-          ["reviewer", "agent-mac"],
-        ]),
-      ),
-    ).toThrow(/direct cloud model workers/);
-  });
-
   it("rejects workers split across Agents", () => {
-    const bindings = [
-      binding("lead", "local_agent"),
-      binding("implementer", "local_agent"),
-      binding("reviewer", "local_agent"),
-    ];
     expect(() =>
-      assertSingleAgentForgeBindings(
-        bindings,
-        new Map([
-          ["lead", "agent-mac"],
-          ["implementer", "agent-mac"],
-          ["reviewer", "agent-linux"],
-        ]),
-      ),
+      assertSingleAgentForgeBindings([
+        binding("lead"),
+        binding("implementer"),
+        binding("reviewer", "agent-linux"),
+      ]),
     ).toThrow(/one Agent/);
   });
 });

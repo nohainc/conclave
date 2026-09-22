@@ -20,7 +20,11 @@ import {
   VerificationGate,
   type Finding,
 } from "@conclave/core";
-import type { WorkerExecutionResult, WorkerExecutor } from "@conclave/core";
+import type {
+  ConclaveAgent,
+  Worker,
+  WorkerAssignmentResult,
+} from "@conclave/core";
 import {
   ContextBuilder,
   type ArtifactResolver,
@@ -57,6 +61,36 @@ export interface ForgeRuntimeEvidence {
     readonly command?: string;
     readonly exitCode?: number;
   }[];
+}
+
+/**
+ * The Forge execution boundary is deliberately expressed in v3 entities.
+ * Cloud selects a Worker hosted by an Agent; the implementation behind this
+ * interface creates and observes a WorkerAssignment through AgentGateway.
+ */
+export interface ForgeWorkerRequest {
+  readonly requestId: string;
+  readonly goalId: string;
+  readonly runId: string;
+  readonly taskId: string;
+  readonly attemptId: string;
+  readonly repositoryId: string;
+  readonly message: unknown;
+  readonly context: readonly {
+    readonly artifactId: string;
+    readonly mediaType: string;
+    readonly content: string;
+    readonly truncated: boolean;
+    readonly originalLength: number;
+    readonly estimatedTokens: number;
+  }[];
+  readonly deadlineAt?: string;
+}
+
+export interface ForgeWorker {
+  readonly worker: Worker;
+  readonly agent: ConclaveAgent;
+  execute(request: ForgeWorkerRequest): Promise<WorkerAssignmentResult>;
 }
 
 export interface ForgeRuntimeAdapter {
@@ -118,14 +152,14 @@ export interface ForgeWorkflowInput {
   readonly run: RunRecord;
   readonly repositoryId: string;
   readonly revision: string;
-  readonly lead: WorkerExecutor;
-  readonly implementer: WorkerExecutor;
-  readonly reviewer?: WorkerExecutor;
-  readonly secondaryResearcher?: WorkerExecutor;
+  readonly lead: ForgeWorker;
+  readonly implementer: ForgeWorker;
+  readonly reviewer?: ForgeWorker;
+  readonly secondaryResearcher?: ForgeWorker;
   readonly requireSecondaryResearch?: boolean;
   readonly runtime: ForgeRuntimeAdapter;
   readonly implementationAgent?: ForgeImplementationAgent;
-  readonly validationFallbackWorker?: WorkerExecutor;
+  readonly validationFallbackWorker?: ForgeWorker;
   readonly persistence: ForgePersistence;
   readonly maxReviewLoops?: number;
   readonly idFactory?: () => string;
@@ -260,7 +294,7 @@ export async function executeForgeGoal(
   input: ForgeWorkflowInput,
 ): Promise<ForgeWorkflowResult> {
   const reviewer = input.reviewer ?? input.lead;
-  if (input.implementer.resource.id === reviewer.resource.id) {
+  if (input.implementer.worker.id === reviewer.worker.id) {
     throw new Error("Forge requires a reviewer different from the implementer");
   }
   const maxReviewLoops = input.maxReviewLoops ?? 2;
@@ -419,7 +453,7 @@ export async function executeForgeGoal(
   };
 
   const callOnce = async <T extends ModelResult["messageType"]>(
-    worker: WorkerExecutor,
+    worker: ForgeWorker,
     modelTask: TaskRecord,
     request: PlanRequest | TaskRequest,
     expected: T,
@@ -439,13 +473,13 @@ export async function executeForgeGoal(
       {
         kind: "protocol_request",
         messageType: request.messageType,
-        workerId: worker.resource.id,
+        workerId: worker.worker.id,
       },
     );
     await persistence.saveAttempt({
       id: attemptId,
       taskId: modelTask.id,
-      workerId: worker.resource.id,
+      workerId: worker.worker.id,
       attemptNumber,
       inputSnapshot: jsonObject(request),
       outputArtifactIds: [requestArtifactId],
@@ -456,10 +490,10 @@ export async function executeForgeGoal(
     });
     await event("ModelRequestSent", "attempt", attemptId, {
       messageType: request.messageType,
-      workerId: worker.resource.id,
+      workerId: worker.worker.id,
     });
 
-    let response: WorkerExecutionResult;
+    let response: WorkerAssignmentResult;
     try {
       response = await worker.execute({
         requestId: id(),
@@ -467,13 +501,11 @@ export async function executeForgeGoal(
         runId: request.runId,
         taskId: modelTask.id,
         attemptId,
-        workerId: worker.resource.id,
-        connectionId: worker.connection.id,
         repositoryId: input.repositoryId,
         message: request,
         context: modelRequest.context ?? [],
       });
-      if (response.status !== "succeeded" || response.output === null) {
+      if (response.status !== "completed" || response.output === null) {
         throw new Error(
           response.error?.message ??
             `Worker execution ended with status ${response.status}`,
@@ -483,10 +515,10 @@ export async function executeForgeGoal(
       await persistence.saveModelCall({
         id: id(),
         attemptId,
-        workerId: worker.resource.id,
-        connectionId: worker.connection.id,
-        provider: worker.connection.provider ?? worker.connection.transport,
-        model: worker.resource.name,
+        workerId: worker.worker.id,
+        connectionId: worker.agent.id,
+        provider: worker.worker.pluginId,
+        model: worker.worker.name,
         requestArtifactId,
         responseArtifactId: null,
         status: "failed",
@@ -498,7 +530,7 @@ export async function executeForgeGoal(
       await persistence.saveAttempt({
         id: attemptId,
         taskId: modelTask.id,
-        workerId: worker.resource.id,
+        workerId: worker.worker.id,
         attemptNumber,
         inputSnapshot: jsonObject(request),
         outputArtifactIds: [requestArtifactId],
@@ -515,35 +547,34 @@ export async function executeForgeGoal(
 
     const responseArtifactId = await artifact(
       modelTask.id,
-      response.rawOutput ?? response.output,
+      JSON.stringify(response.output),
       "application/json",
       {
         kind: "provider_response",
-        providerRequestId: response.providerRequestId ?? null,
-        workerId: worker.resource.id,
+        workerId: worker.worker.id,
       },
     );
     await persistence.saveModelCall({
       id: id(),
       attemptId,
-      workerId: worker.resource.id,
-      connectionId: worker.connection.id,
-      provider: worker.connection.provider ?? worker.connection.transport,
-      model: worker.resource.name,
+      workerId: worker.worker.id,
+      connectionId: worker.agent.id,
+      provider: worker.worker.pluginId,
+      model: worker.worker.name,
       requestArtifactId,
       responseArtifactId,
       status: "completed",
-      inputTokens: response.usage.inputTokens,
-      outputTokens: response.usage.outputTokens,
+      inputTokens: null,
+      outputTokens: null,
       startedAt,
       finishedAt: now(),
     });
     try {
-      const parsed = parseModelResult(JSON.parse(response.output) as unknown);
+      const parsed = parseModelResult(response.output);
       validateResponseContext(parsed, {
         goalId: request.goalId,
         runId: request.runId,
-        workerId: worker.resource.id,
+        workerId: worker.worker.id,
         taskId: modelTask.id,
         expectedMessageType: expected,
       });
@@ -551,7 +582,7 @@ export async function executeForgeGoal(
       await persistence.saveAttempt({
         id: attemptId,
         taskId: modelTask.id,
-        workerId: worker.resource.id,
+        workerId: worker.worker.id,
         attemptNumber,
         inputSnapshot: jsonObject(request),
         outputArtifactIds: [requestArtifactId, responseArtifactId],
@@ -569,7 +600,7 @@ export async function executeForgeGoal(
       await persistence.saveAttempt({
         id: attemptId,
         taskId: modelTask.id,
-        workerId: worker.resource.id,
+        workerId: worker.worker.id,
         attemptNumber,
         inputSnapshot: jsonObject(request),
         outputArtifactIds: [requestArtifactId, responseArtifactId],
@@ -590,7 +621,7 @@ export async function executeForgeGoal(
   };
 
   const call = async <T extends ModelResult["messageType"]>(
-    worker: WorkerExecutor,
+    worker: ForgeWorker,
     modelTask: TaskRecord,
     request: PlanRequest | TaskRequest,
     expected: T,
@@ -603,9 +634,9 @@ export async function executeForgeGoal(
           ? input.validationFallbackWorker
           : worker;
       const activeRequest =
-        activeWorker.resource.id === request.workerId
+        activeWorker.worker.id === request.workerId
           ? request
-          : { ...request, workerId: activeWorker.resource.id };
+          : { ...request, workerId: activeWorker.worker.id };
       try {
         return await callOnce(
           activeWorker,
@@ -622,7 +653,7 @@ export async function executeForgeGoal(
           attempt,
           maxAttempts: maxValidationAttempts,
           messageType: expected,
-          rerouted: activeWorker.resource.id !== worker.resource.id,
+          rerouted: activeWorker.worker.id !== worker.worker.id,
           reason: error.message,
         });
       }
@@ -669,7 +700,7 @@ export async function executeForgeGoal(
     messageId: id(),
     goalId: input.goal.id,
     runId: input.run.id,
-    workerId: input.lead.resource.id,
+    workerId: input.lead.worker.id,
     createdAt: now(),
     messageType: "TaskRequest",
     payload: {
@@ -705,7 +736,7 @@ export async function executeForgeGoal(
     const secondRequest: TaskRequest = {
       ...researchRequest,
       messageId: id(),
-      workerId: (input.secondaryResearcher ?? reviewer).resource.id,
+      workerId: (input.secondaryResearcher ?? reviewer).worker.id,
       payload: {
         ...researchRequest.payload,
         taskId: secondResearchTask.id,
@@ -746,7 +777,7 @@ export async function executeForgeGoal(
     messageId: id(),
     goalId: input.goal.id,
     runId: input.run.id,
-    workerId: input.lead.resource.id,
+    workerId: input.lead.worker.id,
     createdAt: now(),
     messageType: "PlanRequest",
     payload: {
@@ -830,7 +861,7 @@ export async function executeForgeGoal(
   const implementationRequest: TaskRequest = {
     ...researchRequest,
     messageId: id(),
-    workerId: input.implementer.resource.id,
+    workerId: input.implementer.worker.id,
     payload: {
       ...researchRequest.payload,
       taskId: implementationTask.id,
@@ -894,8 +925,8 @@ export async function executeForgeGoal(
   createIsolatedReviewContext({
     reviewContextId: id(),
     implementationContextId: id(),
-    reviewerWorkerId: reviewer.resource.id,
-    authorWorkerId: input.implementer.resource.id,
+    reviewerWorkerId: reviewer.worker.id,
+    authorWorkerId: input.implementer.worker.id,
     artifactIds: [],
   });
   const gate = new VerificationGate(getVerificationPolicy("high"));
@@ -907,7 +938,7 @@ export async function executeForgeGoal(
     const reviewRequest: TaskRequest = {
       ...researchRequest,
       messageId: id(),
-      workerId: reviewer.resource.id,
+      workerId: reviewer.worker.id,
       payload: {
         ...researchRequest.payload,
         taskId: reviewTask.id,
@@ -938,7 +969,7 @@ export async function executeForgeGoal(
       taskId: implementationTask.id,
       method: "independent_review",
       outcome: review.payload.outcome === "pass" ? "passed" : "failed",
-      verifierWorkerId: reviewer.resource.id,
+      verifierWorkerId: reviewer.worker.id,
       independent: true,
     });
     await persistVerification({
@@ -946,7 +977,7 @@ export async function executeForgeGoal(
       runId: input.run.id,
       taskId: implementationTask.id,
       criterionId: "",
-      verifierWorkerId: reviewer.resource.id,
+      verifierWorkerId: reviewer.worker.id,
       method: "independent_review",
       outcome: review.payload.outcome === "pass" ? "passed" : "failed",
       evidenceArtifactIds: [implementationEvidenceId],
@@ -959,7 +990,7 @@ export async function executeForgeGoal(
           `Reviewer resolved finding ${findingId} without a pending fix`,
         );
       }
-      gate.verifyFinding(findingId, reviewer.resource.id);
+      gate.verifyFinding(findingId, reviewer.worker.id);
       const verifiedFinding = gate
         .listFindings(implementationTask.id)
         .find((candidate) => candidate.findingId === findingId);
@@ -973,7 +1004,7 @@ export async function executeForgeGoal(
         taskId: implementationTask.id,
         severity: protocolFinding.severity,
         description: protocolFinding.description,
-        authorWorkerId: input.implementer.resource.id,
+        authorWorkerId: input.implementer.worker.id,
         status: "open",
       };
       const existing = gate
@@ -1016,7 +1047,7 @@ export async function executeForgeGoal(
     const correctionRequest: TaskRequest = {
       ...implementationRequest,
       messageId: id(),
-      workerId: input.implementer.resource.id,
+      workerId: input.implementer.worker.id,
       payload: {
         ...implementationRequest.payload,
         taskId: correctionTask.id,
@@ -1077,7 +1108,7 @@ export async function executeForgeGoal(
   const testRequest: TaskRequest = {
     ...researchRequest,
     messageId: id(),
-    workerId: reviewer.resource.id,
+    workerId: reviewer.worker.id,
     payload: {
       ...researchRequest.payload,
       taskId: testTask.id,
@@ -1098,7 +1129,7 @@ export async function executeForgeGoal(
     taskId: implementationTask.id,
     method: "executable_check",
     outcome: tests.payload.outcome === "pass" ? "passed" : "failed",
-    verifierWorkerId: reviewer.resource.id,
+    verifierWorkerId: reviewer.worker.id,
     independent: true,
   });
   await persistVerification({
@@ -1106,7 +1137,7 @@ export async function executeForgeGoal(
     runId: input.run.id,
     taskId: implementationTask.id,
     criterionId: "",
-    verifierWorkerId: reviewer.resource.id,
+    verifierWorkerId: reviewer.worker.id,
     method: "executable_check",
     outcome: tests.payload.outcome === "pass" ? "passed" : "failed",
     evidenceArtifactIds: [testEvidenceId],
@@ -1131,7 +1162,7 @@ export async function executeForgeGoal(
     const verificationRequest: TaskRequest = {
       ...testRequest,
       messageId: id(),
-      workerId: input.lead.resource.id,
+      workerId: input.lead.worker.id,
       payload: {
         ...testRequest.payload,
         taskId: verificationTask.id,
@@ -1158,7 +1189,7 @@ export async function executeForgeGoal(
       method: verification.payload.method,
       outcome: verification.payload.outcome,
       verificationId: criterionVerificationId,
-      verifierWorkerId: input.lead.resource.id,
+      verifierWorkerId: input.lead.worker.id,
       evidenceArtifactIds: [testEvidenceId, implementationEvidenceId],
     });
     await persistVerification({
@@ -1166,7 +1197,7 @@ export async function executeForgeGoal(
       runId: input.run.id,
       taskId: verificationTask.id,
       criterionId: verification.payload.criterionId,
-      verifierWorkerId: input.lead.resource.id,
+      verifierWorkerId: input.lead.worker.id,
       method: verification.payload.method,
       outcome: verification.payload.outcome,
       evidenceArtifactIds: [testEvidenceId, implementationEvidenceId],
@@ -1194,7 +1225,7 @@ export async function executeForgeGoal(
   const completionRequest: TaskRequest = {
     ...testRequest,
     messageId: id(),
-    workerId: input.lead.resource.id,
+    workerId: input.lead.worker.id,
     payload: {
       ...testRequest.payload,
       taskId: completionTask.id,
@@ -1229,7 +1260,7 @@ export async function executeForgeGoal(
       interpretedTestResult: tests.payload,
     }),
     "application/json",
-    { kind: "completion_report", workerId: input.lead.resource.id },
+    { kind: "completion_report", workerId: input.lead.worker.id },
   );
   await event("RunCompleted", "run", input.run.id, {
     outcome: completion.payload.outcome,

@@ -228,6 +228,30 @@ One host machine normally has one Agent Engine and one optional Agent App.
 
 One Agent Engine may host many Worker Plugins and many Workers.
 
+## Forge execution boundary
+
+Forge uses the same native execution model as every other v3 workflow:
+
+```text
+Forge
+  -> Worker
+      -> WorkerAssignment
+          -> AgentGateway
+              -> Agent
+                  -> Worker Plugin
+```
+
+Forge selects a `Worker` together with its owning `Agent`, creates an
+`Attempt`, and submits a `WorkerAssignment` through `AgentGateway`. The
+assignment result is the only execution response Forge consumes. Transport,
+provider, and billing details are adapter concerns of the Agent/Plugin path;
+Forge must not reconstruct a connection resource or invoke a provider-specific
+executor.
+
+This keeps the workflow portable across local agents, remote agents, API
+workers, and subscription-backed workers while preserving the same persisted
+assignment and attempt identity.
+
 ## Worker Plugin Registry
 
 Cloud stores:

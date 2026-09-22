@@ -10,21 +10,16 @@ import {
   type D1DatabaseLike,
 } from "@conclave/persistence";
 import type {
-  ExecutionEnvironment,
-  WorkerRegistry,
-  WorkerRequirement,
-  WorkerResource,
-  WorkerExecutionBinding,
-  ExecutionChannel,
-  WorkerExecutor,
-  WorkerExecutionRequest,
-  WorkerExecutionResult,
+  ConclaveAgent,
+  Worker,
+  WorkerAssignmentResult,
   WorkerAvailability,
-  WorkerType,
   WorkerCostMetadata,
 } from "@conclave/core";
 import {
   executeForgeGoal,
+  type ForgeWorker,
+  type ForgeWorkerRequest,
   type ForgePersistence,
   type ForgeRuntimeAdapter,
   type ForgeRuntimeEvidence,
@@ -87,30 +82,14 @@ function forgeExecutionRecord(
 }
 
 export function assertSingleAgentForgeBindings(
-  bindings: readonly WorkerExecutionBinding[],
-  agentIds: ReadonlyMap<string, string>,
+  bindings: readonly ForgeWorkerBinding[],
 ): void {
   if (bindings.length !== 3) {
     throw new Error(
       "Single-agent Forge requires lead, implementation, and review workers",
     );
   }
-  if (
-    bindings.some(({ connection }) => connection.transport !== "local_agent")
-  ) {
-    throw new Error(
-      "Single-agent Forge does not permit direct cloud model workers",
-    );
-  }
-  const resolvedAgentIdList = bindings
-    .map(({ worker }) => agentIds.get(worker.id))
-    .filter((id): id is string => Boolean(id));
-  if (resolvedAgentIdList.length !== bindings.length) {
-    throw new Error(
-      "Single-agent Forge requires every worker to resolve to an agent",
-    );
-  }
-  const resolvedAgentIds = new Set(resolvedAgentIdList);
+  const resolvedAgentIds = new Set(bindings.map(({ agent }) => agent.id));
   const uniqueAgentCount = [...resolvedAgentIds].length;
   if (uniqueAgentCount !== 1) {
     throw new Error(
@@ -120,30 +99,14 @@ export function assertSingleAgentForgeBindings(
 }
 
 export function assertMultiAgentForgeBindings(
-  bindings: readonly WorkerExecutionBinding[],
-  agentIds: ReadonlyMap<string, string>,
+  bindings: readonly ForgeWorkerBinding[],
 ): void {
   if (bindings.length < 3) {
     throw new Error(
       "Multi-agent Forge requires lead, implementation, and review workers",
     );
   }
-  if (
-    bindings.some(({ connection }) => connection.transport !== "local_agent")
-  ) {
-    throw new Error(
-      "Multi-agent Forge does not permit direct cloud model workers",
-    );
-  }
-  const resolvedAgentIds = bindings
-    .map(({ worker }) => agentIds.get(worker.id))
-    .filter((id): id is string => Boolean(id));
-  if (resolvedAgentIds.length !== bindings.length) {
-    throw new Error(
-      "Multi-agent Forge requires every worker to resolve to an agent",
-    );
-  }
-  if (new Set(resolvedAgentIds).size < 2) {
+  if (new Set(bindings.map(({ agent }) => agent.id)).size < 2) {
     throw new Error(
       "Multi-agent Forge requires workers on at least two Agents",
     );
@@ -189,7 +152,12 @@ function cost(value: unknown): WorkerCostMetadata {
   };
 }
 
-function workerResource(row: Record<string, unknown>): WorkerResource {
+export interface ForgeWorkerBinding {
+  readonly worker: Worker;
+  readonly agent: ConclaveAgent;
+}
+
+function workerEntity(row: Record<string, unknown>): Worker {
   const workerStatus = String(row.worker_status ?? row.status ?? "offline");
   const agentStatus =
     row.revoked_at == null ? String(row.agent_status ?? "offline") : "offline";
@@ -197,64 +165,90 @@ function workerResource(row: Record<string, unknown>): WorkerResource {
   return {
     id: String(row.id),
     name: String(row.name),
-    type: "agent" as WorkerType,
+    workspaceId: String(row.workspace_id),
+    agentId: String(row.agent_id),
+    pluginId: String(row.plugin_id),
+    pluginVersionPolicy: String(row.plugin_version_policy ?? "latest"),
     capabilities: parseJsonArray(row.capabilities_json),
     roles: parseJsonArray(row.roles_json),
-    permissions: parseJsonArray(row.permissions_json),
     independenceKey: String(row.independence_key),
-    connectionIds: [String(row.id)],
+    config: parseJsonRecord(row.config_json),
+    secretRefs: parseJsonArray(row.secret_refs_json),
+    enabled,
+    billingMode: String(row.billing_mode) as Worker["billingMode"],
+    costMetadata: cost(row.cost_metadata_json),
+    concurrencyLimit: Number(row.concurrency_limit ?? 1),
+    sessionPolicy: String(
+      row.session_policy ?? "stateless",
+    ) as Worker["sessionPolicy"],
     availability:
       enabled && agentStatus === "online" && workerStatus === "available"
         ? "available"
         : (workerStatus as WorkerAvailability),
+    status: workerStatus as Worker["status"],
+    createdAt: String(row.created_at ?? ""),
+    updatedAt: String(row.updated_at ?? ""),
   };
 }
 
-function connectionResource(row: Record<string, unknown>): ExecutionChannel {
-  const workerStatus = String(row.worker_status ?? "offline");
-  const agentStatus =
-    row.revoked_at == null ? String(row.agent_status ?? "offline") : "offline";
+function parseJsonRecord(value: unknown): Record<string, unknown> {
+  if (typeof value !== "string") return {};
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function agentEntity(row: Record<string, unknown>): ConclaveAgent {
+  const capabilities = parseJsonRecord(row.agent_capabilities_json);
   return {
-    id: String(row.id),
-    name: `${String(row.name)} Agent channel`,
-    transport: "local_agent",
-    provider: null,
-    adapterVersion: String(row.plugin_version_policy ?? "latest"),
-    authMode: "local_session",
-    billingMode: String(row.billing_mode) as ExecutionChannel["billingMode"],
-    cost: cost(row.cost_metadata_json),
-    executionEnvironment: "local" as ExecutionEnvironment,
-    availability:
-      row.enabled !== 0 &&
-      agentStatus === "online" &&
-      workerStatus === "available"
-        ? "available"
-        : (workerStatus as WorkerAvailability),
+    id: String(row.agent_id),
+    workspaceId: String(row.workspace_id),
+    name: String(row.agent_name ?? row.agent_id),
+    hostname: String(row.agent_hostname ?? "unknown"),
+    status: String(row.agent_status ?? "offline") as ConclaveAgent["status"],
+    version: String(row.agent_version ?? "unknown"),
+    capabilities: {
+      os: String(
+        capabilities.os ?? "macos",
+      ) as ConclaveAgent["capabilities"]["os"],
+      arch: String(
+        capabilities.arch ?? "arm64",
+      ) as ConclaveAgent["capabilities"]["arch"],
+      version: String(capabilities.version ?? row.agent_version ?? "unknown"),
+      supportedRuntimes: parseJsonArray(capabilities.supportedRuntimes),
+      maxConcurrentWorkers: Number(capabilities.maxConcurrentWorkers ?? 1),
+      customCapabilities: parseJsonArray(capabilities.customCapabilities),
+    },
+    enrolledAt: String(row.enrolled_at ?? ""),
+    lastHeartbeatAt:
+      row.last_heartbeat_at == null ? null : String(row.last_heartbeat_at),
+    revokedAt: row.revoked_at == null ? null : String(row.revoked_at),
   };
 }
 
-class D1WorkerRegistry implements WorkerRegistry {
-  private readonly workers: readonly WorkerExecutionBinding[];
+class D1ForgeWorkerRegistry {
+  constructor(private readonly workers: readonly ForgeWorkerBinding[]) {}
 
-  constructor(workers: readonly WorkerExecutionBinding[]) {
-    this.workers = workers;
-  }
-
-  upsert(): void {
-    throw new Error("Forge worker registry is read-only during execution");
-  }
-
-  list(): readonly WorkerExecutionBinding[] {
+  list(): readonly ForgeWorkerBinding[] {
     return this.workers;
   }
 
-  resolve(requirement: WorkerRequirement): WorkerExecutionBinding | null {
+  resolve(requirement: {
+    capability: string;
+    role?: string;
+  }): ForgeWorkerBinding | null {
     return (
       [...this.workers]
         .filter(
-          ({ worker, connection }) =>
+          ({ worker, agent }) =>
+            worker.enabled &&
             worker.availability === "available" &&
-            connection.availability === "available",
+            agent.status === "online",
         )
         .filter(({ worker }) =>
           worker.capabilities.includes(requirement.capability),
@@ -264,33 +258,7 @@ class D1WorkerRegistry implements WorkerRegistry {
             requirement.role === undefined ||
             worker.roles.includes(requirement.role),
         )
-        .filter(
-          ({ worker }) =>
-            requirement.permission === undefined ||
-            worker.permissions.includes(requirement.permission),
-        )
-        .filter(
-          ({ connection }) =>
-            requirement.executionEnvironment === undefined ||
-            connection.executionEnvironment ===
-              requirement.executionEnvironment,
-        )
-        .filter(
-          ({ connection }) =>
-            requirement.maxEstimatedCostMicrosPerAttempt === undefined ||
-            (connection.cost.estimatedCostMicrosPerAttempt !== null &&
-              connection.cost.estimatedCostMicrosPerAttempt <=
-                requirement.maxEstimatedCostMicrosPerAttempt),
-        )
-        .sort(
-          (left, right) =>
-            (left.connection.cost.estimatedCostMicrosPerAttempt ??
-              Number.MAX_SAFE_INTEGER) -
-              (right.connection.cost.estimatedCostMicrosPerAttempt ??
-                Number.MAX_SAFE_INTEGER) ||
-            left.worker.id.localeCompare(right.worker.id) ||
-            left.connection.id.localeCompare(right.connection.id),
-        )[0] ?? null
+        .at(0) ?? null
     );
   }
 }
@@ -405,13 +373,13 @@ class DurableForgePersistence implements ForgePersistence {
  *
  * Cloud owns orchestration and evidence persistence, while the Agent/Plugin
  * owns filesystem and process access. Keeping this adapter on the Worker
- * execution interface prevents Forge from growing a second host transport.
+ * assignment interface keeps Forge independent from plugin/provider details.
  */
 class AgentWorkerRuntime implements ForgeRuntimeAdapter {
   constructor(
     private readonly env: ForgeExecutionEnv,
     private readonly context: ForgeExecutionContext,
-    private readonly worker: WorkerExecutor,
+    private readonly worker: ForgeWorker,
   ) {}
 
   inspect(input: Parameters<ForgeRuntimeAdapter["inspect"]>[0]) {
@@ -491,7 +459,7 @@ class AgentWorkerRuntime implements ForgeRuntimeAdapter {
       messageId: crypto.randomUUID(),
       goalId: this.context.goalId,
       runId: this.context.runId,
-      workerId: this.worker.resource.id,
+      workerId: this.worker.worker.id,
       createdAt: new Date().toISOString(),
       messageType: "RuntimeOperationRequest",
       payload: {
@@ -508,8 +476,6 @@ class AgentWorkerRuntime implements ForgeRuntimeAdapter {
       runId: this.context.runId,
       taskId,
       attemptId: `${this.context.executionId}:${taskId}:${kind}`,
-      workerId: this.worker.resource.id,
-      connectionId: this.worker.connection.id,
       repositoryId,
       message: {
         protocol: "conclave.protocol",
@@ -524,16 +490,16 @@ class AgentWorkerRuntime implements ForgeRuntimeAdapter {
     const content =
       typeof output.content === "string"
         ? output.content
-        : (result.output ?? result.error?.message ?? "");
+        : (result.error?.message ?? JSON.stringify(output));
     const checks = this.parseChecks(output.checks) ?? [];
     return {
       operation:
         kind === "test" ? "test" : kind === "search" ? "research" : "apply",
-      status: result.status === "succeeded" ? "succeeded" : "failed",
+      status: result.status === "completed" ? "succeeded" : "failed",
       summary:
         typeof output.summary === "string"
           ? output.summary
-          : result.status === "succeeded"
+          : result.status === "completed"
             ? `${kind} completed`
             : (result.error?.message ?? `${kind} failed`),
       content,
@@ -552,16 +518,11 @@ class AgentWorkerRuntime implements ForgeRuntimeAdapter {
     };
   }
 
-  private parseOutput(value: string | null): Record<string, unknown> {
+  private parseOutput(
+    value: Record<string, unknown> | null,
+  ): Record<string, unknown> {
     if (!value) return {};
-    try {
-      const parsed: unknown = JSON.parse(value);
-      return typeof parsed === "object" && parsed !== null
-        ? (parsed as Record<string, unknown>)
-        : { content: value };
-    } catch {
-      return { content: value };
-    }
+    return value;
   }
 
   private parseChecks(value: unknown): ForgeRuntimeEvidence["checks"] {
@@ -608,17 +569,15 @@ class AgentWorkerRuntime implements ForgeRuntimeAdapter {
   }
 }
 
-class AgentGatewayWorkerExecutor implements WorkerExecutor {
+class AgentGatewayForgeWorker implements ForgeWorker {
   constructor(
-    readonly resource: WorkerResource,
-    readonly connection: ExecutionChannel,
+    readonly worker: Worker,
+    readonly agent: ConclaveAgent,
     private readonly env: ForgeExecutionEnv,
     private readonly context: ForgeExecutionContext,
   ) {}
 
-  async execute(
-    request: WorkerExecutionRequest,
-  ): Promise<WorkerExecutionResult> {
+  async execute(request: ForgeWorkerRequest): Promise<WorkerAssignmentResult> {
     const message =
       typeof request.message === "object" && request.message !== null
         ? (request.message as Record<string, unknown>)
@@ -634,12 +593,12 @@ class AgentGatewayWorkerExecutor implements WorkerExecutor {
     const role =
       typeof payload.role === "string"
         ? payload.role
-        : (this.resource.roles[0] ?? "worker");
+        : (this.worker.roles[0] ?? "worker");
     const capabilities = Array.isArray(payload.requiredCapabilities)
       ? payload.requiredCapabilities.filter(
           (value): value is string => typeof value === "string",
         )
-      : this.resource.capabilities;
+      : this.worker.capabilities;
     const task = {
       id: request.taskId,
       role,
@@ -685,16 +644,21 @@ class AgentGatewayWorkerExecutor implements WorkerExecutor {
             ? result.output
             : JSON.stringify(result.output ?? { summary: result.summary });
         return {
-          status: "succeeded",
-          output,
-          rawOutput: output,
-          executionId: dispatched.assignmentId,
-          usage: { inputTokens: null, outputTokens: null },
-          evidenceArtifactIds: Array.isArray(result.artifactIds)
+          assignmentId: dispatched.assignmentId,
+          workspaceId: this.worker.workspaceId,
+          runId: request.runId,
+          taskId: request.taskId,
+          attemptId: dispatched.attemptId,
+          agentId: this.agent.id,
+          workerId: this.worker.id,
+          status: "completed",
+          output: this.outputRecord(output),
+          artifactIds: Array.isArray(result.artifactIds)
             ? result.artifactIds.filter(
                 (value): value is string => typeof value === "string",
               )
             : [],
+          completedAt: new Date().toISOString(),
         };
       }
       if (row?.status === "failed" || row?.status === "cancelled") {
@@ -709,7 +673,7 @@ class AgentGatewayWorkerExecutor implements WorkerExecutor {
   }
 
   private async dispatch(
-    request: WorkerExecutionRequest,
+    request: ForgeWorkerRequest,
     task: {
       id: string;
       role: string;
@@ -726,7 +690,7 @@ class AgentGatewayWorkerExecutor implements WorkerExecutor {
         workspaceId: this.context.organizationId,
         runId: request.runId,
         taskId: request.taskId,
-        explicitWorkerId: this.resource.id,
+        explicitWorkerId: this.worker.id,
         task,
       });
     }
@@ -736,9 +700,9 @@ class AgentGatewayWorkerExecutor implements WorkerExecutor {
       return {
         assignmentId: "",
         attemptId: "",
-        workerId: this.resource.id,
+        workerId: this.worker.id,
         agentId: "",
-        pluginId: this.resource.id,
+        pluginId: this.worker.pluginId,
         status: "failed",
         accepted: false,
         error: "Agent Gateway or internal Forge dispatch is not configured",
@@ -758,7 +722,7 @@ class AgentGatewayWorkerExecutor implements WorkerExecutor {
           workspaceId: this.context.organizationId,
           runId: request.runId,
           taskId: request.taskId,
-          workerId: this.resource.id,
+          workerId: this.worker.id,
           task,
         }),
       },
@@ -774,9 +738,9 @@ class AgentGatewayWorkerExecutor implements WorkerExecutor {
       return {
         assignmentId: "",
         attemptId: "",
-        workerId: this.resource.id,
+        workerId: this.worker.id,
         agentId: "",
-        pluginId: this.resource.id,
+        pluginId: this.worker.pluginId,
         status: "failed",
         accepted: false,
         error:
@@ -786,7 +750,7 @@ class AgentGatewayWorkerExecutor implements WorkerExecutor {
     return body.assignment;
   }
 
-  private deadline(request: WorkerExecutionRequest): number {
+  private deadline(request: ForgeWorkerRequest): number {
     if (!request.deadlineAt) return 15 * 60_000;
     return Math.max(1000, new Date(request.deadlineAt).getTime() - Date.now());
   }
@@ -801,15 +765,32 @@ class AgentGatewayWorkerExecutor implements WorkerExecutor {
       : "HEAD";
   }
 
-  private failed(message: string, retryable = false): WorkerExecutionResult {
+  private failed(message: string, retryable = false): WorkerAssignmentResult {
     return {
+      assignmentId: "",
+      workspaceId: this.worker.workspaceId,
+      runId: this.context.runId,
+      taskId: this.context.taskId,
+      attemptId: "",
+      agentId: this.agent.id,
+      workerId: this.worker.id,
       status: "failed",
       output: null,
-      rawOutput: null,
-      usage: { inputTokens: null, outputTokens: null },
-      evidenceArtifactIds: [],
+      artifactIds: [],
+      completedAt: new Date().toISOString(),
       error: { code: "agent_assignment_failed", message, retryable },
     };
+  }
+
+  private outputRecord(output: string): Record<string, unknown> {
+    try {
+      const parsed: unknown = JSON.parse(output);
+      return typeof parsed === "object" && parsed !== null
+        ? (parsed as Record<string, unknown>)
+        : { content: output };
+    } catch {
+      return { content: output };
+    }
   }
 
   private assignmentError(value: string | null): string | null {
@@ -825,29 +806,16 @@ class AgentGatewayWorkerExecutor implements WorkerExecutor {
   }
 }
 
-async function discoverLocalWorkers(
-  env: ForgeExecutionEnv,
-): Promise<ReadonlySet<string>> {
-  const rows = await env.CONCLAVE_DB.prepare(
-    `SELECT w.id
-     FROM workers w JOIN agents a ON a.id = w.agent_id
-     WHERE w.enabled = 1 AND w.status = 'available'
-       AND a.status = 'online' AND a.revoked_at IS NULL`,
-  ).all<{ id: string }>();
-  return new Set((rows.results ?? []).map((row) => row.id));
-}
-
 function modelFor(
-  binding: WorkerExecutionBinding,
+  binding: ForgeWorkerBinding,
   env: ForgeExecutionEnv,
   context: ForgeExecutionContext,
-): WorkerExecutor {
-  const { worker: resource, connection } = binding;
-  if (connection.transport === "local_agent") {
-    return new AgentGatewayWorkerExecutor(resource, connection, env, context);
-  }
-  throw new Error(
-    `Forge requires Dart Agent execution; unsupported transport: ${connection.transport}`,
+): ForgeWorker {
+  return new AgentGatewayForgeWorker(
+    binding.worker,
+    binding.agent,
+    env,
+    context,
   );
 }
 
@@ -957,8 +925,13 @@ export async function executeForgeService(
        w.id, w.agent_id, w.name, w.plugin_id, w.plugin_version_policy,
        w.roles_json, w.capabilities_json, w.secret_refs_json,
        w.independence_key, w.billing_mode, w.cost_metadata_json,
-       w.status AS worker_status, w.enabled,
-       a.status AS agent_status, a.revoked_at
+       w.config_json, w.concurrency_limit, w.session_policy,
+       w.created_at, w.updated_at,
+       a.id AS agent_id, a.name AS agent_name, a.hostname AS agent_hostname,
+       a.status AS agent_status, a.version AS agent_version,
+       a.capabilities_json AS agent_capabilities_json,
+       a.enrolled_at, a.last_heartbeat_at, a.revoked_at,
+       w.workspace_id
      FROM workers w
      JOIN agents a ON a.id = w.agent_id
      WHERE w.workspace_id = ?1
@@ -966,10 +939,10 @@ export async function executeForgeService(
   )
     .bind(context.organizationId)
     .all<Record<string, unknown>>();
-  const registry: WorkerRegistry = new D1WorkerRegistry(
+  const registry = new D1ForgeWorkerRegistry(
     (workers.results ?? []).map((row) => ({
-      worker: workerResource(row),
-      connection: connectionResource(row),
+      worker: workerEntity(row),
+      agent: agentEntity(row),
     })),
   );
   const leadResource =
@@ -979,10 +952,7 @@ export async function executeForgeService(
     capability: "repository_write",
   });
   const reviewerResource = registry.resolve({ capability: "code_review" });
-  const runtimeResource = registry.resolve({
-    capability: "repository_read",
-    executionEnvironment: "local",
-  });
+  const runtimeResource = registry.resolve({ capability: "repository_read" });
   if (
     !leadResource ||
     !implementerResource ||
@@ -997,53 +967,31 @@ export async function executeForgeService(
     throw new Error("Forge requires independent worker resources");
   }
   const executionMode = resolveForgeExecutionMode(params.executionMode);
-  const agentIds = new Map(
-    (workers.results ?? []).map((row) => [
-      String(row.id),
-      String(row.agent_id),
-    ]),
-  );
   const selectedBindings = [
     leadResource,
     implementerResource,
     reviewerResource,
   ];
   if (executionMode === "single_agent") {
-    assertSingleAgentForgeBindings(selectedBindings, agentIds);
+    assertSingleAgentForgeBindings(selectedBindings);
   }
   if (executionMode === "multi_agent") {
-    assertMultiAgentForgeBindings(selectedBindings, agentIds);
+    assertMultiAgentForgeBindings(selectedBindings);
   }
   const secondaryResearchResource =
     executionMode === "multi_agent"
       ? registry
           .list()
           .find(
-            ({ worker, connection }) =>
-              connection.transport === "local_agent" &&
+            ({ worker, agent }) =>
               worker.capabilities.includes("repository_read") &&
-              agentIds.get(worker.id) !== agentIds.get(leadResource.worker.id),
+              agent.id !== leadResource.agent.id,
           )
       : undefined;
   if (executionMode === "multi_agent" && !secondaryResearchResource) {
     throw new Error(
       "Multi-agent Forge requires a repository research worker on the second Agent",
     );
-  }
-  const localBindings = [
-    leadResource,
-    implementerResource,
-    reviewerResource,
-    runtimeResource,
-  ].filter((binding) => binding.connection.transport === "local_agent");
-  const discoveredLocalWorkers =
-    localBindings.length > 0
-      ? await discoverLocalWorkers(env)
-      : new Set<string>();
-  for (const binding of localBindings) {
-    if (!discoveredLocalWorkers.has(binding.worker.id)) {
-      throw new Error(`Local Worker ${binding.worker.id} is not connected`);
-    }
   }
   const persistence = new DurableForgePersistence(
     repositories,
@@ -1074,9 +1022,9 @@ export async function executeForgeService(
       runtime: new AgentWorkerRuntime(
         env,
         context,
-        new AgentGatewayWorkerExecutor(
+        new AgentGatewayForgeWorker(
           runtimeResource.worker,
-          runtimeResource.connection,
+          runtimeResource.agent,
           env,
           context,
         ),

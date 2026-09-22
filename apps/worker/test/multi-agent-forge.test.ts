@@ -1,59 +1,69 @@
 import { describe, expect, it } from "vitest";
-import { assertMultiAgentForgeBindings } from "../src/forge-execution.js";
-import type { WorkerBinding } from "@conclave/core";
+import {
+  assertMultiAgentForgeBindings,
+  type ForgeWorkerBinding,
+} from "../src/forge-execution.js";
 
-function binding(id: string): WorkerBinding {
+function binding(id: string, agentId: string): ForgeWorkerBinding {
   return {
     worker: {
       id,
+      workspaceId: "workspace-1",
+      agentId,
+      pluginId: "plugin-test",
+      pluginVersionPolicy: "latest",
       name: id,
-      type: "agent",
       capabilities: ["repository_read", "repository_write", "code_review"],
       roles: ["researcher", "implementer", "reviewer"],
-      permissions: [],
-      independenceKey: id,
-      connectionIds: [`connection-${id}`],
-      availability: "available",
-    },
-    connection: {
-      id: `connection-${id}`,
-      name: id,
-      transport: "local_agent",
-      provider: null,
-      adapterVersion: "1",
-      authMode: "local_session",
+      config: {},
+      secretRefs: [],
+      enabled: true,
       billingMode: "subscription",
-      cost: { estimatedCostMicrosPerAttempt: null },
-      executionEnvironment: "local",
+      independenceKey: id,
+      concurrencyLimit: 1,
+      sessionPolicy: "stateless",
       availability: "available",
+      createdAt: "2026-09-21T00:00:00.000Z",
+      updatedAt: "2026-09-21T00:00:00.000Z",
+    },
+    agent: {
+      id: agentId,
+      workspaceId: "workspace-1",
+      name: agentId,
+      hostname: agentId,
+      status: "online",
+      version: "0.1.0",
+      capabilities: {
+        os: "macos",
+        arch: "arm64",
+        version: "0.1.0",
+        supportedRuntimes: [],
+        maxConcurrentWorkers: 3,
+      },
+      enrolledAt: "2026-09-21T00:00:00.000Z",
+      lastHeartbeatAt: "2026-09-21T00:00:00.000Z",
+      revokedAt: null,
     },
   };
 }
 
 describe("multi-agent Forge policy", () => {
-  it("accepts distributed local workers", () => {
+  it("accepts distributed workers", () => {
     expect(() =>
-      assertMultiAgentForgeBindings(
-        [binding("lead"), binding("implementer"), binding("reviewer")],
-        new Map([
-          ["lead", "agent-macbook"],
-          ["implementer", "agent-macbook"],
-          ["reviewer", "agent-linux"],
-        ]),
-      ),
+      assertMultiAgentForgeBindings([
+        binding("lead", "agent-macbook"),
+        binding("implementer", "agent-macbook"),
+        binding("reviewer", "agent-linux"),
+      ]),
     ).not.toThrow();
   });
-
   it("rejects a single Agent topology", () => {
     expect(() =>
-      assertMultiAgentForgeBindings(
-        [binding("lead"), binding("implementer"), binding("reviewer")],
-        new Map([
-          ["lead", "agent-macbook"],
-          ["implementer", "agent-macbook"],
-          ["reviewer", "agent-macbook"],
-        ]),
-      ),
+      assertMultiAgentForgeBindings([
+        binding("lead", "agent-macbook"),
+        binding("implementer", "agent-macbook"),
+        binding("reviewer", "agent-macbook"),
+      ]),
     ).toThrow(/at least two Agents/);
   });
 });
