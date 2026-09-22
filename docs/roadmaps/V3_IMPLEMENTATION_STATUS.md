@@ -12,7 +12,7 @@ runtime checks listed below.
 
 Latest local verification:
 
-- TypeScript: 55 test files, 300 tests passed;
+- TypeScript: 55 test files, 301 tests passed;
 - Dart Agent Engine: analyzer and 125 tests passed;
 - Flutter Studio and Agent App: analyzer/tests passed;
 - Studio web and macOS Agent App release builds passed;
