@@ -441,9 +441,9 @@ class AgentWorkerRuntime implements ForgeRuntimeAdapter {
     repositoryId: string,
     revision: string,
   ): Promise<ForgeRuntimeEvidence> {
-    const { kind: _operationKind, ...details } = operation;
+    const { kind, ...details } = operation;
     return this.execute(
-      operation.kind,
+      kind,
       details,
       taskId,
       repositoryId,

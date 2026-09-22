@@ -1,22 +1,17 @@
 import type {
   ArtifactRecord,
-  AttemptRecord,
   AuditLogRecord,
   BudgetRecord,
   EncryptedCredentialRecord,
   ExtensionRecord,
-  FindingRecord,
   HumanApprovalRecord,
   MembershipRecord,
   ModelCallRecord,
   OrganizationRecord,
-  PhaseRecord,
   ProjectMembershipRecord,
   ProjectRecord,
   RetentionPolicyRecord,
   TaskDependencyRecord,
-  UsageRecord,
-  VerificationRecord,
   WorkflowTemplateRecord,
   WorkerRecord,
   ConnectionRecord,
@@ -355,7 +350,6 @@ export class D1PersistenceRepositories implements PersistenceRepositories {
     const tasks = (
       await Promise.all(phases.map((phase) => this.tasks.listByPhase(phase.id)))
     ).flat();
-    const taskIds = new Set(tasks.map((task) => task.id));
     const dependencies = (
       await Promise.all(
         tasks.map((task) => this.taskDependencies.listByTask(task.id)),
