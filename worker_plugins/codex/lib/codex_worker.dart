@@ -71,7 +71,12 @@ class CodexWorker {
     String executable = 'codex',
     String? workingDirectory,
     Duration timeout = const Duration(minutes: 5),
+    int maxOutputBytes = 4 * 1024 * 1024,
   }) async {
+    if (maxOutputBytes <= 0) {
+      throw ArgumentError.value(
+          maxOutputBytes, 'maxOutputBytes', 'must be positive');
+    }
     final process = await _start(
       executable,
       ['exec', '--json', objective],
@@ -79,15 +84,39 @@ class CodexWorker {
     );
     final stdout = <int>[];
     final stderr = <int>[];
-    final stdoutSubscription = process.stdout.listen(stdout.addAll);
-    final stderrSubscription = process.stderr.listen(stderr.addAll);
+    var outputExceeded = false;
+    void stopForOutputLimit() {
+      if (outputExceeded) return;
+      outputExceeded = true;
+      unawaited(_terminate(process));
+    }
+
+    final stdoutSubscription = process.stdout.listen((chunk) {
+      if (stdout.length + chunk.length > maxOutputBytes) {
+        stdout.addAll(chunk.take(maxOutputBytes - stdout.length));
+        stopForOutputLimit();
+        return;
+      }
+      stdout.addAll(chunk);
+    });
+    final stderrSubscription = process.stderr.listen((chunk) {
+      if (stderr.length + chunk.length > maxOutputBytes) {
+        stderr.addAll(chunk.take(maxOutputBytes - stderr.length));
+        stopForOutputLimit();
+        return;
+      }
+      stderr.addAll(chunk);
+    });
     try {
       final exitCode = await process.exitCode.timeout(timeout, onTimeout: () {
-        process.kill(ProcessSignal.sigterm);
+        unawaited(_terminate(process));
         throw TimeoutException('Codex task timed out', timeout);
       });
       await stdoutSubscription.cancel();
       await stderrSubscription.cancel();
+      if (outputExceeded) {
+        throw StateError('Codex output exceeded $maxOutputBytes bytes');
+      }
       if (exitCode != 0) {
         throw StateError(
           'Codex command failed: ${String.fromCharCodes(stderr)}',
@@ -132,6 +161,15 @@ class CodexWorker {
     final match =
         RegExp(r'\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?').firstMatch(value);
     return match?.group(0);
+  }
+
+  Future<void> _terminate(Process process) async {
+    if (!process.kill(ProcessSignal.sigterm)) return;
+    try {
+      await process.exitCode.timeout(const Duration(seconds: 1));
+    } on TimeoutException {
+      process.kill(ProcessSignal.sigkill);
+    }
   }
 
   static Future<ProcessResult> _defaultInvoke(
