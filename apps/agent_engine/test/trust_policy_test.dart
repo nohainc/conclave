@@ -41,6 +41,10 @@ void main() {
       () => parseConfiguredPluginPermissions('unknown'),
       throwsStateError,
     );
+    expect(
+      parseConfiguredPluginPermissions('network:openai,network:anthropic'),
+      {PluginPermission.networkOpenAi, PluginPermission.networkAnthropic},
+    );
   });
 
   test('supports signing-key rotation and key revocation', () {

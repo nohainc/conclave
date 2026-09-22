@@ -6,6 +6,8 @@ enum PluginPermission {
   writeWorkspace,
   shell,
   network,
+  networkOpenAi,
+  networkAnthropic,
   credentials
 }
 
@@ -15,6 +17,8 @@ extension PluginPermissionWire on PluginPermission {
         PluginPermission.writeWorkspace => 'workspace:write',
         PluginPermission.shell => 'shell:execute',
         PluginPermission.network => 'network:outbound',
+        PluginPermission.networkOpenAi => 'network:openai',
+        PluginPermission.networkAnthropic => 'network:anthropic',
         PluginPermission.credentials => 'credentials:read',
       };
 }
@@ -25,6 +29,8 @@ PluginPermission parsePluginPermission(String value) {
     'writeWorkspace' || 'workspace:write' => PluginPermission.writeWorkspace,
     'shell' || 'shell:execute' => PluginPermission.shell,
     'network' || 'network:outbound' => PluginPermission.network,
+    'network:openai' => PluginPermission.networkOpenAi,
+    'network:anthropic' => PluginPermission.networkAnthropic,
     'credentials' || 'credentials:read' => PluginPermission.credentials,
     _ => throw StateError('unknown plugin permission: $value'),
   };

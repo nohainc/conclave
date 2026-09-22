@@ -213,6 +213,40 @@ void main() {
         PluginPermission.readWorkspace);
     expect(parsePluginPermission('network:outbound'), PluginPermission.network);
     expect(PluginPermission.writeWorkspace.wireName, 'workspace:write');
+    expect(parsePluginPermission('network:openai'),
+        PluginPermission.networkOpenAi);
+    expect(parsePluginPermission('network:anthropic'),
+        PluginPermission.networkAnthropic);
+    expect(PluginPermission.networkOpenAi.wireName, 'network:openai');
+  });
+
+  test('reconciles a scoped API network permission', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-plugins-network-');
+    final bytes = [41, 42, 43];
+    final digest = sha256.convert(bytes).toString();
+    const policy = PluginTrustPolicy(trustedSecrets: {'publisher': 'root'});
+    final manager = PluginManager(
+      directory,
+      trustPolicy: policy,
+      allowedPermissions: {PluginPermission.networkOpenAi},
+    );
+    await manager.reconcile(
+      [
+        {
+          'pluginId': 'openai-plugin',
+          'version': '1.0.0',
+          'publisher': 'publisher',
+          'packageR2Key': 'plugins/openai/1.0.0/package.bin',
+          'packageDigest': digest,
+          'signature': policy.sign('publisher', digest),
+          'permissions': ['network:openai'],
+        },
+      ],
+      download: (_, __, ___) async => bytes,
+    );
+    expect(await manager.activeVersion('openai-plugin'), '1.0.0');
+    await directory.delete(recursive: true);
   });
 
   test('rejects traversal identifiers before checking the active version',
