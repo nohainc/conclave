@@ -4,20 +4,19 @@ import 'dart:io';
 import 'package:conclave_host/host.dart';
 import 'package:conclave_host/assignment_journal.dart';
 import 'package:conclave_host/cloud_connection.dart';
-import 'package:conclave_host/plugin_executor.dart';
-import 'package:conclave_host/plugin_manager.dart';
+import 'package:conclave_host/worker_executor.dart';
+import 'package:conclave_host/worker_manager.dart';
 import 'package:conclave_host/repository_registry.dart';
 import 'package:conclave_host/self_update.dart';
 import 'package:conclave_host/secure_credentials.dart';
-import 'package:conclave_host/trust_policy.dart';
-import 'package:conclave_host/worker_configuration.dart';
+import 'package:conclave_host/worker_trust_policy.dart';
 
-Set<PluginPermission> _configuredPermissions() {
-  return parseConfiguredPluginPermissions(
-      Platform.environment['CONCLAVE_PLUGIN_PERMISSIONS']);
+Set<WorkerPermission> _configuredPermissions() {
+  return parseConfiguredWorkerPermissions(
+      Platform.environment['CONCLAVE_WORKER_PERMISSIONS']);
 }
 
-Map<String, String> _pluginSecrets() {
+Map<String, String> _workerSecrets() {
   const store = PlatformSecureCredentialStore();
   final secrets = <String, String>{};
   for (final name in const [
@@ -31,15 +30,15 @@ Map<String, String> _pluginSecrets() {
   return secrets;
 }
 
-PluginTrustPolicy _releaseTrustPolicy(String publisher) {
+WorkerTrustPolicy _releaseTrustPolicy(String publisher) {
   final secret = Platform.environment['CONCLAVE_HOST_RELEASE_TRUST_SECRET'];
-  return PluginTrustPolicy(
+  return WorkerTrustPolicy(
     trustedSecrets: secret == null ? {} : {publisher: secret},
   );
 }
 
-Future<List<int>> downloadPluginPackage(Uri cloudUri, String? authToken,
-    String pluginId, String version, String packageR2Key,
+Future<List<int>> downloadWorkerPackage(Uri cloudUri, String? authToken,
+    String workerId, String version, String packageR2Key,
     {int maxPackageBytes = 512 * 1024 * 1024,
     Duration timeout = const Duration(seconds: 30)}) async {
   if (maxPackageBytes <= 0) {
@@ -51,8 +50,8 @@ Future<List<int>> downloadPluginPackage(Uri cloudUri, String? authToken,
     scheme: scheme,
     pathSegments: [
       'api',
-      'plugins',
-      pluginId,
+      'workers',
+      workerId,
       'versions',
       version,
       'download',
@@ -69,18 +68,18 @@ Future<List<int>> downloadPluginPackage(Uri cloudUri, String? authToken,
     final response = await request.close().timeout(timeout);
     if (response.statusCode != HttpStatus.ok) {
       throw StateError(
-        'plugin download failed with HTTP ${response.statusCode}',
+        'worker download failed with HTTP ${response.statusCode}',
       );
     }
     if (response.contentLength > maxPackageBytes) {
       throw StateError(
-          'plugin package exceeds the $maxPackageBytes byte package limit');
+          'worker package exceeds the $maxPackageBytes byte package limit');
     }
     final bytes = <int>[];
     await for (final chunk in response.timeout(timeout)) {
       if (bytes.length + chunk.length > maxPackageBytes) {
         throw StateError(
-            'plugin package exceeds the $maxPackageBytes byte package limit');
+            'worker package exceeds the $maxPackageBytes byte package limit');
       }
       bytes.addAll(chunk);
     }
@@ -93,33 +92,28 @@ Future<List<int>> downloadPluginPackage(Uri cloudUri, String? authToken,
 Future<void> main(List<String> args) async {
   final config = HostConfig.fromArgs(args);
   final publisher =
-      Platform.environment['CONCLAVE_PLUGIN_TRUST_PUBLISHER'] ?? 'conclave';
-  final trustSecret = Platform.environment['CONCLAVE_PLUGIN_TRUST_SECRET'];
+      Platform.environment['CONCLAVE_WORKER_TRUST_PUBLISHER'] ?? 'conclave';
+  final trustSecret = Platform.environment['CONCLAVE_WORKER_TRUST_SECRET'];
   final releaseTrustPolicy = _releaseTrustPolicy(publisher);
-  final pluginManager = PluginManager(
-    Directory('${config.dataDirectory.path}/plugins'),
+  final workerManager = WorkerManager(
+    Directory('${config.dataDirectory.path}/workers'),
     requireSignature: true,
-    trustPolicy: PluginTrustPolicy(
+    trustPolicy: WorkerTrustPolicy(
       trustedSecrets: trustSecret == null ? {} : {publisher: trustSecret},
     ),
     allowedPermissions: _configuredPermissions(),
-    secretEnvironment: _pluginSecrets(),
+    secretEnvironment: _workerSecrets(),
   );
-  final workerStore = WorkerConfigurationStore(
-    Directory('${config.dataDirectory.path}/workers'),
-    workspaceId: config.workspaceId ?? '',
-    hostId: config.hostId ?? '',
-  );
-  final activeWorkerIds = (await workerStore.read())
-      .where((worker) => worker['enabled'] == true)
-      .map((worker) => worker['workerId'])
-      .whereType<String>()
+  var activeWorkerIds = (await workerManager.inventory())
+      .where((worker) => worker.active)
+      .map((worker) => worker.workerId)
+      .toSet()
       .toList();
   final repositoryRegistry = await LocalRepositoryRegistry.load(File(
     config.repositoriesFile ?? '${config.dataDirectory.path}/repositories.json',
   ));
-  final pluginHandler = pluginManager.assignmentHandler(
-    PluginProcessExecutor(),
+  final workerHandler = workerManager.assignmentHandler(
+    WorkerProcessExecutor(),
     resolveRepositoryPath: repositoryRegistry.resolve,
   );
   HostUpdateController? updateController;
@@ -163,8 +157,8 @@ Future<void> main(List<String> args) async {
           hostId: config.hostId!,
           workspaceId: config.workspaceId!,
           activeWorkerIds: activeWorkerIds,
-          assignmentHandler: pluginHandler.call,
-          assignmentCancellationHandler: pluginHandler.cancel,
+          assignmentHandler: workerHandler.call,
+          assignmentCancellationHandler: workerHandler.cancel,
           hostUpdateAvailableHandler: (payload) async {
             final controller = updateController;
             if (controller == null) return;
@@ -175,64 +169,48 @@ Future<void> main(List<String> args) async {
             File('${config.dataDirectory.path}/assignments.jsonl'),
           ),
           syncHandler: (payload) async {
-            final raw = payload['desiredPlugins'];
+            final raw = payload['desiredWorkers'];
             if (raw is! List) return;
             final desired = raw
                 .whereType<Map>()
                 .map((item) => Map<String, Object?>.from(item));
             try {
-              await pluginManager.reconcile(
+              await workerManager.reconcile(
                 desired,
-                download: (pluginId, version, packageR2Key) =>
-                    downloadPluginPackage(
+                download: (workerId, version, packageR2Key) =>
+                    downloadWorkerPackage(
                   config.cloudUri!,
                   config.authToken,
-                  pluginId,
+                  workerId,
                   version,
                   packageR2Key,
                 ),
               );
-              final rawWorkers = payload['desiredWorkers'];
-              if (rawWorkers is List) {
-                final desiredWorkers = rawWorkers
-                    .whereType<Map>()
-                    .map((item) => Map<String, Object?>.from(item))
-                    .toList();
-                final ids = await workerStore.reconcile(desiredWorkers);
-                activeWorkerIds
-                  ..clear()
-                  ..addAll(ids);
-                for (final worker in desiredWorkers) {
-                  final workerId = worker['workerId'];
-                  if (workerId is! String) continue;
-                  final enabled = worker['enabled'] == true;
-                  connection?.reportWorkerStatus(
-                    workerId: workerId,
-                    status: enabled ? 'available' : 'disabled',
-                    activeAssignments: 0,
-                  );
-                }
-              }
-              final inventory = await pluginManager.inventory();
-              connection?.reportPluginStatuses(
+              final inventory = await workerManager.inventory();
+              activeWorkerIds = inventory
+                  .where((worker) => worker.active)
+                  .map((worker) => worker.workerId)
+                  .toSet()
+                  .toList();
+              connection?.reportWorkerStatuses(
                 inventory
-                    .map((plugin) => {
-                          'pluginId': plugin.pluginId,
-                          'version': plugin.version,
-                          'status': plugin.active ? 'active' : 'installed',
+                    .map((worker) => {
+                          'workerId': worker.workerId,
+                          'version': worker.version,
+                          'status': worker.active ? 'active' : 'installed',
                           'installedAt':
                               DateTime.now().toUtc().toIso8601String(),
                         })
                     .toList(),
               );
             } catch (error) {
-              for (final plugin in desired) {
-                final pluginId = plugin['pluginId'];
-                final version = plugin['version'];
-                if (pluginId is! String || version is! String) continue;
-                connection?.reportPluginStatuses([
+              for (final worker in desired) {
+                final workerId = worker['workerId'];
+                final version = worker['version'];
+                if (workerId is! String || version is! String) continue;
+                connection?.reportWorkerStatuses([
                   {
-                    'pluginId': pluginId,
+                    'workerId': workerId,
                     'version': version,
                     'status': 'error',
                     'error': '$error',
@@ -254,11 +232,10 @@ Future<void> main(List<String> args) async {
     cloudConnection: connection,
     statusProvider: () async {
       await refreshUpdateAvailability();
-      final plugins = await pluginManager.inventory();
+      final workers = await workerManager.inventory();
       return {
-        'workers': activeWorkerIds.length,
-        'plugins': plugins.length,
-        'pluginIds': plugins.map((plugin) => plugin.pluginId).toList(),
+        'workers': workers.length,
+        'workerIds': workers.map((worker) => worker.workerId).toList(),
         'activeTasks': connection?.activeAssignmentCount ?? 0,
         'activeAssignmentIds': connection?.activeAssignmentIds ?? const [],
         'cloudConnected': connection?.isConnected ?? false,

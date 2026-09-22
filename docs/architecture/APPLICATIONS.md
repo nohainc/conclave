@@ -87,7 +87,7 @@ One Host is installed per machine. Users do not log in/out of Host accounts; Clo
 ## 4. Workers
 
 **Path:** `workers/<worker-id>` after v4 migration  
-**Current transitional path:** `worker_plugins/*`
+**Current path:** `workers/*`
 
 A Worker is an installable execution integration.
 

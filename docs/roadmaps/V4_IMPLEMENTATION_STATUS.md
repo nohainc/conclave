@@ -11,7 +11,7 @@ Track progress of the [v4 implementation roadmap](ARCHITECTURE_V4_IMPLEMENTATION
 | V4-4 | Create clean v4 D1 schema and reset development data | ✅ Complete |
 | V4-5 | Rename Cloud execution plane Agent → Host | ✅ Complete |
 | V4-6 | Merge Agent App + Agent Engine into Conclave Host | ✅ Complete |
-| V4-7 | Convert PluginManager into WorkerManager | ⬜ Not started |
+| V4-7 | Convert PluginManager into WorkerManager | ✅ Complete |
 | V4-8 | Implement Credential Profiles and local secure storage | ⬜ Not started |
 | V4-9 | Credential sharing and usage attribution | ⬜ Not started |
 | V4-10 | Remove configured Worker instances | ⬜ Not started |

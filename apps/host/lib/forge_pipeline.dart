@@ -35,7 +35,7 @@ class ForgeCompletion {
 }
 
 /// Deterministic acceptance pipeline used to prove the Dart Host path.
-/// Real provider plugins can replace the decision callbacks without changing
+/// Real provider workers can replace the decision callbacks without changing
 /// the runtime or evidence model.
 class DartForgePipeline {
   Future<ForgeCompletion> execute(Directory repository) async {

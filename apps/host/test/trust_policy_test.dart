@@ -1,9 +1,9 @@
-import 'package:conclave_host/trust_policy.dart';
+import 'package:conclave_host/worker_trust_policy.dart';
 import 'package:test/test.dart';
 
 void main() {
   test('verifies publisher signatures and rejects revoked digests', () {
-    const policy = PluginTrustPolicy(trustedSecrets: {'conclave': 'root-key'});
+    const policy = WorkerTrustPolicy(trustedSecrets: {'conclave': 'root-key'});
     final signature = policy.sign('conclave', 'sha256:abc');
     expect(
         policy.verify(
@@ -16,7 +16,7 @@ void main() {
           signature: 'sig_pkg_${signature.substring(4)}',
         ),
         isTrue);
-    final revoked = PluginTrustPolicy(
+    final revoked = WorkerTrustPolicy(
         trustedSecrets: {'conclave': 'root-key'},
         revokedDigests: {'sha256:abc'});
     expect(
@@ -25,11 +25,11 @@ void main() {
         isFalse);
   });
 
-  test('enforces plugin permissions and redacts secrets', () {
-    const policy = PluginTrustPolicy(trustedSecrets: {'conclave': 'root-key'});
+  test('enforces worker permissions and redacts secrets', () {
+    const policy = WorkerTrustPolicy(trustedSecrets: {'conclave': 'root-key'});
     expect(
         () => policy.requirePermissions(
-            [PluginPermission.shell], [PluginPermission.readWorkspace]),
+            [WorkerPermission.shell], [WorkerPermission.readWorkspace]),
         throwsStateError);
     expect(redactSecrets('Authorization: secret', ['secret']),
         'Authorization: [REDACTED]');
@@ -37,25 +37,25 @@ void main() {
 
   test('parses canonical and legacy configured permission names', () {
     expect(
-      parseConfiguredPluginPermissions('workspace:read,network:outbound'),
-      {PluginPermission.readWorkspace, PluginPermission.network},
+      parseConfiguredWorkerPermissions('workspace:read,network:outbound'),
+      {WorkerPermission.readWorkspace, WorkerPermission.network},
     );
     expect(
-      parseConfiguredPluginPermissions('readWorkspace'),
-      {PluginPermission.readWorkspace},
+      parseConfiguredWorkerPermissions('readWorkspace'),
+      {WorkerPermission.readWorkspace},
     );
     expect(
-      () => parseConfiguredPluginPermissions('unknown'),
+      () => parseConfiguredWorkerPermissions('unknown'),
       throwsStateError,
     );
     expect(
-      parseConfiguredPluginPermissions('network:openai,network:anthropic'),
-      {PluginPermission.networkOpenAi, PluginPermission.networkAnthropic},
+      parseConfiguredWorkerPermissions('network:openai,network:anthropic'),
+      {WorkerPermission.networkOpenAi, WorkerPermission.networkAnthropic},
     );
   });
 
   test('supports signing-key rotation and key revocation', () {
-    const policy = PluginTrustPolicy(
+    const policy = WorkerTrustPolicy(
       trustedKeys: {
         'conclave': {'old': 'old-key', 'new': 'new-key'},
       },
@@ -71,7 +71,7 @@ void main() {
             publisher: 'conclave', digest: 'digest', signature: newSignature),
         isTrue);
 
-    const rotated = PluginTrustPolicy(
+    const rotated = WorkerTrustPolicy(
       trustedKeys: {
         'conclave': {'old': 'old-key', 'new': 'new-key'},
       },

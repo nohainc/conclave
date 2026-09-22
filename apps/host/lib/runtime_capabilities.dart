@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 
 import 'process_tree.dart';
-import 'trust_policy.dart';
+import 'worker_trust_policy.dart';
 
 class RuntimeViolation implements Exception {
   const RuntimeViolation(this.message);

@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:conclave_host/self_update.dart';
 import 'package:crypto/crypto.dart';
-import 'package:conclave_host/trust_policy.dart';
+import 'package:conclave_host/worker_trust_policy.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -279,7 +279,7 @@ void main() {
   test('rejects an invalid signed release', () async {
     final root = await Directory.systemTemp.createTemp('conclave-update-');
     final bytes = [4, 5, 6];
-    const policy = PluginTrustPolicy(trustedSecrets: {'release': 'root'});
+    const policy = WorkerTrustPolicy(trustedSecrets: {'release': 'root'});
     await expectLater(
       HostUpdater(root, trustPolicy: policy).apply(
         ReleasePackage(

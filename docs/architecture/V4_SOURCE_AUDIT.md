@@ -49,7 +49,7 @@ Assignment
 | `apps/worker` | Keep; rename to `apps/cloud` |
 | `apps/agent_app` | Merged into `apps/host` |
 | `apps/agent_engine` | Merged into `apps/host`; IPC/process split removed |
-| `worker_plugins/*` | Keep implementations; rename directory to `workers/*` |
+| `workers/*` | Keep Worker package implementations |
 | `packages/agent-protocol` | Replace/merge into Host protocol |
 | `packages/plugin-manifest` | Rename to `packages/worker-manifest` |
 | `packages/dart/plugin_protocol` | Rename to Worker protocol |
@@ -166,11 +166,11 @@ Rename to Host Gateway and simplify desired-state payload:
 
 Do not sync configured Worker instances.
 
-### `apps/host/lib/plugin_manager.dart`
+### `apps/host/lib/worker_manager.dart`
 
 The implementation is valuable.
 
-Rename/reframe as WorkerManager:
+WorkerManager owns the local Worker package lifecycle:
 - catalog Worker package;
 - installed versions;
 - desired versions;
@@ -179,16 +179,12 @@ Rename/reframe as WorkerManager:
 - rollback;
 - garbage collection.
 
-Remove Plugin vocabulary from user-facing protocol.
+Keep Worker terminology throughout the local package and runtime APIs.
 
-### `apps/host/lib/worker_configuration.dart`
+### `apps/host/lib/worker_manager.dart` desired state
 
-Delete the current desired configured Worker list.
-
-Replace with:
-- desired Worker installations;
-- Host policy;
-- Credential Profile metadata.
+Cloud desired Worker IDs and version policies are reconciled directly by
+WorkerManager. There is no persisted per-configured-instance Worker list.
 
 ### `apps/host/lib/main.dart`
 
@@ -349,7 +345,7 @@ Architecture v4 cleanup is complete when active source search returns no product
 - configured Worker-instance CRUD;
 - Agent/Plugin navigation labels;
 - `agent_plugin_installs`;
-- `worker_plugins`;
+- `worker_plugins` (legacy name);
 - v3 Architecture as normative.
 
 Historical Git commits are not part of the gate.

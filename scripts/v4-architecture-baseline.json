@@ -258,16 +258,16 @@
     "packages/persistence/src/d1.ts:421",
     "packages/persistence/src/d1.ts:730",
     "packages/persistence/src/index.ts:37",
-    "worker_plugins/anthropic/bin/anthropic_plugin.dart:16",
-    "worker_plugins/anthropic/lib/anthropic_manifest.dart:2",
-    "worker_plugins/claude_code/bin/claude_code_plugin.dart:47",
-    "worker_plugins/claude_code/lib/claude_code_manifest.dart:2",
-    "worker_plugins/codex/bin/codex_plugin.dart:46",
-    "worker_plugins/codex/lib/codex_manifest.dart:2",
-    "worker_plugins/echo/bin/echo_plugin.dart:104",
-    "worker_plugins/forge/bin/forge_plugin.dart:14",
-    "worker_plugins/forge/bin/forge_plugin.dart:67",
-    "worker_plugins/openai/bin/openai_plugin.dart:16",
-    "worker_plugins/openai/lib/openai_manifest.dart:2"
+    "workers/anthropic/bin/anthropic_worker.dart:16",
+    "workers/anthropic/lib/anthropic_manifest.dart:2",
+    "workers/claude_code/bin/claude_code_worker.dart:47",
+    "workers/claude_code/lib/claude_code_manifest.dart:2",
+    "workers/codex/bin/codex_worker.dart:46",
+    "workers/codex/lib/codex_manifest.dart:2",
+    "workers/echo/bin/echo_worker.dart:104",
+    "workers/forge/bin/forge_worker.dart:14",
+    "workers/forge/bin/forge_worker.dart:67",
+    "workers/openai/bin/openai_worker.dart:16",
+    "workers/openai/lib/openai_manifest.dart:2"
   ]
 }

@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:conclave_host/assignment_journal.dart';
 import 'package:conclave_host/cloud_connection.dart';
-import 'package:conclave_host/plugin_executor.dart';
+import 'package:conclave_host/worker_executor.dart';
 import 'package:test/test.dart';
 import 'fixture_copy.dart';
 
@@ -131,8 +131,7 @@ void main() {
     await connection.close();
   });
 
-  test('delivers validated Cloud update announcements to the Host',
-      () async {
+  test('delivers validated Cloud update announcements to the Host', () async {
     final socket = FakeSocket();
     Map<String, Object?>? received;
     final connection = HostCloudConnection(
@@ -201,7 +200,7 @@ void main() {
     await connection.close();
   });
 
-  test('reports correlated plugin and Worker readiness', () async {
+  test('reports correlated worker and Worker readiness', () async {
     final socket = FakeSocket();
     final connection = HostCloudConnection(
       uri: Uri.parse('wss://cloud.test/host'),
@@ -222,9 +221,9 @@ void main() {
     }));
     await Future<void>.delayed(const Duration(milliseconds: 10));
 
-    connection.reportPluginStatuses([
+    connection.reportWorkerStatuses([
       {
-        'pluginId': 'conclave.codex',
+        'workerId': 'conclave.codex',
         'version': '1.0.0',
         'status': 'active',
         'installedAt': DateTime.now().toUtc().toIso8601String(),
@@ -238,13 +237,10 @@ void main() {
     final messages = socket.sent
         .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
         .toList();
-    final plugin = messages.lastWhere(
-      (message) => message['type'] == 'plugin.status',
-    );
-    expect((plugin['payload'] as Map<String, dynamic>)['plugins'], isNotEmpty);
     final worker = messages.lastWhere(
       (message) => message['type'] == 'worker.status',
     );
+    expect((worker['payload'] as Map<String, dynamic>)['workers'], isNotEmpty);
     final workerPayload = worker['payload'] as Map<String, dynamic>;
     expect(workerPayload['hostId'], 'host-1');
     expect(workerPayload['workerId'], 'worker-1');
@@ -367,8 +363,8 @@ void main() {
       'payload': {
         'objective': 'inspect',
         'role': 'research',
-        'pluginId': 'conclave.echo',
-        'resolvedPluginVersion': '1.0.0',
+        'workerId': 'conclave.echo',
+        'resolvedWorkerVersion': '1.0.0',
         'input': {},
         'contextArtifactIds': [],
         'timeoutMs': 1000,
@@ -437,7 +433,6 @@ void main() {
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'host.sync.response',
       'payload': {
-        'desiredPlugins': [],
         'desiredWorkers': [],
         'activeAssignmentIds': ['assignment-1'],
         'assignmentStates': [
@@ -498,7 +493,7 @@ void main() {
     await connection.close();
   });
 
-  test('rejects malformed assignment payloads before plugin execution',
+  test('rejects malformed assignment payloads before worker execution',
       () async {
     final socket = FakeSocket();
     final connection = HostCloudConnection(
@@ -525,7 +520,7 @@ void main() {
       'attemptId': 'attempt-1',
       'assignmentId': 'assignment-3',
       'idempotencyKey': 'idem-3',
-      'payload': {'pluginId': 'conclave.echo'},
+      'payload': {'workerId': 'conclave.echo'},
     }));
     await Future<void>.delayed(const Duration(milliseconds: 10));
     final error = socket.sent
@@ -573,8 +568,8 @@ void main() {
           'payload': {
             'objective': 'inspect',
             'role': 'research',
-            'pluginId': 'conclave.echo',
-            'resolvedPluginVersion': '1.0.0',
+            'workerId': 'conclave.echo',
+            'resolvedWorkerVersion': '1.0.0',
             'input': {},
             'contextArtifactIds': [],
             'timeoutMs': 1000,
@@ -645,8 +640,8 @@ void main() {
       'payload': {
         'objective': 'inspect',
         'role': 'research',
-        'pluginId': 'conclave.echo',
-        'resolvedPluginVersion': '1.0.0',
+        'workerId': 'conclave.echo',
+        'resolvedWorkerVersion': '1.0.0',
         'input': {},
         'contextArtifactIds': [],
         'timeoutMs': 1000,
@@ -712,7 +707,7 @@ void main() {
     await connection.close();
   });
 
-  test('runs Forge through Cloud assignment, plugin, and journal boundaries',
+  test('runs Forge through Cloud assignment, worker, and journal boundaries',
       () async {
     final repository = Directory.current.parent.parent;
     final fixture = await copyForgeFixture();
@@ -721,13 +716,13 @@ void main() {
         await Directory.systemTemp.createTemp('host-journal-');
     final journal =
         AssignmentJournal(File('${journalDirectory.path}/assignments.jsonl'));
-    final handler = PluginAssignmentHandler(
-      executor: PluginProcessExecutor(),
-      resolve: (_) => PluginProcessSpec(
-        pluginId: 'conclave.forge',
+    final handler = WorkerAssignmentHandler(
+      executor: WorkerProcessExecutor(),
+      resolve: (_) => WorkerProcessSpec(
+        workerId: 'conclave.forge',
         executable: 'dart',
-        arguments: ['--disable-analytics', 'run', 'bin/forge_plugin.dart'],
-        workingDirectory: '${repository.path}/worker_plugins/forge',
+        arguments: ['--disable-analytics', 'run', 'bin/forge_worker.dart'],
+        workingDirectory: '${repository.path}/workers/forge',
       ),
     );
     final connection = HostCloudConnection(
@@ -757,8 +752,8 @@ void main() {
         'payload': {
           'objective': 'Fix add and verify the implementation',
           'role': 'implementer',
-          'pluginId': 'conclave.forge',
-          'resolvedPluginVersion': '0.1.0',
+          'workerId': 'conclave.forge',
+          'resolvedWorkerVersion': '0.1.0',
           'input': {'repositoryPath': fixture.path},
           'contextArtifactIds': [],
           'timeoutMs': 60000,
@@ -788,8 +783,7 @@ void main() {
         'taskId': 'task-forge-1',
         'attemptId': 'attempt-forge-1',
         'workerId': 'forge-worker',
-        'pluginId': 'conclave.forge',
-        'pluginVersion': '0.1.0',
+        'workerVersion': '0.1.0',
       });
       expect(output['completionReport'],
           contains('All required fixture checks passed'));

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
-import 'trust_policy.dart';
+import 'worker_trust_policy.dart';
 
 class ReleasePackage {
   const ReleasePackage(
@@ -427,7 +427,7 @@ class HostUpdater {
     this.currentProtocolVersion = '2.0',
   });
   final Directory root;
-  final PluginTrustPolicy? trustPolicy;
+  final WorkerTrustPolicy? trustPolicy;
 
   /// Unsigned releases are allowed only when explicitly opted into for local
   /// development or tests. Production update paths fail closed.

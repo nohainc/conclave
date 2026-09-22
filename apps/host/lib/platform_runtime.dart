@@ -3,7 +3,7 @@ import 'dart:io';
 
 /// Operating-system services used by the Host.
 ///
-/// Protocol, repository, and plugin code should depend on this seam instead
+/// Protocol, repository, and worker code should depend on this seam instead
 /// of branching on the host operating system themselves.
 abstract interface class PlatformRuntime {
   String get operatingSystem;

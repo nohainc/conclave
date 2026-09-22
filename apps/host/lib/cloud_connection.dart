@@ -103,7 +103,7 @@ class HostCloudConnection {
     String? hostname,
     this.hostVersion = '0.1.0',
     Map<String, Object?>? capabilities,
-    this.installedPluginVersions = const {},
+    this.installedWorkerVersions = const {},
     this.activeWorkerIds = const [],
     this.unreconciledAssignmentIds = const [],
     this.assignmentHandler,
@@ -125,7 +125,7 @@ class HostCloudConnection {
   final String hostname;
   final String hostVersion;
   final Map<String, Object?> capabilities;
-  final Map<String, String> installedPluginVersions;
+  final Map<String, String> installedWorkerVersions;
   final List<String> activeWorkerIds;
   final List<String> unreconciledAssignmentIds;
   final HostAssignmentHandler? assignmentHandler;
@@ -152,8 +152,8 @@ class HostCloudConnection {
   Map<String, Object?>? syncResponse;
   final _activeAssignments = <String>{};
 
-  void reportPluginStatuses(List<Map<String, Object?>> plugins) {
-    _sendIfConnected('plugin.status', {'plugins': plugins});
+  void reportWorkerStatuses(List<Map<String, Object?>> workers) {
+    _sendIfConnected('worker.status', {'workers': workers});
   }
 
   void reportWorkerStatus({
@@ -520,8 +520,8 @@ class HostCloudConnection {
     for (final field in [
       'objective',
       'role',
-      'pluginId',
-      'resolvedPluginVersion',
+      'workerId',
+      'resolvedWorkerVersion',
     ]) {
       if (rawPayload[field] is! String ||
           (rawPayload[field] as String).trim().isEmpty) {
@@ -716,7 +716,7 @@ class HostCloudConnection {
       final records = await journal.reconcile();
       for (final record in records.values) {
         // Include terminal local results until Cloud acknowledges them. This
-        // closes the crash window after plugin success but before the result
+        // closes the crash window after worker success but before the result
         // reaches Cloud.
         if (record.status != AssignmentStatus.reconciled) {
           recoveredAssignmentIds.add(record.assignmentId);
@@ -726,7 +726,7 @@ class HostCloudConnection {
     socket.send(jsonEncode(_envelope('host.sync.request', {
       'hostId': hostId,
       'workspaceId': workspaceId,
-      'installedPluginVersions': installedPluginVersions,
+      'installedWorkerVersions': installedWorkerVersions,
       'activeWorkerIds': activeWorkerIds,
       if (recoveredAssignmentIds.isNotEmpty)
         'unreconciledAssignmentIds': recoveredAssignmentIds.toList()..sort(),
