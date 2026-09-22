@@ -180,6 +180,12 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
       )
       .bind(status, now, runId)
       .run();
+    await db
+      .prepare(
+        "UPDATE run_external_executions SET status = ?1, updated_at = ?2 WHERE run_id = ?3 AND execution_kind = 'cloudflare_workflow'",
+      )
+      .bind(status, now, runId)
+      .run();
   }
 
   override async run(
