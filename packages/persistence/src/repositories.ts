@@ -8,10 +8,8 @@ import type {
   MembershipRecord,
   OrganizationRecord,
   ProjectMembershipRecord,
-  ProjectRecord,
   RetentionPolicyRecord,
   WorkflowTemplateRecord,
-  WorkerRecord,
   ConnectionRecord,
   RunAggregateRows,
   PersistenceRepositories,
@@ -30,6 +28,8 @@ import {
   D1TaskRepository,
   D1UsageRepository,
   D1VerificationRepository,
+  D1ProjectRepository,
+  D1WorkerRepository,
   type D1DatabaseLike,
 } from "./d1.js";
 
@@ -102,16 +102,6 @@ class RecordRepository<T extends JsonRecord> {
   }
 }
 
-export class D1ProjectRepository extends RecordRepository<ProjectRecord> {
-  constructor(store: D1RecordStore) {
-    super(store, "projects");
-  }
-}
-export class D1WorkerRepository extends RecordRepository<WorkerRecord> {
-  constructor(store: D1RecordStore) {
-    super(store, "workers");
-  }
-}
 export class D1ConnectionRepository extends RecordRepository<ConnectionRecord> {
   constructor(store: D1RecordStore) {
     super(store, "connections");
@@ -281,8 +271,8 @@ export class D1PersistenceRepositories implements PersistenceRepositories {
 
   constructor(db: D1DatabaseLike) {
     this.store = new D1RecordStore(db);
-    this.projects = new D1ProjectRepository(this.store);
-    this.workers = new D1WorkerRepository(this.store);
+    this.projects = new D1ProjectRepository(db);
+    this.workers = new D1WorkerRepository(db);
     this.connections = new D1ConnectionRepository(this.store);
     this.goals = new D1GoalRepository(db);
     this.runs = new D1RunRepository(db, (runId) => this.loadAggregate(runId));

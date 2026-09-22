@@ -13,6 +13,8 @@ import type {
   TaskRecord,
   UsageRecord,
   VerificationRecord,
+  ProjectRecord,
+  WorkerRecord,
 } from "./index.js";
 
 export interface D1Result<T> {
@@ -54,6 +56,161 @@ function dates(
   row: Record<string, unknown>,
 ): Pick<GoalRecord, "createdAt" | "updatedAt"> {
   return {
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+export class D1ProjectRepository {
+  constructor(private readonly db: D1DatabaseLike) {}
+
+  async get(id: string): Promise<ProjectRecord | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM projects WHERE id = ?1")
+      .bind(id)
+      .first();
+    return row ? toProject(row) : null;
+  }
+
+  async save(project: ProjectRecord): Promise<void> {
+    if (!project.workspaceId) {
+      throw new Error(`D1 project requires workspaceId: ${project.id}`);
+    }
+    await this.db
+      .prepare(
+        `INSERT INTO projects (id, workspace_id, name, description, repository_id, settings_json, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+         ON CONFLICT(id) DO UPDATE SET name=excluded.name, description=excluded.description,
+           repository_id=excluded.repository_id, settings_json=excluded.settings_json,
+           updated_at=excluded.updated_at`,
+      )
+      .bind(
+        project.id,
+        project.workspaceId,
+        project.name,
+        project.description ?? null,
+        project.repositoryId,
+        json(project.settings ?? {}),
+        project.createdAt,
+        project.updatedAt,
+      )
+      .run();
+  }
+}
+
+function toProject(row: Record<string, unknown>): ProjectRecord {
+  return {
+    id: String(row.id),
+    workspaceId: String(row.workspace_id),
+    name: String(row.name),
+    description:
+      row.description === null ? null : String(row.description ?? ""),
+    repositoryId: row.repository_id === null ? null : String(row.repository_id),
+    settings: parse(row.settings_json, {}),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+export class D1WorkerRepository {
+  constructor(private readonly db: D1DatabaseLike) {}
+
+  async get(id: string): Promise<WorkerRecord | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM workers WHERE id = ?1")
+      .bind(id)
+      .first();
+    return row ? toWorker(row) : null;
+  }
+
+  async save(worker: WorkerRecord): Promise<void> {
+    if (!worker.workspaceId || !worker.agentId || !worker.pluginId) {
+      throw new Error(
+        `D1 worker requires workspaceId, agentId, and pluginId: ${worker.id}`,
+      );
+    }
+    const config = {
+      ...jsonObject(worker.config ?? {}),
+      kind: worker.kind,
+    };
+    await this.db
+      .prepare(
+        `INSERT INTO workers (id, workspace_id, agent_id, plugin_id, plugin_version_policy, name,
+           roles_json, capabilities_json, config_json, secret_refs_json, billing_mode,
+           cost_metadata_json, independence_key, concurrency_limit, session_policy,
+           enabled, status, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
+         ON CONFLICT(id) DO UPDATE SET agent_id=excluded.agent_id, plugin_id=excluded.plugin_id,
+           plugin_version_policy=excluded.plugin_version_policy, name=excluded.name,
+           roles_json=excluded.roles_json, capabilities_json=excluded.capabilities_json,
+           config_json=excluded.config_json, secret_refs_json=excluded.secret_refs_json,
+           billing_mode=excluded.billing_mode, cost_metadata_json=excluded.cost_metadata_json,
+           independence_key=excluded.independence_key, concurrency_limit=excluded.concurrency_limit,
+           session_policy=excluded.session_policy, enabled=excluded.enabled,
+           status=excluded.status, updated_at=excluded.updated_at`,
+      )
+      .bind(
+        worker.id,
+        worker.workspaceId,
+        worker.agentId,
+        worker.pluginId,
+        worker.pluginVersionPolicy ?? "latest",
+        worker.name,
+        json(worker.roles),
+        json(worker.capabilities),
+        json(config),
+        json(worker.secretRefs ?? []),
+        worker.billingMode ?? "manual",
+        json(worker.costMetadata ?? {}),
+        worker.independenceKey,
+        worker.concurrencyLimit ?? 1,
+        worker.sessionPolicy ?? "stateless",
+        worker.enabled === false ? 0 : 1,
+        worker.availability,
+        worker.createdAt,
+        worker.updatedAt,
+      )
+      .run();
+  }
+}
+
+function toWorker(row: Record<string, unknown>): WorkerRecord {
+  const config = parse<Record<string, JsonValue>>(row.config_json, {});
+  const configuredKind = config.kind;
+  const kind =
+    configuredKind === "model" ||
+    configuredKind === "agent" ||
+    configuredKind === "runtime" ||
+    configuredKind === "ci" ||
+    configuredKind === "tool" ||
+    configuredKind === "human"
+      ? configuredKind
+      : "agent";
+  const status = String(row.status);
+  return {
+    id: String(row.id),
+    workspaceId: String(row.workspace_id),
+    agentId: String(row.agent_id),
+    pluginId: String(row.plugin_id),
+    pluginVersionPolicy: String(row.plugin_version_policy),
+    name: String(row.name),
+    kind,
+    roles: parse(row.roles_json, [] as string[]),
+    capabilities: parse(row.capabilities_json, [] as string[]),
+    permissions: [],
+    independenceKey: String(row.independence_key),
+    availability:
+      status === "draining" || status === "error"
+        ? "offline"
+        : (status as WorkerRecord["availability"]),
+    connectionIds: [],
+    config,
+    secretRefs: parse(row.secret_refs_json, [] as string[]),
+    billingMode: String(row.billing_mode),
+    costMetadata: parse(row.cost_metadata_json, {}),
+    concurrencyLimit: Number(row.concurrency_limit),
+    sessionPolicy: String(row.session_policy),
+    enabled: Number(row.enabled) === 1,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };

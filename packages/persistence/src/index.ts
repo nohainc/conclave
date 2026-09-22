@@ -9,8 +9,11 @@ export interface EntityRecord {
 }
 
 export interface ProjectRecord extends EntityRecord {
+  readonly workspaceId?: string;
   readonly name: string;
+  readonly description?: string | null;
   readonly repositoryId: string | null;
+  readonly settings?: JsonValue;
 }
 
 export type CompletionCriterionStatus =
@@ -29,6 +32,10 @@ export interface CompletionCriterionRecord {
 }
 
 export interface WorkerRecord extends EntityRecord {
+  readonly workspaceId?: string;
+  readonly agentId?: string;
+  readonly pluginId?: string;
+  readonly pluginVersionPolicy?: string;
   readonly name: string;
   readonly kind: "model" | "agent" | "runtime" | "ci" | "tool" | "human";
   readonly roles: readonly string[];
@@ -37,6 +44,13 @@ export interface WorkerRecord extends EntityRecord {
   readonly independenceKey: string;
   readonly availability: "available" | "busy" | "disabled" | "offline";
   readonly connectionIds: readonly string[];
+  readonly config?: JsonValue;
+  readonly secretRefs?: readonly string[];
+  readonly billingMode?: string;
+  readonly costMetadata?: JsonValue;
+  readonly concurrencyLimit?: number;
+  readonly sessionPolicy?: string;
+  readonly enabled?: boolean;
 }
 
 export interface ConnectionRecord extends EntityRecord {

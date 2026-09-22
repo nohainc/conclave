@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   D1GoalRepository,
+  D1ProjectRepository,
+  D1WorkerRepository,
   D1EventRepository,
   D1ModelCallRepository,
   D1TaskDependencyRepository,
@@ -75,6 +77,64 @@ describe("Cloudflare persistence adapters", () => {
     expect(goal?.completionCriteria[0]?.verificationRequirement).toBe(
       "executable_check",
     );
+  });
+
+  it("reads projects and workers from their tenant tables", async () => {
+    const project = await new D1ProjectRepository(
+      new FakeDb([
+        {
+          id: "project-1",
+          workspace_id: "workspace-1",
+          name: "Forge",
+          description: "Repository automation",
+          repository_id: "repo-1",
+          settings_json: '{"verification":"high"}',
+          created_at: "now",
+          updated_at: "now",
+        },
+      ]),
+    ).get("project-1");
+    expect(project).toMatchObject({
+      id: "project-1",
+      workspaceId: "workspace-1",
+      repositoryId: "repo-1",
+      settings: { verification: "high" },
+    });
+
+    const worker = await new D1WorkerRepository(
+      new FakeDb([
+        {
+          id: "worker-1",
+          workspace_id: "workspace-1",
+          agent_id: "agent-1",
+          plugin_id: "codex",
+          plugin_version_policy: "1.x",
+          name: "Codex",
+          roles_json: '["implementation"]',
+          capabilities_json: '["repository_write"]',
+          config_json: '{"model":"local"}',
+          secret_refs_json: "[]",
+          billing_mode: "subscription",
+          cost_metadata_json: "{}",
+          independence_key: "agent-1:codex",
+          concurrency_limit: 1,
+          session_policy: "isolated_workspace",
+          enabled: 1,
+          status: "available",
+          created_at: "now",
+          updated_at: "now",
+        },
+      ]),
+    ).get("worker-1");
+    expect(worker).toMatchObject({
+      id: "worker-1",
+      workspaceId: "workspace-1",
+      agentId: "agent-1",
+      pluginId: "codex",
+      roles: ["implementation"],
+      capabilities: ["repository_write"],
+      billingMode: "subscription",
+    });
   });
 
   it("resolves tenant scope before saving Goals and Runs", async () => {
