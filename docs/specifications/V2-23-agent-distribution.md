@@ -1,5 +1,9 @@
 # V2-23 — Real Agent distribution
 
+> **Historical V2 specification.** The current normative host/distribution
+> architecture is [Architecture v3](../architecture/ARCHITECTURE_V3.md) and
+> [ADR-003](../decisions/ADR-003-flutter-dart-agent.md).
+
 ## Decision
 
 macOS is distributed as a signed and notarized Apple installer package (`.pkg`). The package installs a versioned agent payload and a small stable launcher. A per-user `launchd` LaunchAgent starts the service, so the agent can use the signed-in user's Keychain and repository permissions without opening an inbound port.
@@ -25,4 +29,3 @@ The JavaScript runtime is deliberately an input to the package build (`CONCLAVE_
 ## Future platforms
 
 The service and credential interfaces are platform-neutral. Windows will add a per-user service/task plus Credential Manager; Linux will add a user systemd unit plus a desktop-secret-store integration. Neither platform should alter Forge or worker execution contracts.
-

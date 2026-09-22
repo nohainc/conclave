@@ -1,5 +1,8 @@
 # V2-29 — Legacy architecture deletion gate
 
+> **Historical V2 deletion gate.** This remains a record of migration history;
+> Architecture v3 is the normative source for all new work.
+
 ## Status
 
 Deletion is intentionally blocked. V2-25 through V2-27 have policy and relay tests, but the repository has not yet passed the real external acceptance run with:

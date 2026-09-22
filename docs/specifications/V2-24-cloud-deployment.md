@@ -1,5 +1,8 @@
 # V2-24 — Same-origin Cloud deployment
 
+> **Historical V2 specification.** Use the Architecture v3 application and
+> deployment documents for current implementation decisions.
+
 ## Deployment shape
 
 `app.conclaveax.com` is a Cloudflare Worker Custom Domain serving one application Worker. The Worker owns the `/api/*` surface and falls through to the Flutter web assets for all other paths. The Flutter client uses `/api` as its production base URL; no API hostname is required.

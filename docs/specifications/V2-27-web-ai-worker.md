@@ -1,5 +1,8 @@
 # V2-27 — Web AI Worker
 
+> **Historical V2 acceptance note.** The current normative design is the
+> Architecture v3 Agent Engine and language-independent Worker Plugin path.
+
 ChatGPT Web, Claude Web, and similar browser sessions participate through the Web AI Worker Plugin and the connector relay. They are ordinary Worker resources with `web_app` transport, `subscription_session` authentication, `subscription` or `free` billing, and their own independence keys.
 
 ## Billing boundary

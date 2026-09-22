@@ -1,5 +1,13 @@
 # Engineering Foundation
 
+> **Historical v1/v2 foundation notes — superseded by Architecture v3.**
+>
+> This document is retained for context. New work must follow [Architecture
+> v3](architecture/ARCHITECTURE_V3.md), [ADR-003](decisions/ADR-003-flutter-dart-agent.md),
+> and the [v3 implementation roadmap](roadmaps/ARCHITECTURE_V3_IMPLEMENTATION.md).
+> In particular, the Agent Engine, not the Local Runtime product concept, is
+> the host execution boundary.
+
 Phase 1 establishes a small monorepo with one shared Flutter application and provider-independent TypeScript packages.
 
 ## Workspace layout

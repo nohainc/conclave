@@ -1,5 +1,8 @@
 # V2-26 — Two-Agent distributed Forge
 
+> **Historical V2 acceptance note.** Follow the Architecture v3 Worker,
+> Agent Engine, and plugin protocol documents for current implementation.
+
 `multi_agent` is an explicit Forge execution mode for proving distributed orchestration:
 
 ```text

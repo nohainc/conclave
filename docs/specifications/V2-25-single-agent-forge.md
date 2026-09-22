@@ -1,5 +1,8 @@
 # V2-25 — Single-Agent Forge acceptance path
 
+> **Historical V2 acceptance note.** The current host boundary is the Dart
+> Agent Engine and executable Worker Plugins described by Architecture v3.
+
 The first real Forge acceptance path uses one connected Agent and three configured local workers on that Agent: a research/lead worker, an implementation worker, and an independent review worker. They may use different local plugins, but the cloud must not call OpenAI, Anthropic, or another model API directly for this mode.
 
 ## Lifecycle
