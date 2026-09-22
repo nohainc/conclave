@@ -177,7 +177,9 @@ class AuthStore {
   StudioSession? session;
   StudioViewer? viewer;
 
-  void replace(StudioViewer? value) => viewer = value;
+  void replace(StudioViewer? value) {
+    if (value != null) viewer = value;
+  }
 
   Future<StudioSession> load() async {
     final value = await source.loadSession();

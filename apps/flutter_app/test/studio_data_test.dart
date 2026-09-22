@@ -71,6 +71,20 @@ void main() {
     expect(store.usage.costMicros, 650000);
   });
 
+  test('preserves a session viewer when a snapshot omits viewer data',
+      () async {
+    final store = StudioStore(const DemoStudioDataSource());
+    store.auth.viewer = const StudioViewer(
+      id: 'user-1',
+      displayName: 'User One',
+      email: 'user@example.test',
+    );
+
+    store.auth.replace(null);
+
+    expect(store.auth.viewer?.id, 'user-1');
+  });
+
   test('normalizes the Cloud chat message envelope', () async {
     final client = StudioApiClient(
       baseUrl: 'https://conclave.test/api',
