@@ -42,18 +42,29 @@ Future<void> terminateProcessTree(
   required bool force,
 }) async {
   if (Platform.isWindows) {
-    await Process.run('taskkill', [
-      '/PID',
-      '${process.pid}',
-      '/T',
-      if (force) '/F',
-    ]);
+    try {
+      final result = await Process.run('taskkill', [
+        '/PID',
+        '${process.pid}',
+        '/T',
+        if (force) '/F',
+      ]).timeout(const Duration(seconds: 5));
+      if (result.exitCode == 0) return;
+    } on Object {
+      // Fall back to the Dart handle when taskkill is unavailable or times
+      // out. This still terminates the direct child safely.
+    }
+    process.kill(force ? ProcessSignal.sigkill : ProcessSignal.sigterm);
     return;
   }
 
   final signal = force ? '-KILL' : '-TERM';
-  final result = await Process.run('kill', [signal, '-${process.pid}']);
-  if (result.exitCode != 0) {
-    process.kill(force ? ProcessSignal.sigkill : ProcessSignal.sigterm);
+  try {
+    final result = await Process.run('kill', [signal, '-${process.pid}'])
+        .timeout(const Duration(seconds: 5));
+    if (result.exitCode == 0) return;
+  } on Object {
+    // Fall through to direct-child termination below.
   }
+  process.kill(force ? ProcessSignal.sigkill : ProcessSignal.sigterm);
 }
