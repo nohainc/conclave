@@ -437,6 +437,16 @@ async function authorizeRequest(
   return context;
 }
 
+function requireWorkspaceContext(
+  context: SecurityContext,
+  env: SecurityEnv,
+  workspaceId: string,
+): void {
+  if (!anonymousDevelopment(env) && context.workspaceId !== workspaceId) {
+    throw new HttpError(404, "Resource not found");
+  }
+}
+
 function requireCiAuthentication(request: Request, env: SecurityEnv): void {
   const configuredToken = env.CONCLAVE_CI_INGEST_TOKEN;
   if (anonymousDevelopment(env) && !configuredToken) return;
@@ -2918,6 +2928,7 @@ async function handleDispatchTaskAssignment(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "runs:control");
+  requireWorkspaceContext(context, env, workspaceId);
 
   const body = ((await request.json().catch(() => ({}))) || {}) as Record<
     string,
@@ -3044,6 +3055,7 @@ async function handleCancelTaskAssignment(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "runs:control");
+  requireWorkspaceContext(context, env, workspaceId);
 
   const body = ((await request.json().catch(() => ({}))) || {}) as Record<
     string,
@@ -3071,6 +3083,7 @@ async function handleDispatchEnsembleTaskAssignment(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "runs:control");
+  requireWorkspaceContext(context, env, workspaceId);
 
   const body = ((await request.json().catch(() => ({}))) || {}) as Record<
     string,

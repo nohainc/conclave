@@ -594,7 +594,7 @@ describe("Assignment Dispatcher (Cloud -> Agent -> Worker)", () => {
 
       const response = await worker.fetch(
         new Request(
-          "https://conclave.local/api/v2/workspaces/ws-1/tasks/task-other/dispatch",
+          "https://conclave.local/api/v2/workspaces/ws-other/tasks/task-other/dispatch",
           {
             method: "POST",
             headers: {
@@ -648,8 +648,7 @@ describe("Assignment Dispatcher (Cloud -> Agent -> Worker)", () => {
         ),
         env as unknown as Env,
       );
-      expect(wrongWorkspaceRes.status).toBe(200);
-      expect(await wrongWorkspaceRes.json()).toEqual({ cancelled: false });
+      expect(wrongWorkspaceRes.status).toBe(404);
       expect(
         (
           db
