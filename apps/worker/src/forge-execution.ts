@@ -835,7 +835,7 @@ export function resolveForgeExecutionMode(value: unknown): ForgeExecutionMode {
   return value === "multi_agent" ? "multi_agent" : "single_agent";
 }
 
-async function readExecutionContext(
+export async function readExecutionContext(
   env: ForgeExecutionEnv,
   params: Record<string, unknown>,
   executionId: string,
@@ -849,12 +849,44 @@ async function readExecutionContext(
     );
   }
   const project = await env.CONCLAVE_DB.prepare(
-    "SELECT p.id AS project_id, p.repository_id FROM projects p JOIN goals g ON g.project_id = p.id WHERE g.id = ?1 AND p.organization_id = ?2",
+    `SELECT p.id AS project_id, p.repository_id,
+            g.id AS goal_id, r.goal_id AS run_goal_id,
+            r.project_id AS run_project_id
+     FROM projects p
+     JOIN goals g ON g.project_id = p.id
+     LEFT JOIN runs r ON r.id = ?2
+     WHERE g.id = ?1 AND p.organization_id = ?3`,
   )
-    .bind(goalId, organizationId)
-    .first<{ project_id: string; repository_id: string | null }>();
+    .bind(goalId, runId, organizationId)
+    .first<{
+      project_id: string;
+      repository_id: string | null;
+      goal_id: string;
+      run_goal_id: string | null;
+      run_project_id: string | null;
+    }>();
   if (!project)
     throw new Error("Goal is not owned by the execution organization");
+  if (project.run_goal_id && project.run_goal_id !== goalId) {
+    throw new Error("Run does not belong to the requested Goal");
+  }
+  if (project.run_project_id && project.run_project_id !== project.project_id) {
+    throw new Error("Run does not belong to the requested Project");
+  }
+  if (
+    typeof params.projectId === "string" &&
+    params.projectId.length > 0 &&
+    params.projectId !== project.project_id
+  ) {
+    throw new Error("Forge project does not match the Goal project");
+  }
+  if (
+    typeof params.repositoryId === "string" &&
+    params.repositoryId.length > 0 &&
+    params.repositoryId !== project.repository_id
+  ) {
+    throw new Error("Forge repository does not match the Project repository");
+  }
   return {
     executionId,
     runId,

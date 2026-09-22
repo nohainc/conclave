@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { ConclaveForgeExecutionService } from "../src/forge-execution.js";
+import {
+  ConclaveForgeExecutionService,
+  readExecutionContext,
+} from "../src/forge-execution.js";
 
 class MemoryD1 {
   readonly records = new Map<string, string>();
+  contextRow: Record<string, unknown> | null = null;
 
   prepare(query: string) {
     let values: readonly unknown[] = [];
@@ -12,6 +16,7 @@ class MemoryD1 {
         return statement;
       },
       first: async <T>() => {
+        if (query.includes("FROM projects")) return this.contextRow as T;
         if (!query.includes("FROM persistence_records")) return null;
         const record = this.records.get(String(values[0]));
         return record ? ({ record_json: record } as T) : null;
@@ -35,6 +40,56 @@ function service(db: MemoryD1): ConclaveForgeExecutionService {
 }
 
 describe("durable Forge execution service", () => {
+  it("rejects a domain run that belongs to another Goal", async () => {
+    const db = new MemoryD1();
+    db.contextRow = {
+      project_id: "project-1",
+      repository_id: "repo-1",
+      goal_id: "goal-1",
+      run_goal_id: "goal-other",
+      run_project_id: "project-1",
+    };
+
+    await expect(
+      readExecutionContext(
+        { CONCLAVE_DB: db } as never,
+        {
+          runId: "run-1",
+          goalId: "goal-1",
+          organizationId: "org-1",
+          projectId: "project-1",
+          repositoryId: "repo-1",
+        },
+        "execution-1",
+      ),
+    ).rejects.toThrow("Run does not belong to the requested Goal");
+  });
+
+  it("rejects a repository override that is not the Project repository", async () => {
+    const db = new MemoryD1();
+    db.contextRow = {
+      project_id: "project-1",
+      repository_id: "repo-1",
+      goal_id: "goal-1",
+      run_goal_id: null,
+      run_project_id: null,
+    };
+
+    await expect(
+      readExecutionContext(
+        { CONCLAVE_DB: db } as never,
+        {
+          runId: "run-1",
+          goalId: "goal-1",
+          organizationId: "org-1",
+          projectId: "project-1",
+          repositoryId: "repo-other",
+        },
+        "execution-1",
+      ),
+    ).rejects.toThrow("Forge repository does not match the Project repository");
+  });
+
   it("recovers a persisted terminal execution by execution ID", async () => {
     const db = new MemoryD1();
     db.records.set(
