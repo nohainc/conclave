@@ -23,7 +23,13 @@ Future<void> main() async {
             'status': Platform.environment['OPENAI_API_KEY']?.isNotEmpty == true
                 ? 'healthy'
                 : 'unavailable',
+            'authenticated':
+                Platform.environment['OPENAI_API_KEY']?.isNotEmpty == true,
           },
+        'get_capabilities' || 'getCapabilities' => {
+            'capabilities': openAiPluginManifest['capabilities'],
+          },
+        'configure_worker' || 'configureWorker' => {'configured': true},
         'start_assignment' => await _execute(worker, request),
         'shutdown' => {'stopped': true},
         _ => throw StateError('unsupported method'),
@@ -50,10 +56,13 @@ Future<Map<String, Object?>> _execute(
   if (objective is! String || model is! String || objective.trim().isEmpty) {
     throw const FormatException('objective and model are required');
   }
+  final input = params['input'] is Map
+      ? Map<String, Object?>.from(params['input'] as Map)
+      : const <String, Object?>{};
   final result = await worker.executeStructured(
     apiKey: Platform.environment['OPENAI_API_KEY'],
     model: model,
-    prompt: objective,
+    prompt: buildOpenAiPrompt(objective, input),
   );
   return {
     'status': 'completed',

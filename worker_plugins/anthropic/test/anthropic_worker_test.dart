@@ -71,4 +71,14 @@ void main() {
       await server.close(force: true);
     }
   });
+
+  test('includes structured assignment context in the provider prompt', () {
+    final prompt = buildAnthropicPrompt('review repository', {
+      'artifact': 'return a - b',
+      'repositoryId': 'repo-1',
+    });
+    expect(prompt, contains('return a - b'));
+    expect(buildAnthropicPrompt('task', {'large': 'x' * 200}, maxBytes: 32),
+        contains('[context truncated]'));
+  });
 }
