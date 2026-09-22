@@ -9,3 +9,4 @@ CREATE TABLE forge_executions (
   updated_at TEXT NOT NULL
 );
 CREATE INDEX idx_forge_executions_run ON forge_executions(run_id);
+CREATE UNIQUE INDEX idx_forge_executions_run_unique ON forge_executions(run_id);

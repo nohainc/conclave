@@ -1129,6 +1129,39 @@ export class ConclaveForgeExecutionService {
     if (typeof params.runId !== "string" || params.runId.length === 0) {
       return Response.json({ error: "run_id_required" }, { status: 400 });
     }
+    const requestedWorkspaceId =
+      typeof params.organizationId === "string" ? params.organizationId : null;
+    const existing = await this.env.CONCLAVE_DB.prepare(
+      `SELECT execution_id, run_id, workspace_id, status, result_artifact_id, error, updated_at
+       FROM forge_executions WHERE run_id = ?1`,
+    )
+      .bind(params.runId)
+      .first<Record<string, unknown>>();
+    if (existing) {
+      if (
+        requestedWorkspaceId &&
+        existing.workspace_id &&
+        String(existing.workspace_id) !== requestedWorkspaceId
+      ) {
+        return Response.json(
+          { error: "run_workspace_mismatch" },
+          { status: 409 },
+        );
+      }
+      const persisted = forgeExecutionRecord(existing);
+      return Response.json(
+        {
+          executionId: persisted.executionId,
+          runId: persisted.runId,
+          status: persisted.status,
+          ...(persisted.resultArtifactId
+            ? { resultArtifactId: persisted.resultArtifactId }
+            : {}),
+          ...(persisted.error ? { error: persisted.error } : {}),
+        },
+        { status: persisted.status === "started" ? 202 : 200 },
+      );
+    }
     const executionId = crypto.randomUUID();
     const runId = params.runId;
     const now = new Date().toISOString();

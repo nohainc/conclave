@@ -18,6 +18,29 @@ class MemoryD1 {
       first: async <T>() => {
         if (query.includes("FROM projects")) return this.contextRow as T;
         if (
+          query.includes("FROM forge_executions") &&
+          query.includes("WHERE run_id")
+        ) {
+          for (const record of this.records.values()) {
+            const parsed = JSON.parse(record) as {
+              executionId: string;
+              runId: string;
+            };
+            if (parsed.runId === String(values[0])) {
+              return {
+                execution_id: parsed.executionId,
+                run_id: parsed.runId,
+                workspace_id: null,
+                status: "started",
+                result_artifact_id: null,
+                error: null,
+                updated_at: "2026-09-22T00:00:00.000Z",
+              } as T;
+            }
+          }
+          return null;
+        }
+        if (
           !query.includes("FROM persistence_records") &&
           !query.includes("FROM forge_executions")
         )
@@ -152,6 +175,32 @@ describe("durable Forge execution service", () => {
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
       error: "run_id_required",
+    });
+  });
+
+  it("returns the persisted execution for a retried domain run", async () => {
+    const db = new MemoryD1();
+    db.records.set(
+      "execution-1",
+      JSON.stringify({
+        executionId: "execution-1",
+        runId: "run-1",
+        status: "started",
+        updatedAt: "2026-09-22T00:00:00.000Z",
+      }),
+    );
+    const response = await service(db).fetch(
+      new Request("https://conclave.internal/execute", {
+        method: "POST",
+        body: JSON.stringify({ runId: "run-1" }),
+      }),
+      {} as ExecutionContext,
+    );
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({
+      executionId: "execution-1",
+      runId: "run-1",
+      status: "started",
     });
   });
 });
