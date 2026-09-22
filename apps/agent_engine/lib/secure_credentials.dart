@@ -84,6 +84,9 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
             '-s',
             service,
             '-U',
+            // With -w as the final option, security prompts on stdin rather
+            // than exposing the credential in the process argument list.
+            '-w',
           ],
         ),
       'linux' => _SecureCommand(
