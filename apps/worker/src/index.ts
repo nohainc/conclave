@@ -3258,6 +3258,17 @@ async function handleAgentProtocolMessage(
     return json({ error: "Agent authentication required" }, { status: 401 });
   }
 
+  if (
+    authenticatedAgent &&
+    (message.type === "agent.hello" ||
+      message.type === "agent.heartbeat" ||
+      message.type === "agent.sync.request") &&
+    (message.payload.agentId !== authenticatedAgent.id ||
+      message.payload.workspaceId !== authenticatedAgent.workspace_id)
+  ) {
+    return json({ error: "Agent identity mismatch" }, { status: 403 });
+  }
+
   const now = new Date().toISOString();
   if (message.type === "agent.hello") {
     return json({

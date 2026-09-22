@@ -391,6 +391,23 @@ describe("Agent Enrollment & Agent Gateway (Architecture v2)", () => {
     expect(helloRes.status).toBe(200);
     const helloAck = (await helloRes.json()) as AgentProtocolMessage;
     expect(helloAck.type).toBe("agent.hello.ack");
+
+    const impersonation = await worker.fetch(
+      new Request("http://localhost/api/v2/agent-protocol/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          ...helloMessage,
+          messageId: "msg-hello-impersonation",
+          payload: { ...helloMessage.payload, agentId: "agent-other" },
+        }),
+      }),
+      mockEnv,
+    );
+    expect(impersonation.status).toBe(403);
   });
 
   it("rejects tokenless HTTP protocol messages outside development", async () => {
