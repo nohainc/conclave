@@ -198,6 +198,7 @@ class HttpError extends Error {
 
 type SecurityEnv = Env & {
   readonly CONCLAVE_ACCESS_ORGANIZATION_ID?: string;
+  readonly CONCLAVE_PLUGIN_PUBLISHER_EMAIL?: string;
   readonly CONCLAVE_AUTH_TOKEN?: string;
   readonly CONCLAVE_PLUGIN_SIGNING_KEY?: string;
   readonly CONCLAVE_AGENT_SIGNING_KEY?: string;
@@ -234,35 +235,7 @@ export function requireSameOriginForCookieMutation(request: Request): void {
   // `common_name` is the service-token client ID and service-token assertions
   // have no user `sub`. This is only a CSRF classification hint; Access
   // authentication and Conclave authorization still happen below.
-  const accessAssertion = request.headers.get("cf-access-jwt-assertion");
-  if (accessAssertion) {
-    try {
-      const payload = accessAssertion.split(".")[1];
-      if (payload) {
-        const claims = JSON.parse(
-          new TextDecoder().decode(
-            Uint8Array.from(
-              atob(
-                payload
-                  .replace(/-/g, "+")
-                  .replace(/_/g, "/")
-                  .padEnd(Math.ceil(payload.length / 4) * 4, "="),
-              ),
-              (character) => character.charCodeAt(0),
-            ),
-          ),
-        ) as { common_name?: unknown; sub?: unknown };
-        if (
-          typeof claims.common_name === "string" &&
-          claims.common_name &&
-          !claims.sub
-        )
-          return;
-      }
-    } catch {
-      // Invalid assertions are handled by Access/Core authentication below.
-    }
-  }
+  if (accessServiceTokenId(request)) return;
 
   // Keep this fallback for local gateways that preserve the original
   // service-token headers instead of forwarding the assertion.
@@ -288,6 +261,37 @@ export function requireSameOriginForCookieMutation(request: Request): void {
   }
 
   throw new HttpError(403, "Same-origin request required for cookie session");
+}
+
+type AccessServiceTokenClaims = { common_name?: unknown; sub?: unknown };
+
+export function accessServiceTokenId(request: Request): string | null {
+  const assertion = request.headers.get("cf-access-jwt-assertion");
+  if (!assertion) return null;
+  try {
+    const payload = assertion.split(".")[1];
+    if (!payload) return null;
+    const claims = JSON.parse(
+      new TextDecoder().decode(
+        Uint8Array.from(
+          atob(
+            payload
+              .replace(/-/g, "+")
+              .replace(/_/g, "/")
+              .padEnd(Math.ceil(payload.length / 4) * 4, "="),
+          ),
+          (character) => character.charCodeAt(0),
+        ),
+      ),
+    ) as AccessServiceTokenClaims;
+    return typeof claims.common_name === "string" &&
+      claims.common_name &&
+      !claims.sub
+      ? claims.common_name
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function createDefaultSecurityContext(
@@ -322,6 +326,10 @@ async function accessSecurityContext(
 ): Promise<SecurityContext> {
   const identity = await accessContext?.access?.getIdentity();
   const accessEmail = identity?.email?.trim().toLowerCase();
+  const serviceTokenId =
+    (typeof identity?.common_name === "string" && !identity.sub
+      ? identity.common_name
+      : undefined) ?? accessServiceTokenId(request);
   // Worker Access normally exposes the identity through ctx.access. The
   // custom-domain Access path also forwards the verified identity header;
   // accept that fallback only on the production Studio hostname so a direct
@@ -330,11 +338,18 @@ async function accessSecurityContext(
     .get("cf-access-authenticated-user-email")
     ?.trim()
     .toLowerCase();
+  const url = new URL(request.url);
+  const servicePublisherEmail =
+    url.pathname === "/api/v2/plugins/publish" ||
+    url.pathname === "/api/plugins/publish"
+      ? env.CONCLAVE_PLUGIN_PUBLISHER_EMAIL?.trim().toLowerCase()
+      : undefined;
   const userId =
     accessEmail ??
-    (new URL(request.url).hostname === "app.conclaveax.com"
-      ? forwardedEmail
-      : undefined);
+    (serviceTokenId && servicePublisherEmail
+      ? servicePublisherEmail
+      : undefined) ??
+    (url.hostname === "app.conclaveax.com" ? forwardedEmail : undefined);
   if (!userId)
     throw new HttpError(401, "Cloudflare Access authentication required");
 

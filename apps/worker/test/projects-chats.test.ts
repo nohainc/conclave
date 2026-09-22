@@ -3,7 +3,10 @@ import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import worker, { requireSameOriginForCookieMutation } from "../src/index.js";
+import worker, {
+  accessServiceTokenId,
+  requireSameOriginForCookieMutation,
+} from "../src/index.js";
 import { hashToken } from "../../../packages/security/src/index.js";
 import type {
   Workspace,
@@ -110,6 +113,7 @@ describe("Projects and Chats API (Architecture v2)", () => {
     );
 
     expect(() => requireSameOriginForCookieMutation(request)).not.toThrow();
+    expect(accessServiceTokenId(request)).toBe("publisher.access");
   });
 
   async function seedUserAndSession(userId: string, email: string) {

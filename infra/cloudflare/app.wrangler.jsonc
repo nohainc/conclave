@@ -16,6 +16,7 @@
   },
   "vars": {
     "CONCLAVE_ENVIRONMENT": "production",
+    "CONCLAVE_PLUGIN_PUBLISHER_EMAIL": "vitalii@nohainc.com",
   },
   "d1_databases": [
     {

@@ -22,6 +22,12 @@ includes the intended Access service token. Send the token credentials as
 secret in Studio or browser assets. The Worker accepts this as a machine
 request and still performs its normal workspace and permission checks.
 
+Because a service token has no human email, the plugin-publish route maps the
+validated service-token assertion to the configured
+`CONCLAVE_PLUGIN_PUBLISHER_EMAIL` workspace member. Keep this mapping explicit
+and scoped to the publish route; never use a client-supplied email as the
+machine identity.
+
 ## Local development
 
 Local development can use the existing anonymous development mode. A development-only bearer token is accepted only when `CONCLAVE_ENVIRONMENT=development`; it is never a browser build input and is rejected by the production authentication path.
