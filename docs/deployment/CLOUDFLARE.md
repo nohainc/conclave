@@ -8,9 +8,11 @@
 - `docs.conclaveax.com` — documentation later.
 - `status.conclaveax.com` — status page later.
 
-## Current development deployment
+## Current deployment
 
-`app.conclaveax.com` is the current development/staging web application. It runs the real Studio application; there is no demo-mode runtime branch.
+`app.conclaveax.com` is the Studio/Cloud application. It runs the real Studio
+application; there is no demo-mode runtime branch. Cloudflare Access must
+protect the hostname before production or private-alpha use.
 
 The deployment builds Flutter Web with the planned same-origin API endpoint:
 
@@ -18,7 +20,9 @@ The deployment builds Flutter Web with the planned same-origin API endpoint:
 flutter build web --release --dart-define=CONCLAVE_API_URL=https://app.conclaveax.com/api
 ```
 
-Until the real API is deployed at that endpoint, Studio is expected to show its normal connection-error state. This is intentional: development should expose real integration gaps rather than hide them behind fake runtime data.
+Studio uses its normal connection-error state when the API is unavailable. This
+is intentional: development should expose integration gaps rather than hide
+them behind fake runtime data.
 
 The static application is deployed with Cloudflare Workers Static Assets. SPA fallback is enabled so Flutter web routes resolve to `index.html`.
 
@@ -39,22 +43,28 @@ Actions -> Deploy Conclave AX App -> Run workflow
 
 The custom-domain route in `infra/cloudflare/app.wrangler.jsonc` targets `app.conclaveax.com`. Because `conclaveax.com` is already on Cloudflare, the Worker custom domain can create/manage the required DNS routing and certificate during deployment.
 
-## Backend production deployment
+## Backend deployment gate
 
-Do not expose the current API publicly until the integration milestone is complete.
+Do not expose the API publicly until the release gates in
+[`V3_IMPLEMENTATION_STATUS.md`](../roadmaps/V3_IMPLEMENTATION_STATUS.md) are
+complete.
 
 Before production backend deployment:
 
-1. remove development-only anonymous access;
-2. replace the single static bearer-token identity with production authentication;
-3. scope every Studio query by organization/project/run;
-4. resolve Workflow instance ID vs Conclave run ID consistently;
-5. make Workflow completion depend on actual Forge completion rather than successful dispatch;
-6. configure production D1/R2 resources and apply migrations;
-7. configure provider/BYOK secrets;
-8. verify Local Runtime outbound transport and permissions;
-9. run a real two-model end-to-end Forge test;
-10. enable API/CI ingress only after security tests pass.
+1. verify Cloudflare Access protects the custom domain and the Access identity
+   maps to an active Workspace membership;
+2. configure production D1/R2 resources and apply migrations;
+3. configure required signing, callback, and other production secrets;
+4. run the deployed Forge recovery drill, including Agent restart, Cloud
+   restart, network loss, and reviewer timeout;
+5. run the external-user security gate, including tenant isolation and
+   backup/restore verification;
+6. enable API/CI ingress only after the release gates pass.
+
+Cloud owns orchestration and persistence. The Dart Agent Engine provides the
+outbound execution channel; Worker Plugins perform model, repository, and tool
+operations. The former Local Runtime product concept is not a deployable
+service.
 
 At that point the preferred topology is either:
 
