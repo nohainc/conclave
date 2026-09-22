@@ -186,6 +186,53 @@ describe("Projects and Chats API (Architecture v2)", () => {
     expect(getData.workspace.slug).toBe("alice-ws");
   });
 
+  it("exposes the authenticated session and revokes it on logout", async () => {
+    const { token } = await seedUserAndSession(
+      "user-session",
+      "session@example.com",
+    );
+    const now = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO workspaces (id, name, slug, created_at, updated_at)
+       VALUES ('workspace-session', 'Session Workspace', 'session-workspace', ?, ?)`,
+    ).run(now, now);
+    db.prepare(
+      `INSERT INTO workspace_memberships (id, workspace_id, user_id, role, created_at, updated_at)
+       VALUES ('membership-session', 'workspace-session', 'user-session', 'owner', ?, ?)`,
+    ).run(now, now);
+
+    const session = await worker.fetch(
+      new Request("https://cloud.conclave.internal/api/session", {
+        headers: { cookie: `conclave_session=${token}` },
+      }),
+      mockEnv,
+    );
+    expect(session.status).toBe(200);
+    const sessionBody = (await session.json()) as Record<string, unknown>;
+    expect(sessionBody.authenticated).toBe(true);
+
+    const logout = await worker.fetch(
+      new Request("https://cloud.conclave.internal/api/session/logout", {
+        method: "POST",
+        headers: {
+          cookie: `conclave_session=${token}`,
+          origin: "https://cloud.conclave.internal",
+        },
+      }),
+      mockEnv,
+    );
+    expect(logout.status).toBe(200);
+    expect(logout.headers.get("set-cookie")).toContain("Max-Age=0");
+
+    const afterLogout = await worker.fetch(
+      new Request("https://cloud.conclave.internal/api/session", {
+        headers: { cookie: `conclave_session=${token}` },
+      }),
+      mockEnv,
+    );
+    expect(afterLogout.status).toBe(401);
+  });
+
   it("handles Project CRUD and scoping within a Workspace", async () => {
     const { token } = await seedUserAndSession("user-bob", "bob@example.com");
 

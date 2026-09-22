@@ -34,6 +34,7 @@ import {
 import {
   authorize,
   extractAuthToken,
+  formatSessionCookie,
   hashToken,
   computePackageDigest,
   signPackageDigest,
@@ -809,6 +810,52 @@ async function handleGoalRequest(
 // =========================================================================
 // Workspaces API Handlers
 // =========================================================================
+
+async function handleSession(
+  request: Request,
+  env: SecurityEnv,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, accessContext);
+  return json({
+    authenticated: true,
+    user: context.user,
+    workspaceId: context.workspaceId,
+    workspaceRole: context.workspaceRole,
+    sessionId: context.sessionId,
+    clientType: context.clientType,
+  });
+}
+
+async function handleSessionLogout(
+  request: Request,
+  env: SecurityEnv,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, accessContext);
+  const token = extractAuthToken(request.headers);
+  if (token && env.CONCLAVE_DB) {
+    await env.CONCLAVE_DB.prepare(
+      "UPDATE auth_sessions SET revoked_at = ?1, updated_at = ?1 WHERE token_hash = ?2 AND revoked_at IS NULL",
+    )
+      .bind(new Date().toISOString(), await hashToken(token))
+      .run();
+  }
+  if (env.CONCLAVE_DB) {
+    await recordAudit(env, context, "logout", "session", context.sessionId);
+  }
+  return json(
+    { authenticated: false },
+    {
+      headers: {
+        "set-cookie": formatSessionCookie("", {
+          maxAgeSeconds: 0,
+          secure: new URL(request.url).protocol === "https:",
+        }),
+      },
+    },
+  );
+}
 
 async function handleListWorkspaces(
   request: Request,
@@ -5170,6 +5217,15 @@ export default {
         request.method === "DELETE"
       ) {
         requireSameOriginForCookieMutation(request);
+      }
+      if (request.method === "GET" && url.pathname === "/api/session") {
+        return await handleSession(request, env as SecurityEnv, ctx);
+      }
+      if (
+        request.method === "POST" &&
+        url.pathname === "/api/session/logout"
+      ) {
+        return await handleSessionLogout(request, env as SecurityEnv, ctx);
       }
       if (request.method === "GET" && url.pathname === "/api/runtime/connect") {
         const securityEnv = env as SecurityEnv;
