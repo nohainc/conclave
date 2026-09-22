@@ -76,4 +76,28 @@ Future<void> main() async {
       await directory.delete(recursive: true);
     }
   });
+
+  test('cancels a running Claude Code CLI process', () async {
+    final directory = await Directory.systemTemp.createTemp('claude-cancel-');
+    final script = File('${directory.path}/waiting.dart')..writeAsStringSync('''
+import 'dart:async';
+Future<void> main() async => Future<void>.delayed(const Duration(seconds: 5));
+''');
+    final token = ClaudeCodeCancellationToken();
+    final worker = ClaudeCodeWorker(
+      start: (executable, arguments, {workingDirectory}) => Process.start(
+        Platform.resolvedExecutable,
+        ['run', script.path],
+        workingDirectory: workingDirectory,
+      ),
+    );
+    final execution = worker.executeTask('wait', cancellation: token);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    token.cancel();
+    await expectLater(
+      execution,
+      throwsA(predicate((error) => error.toString().contains('cancelled'))),
+    );
+    await directory.delete(recursive: true);
+  });
 }

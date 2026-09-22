@@ -32,6 +32,21 @@ class ClaudeCodeTaskResult {
   final List<Map<String, Object?>> events;
 }
 
+/// Cooperative cancellation handle for one Claude Code CLI invocation.
+class ClaudeCodeCancellationToken {
+  final _cancelled = Completer<void>();
+  bool _isCancelled = false;
+
+  bool get isCancelled => _isCancelled;
+  Future<void> get whenCancelled => _cancelled.future;
+
+  void cancel() {
+    if (_isCancelled) return;
+    _isCancelled = true;
+    _cancelled.complete();
+  }
+}
+
 class ClaudeCodeWorker {
   ClaudeCodeWorker({CommandInvoker? invoke, ProcessStarter? start})
       : _invoke = invoke ?? _defaultInvoke,
@@ -78,6 +93,7 @@ class ClaudeCodeWorker {
     String? workingDirectory,
     Duration timeout = const Duration(minutes: 5),
     int maxOutputBytes = 4 * 1024 * 1024,
+    ClaudeCodeCancellationToken? cancellation,
   }) async {
     if (maxOutputBytes <= 0) {
       throw ArgumentError.value(
@@ -93,6 +109,9 @@ class ClaudeCodeWorker {
       ],
       workingDirectory: workingDirectory ?? _repositoryPath(input),
     );
+    final cancellationSubscription = cancellation?.whenCancelled.then((_) {
+      unawaited(_terminate(process));
+    });
     final stdout = <int>[];
     final stderr = <int>[];
     var outputExceeded = false;
@@ -128,6 +147,9 @@ class ClaudeCodeWorker {
       if (outputExceeded) {
         throw StateError('Claude Code output exceeded $maxOutputBytes bytes');
       }
+      if (cancellation?.isCancelled ?? false) {
+        throw StateError('Claude Code task cancelled');
+      }
       if (exitCode != 0) {
         throw StateError(
           'Claude Code command failed: ${String.fromCharCodes(stderr)}',
@@ -137,6 +159,7 @@ class ClaudeCodeWorker {
     } finally {
       await stdoutSubscription.cancel();
       await stderrSubscription.cancel();
+      await cancellationSubscription;
     }
   }
 
