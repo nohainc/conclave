@@ -11,6 +11,78 @@ class ProtocolException implements Exception {
   String toString() => 'ProtocolException: $message';
 }
 
+/// Validates the generated Cloud ↔ Agent envelope before any message is
+/// dispatched. Payload-specific handlers perform their own stricter checks.
+class AgentProtocolMessage {
+  AgentProtocolMessage._(this.value);
+
+  final Map<String, Object?> value;
+
+  String get type => value['type'] as String;
+  Map<String, Object?> get payload =>
+      Map<String, Object?>.from(value['payload'] as Map);
+
+  static AgentProtocolMessage parse(Object? input) {
+    final map = switch (input) {
+      String text => _decode(text),
+      Map value => Map<String, Object?>.from(value),
+      _ => throw const ProtocolException('Agent message must be an object'),
+    };
+    final encodedSize = utf8.encode(jsonEncode(map)).length;
+    if (encodedSize > agentProtocolMaxMessageSizeBytes) {
+      throw const ProtocolException('Agent message exceeds the size limit');
+    }
+    _requiredAgentString(map, 'protocol');
+    if (map['protocol'] != agentProtocolName) {
+      throw const ProtocolException('unsupported Agent protocol name');
+    }
+    final version = _requiredAgentString(map, 'protocolVersion');
+    if (!isCompatibleVersion(agentProtocolVersion, version)) {
+      throw const ProtocolException('unsupported Agent protocol version');
+    }
+    _requiredAgentString(map, 'messageId');
+    final timestamp = DateTime.tryParse(
+      _requiredAgentString(map, 'timestamp'),
+    );
+    if (timestamp == null) {
+      throw const ProtocolException('timestamp is invalid');
+    }
+    final type = _requiredAgentString(map, 'type');
+    if (!agentProtocolMessageTypes.contains(type)) {
+      throw ProtocolException('unsupported Agent message type: $type');
+    }
+    if (map['payload'] is! Map) {
+      throw const ProtocolException('Agent payload must be an object');
+    }
+    if (type.startsWith('assignment.')) {
+      for (final field in agentProtocolAssignmentEnvelopeFields) {
+        _requiredAgentString(map, field);
+      }
+    }
+    return AgentProtocolMessage._(map);
+  }
+
+  static Map<String, Object?> _decode(String text) {
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is! Map) {
+        throw const ProtocolException('Agent message must be an object');
+      }
+      return Map<String, Object?>.from(decoded);
+    } on FormatException {
+      throw const ProtocolException('Agent message is not valid JSON');
+    }
+  }
+
+  static String _requiredAgentString(Map<String, Object?> map, String key) {
+    final value = map[key];
+    if (value is! String || value.trim().isEmpty) {
+      throw ProtocolException('Agent $key is required');
+    }
+    return value;
+  }
+}
+
 class ProtocolEnvelope {
   ProtocolEnvelope({
     required this.messageId,

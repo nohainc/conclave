@@ -80,4 +80,49 @@ void main() {
       throwsA(isA<ProtocolException>()),
     );
   });
+
+  test('validates a generated Agent assignment envelope', () {
+    final parsed = AgentProtocolMessage.parse({
+      'protocol': agentProtocolName,
+      'protocolVersion': agentProtocolVersion,
+      'messageId': 'message-1',
+      'timestamp': '2026-09-22T00:00:00Z',
+      'type': 'assignment.start',
+      'workspaceId': 'workspace-1',
+      'agentId': 'agent-1',
+      'workerId': 'worker-1',
+      'runId': 'run-1',
+      'taskId': 'task-1',
+      'attemptId': 'attempt-1',
+      'assignmentId': 'assignment-1',
+      'idempotencyKey': 'idempotency-1',
+      'payload': <String, Object?>{},
+    });
+    expect(parsed.type, 'assignment.start');
+  });
+
+  test('rejects malformed or oversized Agent messages', () {
+    expect(
+      () => AgentProtocolMessage.parse({
+        'protocol': agentProtocolName,
+        'protocolVersion': agentProtocolVersion,
+        'messageId': 'message-1',
+        'timestamp': '2026-09-22T00:00:00Z',
+        'type': 'assignment.start',
+        'payload': <String, Object?>{},
+      }),
+      throwsA(isA<ProtocolException>()),
+    );
+    expect(
+      () => AgentProtocolMessage.parse({
+        'protocol': agentProtocolName,
+        'protocolVersion': agentProtocolVersion,
+        'messageId': 'message-1',
+        'timestamp': '2026-09-22T00:00:00Z',
+        'type': 'agent.heartbeat',
+        'payload': {'padding': 'x' * agentProtocolMaxMessageSizeBytes},
+      }),
+      throwsA(isA<ProtocolException>()),
+    );
+  });
 }

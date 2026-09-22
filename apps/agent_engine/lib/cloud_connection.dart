@@ -266,10 +266,9 @@ class AgentCloudConnection {
       return;
     }
     if (decoded is! Map<String, dynamic>) return;
-    final remoteVersion = decoded['protocolVersion'];
-    if (decoded['protocol'] != protocol ||
-        remoteVersion is! String ||
-        !_isCompatibleProtocolVersion(remoteVersion)) {
+    try {
+      AgentProtocolMessage.parse(decoded);
+    } on ProtocolException {
       return;
     }
     if (decoded['type'] == 'agent.hello.ack') {
