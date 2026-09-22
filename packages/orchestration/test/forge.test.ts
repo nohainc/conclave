@@ -5,13 +5,9 @@ import type {
   ConnectionResource,
   WorkerExecutionRequest,
   WorkerExecutionResult,
+  WorkerExecutor,
   WorkerResource,
 } from "@conclave/core";
-import type {
-  ModelRequest,
-  ModelResponse,
-  ModelWorker,
-} from "@conclave/providers";
 import type { ImplementationOperation } from "@conclave/protocol";
 
 import {
@@ -105,9 +101,9 @@ function resource(
   };
 }
 
-class FakeWorker implements ModelWorker {
+class FakeWorker implements WorkerExecutor {
   private cursor = 0;
-  readonly requests: ModelRequest[] = [];
+  readonly requests: WorkerExecutionRequest[] = [];
 
   constructor(
     readonly resource: WorkerResource,
@@ -121,29 +117,19 @@ class FakeWorker implements ModelWorker {
   async execute(
     request: WorkerExecutionRequest,
   ): Promise<WorkerExecutionResult> {
-    const response = await this.complete({
-      message: request.message as ModelRequest["message"],
-      context: request.context,
-    });
-    return {
-      status: "succeeded",
-      output: response.text,
-      rawOutput: response.rawResponse,
-      providerRequestId: response.providerRequestId,
-      usage: response.usage,
-      evidenceArtifactIds: [],
-    };
-  }
-
-  complete(request: ModelRequest): Promise<ModelResponse> {
     this.requests.push(request);
     const output = this.outputs[this.cursor++];
-    if (output === undefined)
+    if (output === undefined) {
       throw new Error(`${this.resource.id} ran out of outputs`);
+    }
+
     const parsed = JSON.parse(output) as {
       payload?: Record<string, unknown>;
     };
-    const requestPayload = request.message.payload;
+    const requestMessage = request.message as {
+      payload?: Record<string, unknown>;
+    };
+    const requestPayload = requestMessage.payload;
     if (
       typeof requestPayload === "object" &&
       requestPayload !== null &&
@@ -153,13 +139,16 @@ class FakeWorker implements ModelWorker {
     ) {
       parsed.payload.taskId = requestPayload.taskId;
     }
+
     const text = JSON.stringify(parsed);
-    return Promise.resolve({
+    return {
+      status: "succeeded",
+      output: text,
+      rawOutput: JSON.stringify({ output_text: text }),
       providerRequestId: `${this.resource.id}-${this.cursor}`,
-      text,
-      rawResponse: JSON.stringify({ output_text: text }),
       usage: { inputTokens: 10, outputTokens: 20 },
-    });
+      evidenceArtifactIds: [],
+    };
   }
 }
 
