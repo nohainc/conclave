@@ -86,17 +86,18 @@ void main() {
   });
 
   test('normalizes the Cloud chat message envelope', () async {
+    final requestClient = _JsonClient({
+      'message': {
+        'id': 'message-1',
+        'senderType': 'user',
+        'content': 'Fix the bug',
+        'createdAt': '2026-09-22T00:00:00Z',
+        'metadata': {},
+      },
+    });
     final client = StudioApiClient(
       baseUrl: 'https://conclave.test/api',
-      client: _JsonClient({
-        'message': {
-          'id': 'message-1',
-          'senderType': 'user',
-          'content': 'Fix the bug',
-          'createdAt': '2026-09-22T00:00:00Z',
-          'metadata': {},
-        },
-      }),
+      client: requestClient,
     );
 
     final message = await client.sendChatMessage(
@@ -107,6 +108,7 @@ void main() {
 
     expect(message.sender, StudioMessageSender.user);
     expect(message.text, 'Fix the bug');
+    expect(requestClient.lastRequest?.url.path, '/api/chats/chat-1/messages');
   });
 
   test('loads workspaces and scopes Studio snapshots', () async {

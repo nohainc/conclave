@@ -216,7 +216,7 @@ class StudioApiClient implements StudioDataSource {
     required String text,
   }) async {
     final response = await client.post(
-      Uri.parse('$baseUrl/projects/$projectId/chats/$chatId/messages'),
+      Uri.parse('$baseUrl/chats/$chatId/messages'),
       headers: {'content-type': 'application/json'},
       body: jsonEncode({'content': text}),
     );

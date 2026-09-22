@@ -529,8 +529,7 @@ class _StudioAppState extends State<StudioApp> {
     final commitSha = revisionController.text.trim();
     if (projectId == null || objective.isEmpty || commitSha.isEmpty) {
       if (mounted) {
-        setState(
-            () => loadError = 'Enter an objective and expected commit SHA.');
+        _showSnackBar('Enter an objective and expected commit SHA.');
       }
       return;
     }
@@ -545,7 +544,7 @@ class _StudioAppState extends State<StudioApp> {
       setState(() => showNewGoal = false);
       await _loadSnapshot(projectId: projectId);
     } catch (error) {
-      if (mounted) setState(() => loadError = error.toString());
+      if (mounted) _showSnackBar(error.toString());
     }
   }
 
@@ -993,6 +992,7 @@ class _StudioAppState extends State<StudioApp> {
               style: TextStyle(color: Color(0xff777683), fontSize: 13))
         ])),
         FilledButton.icon(
+            key: const Key('new-goal-button'),
             onPressed: () => setState(() => showNewGoal = true),
             icon: const Icon(Icons.add, size: 18),
             label: const Text('New goal'),
@@ -1056,7 +1056,7 @@ class _StudioAppState extends State<StudioApp> {
       if (!mounted) return;
       setState(() => localChatMessages.add(response));
     } catch (error) {
-      if (mounted) setState(() => loadError = error.toString());
+      if (mounted) _showSnackBar(error.toString());
     }
   }
 
