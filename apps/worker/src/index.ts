@@ -3447,19 +3447,29 @@ async function handleAgentProtocolMessage(
         supported_arch_json: string;
         secret_schema_json: string;
       }>();
-    const desiredPlugins = (desiredPluginRows.results ?? []).map((row) => ({
-      pluginId: row.plugin_id,
-      publisher: row.publisher,
-      version: row.version,
-      protocolVersion: row.protocol_version,
-      minAgentVersion: row.min_agent_version,
-      packageDigest: row.package_digest,
-      packageR2Key: row.package_r2_key,
-      signature: row.signature,
-      permissions: parseJson(row.permissions_json, []),
-      supportedPlatforms: parseJson(row.supported_os_json, []),
-      secretEnvironmentVariables: parseJson(row.secret_schema_json, []),
-    }));
+    const desiredPlugins = (desiredPluginRows.results ?? []).map((row) => {
+      const secretSchema = parseJson(row.secret_schema_json, {});
+      const secretEnvironmentVariables = Array.isArray(secretSchema)
+        ? secretSchema.filter(
+            (name): name is string => typeof name === "string",
+          )
+        : typeof secretSchema === "object" && secretSchema !== null
+          ? Object.keys(secretSchema)
+          : [];
+      return {
+        pluginId: row.plugin_id,
+        publisher: row.publisher,
+        version: row.version,
+        protocolVersion: row.protocol_version,
+        minAgentVersion: row.min_agent_version,
+        packageDigest: row.package_digest,
+        packageR2Key: row.package_r2_key,
+        signature: row.signature,
+        permissions: parseJson(row.permissions_json, []),
+        supportedPlatforms: parseJson(row.supported_os_json, []),
+        secretEnvironmentVariables,
+      };
+    });
     return json({
       protocol: AGENT_PROTOCOL_NAME,
       protocolVersion: AGENT_PROTOCOL_VERSION,
