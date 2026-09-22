@@ -107,5 +107,8 @@ const dartLocal = `// GENERATED FILE. Do not edit by hand.\n\nconst agentAppIpcP
 await writeFile("packages/protocol/src/generated.ts", ts);
 await writeFile("packages/agent-protocol/src/generated.ts", agentTs);
 await writeFile("packages/protocol/src/generated-local-protocols.ts", localTs);
-await writeFile("packages/dart/protocol/lib/generated_local_protocols.dart", dartLocal);
+await writeFile(
+  "packages/dart/protocol/lib/generated_local_protocols.dart",
+  dartLocal,
+);
 await writeFile("packages/dart/protocol/lib/generated_protocol.dart", dart);

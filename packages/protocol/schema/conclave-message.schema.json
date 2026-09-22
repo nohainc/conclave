@@ -65,13 +65,27 @@
       "version": "2.0",
       "jsonRpcVersion": "2.0",
       "methods": [
-        "initialize", "health", "getCapabilities", "configureWorker",
-        "startAssignment", "cancelAssignment", "shutdown", "get_capabilities",
-        "configure_worker", "start_assignment", "cancel_assignment"
+        "initialize",
+        "health",
+        "getCapabilities",
+        "configureWorker",
+        "startAssignment",
+        "cancelAssignment",
+        "shutdown",
+        "get_capabilities",
+        "configure_worker",
+        "start_assignment",
+        "cancel_assignment"
       ],
       "notifications": [
-        "progress", "log", "artifact", "usage", "result", "error",
-        "authentication_required", "rate_limited"
+        "progress",
+        "log",
+        "artifact",
+        "usage",
+        "result",
+        "error",
+        "authentication_required",
+        "rate_limited"
       ]
     }
   },
