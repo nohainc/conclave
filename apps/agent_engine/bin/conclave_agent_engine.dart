@@ -5,6 +5,7 @@ import 'package:conclave_agent_engine/assignment_journal.dart';
 import 'package:conclave_agent_engine/cloud_connection.dart';
 import 'package:conclave_agent_engine/plugin_executor.dart';
 import 'package:conclave_agent_engine/plugin_manager.dart';
+import 'package:conclave_agent_engine/repository_registry.dart';
 import 'package:conclave_agent_engine/self_update.dart';
 import 'package:conclave_agent_engine/trust_policy.dart';
 import 'package:conclave_agent_engine/worker_configuration.dart';
@@ -95,8 +96,12 @@ Future<void> main(List<String> args) async {
       .map((worker) => worker['workerId'])
       .whereType<String>()
       .toList();
+  final repositoryRegistry = config.repositoriesFile == null
+      ? null
+      : await LocalRepositoryRegistry.load(File(config.repositoriesFile!));
   final pluginHandler = pluginManager.assignmentHandler(
     PluginProcessExecutor(),
+    resolveRepositoryPath: repositoryRegistry?.resolve,
   );
   String? updateAvailable;
   var lastUpdateCheck = DateTime.fromMillisecondsSinceEpoch(0);

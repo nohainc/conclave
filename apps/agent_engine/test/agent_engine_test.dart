@@ -83,6 +83,7 @@ void main() {
     expect(config.cloudUri, Uri.parse('wss://cloud.example/agent'));
     expect(config.agentId, 'agent-1');
     expect(config.workspaceId, 'workspace-1');
+    expect(config.repositoriesFile, isNull);
     expect(config.ipcPort, 43210);
     expect(config.ipcToken, 'ipc-secret');
   });

@@ -15,6 +15,7 @@ class AgentEngineConfig {
     this.cloudUri,
     this.agentId,
     this.workspaceId,
+    this.repositoriesFile,
     this.authToken,
     this.ipcPort,
     this.ipcToken,
@@ -24,6 +25,7 @@ class AgentEngineConfig {
   final Uri? cloudUri;
   final String? agentId;
   final String? workspaceId;
+  final String? repositoriesFile;
   final String? authToken;
   final int? ipcPort;
   final String? ipcToken;
@@ -36,6 +38,7 @@ class AgentEngineConfig {
     final cloudIndex = args.indexOf('--cloud-url');
     final agentIndex = args.indexOf('--agent-id');
     final workspaceIndex = args.indexOf('--workspace-id');
+    final repositoriesIndex = args.indexOf('--repositories');
     final path = index >= 0 && index + 1 < args.length
         ? args[index + 1]
         : Platform.environment['CONCLAVE_AGENT_DATA_DIR'];
@@ -48,6 +51,10 @@ class AgentEngineConfig {
     final workspaceId = workspaceIndex >= 0 && workspaceIndex + 1 < args.length
         ? args[workspaceIndex + 1]
         : Platform.environment['CONCLAVE_AGENT_WORKSPACE_ID'];
+    final repositoriesFile =
+        repositoriesIndex >= 0 && repositoriesIndex + 1 < args.length
+            ? args[repositoriesIndex + 1]
+            : Platform.environment['CONCLAVE_AGENT_REPOSITORIES'];
     final ipcPortIndex = args.indexOf('--ipc-port');
     final ipcTokenIndex = args.indexOf('--ipc-token');
     final ipcPortValue = ipcPortIndex >= 0 && ipcPortIndex + 1 < args.length
@@ -65,6 +72,7 @@ class AgentEngineConfig {
       cloudUri: cloudUrl == null ? null : Uri.tryParse(cloudUrl),
       agentId: agentId,
       workspaceId: workspaceId,
+      repositoriesFile: repositoriesFile,
       authToken: Platform.environment['CONCLAVE_AGENT_TOKEN'] ?? storedToken,
       ipcPort: ipcPortValue == null ? null : int.tryParse(ipcPortValue),
       ipcToken: ipcToken,

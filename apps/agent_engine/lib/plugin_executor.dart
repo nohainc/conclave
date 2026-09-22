@@ -252,10 +252,12 @@ class PluginAssignmentHandler {
   const PluginAssignmentHandler({
     required this.executor,
     required this.resolve,
+    this.resolveRepositoryPath,
   });
 
   final PluginProcessExecutor executor;
   final PluginProcessResolver resolve;
+  final Future<String?> Function(String repositoryId)? resolveRepositoryPath;
 
   Future<AgentAssignmentResult> call(AgentAssignmentContext context) async {
     final pluginId = context.payload['pluginId'];
@@ -264,21 +266,11 @@ class PluginAssignmentHandler {
     }
     final spec = await resolve(pluginId);
     if (spec == null) throw StateError('plugin is not installed: $pluginId');
+    final pluginPayload =
+        await _repositoryScopedPayload(context.payload, context);
     final output = await executor.execute(
       spec,
-      {
-        ...context.payload,
-        'conclave': {
-          'workspaceId': context.workspaceId,
-          'agentId': context.agentId,
-          'workerId': context.workerId,
-          'runId': context.runId,
-          'taskId': context.taskId,
-          'attemptId': context.attemptId,
-          'assignmentId': context.assignmentId,
-          'idempotencyKey': context.idempotencyKey,
-        },
-      },
+      pluginPayload,
       operationId: context.assignmentId,
     );
     final summary = output['summary'];
@@ -298,4 +290,76 @@ class PluginAssignmentHandler {
 
   Future<bool> cancel(String assignmentId, String reason) =>
       executor.cancel(assignmentId);
+
+  Future<Map<String, Object?>> _repositoryScopedPayload(
+    Map<String, Object?> payload,
+    AgentAssignmentContext context,
+  ) async {
+    final resolver = resolveRepositoryPath;
+    if (resolver == null) return _withCorrelation(payload, context);
+    final input = payload['input'] is Map
+        ? Map<String, Object?>.from(payload['input'] as Map)
+        : <String, Object?>{};
+    final request = input['request'] is Map
+        ? Map<String, Object?>.from(input['request'] as Map)
+        : const <String, Object?>{};
+    final repositoryId = _firstString([
+      payload['repositoryId'],
+      input['repositoryId'],
+      request['repositoryId'],
+    ]);
+    final suppliedPath = _firstString([
+      payload['repositoryPath'],
+      input['repositoryPath'],
+    ]);
+    if (repositoryId == null) {
+      if (suppliedPath != null) {
+        throw StateError('repositoryPath requires a registered repositoryId');
+      }
+      return _withCorrelation(payload, context);
+    }
+    final path = await resolver(repositoryId);
+    if (path == null) {
+      throw StateError(
+          'repository is not registered on this Agent: $repositoryId');
+    }
+    return _withCorrelation(
+      {
+        ...payload,
+        'repositoryId': repositoryId,
+        'repositoryPath': path,
+        'input': {
+          ...input,
+          'repositoryId': repositoryId,
+          'repositoryPath': path
+        },
+      },
+      context,
+    );
+  }
+
+  Map<String, Object?> _withCorrelation(
+    Map<String, Object?> payload,
+    AgentAssignmentContext context,
+  ) =>
+      {
+        ...payload,
+        'conclave': {
+          'workspaceId': context.workspaceId,
+          'agentId': context.agentId,
+          'workerId': context.workerId,
+          'runId': context.runId,
+          'taskId': context.taskId,
+          'attemptId': context.attemptId,
+          'assignmentId': context.assignmentId,
+          'idempotencyKey': context.idempotencyKey,
+        },
+      };
+
+  String? _firstString(Iterable<Object?> values) {
+    for (final value in values) {
+      if (value is String && value.trim().isNotEmpty) return value.trim();
+    }
+    return null;
+  }
 }

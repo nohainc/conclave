@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:conclave_agent_engine/cloud_connection.dart';
 import 'package:conclave_agent_engine/plugin_executor.dart';
+import 'package:conclave_agent_engine/repository_registry.dart';
 import 'package:test/test.dart';
 import 'fixture_copy.dart';
 
@@ -89,6 +91,42 @@ void main() {
     expect(result.summary, contains('echo worker'));
     expect((result.output?['input'] as Map)['conclave']['assignmentId'],
         'assignment-1');
+  });
+
+  test('resolves repository IDs through the local registry', () async {
+    final repository = await Directory.systemTemp.createTemp('repo-registry-');
+    final registryFile = File('${repository.path}/repositories.json')
+      ..writeAsStringSync(jsonEncode({'repo-1': repository.path}));
+    final registry = await LocalRepositoryRegistry.load(registryFile);
+    final handler = PluginAssignmentHandler(
+      executor: PluginProcessExecutor(),
+      resolve: (_) => PluginProcessSpec(
+        pluginId: 'conclave.echo',
+        executable: Platform.resolvedExecutable,
+        arguments: ['run', 'bin/echo_plugin.dart'],
+        workingDirectory:
+            '${Directory.current.parent.parent.path}/worker_plugins/echo',
+      ),
+      resolveRepositoryPath: registry.resolve,
+    );
+    final result = await handler.call(const AgentAssignmentContext(
+      workspaceId: 'workspace-1',
+      agentId: 'agent-1',
+      workerId: 'worker-1',
+      runId: 'run-1',
+      taskId: 'task-1',
+      attemptId: 'attempt-1',
+      assignmentId: 'assignment-repo-1',
+      idempotencyKey: 'idem-repo-1',
+      payload: {
+        'pluginId': 'conclave.echo',
+        'repositoryId': 'repo-1',
+        'input': <String, Object?>{},
+      },
+    ));
+    expect((result.output?['input'] as Map)['repositoryPath'],
+        await repository.resolveSymbolicLinks());
+    await repository.delete(recursive: true);
   });
 
   test('terminates a plugin that does not answer before the timeout', () async {

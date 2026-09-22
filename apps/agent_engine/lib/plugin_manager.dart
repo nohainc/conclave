@@ -451,10 +451,14 @@ class PluginManager {
     if (await target.exists()) await target.delete(recursive: true);
   }
 
-  PluginAssignmentHandler assignmentHandler(PluginProcessExecutor executor) =>
+  PluginAssignmentHandler assignmentHandler(
+    PluginProcessExecutor executor, {
+    Future<String?> Function(String repositoryId)? resolveRepositoryPath,
+  }) =>
       PluginAssignmentHandler(
         executor: executor,
         resolve: activeProcessSpec,
+        resolveRepositoryPath: resolveRepositoryPath,
       );
 
   Future<void> _activate(
