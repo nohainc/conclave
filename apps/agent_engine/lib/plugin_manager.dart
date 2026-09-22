@@ -39,7 +39,7 @@ class PluginManifest {
         'arguments': arguments,
         if (publisher != null) 'publisher': publisher,
         'permissions':
-            permissions.map((permission) => permission.name).toList(),
+            permissions.map((permission) => permission.wireName).toList(),
         'supportedPlatforms': supportedPlatforms,
         'releaseChannel': releaseChannel,
       };
@@ -140,15 +140,8 @@ class PluginManager {
         digest: digest,
         publisher: publisher,
         signature: signature,
-        permissions: permissions
-            .whereType<String>()
-            .map((value) => PluginPermission.values.firstWhere(
-                  (permission) => permission.name == value,
-                  orElse: () => throw StateError(
-                    'desired plugin contains an unknown permission',
-                  ),
-                ))
-            .toList(),
+        permissions:
+            permissions.whereType<String>().map(parsePluginPermission).toList(),
         manifest: PluginManifest(
           pluginId: pluginId,
           version: version,
@@ -161,12 +154,7 @@ class PluginManager {
           publisher: publisher,
           permissions: permissions
               .whereType<String>()
-              .map((value) => PluginPermission.values.firstWhere(
-                    (permission) => permission.name == value,
-                    orElse: () => throw StateError(
-                      'desired plugin contains an unknown permission',
-                    ),
-                  ))
+              .map(parsePluginPermission)
               .toList(),
           supportedPlatforms: supportedPlatforms is List
               ? supportedPlatforms.whereType<String>().toList()
@@ -421,15 +409,7 @@ class PluginManager {
 
   List<PluginPermission> _permissionsFromManifest(Object? raw) {
     if (raw is! List) return const [];
-    return raw
-        .whereType<String>()
-        .map((value) => PluginPermission.values.firstWhere(
-              (permission) => permission.name == value,
-              orElse: () => throw StateError(
-                'plugin manifest contains an unknown permission',
-              ),
-            ))
-        .toList();
+    return raw.whereType<String>().map(parsePluginPermission).toList();
   }
 
   Future<List<InstalledPlugin>> inventory() async {

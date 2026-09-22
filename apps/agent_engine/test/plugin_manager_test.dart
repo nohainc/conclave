@@ -194,7 +194,7 @@ void main() {
           'packageR2Key': 'plugins/cloud-plugin/1.0.0/package.bin',
           'packageDigest': digest,
           'signature': policy.sign('publisher', digest),
-          'permissions': ['readWorkspace'],
+          'permissions': ['workspace:read'],
         },
       ],
       download: (pluginId, version, packageR2Key) async {
@@ -206,6 +206,13 @@ void main() {
     );
     expect(await manager.activeVersion('cloud-plugin'), '1.0.0');
     await directory.delete(recursive: true);
+  });
+
+  test('accepts canonical cross-language permission names', () {
+    expect(parsePluginPermission('workspace:read'),
+        PluginPermission.readWorkspace);
+    expect(parsePluginPermission('network:outbound'), PluginPermission.network);
+    expect(PluginPermission.writeWorkspace.wireName, 'workspace:write');
   });
 
   test('rejects traversal identifiers before checking the active version',

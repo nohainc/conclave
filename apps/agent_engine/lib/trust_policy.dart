@@ -9,6 +9,27 @@ enum PluginPermission {
   credentials
 }
 
+extension PluginPermissionWire on PluginPermission {
+  String get wireName => switch (this) {
+        PluginPermission.readWorkspace => 'workspace:read',
+        PluginPermission.writeWorkspace => 'workspace:write',
+        PluginPermission.shell => 'shell:execute',
+        PluginPermission.network => 'network:outbound',
+        PluginPermission.credentials => 'credentials:read',
+      };
+}
+
+PluginPermission parsePluginPermission(String value) {
+  return switch (value) {
+    'readWorkspace' || 'workspace:read' => PluginPermission.readWorkspace,
+    'writeWorkspace' || 'workspace:write' => PluginPermission.writeWorkspace,
+    'shell' || 'shell:execute' => PluginPermission.shell,
+    'network' || 'network:outbound' => PluginPermission.network,
+    'credentials' || 'credentials:read' => PluginPermission.credentials,
+    _ => throw StateError('unknown plugin permission: $value'),
+  };
+}
+
 class PluginTrustPolicy {
   const PluginTrustPolicy({
     this.trustedSecrets = const {},
