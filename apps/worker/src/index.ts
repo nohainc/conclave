@@ -4470,6 +4470,10 @@ async function handleGetLatestAgentRelease(
       supportedArch: parseJson<string[]>(latest.supportedArchJson, []),
       packageDigest: latest.packageDigest,
       packageR2Key: latest.packageR2Key,
+      // Agent releases use the Cloud-managed signing identity. Keep the
+      // publisher explicit so Agents can apply their trust policy rather than
+      // treating a missing publisher as an unsigned release.
+      publisher: "conclave",
       signature: latest.signature,
       releaseNotes: latest.releaseNotes,
       createdAt: latest.createdAt,

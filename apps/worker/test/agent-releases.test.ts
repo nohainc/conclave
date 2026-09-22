@@ -266,9 +266,10 @@ describe("Architecture v2 Cloud Agent Releases & Self-Update Registry", () => {
     expect(check1.status).toBe(200);
     const data1 = (await check1.json()) as {
       updateAvailable: boolean;
-      release: { version: string };
+      release: { version: string; publisher: string };
     };
     expect(data1.updateAvailable).toBe(true);
+    expect(data1.release?.publisher).toBe("conclave");
     expect(data1.release.version).toBe("1.3.0");
 
     // Query latest stable from agent 1.3.0 -> updateAvailable: false (already latest stable)
