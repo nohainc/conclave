@@ -564,6 +564,57 @@ describe("Assignment Dispatcher (Cloud -> Agent -> Worker)", () => {
       expect(body.assignment.workerId).toBe("worker-implementer");
     });
 
+    it("does not dispatch a task belonging to another workspace", async () => {
+      const now = new Date().toISOString();
+      db.prepare(
+        `INSERT INTO workspaces (id, name, slug, status, created_at, updated_at)
+         VALUES ('ws-other', 'Other Workspace', 'other-ws', 'active', ?, ?)`,
+      ).run(now, now);
+      db.prepare(
+        `INSERT INTO projects (id, workspace_id, name, description, created_at, updated_at)
+         VALUES ('proj-other', 'ws-other', 'Other Project', '', ?, ?)`,
+      ).run(now, now);
+      db.prepare(
+        `INSERT INTO goals (id, workspace_id, project_id, original_message, objective, status, created_at, updated_at)
+         VALUES ('goal-other', 'ws-other', 'proj-other', 'Other', 'Other', 'running', ?, ?)`,
+      ).run(now, now);
+      db.prepare(
+        `INSERT INTO runs (id, workspace_id, project_id, goal_id, policy_snapshot_json, status, created_at, updated_at)
+         VALUES ('run-other', 'ws-other', 'proj-other', 'goal-other', '{}', 'running', ?, ?)`,
+      ).run(now, now);
+      db.prepare(
+        `INSERT INTO phases (id, run_id, name, purpose, sequence, status, created_at, updated_at)
+         VALUES ('phase-other', 'run-other', 'Other', 'Other', 0, 'running', ?, ?)`,
+      ).run(now, now);
+      db.prepare(
+        `INSERT INTO tasks (id, phase_id, role, objective, capabilities_json, status, created_at, updated_at)
+         VALUES ('task-other', 'phase-other', 'implementer', 'Other', '["test_echo"]', 'ready', ?, ?)`,
+      ).run(now, now);
+
+      const response = await worker.fetch(
+        new Request(
+          "https://conclave.local/api/v2/workspaces/ws-1/tasks/task-other/dispatch",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${adminToken}`,
+              "Content-Type": "application/json",
+            },
+          },
+        ),
+        env as unknown as Env,
+      );
+
+      expect(response.status).toBe(404);
+      expect(
+        db
+          .prepare(
+            "SELECT COUNT(*) AS count FROM attempts WHERE task_id = 'task-other'",
+          )
+          .get() as { count: number },
+      ).toEqual({ count: 0 });
+    });
+
     it("cancels assignment via REST POST endpoint", async () => {
       // First dispatch
       const dispatchRes = await worker.fetch(

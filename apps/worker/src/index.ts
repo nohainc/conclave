@@ -2930,9 +2930,9 @@ async function handleDispatchTaskAssignment(
      FROM tasks t
      JOIN phases ph ON ph.id = t.phase_id
      JOIN runs r ON r.id = ph.run_id
-     WHERE t.id = ?1`,
+     WHERE t.id = ?1 AND r.workspace_id = ?2`,
   )
-    .bind(taskId)
+    .bind(taskId, workspaceId)
     .first<Record<string, unknown>>();
 
   if (!taskRow) {
@@ -3082,9 +3082,9 @@ async function handleDispatchEnsembleTaskAssignment(
      FROM tasks t
      JOIN phases ph ON ph.id = t.phase_id
      JOIN runs r ON r.id = ph.run_id
-     WHERE t.id = ?1`,
+     WHERE t.id = ?1 AND r.workspace_id = ?2`,
   )
-    .bind(taskId)
+    .bind(taskId, workspaceId)
     .first<Record<string, unknown>>();
 
   if (!taskRow) {
