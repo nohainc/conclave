@@ -3542,18 +3542,27 @@ async function validateAndClaimCiEvidence(
     throw new HttpError(409, "Run has no workspace correlation");
   try {
     await env.CONCLAVE_DB.prepare(
-      `INSERT INTO run_ci_evidence
-       (evidence_id, run_id, workspace_id, repository_id, commit_sha, workflow, external_run_id, status, claimed_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'claimed', ?8)`,
+      `INSERT INTO ci_evidence
+       (evidence_id, workspace_id, run_id, repository_id, external_run_id, revision, workflow,
+        source, conclusion, checks_json, smoke_tests_json, health_checks_json, raw_payload_json,
+        observed_at, status, claimed_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, 'claimed', ?15)`,
     )
       .bind(
         evidence.evidenceId,
-        runId,
         expected.workspace_id,
+        runId,
         evidence.repositoryId,
+        evidence.externalRunId,
         evidence.commitSha,
         evidence.workflow,
-        evidence.externalRunId,
+        evidence.source,
+        evidence.conclusion,
+        JSON.stringify(evidence.checks),
+        JSON.stringify(evidence.smokeTests),
+        JSON.stringify(evidence.healthChecks),
+        JSON.stringify(input),
+        evidence.observedAt,
         new Date().toISOString(),
       )
       .run();
@@ -3646,7 +3655,7 @@ async function handleRunCommand(
         payload: body.payload ?? body,
       });
       await env.CONCLAVE_DB.prepare(
-        "UPDATE run_ci_evidence SET status = 'consumed', consumed_at = ?1 WHERE evidence_id = ?2 AND status = 'claimed'",
+        "UPDATE ci_evidence SET status = 'consumed', consumed_at = ?1 WHERE evidence_id = ?2 AND status = 'claimed'",
       )
         .bind(new Date().toISOString(), claimedEvidenceId)
         .run();
