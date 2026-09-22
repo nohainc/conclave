@@ -45,18 +45,13 @@ describe("V2-21 workspace collaboration", () => {
   beforeEach(() => {
     db = new DatabaseSync(":memory:");
     db.exec("PRAGMA foreign_keys = ON;");
-    db.exec(
-      fs.readFileSync(
-        path.resolve(here, "../migrations/0001_initial.sql"),
-        "utf8",
-      ),
-    );
-    db.exec(
-      fs.readFileSync(
-        path.resolve(here, "../migrations/0013_workspace_collaboration.sql"),
-        "utf8",
-      ),
-    );
+    const migrations = path.resolve(here, "../migrations");
+    for (const migration of fs
+      .readdirSync(migrations)
+      .filter((file) => file.endsWith(".sql"))
+      .sort()) {
+      db.exec(fs.readFileSync(path.join(migrations, migration), "utf8"));
+    }
     env = {
       CONCLAVE_ENVIRONMENT: "production",
       CONCLAVE_DB: d1Mock(db),
