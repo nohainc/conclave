@@ -31,6 +31,8 @@ class ConclaveAgentApp extends StatelessWidget {
 abstract interface class AgentEngineConnection {
   Future<AgentSnapshot> snapshot();
 
+  Future<List<String>> logs() async => const [];
+
   Future<bool> isOnline() async => (await snapshot()).online;
 
   factory AgentEngineConnection.unavailable() =
@@ -49,6 +51,9 @@ class UnavailableAgentEngineConnection implements AgentEngineConnection {
         plugins: 0,
         activeTasks: 0,
       );
+
+  @override
+  Future<List<String>> logs() async => const [];
 }
 
 class SocketAgentEngineConnection implements AgentEngineConnection {
@@ -108,6 +113,31 @@ class SocketAgentEngineConnection implements AgentEngineConnection {
         activeTasks: 0,
         error: 'Agent Engine unavailable: $error',
       );
+    }
+  }
+
+  @override
+  Future<List<String>> logs() async {
+    final metadataFile = File('${dataDirectory.path}/ipc.json');
+    if (!await metadataFile.exists()) return const [];
+    try {
+      final metadata =
+          jsonDecode(await metadataFile.readAsString()) as Map<String, dynamic>;
+      final port = metadata['port'];
+      final token = metadata['token'];
+      if (port is! int || token is! String || token.isEmpty) return const [];
+      final client = await LocalIpcClient.connect(port: port, token: token);
+      try {
+        final result =
+            await client.command('engine.logs', const {'limit': 100});
+        return result['lines'] is List
+            ? (result['lines'] as List).whereType<String>().toList()
+            : const [];
+      } finally {
+        await client.close();
+      }
+    } on Object {
+      return const [];
     }
   }
 
@@ -237,7 +267,7 @@ class _AgentHomeState extends State<AgentHome> {
         0 => _OverviewPage(snapshot: snapshot),
         1 => _WorkersPage(snapshot: snapshot),
         2 => _PluginsPage(snapshot: snapshot),
-        3 => const _LogsPage(),
+        3 => _LogsPage(connection: widget.connection),
         _ => _SettingsPage(snapshot: snapshot),
       };
 }
@@ -339,17 +369,50 @@ class _PluginsPage extends StatelessWidget {
       ]);
 }
 
-class _LogsPage extends StatelessWidget {
-  const _LogsPage();
+class _LogsPage extends StatefulWidget {
+  const _LogsPage({required this.connection});
+
+  final AgentEngineConnection connection;
 
   @override
-  Widget build(BuildContext context) => const _Page(title: 'Logs', children: [
-        Text(
-            'Logs are written by the Agent Engine and available in its local data directory.'),
-        SizedBox(height: 12),
-        Text(
-            'Live log streaming will be enabled when the engine log channel is connected.'),
-      ]);
+  State<_LogsPage> createState() => _LogsPageState();
+}
+
+class _LogsPageState extends State<_LogsPage> {
+  late Future<List<String>> _logs;
+
+  @override
+  void initState() {
+    super.initState();
+    _logs = widget.connection.logs();
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<List<String>>(
+        future: _logs,
+        builder: (context, state) {
+          if (state.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final lines = state.data ?? const <String>[];
+          return _Page(
+            title: 'Logs',
+            children: [
+              Text('${lines.length} recent log entries'),
+              const SizedBox(height: 12),
+              if (lines.isEmpty)
+                const Text('No Agent Engine logs are available.'),
+              if (lines.isNotEmpty)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: SelectableText(lines.join('\n')),
+                  ),
+                ),
+            ],
+          );
+        },
+      );
 }
 
 class _SettingsPage extends StatelessWidget {

@@ -144,6 +144,26 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('IPC exposes bounded Engine logs', () async {
+    final directory = await Directory.systemTemp.createTemp('conclave-engine-');
+    final engine =
+        AgentEngine(config: AgentEngineConfig(dataDirectory: directory));
+    await engine.start();
+    final metadata = jsonDecode(
+      await File('${directory.path}/ipc.json').readAsString(),
+    ) as Map<String, dynamic>;
+    final client = await LocalIpcClient.connect(
+      port: metadata['port'] as int,
+      token: metadata['token'] as String,
+    );
+    final logs = await client.command('engine.logs', const {'limit': 1});
+    expect(logs['lines'], isA<List>());
+    expect((logs['lines'] as List).length, lessThanOrEqualTo(1));
+    await client.close();
+    await engine.stop();
+    await directory.delete(recursive: true);
+  });
+
   test('restricts IPC metadata to the current user on POSIX', () async {
     if (Platform.isWindows) return;
     final directory = await Directory.systemTemp.createTemp('conclave-engine-');

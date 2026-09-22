@@ -116,6 +116,7 @@ class AgentEngine {
   final int logFileMaxBytes;
   final AgentEngineLogger _log;
   IOSink? _ownedLogOutput;
+  File? _logFile;
   RandomAccessFile? _lock;
   LocalIpcServer? _ipc;
   bool _running = false;
@@ -126,6 +127,19 @@ class AgentEngine {
   int? get ipcPort => _ipc?.port;
 
   Future<Map<String, Object?>> _handleIpcCommand(IpcCommand command) async {
+    if (command.type == 'engine.logs') {
+      final requested = command.payload['limit'];
+      final limit = (requested is int ? requested : 100).clamp(1, 200);
+      final file = _logFile;
+      if (file == null || !await file.exists()) {
+        return {'lines': <String>[]};
+      }
+      final lines = await file.readAsLines();
+      return {
+        'lines':
+            lines.length <= limit ? lines : lines.sublist(lines.length - limit),
+      };
+    }
     if (command.type != 'engine.status') {
       throw StateError('unsupported engine command: ${command.type}');
     }
@@ -226,6 +240,7 @@ class AgentEngine {
       if (await previous.exists()) await previous.delete();
       await current.rename(previous.path);
     }
+    _logFile = current;
     final output = current.openWrite(mode: FileMode.append);
     await _restrictPermissions(current.path);
     return output;
