@@ -165,6 +165,12 @@ Future<void> main(List<String> args) async {
           activeWorkerIds: activeWorkerIds,
           assignmentHandler: pluginHandler.call,
           assignmentCancellationHandler: pluginHandler.cancel,
+          agentUpdateAvailableHandler: (payload) async {
+            final controller = updateController;
+            if (controller == null) return;
+            final release = controller.acceptAvailable(payload);
+            updateAvailable = release.version;
+          },
           assignmentJournal: AssignmentJournal(
             File('${config.dataDirectory.path}/assignments.jsonl'),
           ),

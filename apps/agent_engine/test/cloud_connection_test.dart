@@ -118,6 +118,45 @@ void main() {
     await connection.close();
   });
 
+  test('delivers validated Cloud update announcements to the Agent Engine',
+      () async {
+    final socket = FakeSocket();
+    Map<String, Object?>? received;
+    final connection = AgentCloudConnection(
+      uri: Uri.parse('wss://cloud.test/agent'),
+      agentId: 'agent-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      agentUpdateAvailableHandler: (payload) async {
+        received = payload;
+      },
+      heartbeat: const Duration(hours: 1),
+    );
+
+    await connection.connect();
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.agent-protocol',
+      'protocolVersion': '2.0',
+      'messageId': 'server-update-1',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'agent.update.available',
+      'payload': {
+        'version': '0.2.0',
+        'channel': 'stable',
+        'packageR2Key': 'agents/0.2.0/macos-arm64.tar.gz',
+        'packageDigest': 'sha256:abc123',
+        'signature': 'sig-1',
+        'releaseNotes': 'Security fixes',
+        'minSupportedAgentVersion': '0.1.0',
+      },
+    }));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    expect(received?['version'], '0.2.0');
+    expect(received?['packageR2Key'], 'agents/0.2.0/macos-arm64.tar.gz');
+    await connection.close();
+  });
+
   test('ignores an incompatible protocol major version', () async {
     final socket = FakeSocket();
     final connection = AgentCloudConnection(

@@ -6,6 +6,34 @@ import 'package:conclave_agent_engine/trust_policy.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('accepts a Cloud release announcement without applying it', () async {
+    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final statuses = <AgentUpdateStatus>[];
+    final controller = AgentUpdateController(
+      cloudUri: Uri.parse('https://cloud.test'),
+      currentVersion: '0.1.0',
+      client: const AgentReleaseClient(),
+      updater: AgentUpdater(root, requireSignature: false),
+      reportStatus: statuses.add,
+    );
+
+    final release = controller.acceptAvailable({
+      'version': '0.2.0',
+      'channel': 'stable',
+      'packageR2Key': 'agents/0.2.0/agent.tar.gz',
+      'packageDigest': 'sha256:abc123',
+      'signature': 'sig-1',
+      'minSupportedAgentVersion': '0.1.0',
+    });
+
+    expect(release.version, '0.2.0');
+    expect(release.minSupportedAgentVersion, '0.1.0');
+    expect(controller.availableRelease?.version, '0.2.0');
+    expect(controller.status.phase, 'available');
+    expect(statuses, hasLength(1));
+    await root.delete(recursive: true);
+  });
+
   test('fetches authenticated release metadata and bounded package bytes',
       () async {
     final root = await Directory.systemTemp.createTemp('conclave-update-');

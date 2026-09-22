@@ -38,6 +38,7 @@ class AgentReleaseDescriptor {
     this.publisher,
     this.signature,
     this.minimumProtocolVersion,
+    this.minSupportedAgentVersion,
     this.operatingSystem,
     this.architecture,
     this.releaseNotes,
@@ -51,6 +52,7 @@ class AgentReleaseDescriptor {
   final String? publisher;
   final String? signature;
   final String? minimumProtocolVersion;
+  final String? minSupportedAgentVersion;
   final String? operatingSystem;
   final String? architecture;
   final String? releaseNotes;
@@ -76,6 +78,7 @@ class AgentReleaseDescriptor {
       publisher: optionalString('publisher'),
       signature: optionalString('signature'),
       minimumProtocolVersion: optionalString('minimumProtocolVersion'),
+      minSupportedAgentVersion: optionalString('minSupportedAgentVersion'),
       operatingSystem: optionalString('operatingSystem'),
       architecture: optionalString('architecture'),
       releaseNotes: optionalString('releaseNotes'),
@@ -276,6 +279,18 @@ class AgentUpdateController {
 
   AgentUpdateStatus get status => _status;
   AgentReleaseDescriptor? get availableRelease => _available;
+
+  /// Accepts a release announcement delivered over the authenticated Cloud
+  /// connection. The announcement is only made available for an explicit
+  /// apply action; receiving it never mutates the running installation.
+  AgentReleaseDescriptor acceptAvailable(Map<String, Object?> payload) {
+    final release = AgentReleaseDescriptor.fromJson(
+      Map<String, dynamic>.from(payload),
+    );
+    _available = release;
+    _publish(AgentUpdateStatus(phase: 'available', version: release.version));
+    return release;
+  }
 
   Future<AgentReleaseDescriptor?> check() async {
     _publish(const AgentUpdateStatus(phase: 'checking'));

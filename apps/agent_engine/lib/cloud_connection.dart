@@ -60,6 +60,9 @@ typedef AgentAssignmentCancellationHandler = Future<bool> Function(
 typedef AgentSyncHandler = Future<void> Function(
   Map<String, Object?> payload,
 );
+typedef AgentUpdateAvailableHandler = Future<void> Function(
+  Map<String, Object?> payload,
+);
 
 class IoAgentCloudSocket implements AgentCloudSocket {
   IoAgentCloudSocket(this.socket);
@@ -107,6 +110,7 @@ class AgentCloudConnection {
     this.assignmentCancellationHandler,
     this.assignmentJournal,
     this.syncHandler,
+    this.agentUpdateAvailableHandler,
     this.heartbeat = const Duration(seconds: 15),
     this.reconnectBaseDelay = const Duration(milliseconds: 10),
     this.reconnectMaxDelay = const Duration(seconds: 5),
@@ -128,6 +132,7 @@ class AgentCloudConnection {
   final AgentAssignmentCancellationHandler? assignmentCancellationHandler;
   final AssignmentJournal? assignmentJournal;
   final AgentSyncHandler? syncHandler;
+  final AgentUpdateAvailableHandler? agentUpdateAvailableHandler;
   final Duration heartbeat;
   final Duration reconnectBaseDelay;
   final Duration reconnectMaxDelay;
@@ -291,6 +296,14 @@ class AgentCloudConnection {
         if (handler != null) {
           unawaited(handler(syncResponse!).catchError((_) {}));
         }
+      }
+    } else if (decoded['type'] == 'agent.update.available') {
+      final payload = decoded['payload'];
+      final handler = agentUpdateAvailableHandler;
+      if (payload is Map<String, dynamic> && handler != null) {
+        unawaited(
+          handler(Map<String, Object?>.from(payload)).catchError((_) {}),
+        );
       }
     } else if (decoded['type'] == 'agent.heartbeat.ack') {
       _heartbeatTimeoutTimer?.cancel();
