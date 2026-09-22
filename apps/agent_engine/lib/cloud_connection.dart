@@ -266,6 +266,11 @@ class AgentCloudConnection {
       return;
     }
     if (decoded is! Map<String, dynamic>) return;
+    final remoteProtocolVersion = decoded['protocolVersion'];
+    if (remoteProtocolVersion is! String ||
+        !_isCompatibleProtocolVersion(remoteProtocolVersion)) {
+      return;
+    }
     try {
       AgentProtocolMessage.parse(decoded);
     } on ProtocolException {
