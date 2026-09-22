@@ -154,14 +154,21 @@ const runs = [
 
 class Statement implements D1Statement {
   private values: readonly unknown[] = [];
-  constructor(private readonly query: string) {}
+  constructor(
+    private readonly query: string,
+    private readonly role: string,
+    private readonly projectIds: readonly string[],
+    private readonly queries: string[],
+  ) {
+    queries.push(query);
+  }
   bind(...values: unknown[]): D1Statement {
     this.values = values;
     return this;
   }
   async first<T>(): Promise<T | null> {
     if (this.query.includes("workspace_memberships")) {
-      return { role: "owner", status: "active" } as T;
+      return { role: this.role, status: "active" } as T;
     }
     if (this.query.includes("SELECT r.id FROM runs")) {
       if (
@@ -190,13 +197,19 @@ class Statement implements D1Statement {
             display_name: "Test User",
             user_status: "active",
             workspace_id: organizationId,
-            role: "owner",
+            role: this.role,
             status: "active",
           } as T,
         ],
       };
     }
-    if (this.query.includes("project_memberships")) return { results: [] };
+    if (this.query.includes("project_memberships"))
+      return {
+        results: this.projectIds.map((project_id) => ({
+          project_id,
+          role: "collaborator",
+        })),
+      } as unknown as { results: readonly T[] };
     if (
       this.query.includes("FROM projects p") ||
       this.query.includes("FROM workers") ||
@@ -253,19 +266,27 @@ class Statement implements D1Statement {
 }
 
 class TenantDb implements D1DatabaseLike {
+  readonly queries: string[] = [];
+  constructor(
+    private readonly role = "owner",
+    private readonly projectIds: readonly string[] = [],
+  ) {}
   prepare(query: string): D1Statement {
-    return new Statement(query);
+    return new Statement(query, this.role, this.projectIds, this.queries);
   }
   async batch(): Promise<readonly { success: boolean }[]> {
     return [];
   }
 }
 
-function environment(organizationId: Tenant) {
+function environment(
+  organizationId: Tenant,
+  options: { role?: string; projectIds?: readonly string[] } = {},
+) {
   return {
     CONCLAVE_ENVIRONMENT: "production",
     CONCLAVE_ACCESS_ORGANIZATION_ID: organizationId,
-    CONCLAVE_DB: new TenantDb(),
+    CONCLAVE_DB: new TenantDb(options.role, options.projectIds),
   } as unknown as Env;
 }
 
@@ -321,5 +342,39 @@ describe("Studio tenant isolation", () => {
     expect(b.artifacts.map((row) => row.name)).toEqual(["artifact-b"]);
     expect(b.modelCalls.map((row) => row.worker)).toEqual(["worker-b"]);
     expect(b.activeRunId).toBe("run-b");
+  });
+
+  it("applies project memberships to the workspace-wide snapshot", async () => {
+    const db = new TenantDb("member", ["project-a"]);
+    const env = {
+      CONCLAVE_ENVIRONMENT: "production",
+      CONCLAVE_ACCESS_ORGANIZATION_ID: "org-a",
+      CONCLAVE_DB: db,
+    } as unknown as Env;
+    const response = await worker.fetch(
+      new Request("https://conclave.test/api/studio/snapshot", {
+        headers: { accept: "application/json" },
+      }),
+      env,
+      {
+        access: {
+          getIdentity: async () => ({ email: "org-a-user@example.com" }),
+        },
+      } as never,
+    );
+
+    expect(response.status).toBe(200);
+    const scopedQueries = db.queries.filter(
+      (query) =>
+        query.includes("FROM projects p") ||
+        query.includes("FROM tasks t") ||
+        query.includes("FROM findings f") ||
+        query.includes("FROM events e") ||
+        query.includes("FROM artifacts a") ||
+        query.includes("FROM model_calls mc") ||
+        query.includes("FROM chats c"),
+    );
+    expect(scopedQueries.length).toBeGreaterThan(0);
+    expect(scopedQueries.every((query) => query.includes("IN ("))).toBe(true);
   });
 });

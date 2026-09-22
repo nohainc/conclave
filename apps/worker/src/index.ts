@@ -3482,6 +3482,23 @@ async function handleStudioSnapshot(
       : isAnonymous
         ? [projectId]
         : [context.workspaceId, projectId];
+  const restrictProjects =
+    !isAnonymous &&
+    context.workspaceRole !== "owner" &&
+    context.workspaceRole !== "admin";
+  const projectScope = (column: string, start: number): string => {
+    if (!restrictProjects) return "";
+    if (context.authorizedProjectIds.length === 0) return " AND 1 = 0";
+    const placeholders = context.authorizedProjectIds
+      .map((_, index) => `?${start + index}`)
+      .join(",");
+    return ` AND ${column} IN (${placeholders})`;
+  };
+  const projectListFilter =
+    projectFilter + projectScope("p.id", bind.length + 1);
+  const projectListBind = restrictProjects
+    ? [...bind, ...context.authorizedProjectIds]
+    : bind;
   const ownership =
     projectId === null
       ? isAnonymous
@@ -3491,6 +3508,11 @@ async function handleStudioSnapshot(
         ? "p.id = ?1"
         : "p.workspace_id = ?1 AND p.id = ?2";
   const ownershipBind = bind;
+  const scopedOwnership =
+    ownership + projectScope("p.id", ownershipBind.length + 1);
+  const scopedOwnershipBind = restrictProjects
+    ? [...ownershipBind, ...context.authorizedProjectIds]
+    : ownershipBind;
   const [
     projects,
     workers,
@@ -3505,9 +3527,9 @@ async function handleStudioSnapshot(
     latestRun,
   ] = await Promise.all([
     env.CONCLAVE_DB.prepare(
-      `SELECT p.id, p.name, COALESCE(p.repository_id, '') AS repository, '' AS branch, (SELECT COUNT(*) FROM goals g WHERE g.project_id = p.id AND g.status IN ('running', 'waiting')) AS activeGoals, p.updated_at AS lastActivity FROM projects p${projectFilter} ORDER BY p.updated_at DESC`,
+      `SELECT p.id, p.name, COALESCE(p.repository_id, '') AS repository, '' AS branch, (SELECT COUNT(*) FROM goals g WHERE g.project_id = p.id AND g.status IN ('running', 'waiting')) AS activeGoals, p.updated_at AS lastActivity FROM projects p${projectListFilter} ORDER BY p.updated_at DESC`,
     )
-      .bind(...bind)
+      .bind(...projectListBind)
       .all(),
     env.CONCLAVE_DB.prepare(
       `SELECT w.id, w.name, w.agent_id AS agentId, w.plugin_id AS pluginId,
@@ -3552,34 +3574,34 @@ async function handleStudioSnapshot(
       .bind(context.workspaceId)
       .all(),
     env.CONCLAVE_DB.prepare(
-      `SELECT t.id, t.objective AS title, ph.name AS phase, t.status, t.role AS worker, t.objective AS detail, CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END AS progress, '[]' AS dependencies, '—' AS tokens, '—' AS cost FROM tasks t JOIN phases ph ON ph.id = t.phase_id JOIN runs r ON r.id = ph.run_id JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${ownership} ORDER BY t.created_at DESC LIMIT 100`,
+      `SELECT t.id, t.objective AS title, ph.name AS phase, t.status, t.role AS worker, t.objective AS detail, CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END AS progress, '[]' AS dependencies, '—' AS tokens, '—' AS cost FROM tasks t JOIN phases ph ON ph.id = t.phase_id JOIN runs r ON r.id = ph.run_id JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${scopedOwnership} ORDER BY t.created_at DESC LIMIT 100`,
     )
-      .bind(...ownershipBind)
+      .bind(...scopedOwnershipBind)
       .all(),
     env.CONCLAVE_DB.prepare(
-      `SELECT f.id, f.description AS title, f.description, f.severity, f.status, COALESCE(f.task_id, '') AS taskId, 'Unknown' AS author FROM findings f JOIN runs r ON r.id = f.run_id JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${ownership} ORDER BY f.created_at DESC LIMIT 100`,
+      `SELECT f.id, f.description AS title, f.description, f.severity, f.status, COALESCE(f.task_id, '') AS taskId, 'Unknown' AS author FROM findings f JOIN runs r ON r.id = f.run_id JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${scopedOwnership} ORDER BY f.created_at DESC LIMIT 100`,
     )
-      .bind(...ownershipBind)
+      .bind(...scopedOwnershipBind)
       .all(),
     env.CONCLAVE_DB.prepare(
-      `SELECT e.occurred_at AS time, e.event_type AS title, e.entity_id AS detail, e.event_type AS kind FROM events e JOIN runs r ON r.id = e.run_id JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${ownership} ORDER BY e.occurred_at DESC LIMIT 100`,
+      `SELECT e.occurred_at AS time, e.event_type AS title, e.entity_id AS detail, e.event_type AS kind FROM events e JOIN runs r ON r.id = e.run_id JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${scopedOwnership} ORDER BY e.occurred_at DESC LIMIT 100`,
     )
-      .bind(...ownershipBind)
+      .bind(...scopedOwnershipBind)
       .all(),
     env.CONCLAVE_DB.prepare(
-      `SELECT a.id AS name, a.media_type AS type, a.size_bytes AS size, 'Conclave' AS source FROM artifacts a JOIN runs r ON r.id = a.run_id JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${ownership} ORDER BY a.created_at DESC LIMIT 100`,
+      `SELECT a.id AS name, a.media_type AS type, a.size_bytes AS size, 'Conclave' AS source FROM artifacts a JOIN runs r ON r.id = a.run_id JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${scopedOwnership} ORDER BY a.created_at DESC LIMIT 100`,
     )
-      .bind(...ownershipBind)
+      .bind(...scopedOwnershipBind)
       .all(),
     env.CONCLAVE_DB.prepare(
-      `SELECT mc.worker_id AS worker, mc.model, mc.attempt_id AS task, u.input_tokens + u.output_tokens AS tokens, u.cost_micros AS cost, u.duration_ms AS duration, mc.status FROM model_calls mc JOIN attempts a ON a.id = mc.attempt_id JOIN tasks t ON t.id = a.task_id JOIN phases ph ON ph.id = t.phase_id JOIN runs r ON r.id = ph.run_id JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id LEFT JOIN usage u ON u.attempt_id = a.id WHERE ${ownership} ORDER BY mc.started_at DESC LIMIT 100`,
+      `SELECT mc.worker_id AS worker, mc.model, mc.attempt_id AS task, u.input_tokens + u.output_tokens AS tokens, u.cost_micros AS cost, u.duration_ms AS duration, mc.status FROM model_calls mc JOIN attempts a ON a.id = mc.attempt_id JOIN tasks t ON t.id = a.task_id JOIN phases ph ON ph.id = t.phase_id JOIN runs r ON r.id = ph.run_id JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id LEFT JOIN usage u ON u.attempt_id = a.id WHERE ${scopedOwnership} ORDER BY mc.started_at DESC LIMIT 100`,
     )
-      .bind(...ownershipBind)
+      .bind(...scopedOwnershipBind)
       .all(),
     env.CONCLAVE_DB.prepare(
-      `SELECT r.id FROM runs r JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${ownership} AND r.status IN ('active', 'running', 'waiting') ORDER BY r.created_at DESC LIMIT 1`,
+      `SELECT r.id FROM runs r JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${scopedOwnership} AND r.status IN ('active', 'running', 'waiting') ORDER BY r.created_at DESC LIMIT 1`,
     )
-      .bind(...ownershipBind)
+      .bind(...scopedOwnershipBind)
       .first<{ id: string }>(),
     env.CONCLAVE_DB.prepare(
       `SELECT r.id, r.status, g.objective AS objective, r.created_at AS createdAt, r.started_at AS startedAt, r.finished_at AS finishedAt,
@@ -3590,9 +3612,9 @@ async function handleStudioSnapshot(
         (SELECT COUNT(*) FROM completion_criteria cc WHERE cc.goal_id = g.id) AS criterionCount,
         COALESCE((SELECT SUM(input_tokens + output_tokens) FROM usage u WHERE u.run_id = r.id), 0) AS tokens,
         COALESCE((SELECT SUM(cost_micros) FROM usage u WHERE u.run_id = r.id), 0) AS costMicros
-       FROM runs r JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${ownership} ORDER BY r.created_at DESC LIMIT 1`,
+       FROM runs r JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${scopedOwnership} ORDER BY r.created_at DESC LIMIT 1`,
     )
-      .bind(...ownershipBind)
+      .bind(...scopedOwnershipBind)
       .first(),
   ]);
   const chatFilter =
@@ -3611,14 +3633,19 @@ async function handleStudioSnapshot(
       : isAnonymous
         ? [projectId]
         : [context.workspaceId, projectId];
+  const scopedChatFilter =
+    chatFilter + projectScope("c.project_id", chatBind.length + 1);
+  const scopedChatBind = restrictProjects
+    ? [...chatBind, ...context.authorizedProjectIds]
+    : chatBind;
   const [chats, chatMessages] = await Promise.all([
     env.CONCLAVE_DB.prepare(
       `SELECT c.id, c.project_id AS projectId, c.workspace_id AS workspaceId,
               c.created_by_user_id AS createdByUserId, c.title, c.status,
               c.created_at AS createdAt, c.updated_at AS updatedAt
-       FROM chats c WHERE ${chatFilter} ORDER BY c.updated_at DESC`,
+       FROM chats c WHERE ${scopedChatFilter} ORDER BY c.updated_at DESC`,
     )
-      .bind(...chatBind)
+      .bind(...scopedChatBind)
       .all(),
     env.CONCLAVE_DB.prepare(
       `SELECT m.id, m.chat_id AS chatId, m.sender_type AS senderType,
@@ -3626,10 +3653,10 @@ async function handleStudioSnapshot(
               m.created_at AS createdAt
        FROM chat_messages m
        JOIN chats c ON c.id = m.chat_id
-       WHERE ${chatFilter}
+       WHERE ${scopedChatFilter}
        ORDER BY m.created_at ASC`,
     )
-      .bind(...chatBind)
+      .bind(...scopedChatBind)
       .all(),
   ]);
   const mapJson = (value: unknown): string[] =>
