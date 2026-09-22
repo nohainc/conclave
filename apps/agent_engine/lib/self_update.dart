@@ -230,6 +230,7 @@ class AgentUpdater {
 
   Future<void> apply(ReleasePackage release,
       {required Future<bool> Function(File executable) healthCheck,
+      Future<bool> Function()? hasActiveAssignments,
       int maxPackageBytes = 512 * 1024 * 1024}) async {
     if (maxPackageBytes <= 0) {
       throw ArgumentError.value(
@@ -238,6 +239,10 @@ class AgentUpdater {
     if (release.bytes.length > maxPackageBytes) {
       throw StateError(
           'agent release exceeds the $maxPackageBytes byte package limit');
+    }
+    if (await hasActiveAssignments?.call() ?? false) {
+      throw StateError(
+          'agent release update is waiting for active assignments to finish');
     }
     final actual = sha256.convert(release.bytes).toString();
     if (actual != release.digest) {

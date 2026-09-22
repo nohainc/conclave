@@ -254,4 +254,26 @@ void main() {
     expect((await root.list().toList()), isEmpty);
     await root.delete(recursive: true);
   });
+
+  test('does not stage an update while assignments are active', () async {
+    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final bytes = [10, 11, 12];
+    await expectLater(
+      AgentUpdater(root).apply(
+        ReleasePackage(
+          version: '4.0.0',
+          channel: 'stable',
+          bytes: bytes,
+          digest: sha256.convert(bytes).toString(),
+        ),
+        hasActiveAssignments: () async => true,
+        healthCheck: (_) async => true,
+      ),
+      throwsA(predicate((error) => error
+          .toString()
+          .contains('waiting for active assignments'))),
+    );
+    expect(await root.list().toList(), isEmpty);
+    await root.delete(recursive: true);
+  });
 }
