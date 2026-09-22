@@ -47,8 +47,8 @@ Assignment
 | --- | --- |
 | `apps/flutter_app` | Keep; rename to `apps/studio`; web-only target |
 | `apps/worker` | Keep; rename to `apps/cloud` |
-| `apps/agent_app` | Merge into `apps/host` |
-| `apps/agent_engine` | Merge runtime code into `apps/host`; remove IPC/process split |
+| `apps/agent_app` | Merged into `apps/host` |
+| `apps/agent_engine` | Merged into `apps/host`; IPC/process split removed |
 | `worker_plugins/*` | Keep implementations; rename directory to `workers/*` |
 | `packages/agent-protocol` | Replace/merge into Host protocol |
 | `packages/plugin-manifest` | Rename to `packages/worker-manifest` |
@@ -154,7 +154,7 @@ Target scheduler resolves an ephemeral Execution Target:
 
 The resulting snapshot is persisted in Attempt/Assignment.
 
-### `apps/worker/src/agent-gateway.ts`
+### `apps/worker/src/host-gateway.ts`
 
 Keep Durable Object/WebSocket behavior.
 
@@ -166,7 +166,7 @@ Rename to Host Gateway and simplify desired-state payload:
 
 Do not sync configured Worker instances.
 
-### `apps/agent_engine/lib/plugin_manager.dart`
+### `apps/host/lib/plugin_manager.dart`
 
 The implementation is valuable.
 
@@ -181,7 +181,7 @@ Rename/reframe as WorkerManager:
 
 Remove Plugin vocabulary from user-facing protocol.
 
-### `apps/agent_engine/lib/worker_configuration.dart`
+### `apps/host/lib/worker_configuration.dart`
 
 Delete the current desired configured Worker list.
 
@@ -190,7 +190,7 @@ Replace with:
 - Host policy;
 - Credential Profile metadata.
 
-### `apps/agent_app/lib/main.dart`
+### `apps/host/lib/main.dart`
 
 Do not preserve the Agent App <-> Engine IPC architecture.
 

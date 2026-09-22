@@ -197,7 +197,7 @@ type SecurityEnv = Env & {
   readonly CONCLAVE_PLUGIN_PUBLISHER_EMAIL?: string;
   readonly CONCLAVE_AUTH_TOKEN?: string;
   readonly CONCLAVE_PLUGIN_SIGNING_KEY?: string;
-  readonly CONCLAVE_AGENT_SIGNING_KEY?: string;
+  readonly CONCLAVE_HOST_SIGNING_KEY?: string;
   readonly CONCLAVE_SECURITY_KEY?: string;
   readonly CONCLAVE_AUTH_USER_ID?: string;
   readonly CONCLAVE_AUTH_ORGANIZATION_ID?: string;
@@ -5309,7 +5309,7 @@ async function handlePublishHostRelease(
   const digest = computedDigest;
 
   const secretKey =
-    env.CONCLAVE_AGENT_SIGNING_KEY ||
+    env.CONCLAVE_HOST_SIGNING_KEY ||
     (env as unknown as { CONCLAVE_SECURITY_KEY?: string })
       .CONCLAVE_SECURITY_KEY;
   if (!secretKey) {
