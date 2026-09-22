@@ -160,7 +160,11 @@ export async function selectEnsembleCandidateWorkers(
     const rows = await db
       .prepare(
         `SELECT w.id, w.agent_id, w.plugin_id, w.name, w.independence_key,
-                w.roles_json, w.capabilities_json, a.status as agent_status
+                w.roles_json, w.capabilities_json, w.concurrency_limit,
+                (SELECT COUNT(*) FROM worker_assignments wa
+                 WHERE wa.worker_id = w.id
+                   AND wa.status IN ('created', 'dispatched', 'acknowledged', 'running')) AS active_assignments,
+                a.status as agent_status
          FROM workers w
          JOIN agents a ON a.id = w.agent_id
          WHERE w.workspace_id = ?1 AND w.id IN (${placeholders}) AND w.enabled = 1
@@ -175,6 +179,8 @@ export async function selectEnsembleCandidateWorkers(
     for (const row of rows.results || []) {
       if (
         !matchesTask(row, task) ||
+        Number(row.active_assignments || 0) >=
+          Number(row.concurrency_limit || 1) ||
         usedIndependenceKeys.has(String(row.independence_key))
       ) {
         continue;
@@ -189,7 +195,11 @@ export async function selectEnsembleCandidateWorkers(
   const rows = await db
     .prepare(
       `SELECT w.id, w.agent_id, w.plugin_id, w.name, w.independence_key,
-              w.roles_json, w.capabilities_json, w.status as worker_status, a.status as agent_status
+              w.roles_json, w.capabilities_json, w.concurrency_limit,
+              (SELECT COUNT(*) FROM worker_assignments wa
+               WHERE wa.worker_id = w.id
+                 AND wa.status IN ('created', 'dispatched', 'acknowledged', 'running')) AS active_assignments,
+              w.status as worker_status, a.status as agent_status
        FROM workers w
        JOIN agents a ON a.id = w.agent_id
        WHERE w.workspace_id = ?1 AND w.enabled = 1 AND w.status != 'disabled'
@@ -206,7 +216,12 @@ export async function selectEnsembleCandidateWorkers(
 
     const indepKey = String(row.independence_key);
 
-    if (!matchesTask(row, task) || usedIndependenceKeys.has(indepKey)) {
+    if (
+      !matchesTask(row, task) ||
+      Number(row.active_assignments || 0) >=
+        Number(row.concurrency_limit || 1) ||
+      usedIndependenceKeys.has(indepKey)
+    ) {
       continue;
     }
 

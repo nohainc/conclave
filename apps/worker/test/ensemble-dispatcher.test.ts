@@ -287,6 +287,34 @@ describe("Multi-Agent Ensemble Dispatcher (Cloud -> Multi-Agent -> Workers)", ()
         "w-web-worker",
       ]);
     });
+
+    it("excludes Workers at their concurrency limit", async () => {
+      const now = new Date().toISOString();
+      db.prepare(
+        "INSERT INTO attempts (id, task_id, worker_id, attempt_number, input_snapshot_json, status, started_at) VALUES ('att-busy', 'task-arch', 'w-claude-mac', 1, '{}', 'running', ?)",
+      ).run(now);
+      db.prepare(
+        `INSERT INTO worker_assignments (id, workspace_id, run_id, task_id, attempt_id, agent_id, worker_id, plugin_id, status, input_json, idempotency_key, timeout_ms, created_at, updated_at)
+         VALUES ('assignment-busy', 'ws-1', 'run-1', 'task-arch', 'att-busy', 'ag-macbook', 'w-claude-mac', 'conclave.claude-code', 'running', '{}', 'idempotency-busy', 60000, ?, ?)`,
+      ).run(now, now);
+
+      const candidates = await selectEnsembleCandidateWorkers(
+        d1,
+        "ws-1",
+        {
+          id: "task-arch",
+          role: "architect",
+          objective: "Design Architecture",
+          capabilities: ["architecture"],
+        },
+        3,
+      );
+
+      expect(candidates.map((candidate) => candidate.id)).not.toContain(
+        "w-claude-mac",
+      );
+      expect(candidates).toHaveLength(2);
+    });
   });
 
   describe("dispatchEnsembleTaskAssignment", () => {
