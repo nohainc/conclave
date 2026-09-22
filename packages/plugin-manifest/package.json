@@ -1,5 +1,5 @@
 {
-  "name": "@conclave/plugin-sdk",
+  "name": "@conclave/plugin-manifest",
   "version": "0.2.0",
   "private": true,
   "type": "module",

@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import worker from "../src/index.js";
 import { computePackageDigest } from "../../../packages/security/src/index.js";
-import type { WorkerPluginManifest } from "../../../packages/plugin-sdk/src/manifest.js";
+import type { WorkerPluginManifest } from "../../../packages/plugin-manifest/src/manifest.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const schemaPath = path.resolve(__dirname, "../migrations/0001_initial.sql");

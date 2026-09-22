@@ -201,7 +201,7 @@ packages/
   persistence/
   security/
   orchestration/
-  plugin-sdk/
+  plugin-manifest/
   agent-protocol/
   testkit/
 

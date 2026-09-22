@@ -46,7 +46,7 @@ import {
 import {
   validateWorkerPluginManifest,
   compareSemver,
-} from "@conclave/plugin-sdk";
+} from "@conclave/plugin-manifest";
 import {
   AGENT_PROTOCOL_NAME,
   AGENT_PROTOCOL_VERSION,

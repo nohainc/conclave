@@ -9,11 +9,9 @@ export const PluginOperatingSystemSchema = z.enum([
   "windows",
 ]);
 export type PluginOperatingSystem = z.infer<typeof PluginOperatingSystemSchema>;
-export type WorkerPluginOperatingSystem = PluginOperatingSystem;
 
 export const PluginArchitectureSchema = z.enum(["arm64", "x64"]);
 export type PluginArchitecture = z.infer<typeof PluginArchitectureSchema>;
-export type WorkerPluginArchitecture = PluginArchitecture;
 
 export const PluginBillingModeSchema = z.enum([
   "api_metered",
@@ -24,7 +22,6 @@ export const PluginBillingModeSchema = z.enum([
   "free",
 ]);
 export type PluginBillingMode = z.infer<typeof PluginBillingModeSchema>;
-export type WorkerPluginBillingMode = PluginBillingMode;
 
 export const PluginReleaseChannelSchema = z.enum([
   "stable",
@@ -32,7 +29,6 @@ export const PluginReleaseChannelSchema = z.enum([
   "development",
 ]);
 export type PluginReleaseChannel = z.infer<typeof PluginReleaseChannelSchema>;
-export type WorkerPluginReleaseChannel = PluginReleaseChannel;
 
 export const WorkerPluginManifestSchema = z
   .object({

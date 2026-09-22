@@ -150,6 +150,11 @@ Examples:
 - shell/test runner;
 - interactive web AI connector.
 
+Cloud-side TypeScript code does not execute plugins. The `plugin-manifest`
+package only validates manifest metadata, semantic versions, compatibility,
+and declared permissions/billing modes. Plugin execution belongs to the
+language-independent protocol implemented by the Agent Engine.
+
 ### Worker
 A Worker is a configured instance of one Worker Plugin hosted by one Agent Engine.
 

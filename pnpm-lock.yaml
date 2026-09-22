@@ -47,9 +47,9 @@ importers:
       '@conclave/persistence':
         specifier: workspace:*
         version: link:../../packages/persistence
-      '@conclave/plugin-sdk':
+      '@conclave/plugin-manifest':
         specifier: workspace:*
-        version: link:../../packages/plugin-sdk
+        version: link:../../packages/plugin-manifest
       '@conclave/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -85,7 +85,7 @@ importers:
 
   packages/persistence: {}
 
-  packages/plugin-sdk:
+  packages/plugin-manifest:
     dependencies:
       zod:
         specifier: ^3.24.2

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  type WorkerPluginBillingMode,
+  type PluginBillingMode,
   type WorkerPluginManifest,
   validateWorkerPluginManifest,
   isPluginCompatibleWithAgent,
@@ -72,9 +72,7 @@ describe("WorkerPluginManifest", () => {
     expect(() =>
       validateWorkerPluginManifest({
         ...validManifest,
-        billingModes: [
-          "invalid_billing_mode" as unknown as WorkerPluginBillingMode,
-        ],
+        billingModes: ["invalid_billing_mode" as unknown as PluginBillingMode],
       }),
     ).toThrow();
   });
