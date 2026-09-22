@@ -41,6 +41,10 @@ abstract interface class StudioDataSource {
     String? channel,
     String? version,
   });
+  Future<StudioAgentEnrollment> createAgentEnrollment({
+    required String workspaceId,
+    int expiresHours = 24,
+  });
   Future<void> saveWorker({
     required String workspaceId,
     String? workerId,
@@ -298,6 +302,24 @@ class StudioApiClient implements StudioDataSource {
       throw StudioApiException(
           'Agent update announcement failed (${response.statusCode})');
     }
+  }
+
+  @override
+  Future<StudioAgentEnrollment> createAgentEnrollment({
+    required String workspaceId,
+    int expiresHours = 24,
+  }) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/workspaces/$workspaceId/agent-enrollments'),
+      headers: {'content-type': 'application/json'},
+      body: jsonEncode({'expiresHours': expiresHours}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+          'Agent enrollment failed (${response.statusCode})');
+    }
+    return StudioAgentEnrollment.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   @override

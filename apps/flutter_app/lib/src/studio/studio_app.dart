@@ -196,6 +196,32 @@ class _StudioAppState extends State<StudioApp> {
     }
   }
 
+  Future<void> _enrollAgent() async {
+    final workspaceId = snapshot.workspaceId;
+    if (workspaceId == null || workspaceId.isEmpty) return;
+    try {
+      final enrollment = await store.agents.createEnrollment(workspaceId);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Enroll a Conclave Agent'),
+          content: SelectableText(
+            'Copy this one-time token into the Agent setup:\n\n${enrollment.token}\n\nExpires: ${enrollment.expiresAt}',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (mounted) setState(() => loadError = error.toString());
+    }
+  }
+
   Future<void> _editWorker([StudioWorker? existing]) async {
     final workspaceId = snapshot.workspaceId;
     if (workspaceId == null || workspaceId.isEmpty) return;
@@ -1752,8 +1778,19 @@ class _StudioAppState extends State<StudioApp> {
   Widget _agentsView() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _fleetHeader('Agents', 'Execution hosts connected to this workspace.',
-              Icons.computer_outlined),
+          Row(children: [
+            Expanded(
+              child: _fleetHeader(
+                  'Agents',
+                  'Execution hosts connected to this workspace.',
+                  Icons.computer_outlined),
+            ),
+            FilledButton.icon(
+              onPressed: snapshot.workspaceId == null ? null : _enrollAgent,
+              icon: const Icon(Icons.add_link),
+              label: const Text('Enroll Agent'),
+            ),
+          ]),
           const SizedBox(height: 24),
           if (snapshot.agents.isEmpty)
             _emptyFleetCard('No agents enrolled',

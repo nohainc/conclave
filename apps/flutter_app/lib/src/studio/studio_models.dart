@@ -419,6 +419,28 @@ class StudioAgent {
       );
 }
 
+class StudioAgentEnrollment {
+  const StudioAgentEnrollment({
+    required this.id,
+    required this.token,
+    required this.workspaceId,
+    required this.expiresAt,
+  });
+
+  final String id;
+  final String token;
+  final String workspaceId;
+  final String expiresAt;
+
+  factory StudioAgentEnrollment.fromJson(Map<String, dynamic> json) =>
+      StudioAgentEnrollment(
+        id: _string(json, 'id'),
+        token: _string(json, 'token'),
+        workspaceId: _string(json, 'workspaceId'),
+        expiresAt: _string(json, 'expiresAt'),
+      );
+}
+
 class StudioPlugin {
   const StudioPlugin({
     required this.id,

@@ -98,6 +98,9 @@ class AgentStore {
   final StudioDataSource source;
   List<StudioAgent> items = const [];
 
+  Future<StudioAgentEnrollment> createEnrollment(String workspaceId) =>
+      source.createAgentEnrollment(workspaceId: workspaceId);
+
   void replace(List<StudioAgent> value) => items = List.unmodifiable(value);
 
   Future<void> revoke(String workspaceId, String agentId) =>

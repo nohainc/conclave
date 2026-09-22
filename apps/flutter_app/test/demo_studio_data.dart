@@ -91,6 +91,19 @@ class DemoStudioDataSource implements StudioDataSource {
   }) async {}
 
   @override
+  Future<StudioAgentEnrollment> createAgentEnrollment({
+    required String workspaceId,
+    int expiresHours = 24,
+  }) async {
+    return StudioAgentEnrollment(
+      id: 'enrollment-demo',
+      token: 'conclave_enroll_demo',
+      workspaceId: workspaceId,
+      expiresAt: 'Tomorrow',
+    );
+  }
+
+  @override
   Future<void> saveWorker({
     required String workspaceId,
     String? workerId,
