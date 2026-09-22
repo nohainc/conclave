@@ -504,6 +504,25 @@ describe("Projects and Chats API (Architecture v2)", () => {
     );
     expect(ownerCrossWorkspaceRes.status).toBe(404);
 
+    // A non-active membership must not grant workspace visibility.
+    db.prepare(
+      "INSERT INTO workspace_memberships (id, workspace_id, user_id, role, status, created_at, updated_at) VALUES (?, ?, ?, 'member', 'suspended', ?, ?)",
+    ).run(
+      `wm-suspended-${Date.now()}`,
+      wsB.id,
+      userA.userId,
+      new Date().toISOString(),
+      new Date().toISOString(),
+    );
+    const suspendedMemberRes = await worker.fetch(
+      new Request(`https://cloud.conclave.internal/api/workspaces/${wsB.id}`, {
+        method: "GET",
+        headers: { authorization: `Bearer ${userA.token}` },
+      }),
+      mockEnv,
+    );
+    expect(suspendedMemberRes.status).toBe(404);
+
     // User B attempts to access Project A using Workspace B header -> forbidden/not found
     const getProjRes = await worker.fetch(
       new Request(`https://cloud.conclave.internal/api/projects/${projA.id}`, {
