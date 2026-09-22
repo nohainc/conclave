@@ -2,6 +2,7 @@ import type {
   ArtifactRecord,
   CompletionCriterionRecord,
   GoalRecord,
+  JsonValue,
   RunEventRecord,
   RunRecord,
   TaskRecord,
@@ -29,6 +30,12 @@ export interface D1DatabaseLike {
 
 function json<T>(value: T): string {
   return JSON.stringify(value);
+}
+
+function jsonObject(value: JsonValue): Record<string, JsonValue> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, JsonValue>)
+    : {};
 }
 
 function parse<T>(value: unknown, fallback: T): T {
@@ -74,14 +81,24 @@ export class D1GoalRepository {
   }
 
   async save(goal: GoalRecord): Promise<void> {
+    const project = await this.db
+      .prepare("SELECT workspace_id FROM projects WHERE id = ?1")
+      .bind(goal.projectId)
+      .first<{ workspace_id: string }>();
+    if (!project?.workspace_id) {
+      throw new Error(
+        `Cannot save Goal for unknown Project: ${goal.projectId}`,
+      );
+    }
     await this.db
       .prepare(
-        `INSERT INTO goals (id, project_id, original_message, objective, constraints_json, completion_criteria_json, verification_policy_json, status, created_at, updated_at)
-      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+        `INSERT INTO goals (id, workspace_id, project_id, original_message, objective, constraints_json, completion_criteria_json, verification_policy_json, status, created_at, updated_at)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
       ON CONFLICT(id) DO UPDATE SET project_id=excluded.project_id, original_message=excluded.original_message, objective=excluded.objective, constraints_json=excluded.constraints_json, completion_criteria_json=excluded.completion_criteria_json, verification_policy_json=excluded.verification_policy_json, status=excluded.status, updated_at=excluded.updated_at`,
       )
       .bind(
         goal.id,
+        project.workspace_id,
         goal.projectId,
         goal.originalMessage,
         goal.objective,
@@ -181,12 +198,25 @@ export class D1RunRepository {
     };
   }
   async save(run: RunRecord): Promise<void> {
+    const scope = await this.db
+      .prepare(
+        `SELECT p.workspace_id, p.id AS project_id
+         FROM goals g JOIN projects p ON p.id = g.project_id
+         WHERE g.id = ?1`,
+      )
+      .bind(run.goalId)
+      .first<{ workspace_id: string; project_id: string }>();
+    if (!scope?.workspace_id || !scope.project_id) {
+      throw new Error(`Cannot save Run for unknown Goal: ${run.goalId}`);
+    }
     await this.db
       .prepare(
-        `INSERT INTO runs (id, goal_id, workflow_instance_id, parent_run_id, policy_snapshot_json, current_phase_id, status, started_at, finished_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11) ON CONFLICT(id) DO UPDATE SET workflow_instance_id=excluded.workflow_instance_id, status=excluded.status, current_phase_id=excluded.current_phase_id, started_at=excluded.started_at, finished_at=excluded.finished_at, updated_at=excluded.updated_at`,
+        `INSERT INTO runs (id, workspace_id, project_id, goal_id, workflow_instance_id, parent_run_id, policy_snapshot_json, current_phase_id, status, started_at, finished_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13) ON CONFLICT(id) DO UPDATE SET workflow_instance_id=excluded.workflow_instance_id, status=excluded.status, current_phase_id=excluded.current_phase_id, started_at=excluded.started_at, finished_at=excluded.finished_at, updated_at=excluded.updated_at`,
       )
       .bind(
         run.id,
+        scope.workspace_id,
+        scope.project_id,
         run.goalId,
         run.workflowInstanceId ?? null,
         run.parentRunId,
@@ -384,37 +414,52 @@ export class D1ArtifactRepository {
     return row ? toArtifact(row) : null;
   }
   async save(record: ArtifactRecord): Promise<void> {
+    const scope = await this.db
+      .prepare(
+        `SELECT p.workspace_id, p.id AS project_id
+         FROM runs r JOIN projects p ON p.id = r.project_id
+         WHERE r.id = ?1`,
+      )
+      .bind(record.runId)
+      .first<{ workspace_id: string; project_id: string }>();
+    if (!scope?.workspace_id || !scope.project_id) {
+      throw new Error(`Cannot save Artifact for unknown Run: ${record.runId}`);
+    }
     const payload =
       record.payload.kind === "inline"
         ? {
             storageKind: "inline",
-            inlinePayload: record.payload.content,
-            bucket: null,
-            key: null,
+            inlineContent: record.payload.content,
+            storageKey: null,
+            provenance: record.provenance,
           }
         : {
             storageKind: "r2",
-            inlinePayload: null,
-            bucket: record.payload.bucket,
-            key: record.payload.key,
+            inlineContent: null,
+            storageKey: record.payload.key,
+            provenance: {
+              ...jsonObject(record.provenance),
+              r2Bucket: record.payload.bucket,
+            },
           };
     await this.db
       .prepare(
-        "INSERT INTO artifacts (id, run_id, task_id, attempt_id, media_type, storage_kind, inline_payload, r2_bucket, r2_key, content_digest, size_bytes, provenance_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+        "INSERT INTO artifacts (id, workspace_id, project_id, run_id, task_id, attempt_id, assignment_id, media_type, content_digest, storage_kind, storage_key, inline_content, size_bytes, provenance_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
       )
       .bind(
         record.id,
+        scope.workspace_id,
+        scope.project_id,
         record.runId,
         record.taskId,
         record.attemptId,
         record.mediaType,
-        payload.storageKind,
-        payload.inlinePayload,
-        payload.bucket,
-        payload.key,
         record.contentDigest,
+        payload.storageKind,
+        payload.storageKey,
+        payload.inlineContent,
         record.sizeBytes,
-        json(record.provenance),
+        json(payload.provenance),
         record.createdAt,
       )
       .run();
@@ -429,6 +474,8 @@ export class D1ArtifactRepository {
 }
 
 function toArtifact(row: Record<string, unknown>): ArtifactRecord {
+  const provenance = parse<JsonValue>(row.provenance_json, {});
+  const provenanceObject = jsonObject(provenance);
   return {
     id: String(row.id),
     runId: String(row.run_id),
@@ -437,16 +484,16 @@ function toArtifact(row: Record<string, unknown>): ArtifactRecord {
     mediaType: String(row.media_type),
     payload:
       row.storage_kind === "inline"
-        ? { kind: "inline", content: String(row.inline_payload) }
+        ? { kind: "inline", content: String(row.inline_content) }
         : {
             kind: "r2",
-            bucket: String(row.r2_bucket),
-            key: String(row.r2_key),
+            bucket: String(provenanceObject.r2Bucket ?? ""),
+            key: String(row.storage_key),
             sizeBytes: Number(row.size_bytes),
           },
     contentDigest: String(row.content_digest),
     sizeBytes: Number(row.size_bytes),
-    provenance: parse(row.provenance_json, {}),
+    provenance,
     createdAt: String(row.created_at),
   };
 }

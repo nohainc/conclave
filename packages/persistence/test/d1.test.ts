@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   D1GoalRepository,
   D1EventRepository,
+  D1RunRepository,
   R2ArtifactStore,
   ThresholdArtifactStore,
   type D1DatabaseLike,
@@ -72,6 +73,48 @@ describe("Cloudflare persistence adapters", () => {
     expect(goal?.completionCriteria[0]?.verificationRequirement).toBe(
       "executable_check",
     );
+  });
+
+  it("resolves tenant scope before saving Goals and Runs", async () => {
+    const goalRepository = new D1GoalRepository(
+      new FakeDb([{ workspace_id: "workspace-1" }, null]),
+    );
+    await expect(
+      goalRepository.save({
+        id: "goal-1",
+        projectId: "project-1",
+        originalMessage: "Fix it",
+        objective: "Fix it",
+        constraints: [],
+        completionCriteria: [],
+        verificationPolicy: {},
+        status: "ready",
+        createdAt: "now",
+        updatedAt: "now",
+      }),
+    ).resolves.toBeUndefined();
+
+    const runRepository = new D1RunRepository(
+      new FakeDb([
+        { workspace_id: "workspace-1", project_id: "project-1" },
+        null,
+      ]),
+    );
+    await expect(
+      runRepository.save({
+        id: "run-1",
+        goalId: "goal-1",
+        workflowInstanceId: null,
+        parentRunId: null,
+        policySnapshot: {},
+        currentPhaseId: null,
+        status: "running",
+        startedAt: "now",
+        finishedAt: null,
+        createdAt: "now",
+        updatedAt: "now",
+      }),
+    ).resolves.toBeUndefined();
   });
 
   it("reads ordered run events and stores large payloads in R2", async () => {
