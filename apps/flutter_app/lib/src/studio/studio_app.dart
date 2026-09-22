@@ -168,17 +168,6 @@ class _StudioAppState extends State<StudioApp> {
     }
   }
 
-  Future<void> _setWorkerEnabled(String workerId, bool enabled) async {
-    final workspaceId = snapshot.workspaceId;
-    if (workspaceId == null || workspaceId.isEmpty) return;
-    try {
-      await store.workers.setEnabled(workspaceId, workerId, enabled);
-      await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
-    } catch (error) {
-      if (mounted) setState(() => loadError = error.toString());
-    }
-  }
-
   Future<void> _revokeAgent(String agentId) async {
     final workspaceId = snapshot.workspaceId;
     if (workspaceId == null || workspaceId.isEmpty) return;
@@ -221,6 +210,9 @@ class _StudioAppState extends State<StudioApp> {
     }
   }
 
+  // Retained only while the legacy Studio data adapter is being retired. It
+  // is no longer reachable from the v4 catalog UI.
+  // ignore: unused_element
   Future<void> _editWorker([StudioWorker? existing]) async {
     if (snapshot.agents.isEmpty || snapshot.plugins.isEmpty) {
       if (mounted) {
@@ -2032,26 +2024,11 @@ class _StudioAppState extends State<StudioApp> {
             ),
             const SizedBox(height: 16),
           ],
-          Align(
-              alignment: Alignment.centerRight,
-              child: SizedBox(
-                height: 48,
-                child: FilledButton.icon(
-                  key: const Key('new-worker-button'),
-                  onPressed: () {
-                    setState(() => workerActionMessage = null);
-                    unawaited(_editWorker());
-                  },
-                  icon: const Icon(Icons.add),
-                  label: const Text('New Worker'),
-                ),
-              )),
-          const SizedBox(height: 16),
           if (snapshot.workers.isEmpty)
-            _emptyFleetCard('No workers configured',
-                'Create a Worker after connecting an Agent and Plugin.')
+            _emptyFleetCard('No Worker catalog entries',
+                'Workers are selected dynamically from catalog availability, accounts, and execution preferences.')
           else ...[
-            const Text('Configured resources',
+            const Text('Worker catalog',
                 style: TextStyle(color: Color(0xff777683), fontSize: 13)),
             const SizedBox(height: 24),
             _policyCard(),
@@ -2076,20 +2053,12 @@ class _StudioAppState extends State<StudioApp> {
                   subtitle: Text(
                       '${worker.agentName} · ${worker.pluginName}\n${worker.roles.isEmpty ? worker.role : worker.roles.join(', ')} · ${worker.capabilities.join(' · ')}'),
                   isThreeLine: true,
-                  trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                    IconButton(
-                        tooltip: 'Edit Worker',
-                        onPressed: () => _editWorker(worker),
-                        icon: const Icon(Icons.edit_outlined)),
-                    Switch(
-                      value: workerEnabled[worker.id] ??
-                          worker.status.toLowerCase() != 'offline',
-                      onChanged: (value) {
-                        setState(() => workerEnabled[worker.id] = value);
-                        _setWorkerEnabled(worker.id, value);
-                      },
-                    ),
-                  ]),
+                  trailing: _statusChip(
+                    worker.status,
+                    worker.status.toLowerCase() == 'online'
+                        ? const Color(0xff3ca879)
+                        : const Color(0xff777683),
+                  ),
                 ),
               ),
             ),

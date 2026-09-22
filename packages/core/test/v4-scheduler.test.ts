@@ -1,0 +1,153 @@
+import { describe, expect, it } from "vitest";
+import {
+  resolveExecutionTarget,
+  type AvailableWorkerAccount,
+  type CredentialGrant,
+  type CredentialProfile,
+} from "../src/index.js";
+
+const profile = (id: string, ownerId = "user-owner"): CredentialProfile => ({
+  id,
+  ownerType: "user",
+  ownerId,
+  workspaceId: "ws-1",
+  workerId: "codex",
+  displayName: id,
+  authType: "oauth",
+  visibility: "workspace",
+  createdAt: "2026-09-23T00:00:00Z",
+  updatedAt: "2026-09-23T00:00:00Z",
+});
+
+const grant = (profileId: string, userId: string): CredentialGrant => ({
+  id: `grant-${profileId}-${userId}`,
+  credentialProfileId: profileId,
+  granteeType: "user",
+  granteeId: userId,
+  usePermission: "use",
+  grantedBy: "user-owner",
+  createdAt: "2026-09-23T00:00:00Z",
+});
+
+const candidate = (
+  overrides: Partial<AvailableWorkerAccount> = {},
+): AvailableWorkerAccount => ({
+  workerId: "codex",
+  hostId: "host-1",
+  workerVersion: "1.0.0",
+  capabilities: ["research", "code"],
+  roles: ["researcher", "implementer"],
+  model: "codex-1",
+  billingMode: "subscription",
+  activeAssignments: 0,
+  concurrencyLimit: 2,
+  credentialProfile: profile("owner-codex"),
+  grants: [],
+  ...overrides,
+});
+
+describe("v4 dynamic execution resolution", () => {
+  it("uses one catalog Worker for different task roles", () => {
+    const available = [candidate()];
+    expect(
+      resolveExecutionTarget(
+        {
+          role: "researcher",
+          capabilities: ["research"],
+          requesterUserId: "user-owner",
+        },
+        available,
+      ).status,
+    ).toBe("ready");
+    expect(
+      resolveExecutionTarget(
+        {
+          role: "implementer",
+          capabilities: ["code"],
+          requesterUserId: "user-owner",
+        },
+        available,
+      ).status,
+    ).toBe("ready");
+  });
+
+  it("selects reviewer capability and honors explicit overrides", () => {
+    const available = [
+      candidate({ workerId: "codex", roles: ["implementer"] }),
+      candidate({
+        workerId: "reviewer",
+        roles: ["reviewer"],
+        credentialProfile: profile("reviewer-account"),
+      }),
+    ];
+    const reviewer = resolveExecutionTarget(
+      { role: "reviewer", capabilities: [], requesterUserId: "user-owner" },
+      available,
+    );
+    expect(reviewer).toMatchObject({ status: "ready", workerId: "reviewer" });
+    const explicit = resolveExecutionTarget(
+      {
+        role: "implementer",
+        capabilities: [],
+        requesterUserId: "user-owner",
+        explicitWorkerId: "codex",
+      },
+      available,
+    );
+    expect(explicit).toMatchObject({
+      status: "ready",
+      workerId: "codex",
+      reason: "explicit",
+    });
+  });
+
+  it("honors Auto and user subscription/API preference", () => {
+    const available = [
+      candidate({
+        billingMode: "api",
+        credentialProfile: profile("api-account"),
+      }),
+      candidate({
+        billingMode: "subscription",
+        credentialProfile: profile("subscription-account"),
+      }),
+    ];
+    const automatic = resolveExecutionTarget(
+      { requesterUserId: "user-owner" },
+      available,
+      {},
+      { executionPreference: "api" },
+    );
+    expect(automatic).toMatchObject({
+      status: "ready",
+      credentialProfileId: "api-account",
+    });
+  });
+
+  it("resolves a granted account without exposing its secret", () => {
+    const shared = candidate({
+      credentialProfile: profile("shared-codex"),
+      grants: [grant("shared-codex", "user-consumer")],
+    });
+    const resolved = resolveExecutionTarget(
+      { requesterUserId: "user-consumer" },
+      [shared],
+    );
+    expect(resolved).toMatchObject({
+      status: "ready",
+      credentialProfileId: "shared-codex",
+    });
+  });
+
+  it("returns setup_required when a required credential is unavailable", () => {
+    const result = resolveExecutionTarget(
+      { requesterUserId: "user-consumer", explicitWorkerId: "codex" },
+      [candidate()],
+    );
+    expect(result).toEqual({
+      status: "setup_required",
+      workerId: "codex",
+      reason: "missing_credential",
+    });
+  });
+});

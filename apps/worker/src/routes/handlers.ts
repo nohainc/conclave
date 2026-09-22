@@ -2745,6 +2745,78 @@ async function handleAnnounceHostUpdate(
   });
 }
 
+export async function handleListWorkerCatalog(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  authorize(context, "hosts:read");
+  requireWorkspaceContext(context, env, workspaceId);
+  const rows = await env.CONCLAVE_DB.prepare(
+    `SELECT w.id, w.display_name, w.description, w.publisher, w.status,
+            wv.version, wv.capabilities_json, wv.credential_requirements_json
+       FROM workers w
+       LEFT JOIN worker_versions wv
+         ON wv.worker_id = w.id AND wv.is_revoked = 0
+        AND wv.created_at = (SELECT MAX(latest.created_at) FROM worker_versions latest
+                             WHERE latest.worker_id = w.id AND latest.is_revoked = 0)
+      WHERE w.status != 'revoked'
+      ORDER BY w.display_name, w.id`,
+  ).all<Record<string, unknown>>();
+  return json({
+    workers: (rows.results ?? []).map((row) => ({
+      id: String(row.id),
+      displayName: String(row.display_name),
+      description: String(row.description ?? ""),
+      publisher: String(row.publisher),
+      status: String(row.status),
+      latestVersion: row.version == null ? null : String(row.version),
+      capabilities: parseJson(row.capabilities_json, []),
+      credentialRequirements: parseJson(row.credential_requirements_json, []),
+    })),
+  });
+}
+
+export async function handleGetWorkerCatalog(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  workerId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  authorize(context, "hosts:read");
+  requireWorkspaceContext(context, env, workspaceId);
+  const row = await env.CONCLAVE_DB.prepare(
+    `SELECT w.id, w.display_name, w.description, w.publisher, w.status,
+            wv.version, wv.capabilities_json, wv.credential_requirements_json
+       FROM workers w
+       LEFT JOIN worker_versions wv
+         ON wv.worker_id = w.id AND wv.is_revoked = 0
+        AND wv.created_at = (SELECT MAX(latest.created_at) FROM worker_versions latest
+                             WHERE latest.worker_id = w.id AND latest.is_revoked = 0)
+      WHERE w.id = ?1 AND w.status != 'revoked'`,
+  )
+    .bind(workerId)
+    .first<Record<string, unknown>>();
+  if (!row)
+    return json({ error: "Worker catalog entry not found" }, { status: 404 });
+  return json({
+    worker: {
+      id: String(row.id),
+      displayName: String(row.display_name),
+      description: String(row.description ?? ""),
+      publisher: String(row.publisher),
+      status: String(row.status),
+      latestVersion: row.version == null ? null : String(row.version),
+      capabilities: parseJson(row.capabilities_json, []),
+      credentialRequirements: parseJson(row.credential_requirements_json, []),
+    },
+  });
+}
+
 async function handleListWorkers(
   request: Request,
   env: SecurityEnv,
@@ -5473,11 +5545,6 @@ export {
   handleGetHost,
   handleRevokeHost,
   handleAnnounceHostUpdate,
-  handleListWorkers,
-  handleCreateWorker,
-  handleGetWorker,
-  handleUpdateWorker,
-  handleDeleteWorker,
   handleDispatchEnsembleTaskAssignment,
   handleDispatchTaskAssignment,
   handleCancelTaskAssignment,

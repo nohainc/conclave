@@ -56,6 +56,8 @@ describe("Architecture v4 clean D1 schema", () => {
       "credential_profiles",
       "credential_grants",
       "worker_assignments",
+      "project_execution_preferences",
+      "user_execution_preferences",
     ]) {
       expect(names).toContain(table);
     }

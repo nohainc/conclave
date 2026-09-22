@@ -323,7 +323,7 @@ export async function routeWorkerRequest(
       /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/workers$/,
     );
     if (request.method === "GET" && workersMatch?.[1]) {
-      return await handlers.handleListWorkers!(
+      return await handlers.handleListWorkerCatalog!(
         request,
         env,
         workersMatch[1],
@@ -331,11 +331,9 @@ export async function routeWorkerRequest(
       );
     }
     if (request.method === "POST" && workersMatch?.[1]) {
-      return await handlers.handleCreateWorker!(
-        request,
-        env,
-        workersMatch[1],
-        ctx,
+      return deps.json(
+        { error: "Configured Worker instances were removed in v4" },
+        { status: 410 },
       );
     }
     const singleWorkerMatch = url.pathname.match(
@@ -346,7 +344,7 @@ export async function routeWorkerRequest(
       singleWorkerMatch?.[1] &&
       singleWorkerMatch?.[2]
     ) {
-      return await handlers.handleGetWorker!(
+      return await handlers.handleGetWorkerCatalog!(
         request,
         env,
         singleWorkerMatch[1],
@@ -359,12 +357,9 @@ export async function routeWorkerRequest(
       singleWorkerMatch?.[1] &&
       singleWorkerMatch?.[2]
     ) {
-      return await handlers.handleUpdateWorker!(
-        request,
-        env,
-        singleWorkerMatch[1],
-        singleWorkerMatch[2],
-        ctx,
+      return deps.json(
+        { error: "Configured Worker instances were removed in v4" },
+        { status: 410 },
       );
     }
     if (
@@ -372,12 +367,9 @@ export async function routeWorkerRequest(
       singleWorkerMatch?.[1] &&
       singleWorkerMatch?.[2]
     ) {
-      return await handlers.handleDeleteWorker!(
-        request,
-        env,
-        singleWorkerMatch[1],
-        singleWorkerMatch[2],
-        ctx,
+      return deps.json(
+        { error: "Configured Worker instances were removed in v4" },
+        { status: 410 },
       );
     }
 

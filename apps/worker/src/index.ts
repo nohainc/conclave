@@ -56,11 +56,8 @@ const routeHandlers = {
   handleGetHost: handlers.handleGetHost,
   handleRevokeHost: handlers.handleRevokeHost,
   handleAnnounceHostUpdate: handlers.handleAnnounceHostUpdate,
-  handleListWorkers: handlers.handleListWorkers,
-  handleCreateWorker: handlers.handleCreateWorker,
-  handleGetWorker: handlers.handleGetWorker,
-  handleUpdateWorker: handlers.handleUpdateWorker,
-  handleDeleteWorker: handlers.handleDeleteWorker,
+  handleListWorkerCatalog: handlers.handleListWorkerCatalog,
+  handleGetWorkerCatalog: handlers.handleGetWorkerCatalog,
   handleDispatchEnsembleTaskAssignment:
     handlers.handleDispatchEnsembleTaskAssignment,
   handleDispatchTaskAssignment: handlers.handleDispatchTaskAssignment,

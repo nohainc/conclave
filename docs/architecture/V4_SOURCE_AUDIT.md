@@ -141,7 +141,7 @@ Target:
 
 ### `apps/worker/src/assignment-dispatcher.ts`
 
-Current scheduler selects a configured Worker row joined to an Agent.
+The v4 scheduler resolves a Worker dynamically from task requirements, catalog availability, project preferences, user billing preference, Hosts, and authorized Credential Profiles. Configured Worker rows are no longer an execution identity.
 
 Target scheduler resolves an ephemeral Execution Target:
 - eligible Host;
@@ -164,7 +164,7 @@ Rename to Host Gateway and simplify desired-state payload:
 - pending Assignments;
 - Host policy/update info.
 
-Do not sync configured Worker instances.
+Do not sync configured Worker instances; sync Worker catalog availability and Host installations only.
 
 ### `apps/host/lib/worker_manager.dart`
 

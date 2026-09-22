@@ -91,6 +91,30 @@ CREATE TABLE projects (
 );
 CREATE INDEX idx_projects_workspace ON projects(workspace_id);
 
+CREATE TABLE project_execution_preferences (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
+  preferred_worker_ids_json TEXT NOT NULL DEFAULT '[]',
+  preferred_model_ids_json TEXT NOT NULL DEFAULT '[]',
+  preferred_credential_profile_ids_json TEXT NOT NULL DEFAULT '[]',
+  quality TEXT NOT NULL DEFAULT 'balanced' CHECK (quality IN ('fast', 'balanced', 'high')),
+  budget_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE user_execution_preferences (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  preferred_private_credential_profile_id TEXT,
+  execution_preference TEXT NOT NULL DEFAULT 'auto' CHECK (execution_preference IN ('auto', 'subscription', 'api')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (workspace_id, user_id)
+);
+CREATE INDEX idx_user_execution_preferences_user ON user_execution_preferences(user_id, workspace_id);
+
 CREATE TABLE project_memberships (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
