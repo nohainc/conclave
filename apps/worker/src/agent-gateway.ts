@@ -221,7 +221,7 @@ export class AgentGateway implements DurableObject {
     this.socket = server;
     this.agentId = agentId;
     this.workspaceId = workspaceId;
-    this.sessionId = `sess-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    this.sessionId = `sess-${crypto.randomUUID()}`;
 
     const now = new Date().toISOString();
 
