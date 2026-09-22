@@ -4,7 +4,8 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo_root"
 
-flutter build macos --release --build-name="${CONCLAVE_AGENT_VERSION:-0.1.0}"
+(cd apps/agent_app && \
+  flutter build macos --release --build-name="${CONCLAVE_AGENT_VERSION:-0.1.0}")
 dart compile exe apps/agent_engine/bin/conclave_agent_engine.dart \
   -o apps/agent_app/build/macos/Build/Products/Release/conclave_agent_engine
 

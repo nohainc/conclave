@@ -16,6 +16,8 @@ app_bundle=""
 engine=""
 output=""
 version="${CONCLAVE_AGENT_VERSION:-0.1.0}"
+protocol_version="${CONCLAVE_PROTOCOL_VERSION:-2.0}"
+release_signature="${CONCLAVE_RELEASE_SIGNATURE:-}"
 signing_identity="${CONCLAVE_CODESIGN_IDENTITY:-}"
 require_signature="${CONCLAVE_REQUIRE_SIGNATURE:-0}"
 
@@ -74,6 +76,14 @@ done
   echo "Invalid Agent version: $version" >&2
   exit 2
 }
+[[ "$protocol_version" =~ ^[0-9]+\.[0-9]+$ ]] || {
+  echo "Invalid protocol version: $protocol_version" >&2
+  exit 2
+}
+[[ "$release_signature" =~ ^[A-Za-z0-9._:-]*$ ]] || {
+  echo "Invalid release signature metadata" >&2
+  exit 2
+}
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 stage="$(mktemp -d "${TMPDIR:-/tmp}/conclave-agent-package.XXXXXX")"
@@ -81,7 +91,9 @@ cleanup() { rm -rf "$stage"; }
 trap cleanup EXIT
 
 mkdir -p "$stage/Conclave AX Agent/bin" "$stage/Conclave AX Agent/scripts"
-cp -R "$app_bundle" "$stage/Conclave AX Agent/"
+# Normalize the bundle name so the archive's installer has a stable layout,
+# regardless of the Flutter target name used by the build environment.
+cp -R "$app_bundle" "$stage/Conclave AX Agent/Conclave AX.app"
 install -m 0755 "$engine" "$stage/Conclave AX Agent/bin/conclave_agent_engine"
 install -m 0755 "$repo_root/scripts/install-agent-macos.sh" \
   "$stage/Conclave AX Agent/scripts/install-agent-macos.sh"
@@ -111,9 +123,11 @@ cat > "$stage/Conclave AX Agent/release.json" <<EOF
 {
   "product": "conclave-agent",
   "version": "$version",
+  "protocolVersion": "$protocol_version",
   "operatingSystem": "macos",
   "architecture": "$(uname -m)",
   "signed": $signed,
+  "signature": "${release_signature}",
   "engineSha256": "$engine_digest",
   "installer": "scripts/install-agent-macos.sh",
   "uninstaller": "scripts/uninstall-agent-macos.sh"

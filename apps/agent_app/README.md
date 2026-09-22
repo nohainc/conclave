@@ -20,3 +20,8 @@ scripts/package-agent-macos.sh \
 For a release build, provide `--signing-identity` (or
 `CONCLAVE_CODESIGN_IDENTITY`) and notarize the resulting signed app through
 the release pipeline. Local unsigned packages are intended for development.
+
+The resulting archive contains a self-contained installer under `scripts/`.
+After extracting it, run `Conclave AX Agent/scripts/install-agent-macos.sh`
+without path arguments. Re-running the installer performs an upgrade, and the
+bundled uninstaller preserves local data unless `--purge` is supplied.

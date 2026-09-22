@@ -47,3 +47,20 @@ digest. Notarization remains a release-CI step after signing.
 The release manifest must include the Agent version, platform, architecture, protocol version, SHA-256 digest, and signature. Updates are staged and health-checked by the Engine before activation.
 
 Signing and notarization identities are intentionally supplied by CI secrets; they are never stored in this repository.
+
+## Install the distributed archive
+
+Extract the archive and run the bundled installer. It resolves the normalized
+app, engine, and release manifest relative to itself, so no source checkout or
+path arguments are required:
+
+```sh
+"Conclave AX Agent/scripts/install-agent-macos.sh"
+```
+
+The same installer is safe to run again for an upgrade. To remove the
+installation while retaining local credentials, repositories, and logs:
+
+```sh
+"Conclave AX Agent/scripts/uninstall-agent-macos.sh" --confirm
+```

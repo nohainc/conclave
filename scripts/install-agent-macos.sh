@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: install-agent-macos.sh --app-bundle PATH --engine PATH [--version VERSION]
+Usage: install-agent-macos.sh [--app-bundle PATH] [--engine PATH] [--version VERSION]
 
 Installs the Flutter Agent App and registers the Dart Agent Engine as a
 per-user launch-at-login service. Credentials and enrollment are configured
@@ -11,9 +11,15 @@ by the Agent App; this script never writes them to the launch agent.
 EOF
 }
 
-app_bundle=""
-engine=""
-version="${CONCLAVE_AGENT_VERSION:-0.1.0}"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+package_root="$(cd "$script_dir/.." && pwd)"
+app_bundle="$package_root/Conclave AX.app"
+engine="$package_root/bin/conclave_agent_engine"
+version="${CONCLAVE_AGENT_VERSION:-}"
+if [[ -z "$version" && -f "$package_root/release.json" ]]; then
+  version="$(sed -n 's/.*"version": "\([^"]*\)".*/\1/p' "$package_root/release.json" | head -n 1)"
+fi
+version="${version:-0.1.0}"
 while (($# > 0)); do
   case "$1" in
     --app-bundle)
