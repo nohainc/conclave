@@ -288,7 +288,7 @@ class PluginManager {
       await File('${staging.path}/manifest.json').writeAsString(
         jsonEncode({
           ...manifest.toJson(),
-          'digest': actual,
+          'digest': package.digest,
           if (package.signature != null) 'signature': package.signature,
         }),
         flush: true,
@@ -314,7 +314,7 @@ class PluginManager {
     final digest = manifest['digest'];
     if (digest is! String || digest.isEmpty) return null;
     final actual = sha256.convert(await packageFile.readAsBytes()).toString();
-    return actual == digest ? actual : null;
+    return _digestMatches(digest, actual) ? actual : null;
   }
 
   void _validatePathComponent(String value, String label) {
@@ -451,7 +451,8 @@ class PluginManager {
     final supportedPlatforms = manifest['supportedPlatforms'];
     if (supportedPlatforms is List &&
         supportedPlatforms.isNotEmpty &&
-        !supportedPlatforms.contains(platformKey)) {
+        !supportedPlatforms.contains(platformKey) &&
+        !supportedPlatforms.contains(platformKey.split('-').first)) {
       throw StateError('plugin is not compatible with platform $platformKey');
     }
     final expectedDigest = manifest['digest'];
@@ -460,7 +461,7 @@ class PluginManager {
     }
     final actualDigest =
         sha256.convert(await packageFile.readAsBytes()).toString();
-    if (actualDigest != expectedDigest) {
+    if (!_digestMatches(expectedDigest, actualDigest)) {
       throw StateError('plugin package was modified after installation');
     }
     final policy = trustPolicy;
@@ -488,6 +489,9 @@ class PluginManager {
     }
     return manifest;
   }
+
+  bool _digestMatches(String expected, String actual) =>
+      expected == actual || expected == 'sha256:$actual';
 
   void _requirePermissions(Iterable<PluginPermission> permissions) {
     const policy = PluginTrustPolicy();
