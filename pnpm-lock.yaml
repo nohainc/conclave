@@ -41,9 +41,6 @@ importers:
       '@conclave/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@conclave/local-runtime':
-        specifier: workspace:*
-        version: link:../../packages/local-runtime
       '@conclave/orchestration':
         specifier: workspace:*
         version: link:../../packages/orchestration
@@ -72,23 +69,12 @@ importers:
         specifier: workspace:*
         version: link:../protocol
 
-  packages/local-runtime:
-    dependencies:
-      '@conclave/core':
-        specifier: workspace:*
-        version: link:../core
-      '@conclave/protocol':
-        specifier: workspace:*
-        version: link:../protocol
 
   packages/orchestration:
     dependencies:
       '@conclave/core':
         specifier: workspace:*
         version: link:../core
-      '@conclave/local-runtime':
-        specifier: workspace:*
-        version: link:../local-runtime
       '@conclave/persistence':
         specifier: workspace:*
         version: link:../persistence
@@ -96,24 +82,11 @@ importers:
         specifier: workspace:*
         version: link:../protocol
 
-    devDependencies:
-      '@conclave/providers':
-        specifier: workspace:*
-        version: link:../providers
 
   packages/persistence: {}
 
   packages/plugin-sdk:
     dependencies:
-      '@conclave/agent-protocol':
-        specifier: workspace:*
-        version: link:../agent-protocol
-      '@conclave/core':
-        specifier: workspace:*
-        version: link:../core
-      '@conclave/security':
-        specifier: workspace:*
-        version: link:../security
       zod:
         specifier: ^3.24.2
         version: 3.25.76
@@ -124,14 +97,6 @@ importers:
         specifier: ^4.1.11
         version: 4.6.5
 
-  packages/providers:
-    dependencies:
-      '@conclave/core':
-        specifier: workspace:*
-        version: link:../core
-      '@conclave/protocol':
-        specifier: workspace:*
-        version: link:../protocol
 
   packages/sdk: {}
 
