@@ -2603,6 +2603,7 @@ async function handleCreateWorker(
 
   const body = (await request.json()) as Record<string, unknown>;
   const now = new Date().toISOString();
+
   const id =
     typeof body.id === "string" && body.id.trim().length > 0
       ? body.id.trim()
@@ -2850,6 +2851,33 @@ async function handleUpdateWorker(
   const body = (await request.json()) as Record<string, unknown>;
   const now = new Date().toISOString();
 
+  const agentId =
+    typeof body.agentId === "string" && body.agentId.length > 0
+      ? body.agentId
+      : String(existing.agent_id);
+  const pluginId =
+    typeof body.pluginId === "string" && body.pluginId.length > 0
+      ? body.pluginId
+      : String(existing.plugin_id);
+
+  const agent = await env.CONCLAVE_DB.prepare(
+    `SELECT id, workspace_id as workspaceId, status
+     FROM agents WHERE id = ?1 AND workspace_id = ?2`,
+  )
+    .bind(agentId, workspaceId)
+    .first<{ id: string; workspaceId: string; status: string }>();
+  if (!agent) {
+    return json({ error: `Agent '${agentId}' not found` }, { status: 404 });
+  }
+  const plugin = await env.CONCLAVE_DB.prepare(
+    `SELECT id FROM worker_plugins WHERE id = ?1`,
+  )
+    .bind(pluginId)
+    .first<{ id: string }>();
+  if (!plugin) {
+    return json({ error: `Plugin '${pluginId}' not found` }, { status: 404 });
+  }
+
   const name =
     typeof body.name === "string" ? body.name : String(existing.name);
   const pluginVersionPolicy =
@@ -2906,8 +2934,8 @@ async function handleUpdateWorker(
   const worker: Worker = {
     id: workerId,
     workspaceId,
-    agentId: String(existing.agent_id),
-    pluginId: String(existing.plugin_id),
+    agentId,
+    pluginId,
     pluginVersionPolicy,
     name,
     roles,
@@ -2936,14 +2964,16 @@ async function handleUpdateWorker(
 
   await env.CONCLAVE_DB.prepare(
     `UPDATE workers SET
-       name = ?1, plugin_version_policy = ?2, roles_json = ?3,
-       capabilities_json = ?4, config_json = ?5, secret_refs_json = ?6,
-       billing_mode = ?7, cost_metadata_json = ?8, independence_key = ?9,
-       concurrency_limit = ?10, session_policy = ?11, enabled = ?12,
-       status = ?13, updated_at = ?14
-     WHERE workspace_id = ?15 AND id = ?16`,
+       agent_id = ?1, plugin_id = ?2, name = ?3, plugin_version_policy = ?4,
+       roles_json = ?5, capabilities_json = ?6, config_json = ?7,
+       secret_refs_json = ?8, billing_mode = ?9, cost_metadata_json = ?10,
+       independence_key = ?11, concurrency_limit = ?12, session_policy = ?13,
+       enabled = ?14, status = ?15, updated_at = ?16
+     WHERE workspace_id = ?17 AND id = ?18`,
   )
     .bind(
+      agentId,
+      pluginId,
       name,
       pluginVersionPolicy,
       JSON.stringify(roles),
@@ -3711,7 +3741,11 @@ async function handleStudioSnapshot(
       .all(),
     env.CONCLAVE_DB.prepare(
       `SELECT w.id, w.name, w.agent_id AS agentId, w.plugin_id AS pluginId,
-              w.roles_json, w.capabilities_json, w.status, '' AS cost,
+              w.plugin_version_policy AS pluginVersionPolicy,
+              w.roles_json, w.capabilities_json, w.config_json AS config,
+              w.billing_mode AS billingMode, w.cost_metadata_json AS costMetadata,
+              w.independence_key AS independenceKey, w.concurrency_limit AS concurrencyLimit,
+              w.session_policy AS sessionPolicy, w.enabled, w.status, '' AS cost,
               COALESCE(a.name, 'Unassigned') AS agentName,
               COALESCE(wp.display_name, 'Unassigned') AS pluginName
        FROM workers w
@@ -3907,6 +3941,8 @@ async function handleStudioSnapshot(
       role: mapJson(row.roles_json)[0] ?? "worker",
       roles: mapJson(row.roles_json),
       capabilities: mapJson(row.capabilities_json),
+      config: mapObject(row.config),
+      costMetadata: mapObject(row.costMetadata),
       status: row.status ?? "unknown",
     })),
     agents: agents.results ?? [],
@@ -5221,10 +5257,7 @@ export default {
       if (request.method === "GET" && url.pathname === "/api/session") {
         return await handleSession(request, env as SecurityEnv, ctx);
       }
-      if (
-        request.method === "POST" &&
-        url.pathname === "/api/session/logout"
-      ) {
+      if (request.method === "POST" && url.pathname === "/api/session/logout") {
         return await handleSessionLogout(request, env as SecurityEnv, ctx);
       }
       if (request.method === "GET" && url.pathname === "/api/runtime/connect") {

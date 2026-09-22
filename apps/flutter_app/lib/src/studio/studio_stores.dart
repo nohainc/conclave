@@ -124,6 +124,13 @@ class WorkerStore {
     required List<String> roles,
     required List<String> capabilities,
     required bool enabled,
+    String pluginVersionPolicy = 'latest',
+    Map<String, dynamic> config = const {},
+    String sessionPolicy = 'stateless',
+    int concurrencyLimit = 1,
+    String billingMode = 'local_compute',
+    String independenceKey = '',
+    Map<String, dynamic> costMetadata = const {},
   }) =>
       source.saveWorker(
           workspaceId: workspaceId,
@@ -133,7 +140,14 @@ class WorkerStore {
           pluginId: pluginId,
           roles: roles,
           capabilities: capabilities,
-          enabled: enabled);
+          enabled: enabled,
+          pluginVersionPolicy: pluginVersionPolicy,
+          config: config,
+          sessionPolicy: sessionPolicy,
+          concurrencyLimit: concurrencyLimit,
+          billingMode: billingMode,
+          independenceKey: independenceKey,
+          costMetadata: costMetadata);
 }
 
 class PluginStore {

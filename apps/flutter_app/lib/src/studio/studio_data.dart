@@ -44,6 +44,13 @@ abstract interface class StudioDataSource {
     required List<String> roles,
     required List<String> capabilities,
     required bool enabled,
+    String pluginVersionPolicy = 'latest',
+    Map<String, dynamic> config = const {},
+    String sessionPolicy = 'stateless',
+    int concurrencyLimit = 1,
+    String billingMode = 'local_compute',
+    String independenceKey = '',
+    Map<String, dynamic> costMetadata = const {},
   });
 }
 
@@ -267,28 +274,45 @@ class StudioApiClient implements StudioDataSource {
     required List<String> roles,
     required List<String> capabilities,
     required bool enabled,
+    String pluginVersionPolicy = 'latest',
+    Map<String, dynamic> config = const {},
+    String sessionPolicy = 'stateless',
+    int concurrencyLimit = 1,
+    String billingMode = 'local_compute',
+    String independenceKey = '',
+    Map<String, dynamic> costMetadata = const {},
   }) async {
     final uri = workerId == null
         ? Uri.parse('$baseUrl/workspaces/$workspaceId/workers')
         : Uri.parse('$baseUrl/workspaces/$workspaceId/workers/$workerId');
+    final payload = {
+      'name': name,
+      'roles': roles,
+      'capabilities': capabilities,
+      'enabled': enabled,
+      'pluginVersionPolicy': pluginVersionPolicy,
+      'config': config,
+      'sessionPolicy': sessionPolicy,
+      'concurrencyLimit': concurrencyLimit,
+      'billingMode': billingMode,
+      'independenceKey': independenceKey,
+      'costMetadata': costMetadata,
+    };
     final response = workerId == null
         ? await client.post(uri,
             headers: {'content-type': 'application/json'},
             body: jsonEncode({
+              ...payload,
               'name': name,
               'agentId': agentId,
               'pluginId': pluginId,
-              'roles': roles,
-              'capabilities': capabilities,
-              'enabled': enabled,
             }))
         : await client.put(uri,
             headers: {'content-type': 'application/json'},
             body: jsonEncode({
-              'name': name,
-              'roles': roles,
-              'capabilities': capabilities,
-              'enabled': enabled,
+              ...payload,
+              'agentId': agentId,
+              'pluginId': pluginId,
             }));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StudioApiException('Worker save failed (${response.statusCode})');

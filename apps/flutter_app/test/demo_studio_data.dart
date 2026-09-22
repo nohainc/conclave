@@ -92,5 +92,12 @@ class DemoStudioDataSource implements StudioDataSource {
     required List<String> roles,
     required List<String> capabilities,
     required bool enabled,
+    String pluginVersionPolicy = 'latest',
+    Map<String, dynamic> config = const {},
+    String sessionPolicy = 'stateless',
+    int concurrencyLimit = 1,
+    String billingMode = 'local_compute',
+    String independenceKey = '',
+    Map<String, dynamic> costMetadata = const {},
   }) async {}
 }

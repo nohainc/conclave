@@ -95,6 +95,10 @@ describe("Worker Configuration REST API (Architecture v2)", () => {
       `INSERT INTO agents (id, workspace_id, name, hostname, status, version, capabilities_json, enrolled_at, created_at, updated_at)
        VALUES ('ag-test-1', 'ws-test-1', 'Agent Mac 1', 'macbook.local', 'online', '2.0.0', '{}', ?, ?, ?)`,
     ).run(now, now, now);
+    db.prepare(
+      `INSERT INTO agents (id, workspace_id, name, hostname, status, version, capabilities_json, enrolled_at, created_at, updated_at)
+       VALUES ('ag-test-2', 'ws-test-1', 'Agent Linux 2', 'linux.local', 'online', '2.0.0', '{}', ?, ?, ?)`,
+    ).run(now, now, now);
 
     db.prepare(
       `INSERT INTO worker_plugins (id, display_name, description, publisher, supported_roles_json, supported_capabilities_json, status, created_at, updated_at)
@@ -237,6 +241,8 @@ describe("Worker Configuration REST API (Architecture v2)", () => {
           },
           body: JSON.stringify({
             name: "Codex Main Implementer v2",
+            agentId: "ag-test-2",
+            pluginId: "openai",
             concurrencyLimit: 3,
             sessionPolicy: "persistent_context",
           }),
@@ -249,6 +255,8 @@ describe("Worker Configuration REST API (Architecture v2)", () => {
       worker: Record<string, unknown>;
     };
     expect(updated.worker.name).toBe("Codex Main Implementer v2");
+    expect(updated.worker.agentId).toBe("ag-test-2");
+    expect(updated.worker.pluginId).toBe("openai");
     expect(updated.worker.concurrencyLimit).toBe(3);
     expect(updated.worker.sessionPolicy).toBe("persistent_context");
 

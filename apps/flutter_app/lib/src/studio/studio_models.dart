@@ -110,6 +110,11 @@ String _string(Map<String, dynamic> json, String key, [String fallback = '—'])
 List<String> _strings(Map<String, dynamic> json, String key) =>
     List<String>.from(json[key] as List? ?? const []);
 
+Map<String, dynamic> _map(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  return value is Map ? Map<String, dynamic>.from(value) : <String, dynamic>{};
+}
+
 enum StudioMessageSender { user, conclave, system }
 
 enum StudioMessageRole { user, assistant, system }
@@ -315,6 +320,13 @@ class StudioWorker {
     this.roles = const [],
     this.agentId = '',
     this.pluginId = '',
+    this.pluginVersionPolicy = 'latest',
+    this.config = const {},
+    this.sessionPolicy = 'stateless',
+    this.concurrencyLimit = 1,
+    this.billingMode = 'local_compute',
+    this.independenceKey = '',
+    this.costMetadata = const {},
   });
 
   final String id;
@@ -329,6 +341,13 @@ class StudioWorker {
   final List<String> roles;
   final String agentId;
   final String pluginId;
+  final String pluginVersionPolicy;
+  final Map<String, dynamic> config;
+  final String sessionPolicy;
+  final int concurrencyLimit;
+  final String billingMode;
+  final String independenceKey;
+  final Map<String, dynamic> costMetadata;
 
   factory StudioWorker.fromJson(Map<String, dynamic> json) => StudioWorker(
       id: _string(json, 'id'),
@@ -342,7 +361,14 @@ class StudioWorker {
       pluginName: _string(json, 'pluginName'),
       roles: _strings(json, 'roles'),
       agentId: _string(json, 'agentId'),
-      pluginId: _string(json, 'pluginId'));
+      pluginId: _string(json, 'pluginId'),
+      pluginVersionPolicy: _string(json, 'pluginVersionPolicy', 'latest'),
+      config: _map(json, 'config'),
+      sessionPolicy: _string(json, 'sessionPolicy', 'stateless'),
+      concurrencyLimit: json['concurrencyLimit'] as int? ?? 1,
+      billingMode: _string(json, 'billingMode', 'local_compute'),
+      independenceKey: _string(json, 'independenceKey', ''),
+      costMetadata: _map(json, 'costMetadata'));
 }
 
 class StudioAgent {

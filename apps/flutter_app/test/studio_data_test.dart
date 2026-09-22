@@ -179,15 +179,27 @@ void main() {
       roles: const ['implementation'],
       capabilities: const ['repository_write'],
       enabled: true,
+      pluginVersionPolicy: 'compatible',
+      config: const {'model': 'codex', 'temperature': 0.1},
+      sessionPolicy: 'persistent',
+      concurrencyLimit: 3,
+      billingMode: 'subscription',
+      independenceKey: 'codex-main',
     );
 
     expect(client.lastRequest?.method, 'POST');
     expect(client.lastRequest?.url.path, '/api/workspaces/workspace-1/workers');
     expect(jsonDecode(client.lastBody!)['agentId'], 'agent-1');
     expect(jsonDecode(client.lastBody!)['pluginId'], 'plugin-codex');
+    expect(jsonDecode(client.lastBody!)['pluginVersionPolicy'], 'compatible');
+    expect(jsonDecode(client.lastBody!)['config']['model'], 'codex');
+    expect(jsonDecode(client.lastBody!)['sessionPolicy'], 'persistent');
+    expect(jsonDecode(client.lastBody!)['concurrencyLimit'], 3);
+    expect(jsonDecode(client.lastBody!)['billingMode'], 'subscription');
+    expect(jsonDecode(client.lastBody!)['independenceKey'], 'codex-main');
   });
 
-  test('updates Worker configuration without changing its bindings', () async {
+  test('updates Worker configuration and bindings', () async {
     final client = _JsonClient({}, statusCode: 200);
     final api = StudioApiClient(
       baseUrl: 'https://conclave.test/api',
@@ -203,6 +215,7 @@ void main() {
       roles: const ['reviewer'],
       capabilities: const ['code_review'],
       enabled: false,
+      config: const {'model': 'claude'},
     );
 
     expect(client.lastRequest?.method, 'PUT');
@@ -210,5 +223,29 @@ void main() {
         '/api/workspaces/workspace-1/workers/worker-1');
     expect(jsonDecode(client.lastBody!)['enabled'], false);
     expect(jsonDecode(client.lastBody!)['roles'], ['reviewer']);
+    expect(jsonDecode(client.lastBody!)['agentId'], 'agent-1');
+    expect(jsonDecode(client.lastBody!)['pluginId'], 'plugin-codex');
+    expect(jsonDecode(client.lastBody!)['config']['model'], 'claude');
+  });
+
+  test('parses full Worker desired state from the Cloud read model', () {
+    final worker = StudioWorker.fromJson({
+      'id': 'worker-1',
+      'name': 'Codex Main',
+      'pluginVersionPolicy': 'compatible',
+      'config': {'model': 'codex'},
+      'sessionPolicy': 'persistent',
+      'concurrencyLimit': 4,
+      'billingMode': 'subscription',
+      'independenceKey': 'codex-main',
+      'costMetadata': {'estimatedCostMicrosPerAttempt': null},
+    });
+
+    expect(worker.pluginVersionPolicy, 'compatible');
+    expect(worker.config['model'], 'codex');
+    expect(worker.sessionPolicy, 'persistent');
+    expect(worker.concurrencyLimit, 4);
+    expect(worker.billingMode, 'subscription');
+    expect(worker.independenceKey, 'codex-main');
   });
 }

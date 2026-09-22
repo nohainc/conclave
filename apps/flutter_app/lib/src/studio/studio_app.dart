@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
@@ -191,6 +192,15 @@ class _StudioAppState extends State<StudioApp> {
                 ? existing!.capabilities
                 : const ['repository_read'])
             .join(', '));
+    final configController = TextEditingController(
+        text:
+            const JsonEncoder.withIndent('  ').convert(existing?.config ?? {}));
+    final versionPolicyController =
+        TextEditingController(text: existing?.pluginVersionPolicy ?? 'latest');
+    final independenceController =
+        TextEditingController(text: existing?.independenceKey ?? '');
+    final concurrencyController =
+        TextEditingController(text: '${existing?.concurrencyLimit ?? 1}');
     var agentId = existing?.agentId.isNotEmpty == true
         ? existing!.agentId
         : snapshot.agents.firstOrNull?.id;
@@ -198,6 +208,8 @@ class _StudioAppState extends State<StudioApp> {
         ? existing!.pluginId
         : snapshot.plugins.firstOrNull?.id;
     var enabled = existing?.status.toLowerCase() != 'disabled';
+    var sessionPolicy = existing?.sessionPolicy ?? 'stateless';
+    var billingMode = existing?.billingMode ?? 'local_compute';
     final saved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -239,6 +251,68 @@ class _StudioAppState extends State<StudioApp> {
                   controller: capabilitiesController,
                   decoration: const InputDecoration(
                       labelText: 'Capabilities (comma separated)')),
+              const SizedBox(height: 10),
+              TextField(
+                  controller: versionPolicyController,
+                  decoration: const InputDecoration(
+                      labelText: 'Plugin version policy')),
+              const SizedBox(height: 10),
+              TextField(
+                  controller: configController,
+                  minLines: 2,
+                  maxLines: 5,
+                  decoration:
+                      const InputDecoration(labelText: 'Model/config (JSON)')),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: sessionPolicy,
+                decoration: const InputDecoration(labelText: 'Session policy'),
+                items: const [
+                  DropdownMenuItem(
+                      value: 'stateless', child: Text('Stateless')),
+                  DropdownMenuItem(
+                      value: 'isolated_workspace',
+                      child: Text('Isolated workspace')),
+                  DropdownMenuItem(
+                      value: 'reuse_session', child: Text('Reuse session')),
+                  DropdownMenuItem(
+                      value: 'persistent_context',
+                      child: Text('Persistent context')),
+                ],
+                onChanged: (value) => setDialogState(() {
+                  if (value != null) sessionPolicy = value;
+                }),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                  controller: concurrencyController,
+                  keyboardType: TextInputType.number,
+                  decoration:
+                      const InputDecoration(labelText: 'Concurrency limit')),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: billingMode,
+                decoration: const InputDecoration(labelText: 'Billing mode'),
+                items: const [
+                  DropdownMenuItem(
+                      value: 'local_compute', child: Text('Local compute')),
+                  DropdownMenuItem(
+                      value: 'subscription', child: Text('Subscription')),
+                  DropdownMenuItem(
+                      value: 'api_metered', child: Text('API metered')),
+                  DropdownMenuItem(value: 'external', child: Text('External')),
+                  DropdownMenuItem(value: 'manual', child: Text('Manual')),
+                  DropdownMenuItem(value: 'free', child: Text('Free')),
+                ],
+                onChanged: (value) => setDialogState(() {
+                  if (value != null) billingMode = value;
+                }),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                  controller: independenceController,
+                  decoration: const InputDecoration(
+                      labelText: 'Independence key (optional)')),
               SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Enabled'),
@@ -266,6 +340,10 @@ class _StudioAppState extends State<StudioApp> {
       nameController.dispose();
       rolesController.dispose();
       capabilitiesController.dispose();
+      configController.dispose();
+      versionPolicyController.dispose();
+      independenceController.dispose();
+      concurrencyController.dispose();
       return;
     }
     try {
@@ -286,6 +364,14 @@ class _StudioAppState extends State<StudioApp> {
             .where((value) => value.isNotEmpty)
             .toList(),
         enabled: enabled,
+        pluginVersionPolicy: versionPolicyController.text.trim().isEmpty
+            ? 'latest'
+            : versionPolicyController.text.trim(),
+        config: _parseWorkerConfig(configController.text),
+        sessionPolicy: sessionPolicy,
+        concurrencyLimit: _parseConcurrency(concurrencyController.text),
+        billingMode: billingMode,
+        independenceKey: independenceController.text.trim(),
       );
       await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
     } catch (error) {
@@ -294,7 +380,28 @@ class _StudioAppState extends State<StudioApp> {
       nameController.dispose();
       rolesController.dispose();
       capabilitiesController.dispose();
+      configController.dispose();
+      versionPolicyController.dispose();
+      independenceController.dispose();
+      concurrencyController.dispose();
     }
+  }
+
+  Map<String, dynamic> _parseWorkerConfig(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return <String, dynamic>{};
+    try {
+      final parsed = jsonDecode(trimmed);
+      if (parsed is Map) return Map<String, dynamic>.from(parsed);
+    } catch (_) {
+      // The API will not receive malformed config; the editor falls back to {}.
+    }
+    return <String, dynamic>{};
+  }
+
+  int _parseConcurrency(String value) {
+    final parsed = int.tryParse(value.trim()) ?? 1;
+    return parsed < 1 ? 1 : parsed;
   }
 
   @override
