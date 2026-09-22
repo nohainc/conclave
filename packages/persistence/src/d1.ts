@@ -5,6 +5,7 @@ import type {
   GoalRecord,
   JsonValue,
   AttemptRecord,
+  ModelCallRecord,
   PhaseRecord,
   RunEventRecord,
   RunRecord,
@@ -392,6 +393,94 @@ export class D1AttemptRepository {
       .all();
     return (rows.results ?? []).map(toAttempt);
   }
+}
+
+export class D1ModelCallRepository {
+  constructor(private readonly db: D1DatabaseLike) {}
+
+  async get(id: string): Promise<ModelCallRecord | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM model_calls WHERE id = ?1")
+      .bind(id)
+      .first();
+    return row ? toModelCall(row) : null;
+  }
+
+  async save(call: ModelCallRecord): Promise<void> {
+    const scope = await this.db
+      .prepare(
+        `SELECT r.workspace_id FROM attempts a
+         JOIN tasks t ON t.id = a.task_id
+         JOIN phases p ON p.id = t.phase_id
+         JOIN runs r ON r.id = p.run_id
+         WHERE a.id = ?1`,
+      )
+      .bind(call.attemptId)
+      .first<{ workspace_id: string }>();
+    if (!scope?.workspace_id) {
+      throw new Error(
+        `Cannot save ModelCall for unknown Attempt: ${call.attemptId}`,
+      );
+    }
+    await this.db
+      .prepare(
+        `INSERT INTO model_calls (id, workspace_id, attempt_id, worker_id, connection_id, provider, model,
+           request_artifact_id, response_artifact_id, status, input_tokens, output_tokens, started_at, finished_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+         ON CONFLICT(id) DO UPDATE SET status=excluded.status, input_tokens=excluded.input_tokens,
+           output_tokens=excluded.output_tokens, request_artifact_id=excluded.request_artifact_id,
+           response_artifact_id=excluded.response_artifact_id, finished_at=excluded.finished_at`,
+      )
+      .bind(
+        call.id,
+        scope.workspace_id,
+        call.attemptId,
+        call.workerId,
+        call.connectionId,
+        call.provider,
+        call.model,
+        call.requestArtifactId,
+        call.responseArtifactId,
+        call.status,
+        call.inputTokens,
+        call.outputTokens,
+        call.startedAt,
+        call.finishedAt,
+      )
+      .run();
+  }
+
+  async listByAttempt(attemptId: string): Promise<readonly ModelCallRecord[]> {
+    const rows = await this.db
+      .prepare(
+        "SELECT * FROM model_calls WHERE attempt_id = ?1 ORDER BY started_at",
+      )
+      .bind(attemptId)
+      .all();
+    return (rows.results ?? []).map(toModelCall);
+  }
+}
+
+function toModelCall(row: Record<string, unknown>): ModelCallRecord {
+  return {
+    id: String(row.id),
+    attemptId: String(row.attempt_id),
+    workerId: String(row.worker_id),
+    connectionId: String(row.connection_id),
+    provider: String(row.provider),
+    model: String(row.model),
+    requestArtifactId:
+      row.request_artifact_id === null ? null : String(row.request_artifact_id),
+    responseArtifactId:
+      row.response_artifact_id === null
+        ? null
+        : String(row.response_artifact_id),
+    status: String(row.status),
+    inputTokens: row.input_tokens === null ? null : Number(row.input_tokens),
+    outputTokens: row.output_tokens === null ? null : Number(row.output_tokens),
+    startedAt: String(row.started_at),
+    finishedAt: row.finished_at === null ? null : String(row.finished_at),
+  };
 }
 
 export class D1FindingRepository {

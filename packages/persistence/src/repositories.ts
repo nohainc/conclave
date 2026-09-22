@@ -6,7 +6,6 @@ import type {
   ExtensionRecord,
   HumanApprovalRecord,
   MembershipRecord,
-  ModelCallRecord,
   OrganizationRecord,
   ProjectMembershipRecord,
   ProjectRecord,
@@ -24,6 +23,7 @@ import {
   D1EventRepository,
   D1FindingRepository,
   D1GoalRepository,
+  D1ModelCallRepository,
   D1PhaseRepository,
   D1AttemptRepository,
   D1RunRepository,
@@ -138,14 +138,6 @@ export class D1TaskDependencyRepository {
       ...record,
       id: `${record.taskId}:${record.dependsOnTaskId}`,
     });
-  }
-}
-export class D1ModelCallRepository extends RecordRepository<ModelCallRecord> {
-  constructor(store: D1RecordStore) {
-    super(store, "model_calls");
-  }
-  async listByAttempt(attemptId: string): Promise<readonly ModelCallRecord[]> {
-    return (await this.list()).filter((call) => call.attemptId === attemptId);
   }
 }
 export class D1OrganizationRepository extends RecordRepository<OrganizationRecord> {
@@ -321,7 +313,7 @@ export class D1PersistenceRepositories implements PersistenceRepositories {
     this.tasks = new D1TaskRepository(db);
     this.taskDependencies = new D1TaskDependencyRepository(this.store);
     this.attempts = new D1AttemptRepository(db);
-    this.modelCalls = new D1ModelCallRepository(this.store);
+    this.modelCalls = new D1ModelCallRepository(db);
     this.findings = new D1FindingRepository(db);
     this.verifications = new D1VerificationRepository(db);
     this.artifacts = new D1ArtifactRepository(db);
@@ -358,10 +350,11 @@ export class D1PersistenceRepositories implements PersistenceRepositories {
     const attempts = (
       await Promise.all(tasks.map((task) => this.attempts.listByTask(task.id)))
     ).flat();
-    const attemptIds = new Set(attempts.map((attempt) => attempt.id));
-    const modelCalls = (await this.modelCalls.list()).filter((call) =>
-      attemptIds.has(call.attemptId),
-    );
+    const modelCalls = (
+      await Promise.all(
+        attempts.map((attempt) => this.modelCalls.listByAttempt(attempt.id)),
+      )
+    ).flat();
     const findings = await this.findings.listByRun(runId);
     const verifications = await this.verifications.listByRun(runId);
     const artifacts = await this.artifacts.listByRun(runId);

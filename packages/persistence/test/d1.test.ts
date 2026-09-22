@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   D1GoalRepository,
   D1EventRepository,
+  D1ModelCallRepository,
   D1RunRepository,
   R2ArtifactStore,
   ThresholdArtifactStore,
@@ -215,5 +216,47 @@ describe("Cloudflare persistence adapters", () => {
       key: "run-1/artifact-2",
     });
     expect(uploads).toEqual(["run-1/artifact-2:text/plain:5"]);
+  });
+
+  it("persists and reconstructs tenant-scoped model calls", async () => {
+    const repository = new D1ModelCallRepository(
+      new FakeDb([{ workspace_id: "workspace-1" }, []]),
+    );
+    const call = {
+      id: "call-1",
+      attemptId: "attempt-1",
+      workerId: "worker-1",
+      connectionId: "connection-1",
+      provider: "codex",
+      model: "codex-local",
+      requestArtifactId: null,
+      responseArtifactId: "artifact-1",
+      status: "completed",
+      inputTokens: 12,
+      outputTokens: 8,
+      startedAt: "2026-09-22T00:00:00.000Z",
+      finishedAt: "2026-09-22T00:00:01.000Z",
+    } as const;
+    await expect(repository.save(call)).resolves.toBeUndefined();
+
+    const listed = await new D1ModelCallRepository(
+      new FakeDb([
+        [
+          {
+            ...call,
+            attempt_id: call.attemptId,
+            worker_id: call.workerId,
+            connection_id: call.connectionId,
+            request_artifact_id: null,
+            response_artifact_id: call.responseArtifactId,
+            input_tokens: call.inputTokens,
+            output_tokens: call.outputTokens,
+            started_at: call.startedAt,
+            finished_at: call.finishedAt,
+          },
+        ],
+      ]),
+    ).listByAttempt("attempt-1");
+    expect(listed).toEqual([call]);
   });
 });

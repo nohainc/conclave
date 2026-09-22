@@ -202,7 +202,7 @@ class Statement implements D1Statement {
       this.query.includes("FROM workers") ||
       this.query.includes("FROM tasks t") ||
       this.query.includes("FROM findings f") ||
-      this.query.includes("FROM run_events e") ||
+      this.query.includes("FROM events e") ||
       this.query.includes("FROM artifacts a") ||
       this.query.includes("FROM model_calls mc")
     ) {
@@ -228,7 +228,7 @@ class Statement implements D1Statement {
       return { results: this.rows("tasks") as T[] };
     if (this.query.includes("FROM findings f"))
       return { results: this.rows("findings") as T[] };
-    if (this.query.includes("FROM run_events e"))
+    if (this.query.includes("FROM events e"))
       return { results: this.rows("events") as T[] };
     if (this.query.includes("FROM artifacts a"))
       return { results: this.rows("artifacts") as T[] };
