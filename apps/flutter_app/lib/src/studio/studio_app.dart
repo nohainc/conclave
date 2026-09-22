@@ -35,6 +35,7 @@ class _StudioAppState extends State<StudioApp> {
   final Set<String> expandedProjectIds = {'forge'};
   bool showNewGoal = false;
   bool showWorkerDrawer = false;
+  StudioAgentEnrollment? enrollmentResult;
   StudioQualityPreset selectedQuality = StudioQualityPreset.balanced;
   final Map<String, bool> workerEnabled = {};
   final objectiveController = TextEditingController();
@@ -202,21 +203,10 @@ class _StudioAppState extends State<StudioApp> {
     try {
       final enrollment = await store.agents.createEnrollment(workspaceId);
       if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Enroll a Conclave Agent'),
-          content: SelectableText(
-            'Copy this one-time token into the Agent setup:\n\n${enrollment.token}\n\nExpires: ${enrollment.expiresAt}',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close'),
-            ),
-          ],
-        ),
-      );
+      setState(() {
+        enrollmentResult = enrollment;
+        loadError = null;
+      });
     } catch (error) {
       if (mounted) setState(() => loadError = error.toString());
     }
@@ -1791,6 +1781,40 @@ class _StudioAppState extends State<StudioApp> {
               label: const Text('Enroll Agent'),
             ),
           ]),
+          if (enrollmentResult != null) ...[
+            const SizedBox(height: 16),
+            Card(
+              color: Theme.of(context).colorScheme.primaryContainer,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      const Expanded(
+                        child: Text('Agent enrollment token',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                      IconButton(
+                        tooltip: 'Hide token',
+                        onPressed: () =>
+                            setState(() => enrollmentResult = null),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ]),
+                    const SizedBox(height: 8),
+                    const Text(
+                        'Copy this one-time token into the Agent setup.'),
+                    const SizedBox(height: 12),
+                    SelectableText(enrollmentResult!.token,
+                        style: const TextStyle(fontFamily: 'monospace')),
+                    const SizedBox(height: 8),
+                    Text('Expires: ${enrollmentResult!.expiresAt}'),
+                  ],
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 24),
           if (snapshot.agents.isEmpty)
             _emptyFleetCard('No agents enrolled',
