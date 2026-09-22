@@ -5,15 +5,23 @@ import { readFile } from "node:fs/promises";
 const configPath = process.argv[2] ?? "infra/cloudflare/app.wrangler.jsonc";
 const config = await readFile(configPath, "utf8");
 
-const required = [
-  ["production environment", /"CONCLAVE_ENVIRONMENT"\s*:\s*"production"/],
-  ["Studio custom domain", /"pattern"\s*:\s*"app\.conclaveax\.com"/],
-  ["D1 binding", /"binding"\s*:\s*"CONCLAVE_DB"/],
-  ["R2 artifact binding", /"binding"\s*:\s*"CONCLAVE_ARTIFACTS"/],
-  ["Forge service binding", /"binding"\s*:\s*"CONCLAVE_FORGE_EXECUTION"/],
-  ["Workflow binding", /"binding"\s*:\s*"CONCLAVE_RUN_WORKFLOW"/],
-  ["Agent Gateway binding", /"name"\s*:\s*"CONCLAVE_AGENT_GATEWAY"/],
-];
+const isForgeService = configPath.includes("forge-execution");
+const required = isForgeService
+  ? [
+      ["production environment", /"CONCLAVE_ENVIRONMENT"\s*:\s*"production"/],
+      ["D1 binding", /"binding"\s*:\s*"CONCLAVE_DB"/],
+      ["R2 artifact binding", /"binding"\s*:\s*"CONCLAVE_ARTIFACTS"/],
+      ["Cloud API service binding", /"binding"\s*:\s*"CONCLAVE_API"/],
+    ]
+  : [
+      ["production environment", /"CONCLAVE_ENVIRONMENT"\s*:\s*"production"/],
+      ["Studio custom domain", /"pattern"\s*:\s*"app\.conclaveax\.com"/],
+      ["D1 binding", /"binding"\s*:\s*"CONCLAVE_DB"/],
+      ["R2 artifact binding", /"binding"\s*:\s*"CONCLAVE_ARTIFACTS"/],
+      ["Forge service binding", /"binding"\s*:\s*"CONCLAVE_FORGE_EXECUTION"/],
+      ["Workflow binding", /"binding"\s*:\s*"CONCLAVE_RUN_WORKFLOW"/],
+      ["Agent Gateway binding", /"name"\s*:\s*"CONCLAVE_AGENT_GATEWAY"/],
+    ];
 
 const missing = required
   .filter(([, pattern]) => !pattern.test(config))

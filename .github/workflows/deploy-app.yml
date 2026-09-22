@@ -29,6 +29,9 @@ jobs:
       - name: Verify production security configuration
         working-directory: .
         run: node scripts/verify-production-security.mjs
+      - name: Verify Forge production configuration
+        working-directory: .
+        run: node scripts/verify-production-security.mjs apps/worker/forge-execution.wrangler.jsonc
       - name: Install Wrangler
         run: npm install --global wrangler@4.38.0
       - name: Deploy Forge execution service

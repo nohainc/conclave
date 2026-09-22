@@ -5,20 +5,19 @@
   "compatibility_date": "2026-09-21",
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
-    "CONCLAVE_ENVIRONMENT": "development",
+    "CONCLAVE_ENVIRONMENT": "production",
   },
   "d1_databases": [
     {
       "binding": "CONCLAVE_DB",
-      "database_name": "conclave-development",
-      "database_id": "local",
+      "database_name": "conclave-production",
       "migrations_dir": "migrations",
     },
   ],
   "r2_buckets": [
     {
       "binding": "CONCLAVE_ARTIFACTS",
-      "bucket_name": "conclave-artifacts-development",
+      "bucket_name": "conclave-artifacts-production",
     },
   ],
   "services": [
