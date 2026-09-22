@@ -131,8 +131,8 @@ class PluginProcessExecutor {
         final pendingResponse = pending[rpc.id];
         if (pendingResponse == null || pendingResponse.isCompleted) return;
         if (rpc.error != null) {
-          pendingResponse.completeError(
-              StateError('${rpc.error!['message'] ?? 'plugin request failed'}'));
+          pendingResponse.completeError(StateError(
+              '${rpc.error!['message'] ?? 'plugin request failed'}'));
           return;
         }
         pendingResponse.complete(rpc.result!);
@@ -159,7 +159,7 @@ class PluginProcessExecutor {
     Future<Map<String, Object?>> request(
       String method,
       Map<String, Object?> params,
-    ) {
+    ) async {
       final id =
           method == 'start_assignment' ? requestId : '$requestId-$method';
       final pendingResponse = method == 'start_assignment'
@@ -172,6 +172,7 @@ class PluginProcessExecutor {
         'method': method,
         'params': params,
       }));
+      await process.stdin.flush();
       return pendingResponse.future;
     }
 
@@ -243,6 +244,9 @@ Map<String, String> safePluginEnvironment(
     final value = Platform.environment[name];
     if (value != null && value.isNotEmpty) environment[name] = value;
   }
+  // Plugin processes are non-interactive. Prevent language runtimes from
+  // blocking on first-run telemetry prompts while the Agent is executing.
+  environment['DART_SUPPRESS_ANALYTICS'] = '1';
   for (final entry in requested.entries) {
     if (allowedNames.contains(entry.key)) environment[entry.key] = entry.value;
   }

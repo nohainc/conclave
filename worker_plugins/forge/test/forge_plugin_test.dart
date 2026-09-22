@@ -7,7 +7,7 @@ void main() {
   test('Forge plugin exposes the Worker Plugin protocol', () async {
     final process = await Process.start(
       Platform.resolvedExecutable,
-      ['run', 'bin/forge_plugin.dart'],
+      ['--disable-analytics', 'run', 'bin/forge_plugin.dart'],
       workingDirectory: Directory.current.path,
     );
     final lines =

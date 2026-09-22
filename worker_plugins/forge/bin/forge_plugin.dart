@@ -15,7 +15,11 @@ Future<void> main() async {
             'version': '0.1.0',
             'protocolVersion': '2.0',
             'runtimeLanguage': 'dart',
-            'capabilities': ['repository_access', 'code_execution', 'verification'],
+            'capabilities': [
+              'repository_access',
+              'code_execution',
+              'verification'
+            ],
           },
         'health' => {'status': 'healthy'},
         'start_assignment' => await _runAssignment(request['params']),
@@ -27,12 +31,14 @@ Future<void> main() async {
         'id': request['id'],
         'result': result,
       }));
+      await stdout.flush();
     } on Object catch (error) {
       stdout.writeln(jsonEncode({
         'jsonrpc': '2.0',
         'id': request['id'],
         'error': {'code': -32000, 'message': '$error'},
       }));
+      await stdout.flush();
     }
   }
 }

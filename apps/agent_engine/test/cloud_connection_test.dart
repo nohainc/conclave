@@ -632,7 +632,7 @@ void main() {
       resolve: (_) => PluginProcessSpec(
         pluginId: 'conclave.forge',
         executable: Platform.resolvedExecutable,
-        arguments: ['run', 'bin/forge_plugin.dart'],
+        arguments: ['--disable-analytics', 'run', 'bin/forge_plugin.dart'],
         workingDirectory: '${repository.path}/worker_plugins/forge',
       ),
     );
@@ -671,17 +671,55 @@ void main() {
         },
       }));
       Map<String, dynamic>? result;
+      Map<String, dynamic>? assignmentError;
       for (var attempt = 0; attempt < 120 && result == null; attempt++) {
         await Future<void>.delayed(const Duration(milliseconds: 500));
         for (final message in socket.sent) {
           final decoded = jsonDecode(message as String) as Map<String, dynamic>;
           if (decoded['type'] == 'assignment.result') result = decoded;
+          if (decoded['type'] == 'assignment.error') assignmentError = decoded;
         }
+        if (assignmentError != null) break;
       }
+      expect(assignmentError, isNull,
+          reason: assignmentError == null ? null : jsonEncode(assignmentError));
       expect(result, isNotNull);
       final completedResult = result!;
-      expect((completedResult['payload'] as Map<String, dynamic>)['status'],
-          'completed');
+      final payload = completedResult['payload'] as Map<String, dynamic>;
+      expect(payload['status'], 'completed');
+      final output = payload['output'] as Map<String, dynamic>;
+      expect(output['completed'], isTrue);
+      expect(output['completionReport'],
+          contains('All required fixture checks passed'));
+      final evidence =
+          (output['evidence'] as List<dynamic>).cast<Map<String, dynamic>>();
+      expect(evidence.map((item) => item['phase']), [
+        'research',
+        'plan',
+        'implementation',
+        'independent_review',
+        'diff',
+        'tests',
+        'verification',
+      ]);
+      final implementation =
+          evidence.firstWhere((item) => item['phase'] == 'implementation');
+      expect(implementation['artifacts'],
+          containsAll(['lib/add.js', 'test/add.test.js']));
+      final verification =
+          evidence.firstWhere((item) => item['phase'] == 'verification');
+      expect(verification['verification'], 'passed');
+      expect(await File('${fixture.path}/lib/add.js').readAsString(),
+          contains('return a + b'));
+      expect(await File('${fixture.path}/test/add.test.js').readAsString(),
+          contains('assert.equal(add(2, 3), 5)'));
+      final machineTests = await Process.run(
+        'node',
+        ['--test'],
+        workingDirectory: fixture.path,
+      );
+      expect(machineTests.exitCode, 0,
+          reason: '${machineTests.stdout}\n${machineTests.stderr}');
       expect((await journal.reconcile())['assignment-forge-1']!.status,
           AssignmentStatus.completed);
     } finally {
