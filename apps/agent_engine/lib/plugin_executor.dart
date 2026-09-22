@@ -266,7 +266,19 @@ class PluginAssignmentHandler {
     if (spec == null) throw StateError('plugin is not installed: $pluginId');
     final output = await executor.execute(
       spec,
-      context.payload,
+      {
+        ...context.payload,
+        'conclave': {
+          'workspaceId': context.workspaceId,
+          'agentId': context.agentId,
+          'workerId': context.workerId,
+          'runId': context.runId,
+          'taskId': context.taskId,
+          'attemptId': context.attemptId,
+          'assignmentId': context.assignmentId,
+          'idempotencyKey': context.idempotencyKey,
+        },
+      },
       operationId: context.assignmentId,
     );
     final summary = output['summary'];

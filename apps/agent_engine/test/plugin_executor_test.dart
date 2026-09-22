@@ -87,6 +87,8 @@ void main() {
       payload: {'pluginId': 'conclave.echo'},
     ));
     expect(result.summary, contains('echo worker'));
+    expect((result.output?['input'] as Map)['conclave']['assignmentId'],
+        'assignment-1');
   });
 
   test('terminates a plugin that does not answer before the timeout', () async {
