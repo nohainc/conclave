@@ -13,7 +13,7 @@ import type {
 } from "../../../packages/core/src/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const schemaPath = path.resolve(__dirname, "../migrations/0001_initial.sql");
+const migrationsPath = path.resolve(__dirname, "../migrations");
 
 function createD1Mock(db: DatabaseSync) {
   return {
@@ -58,8 +58,12 @@ describe("Projects and Chats API (Architecture v2)", () => {
   beforeEach(() => {
     db = new DatabaseSync(":memory:");
     db.exec("PRAGMA foreign_keys = ON;");
-    const sql = fs.readFileSync(schemaPath, "utf8");
-    db.exec(sql);
+    for (const migration of fs
+      .readdirSync(migrationsPath)
+      .filter((file) => file.endsWith(".sql"))
+      .sort()) {
+      db.exec(fs.readFileSync(path.join(migrationsPath, migration), "utf8"));
+    }
     d1 = createD1Mock(db);
 
     mockEnv = {
@@ -489,6 +493,16 @@ describe("Projects and Chats API (Architecture v2)", () => {
     const { workspace: wsB } = (await wsBRes.json()) as {
       workspace: Workspace;
     };
+
+    // Even an owner of Workspace A cannot read Workspace B without membership.
+    const ownerCrossWorkspaceRes = await worker.fetch(
+      new Request(`https://cloud.conclave.internal/api/workspaces/${wsB.id}`, {
+        method: "GET",
+        headers: { authorization: `Bearer ${userA.token}` },
+      }),
+      mockEnv,
+    );
+    expect(ownerCrossWorkspaceRes.status).toBe(404);
 
     // User B attempts to access Project A using Workspace B header -> forbidden/not found
     const getProjRes = await worker.fetch(

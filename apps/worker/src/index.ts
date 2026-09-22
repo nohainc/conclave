@@ -880,11 +880,7 @@ async function handleGetWorkspace(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, accessContext);
-  if (
-    context.workspaceId !== workspaceId &&
-    context.workspaceRole !== "owner" &&
-    !anonymousDevelopment(env)
-  ) {
+  if (context.workspaceId !== workspaceId && !anonymousDevelopment(env)) {
     const membership = await env.CONCLAVE_DB.prepare(
       "SELECT role FROM workspace_memberships WHERE workspace_id = ?1 AND user_id = ?2",
     )
