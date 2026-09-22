@@ -10,6 +10,15 @@ tree. P23 through P25 have substantial implementation and green subsystem
 tests, but their final release-level exit proof still requires the external
 runtime checks listed below.
 
+Latest local verification:
+
+- TypeScript: 55 test files, 300 tests passed;
+- Dart Agent Engine: analyzer and 125 tests passed;
+- Flutter Studio and Agent App: analyzer/tests passed;
+- Studio web and macOS Agent App release builds passed;
+- native Dart Agent Engine compilation passed;
+- Agent retirement and production security preflights passed.
+
 | Phase | Evidence in the repository | Status |
 | --- | --- | --- |
 | P0 | CI workflow, TypeScript checks, Flutter checks, Dart checks, native compilation, and Studio web build | Implemented and locally verified |
