@@ -1,6 +1,5 @@
 import type {
   ArtifactRecord,
-  ConnectionRecord,
   RunAggregateRows,
   PersistenceRepositories,
 } from "./index.js";
@@ -30,86 +29,11 @@ import {
   D1ProjectMembershipRepository,
   D1AuditLogRepository,
   D1BudgetRepository,
+  D1ConnectionRepository,
   type D1DatabaseLike,
 } from "./d1.js";
 
-type JsonRecord = { readonly id: string };
-
-export class D1RecordStore {
-  constructor(private readonly db: D1DatabaseLike) {}
-  async get<T extends JsonRecord>(
-    repository: string,
-    id: string,
-  ): Promise<T | null> {
-    const row = await this.db
-      .prepare(
-        "SELECT record_json FROM persistence_records WHERE repository = ?1 AND record_id = ?2",
-      )
-      .bind(repository, id)
-      .first<{ record_json: string }>();
-    return row ? (JSON.parse(row.record_json) as T) : null;
-  }
-  async save<T extends JsonRecord>(
-    repository: string,
-    record: T,
-    organizationId: string | null = null,
-  ): Promise<void> {
-    const now = new Date().toISOString();
-    await this.db
-      .prepare(
-        `INSERT INTO persistence_records (repository, record_id, organization_id, record_json, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5) ON CONFLICT(repository, record_id) DO UPDATE SET organization_id=excluded.organization_id, record_json=excluded.record_json, updated_at=excluded.updated_at`,
-      )
-      .bind(repository, record.id, organizationId, JSON.stringify(record), now)
-      .run();
-  }
-  async list<T extends JsonRecord>(
-    repository: string,
-    organizationId?: string,
-  ): Promise<readonly T[]> {
-    const query =
-      organizationId === undefined
-        ? "SELECT record_json FROM persistence_records WHERE repository = ?1 ORDER BY updated_at"
-        : "SELECT record_json FROM persistence_records WHERE repository = ?1 AND organization_id = ?2 ORDER BY updated_at";
-    const result =
-      organizationId === undefined
-        ? await this.db
-            .prepare(query)
-            .bind(repository)
-            .all<{ record_json: string }>()
-        : await this.db
-            .prepare(query)
-            .bind(repository, organizationId)
-            .all<{ record_json: string }>();
-    return (result.results ?? []).map(
-      (row) => JSON.parse(row.record_json) as T,
-    );
-  }
-}
-
-class RecordRepository<T extends JsonRecord> {
-  constructor(
-    protected readonly store: D1RecordStore,
-    protected readonly repository: string,
-  ) {}
-  get(id: string): Promise<T | null> {
-    return this.store.get<T>(this.repository, id);
-  }
-  save(record: T, organizationId?: string | null): Promise<void> {
-    return this.store.save(this.repository, record, organizationId);
-  }
-  list(organizationId?: string): Promise<readonly T[]> {
-    return this.store.list<T>(this.repository, organizationId);
-  }
-}
-
-export class D1ConnectionRepository extends RecordRepository<ConnectionRecord> {
-  constructor(store: D1RecordStore) {
-    super(store, "connections");
-  }
-}
-
 export class D1PersistenceRepositories implements PersistenceRepositories {
-  readonly store: D1RecordStore;
   readonly projects: D1ProjectRepository;
   readonly workers: D1WorkerRepository;
   readonly connections: D1ConnectionRepository;
@@ -137,10 +61,9 @@ export class D1PersistenceRepositories implements PersistenceRepositories {
   readonly humanApprovals: D1HumanApprovalRepository;
 
   constructor(db: D1DatabaseLike) {
-    this.store = new D1RecordStore(db);
     this.projects = new D1ProjectRepository(db);
     this.workers = new D1WorkerRepository(db);
-    this.connections = new D1ConnectionRepository(this.store);
+    this.connections = new D1ConnectionRepository(db);
     this.goals = new D1GoalRepository(db);
     this.runs = new D1RunRepository(db, (runId) => this.loadAggregate(runId));
     this.phases = new D1PhaseRepository(db);

@@ -305,6 +305,77 @@ export class D1BudgetRepository {
   }
 }
 
+export class D1ConnectionRepository {
+  constructor(private readonly db: D1DatabaseLike) {}
+
+  async get(id: string): Promise<import("./index.js").ConnectionRecord | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM connections WHERE id = ?1")
+      .bind(id)
+      .first();
+    return row ? toConnection(row) : null;
+  }
+
+  async save(connection: import("./index.js").ConnectionRecord): Promise<void> {
+    if (!connection.workspaceId) {
+      throw new Error(`D1 connection requires workspaceId: ${connection.id}`);
+    }
+    await this.db
+      .prepare(
+        `INSERT INTO connections (id, workspace_id, name, transport, provider,
+           adapter_version, auth_mode, billing_mode, cost_metadata_json,
+           execution_environment, availability, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+         ON CONFLICT(id) DO UPDATE SET name=excluded.name, transport=excluded.transport,
+           provider=excluded.provider, adapter_version=excluded.adapter_version,
+           auth_mode=excluded.auth_mode, billing_mode=excluded.billing_mode,
+           cost_metadata_json=excluded.cost_metadata_json,
+           execution_environment=excluded.execution_environment,
+           availability=excluded.availability, updated_at=excluded.updated_at`,
+      )
+      .bind(
+        connection.id,
+        connection.workspaceId,
+        connection.name,
+        connection.transport,
+        connection.provider,
+        connection.adapterVersion,
+        connection.authMode,
+        connection.billingMode,
+        json(connection.costMetadata),
+        connection.executionEnvironment,
+        connection.availability,
+        connection.createdAt,
+        connection.updatedAt,
+      )
+      .run();
+  }
+}
+
+function toConnection(
+  row: Record<string, unknown>,
+): import("./index.js").ConnectionRecord {
+  return {
+    id: String(row.id),
+    workspaceId: String(row.workspace_id),
+    name: String(row.name),
+    transport: String(row.transport),
+    provider: row.provider === null ? null : String(row.provider),
+    adapterVersion: String(row.adapter_version),
+    authMode: String(row.auth_mode),
+    billingMode: String(row.billing_mode),
+    costMetadata: parse(row.cost_metadata_json, {}),
+    executionEnvironment: String(
+      row.execution_environment,
+    ) as import("./index.js").ConnectionRecord["executionEnvironment"],
+    availability: String(
+      row.availability,
+    ) as import("./index.js").ConnectionRecord["availability"],
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
 function toBudget(row: Record<string, unknown>): BudgetRecord {
   return {
     id: String(row.id),

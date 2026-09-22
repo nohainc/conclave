@@ -54,6 +54,7 @@ export interface WorkerRecord extends EntityRecord {
 }
 
 export interface ConnectionRecord extends EntityRecord {
+  readonly workspaceId?: string;
   readonly name: string;
   readonly transport: string;
   readonly provider: string | null;
