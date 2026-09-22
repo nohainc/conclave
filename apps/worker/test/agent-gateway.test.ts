@@ -311,6 +311,21 @@ describe("Agent Enrollment & Agent Gateway (Architecture v2)", () => {
     expect(fleetData.agents.length).toBe(1);
     expect(fleetData.agents[0]?.name).toBe("MacBook Build Runner");
     expect(fleetData.agents[0]?.status).toBe("enrolled");
+
+    const replayRes = await worker.fetch(
+      new Request("http://localhost/api/v2/agents/enroll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: enrollment.token,
+          name: "Replay Attempt",
+          hostname: "replay.local",
+          agentId: "agent-replay-1",
+        }),
+      }),
+      mockEnv,
+    );
+    expect(replayRes.status).toBe(401);
   });
 
   it("rejects enrollment with invalid or revoked token", async () => {

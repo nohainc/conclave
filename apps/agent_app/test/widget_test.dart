@@ -10,6 +10,7 @@ void main() {
 
     expect(find.text('Conclave AX Agent'), findsOneWidget);
     expect(find.text('Agent overview'), findsOneWidget);
+    expect(find.text('Enroll'), findsOneWidget);
     expect(find.text('Agent Engine offline'), findsNWidgets(2));
     expect(find.text('Workers'), findsNWidgets(2));
   });

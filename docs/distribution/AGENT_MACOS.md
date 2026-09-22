@@ -30,6 +30,21 @@ with `scripts/uninstall-agent-macos.sh --confirm`.
 This development flow does not sign or notarize binaries. Release CI must sign
 the App, Engine, and launch helper before distributing them.
 
+## Enroll the Agent
+
+After installing the app:
+
+1. In Studio, open **Agents** and choose **Enroll Agent**.
+2. Copy the one-time token shown by Studio.
+3. Open **Conclave AX Agent** and choose **Overview → Enroll**.
+4. Keep the Cloud URL as `https://app.conclaveax.com`, paste the token, and choose an Agent name.
+5. Select **Enroll**. The Agent exchanges the token for a durable credential, stores that credential in the macOS Keychain, writes only non-secret registration metadata locally, and restarts the Engine.
+6. Return to Studio. The Agent should appear in the workspace fleet after its outbound connection and heartbeat are established.
+
+Enrollment tokens expire and are single-use. If a token is lost or consumed,
+create a new one in Studio. The token is never written to the Agent config file,
+launchd plist, or logs.
+
 Release packaging must fail closed when signing is unavailable:
 
 ```sh

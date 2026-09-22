@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:conclave_agent_engine/agent_configuration.dart';
+import 'package:conclave_agent_engine/secure_credentials.dart';
 import 'package:conclave_agent_engine/local_ipc.dart';
 
 void main() {
@@ -37,6 +39,16 @@ abstract interface class AgentEngineConnection {
 
   Future<bool> update() async => false;
 
+  Future<AgentRegistration?> registration() async => null;
+
+  Future<AgentEnrollmentResult> enroll({
+    required String cloudUrl,
+    required String token,
+    required String name,
+  }) async {
+    throw UnsupportedError('Agent enrollment is unavailable');
+  }
+
   Future<bool> isOnline() async => (await snapshot()).online;
 
   factory AgentEngineConnection.unavailable() =
@@ -44,6 +56,18 @@ abstract interface class AgentEngineConnection {
 }
 
 class UnavailableAgentEngineConnection implements AgentEngineConnection {
+  @override
+  Future<AgentRegistration?> registration() async => null;
+
+  @override
+  Future<AgentEnrollmentResult> enroll({
+    required String cloudUrl,
+    required String token,
+    required String name,
+  }) async {
+    throw UnsupportedError('Agent Engine is unavailable');
+  }
+
   @override
   Future<bool> restart() async => false;
 
@@ -70,6 +94,65 @@ class SocketAgentEngineConnection implements AgentEngineConnection {
   const SocketAgentEngineConnection({required this.dataDirectory});
 
   final Directory dataDirectory;
+
+  @override
+  Future<AgentRegistration?> registration() async =>
+      AgentRegistrationStore(dataDirectory).readSync();
+
+  @override
+  Future<AgentEnrollmentResult> enroll({
+    required String cloudUrl,
+    required String token,
+    required String name,
+  }) async {
+    final base = Uri.parse(cloudUrl.trim());
+    final endpoint = base.replace(
+      path: '${base.path.replaceFirst(RegExp(r'/$'), '')}/api/v2/agents/enroll',
+    );
+    final client = HttpClient();
+    try {
+      final request = await client.postUrl(endpoint);
+      request.headers.contentType = ContentType.json;
+      request.write(jsonEncode({
+        'token': token.trim(),
+        'name': name.trim().isEmpty ? 'Conclave Agent' : name.trim(),
+        'hostname': Platform.localHostname,
+      }));
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+      final decoded = jsonDecode(body);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final message = decoded is Map && decoded['error'] is String
+            ? decoded['error'] as String
+            : 'Enrollment failed with HTTP ${response.statusCode}';
+        throw StateError(message);
+      }
+      if (decoded is! Map ||
+          decoded['agentId'] is! String ||
+          decoded['workspaceId'] is! String ||
+          decoded['authToken'] is! String) {
+        throw const FormatException(
+            'Cloud returned an invalid enrollment response');
+      }
+      final result = AgentEnrollmentResult(
+        agentId: decoded['agentId'] as String,
+        workspaceId: decoded['workspaceId'] as String,
+        authToken: decoded['authToken'] as String,
+      );
+      await const PlatformSecureCredentialStore()
+          .write(result.agentId, result.authToken);
+      await AgentRegistrationStore(dataDirectory).write(AgentRegistration(
+        agentId: result.agentId,
+        workspaceId: result.workspaceId,
+        cloudUrl: base.toString(),
+        name: name.trim().isEmpty ? 'Conclave Agent' : name.trim(),
+        hostname: Platform.localHostname,
+      ));
+      return result;
+    } finally {
+      client.close(force: true);
+    }
+  }
 
   @override
   Future<bool> isOnline() async => (await snapshot()).online;
@@ -209,6 +292,18 @@ class SocketAgentEngineConnection implements AgentEngineConnection {
       value is Map && value[field] is String ? value[field] as String : null;
 }
 
+class AgentEnrollmentResult {
+  const AgentEnrollmentResult({
+    required this.agentId,
+    required this.workspaceId,
+    required this.authToken,
+  });
+
+  final String agentId;
+  final String workspaceId;
+  final String authToken;
+}
+
 class AgentSnapshot {
   const AgentSnapshot({
     required this.online,
@@ -257,14 +352,85 @@ class AgentHome extends StatefulWidget {
 class _AgentHomeState extends State<AgentHome> {
   int _selectedIndex = 0;
   late Future<AgentSnapshot> _snapshot;
+  late Future<AgentRegistration?> _registration;
 
   @override
   void initState() {
     super.initState();
     _snapshot = widget.connection.snapshot();
+    _registration = widget.connection.registration();
   }
 
   void _refresh() => setState(() => _snapshot = widget.connection.snapshot());
+
+  Future<void> _enroll() async {
+    final cloudController =
+        TextEditingController(text: 'https://app.conclaveax.com');
+    final tokenController = TextEditingController();
+    final nameController = TextEditingController(text: 'Conclave Agent');
+    final form = await showDialog<(String, String, String)>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Enroll this Agent'),
+        content: SizedBox(
+          width: 480,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(
+                controller: cloudController,
+                decoration: const InputDecoration(labelText: 'Cloud URL')),
+            TextField(
+                controller: tokenController,
+                decoration:
+                    const InputDecoration(labelText: 'Enrollment token'),
+                maxLines: 2),
+            TextField(
+                controller: nameController,
+                decoration: const InputDecoration(labelText: 'Agent name')),
+          ]),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, (
+                    cloudController.text,
+                    tokenController.text,
+                    nameController.text
+                  )),
+              child: const Text('Enroll')),
+        ],
+      ),
+    );
+    cloudController.dispose();
+    tokenController.dispose();
+    nameController.dispose();
+    if (form == null || !mounted) return;
+    try {
+      final result = await widget.connection.enroll(
+        cloudUrl: form.$1,
+        token: form.$2,
+        name: form.$3,
+      );
+      final restarted = await widget.connection.restart();
+      if (!mounted) return;
+      setState(() {
+        _registration = widget.connection.registration();
+        _snapshot = widget.connection.snapshot();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(restarted
+            ? 'Agent ${result.agentId} enrolled and restarting.'
+            : 'Agent enrolled. Restart the Agent Engine to connect.'),
+      ));
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Enrollment failed: $error')),
+        );
+      }
+    }
+  }
 
   Future<void> _restartEngine() async {
     final accepted = await widget.connection.restart();
@@ -361,7 +527,12 @@ class _AgentHomeState extends State<AgentHome> {
       );
 
   Widget _pageFor(AgentSnapshot snapshot) => switch (_selectedIndex) {
-        0 => _OverviewPage(snapshot: snapshot, onUpdate: _updateEngine),
+        0 => _OverviewPage(
+            snapshot: snapshot,
+            onUpdate: _updateEngine,
+            onEnroll: _enroll,
+            registration: _registration,
+          ),
         1 => _WorkersPage(snapshot: snapshot),
         2 => _PluginsPage(snapshot: snapshot),
         3 => _LogsPage(connection: widget.connection),
@@ -370,15 +541,38 @@ class _AgentHomeState extends State<AgentHome> {
 }
 
 class _OverviewPage extends StatelessWidget {
-  const _OverviewPage({required this.snapshot, required this.onUpdate});
+  const _OverviewPage(
+      {required this.snapshot,
+      required this.onUpdate,
+      required this.onEnroll,
+      required this.registration});
 
   final AgentSnapshot snapshot;
   final VoidCallback onUpdate;
+  final VoidCallback onEnroll;
+  final Future<AgentRegistration?> registration;
 
   @override
   Widget build(BuildContext context) => _Page(
         title: 'Agent overview',
         children: [
+          FutureBuilder<AgentRegistration?>(
+            future: registration,
+            builder: (context, state) => Card(
+              child: ListTile(
+                leading: Icon(state.data == null ? Icons.link_off : Icons.link),
+                title: Text(state.data == null
+                    ? 'Agent not enrolled'
+                    : 'Agent enrolled'),
+                subtitle: Text(state.data == null
+                    ? 'Paste an enrollment token from Studio to connect this machine.'
+                    : '${state.data!.name} · ${state.data!.workspaceId}'),
+                trailing: FilledButton(
+                    onPressed: onEnroll,
+                    child: Text(state.data == null ? 'Enroll' : 'Re-enroll')),
+              ),
+            ),
+          ),
           if (!snapshot.online)
             const Card(
               child: ListTile(

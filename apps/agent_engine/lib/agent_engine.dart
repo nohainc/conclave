@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'cloud_connection.dart';
+import 'agent_configuration.dart';
 import 'local_ipc.dart';
 import 'secure_credentials.dart';
 
@@ -45,15 +46,19 @@ class AgentEngineConfig {
     final path = index >= 0 && index + 1 < args.length
         ? args[index + 1]
         : Platform.environment['CONCLAVE_AGENT_DATA_DIR'];
+    final dataDirectory = Directory(path ??
+        '${Platform.environment['HOME'] ?? Directory.current.path}/.conclave-agent');
+    final registration = AgentRegistrationStore(dataDirectory).readSync();
     final cloudUrl = cloudIndex >= 0 && cloudIndex + 1 < args.length
         ? args[cloudIndex + 1]
         : Platform.environment['CONCLAVE_AGENT_CLOUD_URL'];
     final agentId = agentIndex >= 0 && agentIndex + 1 < args.length
         ? args[agentIndex + 1]
-        : Platform.environment['CONCLAVE_AGENT_ID'];
+        : Platform.environment['CONCLAVE_AGENT_ID'] ?? registration?.agentId;
     final workspaceId = workspaceIndex >= 0 && workspaceIndex + 1 < args.length
         ? args[workspaceIndex + 1]
-        : Platform.environment['CONCLAVE_AGENT_WORKSPACE_ID'];
+        : Platform.environment['CONCLAVE_AGENT_WORKSPACE_ID'] ??
+            registration?.workspaceId;
     final repositoriesFile =
         repositoriesIndex >= 0 && repositoriesIndex + 1 < args.length
             ? args[repositoriesIndex + 1]
@@ -69,16 +74,30 @@ class AgentEngineConfig {
     final secureStore =
         credentialStore ?? const PlatformSecureCredentialStore();
     final storedToken = agentId == null ? null : secureStore.readSync(agentId);
+    final configuredCloudUrl = cloudUrl ?? registration?.cloudUrl;
+    final configuredCloudUri =
+        configuredCloudUrl == null ? null : _cloudSocketUri(configuredCloudUrl);
     return AgentEngineConfig(
-      dataDirectory: Directory(path ??
-          '${Platform.environment['HOME'] ?? Directory.current.path}/.conclave-agent'),
-      cloudUri: cloudUrl == null ? null : Uri.tryParse(cloudUrl),
+      dataDirectory: dataDirectory,
+      cloudUri: configuredCloudUri,
       agentId: agentId,
       workspaceId: workspaceId,
       repositoriesFile: repositoriesFile,
       authToken: Platform.environment['CONCLAVE_AGENT_TOKEN'] ?? storedToken,
       ipcPort: ipcPortValue == null ? null : int.tryParse(ipcPortValue),
       ipcToken: ipcToken,
+    );
+  }
+
+  static Uri? _cloudSocketUri(String value) {
+    final uri = Uri.tryParse(value);
+    if (uri == null) return null;
+    if (uri.scheme == 'ws' || uri.scheme == 'wss') return uri;
+    if (uri.scheme != 'http' && uri.scheme != 'https') return uri;
+    return uri.replace(
+      scheme: uri.scheme == 'https' ? 'wss' : 'ws',
+      path:
+          '${uri.path.replaceFirst(RegExp(r'/$'), '')}/api/agent-gateway/connect',
     );
   }
 }

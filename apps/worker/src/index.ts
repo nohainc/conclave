@@ -2428,7 +2428,11 @@ async function handleEnrollAgent(
   const now = new Date().toISOString();
 
   const enrollment = await env.CONCLAVE_DB.prepare(
-    `SELECT * FROM agent_enrollments WHERE token_hash = ?1 AND revoked_at IS NULL AND expires_at > ?2`,
+    `SELECT * FROM agent_enrollments
+       WHERE token_hash = ?1
+         AND revoked_at IS NULL
+         AND used_at IS NULL
+         AND expires_at > ?2`,
   )
     .bind(tokenHash, now)
     .first<{
