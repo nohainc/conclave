@@ -426,6 +426,21 @@ export async function executeForgeGoal(
         );
       }
     } catch (error) {
+      await persistence.saveModelCall({
+        id: id(),
+        attemptId,
+        workerId: worker.resource.id,
+        connectionId: worker.connection.id,
+        provider: worker.connection.provider ?? worker.connection.transport,
+        model: worker.resource.name,
+        requestArtifactId,
+        responseArtifactId: null,
+        status: "failed",
+        inputTokens: null,
+        outputTokens: null,
+        startedAt,
+        finishedAt: now(),
+      });
       await persistence.saveAttempt({
         id: attemptId,
         taskId: modelTask.id,
