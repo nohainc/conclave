@@ -16,6 +16,20 @@ CREATE TABLE users (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE auth_identities (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  email TEXT,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (provider, subject),
+  UNIQUE (user_id, provider)
+);
+CREATE INDEX idx_auth_identities_user ON auth_identities(user_id);
+
 CREATE TABLE auth_sessions (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -130,6 +144,7 @@ CREATE TABLE runs (
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+  workflow_instance_id TEXT,
   parent_run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
   policy_snapshot_json TEXT NOT NULL,
   current_phase_id TEXT,
@@ -141,6 +156,7 @@ CREATE TABLE runs (
 );
 CREATE INDEX idx_runs_goal ON runs(goal_id);
 CREATE INDEX idx_runs_workspace ON runs(workspace_id);
+CREATE INDEX idx_runs_workflow_instance ON runs(workflow_instance_id);
 
 CREATE TABLE phases (
   id TEXT PRIMARY KEY,
@@ -440,12 +456,20 @@ CREATE TABLE budgets (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  run_id TEXT REFERENCES runs(id) ON DELETE CASCADE,
   max_cost_micros INTEGER,
+  max_input_tokens INTEGER,
+  max_output_tokens INTEGER,
+  used_input_tokens INTEGER NOT NULL DEFAULT 0,
+  used_output_tokens INTEGER NOT NULL DEFAULT 0,
+  used_cost_micros INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'exhausted', 'disabled')),
   max_attempts INTEGER,
   max_wall_time_seconds INTEGER,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE INDEX idx_budgets_run ON budgets(run_id);
 
 CREATE TABLE usage (
   id TEXT PRIMARY KEY,
@@ -483,6 +507,7 @@ CREATE TABLE ci_evidence (
   evidence_id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  repository_id TEXT,
   external_run_id TEXT NOT NULL,
   revision TEXT NOT NULL,
   workflow TEXT NOT NULL,
@@ -492,19 +517,153 @@ CREATE TABLE ci_evidence (
   smoke_tests_json TEXT NOT NULL DEFAULT '[]',
   health_checks_json TEXT NOT NULL DEFAULT '[]',
   raw_payload_json TEXT,
-  observed_at TEXT NOT NULL
+  observed_at TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'available',
+  claimed_at TEXT,
+  consumed_at TEXT,
+  UNIQUE (run_id, repository_id, revision, workflow, external_run_id)
 );
 CREATE INDEX idx_ci_evidence_run ON ci_evidence(run_id);
 
+CREATE INDEX idx_ci_evidence_claims ON ci_evidence(run_id, status, observed_at);
+
 -- -------------------------------------------------------------------------
--- 10. Persistence Records (Document store fallback)
+-- 10. Collaboration, extensions, security and durable execution
 -- -------------------------------------------------------------------------
-CREATE TABLE persistence_records (
-  repository TEXT NOT NULL,
-  record_id TEXT NOT NULL,
-  organization_id TEXT,
-  record_json TEXT NOT NULL,
+ALTER TABLE workspace_memberships ADD COLUMN status TEXT NOT NULL DEFAULT 'active';
+CREATE INDEX idx_workspace_memberships_status
+  ON workspace_memberships(workspace_id, status);
+
+CREATE TABLE workspace_invitations (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('admin', 'member', 'viewer')),
+  token_hash TEXT NOT NULL UNIQUE,
+  invited_by_user_id TEXT NOT NULL REFERENCES users(id),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'expired', 'revoked')),
+  expires_at TEXT NOT NULL,
+  accepted_by_user_id TEXT REFERENCES users(id),
+  accepted_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX idx_workspace_invitations_workspace ON workspace_invitations(workspace_id, status);
+CREATE INDEX idx_workspace_invitations_email ON workspace_invitations(email, status);
+CREATE INDEX idx_workspace_invitations_project ON workspace_invitations(project_id, status);
+
+CREATE TABLE model_calls (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  attempt_id TEXT NOT NULL REFERENCES attempts(id) ON DELETE CASCADE,
+  worker_id TEXT NOT NULL REFERENCES workers(id),
+  connection_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  model TEXT NOT NULL,
+  request_artifact_id TEXT REFERENCES artifacts(id) ON DELETE SET NULL,
+  response_artifact_id TEXT REFERENCES artifacts(id) ON DELETE SET NULL,
+  status TEXT NOT NULL,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  started_at TEXT NOT NULL,
+  finished_at TEXT
+);
+CREATE INDEX idx_model_calls_attempt ON model_calls(attempt_id, started_at);
+CREATE INDEX idx_model_calls_workspace ON model_calls(workspace_id, started_at);
+
+CREATE TABLE extensions (
+  row_id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  extension_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('provider', 'agent', 'tool', 'ci', 'human')),
+  name TEXT NOT NULL,
+  version TEXT NOT NULL,
+  manifest_json TEXT NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL CHECK (status IN ('active', 'disabled', 'pending_review')),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  PRIMARY KEY (repository, record_id)
+  UNIQUE (organization_id, extension_id, version)
 );
+CREATE INDEX idx_extensions_organization ON extensions(organization_id);
+
+CREATE TABLE workflow_templates (
+  row_id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  template_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  template_json TEXT NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL CHECK (status IN ('draft', 'active', 'archived')),
+  created_by_user_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (organization_id, template_id, version)
+);
+CREATE INDEX idx_workflow_templates_organization ON workflow_templates(organization_id);
+
+CREATE TABLE credentials (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL,
+  key_id TEXT NOT NULL,
+  algorithm TEXT NOT NULL CHECK (algorithm = 'AES-GCM'),
+  iv TEXT NOT NULL,
+  ciphertext TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT,
+  UNIQUE (organization_id, provider)
+);
+CREATE INDEX idx_credentials_organization ON credentials(organization_id);
+
+CREATE TABLE retention_policies (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  audit_days INTEGER NOT NULL,
+  artifact_days INTEGER NOT NULL,
+  usage_days INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (organization_id)
+);
+
+CREATE TABLE human_approvals (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+  requested_by_user_id TEXT NOT NULL REFERENCES users(id),
+  decided_by_user_id TEXT REFERENCES users(id),
+  prompt TEXT NOT NULL,
+  decision TEXT NOT NULL CHECK (decision IN ('pending', 'approved', 'rejected')),
+  requested_at TEXT NOT NULL,
+  decided_at TEXT
+);
+CREATE INDEX idx_human_approvals_organization ON human_approvals(organization_id);
+CREATE INDEX idx_human_approvals_run ON human_approvals(run_id);
+
+CREATE TABLE forge_executions (
+  execution_id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  workspace_id TEXT,
+  status TEXT NOT NULL CHECK (status IN ('started', 'completed', 'failed', 'cancelled', 'needs_input')),
+  result_artifact_id TEXT,
+  error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX idx_forge_executions_run ON forge_executions(run_id);
+CREATE UNIQUE INDEX idx_forge_executions_run_unique ON forge_executions(run_id);
+
+CREATE TABLE run_external_executions (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  execution_kind TEXT NOT NULL,
+  external_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (run_id, execution_kind),
+  UNIQUE (execution_kind, external_id)
+);
+CREATE INDEX idx_run_external_executions_run ON run_external_executions(run_id);

@@ -53,19 +53,6 @@ export interface WorkerRecord extends EntityRecord {
   readonly enabled?: boolean;
 }
 
-export interface ConnectionRecord extends EntityRecord {
-  readonly workspaceId?: string;
-  readonly name: string;
-  readonly transport: string;
-  readonly provider: string | null;
-  readonly adapterVersion: string;
-  readonly authMode: string;
-  readonly billingMode: string;
-  readonly costMetadata: JsonValue;
-  readonly executionEnvironment: "cloud" | "local" | "ci" | "human";
-  readonly availability: "available" | "busy" | "disabled" | "offline";
-}
-
 export interface GoalRecord extends EntityRecord {
   readonly projectId: string;
   readonly originalMessage: string;
@@ -318,7 +305,6 @@ export interface Repository<T extends { readonly id: string }> {
 
 export type ProjectRepository = Repository<ProjectRecord>;
 export type WorkerRepository = Repository<WorkerRecord>;
-export type ConnectionRepository = Repository<ConnectionRecord>;
 export interface GoalRepository extends Repository<GoalRecord> {
   listByProject(projectId: string): Promise<readonly GoalRecord[]>;
 }
@@ -403,7 +389,6 @@ export interface HumanApprovalRepository {
 export interface PersistenceRepositories {
   readonly projects: ProjectRepository;
   readonly workers: WorkerRepository;
-  readonly connections: ConnectionRepository;
   readonly goals: GoalRepository;
   readonly runs: RunRepository;
   readonly phases: PhaseRepository;

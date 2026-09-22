@@ -29,14 +29,12 @@ import {
   D1ProjectMembershipRepository,
   D1AuditLogRepository,
   D1BudgetRepository,
-  D1ConnectionRepository,
   type D1DatabaseLike,
 } from "./d1.js";
 
 export class D1PersistenceRepositories implements PersistenceRepositories {
   readonly projects: D1ProjectRepository;
   readonly workers: D1WorkerRepository;
-  readonly connections: D1ConnectionRepository;
   readonly goals: D1GoalRepository;
   readonly runs: D1RunRepository;
   readonly phases: D1PhaseRepository;
@@ -63,7 +61,6 @@ export class D1PersistenceRepositories implements PersistenceRepositories {
   constructor(db: D1DatabaseLike) {
     this.projects = new D1ProjectRepository(db);
     this.workers = new D1WorkerRepository(db);
-    this.connections = new D1ConnectionRepository(db);
     this.goals = new D1GoalRepository(db);
     this.runs = new D1RunRepository(db, (runId) => this.loadAggregate(runId));
     this.phases = new D1PhaseRepository(db);

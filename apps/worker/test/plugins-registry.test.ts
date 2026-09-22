@@ -8,7 +8,10 @@ import { computePackageDigest } from "../../../packages/security/src/index.js";
 import type { WorkerPluginManifest } from "../../../packages/plugin-manifest/src/manifest.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const schemaPath = path.resolve(__dirname, "../migrations/0001_initial.sql");
+const schemaPath = path.resolve(
+  __dirname,
+  "../migrations/0001_conclave_v3.sql",
+);
 
 function createD1Mock(db: DatabaseSync) {
   return {

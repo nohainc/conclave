@@ -7,10 +7,10 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const schemaPath = path.resolve(
   __dirname,
-  "../../../apps/worker/migrations/0001_initial.sql",
+  "../../../apps/worker/migrations/0001_conclave_v3.sql",
 );
 
-describe("Architecture v2 Clean D1 Schema Baseline", () => {
+describe("Architecture v3 Clean D1 Schema Baseline", () => {
   function createTestDb(): DatabaseSync {
     const db = new DatabaseSync(":memory:");
     db.exec("PRAGMA foreign_keys = ON;");
@@ -29,6 +29,7 @@ describe("Architecture v2 Clean D1 Schema Baseline", () => {
     const tableNames = rows.map((r) => r.name);
 
     expect(tableNames).toContain("users");
+    expect(tableNames).toContain("auth_identities");
     expect(tableNames).toContain("auth_sessions");
     expect(tableNames).toContain("workspaces");
     expect(tableNames).toContain("workspace_memberships");
@@ -60,10 +61,20 @@ describe("Architecture v2 Clean D1 Schema Baseline", () => {
     expect(tableNames).toContain("usage");
     expect(tableNames).toContain("audit_log");
     expect(tableNames).toContain("ci_evidence");
+    expect(tableNames).toContain("model_calls");
+    expect(tableNames).toContain("workspace_invitations");
+    expect(tableNames).toContain("extensions");
+    expect(tableNames).toContain("workflow_templates");
+    expect(tableNames).toContain("credentials");
+    expect(tableNames).toContain("retention_policies");
+    expect(tableNames).toContain("human_approvals");
+    expect(tableNames).toContain("forge_executions");
+    expect(tableNames).toContain("run_external_executions");
 
     // Confirms obsolete connection tables are absent
     expect(tableNames).not.toContain("connections");
     expect(tableNames).not.toContain("worker_connections");
+    expect(tableNames).not.toContain("persistence_records");
   });
 
   it("enforces foreign key cascading deletions from Workspace down to Fleet and Runs", () => {

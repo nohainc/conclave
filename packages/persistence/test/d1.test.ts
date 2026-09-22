@@ -13,7 +13,6 @@ import {
   D1ProjectMembershipRepository,
   D1AuditLogRepository,
   D1BudgetRepository,
-  D1ConnectionRepository,
   D1EventRepository,
   D1ModelCallRepository,
   D1TaskDependencyRepository,
@@ -367,34 +366,6 @@ describe("Cloudflare persistence adapters", () => {
       maxInputTokens: 10000,
       usedOutputTokens: 300,
       usedCostMicros: 12000,
-    });
-  });
-
-  it("reconstructs tenant-scoped connection resources from D1", async () => {
-    const connection = await new D1ConnectionRepository(
-      new FakeDb([
-        {
-          id: "connection-1",
-          workspace_id: "workspace-1",
-          name: "MacBook Agent",
-          transport: "local_agent",
-          provider: "codex",
-          adapter_version: "1.0.0",
-          auth_mode: "agent_session",
-          billing_mode: "subscription",
-          cost_metadata_json: '{"currency":"USD"}',
-          execution_environment: "local",
-          availability: "available",
-          created_at: "now",
-          updated_at: "now",
-        },
-      ]),
-    ).get("connection-1");
-    expect(connection).toMatchObject({
-      workspaceId: "workspace-1",
-      transport: "local_agent",
-      provider: "codex",
-      executionEnvironment: "local",
     });
   });
 

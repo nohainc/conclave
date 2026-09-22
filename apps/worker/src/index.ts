@@ -1157,10 +1157,6 @@ const WORKSPACE_BACKUP_QUERIES: readonly WorkspaceBackupQuery[] = [
     name: "ci_evidence",
     sql: "SELECT * FROM ci_evidence WHERE workspace_id = ?1",
   },
-  {
-    name: "persistence_records",
-    sql: "SELECT * FROM persistence_records WHERE organization_id = ?1",
-  },
 ];
 
 function encodeBase64(bytes: Uint8Array): string {
