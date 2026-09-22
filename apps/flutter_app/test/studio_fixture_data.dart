@@ -1,11 +1,11 @@
 import 'package:conclave_app/src/studio/studio_data.dart';
 import 'package:conclave_app/src/studio/studio_models.dart';
 
-import 'demo_snapshot.dart';
+import 'studio_fixture_snapshot.dart';
 
 /// Test-only fixture source. Production Studio always uses StudioApiClient.
-class DemoStudioDataSource implements StudioDataSource {
-  const DemoStudioDataSource();
+class StudioFixtureDataSource implements StudioDataSource {
+  const StudioFixtureDataSource();
 
   @override
   Future<StudioSession> loadSession() async => const StudioSession(
@@ -18,9 +18,9 @@ class DemoStudioDataSource implements StudioDataSource {
   @override
   Future<List<StudioWorkspace>> loadWorkspaces() async => const [
         StudioWorkspace(
-          id: 'workspace-demo',
-          name: 'Demo Workspace',
-          slug: 'demo-workspace',
+          id: 'workspace-fixture',
+          name: 'Fixture Workspace',
+          slug: 'fixture-workspace',
           status: 'active',
           role: 'owner',
         ),
@@ -29,7 +29,7 @@ class DemoStudioDataSource implements StudioDataSource {
   @override
   Future<StudioSnapshot> loadSnapshot(
           {String? projectId, String? workspaceId}) async =>
-      demoStudioSnapshot();
+      studioFixtureSnapshot();
 
   @override
   Future<void> controlRun(String runId, String command) async {}
@@ -96,8 +96,8 @@ class DemoStudioDataSource implements StudioDataSource {
     int expiresHours = 24,
   }) async {
     return StudioAgentEnrollment(
-      id: 'enrollment-demo',
-      token: 'conclave_enroll_demo',
+      id: 'enrollment-fixture',
+      token: 'conclave_enroll_fixture',
       workspaceId: workspaceId,
       expiresAt: 'Tomorrow',
     );

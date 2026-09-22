@@ -53,6 +53,14 @@ Targets:
 
 Studio owns no orchestration state. It communicates with Cloud.
 
+Studio production startup always uses `StudioApiClient` and the Cloud read
+model. Test fixtures are kept under `apps/flutter_app/test` only and are never
+selected by the application entrypoint. Studio state is organized into
+focused stores for authentication, workspaces, projects, chats, runs, agents,
+workers, plugins, and usage. The primary navigation is Workspace → Projects
+and Chats, Agents, Workers, Plugins, Usage, and Settings; run evidence remains
+available from run details rather than as a separate legacy dashboard screen.
+
 ### Conclave AX Cloud
 Authoritative multi-user control plane.
 

@@ -21,7 +21,6 @@ class StudioApp extends StatefulWidget {
 
 class _StudioAppState extends State<StudioApp> {
   late StudioSnapshot snapshot;
-  List<StudioWorkspace> workspaces = const [];
   String? selectedWorkspaceId;
   String? selectedProjectId;
   RunStatus? optimisticRunStatus;
@@ -54,6 +53,8 @@ class _StudioAppState extends State<StudioApp> {
   StudioProject? get selectedProject => snapshot.projects
       .where((project) => project.id == selectedProjectId)
       .firstOrNull;
+
+  List<StudioWorkspace> get workspaces => store.workspaces.items;
 
   StudioTask? get selectedTask =>
       snapshot.tasks.where((task) => task.id == selectedTaskId).firstOrNull;
@@ -94,7 +95,6 @@ class _StudioAppState extends State<StudioApp> {
       if (!mounted) return;
       setState(() {
         snapshot = StudioSnapshot.empty();
-        workspaces = const [];
         selectedWorkspaceId = null;
         selectedProjectId = null;
       });
@@ -108,7 +108,6 @@ class _StudioAppState extends State<StudioApp> {
       final loaded = await store.workspaces.list();
       if (!mounted) return;
       setState(() {
-        workspaces = loaded;
         selectedWorkspaceId ??= loaded.firstOrNull?.id;
       });
     } catch (_) {
@@ -658,18 +657,13 @@ class _StudioAppState extends State<StudioApp> {
             _sidebarLabel('WORKSPACE'),
             _navItem(Icons.chat_bubble_outline, 'Chats', 0,
                 compact: compact, navigationContext: sidebarContext),
-            _navItem(Icons.track_changes_rounded, 'Goals', 1,
-                compact: compact,
-                navigationContext: sidebarContext,
-                badge:
-                    '${snapshot.projects.fold<int>(0, (total, project) => total + project.activeGoals)}'),
-            _navItem(Icons.computer_outlined, 'Agents', 2,
+            _navItem(Icons.computer_outlined, 'Agents', 1,
                 compact: compact, navigationContext: sidebarContext),
-            _navItem(Icons.extension_outlined, 'Plugins', 3,
+            _navItem(Icons.extension_outlined, 'Plugins', 2,
                 compact: compact, navigationContext: sidebarContext),
-            _navItem(Icons.people_alt_outlined, 'Workers', 4,
+            _navItem(Icons.people_alt_outlined, 'Workers', 3,
                 compact: compact, navigationContext: sidebarContext),
-            _navItem(Icons.folder_copy_outlined, 'Artifacts', 5,
+            _navItem(Icons.analytics_outlined, 'Usage', 4,
                 compact: compact, navigationContext: sidebarContext),
             const SizedBox(height: 26),
             Expanded(
@@ -697,7 +691,7 @@ class _StudioAppState extends State<StudioApp> {
             if (compact)
               _navItem(Icons.close_rounded, 'Close menu', -1,
                   compact: compact, navigationContext: sidebarContext),
-            _navItem(Icons.settings_outlined, 'Settings', 6,
+            _navItem(Icons.settings_outlined, 'Settings', 5,
                 compact: compact, navigationContext: sidebarContext),
             const SizedBox(height: 6),
             Row(children: [
@@ -714,7 +708,7 @@ class _StudioAppState extends State<StudioApp> {
                   child: Text(
                       store.auth.viewer?.displayName ??
                           snapshot.viewer?.displayName ??
-                          'Signed-out user',
+                          'Not signed in',
                       style: const TextStyle(
                           color: Colors.white70, fontSize: 12))),
               PopupMenuButton<String>(
@@ -918,8 +912,9 @@ class _StudioAppState extends State<StudioApp> {
           child: SingleChildScrollView(
               padding: EdgeInsets.fromLTRB(
                   compact ? 18 : 34, 26, compact ? 18 : 34, 40),
-              child:
-                  showRunDetails ? _dashboard(compact) : _chatView(compact))),
+              child: showRunDetails
+                  ? _runDetailsView(compact)
+                  : _chatView(compact))),
     ]);
   }
 
@@ -966,12 +961,12 @@ class _StudioAppState extends State<StudioApp> {
     );
   }
 
-  Widget _dashboard(bool compact) {
-    if (navigationIndex == 2) return _agentsView();
-    if (navigationIndex == 3) return _pluginsView();
-    if (navigationIndex == 4) return _workersView();
-    if (navigationIndex == 5) return _artifactsView();
-    if (navigationIndex == 6) return _settingsView();
+  Widget _runDetailsView(bool compact) {
+    if (navigationIndex == 1) return _agentsView();
+    if (navigationIndex == 2) return _pluginsView();
+    if (navigationIndex == 3) return _workersView();
+    if (navigationIndex == 4) return _usageView();
+    if (navigationIndex == 5) return _settingsView();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Expanded(
@@ -1703,8 +1698,8 @@ class _StudioAppState extends State<StudioApp> {
       subtitle:
           '${snapshot.findings.length} findings · ${snapshot.artifacts.length} artifacts',
       trailing: TextButton(
-          onPressed: () => setState(() => navigationIndex = 3),
-          child: const Text('Open evidence')),
+          onPressed: () => setState(() => showRunDetails = true),
+          child: const Text('Open run details')),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           _metric('Tokens', _formatNumber(snapshot.run?.tokens ?? 0)),
@@ -2102,39 +2097,25 @@ class _StudioAppState extends State<StudioApp> {
         ],
       );
 
-  Widget _artifactsView() => Column(
+  Widget _usageView() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Artifacts & evidence',
+          const Text('Usage',
               style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
-          const Text(
-              'Every report, output, screenshot, and check remains attached to the run.',
+          const Text('Token and cost accounting for the selected run.',
               style: TextStyle(color: Color(0xff777683), fontSize: 13)),
           const SizedBox(height: 24),
           _panel(
             title: snapshot.run == null
                 ? 'No run selected'
                 : 'Run ${snapshot.run!.id}',
-            subtitle: 'Forge · ${snapshot.artifacts.length} artifacts',
-            child: Column(
-              children: snapshot.artifacts
-                  .map(
-                    (artifact) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.description_outlined,
-                          color: Color(0xff6254d9)),
-                      title: Text(artifact.name,
-                          style: const TextStyle(
-                              fontSize: 13, fontWeight: FontWeight.w600)),
-                      subtitle: Text('${artifact.type} · ${artifact.source}'),
-                      trailing: Text(artifact.size,
-                          style: const TextStyle(
-                              color: Color(0xff888691), fontSize: 11)),
-                    ),
-                  )
-                  .toList(),
-            ),
+            subtitle: 'Usage is read from the Cloud run aggregate.',
+            child: Row(children: [
+              _metric('Tokens', _formatNumber(snapshot.run?.tokens ?? 0)),
+              _metric('Cost', _formatCost(snapshot.run?.costMicros ?? 0)),
+              _metric('Model calls', '${snapshot.modelCalls.length}'),
+            ]),
           ),
         ],
       );

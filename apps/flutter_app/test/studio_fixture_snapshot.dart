@@ -1,10 +1,10 @@
 import 'package:conclave_app/src/studio/studio_models.dart';
 
-StudioSnapshot demoStudioSnapshot() => const StudioSnapshot(
-      activeRunId: 'run-demo',
+StudioSnapshot studioFixtureSnapshot() => const StudioSnapshot(
+      activeRunId: 'run-fixture',
       activeChatId: 'chat-auth-1',
       run: StudioRun(
-        id: 'run-demo',
+        id: 'run-fixture',
         status: RunStatus.running,
         objective: 'Improve authentication architecture',
         taskCount: 4,
@@ -29,7 +29,7 @@ StudioSnapshot demoStudioSnapshot() => const StudioSnapshot(
               projectId: 'forge',
               title: 'Improve authentication architecture',
               lastActivity: 'Just now',
-              activeRunId: 'run-demo',
+              activeRunId: 'run-fixture',
               messages: [
                 StudioChatMessage(
                   id: 'msg-user-1',
@@ -44,7 +44,7 @@ StudioSnapshot demoStudioSnapshot() => const StudioSnapshot(
                       'Researching repository boundaries and coordinating candidate workers across GPT-4o and Claude 3.7.',
                   timestamp: '10:15 AM',
                   runPreview: StudioRunPreview(
-                    runId: 'run-demo',
+                    runId: 'run-fixture',
                     statusSummary: 'Researching with 2 Workers...',
                     phases: [
                       StudioPhaseItem(

@@ -2,13 +2,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 
 import 'package:conclave_app/main.dart';
-import 'demo_studio_data.dart';
+import 'studio_fixture_data.dart';
 
 void main() {
   testWidgets('renders the chat-first Studio workspace',
       (WidgetTester tester) async {
     await tester
-        .pumpWidget(const ConclaveApp(dataSource: DemoStudioDataSource()));
+        .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
     await tester.pumpAndSettle();
     expect(find.text('Studio'), findsOneWidget);
     expect(find.text('Improve authentication architecture'), findsWidgets);
@@ -26,7 +26,7 @@ void main() {
   testWidgets('can open run details and return to chat',
       (WidgetTester tester) async {
     await tester
-        .pumpWidget(const ConclaveApp(dataSource: DemoStudioDataSource()));
+        .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
     await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.text('Open run details'));
@@ -42,7 +42,7 @@ void main() {
   testWidgets('can pause a run and open goal creation',
       (WidgetTester tester) async {
     await tester
-        .pumpWidget(const ConclaveApp(dataSource: DemoStudioDataSource()));
+        .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Open run details'));
     await tester.tap(find.text('Open run details'));
@@ -63,7 +63,7 @@ void main() {
   testWidgets('switches project chats and sends a new prompt',
       (WidgetTester tester) async {
     await tester
-        .pumpWidget(const ConclaveApp(dataSource: DemoStudioDataSource()));
+        .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.menu_rounded));
@@ -90,7 +90,7 @@ void main() {
   testWidgets('opens separate Agent, Plugin, and Worker management pages',
       (WidgetTester tester) async {
     await tester
-        .pumpWidget(const ConclaveApp(dataSource: DemoStudioDataSource()));
+        .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.menu_rounded));

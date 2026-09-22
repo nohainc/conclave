@@ -5,7 +5,7 @@ import 'package:conclave_app/src/studio/studio_models.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_test/flutter_test.dart';
 
-import 'demo_studio_data.dart';
+import 'studio_fixture_data.dart';
 import 'package:conclave_app/src/studio/studio_stores.dart';
 
 class _JsonClient extends http.BaseClient {
@@ -57,13 +57,13 @@ void main() {
   });
 
   test('populates focused stores from the Cloud read model', () async {
-    final store = StudioStore(const DemoStudioDataSource());
+    final store = StudioStore(const StudioFixtureDataSource());
     final snapshot = await store.reload();
 
     expect(snapshot.workspaceId, isNull);
     expect(store.projects.items.first.id, 'forge');
     expect(store.chats.items, hasLength(3));
-    expect(store.runs.current?.id, 'run-demo');
+    expect(store.runs.current?.id, 'run-fixture');
     expect(store.agents.items.single.id, 'agent-macbook');
     expect(store.workers.items, hasLength(3));
     expect(store.plugins.items, hasLength(6));
@@ -73,7 +73,7 @@ void main() {
 
   test('preserves a session viewer when a snapshot omits viewer data',
       () async {
-    final store = StudioStore(const DemoStudioDataSource());
+    final store = StudioStore(const StudioFixtureDataSource());
     store.auth.viewer = const StudioViewer(
       id: 'user-1',
       displayName: 'User One',
