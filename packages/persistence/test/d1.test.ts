@@ -117,6 +117,25 @@ describe("Cloudflare persistence adapters", () => {
     ).toBe("artifact");
   });
 
+  it("appends events to the tenant-scoped events table", async () => {
+    const eventRepository = new D1EventRepository(
+      new FakeDb([{ workspace_id: "workspace-1" }, []]),
+    );
+    await expect(
+      eventRepository.append({
+        runId: "run-1",
+        sequence: 1,
+        id: "event-1",
+        eventType: "RunStarted",
+        entityType: "run",
+        entityId: "run-1",
+        correlationId: "run-1",
+        payload: { repositoryId: "repo-1" },
+        occurredAt: "now",
+      }),
+    ).resolves.toBeUndefined();
+  });
+
   it("keeps small artifacts inline and promotes larger artifacts to R2", async () => {
     const uploads: string[] = [];
     const store = new ThresholdArtifactStore(4, {

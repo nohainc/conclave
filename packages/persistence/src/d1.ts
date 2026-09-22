@@ -277,14 +277,22 @@ function toTask(row: Record<string, unknown>): TaskRecord {
 export class D1EventRepository {
   constructor(private readonly db: D1DatabaseLike) {}
   async append(event: RunEventRecord): Promise<void> {
+    const run = await this.db
+      .prepare("SELECT workspace_id FROM runs WHERE id = ?1")
+      .bind(event.runId)
+      .first<{ workspace_id: string }>();
+    if (!run?.workspace_id) {
+      throw new Error(`Cannot append event for unknown run: ${event.runId}`);
+    }
     await this.db
       .prepare(
-        "INSERT INTO run_events (run_id, sequence, id, event_type, entity_type, entity_id, correlation_id, payload_json, occurred_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        "INSERT INTO events (id, workspace_id, run_id, sequence, event_type, entity_type, entity_id, correlation_id, payload_json, occurred_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
       )
       .bind(
+        event.id,
+        run.workspace_id,
         event.runId,
         event.sequence,
-        event.id,
         event.eventType,
         event.entityType,
         event.entityId,
@@ -296,7 +304,7 @@ export class D1EventRepository {
   }
   async listByRun(runId: string): Promise<readonly RunEventRecord[]> {
     const rows = await this.db
-      .prepare("SELECT * FROM run_events WHERE run_id = ?1 ORDER BY sequence")
+      .prepare("SELECT * FROM events WHERE run_id = ?1 ORDER BY sequence")
       .bind(runId)
       .all();
     return (rows.results ?? []).map((row) => ({
