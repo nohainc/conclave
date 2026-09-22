@@ -79,6 +79,10 @@ export interface MultiAgentEnsemblePolicy {
   readonly synthesisPrompt?: string;
   /** Optional evaluation criteria for compare_and_select. */
   readonly evaluationCriteria?: readonly string[];
+  /** Hard per-attempt cost ceiling used by cloud schedulers when routing Workers. */
+  readonly maxEstimatedCostMicrosPerAttempt?: number;
+  /** Billing modes to prefer, in order, when several Workers are eligible. */
+  readonly preferredBillingModes?: readonly string[];
 }
 
 export interface MultiAgentCandidateResult {

@@ -40,6 +40,13 @@ export interface SelectedEnsembleWorker {
   readonly role: string;
   readonly capabilities: readonly string[];
   readonly independenceKey: string;
+  readonly billingMode: string;
+  readonly estimatedCostMicrosPerAttempt: number | null;
+}
+
+export interface EnsembleRoutingOptions {
+  readonly maxEstimatedCostMicrosPerAttempt?: number;
+  readonly preferredBillingModes?: readonly string[];
 }
 
 function roleTask(
@@ -60,6 +67,27 @@ function jsonStrings(value: unknown): string[] {
   } catch {
     return [];
   }
+}
+
+function jsonObject(value: unknown): Record<string, unknown> {
+  if (typeof value !== "string") return {};
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function estimatedCost(row: Record<string, unknown>): number | null {
+  const value = jsonObject(
+    row.cost_metadata_json,
+  ).estimatedCostMicrosPerAttempt;
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : null;
 }
 
 function matchesTask(
@@ -96,6 +124,8 @@ function toSelectedWorker(
     role: task.role,
     capabilities: jsonStrings(row.capabilities_json),
     independenceKey: String(row.independence_key),
+    billingMode: String(row.billing_mode || "unknown"),
+    estimatedCostMicrosPerAttempt: estimatedCost(row),
   };
 }
 
@@ -154,6 +184,7 @@ export async function selectEnsembleCandidateWorkers(
   task: TaskToDispatch,
   count = 2,
   explicitWorkerIds?: readonly string[],
+  routing: EnsembleRoutingOptions = {},
 ): Promise<readonly SelectedEnsembleWorker[]> {
   if (explicitWorkerIds && explicitWorkerIds.length > 0) {
     const placeholders = explicitWorkerIds.map((_, i) => `?${i + 2}`).join(",");
@@ -161,6 +192,7 @@ export async function selectEnsembleCandidateWorkers(
       .prepare(
         `SELECT w.id, w.agent_id, w.plugin_id, w.name, w.independence_key,
                 w.roles_json, w.capabilities_json, w.concurrency_limit,
+                w.billing_mode, w.cost_metadata_json,
                 (SELECT COUNT(*) FROM worker_assignments wa
                  WHERE wa.worker_id = w.id
                    AND wa.status IN ('created', 'dispatched', 'acknowledged', 'running')) AS active_assignments,
@@ -177,11 +209,15 @@ export async function selectEnsembleCandidateWorkers(
     const selected: SelectedEnsembleWorker[] = [];
     const usedIndependenceKeys = new Set<string>();
     for (const row of rows.results || []) {
+      const cost = estimatedCost(row);
       if (
         !matchesTask(row, task) ||
         Number(row.active_assignments || 0) >=
           Number(row.concurrency_limit || 1) ||
-        usedIndependenceKeys.has(String(row.independence_key))
+        usedIndependenceKeys.has(String(row.independence_key)) ||
+        (routing.maxEstimatedCostMicrosPerAttempt !== undefined &&
+          cost !== null &&
+          cost > routing.maxEstimatedCostMicrosPerAttempt)
       ) {
         continue;
       }
@@ -196,6 +232,7 @@ export async function selectEnsembleCandidateWorkers(
     .prepare(
       `SELECT w.id, w.agent_id, w.plugin_id, w.name, w.independence_key,
               w.roles_json, w.capabilities_json, w.concurrency_limit,
+              w.billing_mode, w.cost_metadata_json,
               (SELECT COUNT(*) FROM worker_assignments wa
                WHERE wa.worker_id = w.id
                  AND wa.status IN ('created', 'dispatched', 'acknowledged', 'running')) AS active_assignments,
@@ -208,20 +245,40 @@ export async function selectEnsembleCandidateWorkers(
     .bind(workspaceId)
     .all<Record<string, unknown>>();
 
+  const preferred = routing.preferredBillingModes || [];
+  const eligibleRows = (rows.results || []).filter((row) => {
+    const cost = estimatedCost(row);
+    return (
+      matchesTask(row, task) &&
+      Number(row.active_assignments || 0) <
+        Number(row.concurrency_limit || 1) &&
+      (routing.maxEstimatedCostMicrosPerAttempt === undefined ||
+        cost === null ||
+        cost <= routing.maxEstimatedCostMicrosPerAttempt)
+    );
+  });
+  eligibleRows.sort((left, right) => {
+    const leftRank = preferred.indexOf(String(left.billing_mode || "unknown"));
+    const rightRank = preferred.indexOf(
+      String(right.billing_mode || "unknown"),
+    );
+    const normalizedLeftRank = leftRank < 0 ? preferred.length : leftRank;
+    const normalizedRightRank = rightRank < 0 ? preferred.length : rightRank;
+    if (normalizedLeftRank !== normalizedRightRank) {
+      return normalizedLeftRank - normalizedRightRank;
+    }
+    return String(left.id).localeCompare(String(right.id));
+  });
+
   const selected: SelectedEnsembleWorker[] = [];
   const usedIndependenceKeys = new Set<string>();
 
-  for (const row of rows.results || []) {
+  for (const row of eligibleRows) {
     if (selected.length >= count) break;
 
     const indepKey = String(row.independence_key);
 
-    if (
-      !matchesTask(row, task) ||
-      Number(row.active_assignments || 0) >=
-        Number(row.concurrency_limit || 1) ||
-      usedIndependenceKeys.has(indepKey)
-    ) {
+    if (usedIndependenceKeys.has(indepKey)) {
       continue;
     }
 
@@ -353,6 +410,10 @@ export async function dispatchEnsembleTaskAssignment(
     task,
     targetCount,
     params.explicitCandidateWorkerIds,
+    {
+      maxEstimatedCostMicrosPerAttempt: policy.maxEstimatedCostMicrosPerAttempt,
+      preferredBillingModes: policy.preferredBillingModes,
+    },
   );
 
   if (selectedWorkers.length === 0) {
@@ -374,6 +435,11 @@ export async function dispatchEnsembleTaskAssignment(
         roleTask(task, "synthesizer", "synthesis"),
         1,
         [params.synthesizerWorkerId],
+        {
+          maxEstimatedCostMicrosPerAttempt:
+            policy.maxEstimatedCostMicrosPerAttempt,
+          preferredBillingModes: policy.preferredBillingModes,
+        },
       )
     )[0];
     if (synthWorker) {
@@ -397,6 +463,11 @@ export async function dispatchEnsembleTaskAssignment(
         roleTask(task, "evaluator", "evaluation"),
         1,
         [params.selectorWorkerId],
+        {
+          maxEstimatedCostMicrosPerAttempt:
+            policy.maxEstimatedCostMicrosPerAttempt,
+          preferredBillingModes: policy.preferredBillingModes,
+        },
       )
     )[0];
     if (selWorker) {
@@ -419,6 +490,11 @@ export async function dispatchEnsembleTaskAssignment(
       roleTask(task, "reviewer", "code_review"),
       params.reviewerWorkerIds.length,
       params.reviewerWorkerIds,
+      {
+        maxEstimatedCostMicrosPerAttempt:
+          policy.maxEstimatedCostMicrosPerAttempt,
+        preferredBillingModes: policy.preferredBillingModes,
+      },
     );
     reviewerDescriptors = revWorkers.map((w, idx) =>
       createWorkerDescriptor(

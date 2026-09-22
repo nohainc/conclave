@@ -315,6 +315,37 @@ describe("Multi-Agent Ensemble Dispatcher (Cloud -> Multi-Agent -> Workers)", ()
       );
       expect(candidates).toHaveLength(2);
     });
+
+    it("routes toward preferred billing modes within the cost ceiling", async () => {
+      db.prepare(
+        "UPDATE workers SET billing_mode = 'api_metered', cost_metadata_json = '{\"estimatedCostMicrosPerAttempt\":9000}' WHERE id = 'w-claude-mac'",
+      ).run();
+      db.prepare(
+        "UPDATE workers SET billing_mode = 'subscription', cost_metadata_json = '{\"estimatedCostMicrosPerAttempt\":1000}' WHERE id = 'w-gpt-linux'",
+      ).run();
+
+      const candidates = await selectEnsembleCandidateWorkers(
+        d1,
+        "ws-1",
+        {
+          id: "task-arch",
+          role: "architect",
+          objective: "Design Architecture",
+          capabilities: ["architecture"],
+        },
+        1,
+        undefined,
+        {
+          maxEstimatedCostMicrosPerAttempt: 2000,
+          preferredBillingModes: ["subscription", "local_compute"],
+        },
+      );
+
+      expect(candidates).toHaveLength(1);
+      expect(candidates[0]?.id).toBe("w-gpt-linux");
+      expect(candidates[0]?.billingMode).toBe("subscription");
+      expect(candidates[0]?.estimatedCostMicrosPerAttempt).toBe(1000);
+    });
   });
 
   describe("dispatchEnsembleTaskAssignment", () => {
