@@ -113,8 +113,7 @@ describe("Assignment Dispatcher (Cloud -> Agent -> Worker)", () => {
     env = {
       CONCLAVE_ENVIRONMENT: "development",
       CONCLAVE_DB: d1,
-      AGENT_GATEWAY: mockGatewayNamespace,
-      CONCLAVE_AGENT_GATEWAY: mockGatewayNamespace,
+      CONCLAVE_HOST_GATEWAY: mockGatewayNamespace,
     } as unknown as AssignmentDispatcherEnv;
 
     const now = new Date().toISOString();
@@ -371,9 +370,9 @@ describe("Assignment Dispatcher (Cloud -> Agent -> Worker)", () => {
       expect(assignmentRow.status).toBe("failed");
     });
 
-    it("fails closed when no Agent Gateway is configured", async () => {
+    it("fails closed when no Host Gateway is configured", async () => {
       const result = await dispatchTaskAssignment(
-        { ...env, AGENT_GATEWAY: undefined, CONCLAVE_AGENT_GATEWAY: undefined },
+        { ...env, CONCLAVE_HOST_GATEWAY: undefined },
         {
           workspaceId: "ws-1",
           runId: "run-1",
@@ -388,7 +387,7 @@ describe("Assignment Dispatcher (Cloud -> Agent -> Worker)", () => {
 
       expect(result.status).toBe("failed");
       expect(result.accepted).toBe(false);
-      expect(result.error).toContain("Agent Gateway is not configured");
+      expect(result.error).toContain("Host Gateway is not configured");
       const assignmentRow = db
         .prepare(
           "SELECT status FROM worker_assignments WHERE task_id = 'task-1'",
@@ -503,7 +502,7 @@ describe("Assignment Dispatcher (Cloud -> Agent -> Worker)", () => {
   });
 
   describe("cancelTaskAssignment", () => {
-    it("cancels running assignment and informs Agent Gateway", async () => {
+    it("cancels running assignment and informs Host Gateway", async () => {
       const dispatchResult = await dispatchTaskAssignment(env, {
         workspaceId: "ws-1",
         runId: "run-1",

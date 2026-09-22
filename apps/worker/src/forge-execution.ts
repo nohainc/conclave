@@ -42,7 +42,7 @@ interface ForgeExecutionEnv {
   readonly CONCLAVE_API?: Fetcher;
   readonly CONCLAVE_FORGE_CALLBACK_TOKEN?: string;
   readonly CONCLAVE_TEST_COMMAND?: string;
-  readonly CONCLAVE_AGENT_GATEWAY?: DurableObjectNamespace;
+  readonly CONCLAVE_HOST_GATEWAY?: DurableObjectNamespace;
 }
 
 interface ForgeExecutionContext {
@@ -569,7 +569,7 @@ class AgentWorkerRuntime implements ForgeRuntimeAdapter {
   }
 }
 
-class AgentGatewayForgeWorker implements ForgeWorker {
+class HostGatewayForgeWorker implements ForgeWorker {
   constructor(
     readonly worker: Worker,
     readonly agent: ConclaveAgent,
@@ -685,7 +685,7 @@ class AgentGatewayForgeWorker implements ForgeWorker {
     },
   ): Promise<DispatchAssignmentResult> {
     const dispatcherEnv = this.env as unknown as AssignmentDispatcherEnv;
-    if (this.env.CONCLAVE_AGENT_GATEWAY) {
+    if (this.env.CONCLAVE_HOST_GATEWAY) {
       return dispatchTaskAssignment(dispatcherEnv, {
         workspaceId: this.context.organizationId,
         runId: request.runId,
@@ -705,7 +705,7 @@ class AgentGatewayForgeWorker implements ForgeWorker {
         pluginId: this.worker.pluginId,
         status: "failed",
         accepted: false,
-        error: "Agent Gateway or internal Forge dispatch is not configured",
+        error: "Host Gateway or internal Forge dispatch is not configured",
       };
     }
     const dispatchRequest = new Request(
@@ -811,7 +811,7 @@ function modelFor(
   env: ForgeExecutionEnv,
   context: ForgeExecutionContext,
 ): ForgeWorker {
-  return new AgentGatewayForgeWorker(
+  return new HostGatewayForgeWorker(
     binding.worker,
     binding.agent,
     env,
@@ -1022,7 +1022,7 @@ export async function executeForgeService(
       runtime: new AgentWorkerRuntime(
         env,
         context,
-        new AgentGatewayForgeWorker(
+        new HostGatewayForgeWorker(
           runtimeResource.worker,
           runtimeResource.agent,
           env,
@@ -1199,10 +1199,10 @@ export class ConclaveForgeExecutionService {
       if (
         !this.env.CONCLAVE_API &&
         !this.env.CONCLAVE_API_BASE_URL &&
-        !this.env.CONCLAVE_AGENT_GATEWAY
+        !this.env.CONCLAVE_HOST_GATEWAY
       ) {
         throw new Error(
-          "CONCLAVE_AGENT_GATEWAY, CONCLAVE_API, or CONCLAVE_API_BASE_URL is not configured",
+          "CONCLAVE_HOST_GATEWAY, CONCLAVE_API, or CONCLAVE_API_BASE_URL is not configured",
         );
       }
       resultArtifactId = await executeForgeService(

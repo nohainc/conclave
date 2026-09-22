@@ -4,7 +4,7 @@ import {
   type AssignmentFailurePayload,
   type AssignmentCancelPayload,
 } from "@conclave/agent-protocol";
-import type { GatewayEnv } from "./agent-gateway.js";
+import type { GatewayEnv } from "./host-gateway.js";
 
 export interface TaskToDispatch {
   readonly id: string;
@@ -54,8 +54,7 @@ export interface DispatchAssignmentResult {
 }
 
 export interface AssignmentDispatcherEnv extends GatewayEnv {
-  readonly AGENT_GATEWAY?: DurableObjectNamespace;
-  readonly CONCLAVE_AGENT_GATEWAY?: DurableObjectNamespace;
+  readonly CONCLAVE_HOST_GATEWAY?: DurableObjectNamespace;
 }
 
 /**
@@ -173,7 +172,7 @@ export async function selectWorkerForTask(
 }
 
 /**
- * Creates an Attempt and WorkerAssignment in D1 and dispatches the task over the Agent Gateway.
+ * Creates an Attempt and WorkerAssignment in D1 and dispatches the task over the Host Gateway.
  */
 export async function dispatchTaskAssignment(
   env: AssignmentDispatcherEnv,
@@ -270,7 +269,7 @@ export async function dispatchTaskAssignment(
     .bind(now, taskId)
     .run();
 
-  // 6. Deliver to AgentGateway Durable Object if namespace is available
+  // 6. Deliver to HostGateway Durable Object if namespace is available
   const payload: AssignmentStartPayload = {
     pluginId: selectedWorker.pluginId,
     resolvedPluginVersion: selectedWorker.pluginVersionPolicy,
@@ -282,14 +281,14 @@ export async function dispatchTaskAssignment(
     ...(task.repository ? { repository: task.repository } : {}),
   };
 
-  const gatewayNamespace = env.CONCLAVE_AGENT_GATEWAY || env.AGENT_GATEWAY;
+  const gatewayNamespace = env.CONCLAVE_HOST_GATEWAY;
   if (!gatewayNamespace) {
     const error =
-      "Agent Gateway is not configured; assignment was not dispatched";
+      "Host Gateway is not configured; assignment was not dispatched";
     await recordAssignmentError(env.CONCLAVE_DB, assignmentId, {
       status: "failed",
       error: {
-        code: "AGENT_GATEWAY_NOT_CONFIGURED",
+        code: "HOST_GATEWAY_NOT_CONFIGURED",
         message: error,
         retryable: true,
       },
@@ -579,7 +578,7 @@ export async function cancelTaskAssignment(
     .bind(now, String(row.task_id))
     .run();
 
-  const gatewayNamespace = env.CONCLAVE_AGENT_GATEWAY || env.AGENT_GATEWAY;
+  const gatewayNamespace = env.CONCLAVE_HOST_GATEWAY;
   if (gatewayNamespace) {
     try {
       const doId = gatewayNamespace.idFromName(String(row.agent_id));

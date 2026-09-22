@@ -2,7 +2,7 @@
  * Conclave AX Architecture v2 - Cloud Multi-Agent Ensemble Dispatcher.
  *
  * Coordinates multi-agent and multi-worker execution across heterogeneous agents and machines
- * (e.g. MacBook, Linux server, Web worker) backed by Cloud D1 persistence and AgentGateway Durable Objects.
+ * (e.g. MacBook, Linux server, Web worker) backed by Cloud D1 persistence and HostGateway Durable Objects.
  */
 
 import {

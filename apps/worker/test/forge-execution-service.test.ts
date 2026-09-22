@@ -223,13 +223,13 @@ describe("durable Forge execution service", () => {
     });
   });
 
-  it("accepts direct Agent Gateway execution without an internal HTTP API", async () => {
+  it("accepts direct Host Gateway execution without an internal HTTP API", async () => {
     const db = new MemoryD1();
     const gateway = {} as DurableObjectNamespace;
     const response = await new ConclaveForgeExecutionService({
       CONCLAVE_DB: db,
       CONCLAVE_ARTIFACTS: {} as R2Bucket,
-      CONCLAVE_AGENT_GATEWAY: gateway,
+      CONCLAVE_HOST_GATEWAY: gateway,
     }).fetch(
       new Request("https://conclave.internal/execute", {
         method: "POST",

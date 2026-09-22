@@ -1,5 +1,5 @@
 export { ConclaveRunWorkflow } from "../workflow.js";
-export { AgentGateway } from "../agent-gateway.js";
+export { HostGateway } from "../host-gateway.js";
 export {
   selectWorkerForTask,
   dispatchTaskAssignment,
@@ -204,7 +204,7 @@ type SecurityEnv = Env & {
   readonly CONCLAVE_ALLOW_ANONYMOUS_DEV?: string;
   readonly CONCLAVE_CI_INGEST_TOKEN?: string;
   readonly CONCLAVE_FORGE_CALLBACK_TOKEN?: string;
-  readonly CONCLAVE_AGENT_GATEWAY: DurableObjectNamespace;
+  readonly CONCLAVE_HOST_GATEWAY: DurableObjectNamespace;
   readonly CONCLAVE_CONNECTOR_REGISTRATION_TOKEN?: string;
 };
 
@@ -1118,14 +1118,14 @@ const WORKSPACE_BACKUP_QUERIES: readonly WorkspaceBackupQuery[] = [
     name: "task_dependencies",
     sql: "SELECT td.* FROM task_dependencies td JOIN tasks t ON t.id = td.task_id JOIN phases ph ON ph.id = t.phase_id JOIN runs r ON r.id = ph.run_id WHERE r.workspace_id = ?1",
   },
-  { name: "agents", sql: "SELECT * FROM agents WHERE workspace_id = ?1" },
+  { name: "hosts", sql: "SELECT * FROM hosts WHERE workspace_id = ?1" },
   {
-    name: "agent_enrollments",
-    sql: "SELECT * FROM agent_enrollments WHERE workspace_id = ?1",
+    name: "host_enrollments",
+    sql: "SELECT * FROM host_enrollments WHERE workspace_id = ?1",
   },
   {
-    name: "agent_sessions",
-    sql: "SELECT * FROM agent_sessions WHERE workspace_id = ?1",
+    name: "host_sessions",
+    sql: "SELECT * FROM host_sessions WHERE workspace_id = ?1",
   },
   { name: "workers", sql: "SELECT * FROM workers WHERE workspace_id = ?1" },
   {
@@ -2329,14 +2329,14 @@ async function handleCreateChatMessage(
 // Agent Enrollment & Fleet Handlers
 // =========================================================================
 
-async function handleCreateAgentEnrollment(
+async function handleCreateHostEnrollment(
   request: Request,
   env: SecurityEnv,
   workspaceId: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "agents:manage");
+  authorize(context, "hosts:manage");
   requireWorkspaceContext(context, env, workspaceId);
 
   const body = parseJson<{ expiresHours?: number; maxUses?: number }>(
@@ -2354,7 +2354,7 @@ async function handleCreateAgentEnrollment(
   const createdAt = now.toISOString();
 
   await env.CONCLAVE_DB.prepare(
-    `INSERT INTO agent_enrollments (id, workspace_id, token_hash, created_by_user_id, expires_at, created_at)
+    `INSERT INTO host_enrollments (id, workspace_id, token_hash, created_by_user_id, expires_at, created_at)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
   )
     .bind(
@@ -2370,8 +2370,8 @@ async function handleCreateAgentEnrollment(
   await recordAudit(
     env,
     context,
-    "agent.enrollment.created",
-    "agent_enrollment",
+    "host.enrollment.created",
+    "host_enrollment",
     enrollmentId,
     { expiresAt, maxUses: body.maxUses ?? null },
   );
@@ -2388,19 +2388,19 @@ async function handleCreateAgentEnrollment(
   );
 }
 
-async function handleListAgentEnrollments(
+async function handleListHostEnrollments(
   request: Request,
   env: SecurityEnv,
   workspaceId: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "agents:read");
+  authorize(context, "hosts:read");
   requireWorkspaceContext(context, env, workspaceId);
 
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT id, workspace_id as workspaceId, created_by_user_id as createdByUserId, expires_at as expiresAt, used_at as usedAt, revoked_at as revokedAt, created_at as createdAt
-     FROM agent_enrollments WHERE workspace_id = ?1 ORDER BY created_at DESC`,
+     FROM host_enrollments WHERE workspace_id = ?1 ORDER BY created_at DESC`,
   )
     .bind(workspaceId)
     .all();
@@ -2408,7 +2408,7 @@ async function handleListAgentEnrollments(
   return json({ enrollments: rows.results ?? [] });
 }
 
-async function handleRevokeAgentEnrollment(
+async function handleRevokeHostEnrollment(
   request: Request,
   env: SecurityEnv,
   workspaceId: string,
@@ -2416,12 +2416,12 @@ async function handleRevokeAgentEnrollment(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "agents:manage");
+  authorize(context, "hosts:manage");
   requireWorkspaceContext(context, env, workspaceId);
 
   const now = new Date().toISOString();
   await env.CONCLAVE_DB.prepare(
-    `UPDATE agent_enrollments SET revoked_at = ?1 WHERE id = ?2 AND workspace_id = ?3`,
+    `UPDATE host_enrollments SET revoked_at = ?1 WHERE id = ?2 AND workspace_id = ?3`,
   )
     .bind(now, enrollmentId, workspaceId)
     .run();
@@ -2429,15 +2429,15 @@ async function handleRevokeAgentEnrollment(
   await recordAudit(
     env,
     context,
-    "agent.enrollment.revoked",
-    "agent_enrollment",
+    "host.enrollment.revoked",
+    "host_enrollment",
     enrollmentId,
   );
 
   return json({ ok: true, revokedAt: now });
 }
 
-async function handleEnrollAgent(
+async function handleEnrollHost(
   request: Request,
   env: SecurityEnv,
 ): Promise<Response> {
@@ -2445,7 +2445,7 @@ async function handleEnrollAgent(
     token?: string;
     name?: string;
     hostname?: string;
-    agentId?: string;
+    hostId?: string;
   }>(await request.text(), {});
 
   if (!body.token) {
@@ -2456,7 +2456,7 @@ async function handleEnrollAgent(
   const now = new Date().toISOString();
 
   const enrollment = await env.CONCLAVE_DB.prepare(
-    `SELECT * FROM agent_enrollments
+    `SELECT * FROM host_enrollments
        WHERE token_hash = ?1
          AND revoked_at IS NULL
          AND used_at IS NULL
@@ -2476,22 +2476,21 @@ async function handleEnrollAgent(
     );
   }
 
-  const agentId = body.agentId || `agent-${crypto.randomUUID().slice(0, 8)}`;
-  const authToken = `conclave_agent_tok_${crypto.randomUUID().replace(/-/g, "")}`;
+  const hostId = body.hostId || `host-${crypto.randomUUID().slice(0, 8)}`;
+  const authToken = `conclave_host_tok_${crypto.randomUUID().replace(/-/g, "")}`;
   const authTokenHash = await hashToken(authToken);
 
   await env.CONCLAVE_DB.prepare(
-    `INSERT INTO agents (id, workspace_id, name, hostname, status, version, capabilities_json, auth_token_hash, enrolled_at, created_at, updated_at)
-     VALUES (?1, ?2, ?3, ?4, 'enrolled', '0.2.0', '{}', ?5, ?6, ?6, ?6)
+    `INSERT INTO hosts (id, name, hostname, status, version, capabilities_json, auth_token_hash, enrolled_at, created_at, updated_at)
+     VALUES (?1, ?2, ?3, 'enrolled', '0.2.0', '{}', ?4, ?5, ?5, ?5)
      ON CONFLICT(id) DO UPDATE SET
        auth_token_hash = excluded.auth_token_hash,
        status = 'enrolled',
        updated_at = excluded.updated_at`,
   )
     .bind(
-      agentId,
-      enrollment.workspace_id,
-      body.name || `Agent ${agentId}`,
+      hostId,
+      body.name || `Host ${hostId}`,
       body.hostname || "localhost",
       authTokenHash,
       now,
@@ -2499,14 +2498,28 @@ async function handleEnrollAgent(
     .run();
 
   await env.CONCLAVE_DB.prepare(
-    `UPDATE agent_enrollments SET used_at = ?1 WHERE id = ?2`,
+    `INSERT INTO host_workspace_bindings (id, host_id, workspace_id, status, granted_by_user_id, created_at, updated_at)
+     VALUES (?1, ?2, ?3, 'active', ?4, ?5, ?5)
+     ON CONFLICT(host_id, workspace_id) DO UPDATE SET status = 'active', updated_at = excluded.updated_at`,
+  )
+    .bind(
+      `binding-${hostId}-${enrollment.workspace_id}`,
+      hostId,
+      enrollment.workspace_id,
+      enrollment.created_by_user_id,
+      now,
+    )
+    .run();
+
+  await env.CONCLAVE_DB.prepare(
+    `UPDATE host_enrollments SET used_at = ?1 WHERE id = ?2`,
   )
     .bind(now, enrollment.id)
     .run();
 
   return json(
     {
-      agentId,
+      hostId,
       workspaceId: enrollment.workspace_id,
       authToken,
     },
@@ -2514,90 +2527,93 @@ async function handleEnrollAgent(
   );
 }
 
-async function handleListAgents(
+async function handleListHosts(
   request: Request,
   env: SecurityEnv,
   workspaceId: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "agents:read");
+  authorize(context, "hosts:read");
   requireWorkspaceContext(context, env, workspaceId);
 
   const rows = await env.CONCLAVE_DB.prepare(
-    `SELECT id, workspace_id as workspaceId, name, hostname, status, version, capabilities_json as capabilitiesJson, enrolled_at as enrolledAt, last_heartbeat_at as lastHeartbeatAt, revoked_at as revokedAt, created_at as createdAt, updated_at as updatedAt
-     FROM agents WHERE workspace_id = ?1 ORDER BY created_at DESC`,
+    `SELECT h.id, b.workspace_id as workspaceId, h.name, h.hostname, h.status, h.version, h.capabilities_json as capabilitiesJson, h.enrolled_at as enrolledAt, h.last_heartbeat_at as lastHeartbeatAt, h.revoked_at as revokedAt, h.created_at as createdAt, h.updated_at as updatedAt
+     FROM hosts h JOIN host_workspace_bindings b ON b.host_id = h.id
+     WHERE b.workspace_id = ?1 AND b.status = 'active' ORDER BY h.created_at DESC`,
   )
     .bind(workspaceId)
     .all();
 
-  return json({ agents: rows.results ?? [] });
+  return json({ hosts: rows.results ?? [] });
 }
 
-async function handleGetAgent(
+async function handleGetHost(
   request: Request,
   env: SecurityEnv,
   workspaceId: string,
-  agentId: string,
+  hostId: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "agents:read");
+  authorize(context, "hosts:read");
   requireWorkspaceContext(context, env, workspaceId);
 
-  const agent = await env.CONCLAVE_DB.prepare(
-    `SELECT id, workspace_id as workspaceId, name, hostname, status, version, capabilities_json as capabilitiesJson, enrolled_at as enrolledAt, last_heartbeat_at as lastHeartbeatAt, revoked_at as revokedAt, created_at as createdAt, updated_at as updatedAt
-     FROM agents WHERE workspace_id = ?1 AND id = ?2`,
+  const host = await env.CONCLAVE_DB.prepare(
+    `SELECT h.id, b.workspace_id as workspaceId, h.name, h.hostname, h.status, h.version, h.capabilities_json as capabilitiesJson, h.enrolled_at as enrolledAt, h.last_heartbeat_at as lastHeartbeatAt, h.revoked_at as revokedAt, h.created_at as createdAt, h.updated_at as updatedAt
+     FROM hosts h JOIN host_workspace_bindings b ON b.host_id = h.id
+     WHERE b.workspace_id = ?1 AND b.status = 'active' AND h.id = ?2`,
   )
-    .bind(workspaceId, agentId)
+    .bind(workspaceId, hostId)
     .first();
 
-  if (!agent) return json({ error: "Agent not found" }, { status: 404 });
+  if (!host) return json({ error: "Host not found" }, { status: 404 });
 
   const sessions = await env.CONCLAVE_DB.prepare(
     `SELECT id, client_version as clientVersion, protocol_version as protocolVersion, connected_at as connectedAt, last_heartbeat_at as lastHeartbeatAt, disconnected_at as disconnectedAt
-     FROM agent_sessions WHERE agent_id = ?1 ORDER BY connected_at DESC LIMIT 10`,
+     FROM host_sessions WHERE host_id = ?1 ORDER BY connected_at DESC LIMIT 10`,
   )
-    .bind(agentId)
+    .bind(hostId)
     .all();
 
-  return json({ agent, sessions: sessions.results ?? [] });
+  return json({ host, sessions: sessions.results ?? [] });
 }
 
-async function handleRevokeAgent(
+async function handleRevokeHost(
   request: Request,
   env: SecurityEnv,
   workspaceId: string,
-  agentId: string,
+  hostId: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "agents:manage");
+  authorize(context, "hosts:manage");
   requireWorkspaceContext(context, env, workspaceId);
 
   const now = new Date().toISOString();
   await env.CONCLAVE_DB.prepare(
-    `UPDATE agents SET status = 'revoked', revoked_at = ?1, updated_at = ?1 WHERE workspace_id = ?2 AND id = ?3`,
+    `UPDATE hosts SET status = 'revoked', revoked_at = ?1, updated_at = ?1
+     WHERE id = ?3 AND EXISTS (SELECT 1 FROM host_workspace_bindings b WHERE b.host_id = hosts.id AND b.workspace_id = ?2 AND b.status = 'active')`,
   )
-    .bind(now, workspaceId, agentId)
+    .bind(now, workspaceId, hostId)
     .run();
 
-  await recordAudit(env, context, "agent.revoked", "agent", agentId, {
+  await recordAudit(env, context, "host.revoked", "host", hostId, {
     revokedAt: now,
   });
 
   return json({ ok: true, revokedAt: now });
 }
 
-async function handleAnnounceAgentUpdate(
+async function handleAnnounceHostUpdate(
   request: Request,
   env: SecurityEnv,
   workspaceId: string,
-  agentId: string,
+  hostId: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "agents:manage");
+  authorize(context, "hosts:manage");
   requireWorkspaceContext(context, env, workspaceId);
 
   const body = parseJson<{
@@ -2609,20 +2625,21 @@ async function handleAnnounceAgentUpdate(
     return json({ error: "Unsupported release channel" }, { status: 400 });
   }
 
-  const agent = await env.CONCLAVE_DB.prepare(
-    `SELECT id, version, capabilities_json as capabilitiesJson
-     FROM agents WHERE workspace_id = ?1 AND id = ?2 AND revoked_at IS NULL`,
+  const host = await env.CONCLAVE_DB.prepare(
+    `SELECT h.id, h.version, h.capabilities_json as capabilitiesJson
+     FROM hosts h JOIN host_workspace_bindings b ON b.host_id = h.id
+     WHERE b.workspace_id = ?1 AND b.status = 'active' AND h.id = ?2 AND h.revoked_at IS NULL`,
   )
-    .bind(workspaceId, agentId)
+    .bind(workspaceId, hostId)
     .first<{
       id: string;
       version: string;
       capabilitiesJson: string;
     }>();
-  if (!agent) return json({ error: "Agent not found" }, { status: 404 });
+  if (!host) return json({ error: "Host not found" }, { status: 404 });
 
   const capabilities = parseJson<Record<string, unknown>>(
-    agent.capabilitiesJson,
+    host.capabilitiesJson,
     {},
   );
   const operatingSystem =
@@ -2630,18 +2647,18 @@ async function handleAnnounceAgentUpdate(
   const architecture =
     typeof capabilities.arch === "string" ? capabilities.arch : null;
   const rows = await env.CONCLAVE_DB.prepare(
-    `SELECT version, channel, min_supported_agent_version as minSupportedAgentVersion,
+    `SELECT version, channel, min_supported_host_version as minSupportedHostVersion,
             supported_os_json as supportedOsJson, supported_arch_json as supportedArchJson,
             package_digest as packageDigest, package_r2_key as packageR2Key,
             signature, release_notes as releaseNotes
-     FROM agent_releases
+     FROM host_releases
      WHERE channel = ?1 AND is_revoked = 0`,
   )
     .bind(channel)
     .all<{
       version: string;
       channel: string;
-      minSupportedAgentVersion: string | null;
+      minSupportedHostVersion: string | null;
       supportedOsJson: string;
       supportedArchJson: string;
       packageDigest: string;
@@ -2660,7 +2677,7 @@ async function handleAnnounceAgentUpdate(
       (!architecture ||
         supportedArch.length === 0 ||
         supportedArch.includes(architecture)) &&
-      compareSemver(release.version, agent.version) > 0
+      compareSemver(release.version, host.version) > 0
     );
   };
   const candidates = (rows.results ?? []).filter(compatible);
@@ -2691,12 +2708,12 @@ async function handleAnnounceAgentUpdate(
       packageDigest: release.packageDigest,
       signature: release.signature,
       ...(release.releaseNotes ? { releaseNotes: release.releaseNotes } : {}),
-      ...(release.minSupportedAgentVersion
-        ? { minSupportedAgentVersion: release.minSupportedAgentVersion }
+      ...(release.minSupportedHostVersion
+        ? { minSupportedHostVersion: release.minSupportedHostVersion }
         : {}),
     },
   };
-  const gateway = env.CONCLAVE_AGENT_GATEWAY.getByName(agentId);
+  const gateway = env.CONCLAVE_HOST_GATEWAY.getByName(hostId);
   const delivered = await gateway.fetch(
     new Request("https://gateway.internal/post-message", {
       method: "POST",
@@ -2709,20 +2726,20 @@ async function handleAnnounceAgentUpdate(
       {
         error:
           delivered.status === 503
-            ? "Agent is currently offline"
+            ? "Host is currently offline"
             : "Could not deliver update announcement",
       },
       { status: delivered.status === 503 ? 503 : 502 },
     );
   }
 
-  await recordAudit(env, context, "agent.update.announced", "agent", agentId, {
+  await recordAudit(env, context, "host.update.announced", "host", hostId, {
     version: release.version,
     channel: release.channel,
   });
   return json({
     delivered: true,
-    agentId,
+    hostId,
     version: release.version,
     channel: release.channel,
   });
@@ -2735,11 +2752,11 @@ async function handleListWorkers(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "agents:read");
+  authorize(context, "hosts:read");
   requireWorkspaceContext(context, env, workspaceId);
 
   const rows = await env.CONCLAVE_DB.prepare(
-    `SELECT id, workspace_id as workspaceId, agent_id as agentId, plugin_id as pluginId,
+    `SELECT id, workspace_id as workspaceId, host_id as hostId, plugin_id as pluginId,
             plugin_version_policy as pluginVersionPolicy, name, roles_json as rolesJson,
             capabilities_json as capabilitiesJson, config_json as configJson,
             secret_refs_json as secretRefsJson, billing_mode as billingMode,
@@ -2783,7 +2800,7 @@ async function handleCreateWorker(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "agents:manage");
+  authorize(context, "hosts:manage");
   requireWorkspaceContext(context, env, workspaceId);
 
   const body = (await request.json()) as Record<string, unknown>;
@@ -2863,7 +2880,7 @@ async function handleCreateWorker(
   // Validate agent and plugin references
   const agentRow = await env.CONCLAVE_DB.prepare(
     `SELECT id, workspace_id as workspaceId, status
-     FROM agents WHERE id = ?1 AND workspace_id = ?2`,
+     FROM hosts WHERE id = ?1 AND workspace_id = ?2`,
   )
     .bind(agentId, workspaceId)
     .first<{ id: string; workspaceId: string; status: string }>();
@@ -2921,7 +2938,7 @@ async function handleCreateWorker(
 
   await env.CONCLAVE_DB.prepare(
     `INSERT INTO workers (
-       id, workspace_id, agent_id, plugin_id, plugin_version_policy,
+       id, workspace_id, host_id, plugin_id, plugin_version_policy,
        name, roles_json, capabilities_json, config_json, secret_refs_json,
        billing_mode, cost_metadata_json, independence_key, concurrency_limit,
        session_policy, enabled, status, created_at, updated_at
@@ -2967,11 +2984,11 @@ async function handleGetWorker(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "agents:read");
+  authorize(context, "hosts:read");
   requireWorkspaceContext(context, env, workspaceId);
 
   const row = await env.CONCLAVE_DB.prepare(
-    `SELECT id, workspace_id as workspaceId, agent_id as agentId, plugin_id as pluginId,
+    `SELECT id, workspace_id as workspaceId, host_id as agentId, plugin_id as pluginId,
             plugin_version_policy as pluginVersionPolicy, name, roles_json as rolesJson,
             capabilities_json as capabilitiesJson, config_json as configJson,
             secret_refs_json as secretRefsJson, billing_mode as billingMode,
@@ -3020,7 +3037,7 @@ async function handleUpdateWorker(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "agents:manage");
+  authorize(context, "hosts:manage");
   requireWorkspaceContext(context, env, workspaceId);
 
   const existing = await env.CONCLAVE_DB.prepare(
@@ -3039,7 +3056,7 @@ async function handleUpdateWorker(
   const agentId =
     typeof body.agentId === "string" && body.agentId.length > 0
       ? body.agentId
-      : String(existing.agent_id);
+      : String(existing.host_id);
   const pluginId =
     typeof body.pluginId === "string" && body.pluginId.length > 0
       ? body.pluginId
@@ -3047,7 +3064,7 @@ async function handleUpdateWorker(
 
   const agent = await env.CONCLAVE_DB.prepare(
     `SELECT id, workspace_id as workspaceId, status
-     FROM agents WHERE id = ?1 AND workspace_id = ?2`,
+     FROM hosts WHERE id = ?1 AND workspace_id = ?2`,
   )
     .bind(agentId, workspaceId)
     .first<{ id: string; workspaceId: string; status: string }>();
@@ -3149,7 +3166,7 @@ async function handleUpdateWorker(
 
   await env.CONCLAVE_DB.prepare(
     `UPDATE workers SET
-       agent_id = ?1, plugin_id = ?2, name = ?3, plugin_version_policy = ?4,
+       host_id = ?1, plugin_id = ?2, name = ?3, plugin_version_policy = ?4,
        roles_json = ?5, capabilities_json = ?6, config_json = ?7,
        secret_refs_json = ?8, billing_mode = ?9, cost_metadata_json = ?10,
        independence_key = ?11, concurrency_limit = ?12, session_policy = ?13,
@@ -3194,7 +3211,7 @@ async function handleDeleteWorker(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "agents:manage");
+  authorize(context, "hosts:manage");
   requireWorkspaceContext(context, env, workspaceId);
 
   await env.CONCLAVE_DB.prepare(
@@ -3456,7 +3473,7 @@ async function handleDispatchEnsembleTaskAssignment(
   }
 }
 
-async function handleAgentGatewayConnect(
+async function handleHostGatewayConnect(
   request: Request,
   env: SecurityEnv,
 ): Promise<Response> {
@@ -3465,42 +3482,44 @@ async function handleAgentGatewayConnect(
   }
 
   const url = new URL(request.url);
-  const agentId = url.searchParams.get("agentId");
+  const hostId = url.searchParams.get("hostId");
   const authToken =
     extractAuthToken(request.headers) ??
     url.searchParams.get("token") ??
     url.searchParams.get("authToken");
 
-  if (!agentId || !authToken) {
+  if (!hostId || !authToken) {
     return json(
-      { error: "agentId and authToken are required" },
+      { error: "hostId and authToken are required" },
       { status: 401 },
     );
   }
 
   const tokenHash = await hashToken(authToken);
-  const agent = await env.CONCLAVE_DB.prepare(
-    `SELECT id, workspace_id, status FROM agents WHERE id = ?1 AND auth_token_hash = ?2 AND revoked_at IS NULL`,
+  const host = await env.CONCLAVE_DB.prepare(
+    `SELECT h.id, b.workspace_id, h.status FROM hosts h
+     JOIN host_workspace_bindings b ON b.host_id = h.id
+     WHERE h.id = ?1 AND h.auth_token_hash = ?2 AND b.status = 'active' AND h.revoked_at IS NULL`,
   )
-    .bind(agentId, tokenHash)
+    .bind(hostId, tokenHash)
     .first<{ id: string; workspace_id: string; status: string }>();
 
-  if (!agent) {
+  if (!host) {
     return json(
-      { error: "Invalid agent credentials or agent is revoked" },
+      { error: "Invalid host credentials or host is revoked" },
       { status: 401 },
     );
   }
 
   const targetUrl = new URL(request.url);
-  targetUrl.searchParams.set("workspaceId", agent.workspace_id);
+  targetUrl.searchParams.set("workspaceId", host.workspace_id);
   const upgradedRequest = new Request(targetUrl.toString(), request);
 
-  const stub = env.CONCLAVE_AGENT_GATEWAY.getByName(agentId);
+  const stub = env.CONCLAVE_HOST_GATEWAY.getByName(hostId);
   return stub.fetch(upgradedRequest);
 }
 
-async function handleAgentProtocolMessage(
+async function handleHostProtocolMessage(
   request: Request,
   env: SecurityEnv,
 ): Promise<Response> {
@@ -3510,44 +3529,46 @@ async function handleAgentProtocolMessage(
     return json({ error: "Malformed JSON" }, { status: 400 });
   }
 
-  let message: AgentProtocolMessage;
+  let message: any;
   try {
     message = parseAgentMessage(parsedJson);
   } catch (err) {
     return json(
       {
         error:
-          err instanceof Error ? err.message : "Invalid agent protocol message",
+          err instanceof Error ? err.message : "Invalid host protocol message",
       },
       { status: 400 },
     );
   }
 
   const token = extractAuthToken(request.headers);
-  let authenticatedAgent: { id: string; workspace_id: string } | null = null;
+  let authenticatedHost: { id: string; workspace_id: string } | null = null;
   if (token) {
     const tokenHash = await hashToken(token);
-    authenticatedAgent = await env.CONCLAVE_DB.prepare(
-      `SELECT id, workspace_id FROM agents WHERE auth_token_hash = ?1 AND revoked_at IS NULL`,
+    authenticatedHost = await env.CONCLAVE_DB.prepare(
+      `SELECT h.id, b.workspace_id FROM hosts h
+       JOIN host_workspace_bindings b ON b.host_id = h.id
+       WHERE h.auth_token_hash = ?1 AND b.status = 'active' AND h.revoked_at IS NULL`,
     )
       .bind(tokenHash)
       .first<{ id: string; workspace_id: string }>();
-    if (!authenticatedAgent) {
-      return json({ error: "Unauthorized agent token" }, { status: 401 });
+    if (!authenticatedHost) {
+      return json({ error: "Unauthorized host token" }, { status: 401 });
     }
   } else if (!anonymousDevelopment(env)) {
-    return json({ error: "Agent authentication required" }, { status: 401 });
+    return json({ error: "Host authentication required" }, { status: 401 });
   }
 
   if (
-    authenticatedAgent &&
+    authenticatedHost &&
     (message.type === "agent.hello" ||
       message.type === "agent.heartbeat" ||
       message.type === "agent.sync.request") &&
-    (message.payload.agentId !== authenticatedAgent.id ||
-      message.payload.workspaceId !== authenticatedAgent.workspace_id)
+    (message.payload.agentId !== authenticatedHost.id ||
+      message.payload.workspaceId !== authenticatedHost.workspace_id)
   ) {
-    return json({ error: "Agent identity mismatch" }, { status: 403 });
+    return json({ error: "Host identity mismatch" }, { status: 403 });
   }
 
   const now = new Date().toISOString();
@@ -3593,12 +3614,12 @@ async function handleAgentProtocolMessage(
     const assignmentIds = message.payload.unreconciledAssignmentIds ?? [];
     if (assignmentIds.length > 0) {
       const placeholders = assignmentIds
-        .map((_, index) => `?${index + 3}`)
+        .map((_: unknown, index: number) => `?${index + 3}`)
         .join(",");
       const rows = await env.CONCLAVE_DB.prepare(
         `SELECT id, attempt_id, idempotency_key, status
          FROM worker_assignments
-         WHERE agent_id = ?1 AND workspace_id = ?2 AND id IN (${placeholders})`,
+         WHERE host_id = ?1 AND workspace_id = ?2 AND id IN (${placeholders})`,
       )
         .bind(
           message.payload.agentId,
@@ -3621,19 +3642,19 @@ async function handleAgentProtocolMessage(
       }
     }
     const desiredWorkerRows = await env.CONCLAVE_DB.prepare(
-      `SELECT id, workspace_id, agent_id, plugin_id, plugin_version_policy,
+      `SELECT id, workspace_id, host_id, plugin_id, plugin_version_policy,
               name, roles_json, capabilities_json, config_json, secret_refs_json,
               billing_mode, cost_metadata_json, independence_key,
               concurrency_limit, session_policy, enabled
        FROM workers
-       WHERE workspace_id = ?1 AND agent_id = ?2 AND enabled = 1
+       WHERE workspace_id = ?1 AND host_id = ?2 AND enabled = 1
        ORDER BY id ASC`,
     )
       .bind(message.payload.workspaceId, message.payload.agentId)
       .all<{
         id: string;
         workspace_id: string;
-        agent_id: string;
+        host_id: string;
         plugin_id: string;
         plugin_version_policy: string;
         name: string;
@@ -3658,7 +3679,7 @@ async function handleAgentProtocolMessage(
     const desiredWorkers = (desiredWorkerRows.results ?? []).map((row) => ({
       workerId: row.id,
       workspaceId: row.workspace_id,
-      agentId: row.agent_id,
+      agentId: row.host_id,
       pluginId: row.plugin_id,
       pluginVersionPolicy: row.plugin_version_policy,
       name: row.name,
@@ -3691,7 +3712,7 @@ async function handleAgentProtocolMessage(
            ORDER BY latest.created_at DESC
            LIMIT 1
          )
-       WHERE w.workspace_id = ?1 AND w.agent_id = ?2 AND w.enabled = 1
+       WHERE w.workspace_id = ?1 AND w.host_id = ?2 AND w.enabled = 1
        ORDER BY wp.id ASC`,
     )
       .bind(message.payload.workspaceId, message.payload.agentId)
@@ -3757,18 +3778,18 @@ async function handleAgentProtocolMessage(
 
   if (message.type === "assignment.result") {
     if (
-      authenticatedAgent &&
-      (authenticatedAgent.id !== message.agentId ||
-        authenticatedAgent.workspace_id !== message.workspaceId)
+      authenticatedHost &&
+      (authenticatedHost.id !== message.agentId ||
+        authenticatedHost.workspace_id !== message.workspaceId)
     ) {
       return json(
-        { error: "Agent assignment identity mismatch" },
+        { error: "Host assignment identity mismatch" },
         { status: 403 },
       );
     }
     const assignment = await env.CONCLAVE_DB.prepare(
       `SELECT id FROM worker_assignments
-       WHERE id = ?1 AND workspace_id = ?2 AND agent_id = ?3 AND worker_id = ?4
+       WHERE id = ?1 AND workspace_id = ?2 AND host_id = ?3 AND worker_id = ?4
          AND run_id = ?5 AND task_id = ?6 AND attempt_id = ?7
          AND idempotency_key = ?8`,
     )
@@ -3800,18 +3821,18 @@ async function handleAgentProtocolMessage(
 
   if (message.type === "assignment.error") {
     if (
-      authenticatedAgent &&
-      (authenticatedAgent.id !== message.agentId ||
-        authenticatedAgent.workspace_id !== message.workspaceId)
+      authenticatedHost &&
+      (authenticatedHost.id !== message.agentId ||
+        authenticatedHost.workspace_id !== message.workspaceId)
     ) {
       return json(
-        { error: "Agent assignment identity mismatch" },
+        { error: "Host assignment identity mismatch" },
         { status: 403 },
       );
     }
     const assignment = await env.CONCLAVE_DB.prepare(
       `SELECT id FROM worker_assignments
-       WHERE id = ?1 AND workspace_id = ?2 AND agent_id = ?3 AND worker_id = ?4
+       WHERE id = ?1 AND workspace_id = ?2 AND host_id = ?3 AND worker_id = ?4
          AND run_id = ?5 AND task_id = ?6 AND attempt_id = ?7
          AND idempotency_key = ?8`,
     )
@@ -3909,7 +3930,7 @@ async function handleStudioSnapshot(
   const [
     projects,
     workers,
-    agents,
+    hosts,
     plugins,
     tasks,
     findings,
@@ -3925,7 +3946,7 @@ async function handleStudioSnapshot(
       .bind(...projectListBind)
       .all(),
     env.CONCLAVE_DB.prepare(
-      `SELECT w.id, w.name, w.agent_id AS agentId, w.plugin_id AS pluginId,
+      `SELECT w.id, w.name, w.host_id AS agentId, w.plugin_id AS pluginId,
               w.plugin_version_policy AS pluginVersionPolicy,
               w.roles_json, w.capabilities_json, w.config_json AS config,
               w.billing_mode AS billingMode, w.cost_metadata_json AS costMetadata,
@@ -3934,7 +3955,7 @@ async function handleStudioSnapshot(
               COALESCE(a.name, 'Unassigned') AS agentName,
               COALESCE(wp.display_name, 'Unassigned') AS pluginName
        FROM workers w
-       LEFT JOIN agents a ON a.id = w.agent_id
+       LEFT JOIN hosts a ON a.id = w.host_id
        LEFT JOIN worker_plugins wp ON wp.id = w.plugin_id
        WHERE w.workspace_id = ?1 ORDER BY w.name`,
     )
@@ -3946,11 +3967,11 @@ async function handleStudioSnapshot(
               COALESCE(json_extract(a.capabilities_json, '$.arch'), '—') AS architecture,
               a.version AS appVersion, 'stable' AS updateChannel,
               COALESCE(a.last_heartbeat_at, a.updated_at) AS lastSeen,
-              (SELECT COUNT(*) FROM agent_plugin_installs i WHERE i.agent_id = a.id) AS pluginCount,
-              (SELECT COUNT(*) FROM workers w WHERE w.agent_id = a.id) AS workerCount,
+              (SELECT COUNT(*) FROM agent_plugin_installs i WHERE i.host_id = a.id) AS pluginCount,
+              (SELECT COUNT(*) FROM workers w WHERE w.host_id = a.id) AS workerCount,
               (SELECT COUNT(*) FROM worker_assignments wa JOIN workers w ON w.id = wa.worker_id
-               WHERE w.agent_id = a.id AND wa.status IN ('assigned', 'running')) AS activeTaskCount
-       FROM agents a WHERE a.workspace_id = ?1 ORDER BY a.name`,
+               WHERE w.host_id = a.id AND wa.status IN ('assigned', 'running')) AS activeTaskCount
+       FROM hosts a WHERE a.workspace_id = ?1 ORDER BY a.name`,
     )
       .bind(context.workspaceId)
       .all(),
@@ -3961,7 +3982,7 @@ async function handleStudioSnapshot(
               COALESCE((SELECT v.permissions_json FROM worker_plugin_versions v WHERE v.plugin_id = p.id AND v.is_revoked = 0 ORDER BY v.created_at DESC LIMIT 1), '[]') AS permissions,
               COALESCE((SELECT v.supported_os_json FROM worker_plugin_versions v WHERE v.plugin_id = p.id AND v.is_revoked = 0 ORDER BY v.created_at DESC LIMIT 1), '[]') AS supportedOS,
               COALESCE((SELECT v.supported_arch_json FROM worker_plugin_versions v WHERE v.plugin_id = p.id AND v.is_revoked = 0 ORDER BY v.created_at DESC LIMIT 1), '[]') AS supportedArchitecture,
-              (SELECT COUNT(DISTINCT i.agent_id) FROM agent_plugin_installs i WHERE i.plugin_id = p.id AND i.status IN ('installed', 'active')) AS installedAgentCount,
+              (SELECT COUNT(DISTINCT i.host_id) FROM agent_plugin_installs i WHERE i.plugin_id = p.id AND i.status IN ('installed', 'active')) AS installedAgentCount,
               p.status, p.supported_roles_json AS roles, p.supported_capabilities_json AS capabilities
        FROM worker_plugins p
        WHERE p.status <> 'deprecated'
@@ -4127,7 +4148,7 @@ async function handleStudioSnapshot(
       costMetadata: mapObject(row.costMetadata),
       status: row.status ?? "unknown",
     })),
-    agents: agents.results ?? [],
+    hosts: hosts.results ?? [],
     plugins: (plugins.results ?? []).map((row) => ({
       ...row,
       roles: mapJson(row.roles),
@@ -4662,8 +4683,8 @@ async function handleDownloadPluginVersion(
       const tokenHash = await hashToken(token);
       const agent = await env.CONCLAVE_DB.prepare(
         `SELECT a.id, a.workspace_id
-         FROM agents a
-         JOIN workers w ON w.agent_id = a.id AND w.workspace_id = a.workspace_id
+         FROM hosts a
+         JOIN workers w ON w.host_id = a.id AND w.workspace_id = a.workspace_id
          WHERE a.auth_token_hash = ?1
            AND a.revoked_at IS NULL
            AND w.plugin_id = ?2
@@ -4955,7 +4976,7 @@ async function handleDeprecatePlugin(
 // Agent Releases API Handlers (Architecture v2 Self-Update)
 // =========================================================================
 
-async function handleGetLatestAgentRelease(
+async function handleGetLatestHostRelease(
   request: Request,
   env: SecurityEnv,
 ): Promise<Response> {
@@ -4971,7 +4992,7 @@ async function handleGetLatestAgentRelease(
             package_digest as packageDigest, package_r2_key as packageR2Key,
             signature, release_notes as releaseNotes, is_revoked as isRevoked,
             created_at as createdAt
-     FROM agent_releases
+     FROM host_releases
      WHERE channel = ?1 AND is_revoked = 0
      ORDER BY created_at DESC`,
   )
@@ -5034,7 +5055,7 @@ async function handleGetLatestAgentRelease(
   });
 }
 
-async function handleGetAgentRelease(
+async function handleGetHostRelease(
   env: SecurityEnv,
   version: string,
 ): Promise<Response> {
@@ -5045,7 +5066,7 @@ async function handleGetAgentRelease(
             signature, release_notes as releaseNotes, is_revoked as isRevoked,
             revoked_at as revokedAt, revocation_reason as revocationReason,
             created_at as createdAt
-     FROM agent_releases WHERE version = ?1`,
+     FROM host_releases WHERE version = ?1`,
   )
     .bind(version)
     .first<{
@@ -5088,7 +5109,7 @@ async function handleGetAgentRelease(
   });
 }
 
-async function handleDownloadAgentRelease(
+async function handleDownloadHostRelease(
   request: Request,
   env: SecurityEnv,
   version: string,
@@ -5099,7 +5120,7 @@ async function handleDownloadAgentRelease(
     if (token) {
       const tokenHash = await hashToken(token);
       const agent = await env.CONCLAVE_DB.prepare(
-        `SELECT id FROM agents
+        `SELECT id FROM hosts
          WHERE auth_token_hash = ?1 AND revoked_at IS NULL
          LIMIT 1`,
       )
@@ -5112,11 +5133,11 @@ async function handleDownloadAgentRelease(
         );
       }
     } else {
-      await authorizeRequest(request, env, "agents:read", undefined, ctx);
+      await authorizeRequest(request, env, "hosts:read", undefined, ctx);
     }
   }
   const row = await env.CONCLAVE_DB.prepare(
-    `SELECT package_r2_key, package_digest, is_revoked, revocation_reason FROM agent_releases WHERE version = ?1`,
+    `SELECT package_r2_key, package_digest, is_revoked, revocation_reason FROM host_releases WHERE version = ?1`,
   )
     .bind(version)
     .first<{
@@ -5181,7 +5202,7 @@ async function handleDownloadAgentRelease(
   return new Response(object.body, { headers });
 }
 
-async function handlePublishAgentRelease(
+async function handlePublishHostRelease(
   request: Request,
   env: SecurityEnv,
   ctx?: ExecutionContext,
@@ -5345,7 +5366,7 @@ async function handlePublishAgentRelease(
 
   const now = new Date().toISOString();
   await env.CONCLAVE_DB.prepare(
-    `INSERT INTO agent_releases (
+    `INSERT INTO host_releases (
        version, channel, min_supported_agent_version, supported_os_json,
        supported_arch_json, package_digest, package_r2_key, signature,
        release_notes, is_revoked, created_at
@@ -5391,7 +5412,7 @@ async function handlePublishAgentRelease(
   );
 }
 
-async function handleRevokeAgentRelease(
+async function handleRevokeHostRelease(
   request: Request,
   env: SecurityEnv,
   version: string,
@@ -5404,7 +5425,7 @@ async function handleRevokeAgentRelease(
   const now = new Date().toISOString();
 
   await env.CONCLAVE_DB.prepare(
-    `UPDATE agent_releases
+    `UPDATE host_releases
      SET is_revoked = 1, revoked_at = ?1, revocation_reason = ?2
      WHERE version = ?3`,
   )
@@ -5442,16 +5463,16 @@ export {
   handleChangeWorkspaceMemberRole,
   handleWorkspaceMemberStatus,
   handleInternalDispatchTaskAssignment,
-  handleAgentGatewayConnect,
-  handleAgentProtocolMessage,
-  handleEnrollAgent,
-  handleListAgentEnrollments,
-  handleCreateAgentEnrollment,
-  handleRevokeAgentEnrollment,
-  handleListAgents,
-  handleGetAgent,
-  handleRevokeAgent,
-  handleAnnounceAgentUpdate,
+  handleHostGatewayConnect,
+  handleHostProtocolMessage,
+  handleEnrollHost,
+  handleListHostEnrollments,
+  handleCreateHostEnrollment,
+  handleRevokeHostEnrollment,
+  handleListHosts,
+  handleGetHost,
+  handleRevokeHost,
+  handleAnnounceHostUpdate,
   handleListWorkers,
   handleCreateWorker,
   handleGetWorker,
@@ -5467,11 +5488,11 @@ export {
   handleGetPluginVersion,
   handleDeprecatePlugin,
   handleGetPlugin,
-  handleGetLatestAgentRelease,
-  handlePublishAgentRelease,
-  handleDownloadAgentRelease,
-  handleRevokeAgentRelease,
-  handleGetAgentRelease,
+  handleGetLatestHostRelease,
+  handlePublishHostRelease,
+  handleDownloadHostRelease,
+  handleRevokeHostRelease,
+  handleGetHostRelease,
   handleGetWorkspace,
   handleListProjects,
   handleCreateProject,

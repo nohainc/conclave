@@ -142,7 +142,7 @@ describe("Architecture v2 Cloud Agent Releases & Self-Update Registry", () => {
     );
 
     const publishRes = await worker.fetch(
-      new Request("https://conclave.test/api/v2/agent-releases/publish", {
+      new Request("https://conclave.test/api/v2/host-releases/publish", {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -180,7 +180,7 @@ describe("Architecture v2 Cloud Agent Releases & Self-Update Registry", () => {
 
     // Verify metadata endpoint
     const metaRes = await worker.fetch(
-      new Request("https://conclave.test/api/v2/agent-releases/1.3.0"),
+      new Request("https://conclave.test/api/v2/host-releases/1.3.0"),
       env as never,
     );
     expect(metaRes.status).toBe(200);
@@ -197,7 +197,7 @@ describe("Architecture v2 Cloud Agent Releases & Self-Update Registry", () => {
 
     // Verify download endpoint
     const downloadRes = await worker.fetch(
-      new Request("https://conclave.test/api/v2/agent-releases/1.3.0/download"),
+      new Request("https://conclave.test/api/v2/host-releases/1.3.0/download"),
       env as never,
     );
     expect(downloadRes.status).toBe(200);
@@ -213,7 +213,7 @@ describe("Architecture v2 Cloud Agent Releases & Self-Update Registry", () => {
 
     // Publish 1.2.0 (stable)
     await worker.fetch(
-      new Request("https://conclave.test/api/v2/agent-releases/publish", {
+      new Request("https://conclave.test/api/v2/host-releases/publish", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -229,7 +229,7 @@ describe("Architecture v2 Cloud Agent Releases & Self-Update Registry", () => {
 
     // Publish 1.3.0 (stable)
     await worker.fetch(
-      new Request("https://conclave.test/api/v2/agent-releases/publish", {
+      new Request("https://conclave.test/api/v2/host-releases/publish", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -245,7 +245,7 @@ describe("Architecture v2 Cloud Agent Releases & Self-Update Registry", () => {
 
     // Publish 1.4.0 (beta)
     await worker.fetch(
-      new Request("https://conclave.test/api/v2/agent-releases/publish", {
+      new Request("https://conclave.test/api/v2/host-releases/publish", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -262,7 +262,7 @@ describe("Architecture v2 Cloud Agent Releases & Self-Update Registry", () => {
     // Query latest stable from agent 1.2.0 -> updateAvailable: true (1.3.0)
     const check1 = await worker.fetch(
       new Request(
-        "https://conclave.test/api/v2/agent-releases/latest?channel=stable&currentVersion=1.2.0&os=macos&arch=arm64",
+        "https://conclave.test/api/v2/host-releases/latest?channel=stable&currentVersion=1.2.0&os=macos&arch=arm64",
       ),
       env as never,
     );
@@ -278,7 +278,7 @@ describe("Architecture v2 Cloud Agent Releases & Self-Update Registry", () => {
     // Query latest stable from agent 1.3.0 -> updateAvailable: false (already latest stable)
     const check2 = await worker.fetch(
       new Request(
-        "https://conclave.test/api/v2/agent-releases/latest?channel=stable&currentVersion=1.3.0&os=macos&arch=arm64",
+        "https://conclave.test/api/v2/host-releases/latest?channel=stable&currentVersion=1.3.0&os=macos&arch=arm64",
       ),
       env as never,
     );
@@ -293,7 +293,7 @@ describe("Architecture v2 Cloud Agent Releases & Self-Update Registry", () => {
     // Query beta channel from agent 1.3.0 -> updateAvailable: true (1.4.0 beta)
     const checkBeta = await worker.fetch(
       new Request(
-        "https://conclave.test/api/v2/agent-releases/latest?channel=beta&currentVersion=1.3.0&os=macos&arch=arm64",
+        "https://conclave.test/api/v2/host-releases/latest?channel=beta&currentVersion=1.3.0&os=macos&arch=arm64",
       ),
       env as never,
     );
@@ -308,7 +308,7 @@ describe("Architecture v2 Cloud Agent Releases & Self-Update Registry", () => {
     // Query beta on windows -> not found / no compatible beta
     const checkBetaWin = await worker.fetch(
       new Request(
-        "https://conclave.test/api/v2/agent-releases/latest?channel=beta&currentVersion=1.3.0&os=windows&arch=arm64",
+        "https://conclave.test/api/v2/host-releases/latest?channel=beta&currentVersion=1.3.0&os=windows&arch=arm64",
       ),
       env as never,
     );
@@ -326,7 +326,7 @@ describe("Architecture v2 Cloud Agent Releases & Self-Update Registry", () => {
     const digest = await computePackageDigest(pkg);
 
     const res = await worker.fetch(
-      new Request("https://conclave.test/api/v2/agent-releases/publish", {
+      new Request("https://conclave.test/api/v2/host-releases/publish", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -348,7 +348,7 @@ describe("Architecture v2 Cloud Agent Releases & Self-Update Registry", () => {
   it("revokes an agent release and blocks subsequent downloads with 410 Gone", async () => {
     const pkg = new TextEncoder().encode("agent-1.6.0-buggy");
     await worker.fetch(
-      new Request("https://conclave.test/api/v2/agent-releases/publish", {
+      new Request("https://conclave.test/api/v2/host-releases/publish", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -362,7 +362,7 @@ describe("Architecture v2 Cloud Agent Releases & Self-Update Registry", () => {
 
     // Revoke release
     const revokeRes = await worker.fetch(
-      new Request("https://conclave.test/api/v2/agent-releases/1.6.0/revoke", {
+      new Request("https://conclave.test/api/v2/host-releases/1.6.0/revoke", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -383,7 +383,7 @@ describe("Architecture v2 Cloud Agent Releases & Self-Update Registry", () => {
 
     // Download should return 410 Gone
     const downloadRes = await worker.fetch(
-      new Request("https://conclave.test/api/v2/agent-releases/1.6.0/download"),
+      new Request("https://conclave.test/api/v2/host-releases/1.6.0/download"),
       env as never,
     );
     expect(downloadRes.status).toBe(410);
@@ -399,7 +399,7 @@ describe("Architecture v2 Cloud Agent Releases & Self-Update Registry", () => {
     // Check latest should ignore revoked version
     const checkRes = await worker.fetch(
       new Request(
-        "https://conclave.test/api/v2/agent-releases/latest?channel=stable",
+        "https://conclave.test/api/v2/host-releases/latest?channel=stable",
       ),
       env as never,
     );
@@ -415,7 +415,7 @@ describe("Architecture v2 Cloud Agent Releases & Self-Update Registry", () => {
       CONCLAVE_ALLOW_ANONYMOUS_DEV: undefined,
     };
     const response = await worker.fetch(
-      new Request("https://conclave.test/api/v2/agent-releases/1.3.0/download"),
+      new Request("https://conclave.test/api/v2/host-releases/1.3.0/download"),
       productionEnv as never,
     );
     expect(response.status).toBe(401);

@@ -7,14 +7,15 @@ import {
   type AgentHelloPayload,
   type AgentHeartbeatPayload,
   type AgentSyncRequestPayload,
-  type DesiredWorker,
-  type DesiredPlugin,
   type AssignmentStartPayload,
   type AssignmentCancelPayload,
   type AssignmentResultPayload,
   type AssignmentFailurePayload,
   type AssignmentCancelledPayload,
 } from "@conclave/agent-protocol";
+
+type DesiredWorker = Record<string, unknown>;
+type DesiredPlugin = Record<string, unknown>;
 import {
   recordAssignmentResult,
   recordAssignmentError,
@@ -58,7 +59,7 @@ export interface GatewayEnv {
 
 export interface AssignmentCorrelation {
   workspaceId: string;
-  agentId: string;
+  hostId: string;
   workerId: string;
   runId: string;
   taskId: string;
@@ -73,7 +74,7 @@ export function assignmentContextMatches(
 ): boolean {
   return (
     message.workspaceId === String(row.workspace_id) &&
-    message.agentId === String(row.agent_id) &&
+    message.hostId === String(row.host_id) &&
     message.workerId === String(row.worker_id) &&
     message.runId === String(row.run_id) &&
     message.taskId === String(row.task_id) &&
@@ -109,9 +110,9 @@ export function isCurrentSocketSession(
   );
 }
 
-export class AgentGateway implements DurableObject {
+export class HostGateway implements DurableObject {
   private socket: WebSocket | null = null;
-  private agentId: string | null = null;
+  private hostId: string | null = null;
   private workspaceId: string | null = null;
   private sessionId: string | null = null;
   private readonly pendingAcks = new Map<
@@ -131,7 +132,7 @@ export class AgentGateway implements DurableObject {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
-    // 1. WebSocket Upgrade from Agent
+    // 1. WebSocket Upgrade from Host
     if (request.headers.get("Upgrade")?.toLowerCase() === "websocket") {
       return this.handleWebSocketConnect(request, url);
     }
@@ -140,7 +141,7 @@ export class AgentGateway implements DurableObject {
     if (request.method === "GET" && url.pathname === "/status") {
       return Response.json({
         online: this.socket !== null,
-        agentId: this.agentId,
+        hostId: this.hostId,
         workspaceId: this.workspaceId,
         sessionId: this.sessionId,
         pendingAcksCount: this.pendingAcks.size,
@@ -166,18 +167,18 @@ export class AgentGateway implements DurableObject {
   }
 
   /**
-   * Handles incoming WebSocket connection upgrade from an enrolled Conclave Agent.
+   * Handles incoming WebSocket connection upgrade from an enrolled Conclave Host.
    */
   private async handleWebSocketConnect(
     request: Request,
     url: URL,
   ): Promise<Response> {
-    const agentId = url.searchParams.get("agentId");
+    const hostId = url.searchParams.get("hostId");
     const workspaceId = url.searchParams.get("workspaceId");
 
-    if (!agentId || !workspaceId) {
+    if (!hostId || !workspaceId) {
       return Response.json(
-        { error: "agentId and workspaceId query parameters are required" },
+        { error: "hostId and workspaceId query parameters are required" },
         { status: 400 },
       );
     }
@@ -185,25 +186,27 @@ export class AgentGateway implements DurableObject {
     const token = extractAuthToken(request.headers);
     if (!token) {
       return Response.json(
-        { error: "Agent authentication required" },
+        { error: "Host authentication required" },
         { status: 401 },
       );
     }
     const tokenHash = await hashToken(token);
     const enrolledAgent = await this.env.CONCLAVE_DB.prepare(
-      `SELECT id, workspace_id FROM agents
-       WHERE id = ?1 AND workspace_id = ?2 AND auth_token_hash = ?3 AND revoked_at IS NULL`,
+      `SELECT h.id FROM hosts h
+       JOIN host_workspace_bindings b ON b.host_id = h.id
+       WHERE h.id = ?1 AND b.workspace_id = ?2 AND b.status = 'active'
+         AND h.auth_token_hash = ?3 AND h.revoked_at IS NULL`,
     )
-      .bind(agentId, workspaceId, tokenHash)
-      .first<{ id: string; workspace_id: string }>();
+      .bind(hostId, workspaceId, tokenHash)
+      .first<{ id: string }>();
     if (!enrolledAgent) {
       return Response.json(
-        { error: "Invalid or revoked Agent credential" },
+        { error: "Invalid or revoked Host credential" },
         { status: 401 },
       );
     }
 
-    // Close any previous stale socket for this agent instance
+    // Close any previous stale socket for this host instance
     if (this.socket) {
       try {
         this.socket.close(1000, "Superceded by new connection");
@@ -219,7 +222,7 @@ export class AgentGateway implements DurableObject {
 
     server.accept();
     this.socket = server;
-    this.agentId = agentId;
+    this.hostId = hostId;
     this.workspaceId = workspaceId;
     this.sessionId = `sess-${crypto.randomUUID()}`;
 
@@ -228,19 +231,18 @@ export class AgentGateway implements DurableObject {
     // Update D1 database
     try {
       await this.env.CONCLAVE_DB.prepare(
-        `UPDATE agents SET status = 'online', last_heartbeat_at = ?1, updated_at = ?1 WHERE id = ?2`,
+        `UPDATE hosts SET status = 'online', last_heartbeat_at = ?1, updated_at = ?1 WHERE id = ?2`,
       )
-        .bind(now, agentId)
+        .bind(now, hostId)
         .run();
 
       await this.env.CONCLAVE_DB.prepare(
-        `INSERT INTO agent_sessions (id, agent_id, workspace_id, client_version, protocol_version, ip_address, connected_at, last_heartbeat_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)`,
+        `INSERT INTO host_sessions (id, host_id, client_version, protocol_version, ip_address, connected_at, last_heartbeat_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)`,
       )
         .bind(
           this.sessionId,
-          agentId,
-          workspaceId,
+          hostId,
           "0.2.0",
           AGENT_PROTOCOL_VERSION,
           request.headers.get("CF-Connecting-IP") || "127.0.0.1",
@@ -248,7 +250,7 @@ export class AgentGateway implements DurableObject {
         )
         .run();
     } catch (err) {
-      console.error("Failed to record agent session in D1", err);
+      console.error("Failed to record host session in D1", err);
     }
 
     server.addEventListener("message", (event) => {
@@ -261,7 +263,7 @@ export class AgentGateway implements DurableObject {
     });
 
     server.addEventListener("error", (err) => {
-      console.error("Agent Gateway WebSocket error", err);
+      console.error("Host Gateway WebSocket error", err);
       this.handleSocketClose(server, connectedSessionId);
     });
 
@@ -276,7 +278,7 @@ export class AgentGateway implements DurableObject {
     sessionId?: string | null,
   ): void {
     // A replaced socket may deliver its close event after the new session is
-    // installed. It must not tear down the current session or mark the Agent
+    // installed. It must not tear down the current session or mark the Host
     // offline in D1.
     if (!isCurrentSocketSession(this.socket, this.sessionId, socket, sessionId))
       return;
@@ -284,15 +286,15 @@ export class AgentGateway implements DurableObject {
     this.socket = null;
     const now = new Date().toISOString();
 
-    if (this.agentId && this.sessionId) {
+    if (this.hostId && this.sessionId) {
       void this.env.CONCLAVE_DB.prepare(
-        `UPDATE agents SET status = 'offline', updated_at = ?1 WHERE id = ?2`,
+        `UPDATE hosts SET status = 'offline', updated_at = ?1 WHERE id = ?2`,
       )
-        .bind(now, this.agentId)
+        .bind(now, this.hostId)
         .run();
 
       void this.env.CONCLAVE_DB.prepare(
-        `UPDATE agent_sessions SET disconnected_at = ?1 WHERE id = ?2`,
+        `UPDATE host_sessions SET disconnected_at = ?1 WHERE id = ?2`,
       )
         .bind(now, this.sessionId)
         .run();
@@ -301,14 +303,14 @@ export class AgentGateway implements DurableObject {
     for (const [key, pending] of this.pendingAcks.entries()) {
       clearTimeout(pending.timer);
       pending.reject(
-        new Error("Agent WebSocket closed during pending operation"),
+        new Error("Host WebSocket closed during pending operation"),
       );
       this.pendingAcks.delete(key);
     }
   }
 
   /**
-   * Processes messages incoming over the Agent WebSocket.
+   * Processes messages incoming over the Host WebSocket.
    */
   private async handleIncomingMessage(data: unknown): Promise<void> {
     let parsedJson: unknown;
@@ -323,12 +325,12 @@ export class AgentGateway implements DurableObject {
       return;
     }
 
-    let message: AgentProtocolMessage;
+    let message: any;
     try {
       message = parseAgentMessage(parsedJson);
     } catch (err) {
       this.sendError(
-        err instanceof Error ? err.message : "Invalid agent protocol message",
+        err instanceof Error ? err.message : "Invalid host protocol message",
       );
       return;
     }
@@ -338,7 +340,7 @@ export class AgentGateway implements DurableObject {
     if (message.type.startsWith("assignment.")) {
       const assignmentMessage = message as unknown as AssignmentCorrelation;
       const assignment = await this.env.CONCLAVE_DB.prepare(
-        `SELECT id, workspace_id, agent_id, worker_id, run_id, task_id,
+        `SELECT id, workspace_id, host_id, worker_id, run_id, task_id,
                 attempt_id, idempotency_key
          FROM worker_assignments WHERE id = ?1`,
       )
@@ -355,32 +357,32 @@ export class AgentGateway implements DurableObject {
 
     switch (message.type) {
       case "agent.hello": {
-        const payload = message.payload as AgentHelloPayload;
+        const payload = message.payload as any;
         if (
-          payload.agentId !== this.agentId ||
+          payload.agentId !== this.hostId ||
           payload.workspaceId !== this.workspaceId
         ) {
           this.sendError(
-            "Agent hello identity does not match the authenticated socket",
+            "Host hello identity does not match the authenticated socket",
           );
-          this.socket?.close(1008, "Agent identity mismatch");
+          this.socket?.close(1008, "Host identity mismatch");
           return;
         }
-        // Update agent record with hostname, version and capabilities
+        // Update host record with hostname, version and capabilities
         try {
           await this.env.CONCLAVE_DB.prepare(
-            `UPDATE agents SET hostname = ?1, version = ?2, capabilities_json = ?3, last_heartbeat_at = ?4, updated_at = ?4 WHERE id = ?5`,
+            `UPDATE hosts SET hostname = ?1, version = ?2, capabilities_json = ?3, last_heartbeat_at = ?4, updated_at = ?4 WHERE id = ?5`,
           )
             .bind(
               payload.hostname,
               payload.agentVersion,
               JSON.stringify(payload.capabilities),
               now,
-              this.agentId,
+              this.hostId,
             )
             .run();
         } catch (err) {
-          console.error("Failed to update agent info on hello", err);
+          console.error("Failed to update host info on hello", err);
         }
 
         this.sendProtocolMessage({
@@ -401,34 +403,34 @@ export class AgentGateway implements DurableObject {
       }
 
       case "agent.heartbeat": {
-        const payload = message.payload as AgentHeartbeatPayload;
+        const payload = message.payload as any;
         if (
-          payload.agentId !== this.agentId ||
+          payload.agentId !== this.hostId ||
           payload.workspaceId !== this.workspaceId ||
           payload.sessionId !== this.sessionId
         ) {
           this.sendError(
-            "Agent heartbeat identity does not match the authenticated session",
+            "Host heartbeat identity does not match the authenticated session",
           );
-          this.socket?.close(1008, "Agent session mismatch");
+          this.socket?.close(1008, "Host session mismatch");
           return;
         }
         try {
           await this.env.CONCLAVE_DB.prepare(
-            `UPDATE agents SET status = ?1, last_heartbeat_at = ?2, updated_at = ?2 WHERE id = ?3`,
+            `UPDATE hosts SET status = ?1, last_heartbeat_at = ?2, updated_at = ?2 WHERE id = ?3`,
           )
-            .bind(payload.status, now, this.agentId)
+            .bind(payload.status, now, this.hostId)
             .run();
 
           if (this.sessionId) {
             await this.env.CONCLAVE_DB.prepare(
-              `UPDATE agent_sessions SET last_heartbeat_at = ?1 WHERE id = ?2`,
+              `UPDATE host_sessions SET last_heartbeat_at = ?1 WHERE id = ?2`,
             )
               .bind(now, this.sessionId)
               .run();
           }
         } catch (err) {
-          console.error("Failed to update agent heartbeat", err);
+          console.error("Failed to update host heartbeat", err);
         }
 
         this.sendProtocolMessage({
@@ -447,7 +449,7 @@ export class AgentGateway implements DurableObject {
       }
 
       case "agent.sync.request": {
-        const payload = message.payload as AgentSyncRequestPayload;
+        const payload = message.payload as any;
         // Fetch desired workers from D1
         let desiredWorkers: DesiredWorker[] = [];
         let desiredPlugins: DesiredPlugin[] = [];
@@ -461,7 +463,7 @@ export class AgentGateway implements DurableObject {
         try {
           const workerRows = await this.env.CONCLAVE_DB.prepare(
             `SELECT * FROM workers
-             WHERE agent_id = ?1 AND workspace_id = ?2 AND enabled = 1`,
+             WHERE host_id = ?1 AND workspace_id = ?2 AND enabled = 1`,
           )
             .bind(payload.agentId, payload.workspaceId)
             .all<Record<string, unknown>>();
@@ -470,7 +472,7 @@ export class AgentGateway implements DurableObject {
             id: String(row.id),
             workerId: String(row.id),
             workspaceId: String(row.workspace_id || payload.workspaceId),
-            agentId: String(row.agent_id || payload.agentId),
+            hostId: String(row.host_id || payload.agentId),
             pluginId: String(row.plugin_id),
             pluginVersionPolicy: String(row.plugin_version_policy || "latest"),
             name: String(row.name),
@@ -495,7 +497,7 @@ export class AgentGateway implements DurableObject {
              JOIN worker_plugins p ON p.id = pv.plugin_id
              JOIN workers w ON w.plugin_id = p.id
              WHERE p.status = 'active'
-               AND w.agent_id = ?1 AND w.workspace_id = ?2 AND w.enabled = 1
+               AND w.host_id = ?1 AND w.workspace_id = ?2 AND w.enabled = 1
              GROUP BY pv.id`,
           )
             .bind(payload.agentId, payload.workspaceId)
@@ -526,12 +528,12 @@ export class AgentGateway implements DurableObject {
           const assignmentIds = payload.unreconciledAssignmentIds ?? [];
           if (assignmentIds.length > 0) {
             const placeholders = assignmentIds
-              .map((_, index) => `?${index + 3}`)
+              .map((_: unknown, index: number) => `?${index + 3}`)
               .join(",");
             const assignmentRows = await this.env.CONCLAVE_DB.prepare(
               `SELECT id, attempt_id, idempotency_key, status
                FROM worker_assignments
-               WHERE agent_id = ?1 AND workspace_id = ?2 AND id IN (${placeholders})`,
+               WHERE host_id = ?1 AND workspace_id = ?2 AND id IN (${placeholders})`,
             )
               .bind(payload.agentId, payload.workspaceId, ...assignmentIds)
               .all<Record<string, unknown>>();
@@ -552,7 +554,7 @@ export class AgentGateway implements DurableObject {
           messageId: `msg-${Date.now()}`,
           correlationId: message.messageId,
           timestamp: now,
-          type: "agent.sync.response",
+          type: "host.sync.response",
           payload: {
             desiredPlugins,
             desiredWorkers,
@@ -564,25 +566,21 @@ export class AgentGateway implements DurableObject {
       }
 
       case "worker.status": {
-        const payload = message.payload as {
-          workerId: string;
-          agentId: string;
-          status: string;
-        };
+        const payload = message.payload as any;
         try {
-          if (payload.agentId !== this.agentId) {
+          if (payload.agentId !== this.hostId) {
             this.sendError("Worker status identity does not match the session");
             break;
           }
           await this.env.CONCLAVE_DB.prepare(
             `UPDATE workers SET status = ?1, updated_at = ?2
-             WHERE id = ?3 AND agent_id = ?4 AND workspace_id = ?5`,
+             WHERE id = ?3 AND host_id = ?4 AND workspace_id = ?5`,
           )
             .bind(
               payload.status,
               now,
               payload.workerId,
-              this.agentId,
+              this.hostId,
               this.workspaceId,
             )
             .run();
@@ -650,7 +648,7 @@ export class AgentGateway implements DurableObject {
           await recordAssignmentCancelled(
             this.env.CONCLAVE_DB,
             message.assignmentId,
-            message.payload as AssignmentCancelledPayload,
+            message.payload as unknown as AssignmentCancelledPayload,
           );
         } catch (err) {
           console.error("Failed to record assignment cancellation in D1", err);
@@ -674,19 +672,19 @@ export class AgentGateway implements DurableObject {
   }
 
   /**
-   * Internal DO RPC: Dispatches an assignment to the connected Agent.
+   * Internal DO RPC: Dispatches an assignment to the connected Host.
    */
   private async handleDispatchAssignment(request: Request): Promise<Response> {
     if (!this.socket) {
       return Response.json(
-        { error: "Agent is currently offline" },
+        { error: "Host is currently offline" },
         { status: 503 },
       );
     }
 
     const body = (await request.json()) as {
       workspaceId: string;
-      agentId: string;
+      hostId: string;
       workerId: string;
       runId: string;
       taskId: string;
@@ -699,13 +697,13 @@ export class AgentGateway implements DurableObject {
     const validation = await this.validateInternalAssignment(body);
     if (validation) return validation;
 
-    const envelope: AgentProtocolMessage = {
+    const envelope: any = {
       protocol: AGENT_PROTOCOL_NAME,
       protocolVersion: AGENT_PROTOCOL_VERSION,
       messageId: `msg-${Date.now()}`,
       timestamp: new Date().toISOString(),
       workspaceId: body.workspaceId,
-      agentId: body.agentId,
+      hostId: body.hostId,
       workerId: body.workerId,
       runId: body.runId,
       taskId: body.taskId,
@@ -716,13 +714,13 @@ export class AgentGateway implements DurableObject {
       payload: body.payload,
     };
 
-    // Await ack from agent
+    // Await ack from host
     const ackPromise = new Promise<{ accepted: boolean; reason?: string }>(
       (resolve, reject) => {
         const timer = setTimeout(() => {
           this.pendingAcks.delete(body.assignmentId);
           reject(
-            new Error("Timeout waiting for agent assignment acknowledgment"),
+            new Error("Timeout waiting for host assignment acknowledgment"),
           );
         }, 10000);
 
@@ -748,19 +746,19 @@ export class AgentGateway implements DurableObject {
   }
 
   /**
-   * Internal DO RPC: Cancels a running assignment on the Agent.
+   * Internal DO RPC: Cancels a running assignment on the Host.
    */
   private async handleCancelAssignment(request: Request): Promise<Response> {
     if (!this.socket) {
       return Response.json(
-        { error: "Agent is currently offline" },
+        { error: "Host is currently offline" },
         { status: 503 },
       );
     }
 
     const body = (await request.json()) as {
       workspaceId: string;
-      agentId: string;
+      hostId: string;
       workerId: string;
       runId: string;
       taskId: string;
@@ -773,13 +771,13 @@ export class AgentGateway implements DurableObject {
     const validation = await this.validateInternalAssignment(body);
     if (validation) return validation;
 
-    const envelope: AgentProtocolMessage = {
+    const envelope: any = {
       protocol: AGENT_PROTOCOL_NAME,
       protocolVersion: AGENT_PROTOCOL_VERSION,
       messageId: `msg-${Date.now()}`,
       timestamp: new Date().toISOString(),
       workspaceId: body.workspaceId,
-      agentId: body.agentId,
+      hostId: body.hostId,
       workerId: body.workerId,
       runId: body.runId,
       taskId: body.taskId,
@@ -795,7 +793,7 @@ export class AgentGateway implements DurableObject {
       (resolve, reject) => {
         const timer = setTimeout(() => {
           this.pendingAcks.delete(cancelKey);
-          reject(new Error("Timeout waiting for agent cancel acknowledgment"));
+          reject(new Error("Timeout waiting for host cancel acknowledgment"));
         }, 10000);
 
         this.pendingAcks.set(cancelKey, {
@@ -825,7 +823,7 @@ export class AgentGateway implements DurableObject {
   private async handlePostMessage(request: Request): Promise<Response> {
     if (!this.socket) {
       return Response.json(
-        { error: "Agent is currently offline" },
+        { error: "Host is currently offline" },
         { status: 503 },
       );
     }
@@ -840,7 +838,7 @@ export class AgentGateway implements DurableObject {
     body: AssignmentCorrelation,
   ): Promise<Response | null> {
     const assignment = await this.env.CONCLAVE_DB.prepare(
-      `SELECT id, workspace_id, agent_id, worker_id, run_id, task_id,
+      `SELECT id, workspace_id, host_id, worker_id, run_id, task_id,
               attempt_id, idempotency_key, status
        FROM worker_assignments WHERE id = ?1`,
     )
@@ -864,10 +862,10 @@ export class AgentGateway implements DurableObject {
     return null;
   }
 
-  private sendProtocolMessage(message: AgentProtocolMessage): void {
+  private sendProtocolMessage(message: unknown): void {
     if (!this.socket) return;
     try {
-      const serialized = serializeAgentMessage(message);
+      const serialized = serializeAgentMessage(message as AgentProtocolMessage);
       this.socket.send(serialized);
     } catch (err) {
       console.error("Failed to send protocol message over WebSocket", err);

@@ -6,7 +6,7 @@ interface __BaseEnv_Env {
 	CONCLAVE_DB: D1Database;
 	CONCLAVE_ENVIRONMENT: "development";
 	CONCLAVE_FORGE_EXECUTION: Fetcher /* conclave-forge-execution */;
-	CONCLAVE_AGENT_GATEWAY: DurableObjectNamespace;
+	CONCLAVE_HOST_GATEWAY: DurableObjectNamespace;
 	CONCLAVE_RUN_WORKFLOW: Workflow<Parameters<import("./src/index").ConclaveRunWorkflow['run']>[0]['payload']>;
 }
 declare namespace Cloudflare {

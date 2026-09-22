@@ -199,7 +199,7 @@ export async function routeWorkerRequest(
       );
     }
 
-    // Agent Gateway & Protocol routes
+    // Host Gateway & Protocol routes
     if (
       request.method === "POST" &&
       url.pathname === "/api/internal/agent-assignments/dispatch"
@@ -208,32 +208,32 @@ export async function routeWorkerRequest(
     }
     if (
       request.method === "GET" &&
-      (url.pathname === "/api/agent-gateway/connect" ||
-        url.pathname === "/api/v2/agent-gateway/connect")
+      (url.pathname === "/api/host-gateway/connect" ||
+        url.pathname === "/api/v2/host-gateway/connect")
     ) {
-      return await handlers.handleAgentGatewayConnect!(request, env);
+      return await handlers.handleHostGatewayConnect!(request, env);
     }
     if (
       request.method === "POST" &&
-      (url.pathname === "/api/agent-protocol/messages" ||
-        url.pathname === "/api/v2/agent-protocol/messages")
+      (url.pathname === "/api/host-protocol/messages" ||
+        url.pathname === "/api/v2/host-protocol/messages")
     ) {
-      return await handlers.handleAgentProtocolMessage!(request, env);
+      return await handlers.handleHostProtocolMessage!(request, env);
     }
     if (
       request.method === "POST" &&
-      (url.pathname === "/api/agents/enroll" ||
-        url.pathname === "/api/v2/agents/enroll")
+      (url.pathname === "/api/hosts/enroll" ||
+        url.pathname === "/api/v2/hosts/enroll")
     ) {
-      return await handlers.handleEnrollAgent!(request, env);
+      return await handlers.handleEnrollHost!(request, env);
     }
 
     // Workspace Agent Enrollments
     const agentEnrollmentsMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/agent-enrollments$/,
+      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/host-enrollments$/,
     );
     if (request.method === "GET" && agentEnrollmentsMatch?.[1]) {
-      return await handlers.handleListAgentEnrollments!(
+      return await handlers.handleListHostEnrollments!(
         request,
         env,
         agentEnrollmentsMatch[1],
@@ -241,7 +241,7 @@ export async function routeWorkerRequest(
       );
     }
     if (request.method === "POST" && agentEnrollmentsMatch?.[1]) {
-      return await handlers.handleCreateAgentEnrollment!(
+      return await handlers.handleCreateHostEnrollment!(
         request,
         env,
         agentEnrollmentsMatch[1],
@@ -249,14 +249,14 @@ export async function routeWorkerRequest(
       );
     }
     const revokeEnrollmentMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/agent-enrollments\/([^/]+)$/,
+      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/host-enrollments\/([^/]+)$/,
     );
     if (
       request.method === "DELETE" &&
       revokeEnrollmentMatch?.[1] &&
       revokeEnrollmentMatch?.[2]
     ) {
-      return await handlers.handleRevokeAgentEnrollment!(
+      return await handlers.handleRevokeHostEnrollment!(
         request,
         env,
         revokeEnrollmentMatch[1],
@@ -266,26 +266,21 @@ export async function routeWorkerRequest(
     }
 
     // Workspace Agents Fleet
-    const agentsMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/agents$/,
+    const hostsMatch = url.pathname.match(
+      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/hosts$/,
     );
-    if (request.method === "GET" && agentsMatch?.[1]) {
-      return await handlers.handleListAgents!(
-        request,
-        env,
-        agentsMatch[1],
-        ctx,
-      );
+    if (request.method === "GET" && hostsMatch?.[1]) {
+      return await handlers.handleListHosts!(request, env, hostsMatch[1], ctx);
     }
     const singleAgentMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/agents\/([^/]+)$/,
+      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/hosts\/([^/]+)$/,
     );
     if (
       request.method === "GET" &&
       singleAgentMatch?.[1] &&
       singleAgentMatch?.[2]
     ) {
-      return await handlers.handleGetAgent!(
+      return await handlers.handleGetHost!(
         request,
         env,
         singleAgentMatch[1],
@@ -298,7 +293,7 @@ export async function routeWorkerRequest(
       singleAgentMatch?.[1] &&
       singleAgentMatch?.[2]
     ) {
-      return await handlers.handleRevokeAgent!(
+      return await handlers.handleRevokeHost!(
         request,
         env,
         singleAgentMatch[1],
@@ -307,14 +302,14 @@ export async function routeWorkerRequest(
       );
     }
     const agentUpdateMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/agents\/([^/]+)\/update$/,
+      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/hosts\/([^/]+)\/update$/,
     );
     if (
       request.method === "POST" &&
       agentUpdateMatch?.[1] &&
       agentUpdateMatch?.[2]
     ) {
-      return await handlers.handleAnnounceAgentUpdate!(
+      return await handlers.handleAnnounceHostUpdate!(
         request,
         env,
         agentUpdateMatch[1],
@@ -524,23 +519,23 @@ export async function routeWorkerRequest(
     // Agent Releases routes (Architecture v2 Self-Update)
     if (
       request.method === "GET" &&
-      (url.pathname === "/api/agent-releases/latest" ||
-        url.pathname === "/api/v2/agent-releases/latest")
+      (url.pathname === "/api/host-releases/latest" ||
+        url.pathname === "/api/v2/host-releases/latest")
     ) {
-      return await handlers.handleGetLatestAgentRelease!(request, env);
+      return await handlers.handleGetLatestHostRelease!(request, env);
     }
     if (
       request.method === "POST" &&
-      (url.pathname === "/api/agent-releases/publish" ||
-        url.pathname === "/api/v2/agent-releases/publish")
+      (url.pathname === "/api/host-releases/publish" ||
+        url.pathname === "/api/v2/host-releases/publish")
     ) {
-      return await handlers.handlePublishAgentRelease!(request, env, ctx);
+      return await handlers.handlePublishHostRelease!(request, env, ctx);
     }
     const agentReleaseDownloadMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/agent-releases\/([^/]+)\/download$/,
+      /^\/api(?:\/v2)?\/host-releases\/([^/]+)\/download$/,
     );
     if (request.method === "GET" && agentReleaseDownloadMatch?.[1]) {
-      return await handlers.handleDownloadAgentRelease!(
+      return await handlers.handleDownloadHostRelease!(
         request,
         env,
         agentReleaseDownloadMatch[1],
@@ -548,23 +543,23 @@ export async function routeWorkerRequest(
       );
     }
     const agentReleaseRevokeMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/agent-releases\/([^/]+)\/revoke$/,
+      /^\/api(?:\/v2)?\/host-releases\/([^/]+)\/revoke$/,
     );
     if (request.method === "POST" && agentReleaseRevokeMatch?.[1]) {
-      return await handlers.handleRevokeAgentRelease!(
+      return await handlers.handleRevokeHostRelease!(
         request,
         env,
         agentReleaseRevokeMatch[1],
         ctx,
       );
     }
-    const singleAgentReleaseMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/agent-releases\/([^/]+)$/,
+    const singleHostReleaseMatch = url.pathname.match(
+      /^\/api(?:\/v2)?\/host-releases\/([^/]+)$/,
     );
-    if (request.method === "GET" && singleAgentReleaseMatch?.[1]) {
-      return await handlers.handleGetAgentRelease!(
+    if (request.method === "GET" && singleHostReleaseMatch?.[1]) {
+      return await handlers.handleGetHostRelease!(
         env,
-        singleAgentReleaseMatch[1],
+        singleHostReleaseMatch[1],
       );
     }
 

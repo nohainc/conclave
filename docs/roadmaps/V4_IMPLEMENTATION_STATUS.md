@@ -9,7 +9,7 @@ Track progress of the [v4 implementation roadmap](ARCHITECTURE_V4_IMPLEMENTATION
 | V4-2 | Redesign Worker manifest/package model | ✅ Complete |
 | V4-3 | Define schema-first Host and Worker protocols | ✅ Complete |
 | V4-4 | Create clean v4 D1 schema and reset development data | ✅ Complete |
-| V4-5 | Rename Cloud execution plane Agent → Host | ⬜ Not started |
+| V4-5 | Rename Cloud execution plane Agent → Host | ✅ Complete |
 | V4-6 | Merge Agent App + Agent Engine into Conclave Host | ⬜ Not started |
 | V4-7 | Convert PluginManager into WorkerManager | ⬜ Not started |
 | V4-8 | Implement Credential Profiles and local secure storage | ⬜ Not started |

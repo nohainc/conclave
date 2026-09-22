@@ -85,6 +85,7 @@ function getTrackedSourceFiles() {
     .filter(Boolean);
 
   return files.filter((file) => {
+    if (!existsSync(file)) return false;
     if (!SOURCE_EXTENSIONS.test(file)) return false;
     for (const pattern of EXCLUDED_PATHS) {
       if (pattern.test(file)) return false;

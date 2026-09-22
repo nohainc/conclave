@@ -123,8 +123,7 @@ describe("Multi-Agent Ensemble Dispatcher (Cloud -> Multi-Agent -> Workers)", ()
     env = {
       CONCLAVE_ENVIRONMENT: "development",
       CONCLAVE_DB: d1,
-      AGENT_GATEWAY: mockGatewayNamespace,
-      CONCLAVE_AGENT_GATEWAY: mockGatewayNamespace,
+      CONCLAVE_HOST_GATEWAY: mockGatewayNamespace,
     } as unknown as AssignmentDispatcherEnv;
 
     const now = new Date().toISOString();
