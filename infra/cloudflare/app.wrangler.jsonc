@@ -20,14 +20,14 @@
   "d1_databases": [
     {
       "binding": "CONCLAVE_DB",
-      "database_name": "conclave-development",
+      "database_name": "conclave-production",
       "migrations_dir": "../../apps/worker/migrations",
     },
   ],
   "r2_buckets": [
     {
       "binding": "CONCLAVE_ARTIFACTS",
-      "bucket_name": "conclave-artifacts-development",
+      "bucket_name": "conclave-artifacts-production",
     },
   ],
   "services": [
