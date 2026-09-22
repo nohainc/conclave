@@ -281,7 +281,7 @@ export async function executeForgeGoal(
       name,
       purpose,
       sequence: order,
-      status: "active",
+      status: "running",
       createdAt: now(),
       updatedAt: now(),
     };

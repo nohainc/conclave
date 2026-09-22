@@ -214,7 +214,7 @@ export async function executeTwoModelGoal(
     name: "two-model-mvp",
     purpose: "Lead delegates one task to a Specialist and evaluates the result",
     sequence: 1,
-    status: "active",
+    status: "running",
     createdAt: now(),
     updatedAt: now(),
   };
