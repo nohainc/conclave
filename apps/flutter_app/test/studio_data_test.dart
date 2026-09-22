@@ -5,6 +5,9 @@ import 'package:conclave_app/src/studio/studio_models.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_test/flutter_test.dart';
 
+import 'demo_studio_data.dart';
+import 'package:conclave_app/src/studio/studio_stores.dart';
+
 class _JsonClient extends http.BaseClient {
   _JsonClient(this.body, {this.statusCode = 201});
 
@@ -27,6 +30,21 @@ class _JsonClient extends http.BaseClient {
 }
 
 void main() {
+  test('populates focused stores from the Cloud read model', () async {
+    final store = StudioStore(const DemoStudioDataSource());
+    final snapshot = await store.reload();
+
+    expect(snapshot.workspaceId, isNull);
+    expect(store.projects.items.first.id, 'forge');
+    expect(store.chats.items, hasLength(3));
+    expect(store.runs.current?.id, 'run-demo');
+    expect(store.agents.items.single.id, 'agent-macbook');
+    expect(store.workers.items, hasLength(3));
+    expect(store.plugins.items, hasLength(6));
+    expect(store.usage.tokens, 32500);
+    expect(store.usage.costMicros, 650000);
+  });
+
   test('normalizes the Cloud chat message envelope', () async {
     final client = StudioApiClient(
       baseUrl: 'https://conclave.test/api',
