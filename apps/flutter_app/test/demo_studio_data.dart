@@ -6,7 +6,19 @@ class DemoStudioDataSource implements StudioDataSource {
   const DemoStudioDataSource();
 
   @override
-  Future<StudioSnapshot> loadSnapshot({String? projectId}) async =>
+  Future<List<StudioWorkspace>> loadWorkspaces() async => const [
+        StudioWorkspace(
+          id: 'workspace-demo',
+          name: 'Demo Workspace',
+          slug: 'demo-workspace',
+          status: 'active',
+          role: 'owner',
+        ),
+      ];
+
+  @override
+  Future<StudioSnapshot> loadSnapshot(
+          {String? projectId, String? workspaceId}) async =>
       StudioSnapshot.demo();
 
   @override

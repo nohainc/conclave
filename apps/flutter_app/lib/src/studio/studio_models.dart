@@ -644,6 +644,31 @@ class StudioViewer {
       );
 }
 
+class StudioWorkspace {
+  const StudioWorkspace({
+    required this.id,
+    required this.name,
+    required this.slug,
+    required this.status,
+    required this.role,
+  });
+
+  final String id;
+  final String name;
+  final String slug;
+  final String status;
+  final String role;
+
+  factory StudioWorkspace.fromJson(Map<String, dynamic> json) =>
+      StudioWorkspace(
+        id: _string(json, 'id'),
+        name: _string(json, 'name'),
+        slug: _string(json, 'slug'),
+        status: _string(json, 'status', 'active'),
+        role: _string(json, 'role', 'viewer'),
+      );
+}
+
 class StudioSnapshot {
   const StudioSnapshot({
     this.workspaceId,

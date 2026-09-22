@@ -5,6 +5,7 @@ import 'studio_models.dart';
 class StudioStore {
   StudioStore(this.dataSource)
       : projects = ProjectStore(dataSource),
+        workspaces = WorkspaceStore(dataSource),
         chats = ChatStore(dataSource),
         runs = RunStore(dataSource),
         agents = AgentStore(dataSource),
@@ -13,6 +14,7 @@ class StudioStore {
         usage = UsageStore(dataSource);
 
   final StudioDataSource dataSource;
+  final WorkspaceStore workspaces;
   final ProjectStore projects;
   final ChatStore chats;
   final RunStore runs;
@@ -21,13 +23,21 @@ class StudioStore {
   final PluginStore plugins;
   final UsageStore usage;
 
-  Future<StudioSnapshot> reload({String? projectId}) =>
-      dataSource.loadSnapshot(projectId: projectId);
+  Future<StudioSnapshot> reload({String? projectId, String? workspaceId}) =>
+      dataSource.loadSnapshot(
+          projectId: projectId, workspaceId: workspaceId);
 }
 
 class ProjectStore {
   const ProjectStore(this.source);
   final StudioDataSource source;
+}
+
+class WorkspaceStore {
+  const WorkspaceStore(this.source);
+  final StudioDataSource source;
+
+  Future<List<StudioWorkspace>> list() => source.loadWorkspaces();
 }
 
 class ChatStore {

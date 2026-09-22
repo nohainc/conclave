@@ -7,7 +7,8 @@ import '../platform/http_client_stub.dart'
 import 'studio_models.dart';
 
 abstract interface class StudioDataSource {
-  Future<StudioSnapshot> loadSnapshot({String? projectId});
+  Future<List<StudioWorkspace>> loadWorkspaces();
+  Future<StudioSnapshot> loadSnapshot({String? projectId, String? workspaceId});
   Future<void> controlRun(String runId, String command);
   Future<void> createGoal({
     required String projectId,
@@ -92,9 +93,33 @@ class StudioApiClient implements StudioDataSource {
   final http.Client client;
 
   @override
-  Future<StudioSnapshot> loadSnapshot({String? projectId}) async {
+  Future<List<StudioWorkspace>> loadWorkspaces() async {
+    final response = await client.get(Uri.parse('$baseUrl/workspaces'),
+        headers: {'accept': 'application/json'});
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+          'Workspace list failed (${response.statusCode})');
+    }
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final workspaces = body['workspaces'];
+    if (workspaces is! List) {
+      throw const StudioApiException('Workspace list response is malformed');
+    }
+    return workspaces
+        .whereType<Map>()
+        .map((workspace) => StudioWorkspace.fromJson(
+            Map<String, dynamic>.from(workspace)))
+        .toList();
+  }
+
+  @override
+  Future<StudioSnapshot> loadSnapshot(
+      {String? projectId, String? workspaceId}) async {
     final uri = Uri.parse('$baseUrl/studio/snapshot').replace(
-      queryParameters: projectId == null ? null : {'projectId': projectId},
+      queryParameters: {
+        if (projectId != null) 'projectId': projectId,
+        if (workspaceId != null) 'workspaceId': workspaceId,
+      },
     );
     final response =
         await client.get(uri, headers: {'accept': 'application/json'});
