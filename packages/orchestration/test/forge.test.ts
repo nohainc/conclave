@@ -6,7 +6,6 @@ import type {
   Worker,
   WorkerAssignmentResult,
 } from "@conclave/core";
-import type { ModelRequest, ModelResponse } from "@conclave/providers";
 import type { ImplementationOperation } from "@conclave/protocol";
 
 import {
@@ -112,9 +111,26 @@ const agent: ConclaveAgent = {
   revokedAt: null,
 };
 
+type TestModelRequest = {
+  readonly message: {
+    readonly payload?: unknown;
+  };
+  readonly context?: readonly { readonly content: string }[];
+};
+
+type TestModelResponse = {
+  readonly providerRequestId: string;
+  readonly text: string;
+  readonly rawResponse: string;
+  readonly usage: {
+    readonly inputTokens: number;
+    readonly outputTokens: number;
+  };
+};
+
 class FakeWorker implements ForgeWorker {
   private cursor = 0;
-  readonly requests: ModelRequest[] = [];
+  readonly requests: TestModelRequest[] = [];
 
   constructor(
     readonly worker: Worker,
@@ -125,7 +141,7 @@ class FakeWorker implements ForgeWorker {
 
   async execute(request: ForgeWorkerRequest): Promise<WorkerAssignmentResult> {
     const response = await this.complete({
-      message: request.message as ModelRequest["message"],
+      message: request.message as TestModelRequest["message"],
       context: request.context,
     });
     return {
@@ -143,7 +159,7 @@ class FakeWorker implements ForgeWorker {
     };
   }
 
-  complete(request: ModelRequest): Promise<ModelResponse> {
+  complete(request: TestModelRequest): Promise<TestModelResponse> {
     this.requests.push(request);
     const output = this.outputs[this.cursor++];
     if (output === undefined)
