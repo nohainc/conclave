@@ -73,24 +73,29 @@ class DartForgePipeline {
         summary:
             'Agent patched the implementation through the safe workspace API',
         artifacts: ['lib/add.js']));
-    final reviewWorkspace = SafeWorkspace(repository);
-    final reviewed = await reviewWorkspace.read('lib/add.js');
-    final regressionTest = await reviewWorkspace.read('test/add.test.js');
-    if (!reviewed.contains('return a + b') ||
-        !regressionTest.contains('assert.equal(add(2, 3), 5)')) {
-      return ForgeCompletion(
-        completed: false,
-        evidence: evidence,
-        completionReport:
-            'Implementation or regression coverage did not satisfy review',
-      );
+    final reviewRepository = await _copyWorkspace(repository);
+    try {
+      final reviewWorkspace = SafeWorkspace(reviewRepository);
+      final reviewed = await reviewWorkspace.read('lib/add.js');
+      final regressionTest = await reviewWorkspace.read('test/add.test.js');
+      if (!reviewed.contains('return a + b') ||
+          !regressionTest.contains('assert.equal(add(2, 3), 5)')) {
+        return ForgeCompletion(
+          completed: false,
+          evidence: evidence,
+          completionReport:
+              'Implementation or regression coverage did not satisfy review',
+        );
+      }
+      evidence.add(const ForgeEvidence(
+          phase: 'independent_review',
+          summary:
+              'Independent review inspected a separate workspace clone of the changed repository',
+          artifacts: ['lib/add.js', 'test/add.test.js'],
+          findings: []));
+    } finally {
+      await reviewRepository.delete(recursive: true);
     }
-    evidence.add(const ForgeEvidence(
-        phase: 'independent_review',
-        summary:
-            'Independent review re-read the changed source and regression test',
-        artifacts: ['lib/add.js', 'test/add.test.js'],
-        findings: []));
     final diff = await SafeCommandRunner(workspace).run(
       ['git', 'diff', '--', 'lib/add.js'],
       policy: gitPolicy,
@@ -133,5 +138,34 @@ class DartForgePipeline {
           ? 'All required fixture checks passed at revision ${revision.isEmpty ? 'unknown' : revision}'
           : 'Required fixture checks did not pass',
     );
+  }
+
+  Future<Directory> _copyWorkspace(Directory source) async {
+    final destination =
+        await Directory.systemTemp.createTemp('conclave-forge-review-');
+    await _copyDirectoryContents(source, destination);
+    return destination;
+  }
+
+  Future<void> _copyDirectoryContents(
+      Directory source, Directory destination) async {
+    await for (final entity in source.list(followLinks: false)) {
+      final name = entity.uri.pathSegments.lastWhere(
+        (segment) => segment.isNotEmpty,
+        orElse: () => '',
+      );
+      if (name.isEmpty) continue;
+      final targetPath = '${destination.path}${Platform.pathSeparator}$name';
+      if (entity is Directory) {
+        final target = Directory(targetPath);
+        await target.create(recursive: true);
+        await _copyDirectoryContents(entity, target);
+      } else if (entity is File) {
+        await File(targetPath).writeAsBytes(
+          await entity.readAsBytes(),
+          flush: true,
+        );
+      }
+    }
   }
 }
