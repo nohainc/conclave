@@ -41,6 +41,35 @@ class StudioApiException implements Exception {
   String toString() => message;
 }
 
+Map<String, dynamic> _studioChatMessageFromApi(Map<String, dynamic> json) {
+  final senderType = json['senderType'] ?? json['sender'];
+  final sender = switch (senderType) {
+    'user' => 'user',
+    'system' => 'system',
+    _ => 'conclave',
+  };
+  final metadata = json['metadata'];
+  return {
+    'id': json['id'],
+    'sender': sender,
+    'text': json['content'] ?? json['text'] ?? '',
+    'timestamp': json['createdAt'] ?? json['timestamp'] ?? '',
+    if (metadata is Map && metadata['runPreview'] != null)
+      'runPreview': metadata['runPreview'],
+  };
+}
+
+Map<String, dynamic> _studioChatFromApi(Map<String, dynamic> json) {
+  return {
+    ...json,
+    'lastActivity': json['lastActivity'] ?? json['updatedAt'] ?? '',
+    'messages': (json['messages'] as List? ?? const [])
+        .map((message) => _studioChatMessageFromApi(
+            Map<String, dynamic>.from(message as Map)))
+        .toList(),
+  };
+}
+
 class StudioApiClient implements StudioDataSource {
   StudioApiClient({String? baseUrl, http.Client? client})
       : baseUrl = baseUrl ??
@@ -111,8 +140,13 @@ class StudioApiClient implements StudioDataSource {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StudioApiException('Send message failed (${response.statusCode})');
     }
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final message = body['message'];
+    if (message is! Map) {
+      throw const StudioApiException('Send message response is malformed');
+    }
     return StudioChatMessage.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>);
+        _studioChatMessageFromApi(Map<String, dynamic>.from(message)));
   }
 
   @override
@@ -128,8 +162,13 @@ class StudioApiClient implements StudioDataSource {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StudioApiException('Create chat failed (${response.statusCode})');
     }
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final chat = body['chat'];
+    if (chat is! Map) {
+      throw const StudioApiException('Create chat response is malformed');
+    }
     return StudioChat.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>);
+        _studioChatFromApi(Map<String, dynamic>.from(chat)));
   }
 
   @override
