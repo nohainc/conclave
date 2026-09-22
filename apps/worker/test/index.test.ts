@@ -31,10 +31,14 @@ const identityDb = {
             organization_id: "local-development",
           } as T;
         }
-        if (
-          query.includes("run_external_executions") ||
-          query.includes("persistence_records")
-        ) {
+        if (query.includes("run_external_executions")) {
+          const runId = String(values[0]);
+          const workflowInstanceId = workflowExecutions.get(runId);
+          return workflowInstanceId
+            ? ({ external_id: workflowInstanceId } as T)
+            : null;
+        }
+        if (query.includes("persistence_records")) {
           const runId = String(values[0]);
           const workflowInstanceId = workflowExecutions.get(runId);
           return workflowInstanceId
@@ -64,10 +68,10 @@ const identityDb = {
             );
           consumedEvidence.add(evidenceId);
         }
-        if (
-          query.includes("run_external_executions") ||
-          query.includes("persistence_records")
-        ) {
+        if (query.includes("run_external_executions")) {
+          workflowExecutions.set(String(values[1]), String(values[2]));
+        }
+        if (query.includes("persistence_records")) {
           const runId = String(values[0]);
           const jsonVal = typeof values[1] === "string" ? values[1] : "";
           try {

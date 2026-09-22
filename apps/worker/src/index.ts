@@ -150,32 +150,20 @@ async function resolveWorkflowInstanceId(
     .first<{ workflow_instance_id?: string | null }>();
   if (run?.workflow_instance_id) return run.workflow_instance_id;
 
-  // Read the transitional record written before workflow_instance_id was
-  // added to runs, then promote it into the authoritative run row.
-  const row = await env.CONCLAVE_DB.prepare(
-    "SELECT record_json FROM persistence_records WHERE repository = 'run_external_executions' AND record_id = ?1",
+  const external = await env.CONCLAVE_DB.prepare(
+    "SELECT external_id FROM run_external_executions WHERE run_id = ?1 AND execution_kind = 'cloudflare_workflow'",
   )
     .bind(runId)
-    .first<{ record_json: string }>();
-  if (row) {
-    try {
-      const parsed = JSON.parse(row.record_json) as {
-        workflow_instance_id?: string;
-        workflowInstanceId?: string;
-      };
-      const existing = parsed.workflow_instance_id ?? parsed.workflowInstanceId;
-      if (existing) {
-        await env.CONCLAVE_DB.prepare(
-          "UPDATE runs SET workflow_instance_id = ?1, updated_at = ?2 WHERE id = ?3 AND workflow_instance_id IS NULL",
-        )
-          .bind(existing, new Date().toISOString(), runId)
-          .run();
-        return existing;
-      }
-    } catch {
-      // fallback
-    }
+    .first<{ external_id?: string | null }>();
+  if (external?.external_id) {
+    await env.CONCLAVE_DB.prepare(
+      "UPDATE runs SET workflow_instance_id = ?1, updated_at = ?2 WHERE id = ?3 AND workflow_instance_id IS NULL",
+    )
+      .bind(external.external_id, new Date().toISOString(), runId)
+      .run();
+    return external.external_id;
   }
+
   if (!idempotencyKey) {
     return workflowInstanceId(runId);
   }
@@ -185,6 +173,15 @@ async function resolveWorkflowInstanceId(
     "UPDATE runs SET workflow_instance_id = ?1, updated_at = ?2 WHERE id = ?3 AND workflow_instance_id IS NULL",
   )
     .bind(candidate, now, runId)
+    .run();
+  await env.CONCLAVE_DB.prepare(
+    `INSERT INTO run_external_executions
+       (id, run_id, execution_kind, external_id, status, created_at, updated_at)
+     VALUES (?1, ?2, 'cloudflare_workflow', ?3, 'active', ?4, ?4)
+     ON CONFLICT(run_id, execution_kind) DO UPDATE SET external_id=excluded.external_id,
+       updated_at=excluded.updated_at`,
+  )
+    .bind(`${runId}:cloudflare_workflow`, runId, candidate, now)
     .run();
   return candidate;
 }
