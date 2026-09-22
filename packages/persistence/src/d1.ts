@@ -438,15 +438,15 @@ export class D1ModelCallRepository {
   async save(call: ModelCallRecord): Promise<void> {
     const scope = await this.db
       .prepare(
-        `SELECT r.workspace_id FROM attempts a
+        `SELECT r.workspace_id, r.project_id FROM attempts a
          JOIN tasks t ON t.id = a.task_id
          JOIN phases p ON p.id = t.phase_id
          JOIN runs r ON r.id = p.run_id
          WHERE a.id = ?1`,
       )
       .bind(call.attemptId)
-      .first<{ workspace_id: string }>();
-    if (!scope?.workspace_id) {
+      .first<{ workspace_id: string; project_id: string }>();
+    if (!scope?.workspace_id || !scope.project_id) {
       throw new Error(
         `Cannot save ModelCall for unknown Attempt: ${call.attemptId}`,
       );
@@ -475,6 +475,38 @@ export class D1ModelCallRepository {
         call.outputTokens,
         call.startedAt,
         call.finishedAt,
+      )
+      .run();
+    const startedMs = Date.parse(call.startedAt);
+    const finishedMs = call.finishedAt
+      ? Date.parse(call.finishedAt)
+      : startedMs;
+    const durationMs =
+      Number.isFinite(startedMs) && Number.isFinite(finishedMs)
+        ? Math.max(0, finishedMs - startedMs)
+        : 0;
+    await this.db
+      .prepare(
+        `INSERT INTO usage (id, workspace_id, project_id, run_id, worker_id, assignment_id,
+           input_tokens, output_tokens, cost_micros, duration_ms, recorded_at)
+         SELECT ?1, r.workspace_id, r.project_id, r.id, ?2, NULL, ?3, ?4, 0, ?5, ?6
+         FROM attempts a
+         JOIN tasks t ON t.id = a.task_id
+         JOIN phases p ON p.id = t.phase_id
+         JOIN runs r ON r.id = p.run_id
+         WHERE a.id = ?7
+         ON CONFLICT(id) DO UPDATE SET input_tokens=excluded.input_tokens,
+           output_tokens=excluded.output_tokens, duration_ms=excluded.duration_ms,
+           recorded_at=excluded.recorded_at`,
+      )
+      .bind(
+        `usage:model-call:${call.id}`,
+        call.workerId,
+        call.inputTokens ?? 0,
+        call.outputTokens ?? 0,
+        durationMs,
+        call.finishedAt ?? call.startedAt,
+        call.attemptId,
       )
       .run();
   }

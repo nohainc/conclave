@@ -164,7 +164,11 @@ describe("Cloudflare persistence adapters", () => {
 
   it("appends events to the tenant-scoped events table", async () => {
     const eventRepository = new D1EventRepository(
-      new FakeDb([{ workspace_id: "workspace-1" }, []]),
+      new FakeDb([
+        { workspace_id: "workspace-1", project_id: "project-1" },
+        [],
+        [],
+      ]),
     );
     await expect(
       eventRepository.append({
@@ -221,7 +225,11 @@ describe("Cloudflare persistence adapters", () => {
 
   it("persists and reconstructs tenant-scoped model calls", async () => {
     const repository = new D1ModelCallRepository(
-      new FakeDb([{ workspace_id: "workspace-1" }, []]),
+      new FakeDb([
+        { workspace_id: "workspace-1", project_id: "project-1" },
+        [],
+        [],
+      ]),
     );
     const call = {
       id: "call-1",
