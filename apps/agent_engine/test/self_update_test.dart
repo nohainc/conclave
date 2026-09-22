@@ -172,4 +172,25 @@ void main() {
     expect((await root.list().toList()), isEmpty);
     await root.delete(recursive: true);
   });
+
+  test('rejects oversized release packages before staging', () async {
+    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final bytes = [1, 2, 3, 4];
+    await expectLater(
+      AgentUpdater(root).apply(
+        ReleasePackage(
+          version: '4.0.0',
+          channel: 'stable',
+          bytes: bytes,
+          digest: sha256.convert(bytes).toString(),
+        ),
+        maxPackageBytes: 3,
+        healthCheck: (_) async => true,
+      ),
+      throwsA(predicate((error) =>
+          error.toString().contains('exceeds the 3 byte package limit'))),
+    );
+    expect((await root.list().toList()), isEmpty);
+    await root.delete(recursive: true);
+  });
 }

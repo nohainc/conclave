@@ -40,7 +40,16 @@ class AgentUpdater {
   final String currentProtocolVersion;
 
   Future<void> apply(ReleasePackage release,
-      {required Future<bool> Function(File executable) healthCheck}) async {
+      {required Future<bool> Function(File executable) healthCheck,
+      int maxPackageBytes = 512 * 1024 * 1024}) async {
+    if (maxPackageBytes <= 0) {
+      throw ArgumentError.value(
+          maxPackageBytes, 'maxPackageBytes', 'must be positive');
+    }
+    if (release.bytes.length > maxPackageBytes) {
+      throw StateError(
+          'agent release exceeds the $maxPackageBytes byte package limit');
+    }
     final actual = sha256.convert(release.bytes).toString();
     if (actual != release.digest) {
       throw StateError('agent release digest mismatch');
@@ -93,6 +102,7 @@ class AgentUpdater {
         '${root.path}/.agent-${release.version}.staged-${DateTime.now().microsecondsSinceEpoch}');
     final active = File('${root.path}/agent.active');
     final backup = File('${root.path}/agent.previous');
+    final hadPrevious = await active.exists();
     try {
       await staged.writeAsBytes(release.bytes, flush: true);
       if (await active.exists()) {
@@ -134,6 +144,10 @@ class AgentUpdater {
       await metadataTemp.rename(metadata.path);
     } catch (_) {
       if (await metadataTemp.exists()) await metadataTemp.delete();
+      if (await active.exists()) await active.delete();
+      if (hadPrevious && await backup.exists()) {
+        await backup.rename(active.path);
+      }
       rethrow;
     }
   }
