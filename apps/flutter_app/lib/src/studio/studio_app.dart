@@ -218,6 +218,16 @@ class _StudioAppState extends State<StudioApp> {
   }
 
   Future<void> _editWorker([StudioWorker? existing]) async {
+    if (snapshot.agents.isEmpty || snapshot.plugins.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Connect an Agent and publish a Plugin first.'),
+          ),
+        );
+      }
+      return;
+    }
     final workspaceId = activeWorkspaceId;
     if (workspaceId == null || workspaceId.isEmpty) {
       if (mounted) {
@@ -1973,9 +1983,7 @@ class _StudioAppState extends State<StudioApp> {
           Align(
               alignment: Alignment.centerRight,
               child: FilledButton.icon(
-                  onPressed: snapshot.agents.isEmpty || snapshot.plugins.isEmpty
-                      ? null
-                      : () => _editWorker(),
+                  onPressed: () => unawaited(_editWorker()),
                   icon: const Icon(Icons.add),
                   label: const Text('New Worker'))),
           const SizedBox(height: 16),
