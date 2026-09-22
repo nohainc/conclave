@@ -36,4 +36,32 @@ void main() {
     expect(
         () => worker.parseStructuredOutput('not json'), throwsFormatException);
   });
+
+  test('bounds CLI output and force-terminates a noisy process', () async {
+    final directory = await Directory.systemTemp.createTemp('claude-noisy-');
+    final script = File('${directory.path}/noisy.dart')..writeAsStringSync('''
+import 'dart:io';
+Future<void> main() async {
+  stdout.write(List.filled(1024 * 1024, 'x').join());
+  await Future<void>.delayed(const Duration(seconds: 5));
+}
+''');
+    final worker = ClaudeCodeWorker(
+      start: (executable, arguments, {workingDirectory}) => Process.start(
+        Platform.resolvedExecutable,
+        ['run', script.path],
+        workingDirectory: workingDirectory,
+      ),
+    );
+    try {
+      await expectLater(
+        worker.executeTask('noisy', maxOutputBytes: 1024),
+        throwsA(predicate((error) => error
+            .toString()
+            .contains('Claude Code output exceeded 1024 bytes'))),
+      );
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
 }
