@@ -1,0 +1,74 @@
+import 'package:conclave_app/src/studio/studio_data.dart';
+import 'package:conclave_app/src/studio/studio_models.dart';
+
+/// Test-only fixture source. Production Studio always uses StudioApiClient.
+class DemoStudioDataSource implements StudioDataSource {
+  const DemoStudioDataSource();
+
+  @override
+  Future<StudioSnapshot> loadSnapshot({String? projectId}) async =>
+      StudioSnapshot.demo();
+
+  @override
+  Future<void> controlRun(String runId, String command) async {}
+
+  @override
+  Future<void> createGoal({
+    required String projectId,
+    required String objective,
+    required String revision,
+  }) async {}
+
+  @override
+  Future<StudioChatMessage> sendChatMessage({
+    required String projectId,
+    required String chatId,
+    required String text,
+  }) async {
+    return StudioChatMessage(
+      id: 'msg-${DateTime.now().millisecondsSinceEpoch}',
+      sender: StudioMessageSender.user,
+      text: text,
+      timestamp: 'Just now',
+    );
+  }
+
+  @override
+  Future<StudioChat> createChat({
+    required String projectId,
+    required String title,
+  }) async {
+    return StudioChat(
+      id: 'chat-${DateTime.now().millisecondsSinceEpoch}',
+      projectId: projectId,
+      title: title,
+      lastActivity: 'Just now',
+      messages: [],
+    );
+  }
+
+  @override
+  Future<void> setWorkerEnabled({
+    required String workspaceId,
+    required String workerId,
+    required bool enabled,
+  }) async {}
+
+  @override
+  Future<void> revokeAgent({
+    required String workspaceId,
+    required String agentId,
+  }) async {}
+
+  @override
+  Future<void> saveWorker({
+    required String workspaceId,
+    String? workerId,
+    required String name,
+    required String agentId,
+    required String pluginId,
+    required List<String> roles,
+    required List<String> capabilities,
+    required bool enabled,
+  }) async {}
+}

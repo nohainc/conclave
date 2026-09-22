@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 
 import 'package:conclave_app/main.dart';
-import 'package:conclave_app/src/studio/studio_data.dart';
+import 'demo_studio_data.dart';
 
 void main() {
   testWidgets('renders the chat-first Studio workspace',
