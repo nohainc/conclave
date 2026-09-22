@@ -303,8 +303,12 @@ class PluginAssignmentHandler {
     final request = input['request'] is Map
         ? Map<String, Object?>.from(input['request'] as Map)
         : const <String, Object?>{};
+    final repository = payload['repository'] is Map
+        ? Map<String, Object?>.from(payload['repository'] as Map)
+        : const <String, Object?>{};
     final repositoryId = _firstString([
       payload['repositoryId'],
+      repository['repositoryId'],
       input['repositoryId'],
       request['repositoryId'],
     ]);

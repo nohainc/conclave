@@ -620,6 +620,10 @@ class AgentGatewayWorkerExecutor implements WorkerExecutor {
       capabilities,
       contextArtifactIds: request.context.map((item) => item.artifactId),
       timeoutMs: this.deadline(request),
+      repository: {
+        repositoryId: request.repositoryId,
+        revision: this.revisionFromMessage(message),
+      },
       input: {
         request,
         message: request.message,
@@ -758,6 +762,16 @@ class AgentGatewayWorkerExecutor implements WorkerExecutor {
   private deadline(request: WorkerExecutionRequest): number {
     if (!request.deadlineAt) return 15 * 60_000;
     return Math.max(1000, new Date(request.deadlineAt).getTime() - Date.now());
+  }
+
+  private revisionFromMessage(message: Record<string, unknown>): string {
+    const payload =
+      typeof message.payload === "object" && message.payload !== null
+        ? (message.payload as Record<string, unknown>)
+        : {};
+    return typeof payload.revision === "string" && payload.revision.length > 0
+      ? payload.revision
+      : "HEAD";
   }
 
   private failed(message: string, retryable = false): WorkerExecutionResult {

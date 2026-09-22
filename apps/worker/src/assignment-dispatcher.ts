@@ -15,6 +15,11 @@ export interface TaskToDispatch {
   readonly contextArtifactIds?: readonly string[];
   readonly timeoutMs?: number;
   readonly requiresIndependentVerification?: boolean;
+  readonly repository?: {
+    readonly repositoryId: string;
+    readonly revision: string;
+    readonly workspaceSubpath?: string;
+  };
 }
 
 export interface SelectedWorkerInfo {
@@ -274,6 +279,7 @@ export async function dispatchTaskAssignment(
     input: task.input || {},
     contextArtifactIds: [...(task.contextArtifactIds || [])],
     timeoutMs,
+    ...(task.repository ? { repository: task.repository } : {}),
   };
 
   const gatewayNamespace = env.CONCLAVE_AGENT_GATEWAY || env.AGENT_GATEWAY;

@@ -511,6 +511,16 @@ class AgentCloudConnection {
     if (timeoutMs is! int || timeoutMs < 1000) {
       return 'Assignment timeoutMs must be at least 1000 milliseconds';
     }
+    final repository = rawPayload['repository'];
+    if (repository != null) {
+      if (repository is! Map ||
+          repository['repositoryId'] is! String ||
+          (repository['repositoryId'] as String).trim().isEmpty ||
+          repository['revision'] is! String ||
+          (repository['revision'] as String).trim().isEmpty) {
+        return 'Assignment repository must contain repositoryId and revision';
+      }
+    }
     return null;
   }
 
