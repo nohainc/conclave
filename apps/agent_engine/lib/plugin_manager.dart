@@ -15,6 +15,7 @@ class PluginManifest {
     this.arguments = const [],
     this.publisher,
     this.permissions = const [],
+    this.secretEnvironmentVariables = const [],
     this.supportedPlatforms = const [],
     this.releaseChannel = 'stable',
   });
@@ -27,6 +28,7 @@ class PluginManifest {
   final List<String> arguments;
   final String? publisher;
   final List<PluginPermission> permissions;
+  final List<String> secretEnvironmentVariables;
   final List<String> supportedPlatforms;
   final String releaseChannel;
 
@@ -40,6 +42,7 @@ class PluginManifest {
         if (publisher != null) 'publisher': publisher,
         'permissions':
             permissions.map((permission) => permission.wireName).toList(),
+        'secretEnvironmentVariables': secretEnvironmentVariables,
         'supportedPlatforms': supportedPlatforms,
         'releaseChannel': releaseChannel,
       };
@@ -86,6 +89,7 @@ class PluginManager {
   PluginManager(this.root,
       {this.trustPolicy,
       this.allowedPermissions = const {},
+      this.secretEnvironment = const {},
       String? platformKey,
       this.engineVersion = '0.1.0',
       this.protocolVersion = '2.0'})
@@ -93,6 +97,9 @@ class PluginManager {
   final Directory root;
   final PluginTrustPolicy? trustPolicy;
   final Set<PluginPermission> allowedPermissions;
+  /// Values are supplied by the Agent's secure configuration boundary and are
+  /// injected only when a verified manifest names the variable explicitly.
+  final Map<String, String> secretEnvironment;
   final String platformKey;
   final String engineVersion;
   final String protocolVersion;
@@ -121,6 +128,7 @@ class PluginManager {
       final protocolVersion = item['protocolVersion'];
       final minAgentVersion = item['minAgentVersion'];
       final supportedPlatforms = item['supportedPlatforms'];
+      final secretEnvironmentVariables = item['secretEnvironmentVariables'];
       if (pluginId is! String ||
           version is! String ||
           publisher is! String ||
@@ -164,6 +172,9 @@ class PluginManager {
               .whereType<String>()
               .map(parsePluginPermission)
               .toList(),
+          secretEnvironmentVariables: secretEnvironmentVariables is List
+              ? secretEnvironmentVariables.whereType<String>().toList()
+              : const [],
           supportedPlatforms: supportedPlatforms is List
               ? supportedPlatforms.whereType<String>().toList()
               : const [],
@@ -217,6 +228,7 @@ class PluginManager {
           executable: 'package.bin',
           publisher: package.publisher,
           permissions: package.permissions,
+          secretEnvironmentVariables: const [],
         );
     if (manifest.pluginId != package.id ||
         manifest.version != package.version) {
@@ -228,6 +240,7 @@ class PluginManager {
       throw StateError('plugin manifest publisher does not match package');
     }
     _requirePermissions(manifest.permissions);
+    _validateSecretEnvironment(manifest);
     if (manifest.protocolVersion != protocolVersion ||
         !_satisfiesMinimumVersion(engineVersion, manifest.engineVersion)) {
       throw StateError('plugin is incompatible with this Agent Engine');
@@ -359,7 +372,39 @@ class PluginManager {
       arguments:
           arguments is List ? arguments.whereType<String>().toList() : const [],
       workingDirectory: '${root.path}/$pluginId/$version',
+      environment: _scopedSecretEnvironment(manifest),
+      allowedEnvironmentVariables:
+          _scopedSecretEnvironment(manifest).keys.toSet(),
     );
+  }
+
+  void _validateSecretEnvironment(PluginManifest manifest) {
+    _validateSecretEnvironmentMap(manifest.toJson());
+  }
+
+  void _validateSecretEnvironmentMap(Map<String, Object?> manifest) {
+    final names = manifest['secretEnvironmentVariables'];
+    if (names is! List || names.isEmpty) return;
+    final permissions = _permissionsFromManifest(manifest['permissions']);
+    if (!permissions.contains(PluginPermission.credentials)) {
+      throw StateError(
+          'plugin secret environment requires credentials:read permission');
+    }
+    for (final name in names.whereType<String>()) {
+      if (!RegExp(r'^[A-Z][A-Z0-9_]*$').hasMatch(name)) {
+        throw StateError('invalid plugin secret environment variable: $name');
+      }
+    }
+  }
+
+  Map<String, String> _scopedSecretEnvironment(
+      Map<String, Object?> manifest) {
+    final names = manifest['secretEnvironmentVariables'];
+    if (names is! List) return const {};
+    return {
+      for (final name in names.whereType<String>())
+        if (secretEnvironment.containsKey(name)) name: secretEnvironment[name]!,
+    };
   }
 
   /// Re-check the immutable package payload before every process launch.
@@ -404,6 +449,7 @@ class PluginManager {
     }
     final policy = trustPolicy;
     _requirePermissions(_permissionsFromManifest(manifest['permissions']));
+    _validateSecretEnvironmentMap(manifest);
     if (policy != null) {
       final publisher = manifest['publisher'];
       final signature = manifest['signature'];

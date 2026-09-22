@@ -34,7 +34,12 @@ export const webAiWorkerManifest: WorkerPluginManifest = {
     "coder",
   ],
   capabilities: ["web_chat", "interactive_relay", "code_execution", "network"],
-  permissions: ["network:outbound", "workspace:read", "workspace:write"],
+  permissions: [
+    "network:outbound",
+    "workspace:read",
+    "workspace:write",
+    "credentials:read",
+  ],
   configurationSchema: {
     type: "object",
     properties: {

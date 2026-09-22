@@ -28,7 +28,12 @@ export const openaiApiWorkerManifest: WorkerPluginManifest = {
   supportedArchitecture: ["arm64", "x64"],
   roles: ["architect", "reviewer", "evaluator", "implementer", "coder"],
   capabilities: ["code_execution", "network"],
-  permissions: ["network:outbound", "workspace:read", "workspace:write"],
+  permissions: [
+    "network:outbound",
+    "workspace:read",
+    "workspace:write",
+    "credentials:read",
+  ],
   configurationSchema: {
     type: "object",
     properties: {

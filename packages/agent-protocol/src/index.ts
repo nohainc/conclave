@@ -142,6 +142,7 @@ export const DesiredPluginSchema = z
     packageDigest: nonEmptyStr,
     signature: nonEmptyStr,
     permissions: z.array(nonEmptyStr),
+    secretEnvironmentVariables: z.array(nonEmptyStr).optional(),
   })
   .strict();
 export type DesiredPlugin = z.infer<typeof DesiredPluginSchema>;

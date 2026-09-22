@@ -239,6 +239,64 @@ void main() {
     expect(PluginPermission.networkOpenAi.wireName, 'network:openai');
   });
 
+  test('injects only manifest-declared secrets into a verified plugin', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-plugin-secrets-');
+    final bytes = [61, 62, 63];
+    const manifest = PluginManifest(
+      pluginId: 'secret-plugin',
+      version: '1.0.0',
+      protocolVersion: '2.0',
+      engineVersion: '>=0.1.0',
+      executable: 'package.bin',
+      permissions: [PluginPermission.credentials],
+      secretEnvironmentVariables: ['OPENAI_API_KEY'],
+    );
+    final manager = PluginManager(
+      directory,
+      allowedPermissions: {PluginPermission.credentials},
+      secretEnvironment: const {
+        'OPENAI_API_KEY': 'key-value',
+        'UNDECLARED_SECRET': 'must-not-appear',
+      },
+    );
+    await manager.install(PluginPackage(
+      id: 'secret-plugin',
+      version: '1.0.0',
+      bytes: bytes,
+      digest: sha256.convert(bytes).toString(),
+      manifest: manifest,
+    ));
+    final spec = await manager.activeProcessSpec('secret-plugin');
+    expect(spec?.environment, {'OPENAI_API_KEY': 'key-value'});
+    expect(spec?.allowedEnvironmentVariables, {'OPENAI_API_KEY'});
+    await directory.delete(recursive: true);
+  });
+
+  test('rejects secret declarations without credential permission', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-plugin-secrets-');
+    final bytes = [64, 65, 66];
+    await expectLater(
+      PluginManager(directory).install(PluginPackage(
+        id: 'unapproved-secret-plugin',
+        version: '1.0.0',
+        bytes: bytes,
+        digest: sha256.convert(bytes).toString(),
+        manifest: const PluginManifest(
+          pluginId: 'unapproved-secret-plugin',
+          version: '1.0.0',
+          protocolVersion: '2.0',
+          engineVersion: '>=0.1.0',
+          executable: 'package.bin',
+          secretEnvironmentVariables: ['OPENAI_API_KEY'],
+        ),
+      )),
+      throwsA(isA<StateError>()),
+    );
+    await directory.delete(recursive: true);
+  });
+
   test('reconciles a scoped API network permission', () async {
     final directory =
         await Directory.systemTemp.createTemp('conclave-plugins-network-');

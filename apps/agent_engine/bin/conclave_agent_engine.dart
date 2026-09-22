@@ -78,6 +78,14 @@ Future<void> main(List<String> args) async {
       trustedSecrets: trustSecret == null ? {} : {publisher: trustSecret},
     ),
     allowedPermissions: _configuredPermissions(),
+    secretEnvironment: {
+      for (final name in const [
+        'OPENAI_API_KEY',
+        'ANTHROPIC_API_KEY',
+        'CONCLAVE_CONNECTOR_TOKEN',
+      ])
+        if (Platform.environment[name] != null) name: Platform.environment[name]!,
+    },
   );
   final workerStore = WorkerConfigurationStore(
     Directory('${config.dataDirectory.path}/workers'),

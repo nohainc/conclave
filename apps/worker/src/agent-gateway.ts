@@ -37,6 +37,18 @@ function parseJsonArray(value: unknown): string[] {
   }
 }
 
+function parseJsonObjectKeys(value: unknown): string[] {
+  if (typeof value !== "string") return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
+      ? Object.keys(parsed)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 export interface GatewayEnv {
   CONCLAVE_DB: D1Database;
   CONCLAVE_ENVIRONMENT?: string;
@@ -494,6 +506,7 @@ export class AgentGateway implements DurableObject {
             packageDigest: String(row.package_digest),
             signature: String(row.signature),
             permissions: JSON.parse(String(row.permissions_json || "[]")),
+            secretEnvironmentVariables: parseJsonObjectKeys(row.secret_schema_json),
           }));
 
           const assignmentIds = payload.unreconciledAssignmentIds ?? [];
