@@ -58,7 +58,12 @@
       "name": "conclave.agent-app-ipc",
       "version": "1.0",
       "maxFrameBytes": 1048576,
-      "commandTypes": ["engine.status", "engine.logs", "engine.restart"]
+      "commandTypes": [
+        "engine.status",
+        "engine.logs",
+        "engine.restart",
+        "engine.update"
+      ]
     },
     "workerPlugin": {
       "name": "conclave.worker-plugin",

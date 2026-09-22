@@ -30,6 +30,13 @@ Map<String, String> _pluginSecrets() {
   return secrets;
 }
 
+PluginTrustPolicy _releaseTrustPolicy(String publisher) {
+  final secret = Platform.environment['CONCLAVE_AGENT_RELEASE_TRUST_SECRET'];
+  return PluginTrustPolicy(
+    trustedSecrets: secret == null ? {} : {publisher: secret},
+  );
+}
+
 Future<List<int>> downloadPluginPackage(Uri cloudUri, String? authToken,
     String pluginId, String version, String packageR2Key,
     {int maxPackageBytes = 512 * 1024 * 1024,
@@ -87,6 +94,7 @@ Future<void> main(List<String> args) async {
   final publisher =
       Platform.environment['CONCLAVE_PLUGIN_TRUST_PUBLISHER'] ?? 'conclave';
   final trustSecret = Platform.environment['CONCLAVE_PLUGIN_TRUST_SECRET'];
+  final releaseTrustPolicy = _releaseTrustPolicy(publisher);
   final pluginManager = PluginManager(
     Directory('${config.dataDirectory.path}/plugins'),
     requireSignature: true,
@@ -113,23 +121,31 @@ Future<void> main(List<String> args) async {
     PluginProcessExecutor(),
     resolveRepositoryPath: repositoryRegistry.resolve,
   );
+  AgentUpdateController? updateController;
   String? updateAvailable;
   var lastUpdateCheck = DateTime.fromMillisecondsSinceEpoch(0);
+  if (config.cloudUri != null) {
+    updateController = AgentUpdateController(
+      cloudUri: config.cloudUri!,
+      currentVersion: '0.1.0',
+      client: const AgentReleaseClient(),
+      updater: AgentUpdater(
+        Directory('${config.dataDirectory.path}/updates'),
+        trustPolicy: releaseTrustPolicy,
+      ),
+      operatingSystem: Platform.operatingSystem,
+      authToken: config.authToken,
+    );
+  }
   Future<void> refreshUpdateAvailability() async {
-    if (config.cloudUri == null ||
+    if (updateController == null ||
         DateTime.now().difference(lastUpdateCheck) <
             const Duration(minutes: 5)) {
       return;
     }
     lastUpdateCheck = DateTime.now();
     try {
-      final release = await const AgentReleaseClient().latest(
-        cloudUri: config.cloudUri!,
-        channel: 'stable',
-        currentVersion: '0.1.0',
-        operatingSystem: Platform.operatingSystem,
-        authToken: config.authToken,
-      );
+      final release = await updateController.check();
       updateAvailable = release?.version;
     } on Object {
       // Status remains useful while Cloud is offline; the next interval
@@ -241,6 +257,30 @@ Future<void> main(List<String> args) async {
         'cloudConnected': connection?.isConnected ?? false,
         if (updateAvailable != null) 'updateAvailable': updateAvailable,
       };
+    },
+    updateStatusProvider: () async =>
+        updateController?.status.toJson() ?? const {'phase': 'unconfigured'},
+    updateHandler: (request) async {
+      final controller = updateController;
+      if (controller == null) {
+        throw StateError('Agent Engine updates are not configured');
+      }
+      final action = request['action'] as String? ?? 'status';
+      if (action == 'check') {
+        final release = await controller.check();
+        updateAvailable = release?.version;
+      } else if (action == 'apply') {
+        await controller.apply(
+          hasActiveAssignments: () async =>
+              (connection?.activeAssignmentCount ?? 0) > 0,
+          healthCheck: (executable) async =>
+              await executable.exists() && await executable.length() > 0,
+        );
+        updateAvailable = controller.availableRelease?.version;
+      } else if (action != 'status') {
+        throw StateError('unsupported Agent Engine update action: $action');
+      }
+      return controller.status.toJson();
     },
   );
   await engine.start();

@@ -218,6 +218,141 @@ class _OwnedResponse {
   void close() => _client.close(force: true);
 }
 
+/// The externally visible state of an Agent Engine update transaction.
+class AgentUpdateStatus {
+  const AgentUpdateStatus({
+    required this.phase,
+    this.version,
+    this.error,
+  });
+
+  final String phase;
+  final String? version;
+  final String? error;
+
+  Map<String, Object?> toJson() => {
+        'phase': phase,
+        if (version != null) 'version': version,
+        if (error != null) 'error': error,
+      };
+}
+
+typedef AgentUpdateStatusReporter = void Function(AgentUpdateStatus status);
+
+/// Coordinates release discovery, download, verification, and activation.
+///
+/// The controller deliberately does not replace the running process. The
+/// caller owns the platform-specific restart/bootstrap operation, while this
+/// class guarantees that the update transaction is observable and that a
+/// failed health check is reported as a rollback.
+class AgentUpdateController {
+  AgentUpdateController({
+    required this.cloudUri,
+    required this.currentVersion,
+    required this.client,
+    required this.updater,
+    this.channel = 'stable',
+    this.operatingSystem,
+    this.architecture,
+    this.authToken,
+    this.reportStatus,
+  });
+
+  final Uri cloudUri;
+  final String currentVersion;
+  final AgentReleaseClient client;
+  final AgentUpdater updater;
+  final String channel;
+  final String? operatingSystem;
+  final String? architecture;
+  final String? authToken;
+  final AgentUpdateStatusReporter? reportStatus;
+
+  AgentUpdateStatus _status = const AgentUpdateStatus(phase: 'idle');
+  AgentReleaseDescriptor? _available;
+
+  AgentUpdateStatus get status => _status;
+  AgentReleaseDescriptor? get availableRelease => _available;
+
+  Future<AgentReleaseDescriptor?> check() async {
+    _publish(const AgentUpdateStatus(phase: 'checking'));
+    try {
+      final release = await client.latest(
+        cloudUri: cloudUri,
+        channel: channel,
+        currentVersion: currentVersion,
+        operatingSystem: operatingSystem,
+        architecture: architecture,
+        authToken: authToken,
+      );
+      _available = release;
+      _publish(AgentUpdateStatus(
+        phase: release == null ? 'idle' : 'available',
+        version: release?.version,
+      ));
+      return release;
+    } catch (error) {
+      _publish(AgentUpdateStatus(phase: 'failed', error: '$error'));
+      rethrow;
+    }
+  }
+
+  Future<void> apply({
+    required Future<bool> Function(File executable) healthCheck,
+    Future<bool> Function()? hasActiveAssignments,
+    int maxPackageBytes = 512 * 1024 * 1024,
+  }) async {
+    final release = _available ?? await check();
+    if (release == null) {
+      _publish(const AgentUpdateStatus(phase: 'idle'));
+      return;
+    }
+    _publish(AgentUpdateStatus(phase: 'downloading', version: release.version));
+    try {
+      final package = await client.download(
+        cloudUri: cloudUri,
+        release: release,
+        authToken: authToken,
+        maxPackageBytes: maxPackageBytes,
+      );
+      if (await hasActiveAssignments?.call() ?? false) {
+        _publish(AgentUpdateStatus(
+          phase: 'waiting_for_tasks',
+          version: release.version,
+        ));
+        return;
+      }
+      _publish(AgentUpdateStatus(phase: 'staged', version: release.version));
+      await updater.apply(
+        package,
+        hasActiveAssignments: hasActiveAssignments,
+        healthCheck: (executable) async {
+          _publish(AgentUpdateStatus(
+            phase: 'restarting',
+            version: release.version,
+          ));
+          return healthCheck(executable);
+        },
+      );
+      _available = null;
+      _publish(AgentUpdateStatus(phase: 'healthy', version: release.version));
+    } catch (error) {
+      final message = '$error';
+      _publish(AgentUpdateStatus(
+        phase: message.contains('rolled back') ? 'rolled_back' : 'failed',
+        version: release.version,
+        error: message,
+      ));
+      rethrow;
+    }
+  }
+
+  void _publish(AgentUpdateStatus status) {
+    _status = status;
+    reportStatus?.call(status);
+  }
+}
+
 class AgentUpdater {
   AgentUpdater(
     this.root, {

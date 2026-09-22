@@ -7,6 +7,7 @@ export const AGENT_APP_IPC_COMMAND_TYPES = [
   "engine.status",
   "engine.logs",
   "engine.restart",
+  "engine.update",
 ] as const;
 export const WORKER_PLUGIN_PROTOCOL_NAME = "conclave.worker-plugin" as const;
 export const WORKER_PLUGIN_PROTOCOL_VERSION = "2.0" as const;

@@ -7,6 +7,7 @@ const agentAppIpcCommandTypes = <String>{
   'engine.status',
   'engine.logs',
   'engine.restart',
+  'engine.update',
 };
 const workerPluginProtocolName = 'conclave.worker-plugin';
 const workerPluginProtocolVersion = '2.0';

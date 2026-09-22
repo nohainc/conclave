@@ -8,6 +8,9 @@ import 'local_ipc.dart';
 import 'secure_credentials.dart';
 
 typedef AgentEngineStatusProvider = Future<Map<String, Object?>> Function();
+typedef AgentEngineUpdateHandler = Future<Map<String, Object?>> Function(
+  Map<String, Object?> request,
+);
 
 class AgentEngineConfig {
   const AgentEngineConfig({
@@ -106,6 +109,8 @@ class AgentEngine {
     IOSink? logOutput,
     this.cloudConnection,
     this.statusProvider,
+    this.updateStatusProvider,
+    this.updateHandler,
     String Function(String)? redactLog,
     this.logFileMaxBytes = 1024 * 1024,
   })  : _configuredLogOutput = logOutput,
@@ -120,6 +125,8 @@ class AgentEngine {
   final AgentEngineConfig config;
   final AgentCloudConnection? cloudConnection;
   final AgentEngineStatusProvider? statusProvider;
+  final AgentEngineStatusProvider? updateStatusProvider;
+  final AgentEngineUpdateHandler? updateHandler;
   final IOSink? _configuredLogOutput;
   final int logFileMaxBytes;
   final AgentEngineLogger _log;
@@ -150,16 +157,25 @@ class AgentEngine {
     }
     if (command.type == 'engine.restart') {
       // Let the IPC response flush before replacing the listening socket.
-      unawaited(Future<void>.delayed(const Duration(milliseconds: 50), () async {
+      unawaited(
+          Future<void>.delayed(const Duration(milliseconds: 50), () async {
         await stop();
         await start();
       }));
       return {'accepted': true};
     }
+    if (command.type == 'engine.update') {
+      final handler = updateHandler;
+      if (handler == null) {
+        throw StateError('Agent Engine updates are not configured');
+      }
+      return handler(command.payload);
+    }
     if (command.type != 'engine.status') {
       throw StateError('unsupported engine command: ${command.type}');
     }
     final provided = await statusProvider?.call() ?? const <String, Object?>{};
+    final updateStatus = await updateStatusProvider?.call();
     return {
       'online': _running,
       'status': _running ? 'running' : 'stopped',
@@ -168,6 +184,7 @@ class AgentEngine {
       'activeTasks': 0,
       'version': '0.1.0',
       ...provided,
+      if (updateStatus != null) 'update': updateStatus,
     };
   }
 

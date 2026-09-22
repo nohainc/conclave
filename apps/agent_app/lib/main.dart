@@ -35,6 +35,8 @@ abstract interface class AgentEngineConnection {
 
   Future<bool> restart() async => false;
 
+  Future<bool> update() async => false;
+
   Future<bool> isOnline() async => (await snapshot()).online;
 
   factory AgentEngineConnection.unavailable() =
@@ -44,6 +46,9 @@ abstract interface class AgentEngineConnection {
 class UnavailableAgentEngineConnection implements AgentEngineConnection {
   @override
   Future<bool> restart() async => false;
+
+  @override
+  Future<bool> update() async => false;
 
   @override
   Future<bool> isOnline() async => false;
@@ -105,6 +110,9 @@ class SocketAgentEngineConnection implements AgentEngineConnection {
           pluginIds: _strings(result['pluginIds']),
           activeAssignmentIds: _strings(result['activeAssignmentIds']),
           healthWarnings: _strings(result['healthWarnings']),
+          updatePhase: _updateField(result['update'], 'phase'),
+          updateVersion: _updateField(result['update'], 'version'),
+          updateError: _updateField(result['update'], 'error'),
         );
       } finally {
         await client.close();
@@ -168,10 +176,37 @@ class SocketAgentEngineConnection implements AgentEngineConnection {
     }
   }
 
+  @override
+  Future<bool> update() async {
+    final metadataFile = File('${dataDirectory.path}/ipc.json');
+    if (!await metadataFile.exists()) return false;
+    try {
+      final metadata =
+          jsonDecode(await metadataFile.readAsString()) as Map<String, dynamic>;
+      final port = metadata['port'];
+      final token = metadata['token'];
+      if (port is! int || token is! String || token.isEmpty) return false;
+      final client = await LocalIpcClient.connect(port: port, token: token);
+      try {
+        final result =
+            await client.command('engine.update', const {'action': 'apply'});
+        final phase = _updateField(result, 'phase');
+        return phase == 'healthy' || phase == 'staged';
+      } finally {
+        await client.close();
+      }
+    } on Object {
+      return false;
+    }
+  }
+
   static int _integer(Object? value) => value is int ? value : 0;
 
   static List<String> _strings(Object? value) =>
       value is List ? value.whereType<String>().toList() : const [];
+
+  static String? _updateField(Object? value, String field) =>
+      value is Map && value[field] is String ? value[field] as String : null;
 }
 
 class AgentSnapshot {
@@ -187,6 +222,9 @@ class AgentSnapshot {
     this.healthWarnings = const [],
     this.version,
     this.updateAvailable,
+    this.updatePhase,
+    this.updateVersion,
+    this.updateError,
     this.error,
   });
 
@@ -201,6 +239,9 @@ class AgentSnapshot {
   final List<String> healthWarnings;
   final String? version;
   final String? updateAvailable;
+  final String? updatePhase;
+  final String? updateVersion;
+  final String? updateError;
   final String? error;
 }
 
@@ -239,6 +280,19 @@ class _AgentHomeState extends State<AgentHome> {
       await Future<void>.delayed(const Duration(milliseconds: 250));
       _refresh();
     }
+  }
+
+  Future<void> _updateEngine() async {
+    final accepted = await widget.connection.update();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(accepted
+            ? 'Agent Engine update staged.'
+            : 'Agent Engine update could not be applied.'),
+      ),
+    );
+    _refresh();
   }
 
   @override
@@ -307,7 +361,7 @@ class _AgentHomeState extends State<AgentHome> {
       );
 
   Widget _pageFor(AgentSnapshot snapshot) => switch (_selectedIndex) {
-        0 => _OverviewPage(snapshot: snapshot),
+        0 => _OverviewPage(snapshot: snapshot, onUpdate: _updateEngine),
         1 => _WorkersPage(snapshot: snapshot),
         2 => _PluginsPage(snapshot: snapshot),
         3 => _LogsPage(connection: widget.connection),
@@ -316,9 +370,10 @@ class _AgentHomeState extends State<AgentHome> {
 }
 
 class _OverviewPage extends StatelessWidget {
-  const _OverviewPage({required this.snapshot});
+  const _OverviewPage({required this.snapshot, required this.onUpdate});
 
   final AgentSnapshot snapshot;
+  final VoidCallback onUpdate;
 
   @override
   Widget build(BuildContext context) => _Page(
@@ -342,8 +397,29 @@ class _OverviewPage extends StatelessWidget {
           if (snapshot.version != null)
             _Metric(label: 'Engine version', value: snapshot.version!),
           if (snapshot.updateAvailable != null)
+            Card(
+              child: ListTile(
+                title: Text('Update available: ${snapshot.updateAvailable}'),
+                subtitle: Text(snapshot.updateError ??
+                    snapshot.updatePhase ??
+                    'Ready to install'),
+                trailing: FilledButton(
+                  onPressed: snapshot.updatePhase == 'downloading' ||
+                          snapshot.updatePhase == 'restarting'
+                      ? null
+                      : onUpdate,
+                  child: const Text('Update'),
+                ),
+              ),
+            ),
+          if (snapshot.updatePhase != null &&
+              snapshot.updatePhase != 'idle' &&
+              snapshot.updateAvailable == null)
             _Metric(
-                label: 'Update available', value: snapshot.updateAvailable!),
+              label: 'Update status',
+              value: snapshot.updateError ??
+                  '${snapshot.updatePhase}${snapshot.updateVersion == null ? '' : ' ${snapshot.updateVersion}'}',
+            ),
           if (snapshot.healthWarnings.isNotEmpty)
             Card(
               child: ListTile(

@@ -67,6 +67,60 @@ void main() {
     }
   });
 
+  test('reports the complete update lifecycle through activation', () async {
+    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final bytes = [31, 41, 59];
+    final digest = sha256.convert(bytes).toString();
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final subscription = server.listen((request) {
+      if (request.uri.path.endsWith('/latest')) {
+        request.response
+          ..headers.contentType = ContentType.json
+          ..write(jsonEncode({
+            'updateAvailable': true,
+            'release': {
+              'version': '6.0.0',
+              'channel': 'stable',
+              'packageDigest': digest,
+              'packageR2Key': 'agent/6.0.0.bin',
+            },
+          }));
+      } else {
+        request.response.add(bytes);
+      }
+      request.response.close();
+    });
+    final phases = <String>[];
+    try {
+      final controller = AgentUpdateController(
+        cloudUri: Uri.http('127.0.0.1:${server.port}', '/'),
+        currentVersion: '5.0.0',
+        client: const AgentReleaseClient(),
+        updater: AgentUpdater(root, requireSignature: false),
+        reportStatus: (status) => phases.add(status.phase),
+      );
+      await controller.apply(
+        healthCheck: (file) async => await file.exists(),
+      );
+      expect(controller.status.phase, 'healthy');
+      expect(
+          phases,
+          containsAllInOrder([
+            'checking',
+            'available',
+            'downloading',
+            'staged',
+            'restarting',
+            'healthy',
+          ]));
+      expect(await File('${root.path}/agent.active').readAsBytes(), bytes);
+    } finally {
+      await subscription.cancel();
+      await server.close(force: true);
+      await root.delete(recursive: true);
+    }
+  });
+
   test('activates a verified release and records metadata', () async {
     final root = await Directory.systemTemp.createTemp('conclave-update-');
     final bytes = [1, 2, 3];
