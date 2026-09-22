@@ -32,8 +32,6 @@ runtime checks listed below.
 2. Run the P25 external-user gate with production signing keys, dependency
    scanning, rate limits, Cloudflare Access, backup/restore drill, and the
    tenant-isolation suite.
-3. Perform the final repository-wide P24 legacy-reference audit and record its
-   output.
 
 These are verification gates, not a replacement for implementation. P26, the
 broader v0.1 release gate, is intentionally deferred.
