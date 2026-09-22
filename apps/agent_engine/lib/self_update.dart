@@ -287,6 +287,7 @@ class AgentUpdateController {
     final release = AgentReleaseDescriptor.fromJson(
       Map<String, dynamic>.from(payload),
     );
+    _validateAnnouncementCompatibility(release);
     _available = release;
     _publish(AgentUpdateStatus(phase: 'available', version: release.version));
     return release;
@@ -303,6 +304,7 @@ class AgentUpdateController {
         architecture: architecture,
         authToken: authToken,
       );
+      if (release != null) _validateAnnouncementCompatibility(release);
       _available = release;
       _publish(AgentUpdateStatus(
         phase: release == null ? 'idle' : 'available',
@@ -379,6 +381,43 @@ class AgentUpdateController {
     _status = status;
     reportStatus?.call(status);
   }
+
+  void _validateAnnouncementCompatibility(AgentReleaseDescriptor release) {
+    if (!_isVersion(release.version) || !_isVersion(currentVersion)) {
+      throw StateError('agent release version is invalid');
+    }
+    if (_compareVersions(release.version, currentVersion) <= 0) {
+      throw StateError(
+          'agent release downgrade or duplicate is not permitted: ${release.version} <= $currentVersion');
+    }
+    final minimum = release.minSupportedAgentVersion;
+    if (minimum != null &&
+        (!_isVersion(minimum) ||
+            _compareVersions(currentVersion, minimum) < 0)) {
+      throw StateError('agent release requires a newer Agent Engine: $minimum');
+    }
+  }
+
+  bool _isVersion(String value) =>
+      RegExp(r'^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$').hasMatch(value);
+
+  int _compareVersions(String left, String right) {
+    final leftParts = _versionParts(left);
+    final rightParts = _versionParts(right);
+    for (var index = 0; index < 3; index++) {
+      if (leftParts[index] != rightParts[index]) {
+        return leftParts[index].compareTo(rightParts[index]);
+      }
+    }
+    return 0;
+  }
+
+  List<int> _versionParts(String value) => value
+      .split(RegExp(r'[-+]'))
+      .first
+      .split('.')
+      .map((part) => int.tryParse(part) ?? -1)
+      .toList(growable: false);
 }
 
 class AgentUpdater {

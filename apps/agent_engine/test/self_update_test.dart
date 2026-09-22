@@ -34,6 +34,35 @@ void main() {
     await root.delete(recursive: true);
   });
 
+  test('rejects downgrade and minimum-version-incompatible announcements',
+      () async {
+    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final controller = AgentUpdateController(
+      cloudUri: Uri.parse('https://cloud.test'),
+      currentVersion: '1.2.0',
+      client: const AgentReleaseClient(),
+      updater: AgentUpdater(root, requireSignature: false),
+    );
+    Map<String, Object?> release(String version, {String? minimum}) => {
+          'version': version,
+          'channel': 'stable',
+          'packageR2Key': 'agents/$version/agent.tar.gz',
+          'packageDigest': 'sha256:abc123',
+          'signature': 'sig-1',
+          if (minimum != null) 'minSupportedAgentVersion': minimum,
+        };
+
+    expect(
+      () => controller.acceptAvailable(release('1.1.0')),
+      throwsA(isA<StateError>()),
+    );
+    expect(
+      () => controller.acceptAvailable(release('1.3.0', minimum: '1.3.0')),
+      throwsA(isA<StateError>()),
+    );
+    await root.delete(recursive: true);
+  });
+
   test('fetches authenticated release metadata and bounded package bytes',
       () async {
     final root = await Directory.systemTemp.createTemp('conclave-update-');
