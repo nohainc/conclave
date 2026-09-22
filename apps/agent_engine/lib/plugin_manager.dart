@@ -457,6 +457,9 @@ class PluginManager {
       throw StateError('plugin package was modified after installation');
     }
     final policy = trustPolicy;
+    if (requireSignature && policy == null) {
+      throw StateError('plugin signature verification is not configured');
+    }
     _requirePermissions(_permissionsFromManifest(manifest['permissions']));
     _validateSecretEnvironmentMap(manifest);
     if (policy != null) {

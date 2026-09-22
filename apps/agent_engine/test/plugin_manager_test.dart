@@ -169,6 +169,29 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('requires a trust policy when revalidating an active plugin', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-plugins-');
+    final bytes = [12, 13, 14];
+    final digest = sha256.convert(bytes).toString();
+    await PluginManager(directory).install(PluginPackage(
+      id: 'unsigned-active',
+      version: '1.0.0',
+      bytes: bytes,
+      digest: digest,
+    ));
+
+    final strictManager = PluginManager(
+      directory,
+      requireSignature: true,
+    );
+    await expectLater(
+      strictManager.activeProcessSpec('unsigned-active'),
+      throwsA(isA<StateError>()),
+    );
+    await directory.delete(recursive: true);
+  });
+
   test('enforces signature and permissions when trust policy is enabled',
       () async {
     final directory =
