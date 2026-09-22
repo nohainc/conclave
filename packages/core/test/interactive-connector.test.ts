@@ -13,7 +13,7 @@ describe("interactive connector", () => {
       now: () => now,
       idFactory: (prefix) => `${prefix}-1`,
     });
-    connector.registerTask({
+    connector.registerAssignment({
       taskId: "task-1",
       goalId: "goal-1",
       runId: "run-1",
@@ -30,9 +30,11 @@ describe("interactive connector", () => {
       capabilities: ["code_review"],
       leaseMs: 10_000,
     });
-    expect(
-      connector.claimTask(session.sessionId, session.sessionToken).taskId,
-    ).toBe("task-1");
+    const assignment = connector.claimAssignment(
+      session.sessionId,
+      session.sessionToken,
+    );
+    expect(assignment.taskId).toBe("task-1");
     expect(
       connector.getNextMessage(
         session.sessionId,
@@ -52,12 +54,37 @@ describe("interactive connector", () => {
     connector.submitFinding(session.sessionId, session.sessionToken, "task-1", {
       severity: "minor",
     });
+    expect(() =>
+      connector.submitResult(
+        session.sessionId,
+        session.sessionToken,
+        "task-1",
+        { assignmentId: assignment.assignmentId, status: "completed" },
+      ),
+    ).toThrow("does not match");
+    connector.submitResult(session.sessionId, session.sessionToken, "task-1", {
+      assignmentId: assignment.assignmentId,
+      attemptId: assignment.attemptId,
+      runId: assignment.runId,
+      taskId: assignment.taskId,
+      workerId: assignment.workerId,
+      agentId: assignment.agentId,
+      status: "completed",
+    });
     connector.reportStatus(session.sessionId, session.sessionToken, {
       status: "waiting",
     });
-    connector.releaseTask(session.sessionId, session.sessionToken, "task-1");
+    connector.releaseAssignment(
+      session.sessionId,
+      session.sessionToken,
+      "task-1",
+    );
     expect(() =>
-      connector.getTask(session.sessionId, session.sessionToken, "task-1"),
+      connector.getAssignment(
+        session.sessionId,
+        session.sessionToken,
+        "task-1",
+      ),
     ).toThrow(InteractiveConnectorError);
     now += 20_000;
   });
@@ -95,7 +122,7 @@ describe("interactive connector", () => {
       registrationToken: "relay-token",
       idFactory: (prefix) => `${prefix}-web`,
     });
-    connector.registerTask({
+    connector.registerAssignment({
       taskId: "web-task",
       goalId: "goal-1",
       runId: "run-1",
@@ -105,15 +132,17 @@ describe("interactive connector", () => {
       context: [],
       messages: [{ prompt: "Return a candidate" }],
     });
-    expect(connector.getTaskStatus("relay-token", "web-task")).toMatchObject({
+    expect(
+      connector.getAssignmentStatus("relay-token", "web-task"),
+    ).toMatchObject({
       status: "queued",
       result: null,
     });
-    expect(() => connector.getTaskStatus("wrong", "web-task")).toThrow(
+    expect(() => connector.getAssignmentStatus("wrong", "web-task")).toThrow(
       "authentication",
     );
     expect(() =>
-      connector.registerTask({
+      connector.registerAssignment({
         taskId: "web-task",
         goalId: "goal-1",
         runId: "run-1",
@@ -131,7 +160,7 @@ describe("interactive connector", () => {
       registrationToken: "register-secret",
       idFactory: (prefix) => `${prefix}-1`,
     });
-    connector.registerTask({
+    connector.registerAssignment({
       taskId: "other-task",
       goalId: "goal-2",
       runId: "run-2",
@@ -148,10 +177,10 @@ describe("interactive connector", () => {
       capabilities: [],
     });
     expect(() =>
-      connector.claimTask(session.sessionId, session.sessionToken),
+      connector.claimAssignment(session.sessionId, session.sessionToken),
     ).toThrow("not available");
     expect(() =>
-      connector.claimTask(
+      connector.claimAssignment(
         session.sessionId,
         session.sessionToken,
         "other-task",

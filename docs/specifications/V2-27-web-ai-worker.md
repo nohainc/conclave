@@ -3,7 +3,7 @@
 > **Historical V2 acceptance note.** The current normative design is the
 > Architecture v3 Agent Engine and language-independent Worker Plugin path.
 
-ChatGPT Web, Claude Web, and similar browser sessions participate through the Web AI Worker Plugin and the connector relay. They are ordinary Worker resources with `web_app` transport, `subscription_session` authentication, `subscription` or `free` billing, and their own independence keys.
+ChatGPT Web, Claude Web, and similar browser sessions participate through the Web AI Worker Plugin and the connector relay. They are ordinary Workers hosted by an Agent Engine, with subscription or external billing metadata and their own independence keys.
 
 ## Billing boundary
 
@@ -22,4 +22,4 @@ Worker Plugin
   → Core accepts the correlated result
 ```
 
-The existing session endpoints remain available for native connectors: registration, task claim, bounded context/message retrieval, candidate/result/finding submission, status reporting, and release. Task status is authenticated with the relay registration token, and duplicate task registration is rejected.
+The existing session endpoints remain available for native connectors: registration, assignment claim, bounded context/message retrieval, candidate/result/finding submission, status reporting, and release. Assignment results must contain the exact assignment, attempt, run, task, Worker, and Agent identities issued by Cloud. The connector does not execute or orchestrate the assignment; it only relays the mailbox exchange.

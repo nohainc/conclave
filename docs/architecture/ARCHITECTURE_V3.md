@@ -252,6 +252,24 @@ This keeps the workflow portable across local agents, remote agents, API
 workers, and subscription-backed workers while preserving the same persisted
 assignment and attempt identity.
 
+## Web AI connector boundary
+
+Web AI participation uses the same assignment lifecycle. The Web AI Worker
+Plugin runs on an Agent Engine and uses the Cloud connector only as a relay:
+
+```text
+WorkerAssignment
+  -> Agent Engine
+      -> Web AI Worker Plugin
+          -> Cloud connector mailbox/session lease
+              -> ChatGPT, Claude, or another web session
+```
+
+The connector provides authenticated session registration, assignment claim,
+bounded context/message retrieval, status reporting, finding/candidate relay,
+and correlated `WorkerAssignmentResult` submission. It does not execute work,
+select providers, create fallback Workers, or own orchestration state.
+
 ## Worker Plugin Registry
 
 Cloud stores:

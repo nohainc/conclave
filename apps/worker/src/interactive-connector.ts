@@ -57,11 +57,15 @@ export async function handleConnectorRequest(
   switch (action) {
     case "claim_task":
       return Response.json({
-        task: service.claimTask(sessionId, sessionToken, taskId || undefined),
+        assignment: service.claimAssignment(
+          sessionId,
+          sessionToken,
+          taskId || undefined,
+        ),
       });
     case "get_task":
       return Response.json({
-        task: service.getTask(sessionId, sessionToken, taskId),
+        assignment: service.getAssignment(sessionId, sessionToken, taskId),
       });
     case "get_context":
       return Response.json({
@@ -88,7 +92,7 @@ export async function handleConnectorRequest(
       );
       return Response.json({ accepted: true });
     case "release_task":
-      service.releaseTask(sessionId, sessionToken, taskId);
+      service.releaseAssignment(sessionId, sessionToken, taskId);
       return Response.json({ released: true });
     default:
       return Response.json({ error: "not_found" }, { status: 404 });
@@ -110,7 +114,7 @@ export async function handleConnectorTaskRequest(
       );
     }
     const body = (await request.json()) as Record<string, unknown>;
-    service.registerTask({
+    service.registerAssignment({
       taskId:
         typeof body.taskId === "string" ? body.taskId : crypto.randomUUID(),
       goalId: typeof body.goalId === "string" ? body.goalId : "web-goal",
@@ -123,6 +127,12 @@ export async function handleConnectorTaskRequest(
             : "local-development",
       projectId:
         typeof body.projectId === "string" ? body.projectId : "web-project",
+      assignmentId:
+        typeof body.assignmentId === "string" ? body.assignmentId : undefined,
+      attemptId:
+        typeof body.attemptId === "string" ? body.attemptId : undefined,
+      agentId: typeof body.agentId === "string" ? body.agentId : undefined,
+      workerId: typeof body.workerId === "string" ? body.workerId : undefined,
       objective: typeof body.objective === "string" ? body.objective : "",
       context: [],
       messages: [body.prompt ?? body.input ?? {}],
@@ -130,7 +140,7 @@ export async function handleConnectorTaskRequest(
     return Response.json({ accepted: true });
   }
   if (request.method === "GET" && taskId) {
-    return Response.json(service.getTaskStatus(token, taskId));
+    return Response.json(service.getAssignmentStatus(token, taskId));
   }
   return Response.json({ error: "not_found" }, { status: 404 });
 }

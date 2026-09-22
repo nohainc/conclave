@@ -1,15 +1,29 @@
 import type { AssignmentContextItem } from "./assignment-execution.js";
 
-export interface ConnectorTask {
+export interface ConnectorAssignment {
+  readonly assignmentId: string;
+  readonly attemptId: string;
   readonly taskId: string;
   readonly goalId: string;
   readonly runId: string;
   readonly organizationId: string;
   readonly projectId: string;
+  readonly agentId: string;
+  readonly workerId: string;
   readonly objective: string;
   readonly context: readonly AssignmentContextItem[];
   readonly messages: readonly unknown[];
 }
+
+export type ConnectorAssignmentRegistration = Omit<
+  ConnectorAssignment,
+  "assignmentId" | "attemptId" | "agentId" | "workerId"
+> & {
+  readonly assignmentId?: string;
+  readonly attemptId?: string;
+  readonly agentId?: string;
+  readonly workerId?: string;
+};
 
 export interface ConnectorSession {
   readonly sessionId: string;
@@ -53,10 +67,10 @@ interface SessionState extends Omit<ConnectorSession, "leaseExpiresAt"> {
   leaseExpiresAt: string;
   readonly capabilities: readonly string[];
   readonly leaseMs: number;
-  taskId: string | null;
+  assignmentId: string | null;
 }
 
-interface TaskState extends ConnectorTask {
+interface AssignmentState extends ConnectorAssignment {
   status: "queued" | "claimed" | "completed" | "released";
   claimedBy: string | null;
   candidates: unknown[];
@@ -72,13 +86,13 @@ export interface InteractiveConnectorOptions {
 }
 
 /**
- * Native-chat connector state machine. A Durable Object or repository-backed
- * service can host the same contract; this class keeps the protocol independent
- * of HTTP, MCP, or a specific web AI.
+ * Assignment mailbox and session lease relay for web Worker Plugins.
+ * It does not execute work or create Core state; Cloud remains authoritative
+ * for the WorkerAssignment and the Agent/Plugin reports the result here.
  */
 export class InteractiveConnector {
   private readonly sessions = new Map<string, SessionState>();
-  private readonly tasks = new Map<string, TaskState>();
+  private readonly assignments = new Map<string, AssignmentState>();
   private readonly now: () => number;
   private readonly idFactory: (prefix: string) => string;
 
@@ -87,18 +101,22 @@ export class InteractiveConnector {
     this.idFactory =
       options.idFactory ?? ((prefix) => `${prefix}:${crypto.randomUUID()}`);
     if (!options.registrationToken)
-      throw new Error("Connector registration token is required");
+      throw new Error("Connector authentication is required");
   }
 
-  registerTask(task: ConnectorTask): void {
-    if (this.tasks.has(task.taskId)) {
+  registerAssignment(input: ConnectorAssignmentRegistration): void {
+    if (this.assignments.has(input.taskId)) {
       throw new InteractiveConnectorError(
-        `Task '${task.taskId}' is already registered`,
+        `Assignment '${input.taskId}' is already registered`,
         "conflict",
       );
     }
-    this.tasks.set(task.taskId, {
-      ...task,
+    this.assignments.set(input.taskId, {
+      ...input,
+      assignmentId: input.assignmentId ?? `assignment:${input.taskId}`,
+      attemptId: input.attemptId ?? `attempt:${input.taskId}`,
+      agentId: input.agentId ?? "web-agent",
+      workerId: input.workerId ?? "web-worker",
       status: "queued",
       claimedBy: null,
       candidates: [],
@@ -108,31 +126,19 @@ export class InteractiveConnector {
     });
   }
 
-  getTaskStatus(
-    registrationToken: string,
-    taskId: string,
-  ): {
-    readonly status: TaskState["status"];
-    readonly result: unknown | null;
-    readonly candidates: readonly unknown[];
-    readonly findings: readonly unknown[];
-    readonly statusReport: ConnectorStatus | null;
-  } {
-    if (registrationToken !== this.options.registrationToken) {
-      throw new InteractiveConnectorError(
-        "Connector authentication required",
-        "unauthorized",
-      );
-    }
-    const task = this.tasks.get(taskId);
-    if (!task)
-      throw new InteractiveConnectorError("Task not found", "not_found");
+  getAssignmentStatus(registrationToken: string, taskId: string) {
+    this.requireRegistrationToken(registrationToken);
+    const assignment = this.assignments.get(taskId);
+    if (!assignment)
+      throw new InteractiveConnectorError("Assignment not found", "not_found");
     return {
-      status: task.status,
-      result: task.result,
-      candidates: [...task.candidates],
-      findings: [...task.findings],
-      statusReport: task.statusReport,
+      assignmentId: assignment.assignmentId,
+      attemptId: assignment.attemptId,
+      status: assignment.status,
+      result: assignment.result,
+      candidates: [...assignment.candidates],
+      findings: [...assignment.findings],
+      statusReport: assignment.statusReport,
     };
   }
 
@@ -140,20 +146,15 @@ export class InteractiveConnector {
     token: string,
     registration: ConnectorSessionRegistration,
   ): ConnectorSession {
-    if (token !== this.options.registrationToken)
-      throw new InteractiveConnectorError(
-        "Connector authentication required",
-        "unauthorized",
-      );
+    this.requireRegistrationToken(token);
     const leaseMs = registration.leaseMs ?? 5 * 60_000;
     if (!Number.isInteger(leaseMs) || leaseMs < 1_000)
       throw new InteractiveConnectorError(
         "Session lease is invalid",
         "invalid_request",
       );
-    const sessionId = this.idFactory("session");
     const session = {
-      sessionId,
+      sessionId: this.idFactory("session"),
       sessionToken: this.idFactory("token"),
       organizationId: registration.organizationId,
       projectId: registration.projectId,
@@ -161,81 +162,62 @@ export class InteractiveConnector {
       capabilities: registration.capabilities,
       leaseMs,
       leaseExpiresAt: new Date(this.now() + leaseMs).toISOString(),
-      taskId: null,
+      assignmentId: null,
     } satisfies SessionState;
-    this.sessions.set(sessionId, session);
+    this.sessions.set(session.sessionId, session);
     return this.publicSession(session);
   }
 
-  claimTask(
+  claimAssignment(
     sessionId: string,
     sessionToken: string,
     taskId?: string,
-  ): ConnectorTask {
+  ): ConnectorAssignment {
     const session = this.authenticate(sessionId, sessionToken);
-    if (session.taskId)
+    if (session.assignmentId)
       throw new InteractiveConnectorError(
-        "Session already has a claimed task",
+        "Session already has an assignment",
         "conflict",
       );
-    const task = taskId
-      ? this.tasks.get(taskId)
-      : [...this.tasks.values()].find(
+    const assignment = taskId
+      ? this.assignments.get(taskId)
+      : [...this.assignments.values()].find(
           (candidate) =>
             candidate.status === "queued" &&
             candidate.organizationId === session.organizationId &&
             candidate.projectId === session.projectId,
         );
-    if (!task)
-      throw new InteractiveConnectorError("Task is not available", "not_found");
-    if (task.status !== "queued")
+    if (!assignment)
       throw new InteractiveConnectorError(
-        "Task is already claimed",
+        "Assignment is not available",
+        "not_found",
+      );
+    if (assignment.status !== "queued")
+      throw new InteractiveConnectorError(
+        "Assignment is already claimed",
         "conflict",
       );
-    if (
-      task.organizationId !== session.organizationId ||
-      task.projectId !== session.projectId
-    ) {
-      throw new InteractiveConnectorError(
-        "Task is outside the session workspace",
-        "unauthorized",
-      );
-    }
-    task.status = "claimed";
-    task.claimedBy = session.sessionId;
-    session.taskId = task.taskId;
+    this.authorizeAssignment(session, assignment);
+    assignment.status = "claimed";
+    assignment.claimedBy = session.sessionId;
+    session.assignmentId = assignment.assignmentId;
     this.renew(session);
-    return task;
+    return assignment;
   }
 
-  getTask(
-    sessionId: string,
-    sessionToken: string,
-    taskId: string,
-  ): ConnectorTask & { readonly status: TaskState["status"] } {
+  getAssignment(sessionId: string, sessionToken: string, taskId: string) {
     const session = this.authenticate(sessionId, sessionToken);
-    const task = this.authorizedTask(session, taskId);
-    return task;
+    return this.authorizedAssignment(session, taskId);
   }
 
-  getContext(
-    sessionId: string,
-    sessionToken: string,
-    taskId: string,
-  ): readonly AssignmentContextItem[] {
+  getContext(sessionId: string, sessionToken: string, taskId: string) {
     const session = this.authenticate(sessionId, sessionToken);
-    return this.authorizedTask(session, taskId).context;
+    return this.authorizedAssignment(session, taskId).context;
   }
 
-  getNextMessage(
-    sessionId: string,
-    sessionToken: string,
-    taskId: string,
-  ): unknown | null {
+  getNextMessage(sessionId: string, sessionToken: string, taskId: string) {
     const session = this.authenticate(sessionId, sessionToken);
-    const task = this.authorizedTask(session, taskId);
-    return task.messages[0] ?? null;
+    return this.authorizedAssignment(session, taskId).messages[0] ?? null;
   }
 
   submitCandidate(
@@ -245,7 +227,7 @@ export class InteractiveConnector {
     candidate: unknown,
   ): void {
     const session = this.authenticate(sessionId, sessionToken);
-    this.authorizedTask(session, taskId).candidates.push(candidate);
+    this.authorizedAssignment(session, taskId).candidates.push(candidate);
   }
 
   submitResult(
@@ -255,10 +237,15 @@ export class InteractiveConnector {
     result: unknown,
   ): void {
     const session = this.authenticate(sessionId, sessionToken);
-    const task = this.authorizedTask(session, taskId);
-    task.result = result;
-    task.status = "completed";
-    session.taskId = null;
+    const assignment = this.authorizedAssignment(session, taskId);
+    if (!this.matchesAssignment(assignment, result))
+      throw new InteractiveConnectorError(
+        "WorkerAssignmentResult does not match the claimed assignment",
+        "invalid_request",
+      );
+    assignment.result = result;
+    assignment.status = "completed";
+    session.assignmentId = null;
   }
 
   submitFinding(
@@ -268,7 +255,7 @@ export class InteractiveConnector {
     finding: unknown,
   ): void {
     const session = this.authenticate(sessionId, sessionToken);
-    this.authorizedTask(session, taskId).findings.push(finding);
+    this.authorizedAssignment(session, taskId).findings.push(finding);
   }
 
   reportStatus(
@@ -277,15 +264,32 @@ export class InteractiveConnector {
     status: ConnectorStatus,
   ): void {
     const session = this.authenticate(sessionId, sessionToken);
-    if (session.taskId) this.tasks.get(session.taskId)!.statusReport = status;
+    if (session.assignmentId) {
+      const assignment = [...this.assignments.values()].find(
+        (item) => item.assignmentId === session.assignmentId,
+      );
+      if (assignment) assignment.statusReport = status;
+    }
   }
 
-  releaseTask(sessionId: string, sessionToken: string, taskId: string): void {
+  releaseAssignment(
+    sessionId: string,
+    sessionToken: string,
+    taskId: string,
+  ): void {
     const session = this.authenticate(sessionId, sessionToken);
-    const task = this.authorizedTask(session, taskId);
-    task.status = "released";
-    task.claimedBy = null;
-    session.taskId = null;
+    const assignment = this.authorizedAssignment(session, taskId);
+    assignment.status = "released";
+    assignment.claimedBy = null;
+    session.assignmentId = null;
+  }
+
+  private requireRegistrationToken(token: string): void {
+    if (token !== this.options.registrationToken)
+      throw new InteractiveConnectorError(
+        "Connector authentication required",
+        "unauthorized",
+      );
   }
 
   private authenticate(sessionId: string, sessionToken: string): SessionState {
@@ -312,25 +316,53 @@ export class InteractiveConnector {
     ).toISOString();
   }
 
-  private authorizedTask(session: SessionState, taskId: string): TaskState {
-    const task = this.tasks.get(taskId);
-    if (!task)
-      throw new InteractiveConnectorError("Task not found", "not_found");
-    if (task.claimedBy !== session.sessionId)
+  private authorizedAssignment(
+    session: SessionState,
+    taskId: string,
+  ): AssignmentState {
+    const assignment = this.assignments.get(taskId);
+    if (!assignment)
+      throw new InteractiveConnectorError("Assignment not found", "not_found");
+    if (assignment.claimedBy !== session.sessionId)
       throw new InteractiveConnectorError(
-        "Task is not claimed by this session",
+        "Assignment is not claimed by this session",
         "unauthorized",
       );
+    this.authorizeAssignment(session, assignment);
+    return assignment;
+  }
+
+  private authorizeAssignment(
+    session: SessionState,
+    assignment: AssignmentState,
+  ): void {
     if (
-      task.organizationId !== session.organizationId ||
-      task.projectId !== session.projectId
+      assignment.organizationId !== session.organizationId ||
+      assignment.projectId !== session.projectId
     ) {
       throw new InteractiveConnectorError(
-        "Task is outside the session workspace",
+        "Assignment is outside the session workspace",
         "unauthorized",
       );
     }
-    return task;
+  }
+
+  private matchesAssignment(
+    assignment: AssignmentState,
+    result: unknown,
+  ): boolean {
+    if (typeof result !== "object" || result === null) return false;
+    const value = result as Record<string, unknown>;
+    return (
+      value.assignmentId === assignment.assignmentId &&
+      value.attemptId === assignment.attemptId &&
+      value.runId === assignment.runId &&
+      value.taskId === assignment.taskId &&
+      value.workerId === assignment.workerId &&
+      value.agentId === assignment.agentId &&
+      typeof value.status === "string" &&
+      ["completed", "failed", "cancelled"].includes(value.status)
+    );
   }
 
   private publicSession(session: SessionState): ConnectorSession {
