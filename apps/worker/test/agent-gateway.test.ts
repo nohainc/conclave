@@ -8,6 +8,7 @@ import {
   AgentGateway,
   assignmentContextMatches,
   assignmentIsActive,
+  isCurrentSocketSession,
 } from "../src/agent-gateway.js";
 import { hashToken } from "../../../packages/security/src/index.js";
 import {
@@ -93,6 +94,27 @@ describe("Agent Enrollment & Agent Gateway (Architecture v2)", () => {
     expect(assignmentIsActive({ status: "running" })).toBe(true);
     expect(assignmentIsActive({ status: "completed" })).toBe(false);
     expect(assignmentIsActive({ status: "cancelled" })).toBe(false);
+  });
+
+  it("ignores close events from a superseded socket session", () => {
+    const currentSocket = {} as WebSocket;
+    const oldSocket = {} as WebSocket;
+    expect(
+      isCurrentSocketSession(
+        currentSocket,
+        "session-new",
+        oldSocket,
+        "session-old",
+      ),
+    ).toBe(false);
+    expect(
+      isCurrentSocketSession(
+        currentSocket,
+        "session-new",
+        currentSocket,
+        "session-new",
+      ),
+    ).toBe(true);
   });
   let db: DatabaseSync;
   let d1: D1Database;

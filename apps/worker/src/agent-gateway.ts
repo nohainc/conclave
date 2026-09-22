@@ -73,6 +73,18 @@ export function assignmentIsActive(row: Record<string, unknown>): boolean {
   return !["completed", "failed", "cancelled"].includes(String(row.status));
 }
 
+export function isCurrentSocketSession(
+  currentSocket: WebSocket | null,
+  currentSessionId: string | null,
+  socket?: WebSocket,
+  sessionId?: string | null,
+): boolean {
+  return (
+    (!socket || currentSocket === socket) &&
+    (!sessionId || currentSessionId === sessionId)
+  );
+}
+
 export class AgentGateway implements DurableObject {
   private socket: WebSocket | null = null;
   private agentId: string | null = null;
@@ -219,13 +231,14 @@ export class AgentGateway implements DurableObject {
       void this.handleIncomingMessage(event.data);
     });
 
+    const connectedSessionId = this.sessionId;
     server.addEventListener("close", () => {
-      this.handleSocketClose();
+      this.handleSocketClose(server, connectedSessionId);
     });
 
     server.addEventListener("error", (err) => {
       console.error("Agent Gateway WebSocket error", err);
-      this.handleSocketClose();
+      this.handleSocketClose(server, connectedSessionId);
     });
 
     return new Response(null, { status: 101, webSocket: client });
@@ -234,7 +247,15 @@ export class AgentGateway implements DurableObject {
   /**
    * Cleans up state on socket close.
    */
-  private handleSocketClose(): void {
+  private handleSocketClose(
+    socket?: WebSocket,
+    sessionId?: string | null,
+  ): void {
+    // A replaced socket may deliver its close event after the new session is
+    // installed. It must not tear down the current session or mark the Agent
+    // offline in D1.
+    if (!isCurrentSocketSession(this.socket, this.sessionId, socket, sessionId))
+      return;
     if (!this.socket) return;
     this.socket = null;
     const now = new Date().toISOString();
