@@ -620,7 +620,7 @@ export class D1VerificationRepository {
         verification.taskId,
         verification.criterionId,
         verification.verifierWorkerId,
-        verification.outcome,
+        verification.outcome === "passed" ? "verified" : verification.outcome,
         json(verification.evidenceArtifactIds),
         verification.rationale,
         verification.createdAt,
@@ -648,7 +648,7 @@ function toVerification(row: Record<string, unknown>): VerificationRecord {
     verifierWorkerId:
       row.verifier_worker_id === null ? null : String(row.verifier_worker_id),
     method: "worker",
-    outcome: String(row.conclusion),
+    outcome: row.conclusion === "verified" ? "passed" : String(row.conclusion),
     evidenceArtifactIds: parse(row.evidence_artifact_ids_json, [] as string[]),
     rationale: row.notes === null ? "" : String(row.notes),
     createdAt: String(row.created_at),
