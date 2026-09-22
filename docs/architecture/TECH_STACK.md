@@ -1,166 +1,141 @@
 # Conclave AX Technology Stack
 
-**Status:** Normative for Architecture v3
+**Status:** Normative for Architecture v4
 
 ## Stack summary
 
 | Layer | Technology |
 | --- | --- |
-| Studio | Flutter + Dart |
-| Agent App | Flutter + Dart |
-| Agent Engine | Dart native executable |
+| Studio | Flutter + Dart, Web |
 | Cloud | TypeScript + Cloudflare |
-| Worker Plugin protocol | language-independent JSON-RPC / structured messages |
-| First-party Worker Plugins | Dart where practical |
+| Host | Flutter + Dart desktop |
+| Worker protocol | language-independent structured protocol |
+| First-party Workers | Dart where practical |
 | Cloud database | Cloudflare D1 |
-| Large artifacts/packages | Cloudflare R2 |
+| Artifacts/packages | Cloudflare R2 |
 | Durable orchestration | Cloudflare Workflows |
-| Live Agent connections | Durable Objects + WebSocket |
-| Web hosting | Cloudflare Workers Static Assets |
+| Host connectivity | Durable Objects + WebSocket |
+| Web hosting | Cloudflare static assets / Worker deployment |
 | TypeScript tests | Vitest |
 | Dart/Flutter tests | dart test / flutter_test |
-| TypeScript quality | TypeScript, ESLint, Prettier |
-| Flutter/Dart quality | flutter analyze / dart analyze |
 | CI/CD | GitHub Actions |
-| Cloud deployment | Wrangler |
+| Cloud deploy | Wrangler |
 
-## Why Flutter/Dart on user/host side
+## Studio
 
-Flutter is used for both user-facing desktop applications:
-- Studio;
-- Agent App.
+Flutter remains appropriate because:
+- one responsive web UI;
+- strong reuse for a future mobile app;
+- consistent design system;
+- good adaptive layout support.
 
-Benefits:
-- one desktop UI codebase;
-- macOS/Windows/Linux support;
-- future mobile reuse;
-- compiled native client;
-- consistent design system.
+v4 does not require a desktop Studio binary.
 
-Dart is used for Agent Engine because:
-- shares models/protocols with Flutter apps;
-- compiles to a self-contained native executable;
-- supports filesystem/network/process work;
-- avoids requiring Node.js on every host;
-- allows the UI and engine to share Dart packages.
+## Cloud
 
-## Why separate Agent App and Agent Engine
+TypeScript remains the preferred Cloud language because Cloudflare's runtime/tooling is JavaScript/TypeScript-first and the existing orchestration/persistence/security code is already TypeScript.
 
-The Flutter application is a UI lifecycle.
+Use:
+- Workers for HTTP/API;
+- Workflows for durable Run orchestration;
+- D1 for relational control-plane state;
+- R2 for artifacts and signed Worker/release packages;
+- Durable Objects for live Host WebSockets and transient coordination.
 
-The Agent Engine is a service lifecycle.
+Do not add PostgreSQL/Redis/Kafka/Kubernetes without measured need.
 
-They must be separate OS processes so:
-- closing Studio/Agent UI does not stop work;
-- UI crashes do not kill active assignments;
-- Engine can start at login/boot;
-- Engine can update/restart independently;
-- plugin crashes remain isolated.
+## Host
 
-## Why not Flutter for the Agent Engine
+The Host is one Flutter/Dart desktop application.
 
-The Agent Engine uses Dart, not Flutter.
+Unlike v3, there is no separate Agent App + Agent Engine product split.
 
-Flutter adds rendering/platform UI infrastructure that a headless service does not need.
+The Host process owns:
+- Cloud WebSocket;
+- journal/reconciliation;
+- Worker manager;
+- secure credential integration;
+- child process supervision;
+- repository/runtime capabilities;
+- update lifecycle;
+- minimal local UI.
 
-## Why TypeScript in Cloud
+Worker execution remains in separate OS child processes, retaining crash/cancellation/security isolation where it matters most.
 
-Cloudflare's primary ecosystem is JavaScript/TypeScript.
+## Workers
 
-TypeScript is used for:
-- APIs;
-- orchestration;
-- authentication/authorization;
-- plugin registry;
-- Agent Gateway;
-- durable workflow integration.
+Workers are signed executable packages.
 
-Do not introduce a separate conventional Node server unless Cloudflare limits require one.
+Preferred v4 local transport:
+- structured JSON/JSON-RPC over stdin/stdout for ordinary per-assignment Worker processes.
 
-## Worker Plugins
+A Worker may use:
+- Dart;
+- TypeScript/Node;
+- Rust;
+- Python;
+- Go;
+- another runtime,
 
-Worker Plugins are not tied to Dart.
+when that runtime materially improves integration quality.
 
-Protocol first; language second.
+Protocol compatibility and signing matter more than implementation language.
 
-The v1 protocol should support:
-- initialize;
-- health;
-- configure Worker;
-- start assignment;
-- progress;
-- result;
-- error;
-- cancel;
-- shutdown.
+## Cross-language contracts
 
-Preferred v1 transport:
-- JSON-RPC over stdin/stdout.
+Keep one canonical protocol schema source.
 
-This makes plugin execution:
-- easy to spawn;
-- port-free;
-- firewall-free;
-- language-independent.
+Generate/validate TypeScript and Dart bindings.
 
-## First-party plugin guidance
+Do not hand-maintain semantically duplicate protocol models.
 
-Prefer Dart when integration is simple:
-- Codex CLI;
-- Claude Code CLI;
-- Git;
-- shell/test runner;
-- straightforward HTTP APIs.
+## UI architecture
 
-Use another language when its ecosystem materially reduces complexity.
+Use feature-oriented Flutter organization with:
+- view;
+- controller/view-model/store;
+- repository/API boundary;
+- immutable read models.
 
-Do not rewrite an official SDK merely to keep a plugin in Dart.
+Avoid a single giant application snapshot over time.
 
-## Shared contracts
+Use adaptive layouts:
+- wide: persistent project/chat navigation;
+- medium: collapsible navigation;
+- narrow: single-column navigation/drawers/sheets.
 
-Cloud contracts are defined in TypeScript.
+Support keyboard, mouse, touch and accessibility semantics.
 
-Client/Agent contracts need generated Dart models from one schema source.
+## Cloud architecture patterns
 
-Architecture v3 should converge on a schema-first protocol source such as JSON Schema/OpenAPI where appropriate, with generated TypeScript and Dart bindings.
+Prefer:
+- hexagonal ports at domain boundaries;
+- functional core / imperative shell;
+- explicit state machines;
+- immutable Assignment snapshots;
+- idempotent commands;
+- desired-state reconciliation for Host Worker installs;
+- capability-based scheduling/security;
+- bounded context assembly;
+- durable audit events without full event sourcing.
 
-Do not hand-maintain equivalent protocol models indefinitely.
+## Host architecture patterns
 
-## Storage
+Prefer:
+- supervisor pattern for Worker child processes;
+- state machine for Worker install/update;
+- platform adapters only for genuinely OS-specific behavior;
+- secure-store abstraction;
+- bounded logs/output;
+- explicit cancellation and process-tree termination;
+- idempotent desired-state reconciliation.
 
-### D1
-Use for:
-- users/workspaces/memberships;
-- projects/chats/messages;
-- goals/runs/tasks/attempts;
-- Agents;
-- Workers;
-- plugin registry metadata;
-- assignments;
-- findings/verifications;
-- usage/audit.
+## Storage rule
 
-### R2
-Use for:
-- large artifacts;
-- logs;
-- model outputs retained as artifacts;
-- diffs;
-- screenshots;
-- CI output;
-- Worker Plugin packages;
-- Agent App/Engine release packages.
+D1 stores metadata/state.
 
-## What we deliberately do not add
+R2 stores large immutable artifacts and packages.
 
-Not currently required:
-- PostgreSQL;
-- Redis;
-- Kafka;
-- Kubernetes;
-- Next.js/React;
-- Electron;
-- Python backend;
-- Rust Agent Engine.
+Local Host secure store stores personal secrets by default.
 
-These can be reconsidered only if measured requirements justify them.
+Do not persist plaintext credentials in D1, assignment payloads, logs, or artifacts.
