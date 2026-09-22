@@ -2543,6 +2543,145 @@ async function handleRevokeAgent(
   return json({ ok: true, revokedAt: now });
 }
 
+async function handleAnnounceAgentUpdate(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  agentId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  authorize(context, "agents:manage");
+  requireWorkspaceContext(context, env, workspaceId);
+
+  const body = parseJson<{
+    channel?: string;
+    version?: string;
+  }>(await request.text(), {});
+  const channel = body.channel || "stable";
+  if (!["stable", "beta", "development"].includes(channel)) {
+    return json({ error: "Unsupported release channel" }, { status: 400 });
+  }
+
+  const agent = await env.CONCLAVE_DB.prepare(
+    `SELECT id, version, capabilities_json as capabilitiesJson
+     FROM agents WHERE workspace_id = ?1 AND id = ?2 AND revoked_at IS NULL`,
+  )
+    .bind(workspaceId, agentId)
+    .first<{
+      id: string;
+      version: string;
+      capabilitiesJson: string;
+    }>();
+  if (!agent) return json({ error: "Agent not found" }, { status: 404 });
+
+  const capabilities = parseJson<Record<string, unknown>>(
+    agent.capabilitiesJson,
+    {},
+  );
+  const operatingSystem =
+    typeof capabilities.os === "string" ? capabilities.os : null;
+  const architecture =
+    typeof capabilities.arch === "string" ? capabilities.arch : null;
+  const rows = await env.CONCLAVE_DB.prepare(
+    `SELECT version, channel, min_supported_agent_version as minSupportedAgentVersion,
+            supported_os_json as supportedOsJson, supported_arch_json as supportedArchJson,
+            package_digest as packageDigest, package_r2_key as packageR2Key,
+            signature, release_notes as releaseNotes
+     FROM agent_releases
+     WHERE channel = ?1 AND is_revoked = 0`,
+  )
+    .bind(channel)
+    .all<{
+      version: string;
+      channel: string;
+      minSupportedAgentVersion: string | null;
+      supportedOsJson: string;
+      supportedArchJson: string;
+      packageDigest: string;
+      packageR2Key: string;
+      signature: string;
+      releaseNotes: string | null;
+    }>();
+
+  const compatible = (release: (typeof rows.results)[number]) => {
+    const supportedOS = parseJson<string[]>(release.supportedOsJson, []);
+    const supportedArch = parseJson<string[]>(release.supportedArchJson, []);
+    return (
+      (!operatingSystem ||
+        supportedOS.length === 0 ||
+        supportedOS.includes(operatingSystem)) &&
+      (!architecture ||
+        supportedArch.length === 0 ||
+        supportedArch.includes(architecture)) &&
+      compareSemver(release.version, agent.version) > 0
+    );
+  };
+  const candidates = (rows.results ?? []).filter(compatible);
+  const release = body.version
+    ? candidates.find((candidate) => candidate.version === body.version)
+    : [...candidates].sort((a, b) => compareSemver(b.version, a.version))[0];
+  if (!release) {
+    return json(
+      {
+        error: body.version
+          ? "Requested update is unavailable"
+          : "No update is available",
+      },
+      { status: 404 },
+    );
+  }
+
+  const envelope = {
+    protocol: AGENT_PROTOCOL_NAME,
+    protocolVersion: AGENT_PROTOCOL_VERSION,
+    messageId: `msg-${crypto.randomUUID()}`,
+    timestamp: new Date().toISOString(),
+    type: "agent.update.available" as const,
+    payload: {
+      version: release.version,
+      channel: release.channel as "stable" | "beta" | "development",
+      packageR2Key: release.packageR2Key,
+      packageDigest: release.packageDigest,
+      signature: release.signature,
+      ...(release.releaseNotes ? { releaseNotes: release.releaseNotes } : {}),
+      ...(release.minSupportedAgentVersion
+        ? { minSupportedAgentVersion: release.minSupportedAgentVersion }
+        : {}),
+    },
+  };
+  const gateway = env.CONCLAVE_AGENT_GATEWAY.getByName(agentId);
+  const delivered = await gateway.fetch(
+    new Request("https://gateway.internal/post-message", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(envelope),
+    }),
+  );
+  if (!delivered.ok) {
+    return json(
+      {
+        error:
+          delivered.status === 503
+            ? "Agent is currently offline"
+            : "Could not deliver update announcement",
+      },
+      { status: delivered.status === 503 ? 503 : 502 },
+    );
+  }
+
+  await recordAudit(env, context, "agent.update.announced", "agent", agentId, {
+    version: release.version,
+    channel: release.channel,
+  });
+  return json({
+    delivered: true,
+    agentId,
+    version: release.version,
+    channel: release.channel,
+  });
+}
+
 async function handleListWorkers(
   request: Request,
   env: SecurityEnv,
@@ -5562,6 +5701,22 @@ export default {
           env as SecurityEnv,
           singleAgentMatch[1],
           singleAgentMatch[2],
+          ctx,
+        );
+      }
+      const agentUpdateMatch = url.pathname.match(
+        /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/agents\/([^/]+)\/update$/,
+      );
+      if (
+        request.method === "POST" &&
+        agentUpdateMatch?.[1] &&
+        agentUpdateMatch?.[2]
+      ) {
+        return await handleAnnounceAgentUpdate(
+          request,
+          env as SecurityEnv,
+          agentUpdateMatch[1],
+          agentUpdateMatch[2],
           ctx,
         );
       }

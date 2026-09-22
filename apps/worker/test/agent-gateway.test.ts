@@ -326,6 +326,63 @@ describe("Agent Enrollment & Agent Gateway (Architecture v2)", () => {
     expect(invalidRes.status).toBe(401);
   });
 
+  it("announces a compatible update through the authenticated Agent Gateway", async () => {
+    const now = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO agents
+       (id, workspace_id, name, hostname, status, version, capabilities_json,
+        enrolled_at, created_at, updated_at)
+       VALUES ('agent-update-1', 'ws-test-1', 'Update Agent', 'host', 'online',
+               '0.1.0', ?, ?, ?, ?)`,
+    ).run(JSON.stringify({ os: "macos", arch: "arm64" }), now, now, now);
+    db.prepare(
+      `INSERT INTO agent_releases
+       (version, channel, supported_os_json, supported_arch_json,
+        package_digest, package_r2_key, signature, release_notes, created_at)
+       VALUES ('0.2.0', 'stable', '["macos"]', '["arm64"]',
+               'sha256:release', 'agents/0.2.0/agent.tar.gz', 'sig-release',
+               'Security fixes', ?)`,
+    ).run(now);
+
+    let deliveredMessage: Record<string, unknown> | null = null;
+    (
+      mockEnv as unknown as { CONCLAVE_AGENT_GATEWAY: DurableObjectNamespace }
+    ).CONCLAVE_AGENT_GATEWAY = {
+      getByName: () =>
+        ({
+          fetch: async (request: Request) => {
+            deliveredMessage = (await request.json()) as Record<
+              string,
+              unknown
+            >;
+            return Response.json({ delivered: true });
+          },
+        }) as unknown as DurableObjectStub,
+    } as unknown as DurableObjectNamespace;
+
+    const response = await worker.fetch(
+      new Request(
+        "http://localhost/api/v2/workspaces/ws-test-1/agents/agent-update-1/update",
+        {
+          method: "POST",
+          headers: {
+            Authorization: "Bearer tok_admin_123",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ channel: "stable" }),
+        },
+      ),
+      mockEnv,
+    );
+    expect(response.status).toBe(200);
+    const message = deliveredMessage as unknown as Record<string, unknown>;
+    expect(message.type).toBe("agent.update.available");
+    expect((message.payload as { version: string }).version).toBe("0.2.0");
+    expect((message.payload as { packageR2Key: string }).packageR2Key).toBe(
+      "agents/0.2.0/agent.tar.gz",
+    );
+  });
+
   it("handles agent protocol messages via HTTP fallback", async () => {
     // 1. Enroll agent
     const createReq = new Request(
