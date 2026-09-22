@@ -30,10 +30,6 @@ import {
   type ForgeRuntimeEvidence,
 } from "@conclave/orchestration";
 import type { ImplementationOperation } from "@conclave/protocol";
-import type {
-  RuntimeEvidence,
-  RuntimeOperation,
-} from "@conclave/local-runtime";
 import {
   dispatchTaskAssignment,
   type AssignmentDispatcherEnv,
@@ -47,13 +43,7 @@ interface ForgeExecutionEnv {
   readonly CONCLAVE_API_BASE_URL?: string;
   readonly CONCLAVE_API?: Fetcher;
   readonly CONCLAVE_FORGE_CALLBACK_TOKEN?: string;
-  readonly CONCLAVE_LOCAL_RUNTIME_URL?: string;
-  readonly CONCLAVE_LOCAL_RUNTIME_TOKEN?: string;
-  readonly CONCLAVE_RUNTIME_ID?: string;
-  readonly CONCLAVE_RUNTIME_OPERATION_TOKEN?: string;
   readonly CONCLAVE_TEST_COMMAND?: string;
-  readonly CONCLAVE_RUNTIME_APPROVAL_ID?: string;
-  readonly CONCLAVE_RUNTIME_APPROVAL_EXPIRES_AT?: string;
   readonly CONCLAVE_AGENT_GATEWAY?: DurableObjectNamespace;
 }
 
@@ -374,10 +364,18 @@ class DurableForgePersistence implements ForgePersistence {
   }
 }
 
-class RemoteLocalRuntime implements ForgeRuntimeAdapter {
+/**
+ * Executes repository operations through an Agent Worker assignment.
+ *
+ * Cloud owns orchestration and evidence persistence, while the Agent/Plugin
+ * owns filesystem and process access. Keeping this adapter on the Worker
+ * execution interface prevents Forge from growing a second host transport.
+ */
+class AgentWorkerRuntime implements ForgeRuntimeAdapter {
   constructor(
     private readonly env: ForgeExecutionEnv,
     private readonly context: ForgeExecutionContext,
+    private readonly worker: WorkerExecutor,
   ) {}
 
   inspect(input: Parameters<ForgeRuntimeAdapter["inspect"]>[0]) {
@@ -385,114 +383,173 @@ class RemoteLocalRuntime implements ForgeRuntimeAdapter {
       "search",
       { query: input.objective, path: "." },
       input.taskId,
-    ).then((result) =>
-      this.asForgeEvidence(
-        "research",
-        [result],
-        result.status === "succeeded" ? undefined : result,
-      ),
+      input.repositoryId,
+      input.revision,
     );
   }
 
-  async apply(input: Parameters<ForgeRuntimeAdapter["apply"]>[0]) {
-    const evidence: RuntimeEvidence[] = [];
+  async apply(
+    input: Parameters<ForgeRuntimeAdapter["apply"]>[0],
+  ): Promise<ForgeRuntimeEvidence> {
+    const evidence: ForgeRuntimeEvidence[] = [];
     for (const operation of input.operations) {
-      const result = await this.executeOperation(operation, input.taskId);
+      const result = await this.executeOperation(
+        operation,
+        input.taskId,
+        input.repositoryId,
+        input.revision,
+      );
       evidence.push(result);
       if (result.status !== "succeeded") break;
     }
     const failed = evidence.find((item) => item.status !== "succeeded");
-    return this.asForgeEvidence("apply", evidence, failed);
+    const applied: ForgeRuntimeEvidence = {
+      operation: "apply",
+      status: failed ? "failed" : "succeeded",
+      summary: failed?.summary ?? "apply completed",
+      content: evidence.map((item) => item.content).join("\n"),
+      contentDigest: digest(
+        evidence.map((item) => item.contentDigest).join(":"),
+      ),
+      ...(failed?.command ? { command: failed.command } : {}),
+      ...(failed ? { exitCode: failed.exitCode } : {}),
+    };
+    return applied;
   }
 
   async test(input: Parameters<ForgeRuntimeAdapter["test"]>[0]) {
     const command = this.command();
-    const result = await this.execute(
-      "check",
+    return this.execute(
+      "test",
       {
         command,
         cwd: ".",
+        changedFiles: input.changedFiles,
       },
       input.taskId,
-    );
-    return this.asForgeEvidence(
-      "test",
-      [result],
-      result.status === "succeeded" ? undefined : result,
+      input.repositoryId,
+      input.revision,
     );
   }
 
   private async executeOperation(
     operation: ImplementationOperation,
     taskId: string,
-  ) {
-    if (operation.kind === "write_file") {
-      return this.execute("write_file", operation, taskId);
-    }
-    if (operation.kind === "patch_file") {
-      return this.execute("patch_file", operation, taskId);
-    }
-    return this.execute("delete_file", operation, taskId);
+    repositoryId: string,
+    revision: string,
+  ): Promise<ForgeRuntimeEvidence> {
+    return this.execute(
+      operation.kind,
+      operation,
+      taskId,
+      repositoryId,
+      revision,
+    );
   }
 
   private async execute(
-    kind: RuntimeOperation["kind"],
+    kind: "search" | "write_file" | "patch_file" | "delete_file" | "test",
     details: Record<string, unknown>,
     taskId = this.context.taskId,
-  ): Promise<RuntimeEvidence> {
-    const base = {
+    repositoryId = this.context.repositoryId,
+    revision = this.context.revision,
+  ): Promise<ForgeRuntimeEvidence> {
+    const result = await this.worker.execute({
       requestId: crypto.randomUUID(),
-      organizationId: this.context.organizationId,
-      projectId: this.context.projectId,
+      goalId: this.context.goalId,
       runId: this.context.runId,
       taskId,
-      repositoryId: this.context.repositoryId,
-      approval: {
-        approvalId:
-          this.env.CONCLAVE_RUNTIME_APPROVAL_ID ??
-          `${this.context.runId}:${this.context.executionId}`,
-        organizationId: this.context.organizationId,
-        projectId: this.context.projectId,
-        runId: this.context.runId,
-        taskId,
-        operationKinds: [kind],
-        expiresAt:
-          this.env.CONCLAVE_RUNTIME_APPROVAL_EXPIRES_AT ??
-          new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      attemptId: `${this.context.executionId}:${taskId}:${kind}`,
+      workerId: this.worker.resource.id,
+      connectionId: this.worker.connection.id,
+      repositoryId,
+      message: {
+        protocol: "conclave.protocol",
+        version: "0.1",
+        messageType: "RuntimeOperationRequest",
+        payload: {
+          operation: kind,
+          repositoryId,
+          revision,
+          ...details,
+        },
       },
-      kind,
-      ...details,
-    } as unknown as RuntimeOperation;
-    const baseUrl = this.env.CONCLAVE_LOCAL_RUNTIME_URL;
-    if (!baseUrl) throw new Error("Local Runtime URL is not configured");
-    if (!this.env.CONCLAVE_RUNTIME_ID) {
-      throw new Error("CONCLAVE_RUNTIME_ID is not configured");
+      context: [],
+      deadlineAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+    });
+    const output = this.parseOutput(result.output);
+    const content =
+      typeof output.content === "string"
+        ? output.content
+        : (result.output ?? result.error?.message ?? "");
+    const checks = this.parseChecks(output.checks) ?? [];
+    return {
+      operation:
+        kind === "test" ? "test" : kind === "search" ? "research" : "apply",
+      status: result.status === "succeeded" ? "succeeded" : "failed",
+      summary:
+        typeof output.summary === "string"
+          ? output.summary
+          : result.status === "succeeded"
+            ? `${kind} completed`
+            : (result.error?.message ?? `${kind} failed`),
+      content,
+      contentDigest: digest(content),
+      ...(Array.isArray(output.command)
+        ? {
+            command: output.command.filter(
+              (item): item is string => typeof item === "string",
+            ),
+          }
+        : {}),
+      ...(typeof output.exitCode === "number"
+        ? { exitCode: output.exitCode }
+        : {}),
+      ...(checks.length > 0 ? { checks } : {}),
+    };
+  }
+
+  private parseOutput(value: string | null): Record<string, unknown> {
+    if (!value) return {};
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return typeof parsed === "object" && parsed !== null
+        ? (parsed as Record<string, unknown>)
+        : { content: value };
+    } catch {
+      return { content: value };
     }
-    const response = await fetch(
-      `${baseUrl.replace(/\/$/, "")}/api/runtime/operations`,
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          ...(this.env.CONCLAVE_RUNTIME_ID
-            ? { "x-conclave-runtime-id": this.env.CONCLAVE_RUNTIME_ID }
+  }
+
+  private parseChecks(value: unknown): ForgeRuntimeEvidence["checks"] {
+    if (!Array.isArray(value)) return [];
+    return value.flatMap((item) => {
+      if (typeof item !== "object" || item === null) return [];
+      const check = item as Record<string, unknown>;
+      const name = typeof check.name === "string" ? check.name : null;
+      const status = check.status;
+      if (
+        !name ||
+        (status !== "passed" &&
+          status !== "failed" &&
+          status !== "skipped" &&
+          status !== "inconclusive")
+      ) {
+        return [];
+      }
+      return [
+        {
+          name,
+          status,
+          ...(typeof check.command === "string"
+            ? { command: check.command }
             : {}),
-          ...(this.env.CONCLAVE_LOCAL_RUNTIME_TOKEN
-            ? {
-                authorization: `Bearer ${this.env.CONCLAVE_LOCAL_RUNTIME_TOKEN}`,
-              }
+          ...(typeof check.exitCode === "number"
+            ? { exitCode: check.exitCode }
             : {}),
         },
-        body: JSON.stringify(base),
-      },
-    );
-    const body: unknown = await response.json();
-    if (!response.ok)
-      throw new Error(`Local Runtime failed with ${response.status}`);
-    if (typeof body !== "object" || body === null) {
-      throw new Error("Local Runtime returned an invalid evidence payload");
-    }
-    return body as RuntimeEvidence;
+      ];
+    });
   }
 
   private command(): readonly string[] {
@@ -505,37 +562,6 @@ class RemoteLocalRuntime implements ForgeRuntimeAdapter {
       throw new Error("CONCLAVE_TEST_COMMAND must be a JSON string array");
     }
     return parsed;
-  }
-
-  private asForgeEvidence(
-    operation: ForgeRuntimeEvidence["operation"],
-    evidence: readonly RuntimeEvidence[],
-    failed: RuntimeEvidence | undefined,
-  ): ForgeRuntimeEvidence {
-    return {
-      operation,
-      status: failed ? "failed" : "succeeded",
-      summary: failed?.summary ?? `${operation} completed`,
-      content: evidence.map((item) => item.content).join("\n"),
-      contentDigest: digest(
-        evidence.map((item) => item.contentDigest).join(":"),
-      ),
-      ...(failed?.command ? { command: failed.command } : {}),
-      ...(failed ? { exitCode: failed.exitCode } : {}),
-      ...(operation === "test"
-        ? {
-            checks: evidence.map((item) => ({
-              name: item.summary,
-              status:
-                item.status === "succeeded"
-                  ? ("passed" as const)
-                  : ("failed" as const),
-              command: item.command?.join(" "),
-              exitCode: item.exitCode ?? undefined,
-            })),
-          }
-        : {}),
-    };
   }
 }
 
@@ -864,9 +890,18 @@ export async function executeForgeService(
     capability: "repository_write",
   });
   const reviewerResource = registry.resolve({ capability: "code_review" });
-  if (!leadResource || !implementerResource || !reviewerResource) {
+  const runtimeResource = registry.resolve({
+    capability: "repository_read",
+    executionEnvironment: "local",
+  });
+  if (
+    !leadResource ||
+    !implementerResource ||
+    !reviewerResource ||
+    !runtimeResource
+  ) {
     throw new Error(
-      "Forge requires planning, implementation, and review workers",
+      "Forge requires planning, implementation, review, and runtime workers",
     );
   }
   if (reviewerResource.worker.id === implementerResource.worker.id) {
@@ -910,6 +945,7 @@ export async function executeForgeService(
     leadResource,
     implementerResource,
     reviewerResource,
+    runtimeResource,
   ].filter((binding) => binding.connection.transport === "local_agent");
   const discoveredLocalWorkers =
     localBindings.length > 0
@@ -946,7 +982,16 @@ export async function executeForgeService(
           }
         : {}),
       requireSecondaryResearch: executionMode === "multi_agent",
-      runtime: new RemoteLocalRuntime(env, context),
+      runtime: new AgentWorkerRuntime(
+        env,
+        context,
+        new AgentGatewayWorkerExecutor(
+          runtimeResource.worker,
+          runtimeResource.connection,
+          env,
+          context,
+        ),
+      ),
       persistence,
     });
     await repositories.runs.save({
