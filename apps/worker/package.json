@@ -17,7 +17,6 @@
     "@conclave/persistence": "workspace:*",
     "@conclave/plugin-sdk": "workspace:*",
     "@conclave/protocol": "workspace:*",
-    "@conclave/providers": "workspace:*",
     "@conclave/security": "workspace:*"
   }
 }

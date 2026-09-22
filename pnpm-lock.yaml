@@ -56,9 +56,6 @@ importers:
       '@conclave/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@conclave/providers':
-        specifier: workspace:*
-        version: link:../../packages/providers
       '@conclave/security':
         specifier: workspace:*
         version: link:../../packages/security
@@ -98,6 +95,8 @@ importers:
       '@conclave/protocol':
         specifier: workspace:*
         version: link:../protocol
+
+    devDependencies:
       '@conclave/providers':
         specifier: workspace:*
         version: link:../providers
