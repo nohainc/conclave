@@ -17,6 +17,11 @@ class SafeWorkspace {
   SafeWorkspace(Directory root) : root = root.absolute;
   final Directory root;
 
+  String _comparablePath(String value) {
+    final normalized = value.replaceAll('/', Platform.pathSeparator);
+    return Platform.isWindows ? normalized.toLowerCase() : normalized;
+  }
+
   Future<String> _contained(String relative, {bool forWrite = false}) async {
     if (relative.isEmpty || relative.contains('\u0000')) {
       throw const RuntimeViolation('invalid workspace path');
@@ -29,10 +34,15 @@ class SafeWorkspace {
     final lexicalRoot = root.path.endsWith(Platform.pathSeparator)
         ? root.path
         : '${root.path}${Platform.pathSeparator}';
-    if (!lexical.startsWith(lexicalRoot) && lexical != root.path) {
+    final comparableLexical = _comparablePath(lexical);
+    final comparableLexicalRoot = _comparablePath(lexicalRoot);
+    final comparableRoot = _comparablePath(root.path);
+    if (!comparableLexical.startsWith(comparableLexicalRoot) &&
+        comparableLexical != comparableRoot) {
       throw const RuntimeViolation('path escapes workspace root');
     }
-    final candidate = File('${root.path}/$relative').absolute;
+    final candidate =
+        File('${root.path}${Platform.pathSeparator}$relative').absolute;
     final rootReal = await root.resolveSymbolicLinks();
     final existing = await candidate.exists();
     var parent = candidate.parent;
@@ -47,7 +57,10 @@ class SafeWorkspace {
     final normalized = resolved.endsWith(Platform.pathSeparator)
         ? resolved
         : '$resolved${Platform.pathSeparator}';
-    if (!normalized.startsWith(normalizedRoot) && resolved != rootReal) {
+    final comparableResolved = _comparablePath(normalized);
+    final comparableResolvedRoot = _comparablePath(normalizedRoot);
+    if (!comparableResolved.startsWith(comparableResolvedRoot) &&
+        _comparablePath(resolved) != _comparablePath(rootReal)) {
       throw const RuntimeViolation('path escapes workspace root');
     }
     if (forWrite) {
@@ -163,23 +176,21 @@ class SafeWorkspace {
   }
 
   String _relativePath(String absolutePath) {
-    String comparable(String value) {
-      final normalized = value.replaceAll('/', Platform.pathSeparator);
-      return Platform.isWindows ? normalized.toLowerCase() : normalized;
-    }
-
     final rootPath = root.path.endsWith(Platform.pathSeparator)
         ? root.path
         : '${root.path}${Platform.pathSeparator}';
     final normalizedAbsolute =
         absolutePath.replaceAll('/', Platform.pathSeparator);
-    final comparableRoot = comparable(rootPath);
-    final comparableAbsolute = comparable(normalizedAbsolute);
-    if (!comparableAbsolute.startsWith(comparableRoot)) {
+    if (!_comparablePath(normalizedAbsolute)
+        .startsWith(_comparablePath(rootPath))) {
       throw const RuntimeViolation('path escapes workspace root');
     }
-    final relative = normalizedAbsolute.substring(rootPath.length);
-    return relative == '.' ? relative : relative.replaceFirst('.${Platform.pathSeparator}', '');
+    final relative = normalizedAbsolute
+        .substring(rootPath.length)
+        .replaceFirst('.${Platform.pathSeparator}', '');
+    // Repository-relative paths are protocol/evidence values, not native
+    // filesystem paths. Keep them stable across Windows/macOS/Linux.
+    return relative.replaceAll('\\', '/');
   }
 }
 
