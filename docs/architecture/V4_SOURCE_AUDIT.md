@@ -141,7 +141,7 @@ Target:
 
 ### `apps/worker/src/assignment-dispatcher.ts`
 
-The v4 scheduler resolves a Worker dynamically from task requirements, catalog availability, project preferences, user billing preference, Hosts, and authorized Credential Profiles. Configured Worker rows are no longer an execution identity.
+The v4 scheduler resolves a Worker dynamically from task requirements, catalog availability, project preferences, user billing preference, online Hosts, active installations, capacity, budget, independence, and authorized Credential Profiles. The result is frozen into one immutable ResolvedExecutionTarget assignment snapshot. Configured Worker rows are no longer an execution identity.
 
 Target scheduler resolves an ephemeral Execution Target:
 - eligible Host;

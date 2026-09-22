@@ -3,6 +3,7 @@ import {
   type CredentialGrant,
   type CredentialProfile,
   type CredentialWorkspaceRole,
+  type V4WorkerAssignment,
 } from "./v4-entities.js";
 
 export type ExecutionPreference = "auto" | "subscription" | "api";
@@ -28,6 +29,8 @@ export interface V4TaskRequirements {
   readonly explicitCredentialProfileId?: string | null;
   readonly requesterUserId: string;
   readonly workspaceRole?: CredentialWorkspaceRole;
+  readonly excludeIndependenceKeys?: readonly string[];
+  readonly budgetRemainingMicros?: number | null;
 }
 
 export interface AvailableWorkerAccount {
@@ -43,6 +46,12 @@ export interface AvailableWorkerAccount {
   readonly credentialProfile: CredentialProfile;
   readonly grants: readonly CredentialGrant[];
   readonly credentialUsageCount?: number;
+  readonly supportedModels?: readonly string[];
+  readonly hostStatus?: "online" | "offline" | "draining" | "revoked";
+  readonly installationStatus?:
+    "installing" | "installed" | "active" | "error" | "removed";
+  readonly independenceKey?: string;
+  readonly estimatedCostMicros?: number;
 }
 
 export interface ResolvedWorkerTarget {
@@ -63,6 +72,56 @@ export interface SetupRequiredExecutionTarget {
 
 export type ExecutionResolution =
   ResolvedWorkerTarget | SetupRequiredExecutionTarget;
+
+export interface AssignmentSnapshotInput {
+  readonly assignmentId: string;
+  readonly workspaceId: string;
+  readonly projectId: string;
+  readonly runId: string;
+  readonly taskId: string;
+  readonly attemptId: string;
+  readonly requestedByUserId: string;
+  readonly target: ResolvedWorkerTarget;
+  readonly model?: string | null;
+  readonly config?: Record<string, unknown>;
+  readonly sessionPolicy?: V4WorkerAssignment["sessionPolicy"];
+  readonly permissions?: readonly string[];
+  readonly contextRefs?: readonly Record<string, unknown>[];
+  readonly timeoutMs: number;
+  readonly idempotencyKey: string;
+  readonly input?: Record<string, unknown>;
+  readonly now: string;
+}
+
+/** Freezes the resolver result into the immutable v4 assignment snapshot. */
+export function createAssignmentSnapshot(
+  input: AssignmentSnapshotInput,
+): V4WorkerAssignment {
+  return {
+    id: input.assignmentId,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    runId: input.runId,
+    taskId: input.taskId,
+    attemptId: input.attemptId,
+    requestedByUserId: input.requestedByUserId,
+    hostId: input.target.hostId,
+    workerId: input.target.workerId,
+    credentialProfileId: input.target.credentialProfileId,
+    resolvedWorkerVersion: input.target.workerVersion,
+    model: input.model ?? input.target.model ?? undefined,
+    assignmentConfig: { ...(input.config ?? {}) },
+    sessionPolicy: input.sessionPolicy ?? "stateless",
+    permissions: [...(input.permissions ?? [])],
+    contextRefs: [...(input.contextRefs ?? [])],
+    status: "created",
+    input: { ...(input.input ?? {}) },
+    idempotencyKey: input.idempotencyKey,
+    timeoutMs: input.timeoutMs,
+    createdAt: input.now,
+    updatedAt: input.now,
+  };
+}
 
 /** Resolves a fresh Host + Worker + account target for one task. */
 export function resolveExecutionTarget(
@@ -86,6 +145,17 @@ export function resolveExecutionTarget(
     )
       return false;
     if (candidate.activeAssignments >= candidate.concurrencyLimit) return false;
+    if (candidate.hostStatus && candidate.hostStatus !== "online") return false;
+    if (
+      candidate.installationStatus &&
+      candidate.installationStatus !== "active"
+    )
+      return false;
+    if (
+      candidate.independenceKey &&
+      task.excludeIndependenceKeys?.includes(candidate.independenceKey)
+    )
+      return false;
     if (
       requiredRole &&
       !candidate.roles.map((role) => role.toLowerCase()).includes(requiredRole)
@@ -102,12 +172,24 @@ export function resolveExecutionTarget(
     if (task.model && candidate.model && candidate.model !== task.model)
       return false;
     if (
+      task.model &&
+      candidate.supportedModels &&
+      !candidate.supportedModels.includes(task.model)
+    )
+      return false;
+    if (
       user.executionPreference &&
       user.executionPreference !== "auto" &&
       candidate.billingMode !== user.executionPreference
     )
       return false;
     if (project.maxCostMicros != null && candidate.billingMode === "api")
+      return false;
+    if (
+      task.budgetRemainingMicros != null &&
+      candidate.estimatedCostMicros != null &&
+      candidate.estimatedCostMicros > task.budgetRemainingMicros
+    )
       return false;
     return canUseCredentialProfile(
       candidate.credentialProfile,

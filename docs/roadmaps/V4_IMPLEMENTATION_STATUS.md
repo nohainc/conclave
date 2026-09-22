@@ -15,7 +15,7 @@ Track progress of the [v4 implementation roadmap](ARCHITECTURE_V4_IMPLEMENTATION
 | V4-8 | Implement Credential Profiles and local secure storage | ✅ Complete |
 | V4-9 | Credential sharing and usage attribution | ✅ Complete |
 | V4-10 | Remove configured Worker instances | ✅ Complete |
-| V4-11 | Rewrite assignment dispatcher around ResolvedExecutionTarget | ⬜ Not started |
+| V4-11 | Rewrite assignment dispatcher around ResolvedExecutionTarget | ✅ Complete |
 | V4-12 | Multi-agent → multi-worker orchestration | ⬜ Not started |
 | V4-13 | Migrate first-party Worker packages | ⬜ Not started |
 | V4-14 | Web AI Worker migration | ⬜ Not started |

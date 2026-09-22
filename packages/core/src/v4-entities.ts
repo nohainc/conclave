@@ -357,9 +357,11 @@ export type V4WorkerAssignmentStatus =
 export interface V4WorkerAssignment {
   readonly id: string;
   readonly workspaceId: string;
+  readonly projectId: string;
   readonly runId: string;
   readonly taskId: string;
   readonly attemptId: string;
+  readonly requestedByUserId: string;
 
   // v4 execution target snapshot
   readonly hostId: string;
@@ -368,6 +370,10 @@ export interface V4WorkerAssignment {
   readonly resolvedWorkerVersion: string;
   readonly model?: string;
   readonly assignmentConfig: Record<string, unknown>;
+  readonly sessionPolicy:
+    "stateless" | "isolated_workspace" | "reuse_session" | "persistent_context";
+  readonly permissions: readonly string[];
+  readonly contextRefs: readonly Record<string, unknown>[];
 
   readonly status: V4WorkerAssignmentStatus;
   readonly input: Record<string, unknown>;
@@ -662,9 +668,14 @@ export function validateV4Assignment(
 ): void {
   requireNonEmpty(assignment.id, "V4WorkerAssignment id");
   requireNonEmpty(assignment.workspaceId, "V4WorkerAssignment workspaceId");
+  requireNonEmpty(assignment.projectId, "V4WorkerAssignment projectId");
   requireNonEmpty(assignment.runId, "V4WorkerAssignment runId");
   requireNonEmpty(assignment.taskId, "V4WorkerAssignment taskId");
   requireNonEmpty(assignment.attemptId, "V4WorkerAssignment attemptId");
+  requireNonEmpty(
+    assignment.requestedByUserId,
+    "V4WorkerAssignment requestedByUserId",
+  );
 
   // v4 execution target — the three pillars
   requireNonEmpty(
