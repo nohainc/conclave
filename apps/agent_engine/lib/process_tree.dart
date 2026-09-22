@@ -59,12 +59,17 @@ Future<void> terminateProcessTree(
   }
 
   final signal = force ? '-KILL' : '-TERM';
+  final dartSignal = force ? ProcessSignal.sigkill : ProcessSignal.sigterm;
   try {
-    final result = await Process.run('kill', [signal, '-${process.pid}'])
+    await Process.run('kill', [signal, '-${process.pid}'])
         .timeout(const Duration(seconds: 5));
-    if (result.exitCode == 0) return;
   } on Object {
-    // Fall through to direct-child termination below.
+    // Continue with direct-child termination below. Group signalling is
+    // best-effort because minimal environments may not provide kill/setsid.
   }
-  process.kill(force ? ProcessSignal.sigkill : ProcessSignal.sigterm);
+
+  // Always signal the direct Dart process handle as well. A successful
+  // process-group signal can terminate descendants while leaving Dart's
+  // Process handle waiting indefinitely on some CI/container platforms.
+  process.kill(dartSignal);
 }
