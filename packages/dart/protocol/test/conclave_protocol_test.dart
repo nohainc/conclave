@@ -58,19 +58,10 @@ void main() {
   });
 
   test('validates a canonical runtime operation request', () {
-    final runtime = ProtocolEnvelope.parse({
-      ...message,
-      'messageType': 'RuntimeOperationRequest',
-      'payload': {
-        'operation': 'test',
-        'taskId': 'task-runtime',
-        'repositoryId': 'repo-1',
-        'revision': 'HEAD',
-        'command': ['pnpm', 'test'],
-        'cwd': '.',
-        'changedFiles': ['lib/add.js'],
-      },
-    });
+    final runtime = ProtocolEnvelope.parse(jsonDecode(
+      File('../../protocol/fixtures/runtime-operation-request.json')
+          .readAsStringSync(),
+    ));
     expect(RuntimeOperationRequest.parse(runtime).operation, equals('test'));
     expect(
       () => RuntimeOperationRequest.parse(ProtocolEnvelope.parse({

@@ -36,6 +36,16 @@ const canonicalTaskRequest = JSON.parse(
   ),
 ) as Record<string, unknown>;
 
+const canonicalRuntimeOperation = JSON.parse(
+  fs.readFileSync(
+    path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "../fixtures/runtime-operation-request.json",
+    ),
+    "utf8",
+  ),
+) as Record<string, unknown>;
+
 const validPlanResult = {
   ...envelope,
   messageType: "PlanResult",
@@ -212,19 +222,8 @@ describe("versioned protocol contracts", () => {
   });
 
   it("validates each runtime operation payload discriminator", () => {
-    const runtime = parseRuntimeOperationRequest({
-      ...envelope,
-      messageType: "RuntimeOperationRequest",
-      payload: {
-        operation: "patch_file",
-        taskId: "task-runtime",
-        repositoryId: "repo-1",
-        revision: "HEAD",
-        path: "lib/add.js",
-        patches: [{ oldText: "a - b", newText: "a + b" }],
-      },
-    });
-    expect(runtime.payload.operation).toBe("patch_file");
+    const runtime = parseRuntimeOperationRequest(canonicalRuntimeOperation);
+    expect(runtime.payload.operation).toBe("test");
     expect(() =>
       parseRuntimeOperationRequest({
         ...runtime,

@@ -1,0 +1,19 @@
+{
+  "protocol": "conclave.protocol",
+  "version": "0.1",
+  "messageId": "runtime-message-1",
+  "goalId": "goal-1",
+  "runId": "run-1",
+  "workerId": "worker-runtime-1",
+  "createdAt": "2026-09-21T10:00:00.000Z",
+  "messageType": "RuntimeOperationRequest",
+  "payload": {
+    "operation": "test",
+    "taskId": "task-runtime-1",
+    "repositoryId": "repo-1",
+    "revision": "HEAD",
+    "command": ["pnpm", "test"],
+    "cwd": ".",
+    "changedFiles": ["lib/add.js"]
+  }
+}
