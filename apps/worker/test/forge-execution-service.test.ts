@@ -6,6 +6,7 @@ import {
 
 class MemoryD1 {
   readonly records = new Map<string, string>();
+  readonly contextQueries: string[] = [];
   contextRow: Record<string, unknown> | null = null;
 
   prepare(query: string) {
@@ -16,7 +17,10 @@ class MemoryD1 {
         return statement;
       },
       first: async <T>() => {
-        if (query.includes("FROM projects")) return this.contextRow as T;
+        if (query.includes("FROM projects")) {
+          this.contextQueries.push(query);
+          return this.contextRow as T;
+        }
         if (
           query.includes("FROM forge_executions") &&
           query.includes("WHERE run_id")
@@ -109,6 +113,7 @@ describe("durable Forge execution service", () => {
         "execution-1",
       ),
     ).rejects.toThrow("Run does not belong to the requested Goal");
+    expect(db.contextQueries[0]).toContain("p.workspace_id = ?3");
   });
 
   it("rejects a repository override that is not the Project repository", async () => {

@@ -882,7 +882,7 @@ export async function readExecutionContext(
      FROM projects p
      JOIN goals g ON g.project_id = p.id
      LEFT JOIN runs r ON r.id = ?2
-     WHERE g.id = ?1 AND p.organization_id = ?3`,
+     WHERE g.id = ?1 AND p.workspace_id = ?3`,
   )
     .bind(goalId, runId, organizationId)
     .first<{
