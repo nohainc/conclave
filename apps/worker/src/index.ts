@@ -272,10 +272,24 @@ function createDefaultSecurityContext(
 
 async function accessSecurityContext(
   env: SecurityEnv,
+  request: Request,
   accessContext: ExecutionContext | undefined,
 ): Promise<SecurityContext> {
   const identity = await accessContext?.access?.getIdentity();
-  const userId = identity?.email?.trim().toLowerCase();
+  const accessEmail = identity?.email?.trim().toLowerCase();
+  // Worker Access normally exposes the identity through ctx.access. The
+  // custom-domain Access path also forwards the verified identity header;
+  // accept that fallback only on the production Studio hostname so a direct
+  // workers.dev request cannot spoof a browser identity.
+  const forwardedEmail = request.headers
+    .get("cf-access-authenticated-user-email")
+    ?.trim()
+    .toLowerCase();
+  const userId =
+    accessEmail ??
+    (new URL(request.url).hostname === "app.conclaveax.com"
+      ? forwardedEmail
+      : undefined);
   if (!userId)
     throw new HttpError(401, "Cloudflare Access authentication required");
 
@@ -423,7 +437,7 @@ async function securityContext(
     const organizationId = env.CONCLAVE_AUTH_ORGANIZATION_ID ?? "dev-workspace";
     return createDefaultSecurityContext(userId, organizationId, "owner");
   }
-  return accessSecurityContext(env, accessContext);
+  return accessSecurityContext(env, request, accessContext);
 }
 
 async function authorizeRequest(
