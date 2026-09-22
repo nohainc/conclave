@@ -167,6 +167,21 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
   Env,
   ConclaveWorkflowParams
 > {
+  private async persistTerminalRun(
+    runId: string,
+    status: "completed" | "failed" | "cancelled",
+  ): Promise<void> {
+    const db = (this.env as ExecutionEnv).CONCLAVE_DB;
+    if (!db) return;
+    const now = new Date().toISOString();
+    await db
+      .prepare(
+        "UPDATE runs SET status = ?1, finished_at = ?2, updated_at = ?2 WHERE id = ?3",
+      )
+      .bind(status, now, runId)
+      .run();
+  }
+
   override async run(
     event: WorkflowEvent<ConclaveWorkflowParams>,
     step: WorkflowStep,
@@ -308,22 +323,25 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
     }
 
     if (forgeTerminal.status !== "completed") {
-      return step.do("checkpoint:forge-terminal", stepConfig, async () => ({
-        ...execution,
-        stage:
+      return step.do("checkpoint:forge-terminal", stepConfig, async () => {
+        const status =
           forgeTerminal.status === "failed"
             ? ("failed" as const)
-            : ("cancelled" as const),
-        status:
-          forgeTerminal.status === "failed"
-            ? ("failed" as const)
-            : ("cancelled" as const),
-        executionStatus: forgeTerminal.status,
-        ...(forgeTerminal.error ? { failureReason: forgeTerminal.error } : {}),
-        ...(forgeTerminal.resultArtifactId
-          ? { resultArtifactId: forgeTerminal.resultArtifactId }
-          : {}),
-      }));
+            : ("cancelled" as const);
+        await this.persistTerminalRun(params.runId, status);
+        return {
+          ...execution,
+          stage: status,
+          status,
+          executionStatus: forgeTerminal.status,
+          ...(forgeTerminal.error
+            ? { failureReason: forgeTerminal.error }
+            : {}),
+          ...(forgeTerminal.resultArtifactId
+            ? { resultArtifactId: forgeTerminal.resultArtifactId }
+            : {}),
+        };
+      });
     }
 
     let machineEvidence: MachineEvidenceEvent | undefined;
@@ -370,11 +388,14 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
         ...(machineEvidence ? { machineEvidence } : {}),
       }),
     );
-    return step.do("checkpoint:completed", stepConfig, async () => ({
-      ...verification,
-      stage: "completed" as const,
-      status: "completed" as const,
-      executionStatus: "completed" as const,
-    }));
+    return step.do("checkpoint:completed", stepConfig, async () => {
+      await this.persistTerminalRun(params.runId, "completed");
+      return {
+        ...verification,
+        stage: "completed" as const,
+        status: "completed" as const,
+        executionStatus: "completed" as const,
+      };
+    });
   }
 }

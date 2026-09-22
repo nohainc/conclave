@@ -7,8 +7,8 @@ Phase 11 maps long-running Conclave runs to a Cloudflare Workflow named `conclav
 The Worker creates an instance with a deterministic ID derived from a validated idempotency key. The Workflow checkpoints these stages with `step.do`:
 
 ```text
-intake -> wait for run control -> research -> planning -> implementation
-  -> CI evidence wait -> optional approval wait -> verification -> completed
+intake -> research -> planning -> implementation -> Forge terminal
+  -> CI evidence wait -> verification -> completed
 ```
 
 Each checkpoint returns the complete small state needed by the next stage. A Workflow replay therefore does not depend on module-level mutable state, wall-clock values, or an in-memory task cursor. Step retries are bounded and use exponential backoff.
@@ -24,7 +24,7 @@ The Worker exposes the following control surface:
 - `POST /api/runs/:id/events` sends validated `run-control` or `run-approval` events.
 - `POST /api/runs/:id/ci-evidence` sends a validated machine-check evidence record.
 
-The first external `run-control` event must be `continue` or `cancel`. A run configured with `requireApproval` waits on `run-approval` for up to 365 days. A rejected approval produces a durable cancelled result. Native pause/resume controls are separate from event waits: pausing suspends execution, while resuming allows the current step to continue.
+Normal runs start automatically after intake. A run created with `startPaused` waits for an explicit `run-control` event; a `cancel` event produces a durable cancelled result. A run configured with `requireApproval` waits on `run-approval` for up to 365 days. Native pause/resume controls are separate from event waits: pausing suspends execution, while resuming allows the current step to continue.
 
 Unless `requireCiEvidence` is explicitly disabled, the run waits for a `ci-evidence` event after implementation. The successful evidence record, including its individual checks, is part of the final durable checkpoint.
 
