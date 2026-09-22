@@ -6,6 +6,67 @@ import 'package:conclave_agent_engine/trust_policy.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('fetches authenticated release metadata and bounded package bytes',
+      () async {
+    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final packageBytes = [11, 22, 33];
+    final digest = sha256.convert(packageBytes).toString();
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final subscription = server.listen((request) {
+      expect(request.headers.value(HttpHeaders.authorizationHeader),
+          'Bearer agent-token');
+      if (request.uri.path.endsWith('/latest')) {
+        request.response
+          ..headers.contentType = ContentType.json
+          ..write(jsonEncode({
+            'updateAvailable': true,
+            'release': {
+              'version': '5.0.0',
+              'channel': 'stable',
+              'packageDigest': digest,
+              'packageR2Key': 'agent/5.0.0.tar.gz',
+              'publisher': 'conclave',
+              'signature': 'sig-test',
+            },
+          }));
+      } else {
+        request.response.add(packageBytes);
+      }
+      request.response.close();
+    });
+    try {
+      final client = const AgentReleaseClient();
+      final base = Uri.http('127.0.0.1:${server.port}', '/');
+      final release = await client.latest(
+        cloudUri: base,
+        channel: 'stable',
+        currentVersion: '4.0.0',
+        authToken: 'agent-token',
+      );
+      expect(release?.version, '5.0.0');
+      final package = await client.download(
+        cloudUri: base,
+        release: release!,
+        authToken: 'agent-token',
+      );
+      expect(package.bytes, packageBytes);
+      await expectLater(
+        client.download(
+          cloudUri: base,
+          release: release,
+          authToken: 'agent-token',
+          maxPackageBytes: 2,
+        ),
+        throwsA(predicate(
+            (error) => error.toString().contains('exceeded 2 bytes'))),
+      );
+    } finally {
+      await subscription.cancel();
+      await server.close(force: true);
+      await root.delete(recursive: true);
+    }
+  });
+
   test('activates a verified release and records metadata', () async {
     final root = await Directory.systemTemp.createTemp('conclave-update-');
     final bytes = [1, 2, 3];

@@ -29,6 +29,195 @@ class ReleasePackage {
   final String? packageUrl;
 }
 
+class AgentReleaseDescriptor {
+  const AgentReleaseDescriptor({
+    required this.version,
+    required this.channel,
+    required this.packageDigest,
+    required this.packageR2Key,
+    this.publisher,
+    this.signature,
+    this.minimumProtocolVersion,
+    this.operatingSystem,
+    this.architecture,
+    this.releaseNotes,
+    this.packageUrl,
+  });
+
+  final String version;
+  final String channel;
+  final String packageDigest;
+  final String packageR2Key;
+  final String? publisher;
+  final String? signature;
+  final String? minimumProtocolVersion;
+  final String? operatingSystem;
+  final String? architecture;
+  final String? releaseNotes;
+  final String? packageUrl;
+
+  factory AgentReleaseDescriptor.fromJson(Map<String, dynamic> json) {
+    String requiredString(String key) {
+      final value = json[key];
+      if (value is! String || value.isEmpty) {
+        throw FormatException('release field $key is required');
+      }
+      return value;
+    }
+
+    String? optionalString(String key) =>
+        json[key] is String ? json[key] as String : null;
+
+    return AgentReleaseDescriptor(
+      version: requiredString('version'),
+      channel: requiredString('channel'),
+      packageDigest: requiredString('packageDigest'),
+      packageR2Key: requiredString('packageR2Key'),
+      publisher: optionalString('publisher'),
+      signature: optionalString('signature'),
+      minimumProtocolVersion: optionalString('minimumProtocolVersion'),
+      operatingSystem: optionalString('operatingSystem'),
+      architecture: optionalString('architecture'),
+      releaseNotes: optionalString('releaseNotes'),
+      packageUrl: optionalString('packageUrl'),
+    );
+  }
+}
+
+class AgentReleaseClient {
+  const AgentReleaseClient({this.timeout = const Duration(seconds: 30)});
+
+  final Duration timeout;
+
+  Future<AgentReleaseDescriptor?> latest({
+    required Uri cloudUri,
+    required String channel,
+    required String currentVersion,
+    String? operatingSystem,
+    String? architecture,
+    String? authToken,
+  }) async {
+    final owned = await _request(
+      cloudUri.replace(
+        scheme: _httpScheme(cloudUri),
+        pathSegments: ['api', 'agent-releases', 'latest'],
+        queryParameters: {
+          'channel': channel,
+          'currentVersion': currentVersion,
+          if (operatingSystem != null) 'os': operatingSystem,
+          if (architecture != null) 'arch': architecture,
+        },
+      ),
+      authToken: authToken,
+    );
+    try {
+      final response = owned.response;
+      if (response.statusCode != HttpStatus.ok) {
+        throw StateError(
+            'agent release lookup failed with HTTP ${response.statusCode}');
+      }
+      final decoded = jsonDecode(await _readBody(owned, 256 * 1024));
+      if (decoded is! Map || decoded['updateAvailable'] != true) {
+        return null;
+      }
+      final release = decoded['release'];
+      if (release is! Map) {
+        throw const FormatException('release metadata is invalid');
+      }
+      return AgentReleaseDescriptor.fromJson(
+          Map<String, dynamic>.from(release));
+    } finally {
+      owned.close();
+    }
+  }
+
+  Future<ReleasePackage> download({
+    required Uri cloudUri,
+    required AgentReleaseDescriptor release,
+    String? authToken,
+    int maxPackageBytes = 512 * 1024 * 1024,
+  }) async {
+    if (maxPackageBytes <= 0) {
+      throw ArgumentError.value(
+          maxPackageBytes, 'maxPackageBytes', 'must be positive');
+    }
+    final owned = await _request(
+      cloudUri.replace(
+        scheme: _httpScheme(cloudUri),
+        pathSegments: ['api', 'agent-releases', release.version, 'download'],
+      ),
+      authToken: authToken,
+    );
+    try {
+      final response = owned.response;
+      if (response.statusCode != HttpStatus.ok) {
+        throw StateError(
+            'agent release download failed with HTTP ${response.statusCode}');
+      }
+      final bytes = await _readBytes(owned, maxPackageBytes);
+      return ReleasePackage(
+        version: release.version,
+        channel: release.channel,
+        bytes: bytes,
+        digest: release.packageDigest,
+        publisher: release.publisher,
+        signature: release.signature,
+        minimumProtocolVersion: release.minimumProtocolVersion,
+        operatingSystem: release.operatingSystem,
+        architecture: release.architecture,
+        releaseNotes: release.releaseNotes,
+        packageUrl: release.packageUrl,
+      );
+    } finally {
+      owned.close();
+    }
+  }
+
+  Future<_OwnedResponse> _request(Uri uri, {String? authToken}) async {
+    final client = HttpClient()..connectionTimeout = timeout;
+    try {
+      final request = await client.getUrl(uri).timeout(timeout);
+      if (authToken != null && authToken.isNotEmpty) {
+        request.headers
+            .set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
+      }
+      final response = await request.close().timeout(timeout);
+      return _OwnedResponse(response, client);
+    } catch (_) {
+      client.close(force: true);
+      rethrow;
+    }
+  }
+
+  String _httpScheme(Uri uri) => uri.scheme == 'wss' ? 'https' : 'http';
+
+  Future<String> _readBody(_OwnedResponse owned, int maxBytes) async {
+    final bytes = await _readBytes(owned, maxBytes);
+    return utf8.decode(bytes);
+  }
+
+  Future<List<int>> _readBytes(_OwnedResponse owned, int maxBytes) async {
+    final bytes = <int>[];
+    await for (final chunk in owned.response.timeout(timeout)) {
+      if (bytes.length + chunk.length > maxBytes) {
+        throw StateError('agent release response exceeded $maxBytes bytes');
+      }
+      bytes.addAll(chunk);
+    }
+    return bytes;
+  }
+}
+
+class _OwnedResponse {
+  _OwnedResponse(this._response, this._client);
+  final HttpClientResponse _response;
+  final HttpClient _client;
+
+  HttpClientResponse get response => _response;
+
+  void close() => _client.close(force: true);
+}
+
 class AgentUpdater {
   AgentUpdater(
     this.root, {
