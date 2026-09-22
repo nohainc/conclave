@@ -3,6 +3,7 @@
   "$id": "https://conclaveax.com/schemas/conclave-message.schema.json",
   "title": "Conclave Cloud to Worker message",
   "description": "Canonical cross-language envelope shared by Cloud, Agent Engine, and Worker Plugins.",
+  "x-protocol-version": "0.1",
   "type": "object",
   "additionalProperties": false,
   "required": [

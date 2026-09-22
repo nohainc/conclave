@@ -1,7 +1,12 @@
 import { z } from "zod";
 
-export const PROTOCOL_NAME = "conclave.protocol" as const;
-export const PROTOCOL_VERSION = "0.1" as const;
+import { PROTOCOL_NAME, PROTOCOL_VERSION } from "./generated.js";
+
+export {
+  PROTOCOL_NAME,
+  PROTOCOL_VERSION,
+  REQUIRED_ENVELOPE_FIELDS,
+} from "./generated.js";
 
 const protocolVersionPattern = /^\d+\.\d+(?:\.\d+)?$/;
 

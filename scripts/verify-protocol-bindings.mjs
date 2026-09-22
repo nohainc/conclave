@@ -8,20 +8,19 @@ const schema = JSON.parse(
     "utf8",
   ),
 );
+if (schema["x-protocol-version"] !== "0.1") {
+  throw new Error("canonical protocol schema has an unexpected version");
+}
 if (schema.properties.protocol.const !== "conclave.protocol") {
   throw new Error("canonical protocol schema has an unexpected protocol name");
 }
-const requiredFields = [
-  "protocol",
-  "version",
-  "messageId",
-  "goalId",
-  "runId",
-  "workerId",
-  "createdAt",
-  "messageType",
-  "payload",
-];
+const requiredFields = schema.required;
+if (
+  !Array.isArray(requiredFields) ||
+  requiredFields.some((field) => typeof field !== "string")
+) {
+  throw new Error("canonical protocol schema has invalid required fields");
+}
 for (const field of requiredFields) {
   if (!schema.required.includes(field)) {
     throw new Error(`canonical protocol schema is missing ${field}`);
@@ -31,11 +30,14 @@ if (!schema.properties.version.pattern.includes("[0-9]+")) {
   throw new Error("canonical protocol schema does not constrain versions");
 }
 
-const [dart, typescript, fixtureText] = await Promise.all([
-  read("packages/dart/protocol/lib/conclave_protocol.dart"),
-  read("packages/protocol/src/index.ts"),
-  read("packages/protocol/fixtures/task-request.json"),
-]);
+const [dart, generatedDart, generated, typescript, fixtureText] =
+  await Promise.all([
+    read("packages/dart/protocol/lib/conclave_protocol.dart"),
+    read("packages/dart/protocol/lib/generated_protocol.dart"),
+    read("packages/protocol/src/generated.ts"),
+    read("packages/protocol/src/index.ts"),
+    read("packages/protocol/fixtures/task-request.json"),
+  ]);
 const fixture = JSON.parse(fixtureText);
 for (const field of requiredFields) {
   if (!(field in fixture)) {
@@ -52,14 +54,19 @@ if (
   throw new Error("canonical TaskRequest fixture is malformed");
 }
 for (const field of ["PROTOCOL_NAME", "PROTOCOL_VERSION"]) {
-  if (!typescript.includes(`export const ${field}`)) {
-    throw new Error(`TypeScript binding is missing ${field}`);
+  if (!generated.includes(`export const ${field}`)) {
+    throw new Error(`generated TypeScript binding is missing ${field}`);
   }
 }
-if (!typescript.includes(`PROTOCOL_VERSION = "${fixture.version}"`)) {
+if (!generated.includes(`PROTOCOL_VERSION = "${fixture.version}"`)) {
   throw new Error("TypeScript protocol version does not match the fixture");
 }
-if (!dart.includes(`const protocolVersion = '${fixture.version}'`)) {
+if (!typescript.includes('from "./generated.js"')) {
+  throw new Error(
+    "TypeScript protocol binding does not import generated constants",
+  );
+}
+if (!generatedDart.includes(`const protocolVersion = '${fixture.version}'`)) {
   throw new Error("Dart protocol version does not match the fixture");
 }
 for (const field of [

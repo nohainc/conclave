@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-const protocolName = 'conclave.protocol';
-const protocolVersion = '0.1';
+export 'generated_protocol.dart';
+import 'generated_protocol.dart';
 
 class ProtocolException implements Exception {
   const ProtocolException(this.message);
@@ -54,7 +54,8 @@ class ProtocolEnvelope {
         throw const ProtocolException('message is not valid JSON');
       }
     }
-    if (input is! Map) throw const ProtocolException('message must be an object');
+    if (input is! Map)
+      throw const ProtocolException('message must be an object');
     final map = Map<String, Object?>.from(input);
     _requiredString(map, 'protocol');
     if (map['protocol'] != protocolName) {
@@ -70,9 +71,11 @@ class ProtocolEnvelope {
     final workerId = _requiredString(map, 'workerId');
     final messageType = _requiredString(map, 'messageType');
     final createdAt = DateTime.tryParse(_requiredString(map, 'createdAt'));
-    if (createdAt == null) throw const ProtocolException('createdAt is invalid');
+    if (createdAt == null)
+      throw const ProtocolException('createdAt is invalid');
     final payload = map['payload'];
-    if (payload is! Map) throw const ProtocolException('payload must be an object');
+    if (payload is! Map)
+      throw const ProtocolException('payload must be an object');
     return ProtocolEnvelope(
       version: version,
       messageId: messageId,
@@ -102,7 +105,8 @@ bool isCompatibleVersion(String local, String remote) {
 
 (int, int, int) _versionParts(String version) {
   final parts = version.split('.').map(int.tryParse).toList();
-  if ((parts.length != 2 && parts.length != 3) || parts.any((part) => part == null)) {
+  if ((parts.length != 2 && parts.length != 3) ||
+      parts.any((part) => part == null)) {
     throw const ProtocolException('version must be major.minor.patch');
   }
   return (parts[0]!, parts[1]!, parts.length == 3 ? parts[2]! : 0);
