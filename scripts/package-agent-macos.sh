@@ -4,10 +4,11 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage: package-agent-macos.sh --app-bundle PATH --engine PATH --output PATH
-       [--version VERSION] [--signing-identity ID]
+       [--version VERSION] [--signing-identity ID] [--require-signature]
 
 Creates a distributable Conclave AX Agent zip. Codesigning is optional for
-local builds and required by the release pipeline before notarization.
+local builds. Release packaging must pass --require-signature (or set
+CONCLAVE_REQUIRE_SIGNATURE=1) so unsigned archives cannot be produced.
 EOF
 }
 
@@ -16,6 +17,7 @@ engine=""
 output=""
 version="${CONCLAVE_AGENT_VERSION:-0.1.0}"
 signing_identity="${CONCLAVE_CODESIGN_IDENTITY:-}"
+require_signature="${CONCLAVE_REQUIRE_SIGNATURE:-0}"
 
 while (($# > 0)); do
   case "$1" in
@@ -43,6 +45,10 @@ while (($# > 0)); do
       [[ $# -ge 2 ]] || { usage >&2; exit 2; }
       signing_identity="$2"
       shift 2
+      ;;
+    --require-signature)
+      require_signature=1
+      shift
       ;;
     -h|--help)
       usage
@@ -93,6 +99,11 @@ if [[ -n "$signing_identity" ]]; then
   codesign --force --options runtime --sign "$signing_identity" \
     "$stage/Conclave AX Agent/bin/conclave_agent_engine"
   signed=true
+fi
+
+if [[ "$require_signature" == "1" && "$signed" != "true" ]]; then
+  echo "A signing identity is required for release packaging" >&2
+  exit 1
 fi
 
 engine_digest="$(shasum -a 256 "$stage/Conclave AX Agent/bin/conclave_agent_engine" | awk '{print $1}')"

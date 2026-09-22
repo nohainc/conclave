@@ -30,6 +30,20 @@ with `scripts/uninstall-agent-macos.sh --confirm`.
 This development flow does not sign or notarize binaries. Release CI must sign
 the App, Engine, and launch helper before distributing them.
 
+Release packaging must fail closed when signing is unavailable:
+
+```sh
+CONCLAVE_REQUIRE_SIGNATURE=1 \
+CONCLAVE_CODESIGN_IDENTITY="Developer ID Application: Example" \
+scripts/package-agent-macos.sh \
+  --app-bundle apps/agent_app/build/macos/Build/Products/Release/conclave_agent_app.app \
+  --engine apps/agent_app/build/macos/Build/Products/Release/conclave_agent_engine \
+  --output dist/conclave-agent-macos.zip
+```
+
+The archive includes `release.json` with `signed: true` and the Engine SHA-256
+digest. Notarization remains a release-CI step after signing.
+
 The release manifest must include the Agent version, platform, architecture, protocol version, SHA-256 digest, and signature. Updates are staged and health-checked by the Engine before activation.
 
 Signing and notarization identities are intentionally supplied by CI secrets; they are never stored in this repository.
