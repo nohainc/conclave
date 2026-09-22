@@ -1,6 +1,7 @@
 import type {
   ArtifactRecord,
   CompletionCriterionRecord,
+  FindingRecord,
   GoalRecord,
   JsonValue,
   AttemptRecord,
@@ -8,6 +9,8 @@ import type {
   RunEventRecord,
   RunRecord,
   TaskRecord,
+  UsageRecord,
+  VerificationRecord,
 } from "./index.js";
 
 export interface D1Result<T> {
@@ -389,6 +392,215 @@ export class D1AttemptRepository {
       .all();
     return (rows.results ?? []).map(toAttempt);
   }
+}
+
+export class D1FindingRepository {
+  constructor(private readonly db: D1DatabaseLike) {}
+
+  async get(id: string): Promise<FindingRecord | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM findings WHERE id = ?1")
+      .bind(id)
+      .first();
+    return row ? toFinding(row) : null;
+  }
+
+  async save(finding: FindingRecord): Promise<void> {
+    const scope = await runScope(this.db, finding.runId);
+    await this.db
+      .prepare(
+        `INSERT INTO findings (id, workspace_id, run_id, task_id, attempt_id, category, severity, title, description, status, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+         ON CONFLICT(id) DO UPDATE SET task_id=excluded.task_id, attempt_id=excluded.attempt_id,
+           category=excluded.category, severity=excluded.severity, title=excluded.title,
+           description=excluded.description, status=excluded.status, updated_at=excluded.updated_at`,
+      )
+      .bind(
+        finding.id,
+        scope.workspaceId,
+        finding.runId,
+        finding.taskId,
+        finding.sourceAttemptId,
+        finding.scope,
+        finding.severity === "blocker" || finding.severity === "major"
+          ? finding.severity === "blocker"
+            ? "critical"
+            : "warning"
+          : finding.severity === "minor"
+            ? "warning"
+            : "info",
+        finding.scope,
+        finding.description,
+        finding.status,
+        finding.createdAt,
+        finding.updatedAt,
+      )
+      .run();
+  }
+
+  async listByRun(runId: string): Promise<readonly FindingRecord[]> {
+    const rows = await this.db
+      .prepare("SELECT * FROM findings WHERE run_id = ?1 ORDER BY created_at")
+      .bind(runId)
+      .all();
+    return (rows.results ?? []).map(toFinding);
+  }
+}
+
+function toFinding(row: Record<string, unknown>): FindingRecord {
+  const severity = String(row.severity);
+  return {
+    id: String(row.id),
+    runId: String(row.run_id),
+    taskId: row.task_id === null ? null : String(row.task_id),
+    sourceAttemptId: row.attempt_id === null ? null : String(row.attempt_id),
+    severity:
+      severity === "critical"
+        ? "blocker"
+        : severity === "warning"
+          ? "major"
+          : severity === "info"
+            ? "note"
+            : "minor",
+    scope: String(row.category),
+    description: String(row.description),
+    evidenceArtifactIds: [],
+    status: String(row.status),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+export class D1VerificationRepository {
+  constructor(private readonly db: D1DatabaseLike) {}
+
+  async get(id: string): Promise<VerificationRecord | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM verifications WHERE id = ?1")
+      .bind(id)
+      .first();
+    return row ? toVerification(row) : null;
+  }
+
+  async save(verification: VerificationRecord): Promise<void> {
+    const scope = await runScope(this.db, verification.runId);
+    if (!verification.verifierWorkerId) {
+      throw new Error("D1 verifications require verifierWorkerId");
+    }
+    await this.db
+      .prepare(
+        `INSERT INTO verifications (id, workspace_id, run_id, task_id, criterion_id, verifier_worker_id, conclusion, evidence_artifact_ids_json, notes, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+         ON CONFLICT(id) DO UPDATE SET task_id=excluded.task_id, criterion_id=excluded.criterion_id,
+           verifier_worker_id=excluded.verifier_worker_id, conclusion=excluded.conclusion,
+           evidence_artifact_ids_json=excluded.evidence_artifact_ids_json, notes=excluded.notes`,
+      )
+      .bind(
+        verification.id,
+        scope.workspaceId,
+        verification.runId,
+        verification.taskId,
+        verification.criterionId,
+        verification.verifierWorkerId,
+        verification.outcome,
+        json(verification.evidenceArtifactIds),
+        verification.rationale,
+        verification.createdAt,
+      )
+      .run();
+  }
+
+  async listByRun(runId: string): Promise<readonly VerificationRecord[]> {
+    const rows = await this.db
+      .prepare(
+        "SELECT * FROM verifications WHERE run_id = ?1 ORDER BY created_at",
+      )
+      .bind(runId)
+      .all();
+    return (rows.results ?? []).map(toVerification);
+  }
+}
+
+function toVerification(row: Record<string, unknown>): VerificationRecord {
+  return {
+    id: String(row.id),
+    runId: String(row.run_id),
+    taskId: row.task_id === null ? null : String(row.task_id),
+    criterionId: row.criterion_id === null ? "" : String(row.criterion_id),
+    verifierWorkerId:
+      row.verifier_worker_id === null ? null : String(row.verifier_worker_id),
+    method: "worker",
+    outcome: String(row.conclusion),
+    evidenceArtifactIds: parse(row.evidence_artifact_ids_json, [] as string[]),
+    rationale: row.notes === null ? "" : String(row.notes),
+    createdAt: String(row.created_at),
+  };
+}
+
+export class D1UsageRepository {
+  constructor(private readonly db: D1DatabaseLike) {}
+
+  async save(usage: UsageRecord): Promise<void> {
+    const scope = await runScope(this.db, usage.runId);
+    if (!usage.workerId) throw new Error("D1 usage requires workerId");
+    await this.db
+      .prepare(
+        `INSERT INTO usage (id, workspace_id, project_id, run_id, worker_id, assignment_id, input_tokens, output_tokens, cost_micros, duration_ms, recorded_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+         ON CONFLICT(id) DO UPDATE SET input_tokens=excluded.input_tokens, output_tokens=excluded.output_tokens,
+           cost_micros=excluded.cost_micros, duration_ms=excluded.duration_ms, recorded_at=excluded.recorded_at`,
+      )
+      .bind(
+        usage.id,
+        scope.workspaceId,
+        scope.projectId,
+        usage.runId,
+        usage.workerId,
+        null,
+        usage.inputTokens,
+        usage.outputTokens,
+        usage.estimatedCostMicros,
+        usage.executionMs,
+        usage.recordedAt,
+      )
+      .run();
+  }
+
+  async listByRun(runId: string): Promise<readonly UsageRecord[]> {
+    const rows = await this.db
+      .prepare("SELECT * FROM usage WHERE run_id = ?1 ORDER BY recorded_at")
+      .bind(runId)
+      .all();
+    return (rows.results ?? []).map(toUsage);
+  }
+}
+
+async function runScope(
+  db: D1DatabaseLike,
+  runId: string,
+): Promise<{ workspaceId: string; projectId: string }> {
+  const row = await db
+    .prepare("SELECT workspace_id, project_id FROM runs WHERE id = ?1")
+    .bind(runId)
+    .first<{ workspace_id: string; project_id: string }>();
+  if (!row?.workspace_id || !row.project_id) {
+    throw new Error(`Cannot persist record for unknown Run: ${runId}`);
+  }
+  return { workspaceId: row.workspace_id, projectId: row.project_id };
+}
+
+function toUsage(row: Record<string, unknown>): UsageRecord {
+  return {
+    id: String(row.id),
+    runId: String(row.run_id),
+    attemptId: null,
+    workerId: row.worker_id === null ? null : String(row.worker_id),
+    inputTokens: Number(row.input_tokens),
+    outputTokens: Number(row.output_tokens),
+    executionMs: Number(row.duration_ms),
+    estimatedCostMicros: Number(row.cost_micros),
+    recordedAt: String(row.recorded_at),
+  };
 }
 
 function toAttempt(row: Record<string, unknown>): AttemptRecord {

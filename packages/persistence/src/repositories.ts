@@ -27,11 +27,14 @@ import { reconstructRun } from "./index.js";
 import {
   D1ArtifactRepository,
   D1EventRepository,
+  D1FindingRepository,
   D1GoalRepository,
   D1PhaseRepository,
   D1AttemptRepository,
   D1RunRepository,
   D1TaskRepository,
+  D1UsageRepository,
+  D1VerificationRepository,
   type D1DatabaseLike,
 } from "./d1.js";
 
@@ -148,32 +151,6 @@ export class D1ModelCallRepository extends RecordRepository<ModelCallRecord> {
   }
   async listByAttempt(attemptId: string): Promise<readonly ModelCallRecord[]> {
     return (await this.list()).filter((call) => call.attemptId === attemptId);
-  }
-}
-export class D1FindingRepository extends RecordRepository<FindingRecord> {
-  constructor(store: D1RecordStore) {
-    super(store, "findings");
-  }
-  async listByRun(runId: string): Promise<readonly FindingRecord[]> {
-    return (await this.list()).filter((finding) => finding.runId === runId);
-  }
-}
-export class D1VerificationRepository extends RecordRepository<VerificationRecord> {
-  constructor(store: D1RecordStore) {
-    super(store, "verifications");
-  }
-  async listByRun(runId: string): Promise<readonly VerificationRecord[]> {
-    return (await this.list()).filter(
-      (verification) => verification.runId === runId,
-    );
-  }
-}
-export class D1UsageRepository extends RecordRepository<UsageRecord> {
-  constructor(store: D1RecordStore) {
-    super(store, "usage");
-  }
-  async listByRun(runId: string): Promise<readonly UsageRecord[]> {
-    return (await this.list()).filter((usage) => usage.runId === runId);
   }
 }
 export class D1OrganizationRepository extends RecordRepository<OrganizationRecord> {
@@ -350,11 +327,11 @@ export class D1PersistenceRepositories implements PersistenceRepositories {
     this.taskDependencies = new D1TaskDependencyRepository(this.store);
     this.attempts = new D1AttemptRepository(db);
     this.modelCalls = new D1ModelCallRepository(this.store);
-    this.findings = new D1FindingRepository(this.store);
-    this.verifications = new D1VerificationRepository(this.store);
+    this.findings = new D1FindingRepository(db);
+    this.verifications = new D1VerificationRepository(db);
     this.artifacts = new D1ArtifactRepository(db);
     this.events = new D1EventRepository(db);
-    this.usage = new D1UsageRepository(this.store);
+    this.usage = new D1UsageRepository(db);
     this.organizations = new D1OrganizationRepository(this.store);
     this.memberships = new D1MembershipRepository(this.store);
     this.projectMemberships = new D1ProjectMembershipRepository(this.store);
@@ -391,17 +368,11 @@ export class D1PersistenceRepositories implements PersistenceRepositories {
     const modelCalls = (await this.modelCalls.list()).filter((call) =>
       attemptIds.has(call.attemptId),
     );
-    const findings = (await this.findings.list()).filter(
-      (finding) => finding.runId === runId,
-    );
-    const verifications = (await this.verifications.list()).filter(
-      (verification) => verification.runId === runId,
-    );
+    const findings = await this.findings.listByRun(runId);
+    const verifications = await this.verifications.listByRun(runId);
     const artifacts = await this.artifacts.listByRun(runId);
     const events = await this.events.listByRun(runId);
-    const usage = (await this.usage.list()).filter(
-      (entry) => entry.runId === runId,
-    );
+    const usage = await this.usage.listByRun(runId);
     const rows: RunAggregateRows = {
       goal,
       run,
