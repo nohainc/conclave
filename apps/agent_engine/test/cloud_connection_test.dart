@@ -720,6 +720,14 @@ void main() {
       expect(payload['status'], 'completed');
       final output = payload['output'] as Map<String, dynamic>;
       expect(output['completed'], isTrue);
+      expect(output['executionContext'], {
+        'runId': 'run-forge-1',
+        'taskId': 'task-forge-1',
+        'attemptId': 'attempt-forge-1',
+        'workerId': 'forge-worker',
+        'pluginId': 'conclave.forge',
+        'pluginVersion': '0.1.0',
+      });
       expect(output['completionReport'],
           contains('All required fixture checks passed'));
       final evidence =

@@ -47,6 +47,10 @@ Future<Map<String, Object?>> _runAssignment(Object? rawParams) async {
   if (rawParams is! Map || rawParams['input'] is! Map) {
     throw StateError('Forge assignment input is required');
   }
+  final params = Map<String, Object?>.from(rawParams);
+  final correlation = params['conclave'] is Map
+      ? Map<String, Object?>.from(params['conclave'] as Map)
+      : const <String, Object?>{};
   final input = Map<String, Object?>.from(rawParams['input'] as Map);
   final repositoryPath = input['repositoryPath'];
   if (repositoryPath is! String || repositoryPath.isEmpty) {
@@ -54,8 +58,19 @@ Future<Map<String, Object?>> _runAssignment(Object? rawParams) async {
   }
   final completion =
       await DartForgePipeline().execute(Directory(repositoryPath));
+  final executionContext = <String, Object?>{
+    if (correlation['runId'] is String) 'runId': correlation['runId'],
+    if (correlation['taskId'] is String) 'taskId': correlation['taskId'],
+    if (correlation['attemptId'] is String)
+      'attemptId': correlation['attemptId'],
+    if (correlation['workerId'] is String) 'workerId': correlation['workerId'],
+    if (params['pluginId'] is String) 'pluginId': params['pluginId'],
+    if (params['resolvedPluginVersion'] is String)
+      'pluginVersion': params['resolvedPluginVersion'],
+  };
   final evidence = completion.evidence
       .map((item) => {
+            ...executionContext,
             'phase': item.phase,
             'summary': item.summary,
             'artifacts': item.artifacts,
@@ -75,6 +90,7 @@ Future<Map<String, Object?>> _runAssignment(Object? rawParams) async {
     'output': {
       'completed': completion.completed,
       'completionReport': completion.completionReport,
+      'executionContext': executionContext,
       'evidence': evidence,
     },
     'artifactIds': const <String>[],
