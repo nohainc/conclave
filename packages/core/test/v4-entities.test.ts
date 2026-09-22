@@ -17,6 +17,7 @@ import {
   validateHostWorkerInstallation,
   validateCredentialProfile,
   validateCredentialGrant,
+  canUseCredentialProfile,
   validateV4Assignment,
   validateV4AssignmentResult,
 } from "../src/index.js";
@@ -405,6 +406,7 @@ describe("Architecture v4 Core Domain Entities and Invariants", () => {
       credentialProfileId: "cred-vitalii-codex",
       granteeType: "user",
       granteeId: "user-bob",
+      usePermission: "use",
       grantedBy: "user-vitalii",
       createdAt: "2026-09-21T10:15:00Z",
     };
@@ -456,6 +458,82 @@ describe("Architecture v4 Core Domain Entities and Invariants", () => {
           granteeType: "team" as CredentialGrant["granteeType"],
         }),
       ).toThrow(/Invalid CredentialGrant granteeType/);
+    });
+
+    it("resolves owner, grant, expiry, revocation, and usage limits", () => {
+      expect(
+        canUseCredentialProfile(sampleCredentialProfile, [], {
+          workspaceId: "ws-primary",
+          requesterUserId: "user-vitalii",
+        }),
+      ).toBe(true);
+      expect(
+        canUseCredentialProfile(sharedProfile, [validGrant], {
+          workspaceId: "ws-primary",
+          requesterUserId: "user-bob",
+          workspaceRole: "member",
+        }),
+      ).toBe(true);
+      expect(
+        canUseCredentialProfile(
+          sharedProfile,
+          [
+            {
+              ...validGrant,
+              expiresAt: "2026-01-01T00:00:00Z",
+            },
+          ],
+          {
+            workspaceId: "ws-primary",
+            requesterUserId: "user-bob",
+            workspaceRole: "member",
+            now: "2026-09-23T00:00:00Z",
+          },
+        ),
+      ).toBe(false);
+      expect(
+        canUseCredentialProfile(
+          sharedProfile,
+          [{ ...validGrant, revokedAt: "now" }],
+          {
+            workspaceId: "ws-primary",
+            requesterUserId: "user-bob",
+            workspaceRole: "member",
+          },
+        ),
+      ).toBe(false);
+      expect(
+        canUseCredentialProfile(
+          sharedProfile,
+          [{ ...validGrant, usageLimit: 1 }],
+          {
+            workspaceId: "ws-primary",
+            requesterUserId: "user-bob",
+            workspaceRole: "member",
+            usageCount: 1,
+          },
+        ),
+      ).toBe(false);
+    });
+
+    it("does not let viewers use workspace grants", () => {
+      expect(
+        canUseCredentialProfile(
+          sharedProfile,
+          [
+            {
+              ...validGrant,
+              granteeType: "workspace",
+              granteeId: "workspace-conclave",
+            },
+          ],
+          {
+            workspaceId: "workspace-conclave",
+            requesterUserId: "user-viewer",
+            workspaceRole: "viewer",
+          },
+        ),
+      ).toBe(false);
     });
   });
 

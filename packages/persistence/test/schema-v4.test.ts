@@ -136,6 +136,39 @@ describe("Architecture v4 clean D1 schema", () => {
           .get() as { secret_reference: string }
       ).secret_reference,
     ).toBe("credential-profile/host-a/codex/cred-a");
+
+    const grantColumns = db
+      .prepare("PRAGMA table_info(credential_grants)")
+      .all() as { name: string }[];
+    expect(grantColumns.map((column) => column.name)).toEqual(
+      expect.arrayContaining([
+        "use_permission",
+        "expires_at",
+        "usage_limit",
+        "revoked_at",
+      ]),
+    );
+  });
+
+  it("keeps usage attribution separate from credential secrets", () => {
+    const db = createDb();
+    const usageColumns = db.prepare("PRAGMA table_info(usage)").all() as {
+      name: string;
+    }[];
+    expect(usageColumns.map((column) => column.name)).toEqual(
+      expect.arrayContaining([
+        "credential_profile_id",
+        "requester_user_id",
+        "host_id",
+        "worker_id",
+        "model",
+        "input_tokens",
+        "output_tokens",
+        "cost_micros",
+        "duration_ms",
+      ]),
+    );
+    expect(usageColumns.map((column) => column.name)).not.toContain("secret");
   });
 
   it("reconstructs a v4 assignment from its immutable execution snapshot", () => {

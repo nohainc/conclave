@@ -233,7 +233,7 @@ export interface CredentialProfile {
 
 // ── CredentialGrant ───────────────────────────────────────────────────────
 
-export type CredentialGranteeType = "user" | "workspace";
+export type CredentialGranteeType = "user" | "workspace" | "role";
 
 /**
  * Explicit sharing of a CredentialProfile.
@@ -244,8 +244,76 @@ export interface CredentialGrant {
   readonly credentialProfileId: string;
   readonly granteeType: CredentialGranteeType;
   readonly granteeId: string;
+  /** The only supported permission is use; secret-read is never modeled. */
+  readonly usePermission: "use";
   readonly grantedBy: string;
   readonly createdAt: string;
+  readonly expiresAt?: string | null;
+  readonly usageLimit?: number | null;
+  readonly revokedAt?: string | null;
+}
+
+export type CredentialWorkspaceRole = "owner" | "admin" | "member" | "viewer";
+
+export interface CredentialUseContext {
+  readonly workspaceId: string;
+  readonly requesterUserId: string;
+  readonly workspaceRole?: CredentialWorkspaceRole;
+  readonly now?: string;
+  readonly usageCount?: number;
+}
+
+/**
+ * Resolves use permission without ever exposing a profile secret.
+ * Owners can use their own profile; all other access requires a live grant.
+ */
+export function canUseCredentialProfile(
+  profile: CredentialProfile,
+  grants: readonly CredentialGrant[],
+  context: CredentialUseContext,
+): boolean {
+  if (profile.workspaceId !== context.workspaceId) return false;
+  if (
+    profile.ownerType === "user" &&
+    profile.ownerId === context.requesterUserId
+  ) {
+    return true;
+  }
+  const role = context.workspaceRole;
+  if (
+    profile.ownerType === "workspace" &&
+    role !== undefined &&
+    role !== "viewer"
+  ) {
+    return true;
+  }
+  if (profile.visibility === "private") return false;
+  const now = Date.parse(context.now ?? new Date().toISOString());
+  return grants.some((grant) => {
+    if (
+      grant.credentialProfileId !== profile.id ||
+      grant.usePermission !== "use" ||
+      (grant.revokedAt !== null && grant.revokedAt !== undefined)
+    ) {
+      return false;
+    }
+    if (grant.expiresAt && Date.parse(grant.expiresAt) <= now) return false;
+    if (
+      grant.usageLimit !== null &&
+      grant.usageLimit !== undefined &&
+      (context.usageCount ?? 0) >= grant.usageLimit
+    ) {
+      return false;
+    }
+    return (
+      (grant.granteeType === "user" &&
+        grant.granteeId === context.requesterUserId) ||
+      (grant.granteeType === "workspace" &&
+        context.workspaceId === grant.granteeId &&
+        role !== "viewer") ||
+      (grant.granteeType === "role" && grant.granteeId === role)
+    );
+  });
 }
 
 // ── ResolvedExecutionTarget ───────────────────────────────────────────────
@@ -541,7 +609,22 @@ export function validateCredentialGrant(
   requireNonEmpty(grant.granteeId, "CredentialGrant granteeId");
   requireNonEmpty(grant.grantedBy, "CredentialGrant grantedBy");
 
-  if (!["user", "workspace"].includes(grant.granteeType)) {
+  if (grant.usePermission !== "use") {
+    throw new DomainInvariantError(
+      "CredentialGrant supports use permission only; secret-read is forbidden",
+    );
+  }
+  if (
+    grant.usageLimit !== null &&
+    grant.usageLimit !== undefined &&
+    grant.usageLimit < 0
+  ) {
+    throw new DomainInvariantError(
+      "CredentialGrant usageLimit cannot be negative",
+    );
+  }
+
+  if (!["user", "workspace", "role"].includes(grant.granteeType)) {
     throw new DomainInvariantError(
       `Invalid CredentialGrant granteeType '${String(grant.granteeType)}'`,
     );

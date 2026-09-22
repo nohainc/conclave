@@ -13,7 +13,7 @@ Track progress of the [v4 implementation roadmap](ARCHITECTURE_V4_IMPLEMENTATION
 | V4-6 | Merge Agent App + Agent Engine into Conclave Host | ✅ Complete |
 | V4-7 | Convert PluginManager into WorkerManager | ✅ Complete |
 | V4-8 | Implement Credential Profiles and local secure storage | ✅ Complete |
-| V4-9 | Credential sharing and usage attribution | ⬜ Not started |
+| V4-9 | Credential sharing and usage attribution | ✅ Complete |
 | V4-10 | Remove configured Worker instances | ⬜ Not started |
 | V4-11 | Rewrite assignment dispatcher around ResolvedExecutionTarget | ⬜ Not started |
 | V4-12 | Multi-agent → multi-worker orchestration | ⬜ Not started |

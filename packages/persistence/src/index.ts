@@ -190,6 +190,10 @@ export interface UsageRecord {
   readonly runId: string;
   readonly attemptId: string | null;
   readonly workerId: string | null;
+  readonly credentialProfileId?: string | null;
+  readonly requesterUserId?: string | null;
+  readonly hostId?: string | null;
+  readonly model?: string | null;
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly executionMs: number;

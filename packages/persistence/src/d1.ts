@@ -1399,10 +1399,12 @@ export class D1UsageRepository {
     if (!usage.workerId) throw new Error("D1 usage requires workerId");
     await this.db
       .prepare(
-        `INSERT INTO usage (id, workspace_id, project_id, run_id, worker_id, assignment_id, input_tokens, output_tokens, cost_micros, duration_ms, recorded_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+        `INSERT INTO usage (id, workspace_id, project_id, run_id, worker_id, assignment_id, credential_profile_id, requester_user_id, host_id, model, input_tokens, output_tokens, cost_micros, duration_ms, recorded_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
          ON CONFLICT(id) DO UPDATE SET input_tokens=excluded.input_tokens, output_tokens=excluded.output_tokens,
-           cost_micros=excluded.cost_micros, duration_ms=excluded.duration_ms, recorded_at=excluded.recorded_at`,
+           credential_profile_id=excluded.credential_profile_id, requester_user_id=excluded.requester_user_id,
+           host_id=excluded.host_id, model=excluded.model, cost_micros=excluded.cost_micros,
+           duration_ms=excluded.duration_ms, recorded_at=excluded.recorded_at`,
       )
       .bind(
         usage.id,
@@ -1411,6 +1413,10 @@ export class D1UsageRepository {
         usage.runId,
         usage.workerId,
         null,
+        usage.credentialProfileId ?? null,
+        usage.requesterUserId ?? null,
+        usage.hostId ?? null,
+        usage.model ?? null,
         usage.inputTokens,
         usage.outputTokens,
         usage.estimatedCostMicros,
@@ -1449,6 +1455,21 @@ function toUsage(row: Record<string, unknown>): UsageRecord {
     runId: String(row.run_id),
     attemptId: null,
     workerId: row.worker_id === null ? null : String(row.worker_id),
+    credentialProfileId:
+      row.credential_profile_id === null ||
+      row.credential_profile_id === undefined
+        ? null
+        : String(row.credential_profile_id),
+    requesterUserId:
+      row.requester_user_id === null || row.requester_user_id === undefined
+        ? null
+        : String(row.requester_user_id),
+    hostId:
+      row.host_id === null || row.host_id === undefined
+        ? null
+        : String(row.host_id),
+    model:
+      row.model === null || row.model === undefined ? null : String(row.model),
     inputTokens: Number(row.input_tokens),
     outputTokens: Number(row.output_tokens),
     executionMs: Number(row.duration_ms),

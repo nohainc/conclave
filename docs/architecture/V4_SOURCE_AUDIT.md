@@ -116,7 +116,7 @@ The current Dart process/tree/permission work is valuable and becomes Host runti
 
 Keep platform credential backends.
 
-Refactor storage keys/namespaces around Credential Profiles rather than Agent Worker secret lists. V4-8 now keys local secrets by Host, Worker, and Credential Profile, with metadata-only Cloud status reporting.
+Refactor storage keys/namespaces around Credential Profiles rather than Agent Worker secret lists. V4-8 now keys local secrets by Host, Worker, and Credential Profile, with metadata-only Cloud status reporting. V4-9 adds use-only grants with expiry and usage limits plus requester-attributed usage records.
 
 ## 4. Refactor heavily
 
