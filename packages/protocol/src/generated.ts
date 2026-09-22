@@ -13,3 +13,17 @@ export const REQUIRED_ENVELOPE_FIELDS = [
   "messageType",
   "payload",
 ] as const;
+export const PROTOCOL_MESSAGE_TYPES = [
+  "PlanRequest",
+  "PlanResult",
+  "TaskRequest",
+  "TaskResult",
+  "ResearchResult",
+  "ImplementationResult",
+  "ReviewResult",
+  "TestResult",
+  "VerificationResult",
+  "DecisionResult",
+  "CompletionResult",
+  "RuntimeOperationRequest",
+] as const;

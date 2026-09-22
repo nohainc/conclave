@@ -31,6 +31,15 @@ void main() {
         throwsA(isA<ProtocolException>()));
   });
 
+  test('rejects unknown canonical message types', () {
+    final invalid = Map<String, Object?>.from(message)
+      ..['messageType'] = 'UnknownMessage';
+    expect(
+      () => ProtocolEnvelope.parse(invalid),
+      throwsA(isA<ProtocolException>()),
+    );
+  });
+
   test('rejects incompatible major versions', () {
     expect(isCompatibleVersion('1.2.0', '1.3.0'), isTrue);
     expect(isCompatibleVersion('1.2.0', '2.0.0'), isFalse);

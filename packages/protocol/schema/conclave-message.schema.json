@@ -4,6 +4,20 @@
   "title": "Conclave Cloud to Worker message",
   "description": "Canonical cross-language envelope shared by Cloud, Agent Engine, and Worker Plugins.",
   "x-protocol-version": "0.1",
+  "x-message-types": [
+    "PlanRequest",
+    "PlanResult",
+    "TaskRequest",
+    "TaskResult",
+    "ResearchResult",
+    "ImplementationResult",
+    "ReviewResult",
+    "TestResult",
+    "VerificationResult",
+    "DecisionResult",
+    "CompletionResult",
+    "RuntimeOperationRequest"
+  ],
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -147,7 +161,23 @@
     "runId": { "type": "string", "minLength": 1 },
     "workerId": { "type": "string", "minLength": 1 },
     "createdAt": { "type": "string", "format": "date-time" },
-    "messageType": { "type": "string", "minLength": 1 },
+    "messageType": {
+      "type": "string",
+      "enum": [
+        "PlanRequest",
+        "PlanResult",
+        "TaskRequest",
+        "TaskResult",
+        "ResearchResult",
+        "ImplementationResult",
+        "ReviewResult",
+        "TestResult",
+        "VerificationResult",
+        "DecisionResult",
+        "CompletionResult",
+        "RuntimeOperationRequest"
+      ]
+    },
     "payload": { "type": "object", "additionalProperties": true }
   }
 }

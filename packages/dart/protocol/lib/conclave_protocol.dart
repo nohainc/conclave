@@ -70,6 +70,9 @@ class ProtocolEnvelope {
     final runId = _requiredString(map, 'runId');
     final workerId = _requiredString(map, 'workerId');
     final messageType = _requiredString(map, 'messageType');
+    if (!protocolMessageTypes.contains(messageType)) {
+      throw ProtocolException('unsupported message type: $messageType');
+    }
     final createdAt = DateTime.tryParse(_requiredString(map, 'createdAt'));
     if (createdAt == null)
       throw const ProtocolException('createdAt is invalid');

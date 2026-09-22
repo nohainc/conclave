@@ -13,3 +13,17 @@ const requiredEnvelopeFields = <String>[
   'messageType',
   'payload',
 ];
+const protocolMessageTypes = <String>{
+  'PlanRequest',
+  'PlanResult',
+  'TaskRequest',
+  'TaskResult',
+  'ResearchResult',
+  'ImplementationResult',
+  'ReviewResult',
+  'TestResult',
+  'VerificationResult',
+  'DecisionResult',
+  'CompletionResult',
+  'RuntimeOperationRequest',
+};

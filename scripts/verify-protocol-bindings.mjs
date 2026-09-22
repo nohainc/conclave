@@ -15,11 +15,19 @@ if (schema.properties.protocol.const !== "conclave.protocol") {
   throw new Error("canonical protocol schema has an unexpected protocol name");
 }
 const requiredFields = schema.required;
+const messageTypes = schema["x-message-types"];
 if (
   !Array.isArray(requiredFields) ||
   requiredFields.some((field) => typeof field !== "string")
 ) {
   throw new Error("canonical protocol schema has invalid required fields");
+}
+if (
+  !Array.isArray(messageTypes) ||
+  messageTypes.length === 0 ||
+  messageTypes.some((messageType) => typeof messageType !== "string")
+) {
+  throw new Error("canonical protocol schema has invalid message types");
 }
 for (const field of requiredFields) {
   if (!schema.required.includes(field)) {
@@ -78,6 +86,14 @@ for (const field of [
 ]) {
   if (!dart.includes(`'${field}'`)) {
     throw new Error(`Dart binding is missing ${field}`);
+  }
+}
+for (const messageType of messageTypes) {
+  if (!generated.includes(JSON.stringify(messageType))) {
+    throw new Error(`generated TypeScript binding is missing ${messageType}`);
+  }
+  if (!generatedDart.includes(`'${messageType}'`)) {
+    throw new Error(`generated Dart binding is missing ${messageType}`);
   }
 }
 globalThis.console.log(
