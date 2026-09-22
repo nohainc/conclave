@@ -167,6 +167,18 @@ export const AgentSyncResponsePayloadSchema = z
     desiredPlugins: z.array(DesiredPluginSchema),
     desiredWorkers: z.array(DesiredWorkerSchema),
     activeAssignmentIds: z.array(nonEmptyStr),
+    assignmentStates: z
+      .array(
+        z
+          .object({
+            assignmentId: nonEmptyStr,
+            attemptId: nonEmptyStr,
+            idempotencyKey: nonEmptyStr,
+            status: nonEmptyStr,
+          })
+          .strict(),
+      )
+      .optional(),
   })
   .strict();
 export type AgentSyncResponsePayload = z.infer<
@@ -382,6 +394,16 @@ export type AssignmentFailurePayload = z.infer<
   typeof AssignmentFailurePayloadSchema
 >;
 
+export const AssignmentCancelledPayloadSchema = z
+  .object({
+    status: z.literal("cancelled"),
+    reason: nonEmptyStr,
+  })
+  .strict();
+export type AssignmentCancelledPayload = z.infer<
+  typeof AssignmentCancelledPayloadSchema
+>;
+
 export const AssignmentCancelPayloadSchema = z
   .object({
     reason: nonEmptyStr,
@@ -458,6 +480,7 @@ export const AgentProtocolMessageSchema = z.discriminatedUnion("type", [
   assignmentMessage("assignment.progress", AssignmentProgressPayloadSchema),
   assignmentMessage("assignment.result", AssignmentResultPayloadSchema),
   assignmentMessage("assignment.error", AssignmentFailurePayloadSchema),
+  assignmentMessage("assignment.cancelled", AssignmentCancelledPayloadSchema),
   assignmentMessage("assignment.cancel", AssignmentCancelPayloadSchema),
   assignmentMessage("assignment.cancel.ack", AssignmentCancelAckPayloadSchema),
 ]);

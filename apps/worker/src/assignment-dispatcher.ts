@@ -494,6 +494,44 @@ export async function recordAssignmentError(
   }
 }
 
+export async function recordAssignmentCancelled(
+  db: D1Database,
+  assignmentId: string,
+  cancellation: { status: "cancelled"; reason: string },
+): Promise<void> {
+  const now = new Date().toISOString();
+  const existing = await db
+    .prepare(
+      `SELECT status, task_id, attempt_id FROM worker_assignments WHERE id = ?1`,
+    )
+    .bind(assignmentId)
+    .first<{ status: string; task_id: string; attempt_id: string }>();
+  if (
+    !existing ||
+    ["completed", "failed", "cancelled"].includes(existing.status)
+  ) {
+    return;
+  }
+  await db
+    .prepare(
+      `UPDATE worker_assignments SET status = 'cancelled', error_json = ?1, updated_at = ?2 WHERE id = ?3`,
+    )
+    .bind(JSON.stringify(cancellation), now, assignmentId)
+    .run();
+  await db
+    .prepare(
+      `UPDATE attempts SET status = 'cancelled', finished_at = ?1 WHERE id = ?2`,
+    )
+    .bind(now, existing.attempt_id)
+    .run();
+  await db
+    .prepare(
+      `UPDATE tasks SET status = 'cancelled', updated_at = ?1 WHERE id = ?2`,
+    )
+    .bind(now, existing.task_id)
+    .run();
+}
+
 /**
  * Cancels a running task assignment across Cloud and Agent.
  */

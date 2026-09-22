@@ -13,10 +13,12 @@ import {
   type AssignmentCancelPayload,
   type AssignmentResultPayload,
   type AssignmentFailurePayload,
+  type AssignmentCancelledPayload,
 } from "@conclave/agent-protocol";
 import {
   recordAssignmentResult,
   recordAssignmentError,
+  recordAssignmentCancelled,
 } from "./assignment-dispatcher.js";
 import {
   extractAuthToken,
@@ -404,6 +406,12 @@ export class AgentGateway implements DurableObject {
         // Fetch desired workers from D1
         let desiredWorkers: DesiredWorker[] = [];
         let desiredPlugins: DesiredPlugin[] = [];
+        let assignmentStates: Array<{
+          assignmentId: string;
+          attemptId: string;
+          idempotencyKey: string;
+          status: string;
+        }> = [];
 
         try {
           const workerRows = await this.env.CONCLAVE_DB.prepare(
@@ -466,6 +474,26 @@ export class AgentGateway implements DurableObject {
             signature: String(row.signature),
             permissions: JSON.parse(String(row.permissions_json || "[]")),
           }));
+
+          const assignmentIds = payload.unreconciledAssignmentIds ?? [];
+          if (assignmentIds.length > 0) {
+            const placeholders = assignmentIds
+              .map((_, index) => `?${index + 3}`)
+              .join(",");
+            const assignmentRows = await this.env.CONCLAVE_DB.prepare(
+              `SELECT id, attempt_id, idempotency_key, status
+               FROM worker_assignments
+               WHERE agent_id = ?1 AND workspace_id = ?2 AND id IN (${placeholders})`,
+            )
+              .bind(payload.agentId, payload.workspaceId, ...assignmentIds)
+              .all<Record<string, unknown>>();
+            assignmentStates = (assignmentRows.results ?? []).map((row) => ({
+              assignmentId: String(row.id),
+              attemptId: String(row.attempt_id),
+              idempotencyKey: String(row.idempotency_key),
+              status: String(row.status),
+            }));
+          }
         } catch (err) {
           console.error("Failed to query desired fleet config from D1", err);
         }
@@ -481,6 +509,7 @@ export class AgentGateway implements DurableObject {
             desiredPlugins,
             desiredWorkers,
             activeAssignmentIds: [],
+            assignmentStates,
           },
         });
         break;
@@ -564,6 +593,19 @@ export class AgentGateway implements DurableObject {
           );
         } catch (err) {
           console.error("Failed to record assignment failure in D1", err);
+        }
+        break;
+      }
+
+      case "assignment.cancelled": {
+        try {
+          await recordAssignmentCancelled(
+            this.env.CONCLAVE_DB,
+            message.assignmentId,
+            message.payload as AssignmentCancelledPayload,
+          );
+        } catch (err) {
+          console.error("Failed to record assignment cancellation in D1", err);
         }
         break;
       }

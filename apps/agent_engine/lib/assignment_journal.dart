@@ -19,18 +19,39 @@ class AssignmentRecord {
     required this.assignmentId,
     required this.status,
     required this.updatedAt,
+    this.workspaceId,
+    this.agentId,
+    this.workerId,
+    this.runId,
+    this.taskId,
+    this.attemptId,
+    this.idempotencyKey,
     this.result,
   });
 
   final String assignmentId;
   final AssignmentStatus status;
   final DateTime updatedAt;
+  final String? workspaceId;
+  final String? agentId;
+  final String? workerId;
+  final String? runId;
+  final String? taskId;
+  final String? attemptId;
+  final String? idempotencyKey;
   final Map<String, Object?>? result;
 
   Map<String, Object?> toJson() => {
         'assignmentId': assignmentId,
         'status': status.name,
         'updatedAt': updatedAt.toUtc().toIso8601String(),
+        if (workspaceId != null) 'workspaceId': workspaceId,
+        if (agentId != null) 'agentId': agentId,
+        if (workerId != null) 'workerId': workerId,
+        if (runId != null) 'runId': runId,
+        if (taskId != null) 'taskId': taskId,
+        if (attemptId != null) 'attemptId': attemptId,
+        if (idempotencyKey != null) 'idempotencyKey': idempotencyKey,
         if (result != null) 'result': result,
       };
 
@@ -59,10 +80,26 @@ class AssignmentRecord {
       assignmentId: assignmentId,
       status: status,
       updatedAt: updatedAt,
+      workspaceId: _optionalString(json, 'workspaceId'),
+      agentId: _optionalString(json, 'agentId'),
+      workerId: _optionalString(json, 'workerId'),
+      runId: _optionalString(json, 'runId'),
+      taskId: _optionalString(json, 'taskId'),
+      attemptId: _optionalString(json, 'attemptId'),
+      idempotencyKey: _optionalString(json, 'idempotencyKey'),
       result: rawResult == null
           ? null
           : Map<String, Object?>.from(rawResult as Map),
     );
+  }
+
+  static String? _optionalString(Map<String, Object?> json, String key) {
+    final value = json[key];
+    if (value == null) return null;
+    if (value is! String || value.isEmpty) {
+      throw FormatException('$key must be a non-empty string');
+    }
+    return value;
   }
 }
 
@@ -133,6 +170,7 @@ class _JournalEntry {
 
 bool _canTransition(AssignmentStatus previous, AssignmentStatus next) {
   if (previous == next) return true;
+  if (next == AssignmentStatus.reconciled) return true;
   return switch (previous) {
     AssignmentStatus.received => {
         AssignmentStatus.accepted,
@@ -160,19 +198,14 @@ bool _canTransition(AssignmentStatus previous, AssignmentStatus next) {
         AssignmentStatus.failed,
         AssignmentStatus.interrupted,
       }.contains(next),
-    AssignmentStatus.interrupted => {
-        AssignmentStatus.resultPendingUpload,
-        AssignmentStatus.reconciled,
-      }.contains(next),
-    AssignmentStatus.resultPendingUpload => {
-        AssignmentStatus.completed,
-        AssignmentStatus.failed,
-        AssignmentStatus.reconciled,
-      }.contains(next),
+    AssignmentStatus.interrupted =>
+      {AssignmentStatus.resultPendingUpload}.contains(next),
+    AssignmentStatus.resultPendingUpload =>
+      {AssignmentStatus.completed, AssignmentStatus.failed}.contains(next),
     AssignmentStatus.completed ||
     AssignmentStatus.failed ||
     AssignmentStatus.cancelled =>
-      next == AssignmentStatus.reconciled,
+      false,
     AssignmentStatus.reconciled => false,
   };
 }

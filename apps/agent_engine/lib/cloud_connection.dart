@@ -270,6 +270,7 @@ class AgentCloudConnection {
       final payload = decoded['payload'];
       if (payload is Map<String, dynamic>) {
         syncResponse = Map<String, Object?>.from(payload);
+        unawaited(_reconcileSyncResponse(syncResponse!).catchError((_) {}));
         final handler = syncHandler;
         if (handler != null) {
           unawaited(handler(syncResponse!).catchError((_) {}));
@@ -388,7 +389,8 @@ class AgentCloudConnection {
       }
       return;
     }
-    await _recordAssignment(context.assignmentId, AssignmentStatus.received);
+    await _recordAssignment(context.assignmentId, AssignmentStatus.received,
+        context: context);
 
     if (assignmentHandler == null) {
       socket.send(jsonEncode(_assignmentEnvelope(
@@ -399,7 +401,8 @@ class AgentCloudConnection {
       return;
     }
 
-    await _recordAssignment(context.assignmentId, AssignmentStatus.running);
+    await _recordAssignment(context.assignmentId, AssignmentStatus.running,
+        context: context);
     _activeAssignments.add(context.assignmentId);
     socket.send(jsonEncode(_assignmentEnvelope(
       'assignment.ack',
@@ -426,6 +429,7 @@ class AgentCloudConnection {
       await _recordAssignment(
         context.assignmentId,
         AssignmentStatus.completed,
+        context: context,
         result: {'summary': result.summary, 'artifactIds': result.artifactIds},
       );
     } catch (error) {
@@ -444,6 +448,7 @@ class AgentCloudConnection {
       await _recordAssignment(
         context.assignmentId,
         AssignmentStatus.failed,
+        context: context,
         result: {'error': '$error'},
       );
     } finally {
@@ -533,6 +538,8 @@ class AgentCloudConnection {
   Future<void> _recordAssignment(
     String assignmentId,
     AssignmentStatus status, {
+    AgentAssignmentContext? context,
+    Map<String, Object?>? correlation,
     Map<String, Object?>? result,
   }) async {
     final journal = assignmentJournal;
@@ -541,9 +548,105 @@ class AgentCloudConnection {
       assignmentId: assignmentId,
       status: status,
       updatedAt: DateTime.now().toUtc(),
+      workspaceId:
+          context?.workspaceId ?? correlation?['workspaceId'] as String?,
+      agentId: context?.agentId ?? correlation?['agentId'] as String?,
+      workerId: context?.workerId ?? correlation?['workerId'] as String?,
+      runId: context?.runId ?? correlation?['runId'] as String?,
+      taskId: context?.taskId ?? correlation?['taskId'] as String?,
+      attemptId: context?.attemptId ?? correlation?['attemptId'] as String?,
+      idempotencyKey:
+          context?.idempotencyKey ?? correlation?['idempotencyKey'] as String?,
       result: result,
     ));
   }
+
+  Future<void> _reconcileSyncResponse(Map<String, Object?> payload) async {
+    final rawStates = payload['assignmentStates'];
+    final journal = assignmentJournal;
+    if (journal == null || rawStates is! List) return;
+    final states = <String, Map<String, Object?>>{};
+    for (final raw in rawStates.whereType<Map>()) {
+      final state = Map<String, Object?>.from(raw);
+      final assignmentId = state['assignmentId'];
+      if (assignmentId is String) states[assignmentId] = state;
+    }
+    final records = await journal.reconcile();
+    for (final record in records.values) {
+      final state = states[record.assignmentId];
+      if (state == null) continue;
+      final cloudStatus = state['status'];
+      if (cloudStatus is! String) continue;
+      if (const {'completed', 'failed', 'cancelled'}.contains(cloudStatus)) {
+        if (record.status != AssignmentStatus.reconciled) {
+          await _recordAssignment(
+              record.assignmentId, AssignmentStatus.reconciled,
+              correlation: _recordCorrelation(record), result: record.result);
+        }
+        continue;
+      }
+      if (!const {
+        AssignmentStatus.completed,
+        AssignmentStatus.failed,
+        AssignmentStatus.cancelled,
+      }.contains(record.status)) {
+        continue;
+      }
+      final correlation = _recordCorrelation(record);
+      if (correlation.values.any((value) => value is! String)) continue;
+      final socket = _socket;
+      if (socket == null || sessionId == null) continue;
+      if (record.status == AssignmentStatus.completed) {
+        socket.send(jsonEncode(_assignmentEnvelope(
+          'assignment.result',
+          correlation,
+          {
+            'status': 'completed',
+            'summary':
+                record.result?['summary'] ?? 'Recovered assignment result',
+            'output': null,
+            'artifactIds': record.result?['artifactIds'] ?? const [],
+          },
+        )));
+      } else if (record.status == AssignmentStatus.failed) {
+        socket.send(jsonEncode(_assignmentEnvelope(
+          'assignment.error',
+          correlation,
+          {
+            'status': 'failed',
+            'error': {
+              'code': 'agent_assignment_recovered_failure',
+              'message':
+                  record.result?['error'] ?? 'Recovered assignment failure',
+              'retryable': false,
+            },
+          },
+        )));
+      } else {
+        socket.send(jsonEncode(_assignmentEnvelope(
+          'assignment.cancelled',
+          correlation,
+          {
+            'status': 'cancelled',
+            'reason': 'Assignment was cancelled while the Agent was offline',
+          },
+        )));
+      }
+      await _recordAssignment(record.assignmentId, AssignmentStatus.reconciled,
+          correlation: correlation, result: record.result);
+    }
+  }
+
+  Map<String, Object?> _recordCorrelation(AssignmentRecord record) => {
+        'workspaceId': record.workspaceId,
+        'agentId': record.agentId,
+        'workerId': record.workerId,
+        'runId': record.runId,
+        'taskId': record.taskId,
+        'attemptId': record.attemptId,
+        'assignmentId': record.assignmentId,
+        'idempotencyKey': record.idempotencyKey,
+      };
 
   Map<String, Object?> _assignmentCorrelation(Map<String, dynamic> message) => {
         'workspaceId': message['workspaceId'],

@@ -285,6 +285,77 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('replays a terminal journal result when Cloud still has it active',
+      () async {
+    final socket = FakeSocket();
+    final directory = await Directory.systemTemp.createTemp('agent-replay-');
+    final journal =
+        AssignmentJournal(File('${directory.path}/assignments.jsonl'));
+    await journal.append(AssignmentRecord(
+      assignmentId: 'assignment-1',
+      status: AssignmentStatus.completed,
+      updatedAt: DateTime.now().toUtc(),
+      workspaceId: 'workspace-1',
+      agentId: 'agent-1',
+      workerId: 'worker-1',
+      runId: 'run-1',
+      taskId: 'task-1',
+      attemptId: 'attempt-1',
+      idempotencyKey: 'idem-1',
+      result: {'summary': 'recovered', 'artifactIds': <String>[]},
+    ));
+    final connection = AgentCloudConnection(
+      uri: Uri.parse('wss://cloud.test/agent'),
+      agentId: 'agent-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      assignmentJournal: journal,
+      heartbeat: const Duration(hours: 1),
+    );
+    await connection.connect();
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.agent-protocol',
+      'protocolVersion': '2.0',
+      'messageId': 'server-1',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'agent.hello.ack',
+      'payload': {'sessionId': 'session-1'},
+    }));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.agent-protocol',
+      'protocolVersion': '2.0',
+      'messageId': 'server-sync-1',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'agent.sync.response',
+      'payload': {
+        'desiredPlugins': [],
+        'desiredWorkers': [],
+        'activeAssignmentIds': ['assignment-1'],
+        'assignmentStates': [
+          {
+            'assignmentId': 'assignment-1',
+            'attemptId': 'attempt-1',
+            'idempotencyKey': 'idem-1',
+            'status': 'running',
+          },
+        ],
+      },
+    }));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+
+    final replay = socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .firstWhere((message) => message['type'] == 'assignment.result');
+    expect((replay['payload'] as Map<String, dynamic>)['summary'], 'recovered');
+    expect(
+      (await journal.reconcile())['assignment-1']!.status,
+      AssignmentStatus.reconciled,
+    );
+    await connection.close();
+    await directory.delete(recursive: true);
+  });
+
   test('rejects assignments addressed to another workspace', () async {
     final socket = FakeSocket();
     final connection = AgentCloudConnection(
