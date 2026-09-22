@@ -1,19 +1,17 @@
 import type {
-  WorkerExecutionRequest,
-  WorkerExecutionResult,
-  WorkerExecutor,
-} from "./worker-execution.js";
+  WorkerAssignmentRequest,
+  WorkerAssignmentResponse,
+  WorkerAssignmentRunner,
+} from "./assignment-execution.js";
 
 export interface WorkerFallbackAttempt {
   readonly workerId: string;
-  readonly connectionId: string;
-  readonly result: WorkerExecutionResult;
+  readonly result: WorkerAssignmentResponse;
 }
 
 export interface WorkerFallbackResult {
   readonly selectedWorkerId: string | null;
-  readonly selectedConnectionId: string | null;
-  readonly result: WorkerExecutionResult;
+  readonly result: WorkerAssignmentResponse;
   readonly attempts: readonly WorkerFallbackAttempt[];
 }
 
@@ -24,14 +22,14 @@ export class WorkerFallbackError extends Error {
   }
 }
 
-function canFallback(result: WorkerExecutionResult): boolean {
+function canFallback(result: WorkerAssignmentResponse): boolean {
   return result.status === "failed" && result.error?.retryable === true;
 }
 
-/** Runs an ordered Worker/Connection policy, falling back only on retryable failures. */
+/** Runs an ordered Worker assignment policy, falling back only on retryable failures. */
 export async function executeWithFallback(
-  request: WorkerExecutionRequest,
-  workers: readonly WorkerExecutor[],
+  request: WorkerAssignmentRequest,
+  workers: readonly WorkerAssignmentRunner[],
 ): Promise<WorkerFallbackResult> {
   if (workers.length === 0)
     throw new WorkerFallbackError("At least one fallback worker is required");
@@ -39,19 +37,16 @@ export async function executeWithFallback(
   for (const worker of workers) {
     const result = await worker.execute({
       ...request,
-      workerId: worker.resource.id,
-      connectionId: worker.connection.id,
-      requestId: `${request.requestId}:fallback:${worker.resource.id}`,
+      workerId: worker.worker.id,
+      requestId: `${request.requestId}:fallback:${worker.worker.id}`,
     });
     attempts.push({
-      workerId: worker.resource.id,
-      connectionId: worker.connection.id,
+      workerId: worker.worker.id,
       result,
     });
-    if (result.status === "succeeded") {
+    if (result.status === "completed") {
       return {
-        selectedWorkerId: worker.resource.id,
-        selectedConnectionId: worker.connection.id,
+        selectedWorkerId: worker.worker.id,
         result,
         attempts,
       };
@@ -63,7 +58,6 @@ export async function executeWithFallback(
     throw new WorkerFallbackError("Fallback policy produced no attempts");
   return {
     selectedWorkerId: null,
-    selectedConnectionId: null,
     result: last.result,
     attempts,
   };

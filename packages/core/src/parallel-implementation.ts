@@ -1,13 +1,13 @@
 import type {
-  WorkerExecutionRequest,
-  WorkerExecutionResult,
-  WorkerExecutor,
-} from "./worker-execution.js";
+  WorkerAssignmentRequest,
+  WorkerAssignmentResponse,
+  WorkerAssignmentRunner,
+} from "./assignment-execution.js";
 
 export interface ParallelImplementationInput {
-  readonly request: WorkerExecutionRequest;
+  readonly request: WorkerAssignmentRequest;
   readonly executions: readonly {
-    readonly worker: WorkerExecutor;
+    readonly worker: WorkerAssignmentRunner;
     /** A Local Runtime repository ID backed by a dedicated Git worktree. */
     readonly workspaceRepositoryId: string;
   }[];
@@ -16,7 +16,7 @@ export interface ParallelImplementationInput {
 export interface ParallelImplementationResult {
   readonly workerId: string;
   readonly workspaceRepositoryId: string;
-  readonly result: WorkerExecutionResult;
+  readonly result: WorkerAssignmentResponse;
 }
 
 export class ParallelImplementationError extends Error {
@@ -38,13 +38,13 @@ export async function executeParallelImplementations(
   const workspaces = new Set<string>();
   const independenceKeys = new Set<string>();
   for (const execution of input.executions) {
-    if (workers.has(execution.worker.resource.id))
+    if (workers.has(execution.worker.worker.id))
       throw new ParallelImplementationError("Worker cannot implement twice");
     if (workspaces.has(execution.workspaceRepositoryId))
       throw new ParallelImplementationError(
         "Each implementation worker requires a distinct workspace",
       );
-    if (independenceKeys.has(execution.worker.resource.independenceKey))
+    if (independenceKeys.has(execution.worker.worker.independenceKey))
       throw new ParallelImplementationError(
         "Parallel implementations require independent workers",
       );
@@ -53,19 +53,18 @@ export async function executeParallelImplementations(
         "A workspace repository ID is required",
       );
     }
-    workers.add(execution.worker.resource.id);
+    workers.add(execution.worker.worker.id);
     workspaces.add(execution.workspaceRepositoryId);
-    independenceKeys.add(execution.worker.resource.independenceKey);
+    independenceKeys.add(execution.worker.worker.independenceKey);
   }
   return Promise.all(
     input.executions.map(async ({ worker, workspaceRepositoryId }) => ({
-      workerId: worker.resource.id,
+      workerId: worker.worker.id,
       workspaceRepositoryId,
       result: await worker.execute({
         ...input.request,
-        requestId: `${input.request.requestId}:implementation:${worker.resource.id}`,
-        workerId: worker.resource.id,
-        connectionId: worker.connection.id,
+        requestId: `${input.request.requestId}:implementation:${worker.worker.id}`,
+        workerId: worker.worker.id,
         repositoryId: workspaceRepositoryId,
       }),
     })),

@@ -1,10 +1,9 @@
 import type {
-  WorkerExecutionRequest,
-  WorkerExecutionResult,
-  WorkerExecutor,
-  WorkerRegistry,
-  WorkerRequirement,
-} from "./index.js";
+  WorkerAssignmentRequest,
+  WorkerAssignmentResponse,
+  WorkerAssignmentRunner,
+} from "./assignment-execution.js";
+import type { Worker } from "./entities.js";
 
 export type ReadOnlyRole = "researcher" | "architect" | "planner" | "reviewer";
 
@@ -15,14 +14,6 @@ const roleCapabilities: Record<ReadOnlyRole, string> = {
   reviewer: "code_review",
 };
 
-const forbiddenPermissions = new Set([
-  "repository_write",
-  "shell_execute",
-  "build_execute",
-  "git_write",
-  "runtime_write",
-]);
-
 export class ReadOnlyRoleError extends Error {
   constructor(message: string) {
     super(message);
@@ -30,52 +21,47 @@ export class ReadOnlyRoleError extends Error {
   }
 }
 
-export function readOnlyWorkerRequirement(
-  role: ReadOnlyRole,
-): WorkerRequirement {
-  return {
-    capability: roleCapabilities[role],
-    role,
-    permission: "repository_read",
-  };
-}
-
 export function resolveReadOnlyWorker(
-  registry: WorkerRegistry,
+  workers: readonly Worker[],
   role: ReadOnlyRole,
-): ReturnType<WorkerRegistry["resolve"]> {
-  return registry.resolve(readOnlyWorkerRequirement(role));
+): Worker | null {
+  return (
+    workers.find(
+      (worker) =>
+        worker.enabled &&
+        worker.availability === "available" &&
+        worker.roles.includes(role) &&
+        worker.capabilities.includes(roleCapabilities[role]),
+    ) ?? null
+  );
 }
 
 export interface ReadOnlyRoleExecution {
   readonly role: ReadOnlyRole;
   readonly workerId: string;
-  readonly result: WorkerExecutionResult;
+  readonly result: WorkerAssignmentResponse;
 }
 
 export interface ReadOnlyPanelInput {
-  readonly request: WorkerExecutionRequest;
-  readonly workers: Readonly<Partial<Record<ReadOnlyRole, WorkerExecutor>>>;
+  readonly request: WorkerAssignmentRequest;
+  readonly workers: Readonly<
+    Partial<Record<ReadOnlyRole, WorkerAssignmentRunner>>
+  >;
   readonly roles: readonly ReadOnlyRole[];
 }
 
-function validateWorker(role: ReadOnlyRole, worker: WorkerExecutor): void {
-  if (!worker.resource.roles.includes(role)) {
+function validateWorker(
+  role: ReadOnlyRole,
+  worker: WorkerAssignmentRunner,
+): void {
+  if (!worker.worker.roles.includes(role)) {
     throw new ReadOnlyRoleError(
-      `Worker ${worker.resource.id} is not registered for ${role}`,
+      `Worker ${worker.worker.id} is not registered for ${role}`,
     );
   }
-  if (!worker.resource.capabilities.includes(roleCapabilities[role])) {
+  if (!worker.worker.capabilities.includes(roleCapabilities[role])) {
     throw new ReadOnlyRoleError(
-      `Worker ${worker.resource.id} lacks ${roleCapabilities[role]}`,
-    );
-  }
-  const forbidden = worker.resource.permissions.filter((permission) =>
-    forbiddenPermissions.has(permission),
-  );
-  if (forbidden.length > 0) {
-    throw new ReadOnlyRoleError(
-      `Worker ${worker.resource.id} has write-capable permissions: ${forbidden.join(", ")}`,
+      `Worker ${worker.worker.id} lacks ${roleCapabilities[role]}`,
     );
   }
 }
@@ -90,24 +76,23 @@ export async function executeReadOnlyPanel(
     const worker = input.workers[role];
     if (!worker) throw new ReadOnlyRoleError(`No worker supplied for ${role}`);
     validateWorker(role, worker);
-    if (seenIndependence.has(worker.resource.independenceKey)) {
+    if (seenIndependence.has(worker.worker.independenceKey)) {
       throw new ReadOnlyRoleError(
-        `Read-only workers must be independent; ${worker.resource.id} shares an independence key`,
+        `Read-only workers must be independent; ${worker.worker.id} shares an independence key`,
       );
     }
-    seenIndependence.add(worker.resource.independenceKey);
+    seenIndependence.add(worker.worker.independenceKey);
     return { role, worker };
   });
 
   return Promise.all(
     selected.map(async ({ role, worker }) => ({
       role,
-      workerId: worker.resource.id,
+      workerId: worker.worker.id,
       result: await worker.execute({
         ...input.request,
         requestId: `${input.request.requestId}:readonly:${role}`,
-        workerId: worker.resource.id,
-        connectionId: worker.connection.id,
+        workerId: worker.worker.id,
       }),
     })),
   );

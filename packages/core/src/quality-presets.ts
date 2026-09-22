@@ -1,10 +1,11 @@
-import type {
-  ExecutionPolicyMode,
-  ConnectionResource,
-  WorkerBinding,
-  WorkerRegistry,
-  WorkerRequirement,
-} from "./index.js";
+import type { ExecutionPolicyMode } from "./index.js";
+import type { Worker } from "./entities.js";
+
+export interface WorkerRoutingRequirement {
+  readonly capability: string;
+  readonly role?: string;
+  readonly maxEstimatedCostMicrosPerAttempt?: number;
+}
 
 export type QualityPreset =
   "economy" | "balanced" | "high_assurance" | "exploration" | "custom";
@@ -119,66 +120,58 @@ export function resolveQuality(
 }
 
 function eligible(
-  binding: WorkerBinding,
-  requirement: WorkerRequirement,
+  worker: Worker,
+  requirement: WorkerRoutingRequirement,
   ceiling: number | null,
 ): boolean {
-  const { worker, connection } = binding;
-  const cost = connection.cost.estimatedCostMicrosPerAttempt;
+  const cost = worker.costMetadata?.estimatedCostMicrosPerAttempt ?? null;
   return (
+    worker.enabled &&
     worker.availability === "available" &&
-    connection.availability === "available" &&
     worker.capabilities.includes(requirement.capability) &&
     (requirement.role === undefined ||
       worker.roles.includes(requirement.role)) &&
-    (requirement.permission === undefined ||
-      worker.permissions.includes(requirement.permission)) &&
-    (requirement.executionEnvironment === undefined ||
-      connection.executionEnvironment === requirement.executionEnvironment) &&
     (ceiling === null || (cost !== null && cost <= ceiling)) &&
     (requirement.maxEstimatedCostMicrosPerAttempt === undefined ||
       (cost !== null && cost <= requirement.maxEstimatedCostMicrosPerAttempt))
   );
 }
 
-function bindingCost(binding: WorkerBinding): number {
+function workerCost(worker: Worker): number {
   return (
-    binding.connection.cost.estimatedCostMicrosPerAttempt ??
+    worker.costMetadata?.estimatedCostMicrosPerAttempt ??
     Number.MAX_SAFE_INTEGER
   );
 }
 
 export function routeWorkers(
-  registry: WorkerRegistry,
-  requirement: WorkerRequirement,
+  workers: readonly Worker[],
+  requirement: WorkerRoutingRequirement,
   selection: QualitySelection,
-): readonly WorkerBinding[] {
-  const candidates = registry
-    .list()
-    .filter((binding) =>
+): readonly Worker[] {
+  const candidates = workers
+    .filter((worker) =>
       eligible(
-        binding,
+        worker,
         requirement,
         selection.config.maxEstimatedCostMicrosPerAttempt,
       ),
     )
     .sort(
       (left, right) =>
-        bindingCost(left) - bindingCost(right) ||
-        left.worker.id.localeCompare(right.worker.id) ||
-        left.connection.id.localeCompare(right.connection.id),
+        workerCost(left) - workerCost(right) || left.id.localeCompare(right.id),
     );
-  const selected: WorkerBinding[] = [];
+  const selected: Worker[] = [];
   const independenceKeys = new Set<string>();
   for (const candidate of candidates) {
     if (
       selection.config.requireIndependentWorkers &&
-      independenceKeys.has(candidate.worker.independenceKey)
+      independenceKeys.has(candidate.independenceKey)
     ) {
       continue;
     }
     selected.push(candidate);
-    independenceKeys.add(candidate.worker.independenceKey);
+    independenceKeys.add(candidate.independenceKey);
     if (selected.length === selection.config.candidateCount) break;
   }
   if (selected.length < selection.config.candidateCount) {
@@ -190,17 +183,17 @@ export function routeWorkers(
 }
 
 export function estimatedSelectionCost(
-  bindings: readonly WorkerBinding[],
+  workers: readonly Worker[],
 ): number | null {
   let total = 0;
-  for (const binding of bindings) {
-    const cost = binding.connection.cost.estimatedCostMicrosPerAttempt;
+  for (const worker of workers) {
+    const cost = worker.costMetadata?.estimatedCostMicrosPerAttempt ?? null;
     if (cost === null) return null;
     total += cost;
   }
   return total;
 }
 
-export function connectionCost(connection: ConnectionResource): number | null {
-  return connection.cost.estimatedCostMicrosPerAttempt;
+export function workerCostEstimate(worker: Worker): number | null {
+  return worker.costMetadata?.estimatedCostMicrosPerAttempt ?? null;
 }

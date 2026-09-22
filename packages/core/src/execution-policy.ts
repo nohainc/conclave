@@ -1,8 +1,8 @@
 import type {
-  WorkerExecutionRequest,
-  WorkerExecutionResult,
-  WorkerExecutor,
-} from "./worker-execution.js";
+  WorkerAssignmentRequest,
+  WorkerAssignmentResponse,
+  WorkerAssignmentRunner,
+} from "./assignment-execution.js";
 import {
   DecisionResultSchema,
   PROTOCOL_NAME,
@@ -24,19 +24,19 @@ export interface ExecutionPolicy {
 
 export interface ExecutionPolicyInput {
   readonly policy: ExecutionPolicy;
-  readonly request: WorkerExecutionRequest;
-  readonly workers: readonly WorkerExecutor[];
+  readonly request: WorkerAssignmentRequest;
+  readonly workers: readonly WorkerAssignmentRunner[];
   /** Required by `synthesize`; must not be one of the candidate workers. */
-  readonly synthesizer?: WorkerExecutor;
+  readonly synthesizer?: WorkerAssignmentRunner;
   /** Required by `compare_and_select`; must not be one of the candidate workers. */
-  readonly selector?: WorkerExecutor;
+  readonly selector?: WorkerAssignmentRunner;
 }
 
 export interface ExecutionPolicyResult {
   readonly mode: ExecutionPolicyMode;
-  readonly candidateResults: readonly WorkerExecutionResult[];
+  readonly candidateResults: readonly WorkerAssignmentResponse[];
   /** The synthesis or comparison decision, when the policy has one. */
-  readonly decisionResult: WorkerExecutionResult | null;
+  readonly decisionResult: WorkerAssignmentResponse | null;
   /** Parsed Core decision emitted by the ordinary synthesis Task. */
   readonly decision: DecisionResult | null;
   /** The ordinary TaskRequest used to ask for synthesis/evaluation. */
@@ -51,12 +51,12 @@ export class ExecutionPolicyError extends Error {
 }
 
 function ensureDistinct(
-  workers: readonly WorkerExecutor[],
-  special: WorkerExecutor | undefined,
+  workers: readonly WorkerAssignmentRunner[],
+  special: WorkerAssignmentRunner | undefined,
   label: string,
 ): void {
   if (!special) throw new ExecutionPolicyError(`${label} worker is required`);
-  if (workers.some((worker) => worker.resource.id === special.resource.id)) {
+  if (workers.some((worker) => worker.worker.id === special.worker.id)) {
     throw new ExecutionPolicyError(
       `${label} worker must be independent from candidate workers`,
     );
@@ -93,11 +93,11 @@ function validate(input: ExecutionPolicyInput): void {
 }
 
 async function runCandidates(
-  workers: readonly WorkerExecutor[],
-  request: WorkerExecutionRequest,
+  workers: readonly WorkerAssignmentRunner[],
+  request: WorkerAssignmentRequest,
   maxParallel: number | undefined,
-): Promise<WorkerExecutionResult[]> {
-  const results: WorkerExecutionResult[] = [];
+): Promise<WorkerAssignmentResponse[]> {
+  const results: WorkerAssignmentResponse[] = [];
   const limit = maxParallel ?? workers.length;
   for (let offset = 0; offset < workers.length; offset += limit) {
     const batch = workers.slice(offset, offset + limit);
@@ -106,10 +106,9 @@ async function runCandidates(
         batch.map((worker) =>
           worker.execute({
             ...request,
-            requestId: `${request.requestId}:${worker.resource.id}`,
-            attemptId: `${request.attemptId}:candidate:${worker.resource.id}`,
-            workerId: worker.resource.id,
-            connectionId: worker.connection.id,
+            requestId: `${request.requestId}:${worker.worker.id}`,
+            attemptId: `${request.attemptId}:candidate:${worker.worker.id}`,
+            workerId: worker.worker.id,
           }),
         ),
       )),
@@ -119,11 +118,11 @@ async function runCandidates(
 }
 
 function decisionRequest(
-  request: WorkerExecutionRequest,
+  request: WorkerAssignmentRequest,
   mode: "synthesize" | "compare_and_select",
-  candidateResults: readonly WorkerExecutionResult[],
-  worker: WorkerExecutor,
-): { request: WorkerExecutionRequest; task: TaskRequest } {
+  candidateResults: readonly WorkerAssignmentResponse[],
+  worker: WorkerAssignmentRunner,
+): { request: WorkerAssignmentRequest; task: TaskRequest } {
   const taskId = `${request.taskId}:${mode}`;
   const task = TaskRequestSchema.parse({
     protocol: PROTOCOL_NAME,
@@ -131,7 +130,7 @@ function decisionRequest(
     messageId: `${request.requestId}:${mode}:task`,
     goalId: request.goalId,
     runId: request.runId,
-    workerId: worker.resource.id,
+    workerId: worker.worker.id,
     createdAt: new Date().toISOString(),
     messageType: "TaskRequest",
     payload: {
@@ -160,8 +159,7 @@ function decisionRequest(
       requestId: `${request.requestId}:${mode}`,
       attemptId: `${request.attemptId}:decision:${mode}`,
       taskId,
-      workerId: worker.resource.id,
-      connectionId: worker.connection.id,
+      workerId: worker.worker.id,
       message: task,
     },
     task,
@@ -197,7 +195,7 @@ export async function executeWithPolicy(
   const decisionResult = await decisionWorker!.execute(
     decisionRequestValue.request,
   );
-  if (decisionResult.status !== "succeeded" || decisionResult.output === null) {
+  if (decisionResult.status !== "completed" || decisionResult.output === null) {
     return {
       mode: input.policy.mode,
       candidateResults,
@@ -206,13 +204,11 @@ export async function executeWithPolicy(
       decisionTask: decisionRequestValue.task,
     };
   }
-  const decision = DecisionResultSchema.parse(
-    JSON.parse(decisionResult.output) as unknown,
-  );
+  const decision = DecisionResultSchema.parse(decisionResult.output);
   validateResponseContext(decision, {
     goalId: input.request.goalId,
     runId: input.request.runId,
-    workerId: decisionWorker!.resource.id,
+    workerId: decisionWorker!.worker.id,
     taskId: decisionRequestValue.task.payload.taskId,
     expectedMessageType: "DecisionResult",
   });

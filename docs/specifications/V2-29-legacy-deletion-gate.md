@@ -5,6 +5,10 @@
 
 ## Status
 
+The C2 Core cleanup has removed the legacy TypeScript execution contracts and
+the `v2-entities.ts` source name. Current TypeScript Core code uses native
+`Agent`, `WorkerPlugin`, `Worker`, `WorkerAssignment`, and `Attempt` entities.
+
 Deletion is intentionally blocked. V2-25 through V2-27 have policy and relay tests, but the repository has not yet passed the real external acceptance run with:
 
 - a real repository and bug request;

@@ -1,18 +1,16 @@
 import { parseModelResult, type ModelResult } from "@conclave/protocol";
 
-export * from "./worker-registry.js";
-export * from "./worker-execution.js";
+export * from "./assignment-execution.js";
 export * from "./execution-policy.js";
 export * from "./read-only-roles.js";
 export * from "./quality-presets.js";
 export * from "./parallel-implementation.js";
-export * from "./external-workers.js";
 export * from "./worker-fallback.js";
 export * from "./interactive-connector.js";
 export * from "./task-graph.js";
 export * from "./verification.js";
 export * from "./completion.js";
-export * from "./v2-entities.js";
+export * from "./entities.js";
 export * from "./multi-agent-ensemble.js";
 export * from "./chat-lifecycle.js";
 

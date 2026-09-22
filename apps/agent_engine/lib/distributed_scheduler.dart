@@ -37,7 +37,7 @@ class WorkerCandidateResult {
   bool get succeeded => error == null;
 }
 
-typedef WorkerExecutor = Future<Object?> Function(WorkerCandidate worker);
+typedef AssignmentRunner = Future<Object?> Function(WorkerCandidate worker);
 typedef CandidateSynthesizer = Future<Object?> Function(
     List<WorkerCandidateResult> candidates);
 typedef CandidateSelector = Future<WorkerCandidateResult> Function(
@@ -47,7 +47,7 @@ class DistributedScheduler {
   Future<List<WorkerCandidateResult>> execute({
     required Iterable<WorkerCandidate> workers,
     required Set<String> requiredCapabilities,
-    required WorkerExecutor executor,
+    required AssignmentRunner executor,
     SchedulingMode mode = SchedulingMode.parallel,
     int maxCandidates = 2,
     int maxCost = 100,
@@ -83,7 +83,8 @@ class DistributedScheduler {
     final selected = <WorkerCandidate>[];
     var totalCost = 0;
     for (final worker in eligible) {
-      if (selected.length >= (mode == SchedulingMode.single ? 1 : maxCandidates)) {
+      if (selected.length >=
+          (mode == SchedulingMode.single ? 1 : maxCandidates)) {
         break;
       }
       if (totalCost + worker.cost > maxTotalCost) continue;
@@ -123,7 +124,7 @@ class DistributedScheduler {
   }
 
   Future<WorkerCandidateResult> _run(
-      WorkerCandidate worker, WorkerExecutor executor) async {
+      WorkerCandidate worker, AssignmentRunner executor) async {
     try {
       return WorkerCandidateResult(
           worker: worker, output: await executor(worker));

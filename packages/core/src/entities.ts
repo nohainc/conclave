@@ -1,14 +1,20 @@
 /**
- * Conclave AX Architecture v2 Core Domain Entities.
+ * Conclave AX current Core domain entities.
  *
  * Core execution invariant:
  * Cloud orchestrates. Agents execute. Plugins integrate. Workers do the actual work. Studio controls and observes.
  */
 
-import type {
-  WorkerAvailability,
-  WorkerCostMetadata,
-} from "./worker-registry.js";
+export type WorkerAvailability =
+  "available" | "busy" | "disabled" | "offline" | "draining";
+
+export interface WorkerCostMetadata {
+  readonly currency?: string;
+  readonly estimatedCostMicrosPerAttempt: number | null;
+  readonly inputMicrosPerMillionTokens?: number | null;
+  readonly outputMicrosPerMillionTokens?: number | null;
+  readonly [key: string]: unknown;
+}
 
 export interface Workspace {
   readonly id: string;

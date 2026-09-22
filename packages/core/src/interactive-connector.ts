@@ -1,4 +1,4 @@
-import type { WorkerExecutionContextItem } from "./worker-execution.js";
+import type { AssignmentContextItem } from "./assignment-execution.js";
 
 export interface ConnectorTask {
   readonly taskId: string;
@@ -7,7 +7,7 @@ export interface ConnectorTask {
   readonly organizationId: string;
   readonly projectId: string;
   readonly objective: string;
-  readonly context: readonly WorkerExecutionContextItem[];
+  readonly context: readonly AssignmentContextItem[];
   readonly messages: readonly unknown[];
 }
 
@@ -223,7 +223,7 @@ export class InteractiveConnector {
     sessionId: string,
     sessionToken: string,
     taskId: string,
-  ): readonly WorkerExecutionContextItem[] {
+  ): readonly AssignmentContextItem[] {
     const session = this.authenticate(sessionId, sessionToken);
     return this.authorizedTask(session, taskId).context;
   }
