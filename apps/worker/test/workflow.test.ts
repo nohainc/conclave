@@ -81,6 +81,51 @@ describe("durable Forge lifecycle", () => {
     expect(result.resultArtifactId).toBe("artifact-1");
   });
 
+  it("reconciles a persisted Forge completion when the callback is lost", async () => {
+    let waited = false;
+    const service = {
+      fetch: async (input: RequestInfo | URL) => {
+        if (String(input).includes("/execute")) {
+          return Response.json(
+            { executionId: "forge-execution-1" },
+            {
+              status: 202,
+            },
+          );
+        }
+        return Response.json({
+          executionId: "forge-execution-1",
+          runId: "run-1",
+          status: "completed",
+          resultArtifactId: "artifact-reconciled",
+        });
+      },
+    };
+    const instance = new ConclaveRunWorkflow(
+      {} as never,
+      { CONCLAVE_FORGE_EXECUTION: service } as unknown as Env,
+    );
+    const step = {
+      do: async <T>(
+        _name: string,
+        _config: unknown,
+        callback: () => Promise<T>,
+      ) => callback(),
+      waitForEvent: async <T>() => {
+        if (!waited) {
+          waited = true;
+          throw new Error("event wait timed out");
+        }
+        return { payload: undefined as T };
+      },
+      sleep: async () => undefined,
+    } as unknown as import("cloudflare:workers").WorkflowStep;
+
+    const result = await instance.run({ payload: params } as never, step);
+    expect(result.stage).toBe("completed");
+    expect(result.resultArtifactId).toBe("artifact-reconciled");
+  });
+
   it("surfaces Forge failure without entering verification or completion", async () => {
     const { instance, step } = workflow([
       {

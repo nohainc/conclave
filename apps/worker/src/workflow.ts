@@ -95,6 +95,15 @@ interface ForgeTerminalEvent {
   readonly error?: string;
 }
 
+interface ForgeExecutionStatus {
+  readonly executionId: string;
+  readonly runId: string;
+  readonly status:
+    "started" | "completed" | "failed" | "cancelled" | "needs_input";
+  readonly resultArtifactId?: string;
+  readonly error?: string;
+}
+
 const stepConfig = {
   retries: {
     limit: 3,
@@ -129,6 +138,23 @@ function isForgeTerminalEvent(value: unknown): value is ForgeTerminalEvent {
     typeof record.runId === "string" &&
     typeof record.executionId === "string" &&
     (record.status === "completed" ||
+      record.status === "failed" ||
+      record.status === "cancelled" ||
+      record.status === "needs_input") &&
+    (record.resultArtifactId === undefined ||
+      typeof record.resultArtifactId === "string") &&
+    (record.error === undefined || typeof record.error === "string")
+  );
+}
+
+function isForgeExecutionStatus(value: unknown): value is ForgeExecutionStatus {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.executionId === "string" &&
+    typeof record.runId === "string" &&
+    (record.status === "started" ||
+      record.status === "completed" ||
       record.status === "failed" ||
       record.status === "cancelled" ||
       record.status === "needs_input") &&
@@ -306,11 +332,61 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
       };
     });
     let forgeTerminal: ForgeTerminalEvent;
+    let reconciliationAttempt = 0;
     while (true) {
-      const terminalEvent = await step.waitForEvent<ForgeTerminalEvent>(
-        "wait for Forge terminal result",
-        { type: "forge-terminal", timeout: "365 days" },
-      );
+      let terminalEvent: { payload: ForgeTerminalEvent };
+      try {
+        terminalEvent = await step.waitForEvent<ForgeTerminalEvent>(
+          "wait for Forge terminal result",
+          { type: "forge-terminal", timeout: "5 minutes" },
+        );
+      } catch {
+        const status = await step.do(
+          `forge:reconcile:${reconciliationAttempt}`,
+          stepConfig,
+          async () => {
+            const service = (this.env as ExecutionEnv).CONCLAVE_FORGE_EXECUTION;
+            if (!service) {
+              throw new Error("Forge execution service is not configured");
+            }
+            const response = await service.fetch(
+              `https://conclave.internal/status/${execution.executionId}`,
+            );
+            if (!response.ok) {
+              throw new Error(
+                `Forge status reconciliation failed with status ${response.status}`,
+              );
+            }
+            const body: unknown = await response.json();
+            if (!isForgeExecutionStatus(body)) {
+              throw new Error(
+                "Forge status reconciliation returned invalid data",
+              );
+            }
+            return body;
+          },
+        );
+        reconciliationAttempt += 1;
+        if (status.status === "started") {
+          await step.sleep(
+            `forge:reconcile:wait:${reconciliationAttempt}`,
+            "30 seconds",
+          );
+          continue;
+        }
+        terminalEvent = {
+          payload: {
+            eventId: `reconciled-${execution.executionId}-${reconciliationAttempt}`,
+            runId: status.runId,
+            executionId: status.executionId,
+            status: status.status,
+            ...(status.resultArtifactId
+              ? { resultArtifactId: status.resultArtifactId }
+              : {}),
+            ...(status.error ? { error: status.error } : {}),
+          },
+        };
+      }
       if (!isForgeTerminalEvent(terminalEvent.payload)) {
         throw new Error("Invalid Forge terminal event payload");
       }
