@@ -24,6 +24,7 @@ import type {
   MembershipRecord,
   ProjectMembershipRecord,
   AuditLogRecord,
+  BudgetRecord,
 } from "./index.js";
 
 export interface D1Result<T> {
@@ -259,6 +260,70 @@ export class D1AuditLogRepository {
       };
     });
   }
+}
+
+export class D1BudgetRepository {
+  constructor(private readonly db: D1DatabaseLike) {}
+
+  async get(id: string): Promise<BudgetRecord | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM budgets WHERE id = ?1")
+      .bind(id)
+      .first();
+    return row ? toBudget(row) : null;
+  }
+
+  async save(budget: BudgetRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO budgets (id, workspace_id, project_id, run_id, max_cost_micros,
+           max_input_tokens, max_output_tokens, used_input_tokens, used_output_tokens,
+           used_cost_micros, status, max_attempts, max_wall_time_seconds, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, NULL, NULL, ?12, ?13)
+         ON CONFLICT(id) DO UPDATE SET project_id=excluded.project_id, run_id=excluded.run_id,
+           max_cost_micros=excluded.max_cost_micros, max_input_tokens=excluded.max_input_tokens,
+           max_output_tokens=excluded.max_output_tokens, used_input_tokens=excluded.used_input_tokens,
+           used_output_tokens=excluded.used_output_tokens, used_cost_micros=excluded.used_cost_micros,
+           status=excluded.status, updated_at=excluded.updated_at`,
+      )
+      .bind(
+        budget.id,
+        budget.organizationId,
+        budget.projectId,
+        budget.runId,
+        budget.maxCostMicros,
+        budget.maxInputTokens,
+        budget.maxOutputTokens,
+        budget.usedInputTokens,
+        budget.usedOutputTokens,
+        budget.usedCostMicros,
+        budget.status,
+        budget.createdAt,
+        budget.updatedAt,
+      )
+      .run();
+  }
+}
+
+function toBudget(row: Record<string, unknown>): BudgetRecord {
+  return {
+    id: String(row.id),
+    organizationId: String(row.workspace_id),
+    projectId: row.project_id === null ? null : String(row.project_id),
+    runId: row.run_id === null ? null : String(row.run_id),
+    maxInputTokens:
+      row.max_input_tokens === null ? null : Number(row.max_input_tokens),
+    maxOutputTokens:
+      row.max_output_tokens === null ? null : Number(row.max_output_tokens),
+    maxCostMicros:
+      row.max_cost_micros === null ? null : Number(row.max_cost_micros),
+    usedInputTokens: Number(row.used_input_tokens ?? 0),
+    usedOutputTokens: Number(row.used_output_tokens ?? 0),
+    usedCostMicros: Number(row.used_cost_micros ?? 0),
+    status: String(row.status) as BudgetRecord["status"],
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
 }
 
 export class D1ProjectRepository {

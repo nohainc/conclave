@@ -1,6 +1,5 @@
 import type {
   ArtifactRecord,
-  BudgetRecord,
   ConnectionRecord,
   RunAggregateRows,
   PersistenceRepositories,
@@ -30,6 +29,7 @@ import {
   D1MembershipRepository,
   D1ProjectMembershipRepository,
   D1AuditLogRepository,
+  D1BudgetRepository,
   type D1DatabaseLike,
 } from "./d1.js";
 
@@ -107,11 +107,6 @@ export class D1ConnectionRepository extends RecordRepository<ConnectionRecord> {
     super(store, "connections");
   }
 }
-export class D1BudgetRepository extends RecordRepository<BudgetRecord> {
-  constructor(store: D1RecordStore) {
-    super(store, "budgets");
-  }
-}
 
 export class D1PersistenceRepositories implements PersistenceRepositories {
   readonly store: D1RecordStore;
@@ -162,7 +157,7 @@ export class D1PersistenceRepositories implements PersistenceRepositories {
     this.memberships = new D1MembershipRepository(db);
     this.projectMemberships = new D1ProjectMembershipRepository(db);
     this.auditLog = new D1AuditLogRepository(db);
-    this.budgets = new D1BudgetRepository(this.store);
+    this.budgets = new D1BudgetRepository(db);
     this.credentials = new D1CredentialRepository(db);
     this.retentionPolicies = new D1RetentionPolicyRepository(db);
     this.extensions = new D1ExtensionRepository(db);
