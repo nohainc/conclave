@@ -118,6 +118,37 @@ void main() {
     await connection.close();
   });
 
+  test('ignores an incompatible protocol major version', () async {
+    final socket = FakeSocket();
+    final connection = AgentCloudConnection(
+      uri: Uri.parse('wss://cloud.test/agent'),
+      agentId: 'agent-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      heartbeat: const Duration(hours: 1),
+    );
+
+    await connection.connect();
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.agent-protocol',
+      'protocolVersion': '3.0',
+      'messageId': 'server-incompatible',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'agent.hello.ack',
+      'payload': {'sessionId': 'should-not-be-accepted'},
+    }));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    expect(connection.sessionId, isNull);
+    expect(
+      socket.sent.where((message) =>
+          (jsonDecode(message as String) as Map<String, dynamic>)['type'] ==
+          'agent.sync.request'),
+      isEmpty,
+    );
+    await connection.close();
+  });
+
   test('reports correlated plugin and Worker readiness', () async {
     final socket = FakeSocket();
     final connection = AgentCloudConnection(
