@@ -549,7 +549,13 @@ export class D1FindingRepository {
             : "info",
         finding.scope,
         finding.description,
-        finding.status,
+        finding.status === "fixed" || finding.status === "verified"
+          ? "resolved"
+          : finding.status === "dismissed"
+            ? "ignored"
+            : finding.status === "reopened"
+              ? "open"
+              : finding.status,
         finding.createdAt,
         finding.updatedAt,
       )
@@ -583,7 +589,12 @@ function toFinding(row: Record<string, unknown>): FindingRecord {
     scope: String(row.category),
     description: String(row.description),
     evidenceArtifactIds: [],
-    status: String(row.status),
+    status:
+      row.status === "resolved"
+        ? "verified"
+        : row.status === "ignored"
+          ? "dismissed"
+          : String(row.status),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
