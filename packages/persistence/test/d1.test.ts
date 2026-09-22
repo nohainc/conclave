@@ -8,6 +8,10 @@ import {
   D1CredentialRepository,
   D1RetentionPolicyRepository,
   D1HumanApprovalRepository,
+  D1OrganizationRepository,
+  D1MembershipRepository,
+  D1ProjectMembershipRepository,
+  D1AuditLogRepository,
   D1EventRepository,
   D1ModelCallRepository,
   D1TaskDependencyRepository,
@@ -257,6 +261,80 @@ describe("Cloudflare persistence adapters", () => {
       organizationId: "workspace-1",
       runId: "run-1",
       decision: "pending",
+    });
+  });
+
+  it("reads collaboration and audit records from tenant tables", async () => {
+    const organization = await new D1OrganizationRepository(
+      new FakeDb([
+        {
+          id: "workspace-1",
+          name: "Workspace",
+          status: "active",
+          created_at: "now",
+          updated_at: "now",
+        },
+      ]),
+    ).get("workspace-1");
+    expect(organization).toMatchObject({
+      id: "workspace-1",
+      name: "Workspace",
+      plan: "workspace",
+    });
+
+    const membership = await new D1MembershipRepository(
+      new FakeDb([
+        {
+          workspace_id: "workspace-1",
+          user_id: "user-1",
+          role: "member",
+          created_at: "now",
+          updated_at: "now",
+        },
+      ]),
+    ).get("workspace-1", "user-1");
+    expect(membership).toMatchObject({
+      organizationId: "workspace-1",
+      userId: "user-1",
+      role: "member",
+    });
+
+    const projectMemberships = await new D1ProjectMembershipRepository(
+      new FakeDb([
+        [
+          {
+            project_id: "project-1",
+            user_id: "user-1",
+            role: "collaborator",
+            created_at: "now",
+            updated_at: "now",
+          },
+        ],
+      ]),
+    ).listByProject("project-1");
+    expect(projectMemberships[0]?.role).toBe("collaborator");
+
+    const audit = await new D1AuditLogRepository(
+      new FakeDb([
+        [
+          {
+            id: "audit-1",
+            workspace_id: "workspace-1",
+            actor_type: "user",
+            actor_id: "user-1",
+            action: "run.pause",
+            target_type: "run",
+            target_id: "run-1",
+            details_json: '{"outcome":"success"}',
+            created_at: "now",
+          },
+        ],
+      ]),
+    ).listByOrganization("workspace-1");
+    expect(audit[0]).toMatchObject({
+      actorUserId: "user-1",
+      resourceType: "run",
+      action: "run.pause",
     });
   });
 

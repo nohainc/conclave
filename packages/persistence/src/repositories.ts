@@ -1,10 +1,6 @@
 import type {
   ArtifactRecord,
-  AuditLogRecord,
   BudgetRecord,
-  MembershipRecord,
-  OrganizationRecord,
-  ProjectMembershipRecord,
   ConnectionRecord,
   RunAggregateRows,
   PersistenceRepositories,
@@ -30,6 +26,10 @@ import {
   D1CredentialRepository,
   D1RetentionPolicyRepository,
   D1HumanApprovalRepository,
+  D1OrganizationRepository,
+  D1MembershipRepository,
+  D1ProjectMembershipRepository,
+  D1AuditLogRepository,
   type D1DatabaseLike,
 } from "./d1.js";
 
@@ -107,81 +107,6 @@ export class D1ConnectionRepository extends RecordRepository<ConnectionRecord> {
     super(store, "connections");
   }
 }
-export class D1OrganizationRepository extends RecordRepository<OrganizationRecord> {
-  constructor(store: D1RecordStore) {
-    super(store, "organizations");
-  }
-}
-export class D1MembershipRepository {
-  private readonly store: D1RecordStore;
-  constructor(store: D1RecordStore) {
-    this.store = store;
-  }
-  async get(
-    organizationId: string,
-    userId: string,
-  ): Promise<MembershipRecord | null> {
-    const rows = await this.store.list<
-      MembershipRecord & { readonly id: string }
-    >("organization_memberships");
-    return (
-      rows.find(
-        (row) => row.organizationId === organizationId && row.userId === userId,
-      ) ?? null
-    );
-  }
-  save(record: MembershipRecord): Promise<void> {
-    return this.store.save("organization_memberships", {
-      ...record,
-      id: `${record.organizationId}:${record.userId}`,
-    });
-  }
-}
-export class D1ProjectMembershipRepository {
-  private readonly store: D1RecordStore;
-  constructor(store: D1RecordStore) {
-    this.store = store;
-  }
-  async listByProject(
-    projectId: string,
-  ): Promise<readonly ProjectMembershipRecord[]> {
-    const rows = await this.store.list<
-      ProjectMembershipRecord & { readonly id: string }
-    >("project_memberships");
-    return rows
-      .filter((row) => row.projectId === projectId)
-      .map(
-        ({ projectId: rowProjectId, userId, role, createdAt, updatedAt }) => ({
-          projectId: rowProjectId,
-          userId,
-          role,
-          createdAt,
-          updatedAt,
-        }),
-      );
-  }
-  save(record: ProjectMembershipRecord): Promise<void> {
-    return this.store.save("project_memberships", {
-      ...record,
-      id: `${record.projectId}:${record.userId}`,
-    });
-  }
-}
-export class D1AuditLogRepository extends RecordRepository<AuditLogRecord> {
-  constructor(store: D1RecordStore) {
-    super(store, "audit_log");
-  }
-  append(record: AuditLogRecord): Promise<void> {
-    return this.save(record, record.organizationId);
-  }
-  async listByOrganization(
-    organizationId: string,
-  ): Promise<readonly AuditLogRecord[]> {
-    return (await this.list(organizationId)).filter(
-      (record) => record.organizationId === organizationId,
-    );
-  }
-}
 export class D1BudgetRepository extends RecordRepository<BudgetRecord> {
   constructor(store: D1RecordStore) {
     super(store, "budgets");
@@ -233,10 +158,10 @@ export class D1PersistenceRepositories implements PersistenceRepositories {
     this.artifacts = new D1ArtifactRepository(db);
     this.events = new D1EventRepository(db);
     this.usage = new D1UsageRepository(db);
-    this.organizations = new D1OrganizationRepository(this.store);
-    this.memberships = new D1MembershipRepository(this.store);
-    this.projectMemberships = new D1ProjectMembershipRepository(this.store);
-    this.auditLog = new D1AuditLogRepository(this.store);
+    this.organizations = new D1OrganizationRepository(db);
+    this.memberships = new D1MembershipRepository(db);
+    this.projectMemberships = new D1ProjectMembershipRepository(db);
+    this.auditLog = new D1AuditLogRepository(db);
     this.budgets = new D1BudgetRepository(this.store);
     this.credentials = new D1CredentialRepository(db);
     this.retentionPolicies = new D1RetentionPolicyRepository(db);

@@ -20,6 +20,10 @@ import type {
   EncryptedCredentialRecord,
   RetentionPolicyRecord,
   HumanApprovalRecord,
+  OrganizationRecord,
+  MembershipRecord,
+  ProjectMembershipRecord,
+  AuditLogRecord,
 } from "./index.js";
 
 export interface D1Result<T> {
@@ -64,6 +68,197 @@ function dates(
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
+}
+
+export class D1OrganizationRepository {
+  constructor(private readonly db: D1DatabaseLike) {}
+
+  async get(id: string): Promise<OrganizationRecord | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM workspaces WHERE id = ?1")
+      .bind(id)
+      .first();
+    return row ? toOrganization(row) : null;
+  }
+
+  async save(organization: OrganizationRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO workspaces (id, name, slug, status, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(id) DO UPDATE SET name=excluded.name, status=excluded.status,
+           updated_at=excluded.updated_at`,
+      )
+      .bind(
+        organization.id,
+        organization.name,
+        organization.id,
+        organization.status,
+        organization.createdAt,
+        organization.updatedAt,
+      )
+      .run();
+  }
+}
+
+function toOrganization(row: Record<string, unknown>): OrganizationRecord {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    status: String(row.status) === "suspended" ? "suspended" : "active",
+    plan: "workspace",
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+export class D1MembershipRepository {
+  constructor(private readonly db: D1DatabaseLike) {}
+
+  async get(
+    organizationId: string,
+    userId: string,
+  ): Promise<MembershipRecord | null> {
+    const row = await this.db
+      .prepare(
+        "SELECT * FROM workspace_memberships WHERE workspace_id = ?1 AND user_id = ?2",
+      )
+      .bind(organizationId, userId)
+      .first();
+    return row ? toMembership(row) : null;
+  }
+
+  async save(membership: MembershipRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO workspace_memberships (id, workspace_id, user_id, role, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(workspace_id, user_id) DO UPDATE SET role=excluded.role,
+           updated_at=excluded.updated_at`,
+      )
+      .bind(
+        `${membership.organizationId}:${membership.userId}`,
+        membership.organizationId,
+        membership.userId,
+        membership.role,
+        membership.createdAt,
+        membership.updatedAt,
+      )
+      .run();
+  }
+}
+
+function toMembership(row: Record<string, unknown>): MembershipRecord {
+  return {
+    organizationId: String(row.workspace_id),
+    userId: String(row.user_id),
+    role: String(row.role),
+    status: "active",
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+export class D1ProjectMembershipRepository {
+  constructor(private readonly db: D1DatabaseLike) {}
+
+  async listByProject(
+    projectId: string,
+  ): Promise<readonly ProjectMembershipRecord[]> {
+    const rows = await this.db
+      .prepare(
+        "SELECT * FROM project_memberships WHERE project_id = ?1 ORDER BY user_id",
+      )
+      .bind(projectId)
+      .all();
+    return (rows.results ?? []).map(toProjectMembership);
+  }
+
+  async save(membership: ProjectMembershipRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO project_memberships (id, project_id, user_id, role, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(project_id, user_id) DO UPDATE SET role=excluded.role,
+           updated_at=excluded.updated_at`,
+      )
+      .bind(
+        `${membership.projectId}:${membership.userId}`,
+        membership.projectId,
+        membership.userId,
+        membership.role,
+        membership.createdAt,
+        membership.updatedAt,
+      )
+      .run();
+  }
+}
+
+function toProjectMembership(
+  row: Record<string, unknown>,
+): ProjectMembershipRecord {
+  return {
+    projectId: String(row.project_id),
+    userId: String(row.user_id),
+    role: String(row.role),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+export class D1AuditLogRepository {
+  constructor(private readonly db: D1DatabaseLike) {}
+
+  async append(record: AuditLogRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO audit_log (id, workspace_id, actor_type, actor_id, action,
+           target_type, target_id, details_json, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+      )
+      .bind(
+        record.id,
+        record.organizationId,
+        record.actorUserId ? "user" : "system",
+        record.actorUserId ?? "system",
+        record.action,
+        record.resourceType,
+        record.resourceId ?? "",
+        json({ ...jsonObject(record.metadata), outcome: record.outcome }),
+        record.occurredAt,
+      )
+      .run();
+  }
+
+  async listByOrganization(
+    organizationId: string,
+  ): Promise<readonly AuditLogRecord[]> {
+    const rows = await this.db
+      .prepare(
+        "SELECT * FROM audit_log WHERE workspace_id = ?1 ORDER BY created_at",
+      )
+      .bind(organizationId)
+      .all();
+    return (rows.results ?? []).map((row) => {
+      const details = parse<Record<string, JsonValue>>(row.details_json, {});
+      const outcome = details.outcome;
+      const metadata = { ...details };
+      delete metadata.outcome;
+      return {
+        id: String(row.id),
+        organizationId: String(row.workspace_id),
+        actorUserId: row.actor_type === "user" ? String(row.actor_id) : null,
+        action: String(row.action),
+        resourceType: String(row.target_type),
+        resourceId: row.target_id === null ? null : String(row.target_id),
+        outcome:
+          outcome === "denied" || outcome === "failure" ? outcome : "success",
+        metadata,
+        occurredAt: String(row.created_at),
+        retentionUntil: String(row.created_at),
+      };
+    });
+  }
 }
 
 export class D1ProjectRepository {
