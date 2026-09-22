@@ -1,6 +1,15 @@
 packages:
-  - packages/*
-  - apps/*
+  # Keep pnpm limited to TypeScript packages. Dart and Flutter projects use
+  # their native package managers and are intentionally not workspace entries.
+  - packages/agent-protocol
+  - packages/core
+  - packages/orchestration
+  - packages/persistence
+  - packages/plugin-manifest
+  - packages/protocol
+  - packages/sdk
+  - packages/security
+  - apps/worker
 
 allowBuilds:
   esbuild: true
