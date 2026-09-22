@@ -41,6 +41,51 @@ const protocolMessagePayloadSchemas = <String, String>{
   'CompletionResult': '#/\$defs/completionResultPayload',
   'RuntimeOperationRequest': '#/\$defs/runtimeOperationPayload',
 };
+
+const hostProtocolName = 'conclave.host-protocol';
+const hostProtocolVersion = '4.0';
+const hostProtocolMaxMessageSizeBytes = 4194304;
+const hostProtocolMessageTypes = <String>{
+  'host.hello',
+  'host.hello.ack',
+  'host.heartbeat',
+  'host.heartbeat.ack',
+  'host.sync.request',
+  'host.sync.result',
+  'host.status',
+  'host.update',
+  'worker.install',
+  'worker.remove',
+  'worker.status',
+  'credential.status',
+  'assignment.start',
+  'assignment.ack',
+  'assignment.progress',
+  'assignment.result',
+  'assignment.error',
+  'assignment.cancel',
+  'assignment.cancel.ack',
+};
+const hostProtocolBaseEnvelopeFields = <String>[
+  'protocol',
+  'protocolVersion',
+  'messageId',
+  'correlationId',
+  'timestamp',
+  'type',
+  'payload',
+];
+const hostProtocolAssignmentEnvelopeFields = <String>[
+  'workspaceId',
+  'hostId',
+  'workerId',
+  'runId',
+  'taskId',
+  'attemptId',
+  'assignmentId',
+  'idempotencyKey',
+];
+
 const agentProtocolName = 'conclave.agent-protocol';
 const agentProtocolVersion = '2.0';
 const agentProtocolMaxMessageSizeBytes = 4194304;

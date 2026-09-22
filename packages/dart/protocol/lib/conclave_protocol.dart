@@ -13,6 +13,137 @@ class ProtocolException implements Exception {
   String toString() => 'ProtocolException: $message';
 }
 
+/// Validates the generated Cloud ↔ Host envelope before any message is
+/// dispatched.
+class HostProtocolMessage {
+  HostProtocolMessage._(this.value);
+
+  final Map<String, Object?> value;
+
+  String get type => value['type'] as String;
+  Map<String, Object?> get payload =>
+      Map<String, Object?>.from(value['payload'] as Map);
+
+  static HostProtocolMessage parse(Object? input) {
+    final map = switch (input) {
+      String text => _decode(text),
+      Map value => Map<String, Object?>.from(value),
+      _ => throw const ProtocolException('Host message must be an object'),
+    };
+    final encodedSize = utf8.encode(jsonEncode(map)).length;
+    if (encodedSize > hostProtocolMaxMessageSizeBytes) {
+      throw const ProtocolException('Host message exceeds the size limit');
+    }
+    _requiredString(map, 'protocol');
+    if (map['protocol'] != hostProtocolName) {
+      throw const ProtocolException('unsupported Host protocol name');
+    }
+    final version = _requiredString(map, 'protocolVersion');
+    if (!isCompatibleVersion(hostProtocolVersion, version)) {
+      throw const ProtocolException('unsupported Host protocol version');
+    }
+    _requiredString(map, 'messageId');
+    final timestamp = DateTime.tryParse(
+      _requiredString(map, 'timestamp'),
+    );
+    if (timestamp == null) {
+      throw const ProtocolException('timestamp is invalid');
+    }
+    final type = _requiredString(map, 'type');
+    if (!hostProtocolMessageTypes.contains(type)) {
+      throw ProtocolException('unsupported Host message type: $type');
+    }
+    if (map['payload'] is! Map) {
+      throw const ProtocolException('Host payload must be an object');
+    }
+    if (type.startsWith('assignment.')) {
+      for (final field in hostProtocolAssignmentEnvelopeFields) {
+        _requiredString(map, field);
+      }
+      if (type == 'assignment.start') {
+        AssignmentSnapshot.validate(
+          Map<String, Object?>.from(map['payload'] as Map)['snapshot'],
+        );
+      }
+    }
+    return HostProtocolMessage._(map);
+  }
+
+  static Map<String, Object?> _decode(String text) {
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is! Map) {
+        throw const ProtocolException('Host message must be an object');
+      }
+      return Map<String, Object?>.from(decoded);
+    } on FormatException {
+      throw const ProtocolException('Host message is not valid JSON');
+    }
+  }
+
+  static String _requiredString(Map<String, Object?> map, String key) {
+    final value = map[key];
+    if (value is! String || value.trim().isEmpty) {
+      throw ProtocolException('Host $key is required');
+    }
+    return value;
+  }
+}
+
+/// Validates the immutable execution snapshot carried by assignment.start and
+/// Worker execute requests. Credential material is deliberately not accepted.
+class AssignmentSnapshot {
+  const AssignmentSnapshot._();
+
+  static void validate(Object? input) {
+    if (input is! Map) {
+      throw const ProtocolException('assignment snapshot must be an object');
+    }
+    final map = Map<String, Object?>.from(input);
+    const required = [
+      'assignmentId',
+      'workspaceId',
+      'projectId',
+      'runId',
+      'taskId',
+      'attemptId',
+      'requestedByUserId',
+      'hostId',
+      'workerId',
+      'resolvedWorkerVersion',
+      'credentialProfileId',
+      'config',
+      'sessionPolicy',
+      'permissions',
+      'contextRefs',
+      'timeoutMs',
+      'idempotencyKey',
+    ];
+    for (final key in required.where(
+      (key) =>
+          !{'config', 'permissions', 'contextRefs', 'timeoutMs'}.contains(key),
+    )) {
+      _requiredString(map, key);
+    }
+    if (map['config'] is! Map ||
+        map['contextRefs'] is! List ||
+        map['permissions'] is! List) {
+      throw const ProtocolException(
+          'assignment snapshot collections are invalid');
+    }
+    if (map['timeoutMs'] is! int || (map['timeoutMs'] as int) < 1000) {
+      throw const ProtocolException('assignment snapshot timeoutMs is invalid');
+    }
+    if (map.containsKey('credentials') ||
+        map.containsKey('rawApiKey') ||
+        map.containsKey('secretToken') ||
+        map.containsKey('secrets')) {
+      throw const ProtocolException(
+          'raw credentials are not allowed in assignment snapshots');
+    }
+  }
+}
+
 /// Validates the generated Cloud ↔ Agent envelope before any message is
 /// dispatched. Payload-specific handlers perform their own stricter checks.
 class AgentProtocolMessage {

@@ -1,5 +1,25 @@
 // GENERATED FILE. Do not edit by hand.
 
+const workerProtocolName = 'conclave.worker-protocol';
+const workerProtocolVersion = '4.0';
+const workerProtocolJsonRpcVersion = '2.0';
+const workerProtocolMethods = <String>{
+  'initialize',
+  'health',
+  'describe',
+  'execute',
+  'cancel',
+  'shutdown',
+};
+const workerProtocolNotifications = <String>{
+  'progress',
+  'usage',
+  'artifact',
+  'result',
+  'error',
+  'log',
+};
+
 const agentAppIpcProtocolName = 'conclave.agent-app-ipc';
 const agentAppIpcProtocolVersion = '1.0';
 const agentAppIpcMaxFrameBytes = 1048576;

@@ -103,47 +103,102 @@ if (!typescript.includes('from "./generated.js"')) {
     "TypeScript protocol binding does not import generated constants",
   );
 }
-const agentProtocol = schema["x-agent-protocol"];
+const hostProtocol = schema["x-host-protocol"];
 if (
   !agentGenerated.includes(
-    `AGENT_PROTOCOL_NAME = ${JSON.stringify(agentProtocol.name)}`,
+    `HOST_PROTOCOL_NAME = ${JSON.stringify(hostProtocol.name)}`,
   ) ||
   !agentGenerated.includes(
-    `AGENT_PROTOCOL_VERSION = ${JSON.stringify(agentProtocol.version)}`,
+    `HOST_PROTOCOL_VERSION = ${JSON.stringify(hostProtocol.version)}`,
+  ) ||
+  !generatedDart.includes(`hostProtocolName = '${hostProtocol.name}'`) ||
+  !generatedDart.includes(`hostProtocolVersion = '${hostProtocol.version}'`)
+) {
+  throw new Error("generated Host protocol binding is out of date");
+}
+if (
+  typeof hostProtocol.payloadSchemas !== "object" ||
+  hostProtocol.messageTypes.some(
+    (messageType) =>
+      typeof hostProtocol.payloadSchemas[messageType] !== "string" ||
+      !Object.hasOwn(
+        schema.$defs ?? {},
+        hostProtocol.payloadSchemas[messageType].replace("#/$defs/", ""),
+      ),
   )
 ) {
-  throw new Error("generated Agent protocol binding is out of date");
+  throw new Error(
+    "Host protocol messages must map to canonical schema definitions",
+  );
 }
-for (const messageType of agentProtocol.messageTypes) {
-  if (!agentGenerated.includes(JSON.stringify(messageType))) {
+for (const messageType of hostProtocol.messageTypes) {
+  if (
+    !agentGenerated.includes(JSON.stringify(messageType)) ||
+    !generatedDart.includes(`'${messageType}'`)
+  ) {
     throw new Error(
-      `generated Agent protocol binding is missing ${messageType}`,
+      `generated Host protocol binding is missing ${messageType}`,
     );
   }
 }
-const localProtocols = schema["x-local-protocols"];
+
+const workerProtocol = schema["x-worker-protocol"];
 if (
-  !localGenerated.includes("AGENT_APP_IPC_PROTOCOL_NAME") ||
-  !localGenerated.includes("WORKER_PLUGIN_PROTOCOL_NAME") ||
-  !localDart.includes("agentAppIpcProtocolName") ||
-  !localDart.includes("workerPluginProtocolName")
+  !localGenerated.includes(
+    `WORKER_PROTOCOL_NAME = ${JSON.stringify(workerProtocol.name)}`,
+  ) ||
+  !localGenerated.includes(
+    `WORKER_PROTOCOL_VERSION = ${JSON.stringify(workerProtocol.version)}`,
+  ) ||
+  !localDart.includes(`workerProtocolName = '${workerProtocol.name}'`) ||
+  !localDart.includes(`workerProtocolVersion = '${workerProtocol.version}'`)
 ) {
-  throw new Error("generated local protocol bindings are missing");
+  throw new Error("generated Worker protocol binding is out of date");
 }
-for (const command of localProtocols.agentAppIpc.commandTypes) {
-  if (
-    !localGenerated.includes(JSON.stringify(command)) ||
-    !localDart.includes(`'${command}'`)
-  ) {
-    throw new Error(`generated IPC binding is missing ${command}`);
-  }
+if (
+  typeof workerProtocol.payloadSchemas !== "object" ||
+  [...workerProtocol.methods, ...workerProtocol.notifications].some(
+    (name) =>
+      typeof workerProtocol.payloadSchemas[name] !== "string" ||
+      !Object.hasOwn(
+        schema.$defs ?? {},
+        workerProtocol.payloadSchemas[name].replace("#/$defs/", ""),
+      ),
+  )
+) {
+  throw new Error(
+    "Worker protocol methods/events must map to canonical schema definitions",
+  );
 }
-for (const method of localProtocols.workerPlugin.methods) {
+for (const method of workerProtocol.methods) {
   if (
     !localGenerated.includes(JSON.stringify(method)) ||
     !localDart.includes(`'${method}'`)
   ) {
-    throw new Error(`generated plugin binding is missing ${method}`);
+    throw new Error(
+      `generated Worker protocol binding is missing method ${method}`,
+    );
+  }
+}
+for (const notif of workerProtocol.notifications) {
+  if (
+    !localGenerated.includes(JSON.stringify(notif)) ||
+    !localDart.includes(`'${notif}'`)
+  ) {
+    throw new Error(
+      `generated Worker protocol binding is missing notification ${notif}`,
+    );
+  }
+}
+
+const agentProtocol = schema["x-agent-protocol"];
+if (agentProtocol) {
+  for (const messageType of agentProtocol.messageTypes) {
+    if (!agentGenerated.includes(JSON.stringify(messageType))) {
+      throw new Error(
+        `generated Agent protocol binding is missing ${messageType}`,
+      );
+    }
   }
 }
 if (!generatedDart.includes(`const protocolVersion = '${fixture.version}'`)) {

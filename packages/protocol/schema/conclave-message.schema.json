@@ -4,6 +4,107 @@
   "title": "Conclave canonical message",
   "description": "Strict cross-language contract shared by Cloud, Agent Engine, and Worker Plugins.",
   "x-protocol-version": "0.1",
+  "x-host-protocol": {
+    "name": "conclave.host-protocol",
+    "version": "4.0",
+    "maxMessageSizeBytes": 4194304,
+    "messageTypes": [
+      "host.hello",
+      "host.hello.ack",
+      "host.heartbeat",
+      "host.heartbeat.ack",
+      "host.sync.request",
+      "host.sync.result",
+      "host.status",
+      "host.update",
+      "worker.install",
+      "worker.remove",
+      "worker.status",
+      "credential.status",
+      "assignment.start",
+      "assignment.ack",
+      "assignment.progress",
+      "assignment.result",
+      "assignment.error",
+      "assignment.cancel",
+      "assignment.cancel.ack"
+    ],
+    "baseEnvelopeFields": [
+      "protocol",
+      "protocolVersion",
+      "messageId",
+      "correlationId",
+      "timestamp",
+      "type",
+      "payload"
+    ],
+    "assignmentEnvelopeFields": [
+      "workspaceId",
+      "hostId",
+      "workerId",
+      "runId",
+      "taskId",
+      "attemptId",
+      "assignmentId",
+      "idempotencyKey"
+    ],
+    "payloadSchemas": {
+      "host.hello": "#/$defs/hostHelloPayload",
+      "host.hello.ack": "#/$defs/hostHelloAckPayload",
+      "host.heartbeat": "#/$defs/hostHeartbeatPayload",
+      "host.heartbeat.ack": "#/$defs/hostHeartbeatAckPayload",
+      "host.sync.request": "#/$defs/hostSyncRequestPayload",
+      "host.sync.result": "#/$defs/hostSyncResultPayload",
+      "host.status": "#/$defs/hostStatusPayload",
+      "host.update": "#/$defs/hostUpdatePayload",
+      "worker.install": "#/$defs/workerInstallPayload",
+      "worker.remove": "#/$defs/workerRemovePayload",
+      "worker.status": "#/$defs/workerStatusPayload",
+      "credential.status": "#/$defs/credentialStatusPayload",
+      "assignment.start": "#/$defs/assignmentStartPayload",
+      "assignment.ack": "#/$defs/assignmentAckPayload",
+      "assignment.progress": "#/$defs/assignmentProgressPayload",
+      "assignment.result": "#/$defs/assignmentResultPayload",
+      "assignment.error": "#/$defs/assignmentErrorPayload",
+      "assignment.cancel": "#/$defs/assignmentCancelPayload",
+      "assignment.cancel.ack": "#/$defs/assignmentCancelAckPayload"
+    }
+  },
+  "x-worker-protocol": {
+    "name": "conclave.worker-protocol",
+    "version": "4.0",
+    "jsonRpcVersion": "2.0",
+    "methods": [
+      "initialize",
+      "health",
+      "describe",
+      "execute",
+      "cancel",
+      "shutdown"
+    ],
+    "notifications": [
+      "progress",
+      "usage",
+      "artifact",
+      "result",
+      "error",
+      "log"
+    ],
+    "payloadSchemas": {
+      "initialize": "#/$defs/workerInitializeParams",
+      "health": "#/$defs/workerEmptyParams",
+      "describe": "#/$defs/workerEmptyParams",
+      "execute": "#/$defs/workerExecuteParams",
+      "cancel": "#/$defs/workerCancelParams",
+      "shutdown": "#/$defs/workerShutdownParams",
+      "progress": "#/$defs/workerProgressNotification",
+      "usage": "#/$defs/workerUsageNotification",
+      "artifact": "#/$defs/workerArtifactNotification",
+      "result": "#/$defs/workerResultNotification",
+      "error": "#/$defs/workerErrorNotification",
+      "log": "#/$defs/workerLogNotification"
+    }
+  },
   "x-agent-protocol": {
     "name": "conclave.agent-protocol",
     "version": "2.0",
@@ -258,6 +359,459 @@
   "$defs": {
     "id": { "type": "string", "minLength": 1 },
     "nonEmpty": { "type": "string", "minLength": 1 },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "stringList": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/nonEmpty" }
+    },
+    "objectMap": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "hostCapabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "arch",
+        "version",
+        "supportedRuntimes",
+        "maxConcurrentWorkers"
+      ],
+      "properties": {
+        "os": { "enum": ["macos", "linux", "windows"] },
+        "arch": { "enum": ["arm64", "x64"] },
+        "version": { "$ref": "#/$defs/nonEmpty" },
+        "supportedRuntimes": { "$ref": "#/$defs/stringList" },
+        "maxConcurrentWorkers": { "type": "integer", "minimum": 1 },
+        "customCapabilities": { "$ref": "#/$defs/stringList" }
+      }
+    },
+    "assignmentSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assignmentId",
+        "workspaceId",
+        "projectId",
+        "runId",
+        "taskId",
+        "attemptId",
+        "requestedByUserId",
+        "hostId",
+        "workerId",
+        "resolvedWorkerVersion",
+        "credentialProfileId",
+        "config",
+        "sessionPolicy",
+        "permissions",
+        "contextRefs",
+        "timeoutMs",
+        "idempotencyKey"
+      ],
+      "properties": {
+        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
+        "workspaceId": { "$ref": "#/$defs/nonEmpty" },
+        "projectId": { "$ref": "#/$defs/nonEmpty" },
+        "runId": { "$ref": "#/$defs/nonEmpty" },
+        "taskId": { "$ref": "#/$defs/nonEmpty" },
+        "attemptId": { "$ref": "#/$defs/nonEmpty" },
+        "requestedByUserId": { "$ref": "#/$defs/nonEmpty" },
+        "hostId": { "$ref": "#/$defs/nonEmpty" },
+        "workerId": { "$ref": "#/$defs/nonEmpty" },
+        "resolvedWorkerVersion": { "$ref": "#/$defs/nonEmpty" },
+        "credentialProfileId": { "$ref": "#/$defs/nonEmpty" },
+        "model": { "type": "string" },
+        "config": { "$ref": "#/$defs/objectMap" },
+        "sessionPolicy": {
+          "enum": [
+            "stateless",
+            "isolated_workspace",
+            "reuse_session",
+            "persistent_context"
+          ]
+        },
+        "permissions": { "$ref": "#/$defs/stringList" },
+        "contextRefs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/objectMap" }
+        },
+        "timeoutMs": { "type": "integer", "minimum": 1000 },
+        "idempotencyKey": { "$ref": "#/$defs/nonEmpty" }
+      }
+    },
+    "hostHelloPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hostId", "name", "hostname", "hostVersion", "capabilities"],
+      "properties": {
+        "hostId": { "$ref": "#/$defs/nonEmpty" },
+        "name": { "$ref": "#/$defs/nonEmpty" },
+        "hostname": { "$ref": "#/$defs/nonEmpty" },
+        "hostVersion": { "$ref": "#/$defs/nonEmpty" },
+        "capabilities": { "$ref": "#/$defs/hostCapabilities" },
+        "enrolledWorkspaces": { "$ref": "#/$defs/stringList" },
+        "authCredentials": { "$ref": "#/$defs/objectMap" }
+      }
+    },
+    "hostHelloAckPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hostId", "status", "authenticatedAt", "serverVersion"],
+      "properties": {
+        "hostId": { "$ref": "#/$defs/nonEmpty" },
+        "status": { "enum": ["authenticated", "rejected"] },
+        "authenticatedAt": { "$ref": "#/$defs/timestamp" },
+        "serverVersion": { "$ref": "#/$defs/nonEmpty" },
+        "sessionToken": { "$ref": "#/$defs/nonEmpty" },
+        "activeWorkspaceBindings": { "$ref": "#/$defs/stringList" },
+        "rejectionReason": { "type": "string" }
+      }
+    },
+    "hostHeartbeatPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hostId", "timestamp"],
+      "properties": {
+        "hostId": { "$ref": "#/$defs/nonEmpty" },
+        "timestamp": { "$ref": "#/$defs/timestamp" },
+        "metrics": { "$ref": "#/$defs/objectMap" }
+      }
+    },
+    "hostHeartbeatAckPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hostId", "acknowledgedAt", "serverTime"],
+      "properties": {
+        "hostId": { "$ref": "#/$defs/nonEmpty" },
+        "acknowledgedAt": { "$ref": "#/$defs/timestamp" },
+        "serverTime": { "$ref": "#/$defs/timestamp" },
+        "nextHeartbeatIntervalMs": { "type": "integer", "minimum": 1000 }
+      }
+    },
+    "hostSyncRequestPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hostId"],
+      "properties": {
+        "hostId": { "$ref": "#/$defs/nonEmpty" },
+        "syncToken": { "type": "string" },
+        "knownAssignmentIds": { "$ref": "#/$defs/stringList" },
+        "knownWorkerIds": { "$ref": "#/$defs/stringList" }
+      }
+    },
+    "hostSyncResultPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hostId", "syncToken"],
+      "properties": {
+        "hostId": { "$ref": "#/$defs/nonEmpty" },
+        "syncToken": { "$ref": "#/$defs/nonEmpty" },
+        "pendingAssignments": { "$ref": "#/$defs/stringList" },
+        "installedWorkers": { "$ref": "#/$defs/stringList" },
+        "credentialStatuses": { "$ref": "#/$defs/objectMap" }
+      }
+    },
+    "hostStatusPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hostId", "status"],
+      "properties": {
+        "hostId": { "$ref": "#/$defs/nonEmpty" },
+        "status": { "enum": ["online", "draining", "offline"] },
+        "activeAssignmentsCount": { "type": "integer", "minimum": 0 },
+        "reason": { "type": "string" }
+      }
+    },
+    "hostUpdatePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hostId",
+        "targetVersion",
+        "packageDigest",
+        "packageR2Key",
+        "signature"
+      ],
+      "properties": {
+        "hostId": { "$ref": "#/$defs/nonEmpty" },
+        "targetVersion": { "$ref": "#/$defs/nonEmpty" },
+        "packageDigest": { "$ref": "#/$defs/nonEmpty" },
+        "packageR2Key": { "$ref": "#/$defs/nonEmpty" },
+        "signature": { "$ref": "#/$defs/nonEmpty" },
+        "channel": { "enum": ["stable", "beta", "development"] }
+      }
+    },
+    "workerInstallPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hostId",
+        "workerId",
+        "version",
+        "packageDigest",
+        "packageR2Key",
+        "signature",
+        "entrypoint"
+      ],
+      "properties": {
+        "hostId": { "$ref": "#/$defs/nonEmpty" },
+        "workerId": { "$ref": "#/$defs/nonEmpty" },
+        "version": { "$ref": "#/$defs/nonEmpty" },
+        "packageDigest": { "$ref": "#/$defs/nonEmpty" },
+        "packageR2Key": { "$ref": "#/$defs/nonEmpty" },
+        "signature": { "$ref": "#/$defs/nonEmpty" },
+        "entrypoint": { "$ref": "#/$defs/nonEmpty" },
+        "permissions": { "$ref": "#/$defs/stringList" }
+      }
+    },
+    "workerRemovePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hostId", "workerId"],
+      "properties": {
+        "hostId": { "$ref": "#/$defs/nonEmpty" },
+        "workerId": { "$ref": "#/$defs/nonEmpty" },
+        "version": { "$ref": "#/$defs/nonEmpty" },
+        "purgeData": { "type": "boolean" }
+      }
+    },
+    "workerStatusPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hostId", "workerId", "version", "status"],
+      "properties": {
+        "hostId": { "$ref": "#/$defs/nonEmpty" },
+        "workerId": { "$ref": "#/$defs/nonEmpty" },
+        "version": { "$ref": "#/$defs/nonEmpty" },
+        "status": { "enum": ["installed", "installing", "failed", "removed"] },
+        "error": { "type": "string" }
+      }
+    },
+    "credentialStatusPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hostId",
+        "credentialProfileId",
+        "workerId",
+        "status",
+        "authMode",
+        "lastCheckedAt"
+      ],
+      "properties": {
+        "hostId": { "$ref": "#/$defs/nonEmpty" },
+        "credentialProfileId": { "$ref": "#/$defs/nonEmpty" },
+        "workerId": { "$ref": "#/$defs/nonEmpty" },
+        "status": { "enum": ["ready", "needs_auth", "invalid", "expired"] },
+        "authMode": {
+          "enum": [
+            "none",
+            "api_key",
+            "oauth_browser",
+            "local_cli_session",
+            "interactive_custom"
+          ]
+        },
+        "visibility": { "enum": ["private", "workspace"] },
+        "lastCheckedAt": { "$ref": "#/$defs/timestamp" },
+        "errorMessage": { "type": "string" }
+      }
+    },
+    "assignmentStartPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["snapshot", "input"],
+      "properties": {
+        "snapshot": { "$ref": "#/$defs/assignmentSnapshot" },
+        "input": { "$ref": "#/$defs/objectMap" }
+      }
+    },
+    "assignmentAckPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assignmentId",
+        "hostId",
+        "workerId",
+        "status",
+        "acknowledgedAt"
+      ],
+      "properties": {
+        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
+        "hostId": { "$ref": "#/$defs/nonEmpty" },
+        "workerId": { "$ref": "#/$defs/nonEmpty" },
+        "status": { "enum": ["accepted", "rejected"] },
+        "acknowledgedAt": { "$ref": "#/$defs/timestamp" },
+        "rejectionReason": { "type": "string" }
+      }
+    },
+    "assignmentProgressPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assignmentId", "percentage", "observedAt"],
+      "properties": {
+        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
+        "percentage": { "type": "number", "minimum": 0, "maximum": 100 },
+        "message": { "type": "string" },
+        "observedAt": { "$ref": "#/$defs/timestamp" },
+        "metrics": { "$ref": "#/$defs/objectMap" }
+      }
+    },
+    "assignmentResultPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assignmentId", "status", "output", "completedAt"],
+      "properties": {
+        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
+        "status": { "enum": ["completed", "failed", "cancelled"] },
+        "output": { "type": ["object", "null"] },
+        "findings": { "type": "array" },
+        "artifactIds": { "$ref": "#/$defs/stringList" },
+        "completedAt": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "assignmentErrorPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assignmentId", "error", "failedAt"],
+      "properties": {
+        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
+        "error": { "$ref": "#/$defs/objectMap" },
+        "failedAt": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "assignmentCancelPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assignmentId"],
+      "properties": {
+        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
+        "reason": { "type": "string" },
+        "deadlineMs": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "assignmentCancelAckPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assignmentId", "cancelled"],
+      "properties": {
+        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
+        "cancelled": { "type": "boolean" },
+        "reason": { "type": "string" }
+      }
+    },
+    "workerEmptyParams": { "type": "object", "additionalProperties": false },
+    "workerInitializeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workerId", "version", "hostVersion"],
+      "properties": {
+        "workerId": { "$ref": "#/$defs/nonEmpty" },
+        "version": { "$ref": "#/$defs/nonEmpty" },
+        "protocolVersion": { "$ref": "#/$defs/nonEmpty" },
+        "hostVersion": { "$ref": "#/$defs/nonEmpty" },
+        "config": { "$ref": "#/$defs/objectMap" },
+        "permissions": { "$ref": "#/$defs/stringList" }
+      }
+    },
+    "workerExecuteParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assignment", "input"],
+      "properties": {
+        "assignment": { "$ref": "#/$defs/assignmentSnapshot" },
+        "input": { "$ref": "#/$defs/objectMap" }
+      }
+    },
+    "workerCancelParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assignmentId"],
+      "properties": {
+        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
+        "reason": { "type": "string" }
+      }
+    },
+    "workerShutdownParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "gracePeriodMs": { "type": "integer", "minimum": 0 } }
+    },
+    "workerProgressNotification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assignmentId", "percentage", "timestamp"],
+      "properties": {
+        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
+        "percentage": { "type": "number", "minimum": 0, "maximum": 100 },
+        "message": { "type": "string" },
+        "timestamp": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "workerUsageNotification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assignmentId", "timestamp"],
+      "properties": {
+        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
+        "tokensUsed": { "type": "integer", "minimum": 0 },
+        "estimatedCostMicros": { "type": "integer", "minimum": 0 },
+        "timestamp": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "workerArtifactNotification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assignmentId", "artifactId", "name", "type", "digest"],
+      "properties": {
+        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
+        "artifactId": { "$ref": "#/$defs/nonEmpty" },
+        "name": { "$ref": "#/$defs/nonEmpty" },
+        "type": { "$ref": "#/$defs/nonEmpty" },
+        "digest": { "$ref": "#/$defs/nonEmpty" },
+        "contentBase64": { "type": "string" },
+        "metadata": { "$ref": "#/$defs/objectMap" }
+      }
+    },
+    "workerResultNotification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assignmentId", "status", "output", "completedAt"],
+      "properties": {
+        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
+        "status": { "enum": ["completed", "failed", "cancelled"] },
+        "output": { "type": ["object", "null"] },
+        "findings": { "type": "array" },
+        "artifactIds": { "$ref": "#/$defs/stringList" },
+        "completedAt": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "workerErrorNotification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assignmentId", "code", "message", "timestamp"],
+      "properties": {
+        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
+        "code": { "$ref": "#/$defs/nonEmpty" },
+        "message": { "$ref": "#/$defs/nonEmpty" },
+        "retryable": { "type": "boolean" },
+        "details": { "$ref": "#/$defs/objectMap" },
+        "timestamp": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "workerLogNotification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "message", "timestamp"],
+      "properties": {
+        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
+        "level": { "enum": ["debug", "info", "warn", "error"] },
+        "message": { "$ref": "#/$defs/nonEmpty" },
+        "timestamp": { "$ref": "#/$defs/timestamp" },
+        "metadata": { "$ref": "#/$defs/objectMap" }
+      }
+    },
     "artifactIds": { "type": "array", "items": { "$ref": "#/$defs/id" } },
     "repository": {
       "type": "object",

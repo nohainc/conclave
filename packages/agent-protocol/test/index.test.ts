@@ -1,405 +1,567 @@
 import { describe, expect, it } from "vitest";
 import {
-  AGENT_PROTOCOL_NAME,
-  AGENT_PROTOCOL_VERSION,
-  parseAgentMessage,
-  serializeAgentMessage,
-  isCompatibleAgentProtocolVersion,
-  reconcileAssignmentJournal,
-  UnsupportedProtocolVersionError,
-  MalformedMessageError,
-  type AgentProtocolMessage,
-  type CloudAssignmentRecord,
+  HOST_PROTOCOL_NAME,
+  HOST_PROTOCOL_VERSION,
+  parseHostMessage,
+  parseWorkerRpcMessage,
+  isCompatibleHostProtocolVersion,
+  UnsupportedHostProtocolVersionError,
+  MalformedProtocolMessageError,
+  type AssignmentSnapshot,
 } from "../src/index.js";
 
-describe("Conclave Agent Protocol v2", () => {
-  const baseEnvelope = {
-    protocol: AGENT_PROTOCOL_NAME,
-    protocolVersion: AGENT_PROTOCOL_VERSION,
-    messageId: "msg-001",
-    timestamp: "2026-09-21T12:00:00.000Z",
+describe("Conclave Host & Worker Protocol v4", () => {
+  const hostBaseEnvelope = {
+    protocol: HOST_PROTOCOL_NAME,
+    protocolVersion: HOST_PROTOCOL_VERSION,
+    messageId: "msg-host-001",
+    timestamp: "2026-09-23T10:00:00.000Z",
   };
 
-  const baseAssignmentEnvelope = {
-    ...baseEnvelope,
-    workspaceId: "ws-test",
-    agentId: "agent-01",
-    workerId: "worker-codex",
-    runId: "run-001",
-    taskId: "task-001",
-    attemptId: "att-001",
-    assignmentId: "asgn-001",
-    idempotencyKey: "idemp-001",
+  const sampleSnapshot: AssignmentSnapshot = {
+    assignmentId: "asgn-v4-001",
+    workspaceId: "ws-primary",
+    projectId: "proj-web",
+    runId: "run-100",
+    taskId: "task-01",
+    attemptId: "att-001-a",
+    requestedByUserId: "user-vitalii",
+    hostId: "host-macbook-pro",
+    workerId: "codex",
+    resolvedWorkerVersion: "1.0.0",
+    credentialProfileId: "cred-vitalii-codex", // Opaque reference
+    model: "codex-1",
+    config: { timeoutSec: 300 },
+    sessionPolicy: "isolated_workspace",
+    permissions: ["fs:read", "fs:write", "process:spawn"],
+    contextRefs: [{ uri: "repo://conclave/packages/core", commit: "abc123" }],
+    timeoutMs: 60000,
+    idempotencyKey: "idemp-run100-task01-att01",
   };
 
-  describe("Agent Lifecycle Messages", () => {
-    it("parses valid agent.hello message", () => {
+  const hostAssignmentEnvelope = {
+    ...hostBaseEnvelope,
+    workspaceId: "ws-primary",
+    hostId: "host-macbook-pro",
+    workerId: "codex",
+    runId: "run-100",
+    taskId: "task-01",
+    attemptId: "att-001-a",
+    assignmentId: "asgn-v4-001",
+    idempotencyKey: "idemp-run100-task01-att01",
+  };
+
+  describe("Host Lifecycle & Presence Messages", () => {
+    it("parses valid host.hello message", () => {
       const msg = {
-        ...baseEnvelope,
-        type: "agent.hello",
+        ...hostBaseEnvelope,
+        type: "host.hello",
         payload: {
-          agentId: "agent-01",
-          workspaceId: "ws-test",
-          name: "MacBook Dev",
+          hostId: "host-macbook-pro",
+          name: "MacBook Pro Dev",
           hostname: "mbp.local",
-          agentVersion: "0.2.0",
+          hostVersion: "0.1.0",
           capabilities: {
             os: "macos",
             arch: "arm64",
-            agentVersion: "0.2.0",
-            supportedRuntimes: ["node22", "git"],
+            version: "0.1.0",
+            supportedRuntimes: ["node22", "git", "xcode"],
             maxConcurrentWorkers: 4,
           },
+          enrolledWorkspaces: ["ws-primary", "ws-secondary"],
         },
       };
 
-      const parsed = parseAgentMessage(msg);
-      expect(parsed.type).toBe("agent.hello");
-      expect(parsed.protocolVersion).toBe(AGENT_PROTOCOL_VERSION);
+      const parsed = parseHostMessage(msg);
+      expect(parsed.type).toBe("host.hello");
+      expect(parsed.protocolVersion).toBe(HOST_PROTOCOL_VERSION);
     });
 
-    it("parses valid agent.heartbeat message", () => {
+    it("parses valid host.hello.ack message", () => {
       const msg = {
-        ...baseEnvelope,
-        type: "agent.heartbeat",
+        ...hostBaseEnvelope,
+        type: "host.hello.ack",
         payload: {
-          agentId: "agent-01",
-          workspaceId: "ws-test",
-          sessionId: "sess-100",
-          status: "online",
-          activeWorkers: 2,
-          activeAssignments: 1,
+          hostId: "host-macbook-pro",
+          status: "authenticated",
+          authenticatedAt: "2026-09-23T10:00:01.000Z",
+          serverVersion: "4.0.0",
+          sessionToken: "sess_tok_abc",
+          activeWorkspaceBindings: ["ws-primary"],
         },
       };
 
-      const parsed = parseAgentMessage(msg);
-      expect(parsed.type).toBe("agent.heartbeat");
+      const parsed = parseHostMessage(msg);
+      expect(parsed.type).toBe("host.hello.ack");
     });
 
-    it("parses valid agent.update.available and agent.update.status messages", () => {
-      const availMsg = {
-        ...baseEnvelope,
-        type: "agent.update.available",
+    it("parses valid host.heartbeat and host.heartbeat.ack messages", () => {
+      const hbMsg = {
+        ...hostBaseEnvelope,
+        type: "host.heartbeat",
         payload: {
-          version: "1.3.0",
-          channel: "stable",
-          packageR2Key: "agent/releases/1.3.0.tar.gz",
-          packageDigest: "sha256:abcd",
-          signature: "sig_pkg_123",
-          releaseNotes: "Critical fixes",
+          hostId: "host-macbook-pro",
+          timestamp: "2026-09-23T10:01:00.000Z",
+          metrics: {
+            cpuUsagePercent: 12.5,
+            memoryUsageBytes: 4294967296,
+            activeWorkers: 1,
+            pendingAssignments: 0,
+          },
         },
       };
 
-      const parsedAvail = parseAgentMessage(availMsg);
-      expect(parsedAvail.type).toBe("agent.update.available");
+      const parsedHb = parseHostMessage(hbMsg);
+      expect(parsedHb.type).toBe("host.heartbeat");
+
+      const ackMsg = {
+        ...hostBaseEnvelope,
+        type: "host.heartbeat.ack",
+        payload: {
+          hostId: "host-macbook-pro",
+          acknowledgedAt: "2026-09-23T10:01:01.000Z",
+          serverTime: "2026-09-23T10:01:01.000Z",
+          nextHeartbeatIntervalMs: 30000,
+        },
+      };
+
+      const parsedAck = parseHostMessage(ackMsg);
+      expect(parsedAck.type).toBe("host.heartbeat.ack");
+    });
+
+    it("parses valid host.sync.request and host.sync.result messages", () => {
+      const req = {
+        ...hostBaseEnvelope,
+        type: "host.sync.request",
+        payload: {
+          hostId: "host-macbook-pro",
+          syncToken: "tok-prev",
+          knownAssignmentIds: ["asgn-01"],
+          knownWorkerIds: ["codex"],
+        },
+      };
+      const parsedReq = parseHostMessage(req);
+      expect(parsedReq.type).toBe("host.sync.request");
+
+      const res = {
+        ...hostBaseEnvelope,
+        type: "host.sync.result",
+        payload: {
+          hostId: "host-macbook-pro",
+          syncToken: "tok-new",
+          pendingAssignments: [],
+          installedWorkers: ["codex@1.0.0"],
+          credentialStatuses: { "cred-vitalii-codex": "ready" },
+        },
+      };
+      const parsedRes = parseHostMessage(res);
+      expect(parsedRes.type).toBe("host.sync.result");
+    });
+
+    it("parses valid host.status and host.update messages", () => {
+      const statusMsg = {
+        ...hostBaseEnvelope,
+        type: "host.status",
+        payload: {
+          hostId: "host-macbook-pro",
+          status: "online",
+          activeAssignmentsCount: 2,
+        },
+      };
+      expect(parseHostMessage(statusMsg).type).toBe("host.status");
+
+      const updateMsg = {
+        ...hostBaseEnvelope,
+        type: "host.update",
+        payload: {
+          hostId: "host-macbook-pro",
+          targetVersion: "0.2.0",
+          packageDigest: "sha256:11223344",
+          packageR2Key: "host/releases/0.2.0.tgz",
+          signature: "sig_host_020",
+          channel: "stable",
+        },
+      };
+      expect(parseHostMessage(updateMsg).type).toBe("host.update");
+    });
+  });
+
+  describe("Worker Management over Host Protocol", () => {
+    it("parses worker.install, worker.remove, and worker.status", () => {
+      const installMsg = {
+        ...hostBaseEnvelope,
+        type: "worker.install",
+        payload: {
+          hostId: "host-macbook-pro",
+          workerId: "codex",
+          version: "1.0.0",
+          packageDigest: "sha256:abcd",
+          packageR2Key: "workers/codex/1.0.0.tgz",
+          signature: "sig_codex_100",
+          entrypoint: "bin/codex_worker.dart",
+          permissions: ["fs:read", "fs:write"],
+        },
+      };
+      expect(parseHostMessage(installMsg).type).toBe("worker.install");
+
+      const removeMsg = {
+        ...hostBaseEnvelope,
+        type: "worker.remove",
+        payload: {
+          hostId: "host-macbook-pro",
+          workerId: "codex",
+          version: "0.9.0",
+          purgeData: true,
+        },
+      };
+      expect(parseHostMessage(removeMsg).type).toBe("worker.remove");
 
       const statusMsg = {
-        ...baseEnvelope,
-        type: "agent.update.status",
+        ...hostBaseEnvelope,
+        type: "worker.status",
         payload: {
-          fromVersion: "1.2.0",
-          targetVersion: "1.3.0",
-          status: "draining",
+          hostId: "host-macbook-pro",
+          workerId: "codex",
+          version: "1.0.0",
+          status: "installed",
         },
       };
+      expect(parseHostMessage(statusMsg).type).toBe("worker.status");
+    });
 
-      const parsedStatus = parseAgentMessage(statusMsg);
-      expect(parsedStatus.type).toBe("agent.update.status");
+    it("parses credential.status message", () => {
+      const credMsg = {
+        ...hostBaseEnvelope,
+        type: "credential.status",
+        payload: {
+          hostId: "host-macbook-pro",
+          credentialProfileId: "cred-vitalii-codex",
+          workerId: "codex",
+          status: "ready",
+          authMode: "oauth_browser",
+          visibility: "private",
+          lastCheckedAt: "2026-09-23T10:00:00.000Z",
+        },
+      };
+      expect(parseHostMessage(credMsg).type).toBe("credential.status");
     });
   });
 
-  it("accepts compatible minor versions and rejects incompatible majors", () => {
-    expect(isCompatibleAgentProtocolVersion("2.0", "2.1")).toBe(true);
-    expect(isCompatibleAgentProtocolVersion("2.0", "1.9")).toBe(false);
-    expect(() =>
-      parseAgentMessage({
-        ...baseEnvelope,
-        protocolVersion: "3.0",
-        type: "agent.hello",
-        payload: {
-          agentId: "agent-01",
-          workspaceId: "ws-test",
-          name: "MacBook Dev",
-          hostname: "mbp.local",
-          agentVersion: "0.2.0",
-          capabilities: {
-            os: "macos",
-            arch: "arm64",
-            agentVersion: "0.2.0",
-            supportedRuntimes: ["dart"],
-            maxConcurrentWorkers: 1,
-          },
-        },
-      }),
-    ).toThrow(UnsupportedProtocolVersionError);
-  });
-
-  describe("Plugin Management Messages", () => {
-    it("parses valid plugin.install message", () => {
-      const msg = {
-        ...baseEnvelope,
-        type: "plugin.install",
-        payload: {
-          pluginId: "codex",
-          version: "1.2.0",
-          packageR2Key: "plugins/codex-1.2.0.tgz",
-          packageDigest: "sha256:abc123def456",
-          signature: "sig-valid-789",
-          permissions: ["fs.read", "fs.write", "process.spawn"],
-        },
-      };
-
-      const parsed = parseAgentMessage(msg);
-      expect(parsed.type).toBe("plugin.install");
-    });
-  });
-
-  describe("Worker Management Messages", () => {
-    it("parses valid worker.configure message with complete configuration", () => {
-      const msg = {
-        ...baseEnvelope,
-        type: "worker.configure",
-        payload: {
-          worker: {
-            id: "worker-gpt-architect",
-            workerId: "worker-gpt-architect",
-            workspaceId: "ws-test",
-            agentId: "agent-01",
-            pluginId: "openai",
-            pluginVersionPolicy: "^1.4",
-            name: "GPT Architect",
-            roles: ["architect"],
-            capabilities: ["code_design", "adr_generation"],
-            config: { model: "o3-mini", temperature: 0.2 },
-            secretRefs: ["OPENAI_API_KEY"],
-            billingMode: "api_metered",
-            costMetadata: {
-              currency: "USD",
-              inputMicrosPerMillionTokens: 1100,
-            },
-            independenceKey: "key-gpt-arch",
-            concurrencyLimit: 2,
-            sessionPolicy: "isolated_workspace",
-            availability: "available",
-            enabled: true,
-          },
-        },
-      };
-
-      const parsed = parseAgentMessage(msg);
-      expect(parsed.type).toBe("worker.configure");
-      if (parsed.type === "worker.configure") {
-        expect(parsed.payload.worker.workerId).toBe("worker-gpt-architect");
-        expect(parsed.payload.worker.sessionPolicy).toBe("isolated_workspace");
-        expect(parsed.payload.worker.billingMode).toBe("api_metered");
-      }
-    });
-  });
-
-  describe("Assignment Execution Messages & Envelope Invariants", () => {
-    it("parses valid assignment.start message with complete execution envelope", () => {
-      const msg = {
-        ...baseAssignmentEnvelope,
+  describe("Assignment Snapshot & Execution Lifecycle", () => {
+    it("parses assignment.start with comprehensive snapshot", () => {
+      const startMsg = {
+        ...hostAssignmentEnvelope,
         type: "assignment.start",
         payload: {
-          objective: "Fix bug in auth service",
-          role: "implementer",
-          pluginId: "codex",
-          resolvedPluginVersion: "1.2.0",
-          input: { path: "src/auth.ts" },
-          contextArtifactIds: ["art-1", "art-2"],
-          timeoutMs: 30000,
+          snapshot: sampleSnapshot,
+          input: {
+            objective: "Implement login view",
+          },
         },
       };
 
-      const parsed = parseAgentMessage(msg);
+      const parsed = parseHostMessage(startMsg);
       expect(parsed.type).toBe("assignment.start");
-      if (parsed.type === "assignment.start") {
-        expect(parsed.assignmentId).toBe("asgn-001");
-        expect(parsed.attemptId).toBe("att-001");
-        expect(parsed.workerId).toBe("worker-codex");
-      }
     });
 
-    it("parses valid assignment.result message", () => {
-      const msg = {
-        ...baseAssignmentEnvelope,
+    it("secret rule: uses opaque credentialProfileId, without raw secret fields", () => {
+      expect(sampleSnapshot.credentialProfileId).toBe("cred-vitalii-codex");
+      expect(sampleSnapshot).not.toHaveProperty("rawApiKey");
+      expect(sampleSnapshot).not.toHaveProperty("secretToken");
+
+      const inlineSecret = {
+        ...hostAssignmentEnvelope,
+        type: "assignment.start",
+        payload: {
+          snapshot: { ...sampleSnapshot, rawApiKey: "plaintext-secret" },
+          input: {},
+        },
+      };
+      expect(() => parseHostMessage(inlineSecret)).toThrow(
+        MalformedProtocolMessageError,
+      );
+    });
+
+    it("supports optional fields in assignment snapshot", () => {
+      const minimalSnapshot: AssignmentSnapshot = {
+        assignmentId: "asgn-min",
+        workspaceId: "ws-min",
+        projectId: "proj-min",
+        runId: "run-min",
+        taskId: "task-min",
+        attemptId: "att-min",
+        requestedByUserId: "user-min",
+        hostId: "host-min",
+        workerId: "git-test",
+        resolvedWorkerVersion: "1.0.0",
+        credentialProfileId: "cred-none",
+        config: {},
+        sessionPolicy: "stateless",
+        permissions: [],
+        contextRefs: [],
+        timeoutMs: 30000,
+        idempotencyKey: "idemp-min",
+      };
+
+      const startMsg = {
+        ...hostAssignmentEnvelope,
+        assignmentId: "asgn-min",
+        taskId: "task-min",
+        attemptId: "att-min",
+        runId: "run-min",
+        idempotencyKey: "idemp-min",
+        type: "assignment.start",
+        payload: {
+          snapshot: minimalSnapshot,
+          input: {},
+        },
+      };
+
+      const parsed = parseHostMessage(startMsg);
+      expect(parsed.type).toBe("assignment.start");
+    });
+
+    it("parses assignment.ack, assignment.progress, assignment.result, assignment.error, assignment.cancel", () => {
+      const ackMsg = {
+        ...hostAssignmentEnvelope,
+        type: "assignment.ack",
+        payload: {
+          assignmentId: "asgn-v4-001",
+          hostId: "host-macbook-pro",
+          workerId: "codex",
+          status: "accepted",
+          acknowledgedAt: "2026-09-23T10:02:00.000Z",
+        },
+      };
+      expect(parseHostMessage(ackMsg).type).toBe("assignment.ack");
+
+      const progressMsg = {
+        ...hostAssignmentEnvelope,
+        type: "assignment.progress",
+        payload: {
+          assignmentId: "asgn-v4-001",
+          percentage: 50,
+          message: "Compiling code changes...",
+          observedAt: "2026-09-23T10:02:30.000Z",
+        },
+      };
+      expect(parseHostMessage(progressMsg).type).toBe("assignment.progress");
+
+      const resultMsg = {
+        ...hostAssignmentEnvelope,
         type: "assignment.result",
         payload: {
+          assignmentId: "asgn-v4-001",
           status: "completed",
-          summary: "Patch applied cleanly",
-          output: { changes: 1 },
-          artifactIds: ["art-patch-1"],
+          output: { summary: "Implemented" },
+          findings: [],
+          artifactIds: ["art-diff-1"],
+          completedAt: "2026-09-23T10:03:00.000Z",
         },
       };
+      expect(parseHostMessage(resultMsg).type).toBe("assignment.result");
 
-      const parsed = parseAgentMessage(msg);
-      expect(parsed.type).toBe("assignment.result");
-    });
-
-    it("parses valid assignment.error message", () => {
-      const msg = {
-        ...baseAssignmentEnvelope,
+      const errorMsg = {
+        ...hostAssignmentEnvelope,
         type: "assignment.error",
         payload: {
-          status: "failed",
+          assignmentId: "asgn-v4-001",
           error: {
-            code: "PROCESS_TIMEOUT",
-            message: "Worker exceeded 30000ms limit",
+            code: "PROCESS_CRASHED",
+            message: "Process exited with code 1",
             retryable: true,
           },
+          failedAt: "2026-09-23T10:03:00.000Z",
         },
       };
+      expect(parseHostMessage(errorMsg).type).toBe("assignment.error");
 
-      const parsed = parseAgentMessage(msg);
-      expect(parsed.type).toBe("assignment.error");
-    });
-
-    it("rejects assignment message missing mandatory correlation fields (e.g. attemptId)", () => {
-      const rawMsg: Record<string, unknown> = {
-        ...baseAssignmentEnvelope,
-        type: "assignment.start",
+      const cancelMsg = {
+        ...hostAssignmentEnvelope,
+        type: "assignment.cancel",
         payload: {
-          objective: "Task",
-          role: "implementer",
-          pluginId: "codex",
-          resolvedPluginVersion: "1.0.0",
-          input: {},
-          contextArtifactIds: [],
-          timeoutMs: 10000,
+          assignmentId: "asgn-v4-001",
+          reason: "User cancelled run",
         },
       };
-      delete rawMsg.attemptId;
+      expect(parseHostMessage(cancelMsg).type).toBe("assignment.cancel");
 
-      expect(() => parseAgentMessage(rawMsg)).toThrow(MalformedMessageError);
-    });
-
-    it("rejects assignment message missing idempotencyKey", () => {
-      const rawMsg: Record<string, unknown> = {
-        ...baseAssignmentEnvelope,
-        type: "assignment.start",
+      const cancelAckMsg = {
+        ...hostAssignmentEnvelope,
+        type: "assignment.cancel.ack",
         payload: {
-          objective: "Task",
-          role: "implementer",
-          pluginId: "codex",
-          resolvedPluginVersion: "1.0.0",
-          input: {},
-          contextArtifactIds: [],
-          timeoutMs: 10000,
+          assignmentId: "asgn-v4-001",
+          cancelled: true,
         },
       };
-      delete rawMsg.idempotencyKey;
-
-      expect(() => parseAgentMessage(rawMsg)).toThrow(MalformedMessageError);
+      expect(parseHostMessage(cancelAckMsg).type).toBe("assignment.cancel.ack");
     });
   });
 
-  describe("Protocol Errors & Boundary Rejections", () => {
-    it("rejects message with unsupported protocol version", () => {
-      const msg = {
-        ...baseEnvelope,
-        protocolVersion: "1.0",
-        type: "agent.heartbeat",
+  describe("Host <-> Worker Protocol (JSON-RPC 2.0)", () => {
+    it("parses valid worker JSON-RPC requests (initialize, health, describe, execute, cancel, shutdown)", () => {
+      const initReq = {
+        jsonrpc: "2.0",
+        id: "req-1",
+        method: "initialize",
+        params: {
+          workerId: "codex",
+          version: "1.0.0",
+          protocolVersion: "4.0",
+          hostVersion: "0.1.0",
+          config: { timeout: 300 },
+          permissions: ["fs:read"],
+        },
+      };
+      const parsedInit = parseWorkerRpcMessage(initReq);
+      expect(parsedInit.method).toBe("initialize");
+
+      const execReq = {
+        jsonrpc: "2.0",
+        id: 2,
+        method: "execute",
+        params: {
+          assignment: sampleSnapshot,
+          input: { task: "run" },
+        },
+      };
+      const parsedExec = parseWorkerRpcMessage(execReq);
+      expect(parsedExec.method).toBe("execute");
+
+      const cancelReq = {
+        jsonrpc: "2.0",
+        id: "req-3",
+        method: "cancel",
+        params: {
+          assignmentId: "asgn-v4-001",
+          reason: "timeout",
+        },
+      };
+      expect(parseWorkerRpcMessage(cancelReq).method).toBe("cancel");
+    });
+
+    it("parses valid worker notifications (progress, usage, artifact, result, error, log)", () => {
+      const progressNotif = {
+        jsonrpc: "2.0",
+        method: "progress",
+        params: {
+          assignmentId: "asgn-v4-001",
+          percentage: 75,
+          message: "Tests running",
+          timestamp: "2026-09-23T10:02:45.000Z",
+        },
+      };
+      expect(parseWorkerRpcMessage(progressNotif).method).toBe("progress");
+
+      const usageNotif = {
+        jsonrpc: "2.0",
+        method: "usage",
+        params: {
+          assignmentId: "asgn-v4-001",
+          tokensUsed: 1540,
+          estimatedCostMicros: 2310,
+          timestamp: "2026-09-23T10:02:50.000Z",
+        },
+      };
+      expect(parseWorkerRpcMessage(usageNotif).method).toBe("usage");
+
+      const resultNotif = {
+        jsonrpc: "2.0",
+        method: "result",
+        params: {
+          assignmentId: "asgn-v4-001",
+          status: "completed",
+          output: { done: true },
+          findings: [],
+          artifactIds: ["art-1"],
+          completedAt: "2026-09-23T10:03:00.000Z",
+        },
+      };
+      expect(parseWorkerRpcMessage(resultNotif).method).toBe("result");
+    });
+
+    it("rejects malformed worker events and unsupported methods", () => {
+      expect(() =>
+        parseWorkerRpcMessage({
+          jsonrpc: "1.0", // Invalid JSON-RPC
+          id: "1",
+          method: "initialize",
+        }),
+      ).toThrow(MalformedProtocolMessageError);
+
+      expect(() =>
+        parseWorkerRpcMessage({
+          jsonrpc: "2.0",
+          id: "1",
+          method: "unsupported_magic_method",
+          params: {},
+        }),
+      ).toThrow(MalformedProtocolMessageError);
+
+      expect(() =>
+        parseWorkerRpcMessage({
+          jsonrpc: "2.0",
+          method: "progress",
+          params: { assignmentId: "asgn-v4-001", percentage: 101 },
+        }),
+      ).toThrow(MalformedProtocolMessageError);
+    });
+  });
+
+  describe("Version Compatibility & Protocol Invariants", () => {
+    it("enforces compatible protocol version rules", () => {
+      expect(isCompatibleHostProtocolVersion("4.0", "4.0")).toBe(true);
+      expect(isCompatibleHostProtocolVersion("4.0", "4.1")).toBe(true);
+      expect(isCompatibleHostProtocolVersion("4.1", "4.0")).toBe(false);
+      expect(isCompatibleHostProtocolVersion("4.0", "5.0")).toBe(false);
+      expect(isCompatibleHostProtocolVersion("4.0", "3.9")).toBe(false);
+    });
+
+    it("rejects incompatible major protocol versions in parseHostMessage", () => {
+      const badVersionMsg = {
+        ...hostBaseEnvelope,
+        protocolVersion: "5.0",
+        type: "host.status",
         payload: {
-          agentId: "agent-01",
-          workspaceId: "ws-test",
-          sessionId: "sess-1",
+          hostId: "host-macbook-pro",
           status: "online",
-          activeWorkers: 0,
-          activeAssignments: 0,
         },
       };
 
-      expect(() => parseAgentMessage(msg)).toThrow(
-        UnsupportedProtocolVersionError,
+      expect(() => parseHostMessage(badVersionMsg)).toThrow(
+        UnsupportedHostProtocolVersionError,
       );
     });
 
-    it("rejects message with invalid protocol identifier", () => {
-      const msg = {
-        ...baseEnvelope,
-        protocol: "invalid-protocol",
-        type: "agent.heartbeat",
-        payload: {},
-      };
-
-      expect(() => parseAgentMessage(msg)).toThrow(MalformedMessageError);
-    });
-
-    it("rejects non-object payload", () => {
-      expect(() => parseAgentMessage("not a json object")).toThrow(
-        MalformedMessageError,
-      );
-      expect(() => parseAgentMessage(null)).toThrow(MalformedMessageError);
-    });
-
-    it("serializes valid message to JSON", () => {
-      const msg: AgentProtocolMessage = {
-        ...baseEnvelope,
-        type: "agent.heartbeat.ack",
+    it("validates assignment idempotency key present on assignment envelope", () => {
+      const missingIdempMsg = {
+        ...hostAssignmentEnvelope,
+        idempotencyKey: "",
+        type: "assignment.start",
         payload: {
-          acknowledged: true,
-          serverTime: "2026-09-21T12:00:00.000Z",
+          snapshot: sampleSnapshot,
+          input: {},
         },
       };
 
-      const json = serializeAgentMessage(msg);
-      expect(typeof json).toBe("string");
-      expect(JSON.parse(json).type).toBe("agent.heartbeat.ack");
-    });
-  });
-
-  describe("Reconnect Journal Reconciliation", () => {
-    it("reconciles offline completed assignment by submitting result", () => {
-      const cloudRecords: CloudAssignmentRecord[] = [
-        {
-          assignmentId: "asgn-01",
-          attemptId: "att-01",
-          idempotencyKey: "idemp-01",
-          status: "running",
-        },
-      ];
-
-      const agentJournal = [
-        {
-          assignmentId: "asgn-01",
-          attemptId: "att-01",
-          idempotencyKey: "idemp-01",
-          status: "completed" as const,
-          terminalResult: { output: "done" },
-          updatedAt: "2026-09-21T12:05:00.000Z",
-        },
-      ];
-
-      const actions = reconcileAssignmentJournal(cloudRecords, agentJournal);
-      expect(actions).toEqual([
-        {
-          action: "submit_result",
-          assignmentId: "asgn-01",
-          terminalResult: { output: "done" },
-        },
-      ]);
+      expect(() => parseHostMessage(missingIdempMsg)).toThrow(
+        MalformedProtocolMessageError,
+      );
     });
 
-    it("cancels orphaned assignment no longer tracked by Cloud", () => {
-      const cloudRecords: CloudAssignmentRecord[] = [];
-      const agentJournal = [
-        {
-          assignmentId: "asgn-orphaned",
-          attemptId: "att-02",
-          idempotencyKey: "idemp-02",
-          status: "running" as const,
-          updatedAt: "2026-09-21T12:05:00.000Z",
+    it("rejects a snapshot whose idempotency key differs from the envelope", () => {
+      const mismatched = {
+        ...hostAssignmentEnvelope,
+        type: "assignment.start",
+        payload: {
+          snapshot: { ...sampleSnapshot, idempotencyKey: "different-key" },
+          input: {},
         },
-      ];
+      };
 
-      const actions = reconcileAssignmentJournal(cloudRecords, agentJournal);
-      expect(actions).toEqual([
-        {
-          action: "cancel_orphaned",
-          assignmentId: "asgn-orphaned",
-        },
-      ]);
+      expect(() => parseHostMessage(mismatched)).toThrow(
+        MalformedProtocolMessageError,
+      );
     });
   });
 });

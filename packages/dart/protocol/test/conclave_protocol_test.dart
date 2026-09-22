@@ -81,46 +81,67 @@ void main() {
     );
   });
 
-  test('validates a generated Agent assignment envelope', () {
-    final parsed = AgentProtocolMessage.parse({
-      'protocol': agentProtocolName,
-      'protocolVersion': agentProtocolVersion,
+  test('validates a generated Host assignment envelope', () {
+    final parsed = HostProtocolMessage.parse({
+      'protocol': hostProtocolName,
+      'protocolVersion': hostProtocolVersion,
       'messageId': 'message-1',
-      'timestamp': '2026-09-22T00:00:00Z',
+      'timestamp': '2026-09-23T00:00:00Z',
       'type': 'assignment.start',
       'workspaceId': 'workspace-1',
-      'agentId': 'agent-1',
+      'hostId': 'host-1',
       'workerId': 'worker-1',
       'runId': 'run-1',
       'taskId': 'task-1',
       'attemptId': 'attempt-1',
       'assignmentId': 'assignment-1',
       'idempotencyKey': 'idempotency-1',
-      'payload': <String, Object?>{},
+      'payload': <String, Object?>{
+        'snapshot': <String, Object?>{
+          'assignmentId': 'assignment-1',
+          'workspaceId': 'workspace-1',
+          'projectId': 'project-1',
+          'runId': 'run-1',
+          'taskId': 'task-1',
+          'attemptId': 'attempt-1',
+          'requestedByUserId': 'user-1',
+          'hostId': 'host-1',
+          'workerId': 'worker-1',
+          'resolvedWorkerVersion': '1.0.0',
+          'credentialProfileId': 'credential-1',
+          'config': <String, Object?>{},
+          'sessionPolicy': 'stateless',
+          'permissions': <Object?>[],
+          'contextRefs': <Object?>[],
+          'timeoutMs': 1000,
+          'idempotencyKey': 'idempotency-1',
+        },
+        'input': <String, Object?>{},
+      },
     });
     expect(parsed.type, 'assignment.start');
   });
 
-  test('rejects malformed or oversized Agent messages', () {
+  test('rejects malformed or oversized Host messages', () {
     expect(
-      () => AgentProtocolMessage.parse({
-        'protocol': agentProtocolName,
-        'protocolVersion': agentProtocolVersion,
+      () => HostProtocolMessage.parse({
+        'protocol': hostProtocolName,
+        'protocolVersion': hostProtocolVersion,
         'messageId': 'message-1',
-        'timestamp': '2026-09-22T00:00:00Z',
+        'timestamp': '2026-09-23T00:00:00Z',
         'type': 'assignment.start',
         'payload': <String, Object?>{},
       }),
       throwsA(isA<ProtocolException>()),
     );
     expect(
-      () => AgentProtocolMessage.parse({
-        'protocol': agentProtocolName,
-        'protocolVersion': agentProtocolVersion,
+      () => HostProtocolMessage.parse({
+        'protocol': hostProtocolName,
+        'protocolVersion': hostProtocolVersion,
         'messageId': 'message-1',
-        'timestamp': '2026-09-22T00:00:00Z',
-        'type': 'agent.heartbeat',
-        'payload': {'padding': 'x' * agentProtocolMaxMessageSizeBytes},
+        'timestamp': '2026-09-23T00:00:00Z',
+        'type': 'host.heartbeat',
+        'payload': {'padding': 'x' * hostProtocolMaxMessageSizeBytes},
       }),
       throwsA(isA<ProtocolException>()),
     );
