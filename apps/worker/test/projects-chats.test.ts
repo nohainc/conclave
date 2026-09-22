@@ -96,6 +96,22 @@ describe("Projects and Chats API (Architecture v2)", () => {
     expect(() => requireSameOriginForCookieMutation(request)).not.toThrow();
   });
 
+  it("recognizes the Access service-token assertion forwarded to the Worker", () => {
+    const payload = btoa(JSON.stringify({ common_name: "publisher.access" }));
+    const request = new Request(
+      "https://cloud.conclave.internal/api/workspaces",
+      {
+        method: "POST",
+        headers: {
+          cookie: "CF_Authorization=access-session",
+          "cf-access-jwt-assertion": `header.${payload}.signature`,
+        },
+      },
+    );
+
+    expect(() => requireSameOriginForCookieMutation(request)).not.toThrow();
+  });
+
   async function seedUserAndSession(userId: string, email: string) {
     const token = `tok_${userId}_${Math.random()}`;
     const tokenHash = await hashToken(token);

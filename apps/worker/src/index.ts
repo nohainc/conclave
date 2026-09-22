@@ -229,11 +229,43 @@ function bearer(request: Request): string | null {
 export function requireSameOriginForCookieMutation(request: Request): void {
   if (!request.headers.get("cookie") || bearer(request)) return;
 
-  // Cloudflare Access service-token calls are machine-to-machine requests.
-  // Access may attach its CF_Authorization cookie while forwarding the
-  // request, but these callers cannot provide a browser Origin/Referer.
-  // The service-token headers are still authenticated by Access before the
-  // request reaches this Worker; authorization remains enforced below.
+  // Cloudflare Access consumes the service-token client headers at the edge
+  // and forwards a signed application JWT instead. The assertion's
+  // `common_name` is the service-token client ID and service-token assertions
+  // have no user `sub`. This is only a CSRF classification hint; Access
+  // authentication and Conclave authorization still happen below.
+  const accessAssertion = request.headers.get("cf-access-jwt-assertion");
+  if (accessAssertion) {
+    try {
+      const payload = accessAssertion.split(".")[1];
+      if (payload) {
+        const claims = JSON.parse(
+          new TextDecoder().decode(
+            Uint8Array.from(
+              atob(
+                payload
+                  .replace(/-/g, "+")
+                  .replace(/_/g, "/")
+                  .padEnd(Math.ceil(payload.length / 4) * 4, "="),
+              ),
+              (character) => character.charCodeAt(0),
+            ),
+          ),
+        ) as { common_name?: unknown; sub?: unknown };
+        if (
+          typeof claims.common_name === "string" &&
+          claims.common_name &&
+          !claims.sub
+        )
+          return;
+      }
+    } catch {
+      // Invalid assertions are handled by Access/Core authentication below.
+    }
+  }
+
+  // Keep this fallback for local gateways that preserve the original
+  // service-token headers instead of forwarding the assertion.
   const serviceTokenClientId = request.headers
     .get("cf-access-client-id")
     ?.trim();
