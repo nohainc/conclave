@@ -20,6 +20,8 @@ class StudioApp extends StatefulWidget {
 
 class _StudioAppState extends State<StudioApp> {
   late StudioSnapshot snapshot;
+  List<StudioWorkspace> workspaces = const [];
+  String? selectedWorkspaceId;
   String? selectedProjectId;
   RunStatus? optimisticRunStatus;
   Timer? refreshTimer;
@@ -58,11 +60,25 @@ class _StudioAppState extends State<StudioApp> {
     super.initState();
     store = StudioStore(widget.dataSource);
     snapshot = StudioSnapshot.empty();
+    unawaited(_loadWorkspaces());
     _loadSnapshot();
   }
 
+  Future<void> _loadWorkspaces() async {
+    try {
+      final loaded = await store.workspaces.list();
+      if (!mounted) return;
+      setState(() {
+        workspaces = loaded;
+        selectedWorkspaceId ??= loaded.firstOrNull?.id;
+      });
+    } catch (_) {
+      // Snapshot loading remains the primary path for anonymous development.
+    }
+  }
+
   Future<void> _loadSnapshot(
-      {String? projectId, bool showSpinner = true}) async {
+      {String? projectId, String? workspaceId, bool showSpinner = true}) async {
     if (showSpinner) {
       setState(() {
         isLoading = true;
@@ -70,10 +86,13 @@ class _StudioAppState extends State<StudioApp> {
       });
     }
     try {
-      final loaded = await store.reload(projectId: projectId);
+      final loaded = await store.reload(
+          projectId: projectId,
+          workspaceId: workspaceId ?? selectedWorkspaceId);
       if (!mounted) return;
       setState(() {
         snapshot = loaded;
+        selectedWorkspaceId = workspaceId ?? selectedWorkspaceId;
         optimisticRunStatus = null;
         selectedQuality = loaded.policy?.preset ?? selectedQuality;
         selectedProjectId = loaded.projects.any(
@@ -388,6 +407,10 @@ class _StudioAppState extends State<StudioApp> {
                     letterSpacing: -.3)),
           ]),
           const SizedBox(height: 32),
+          if (workspaces.length > 1) ...[
+            _workspaceSelector(),
+            const SizedBox(height: 20),
+          ],
           _sidebarLabel('WORKSPACE'),
           _navItem(Icons.chat_bubble_outline, 'Chats', 0),
           _navItem(Icons.track_changes_rounded, 'Goals', 1,
@@ -459,6 +482,36 @@ class _StudioAppState extends State<StudioApp> {
               fontSize: 10,
               fontWeight: FontWeight.w700,
               letterSpacing: 1.2)));
+
+  Widget _workspaceSelector() => DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: workspaces.any((workspace) => workspace.id == selectedWorkspaceId)
+              ? selectedWorkspaceId
+              : workspaces.first.id,
+          isExpanded: true,
+          dropdownColor: const Color(0xff29283c),
+          icon: const Icon(Icons.unfold_more, color: Colors.white54, size: 17),
+          style: const TextStyle(color: Colors.white, fontSize: 13),
+          items: workspaces
+              .map((workspace) => DropdownMenuItem<String>(
+                    value: workspace.id,
+                    child: Text(workspace.name,
+                        overflow: TextOverflow.ellipsis),
+                  ))
+              .toList(),
+          onChanged: (workspaceId) {
+            if (workspaceId == null || workspaceId == selectedWorkspaceId) {
+              return;
+            }
+            setState(() {
+              selectedWorkspaceId = workspaceId;
+              selectedProjectId = null;
+              selectedChatId = null;
+            });
+            _loadSnapshot(workspaceId: workspaceId);
+          },
+        ),
+      );
 
   Widget _navItem(IconData icon, String label, int index, {String? badge}) {
     final active = navigationIndex == index;
