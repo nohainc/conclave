@@ -393,6 +393,77 @@ describe("Agent Enrollment & Agent Gateway (Architecture v2)", () => {
     const helloAck = (await helloRes.json()) as AgentProtocolMessage;
     expect(helloAck.type).toBe("agent.hello.ack");
 
+    const now = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO worker_plugins
+       (id, display_name, description, publisher, supported_roles_json,
+        supported_capabilities_json, status, created_at, updated_at)
+       VALUES ('plugin-sync', 'Sync Plugin', 'Sync fixture', 'Conclave',
+               '["researcher"]', '["repository_research"]', 'active', ?, ?)`,
+    ).run(now, now);
+    db.prepare(
+      `INSERT INTO worker_plugin_versions
+       (id, plugin_id, version, channel, protocol_version, min_agent_version,
+        supported_os_json, supported_arch_json, package_digest, package_r2_key,
+        signature, permissions_json, billing_modes_json, config_schema_json,
+        secret_schema_json, created_at)
+       VALUES ('plugin-sync-v1', 'plugin-sync', '1.0.0', 'stable', '2.0',
+               '0.1.0', '["macos"]', '["arm64"]', 'sha256:digest',
+               'plugins/plugin-sync/1.0.0/package.tgz', 'sig_pkg_test', '[]',
+               '["free"]', '{}', '[]', ?)`,
+    ).run(now);
+    db.prepare(
+      `INSERT INTO workers
+       (id, workspace_id, agent_id, plugin_id, plugin_version_policy, name,
+        roles_json, capabilities_json, config_json, secret_refs_json,
+        billing_mode, cost_metadata_json, independence_key, concurrency_limit,
+        session_policy, enabled, status, created_at, updated_at)
+       VALUES ('worker-sync', 'ws-test-1', 'agent-http-1', 'plugin-sync',
+               'latest', 'Sync Worker', '["researcher"]',
+               '["repository_research"]', '{}', '[]', 'free', '{}',
+               'independent-sync', 1, 'stateless', 1, 'available', ?, ?)`,
+    ).run(now, now);
+    const syncMessage: AgentProtocolMessage = {
+      protocol: AGENT_PROTOCOL_NAME,
+      protocolVersion: AGENT_PROTOCOL_VERSION,
+      messageId: "msg-sync-1",
+      timestamp: new Date().toISOString(),
+      type: "agent.sync.request",
+      payload: {
+        agentId: "agent-http-1",
+        workspaceId: "ws-test-1",
+        installedPluginVersions: {},
+        activeWorkerIds: [],
+      },
+    };
+    const syncRes = await worker.fetch(
+      new Request("http://localhost/api/v2/agent-protocol/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(syncMessage),
+      }),
+      mockEnv,
+    );
+    expect(syncRes.status).toBe(200);
+    const syncResponse = (await syncRes.json()) as {
+      payload: {
+        desiredPlugins: Array<{ pluginId: string; version: string }>;
+        desiredWorkers: Array<{ workerId: string; pluginId: string }>;
+      };
+    };
+    expect(syncResponse.payload.desiredPlugins).toEqual([
+      expect.objectContaining({ pluginId: "plugin-sync", version: "1.0.0" }),
+    ]);
+    expect(syncResponse.payload.desiredWorkers).toEqual([
+      expect.objectContaining({
+        workerId: "worker-sync",
+        pluginId: "plugin-sync",
+      }),
+    ]);
+
     const impersonation = await worker.fetch(
       new Request("http://localhost/api/v2/agent-protocol/messages", {
         method: "POST",

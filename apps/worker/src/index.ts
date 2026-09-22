@@ -3358,6 +3358,108 @@ async function handleAgentProtocolMessage(
         });
       }
     }
+    const desiredWorkerRows = await env.CONCLAVE_DB.prepare(
+      `SELECT id, workspace_id, agent_id, plugin_id, plugin_version_policy,
+              name, roles_json, capabilities_json, config_json, secret_refs_json,
+              billing_mode, cost_metadata_json, independence_key,
+              concurrency_limit, session_policy, enabled
+       FROM workers
+       WHERE workspace_id = ?1 AND agent_id = ?2 AND enabled = 1
+       ORDER BY id ASC`,
+    )
+      .bind(message.payload.workspaceId, message.payload.agentId)
+      .all<{
+        id: string;
+        workspace_id: string;
+        agent_id: string;
+        plugin_id: string;
+        plugin_version_policy: string;
+        name: string;
+        roles_json: string;
+        capabilities_json: string;
+        config_json: string;
+        secret_refs_json: string;
+        billing_mode: string;
+        cost_metadata_json: string;
+        independence_key: string;
+        concurrency_limit: number;
+        session_policy: string;
+        enabled: number;
+      }>();
+    const parseJson = (value: string, fallback: unknown): unknown => {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return fallback;
+      }
+    };
+    const desiredWorkers = (desiredWorkerRows.results ?? []).map((row) => ({
+      workerId: row.id,
+      workspaceId: row.workspace_id,
+      agentId: row.agent_id,
+      pluginId: row.plugin_id,
+      pluginVersionPolicy: row.plugin_version_policy,
+      name: row.name,
+      roles: parseJson(row.roles_json, []),
+      capabilities: parseJson(row.capabilities_json, []),
+      config: parseJson(row.config_json, {}),
+      secretRefs: parseJson(row.secret_refs_json, []),
+      enabled: row.enabled === 1,
+      availability: "available",
+      billingMode: row.billing_mode,
+      costMetadata: parseJson(row.cost_metadata_json, {}),
+      independenceKey: row.independence_key,
+      concurrencyLimit: row.concurrency_limit,
+      sessionPolicy: row.session_policy,
+    }));
+    const desiredPluginRows = await env.CONCLAVE_DB.prepare(
+      `SELECT DISTINCT wp.id AS plugin_id, wp.publisher,
+              wpv.version, wpv.protocol_version, wpv.min_agent_version,
+              wpv.package_digest, wpv.package_r2_key, wpv.signature,
+              wpv.permissions_json, wpv.supported_os_json, wpv.supported_arch_json,
+              wpv.secret_schema_json
+       FROM workers w
+       JOIN worker_plugins wp ON wp.id = w.plugin_id AND wp.status = 'active'
+       JOIN worker_plugin_versions wpv ON wpv.plugin_id = wp.id
+         AND wpv.is_revoked = 0
+         AND wpv.version = (
+           SELECT latest.version
+           FROM worker_plugin_versions latest
+           WHERE latest.plugin_id = wp.id AND latest.is_revoked = 0
+           ORDER BY latest.created_at DESC
+           LIMIT 1
+         )
+       WHERE w.workspace_id = ?1 AND w.agent_id = ?2 AND w.enabled = 1
+       ORDER BY wp.id ASC`,
+    )
+      .bind(message.payload.workspaceId, message.payload.agentId)
+      .all<{
+        plugin_id: string;
+        publisher: string;
+        version: string;
+        protocol_version: string;
+        min_agent_version: string;
+        package_digest: string;
+        package_r2_key: string;
+        signature: string;
+        permissions_json: string;
+        supported_os_json: string;
+        supported_arch_json: string;
+        secret_schema_json: string;
+      }>();
+    const desiredPlugins = (desiredPluginRows.results ?? []).map((row) => ({
+      pluginId: row.plugin_id,
+      publisher: row.publisher,
+      version: row.version,
+      protocolVersion: row.protocol_version,
+      minAgentVersion: row.min_agent_version,
+      packageDigest: row.package_digest,
+      packageR2Key: row.package_r2_key,
+      signature: row.signature,
+      permissions: parseJson(row.permissions_json, []),
+      supportedPlatforms: parseJson(row.supported_os_json, []),
+      secretEnvironmentVariables: parseJson(row.secret_schema_json, []),
+    }));
     return json({
       protocol: AGENT_PROTOCOL_NAME,
       protocolVersion: AGENT_PROTOCOL_VERSION,
@@ -3366,8 +3468,8 @@ async function handleAgentProtocolMessage(
       timestamp: now,
       type: "agent.sync.response",
       payload: {
-        desiredPlugins: [],
-        desiredWorkers: [],
+        desiredPlugins,
+        desiredWorkers,
         activeAssignmentIds: assignmentStates
           .filter(
             ({ status }) =>
