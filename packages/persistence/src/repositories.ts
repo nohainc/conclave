@@ -28,6 +28,8 @@ import {
   D1ArtifactRepository,
   D1EventRepository,
   D1GoalRepository,
+  D1PhaseRepository,
+  D1AttemptRepository,
   D1RunRepository,
   D1TaskRepository,
   type D1DatabaseLike,
@@ -117,14 +119,6 @@ export class D1ConnectionRepository extends RecordRepository<ConnectionRecord> {
     super(store, "connections");
   }
 }
-export class D1PhaseRepository extends RecordRepository<PhaseRecord> {
-  constructor(store: D1RecordStore) {
-    super(store, "phases");
-  }
-  async listByRun(runId: string): Promise<readonly PhaseRecord[]> {
-    return (await this.list()).filter((phase) => phase.runId === runId);
-  }
-}
 export class D1TaskDependencyRepository {
   constructor(store: D1RecordStore) {
     this.store = store;
@@ -146,14 +140,6 @@ export class D1TaskDependencyRepository {
       ...record,
       id: `${record.taskId}:${record.dependsOnTaskId}`,
     });
-  }
-}
-export class D1AttemptRepository extends RecordRepository<AttemptRecord> {
-  constructor(store: D1RecordStore) {
-    super(store, "attempts");
-  }
-  async listByTask(taskId: string): Promise<readonly AttemptRecord[]> {
-    return (await this.list()).filter((attempt) => attempt.taskId === taskId);
   }
 }
 export class D1ModelCallRepository extends RecordRepository<ModelCallRecord> {
@@ -359,10 +345,10 @@ export class D1PersistenceRepositories implements PersistenceRepositories {
     this.connections = new D1ConnectionRepository(this.store);
     this.goals = new D1GoalRepository(db);
     this.runs = new D1RunRepository(db, (runId) => this.loadAggregate(runId));
-    this.phases = new D1PhaseRepository(this.store);
+    this.phases = new D1PhaseRepository(db);
     this.tasks = new D1TaskRepository(db);
     this.taskDependencies = new D1TaskDependencyRepository(this.store);
-    this.attempts = new D1AttemptRepository(this.store);
+    this.attempts = new D1AttemptRepository(db);
     this.modelCalls = new D1ModelCallRepository(this.store);
     this.findings = new D1FindingRepository(this.store);
     this.verifications = new D1VerificationRepository(this.store);
@@ -388,9 +374,7 @@ export class D1PersistenceRepositories implements PersistenceRepositories {
     if (!run) return null;
     const goal = await this.goals.get(run.goalId);
     if (!goal) return null;
-    const phases = (await this.phases.list()).filter(
-      (phase) => phase.runId === runId,
-    );
+    const phases = await this.phases.listByRun(runId);
     const tasks = (
       await Promise.all(phases.map((phase) => this.tasks.listByPhase(phase.id)))
     ).flat();
@@ -400,9 +384,9 @@ export class D1PersistenceRepositories implements PersistenceRepositories {
         tasks.map((task) => this.taskDependencies.listByTask(task.id)),
       )
     ).flat();
-    const attempts = (await this.attempts.list()).filter((attempt) =>
-      taskIds.has(attempt.taskId),
-    );
+    const attempts = (
+      await Promise.all(tasks.map((task) => this.attempts.listByTask(task.id)))
+    ).flat();
     const attemptIds = new Set(attempts.map((attempt) => attempt.id));
     const modelCalls = (await this.modelCalls.list()).filter((call) =>
       attemptIds.has(call.attemptId),

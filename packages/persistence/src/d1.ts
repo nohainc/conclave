@@ -3,6 +3,8 @@ import type {
   CompletionCriterionRecord,
   GoalRecord,
   JsonValue,
+  AttemptRecord,
+  PhaseRecord,
   RunEventRecord,
   RunRecord,
   TaskRecord,
@@ -286,6 +288,122 @@ export class D1TaskRepository {
       .all();
     return (rows.results ?? []).map(toTask);
   }
+}
+
+export class D1PhaseRepository {
+  constructor(private readonly db: D1DatabaseLike) {}
+
+  async get(id: string): Promise<PhaseRecord | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM phases WHERE id = ?1")
+      .bind(id)
+      .first();
+    return row ? toPhase(row) : null;
+  }
+
+  async save(phase: PhaseRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO phases (id, run_id, name, purpose, sequence, status, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+         ON CONFLICT(id) DO UPDATE SET name=excluded.name, purpose=excluded.purpose,
+           sequence=excluded.sequence, status=excluded.status, updated_at=excluded.updated_at`,
+      )
+      .bind(
+        phase.id,
+        phase.runId,
+        phase.name,
+        phase.purpose,
+        phase.sequence,
+        phase.status,
+        phase.createdAt,
+        phase.updatedAt,
+      )
+      .run();
+  }
+
+  async listByRun(runId: string): Promise<readonly PhaseRecord[]> {
+    const rows = await this.db
+      .prepare("SELECT * FROM phases WHERE run_id = ?1 ORDER BY sequence")
+      .bind(runId)
+      .all();
+    return (rows.results ?? []).map(toPhase);
+  }
+}
+
+function toPhase(row: Record<string, unknown>): PhaseRecord {
+  return {
+    id: String(row.id),
+    runId: String(row.run_id),
+    name: String(row.name),
+    purpose: String(row.purpose),
+    sequence: Number(row.sequence),
+    status: String(row.status),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+export class D1AttemptRepository {
+  constructor(private readonly db: D1DatabaseLike) {}
+
+  async get(id: string): Promise<AttemptRecord | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM attempts WHERE id = ?1")
+      .bind(id)
+      .first();
+    return row ? toAttempt(row) : null;
+  }
+
+  async save(attempt: AttemptRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO attempts (id, task_id, worker_id, attempt_number, input_snapshot_json,
+           output_artifact_ids_json, status, failure_class, started_at, finished_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+         ON CONFLICT(id) DO UPDATE SET output_artifact_ids_json=excluded.output_artifact_ids_json,
+           status=excluded.status, failure_class=excluded.failure_class,
+           started_at=excluded.started_at, finished_at=excluded.finished_at`,
+      )
+      .bind(
+        attempt.id,
+        attempt.taskId,
+        attempt.workerId,
+        attempt.attemptNumber,
+        json(attempt.inputSnapshot),
+        json(attempt.outputArtifactIds),
+        attempt.status,
+        attempt.failureClass,
+        attempt.startedAt,
+        attempt.finishedAt,
+      )
+      .run();
+  }
+
+  async listByTask(taskId: string): Promise<readonly AttemptRecord[]> {
+    const rows = await this.db
+      .prepare(
+        "SELECT * FROM attempts WHERE task_id = ?1 ORDER BY attempt_number",
+      )
+      .bind(taskId)
+      .all();
+    return (rows.results ?? []).map(toAttempt);
+  }
+}
+
+function toAttempt(row: Record<string, unknown>): AttemptRecord {
+  return {
+    id: String(row.id),
+    taskId: String(row.task_id),
+    workerId: String(row.worker_id),
+    attemptNumber: Number(row.attempt_number),
+    inputSnapshot: parse(row.input_snapshot_json, {}),
+    outputArtifactIds: parse(row.output_artifact_ids_json, [] as string[]),
+    status: String(row.status),
+    failureClass: row.failure_class === null ? null : String(row.failure_class),
+    startedAt: String(row.started_at),
+    finishedAt: row.finished_at === null ? null : String(row.finished_at),
+  };
 }
 
 function toTask(row: Record<string, unknown>): TaskRecord {
