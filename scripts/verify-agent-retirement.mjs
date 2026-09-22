@@ -1,3 +1,5 @@
+/* global console, process */
+
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
@@ -11,8 +13,8 @@ const codeFiles = trackedFiles.filter((file) =>
   /\.(?:ts|tsx|js|mjs|json|yaml|yml)$/.test(file),
 );
 const legacyPatterns = [
-  /(?:^|["'`])(?:\.\/)?apps\/agent(?:[\/"'`]|$)/,
-  /(?:^|["'`])(?:\.\/)?packages\/agent(?:[\/"'`]|$)/,
+  /(?:^|["'`])(?:\.\/)?apps\/agent(?:[/"'`]|$)/,
+  /(?:^|["'`])(?:\.\/)?packages\/agent(?:[/"'`]|$)/,
 ];
 const violations = [];
 

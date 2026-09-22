@@ -233,7 +233,7 @@ describe("durable Forge lifecycle", () => {
         }
         return callback();
       },
-      waitForEvent: async <T>() => {
+      waitForEvent: async () => {
         throw new Error("terminal callback was lost during Forge restart");
       },
       sleep: async () => undefined,
