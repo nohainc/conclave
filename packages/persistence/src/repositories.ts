@@ -10,7 +10,6 @@ import type {
   ProjectMembershipRecord,
   ProjectRecord,
   RetentionPolicyRecord,
-  TaskDependencyRecord,
   WorkflowTemplateRecord,
   WorkerRecord,
   ConnectionRecord,
@@ -27,6 +26,7 @@ import {
   D1PhaseRepository,
   D1AttemptRepository,
   D1RunRepository,
+  D1TaskDependencyRepository,
   D1TaskRepository,
   D1UsageRepository,
   D1VerificationRepository,
@@ -115,29 +115,6 @@ export class D1WorkerRepository extends RecordRepository<WorkerRecord> {
 export class D1ConnectionRepository extends RecordRepository<ConnectionRecord> {
   constructor(store: D1RecordStore) {
     super(store, "connections");
-  }
-}
-export class D1TaskDependencyRepository {
-  constructor(store: D1RecordStore) {
-    this.store = store;
-  }
-  private readonly store: D1RecordStore;
-  async listByTask(taskId: string): Promise<readonly TaskDependencyRecord[]> {
-    const rows = await this.store.list<
-      TaskDependencyRecord & { readonly id: string }
-    >("task_dependencies");
-    return rows
-      .filter((row) => row.taskId === taskId)
-      .map(({ taskId: sourceTaskId, dependsOnTaskId }) => ({
-        taskId: sourceTaskId,
-        dependsOnTaskId,
-      }));
-  }
-  save(record: TaskDependencyRecord): Promise<void> {
-    return this.store.save("task_dependencies", {
-      ...record,
-      id: `${record.taskId}:${record.dependsOnTaskId}`,
-    });
   }
 }
 export class D1OrganizationRepository extends RecordRepository<OrganizationRecord> {
@@ -311,7 +288,7 @@ export class D1PersistenceRepositories implements PersistenceRepositories {
     this.runs = new D1RunRepository(db, (runId) => this.loadAggregate(runId));
     this.phases = new D1PhaseRepository(db);
     this.tasks = new D1TaskRepository(db);
-    this.taskDependencies = new D1TaskDependencyRepository(this.store);
+    this.taskDependencies = new D1TaskDependencyRepository(db);
     this.attempts = new D1AttemptRepository(db);
     this.modelCalls = new D1ModelCallRepository(db);
     this.findings = new D1FindingRepository(db);

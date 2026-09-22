@@ -9,6 +9,7 @@ import type {
   PhaseRecord,
   RunEventRecord,
   RunRecord,
+  TaskDependencyRecord,
   TaskRecord,
   UsageRecord,
   VerificationRecord,
@@ -291,6 +292,34 @@ export class D1TaskRepository {
       .bind(phaseId)
       .all();
     return (rows.results ?? []).map(toTask);
+  }
+}
+
+export class D1TaskDependencyRepository {
+  constructor(private readonly db: D1DatabaseLike) {}
+
+  async listByTask(taskId: string): Promise<readonly TaskDependencyRecord[]> {
+    const rows = await this.db
+      .prepare(
+        "SELECT task_id, depends_on_task_id FROM task_dependencies WHERE task_id = ?1 ORDER BY depends_on_task_id",
+      )
+      .bind(taskId)
+      .all();
+    return (rows.results ?? []).map((row) => ({
+      taskId: String(row.task_id),
+      dependsOnTaskId: String(row.depends_on_task_id),
+    }));
+  }
+
+  async save(record: TaskDependencyRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO task_dependencies (task_id, depends_on_task_id)
+         VALUES (?1, ?2)
+         ON CONFLICT(task_id, depends_on_task_id) DO NOTHING`,
+      )
+      .bind(record.taskId, record.dependsOnTaskId)
+      .run();
   }
 }
 

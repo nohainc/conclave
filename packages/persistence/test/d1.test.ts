@@ -3,6 +3,7 @@ import {
   D1GoalRepository,
   D1EventRepository,
   D1ModelCallRepository,
+  D1TaskDependencyRepository,
   D1RunRepository,
   R2ArtifactStore,
   ThresholdArtifactStore,
@@ -258,5 +259,17 @@ describe("Cloudflare persistence adapters", () => {
       ]),
     ).listByAttempt("attempt-1");
     expect(listed).toEqual([call]);
+  });
+
+  it("uses the relational task dependency table", async () => {
+    const repository = new D1TaskDependencyRepository(
+      new FakeDb([[], [{ task_id: "task-2", depends_on_task_id: "task-1" }]]),
+    );
+    await expect(
+      repository.save({ taskId: "task-2", dependsOnTaskId: "task-1" }),
+    ).resolves.toBeUndefined();
+    await expect(repository.listByTask("task-2")).resolves.toEqual([
+      { taskId: "task-2", dependsOnTaskId: "task-1" },
+    ]);
   });
 });
