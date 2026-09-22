@@ -22,7 +22,7 @@ runtime checks listed below.
 | P21 | Tenant-scoped Agent/Plugin/Worker management, update announcement endpoint, Gateway delivery, and Studio update control | Implemented and tested |
 | P22 | Execution policies, distributed ensembles, synthesis/selection, cost routing, and acceptance tests | Implemented and tested |
 | P23 | Real fixture Forge pipeline, Agent Engine execution, Cloud assignment boundary, evidence, and durable Forge reconciliation | Implemented; external restart/network/timeout drill remains |
-| P24 | No tracked TypeScript Agent application or imports; CI targets Dart Engine and Flutter Agent App | Implemented; final legacy-reference audit remains |
+| P24 | No tracked TypeScript Agent application or imports; automated `agent:retirement-check`; CI targets Dart Engine and Flutter Agent App | Implemented; `RuntimeConnection`/`ConnectionResource` remain only as transitional architecture for the later deletion gate |
 | P25 | Signed packages/releases, revocation, permissions, sandboxed process boundaries, secret redaction, backups, audit export, threat model, and security tests | Implemented; production security gate remains |
 
 ## Remaining proof work before the P0–P25 objective can be closed
