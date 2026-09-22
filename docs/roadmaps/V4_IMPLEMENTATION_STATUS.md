@@ -6,7 +6,7 @@ Track progress of the [v4 implementation roadmap](ARCHITECTURE_V4_IMPLEMENTATION
 | --- | --- | --- |
 | V4-0 | Freeze v4 and establish a green baseline | ✅ Complete |
 | V4-1 | Define v4 canonical domain vocabulary | ✅ Complete |
-| V4-2 | Redesign Worker manifest/package model | ⬜ Not started |
+| V4-2 | Redesign Worker manifest/package model | ✅ Complete |
 | V4-3 | Define schema-first Host and Worker protocols | ⬜ Not started |
 | V4-4 | Create clean v4 D1 schema and reset development data | ⬜ Not started |
 | V4-5 | Rename Cloud execution plane Agent → Host | ⬜ Not started |

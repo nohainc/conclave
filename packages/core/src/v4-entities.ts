@@ -280,7 +280,7 @@ export type V4WorkerAssignmentStatus =
 
 /**
  * v4 Worker Assignment — execution using the Host + Worker + CredentialProfile
- * model. No agentId or pluginId.
+ * model. No legacy execution target fields.
  *
  * Snapshot fields (hostId, workerId, credentialProfileId, resolvedWorkerVersion,
  * model, assignmentConfig) are immutable: changing an account/model/Worker later
@@ -571,7 +571,7 @@ export function validateCredentialGrant(
  * Validates invariants for a v4 WorkerAssignment.
  *
  * Key invariant: requires hostId + workerId + credentialProfileId.
- * No agentId or pluginId.
+ * No legacy execution target fields.
  */
 export function validateV4Assignment(
   assignment: V4WorkerAssignment,

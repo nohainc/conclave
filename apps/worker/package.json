@@ -14,7 +14,7 @@
     "@conclave/core": "workspace:*",
     "@conclave/orchestration": "workspace:*",
     "@conclave/persistence": "workspace:*",
-    "@conclave/plugin-manifest": "workspace:*",
+    "@conclave/worker-manifest": "workspace:*",
     "@conclave/protocol": "workspace:*",
     "@conclave/security": "workspace:*"
   }

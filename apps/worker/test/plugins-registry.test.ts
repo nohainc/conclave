@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import worker from "../src/index.js";
 import { computePackageDigest } from "../../../packages/security/src/index.js";
-import type { WorkerPluginManifest } from "../../../packages/plugin-manifest/src/manifest.js";
+import type { WorkerManifest } from "../../../packages/worker-manifest/src/manifest.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const schemaPath = path.resolve(
@@ -138,25 +138,40 @@ describe("Architecture v2 Cloud Plugin Registry", () => {
     } as unknown as TestEnv;
   });
 
-  const sampleManifest: WorkerPluginManifest = {
-    pluginId: "conclave.codex",
+  const sampleManifest: WorkerManifest = {
+    workerId: "conclave.codex",
     version: "1.0.0",
     displayName: "OpenAI Codex Worker Plugin",
     description: "Official Codex CLI worker plugin",
     publisher: "conclave-official",
     protocolVersion: "2.0",
-    minimumAgentVersion: "0.2.0",
+    minimumHostVersion: "0.2.0",
     supportedOS: ["macos", "linux"],
     supportedArchitecture: ["arm64", "x64"],
     roles: ["coder", "architect"],
     capabilities: ["code_write", "git_ops"],
     permissions: ["fs:read", "fs:write"],
+    credentialRequirements: [
+      {
+        name: "OPENAI_API_KEY",
+        authMode: "api_key",
+        sharingPolicy: "owner_controlled",
+        required: true,
+      },
+    ],
+    credentialSharingPolicy: "owner_controlled",
     configurationSchema: {
       type: "object",
       properties: { model: { type: "string" } },
     },
     secretSchema: {
       OPENAI_API_KEY: { type: "string", required: true },
+    },
+    sessionModes: ["stateless"],
+    concurrencyModel: {
+      maxConcurrentAssignments: 1,
+      persistentRuntime: false,
+      isolation: "process",
     },
     entrypoint: "dist/index.js",
     billingModes: ["api_metered", "subscription"],

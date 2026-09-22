@@ -5,7 +5,7 @@ packages:
   - packages/core
   - packages/orchestration
   - packages/persistence
-  - packages/plugin-manifest
+  - packages/worker-manifest
   - packages/protocol
   - packages/sdk
   - packages/security

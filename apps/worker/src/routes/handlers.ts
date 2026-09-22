@@ -41,9 +41,9 @@ import {
   type SecurityContext,
 } from "@conclave/security";
 import {
-  validateWorkerPluginManifest,
+  validateWorkerManifest,
   compareSemver,
-} from "@conclave/plugin-manifest";
+} from "@conclave/worker-manifest";
 import {
   AGENT_PROTOCOL_NAME,
   AGENT_PROTOCOL_VERSION,
@@ -4750,7 +4750,7 @@ async function handlePublishPlugin(
     signingSecret?: string;
   };
 
-  const manifest = validateWorkerPluginManifest(body.manifest);
+  const manifest = validateWorkerManifest(body.manifest);
   const channel = (body.channel ?? manifest.channel ?? "stable") as
     "stable" | "beta" | "development";
 
@@ -4799,7 +4799,10 @@ async function handlePublishPlugin(
     }
   }
 
-  const r2Key = `plugins/${manifest.pluginId}/${manifest.version}/${digest.replace(/^sha256:/, "")}.tgz`;
+  const workerIdentifier = manifest.workerId || "unknown";
+  const minimumAgentVersion = manifest.minimumHostVersion || "0.1.0";
+
+  const r2Key = `plugins/${workerIdentifier}/${manifest.version}/${digest.replace(/^sha256:/, "")}.tgz`;
   const bucket =
     (env as unknown as { CONCLAVE_PLUGINS?: R2Bucket }).CONCLAVE_PLUGINS ??
     env.CONCLAVE_ARTIFACTS;
@@ -4807,7 +4810,7 @@ async function handlePublishPlugin(
     await bucket.put(r2Key, packageBytes, {
       httpMetadata: { contentType: "application/gzip" },
       customMetadata: {
-        pluginId: manifest.pluginId,
+        pluginId: workerIdentifier,
         version: manifest.version,
         digest,
         signature,
@@ -4830,7 +4833,7 @@ async function handlePublishPlugin(
        updated_at = excluded.updated_at`,
   )
     .bind(
-      manifest.pluginId,
+      workerIdentifier,
       manifest.displayName,
       manifest.description ?? "",
       manifest.publisher,
@@ -4841,7 +4844,7 @@ async function handlePublishPlugin(
     .run();
 
   // 2. Upsert worker_plugin_versions
-  const versionId = `ver-${manifest.pluginId}-${manifest.version}`;
+  const versionId = `ver-${workerIdentifier}-${manifest.version}`;
   await env.CONCLAVE_DB.prepare(
     `INSERT INTO worker_plugin_versions (
        id, plugin_id, version, channel, protocol_version, min_agent_version, max_agent_version,
@@ -4864,11 +4867,11 @@ async function handlePublishPlugin(
   )
     .bind(
       versionId,
-      manifest.pluginId,
+      workerIdentifier,
       manifest.version,
       channel,
-      manifest.protocolVersion ?? "2.0",
-      manifest.minimumAgentVersion ?? "0.2.0",
+      manifest.protocolVersion ?? "4.0",
+      minimumAgentVersion,
       null,
       JSON.stringify(manifest.supportedOS),
       JSON.stringify(manifest.supportedArchitecture),
@@ -4884,7 +4887,8 @@ async function handlePublishPlugin(
     .run();
 
   return json({
-    pluginId: manifest.pluginId,
+    pluginId: workerIdentifier,
+    workerId: workerIdentifier,
     version: manifest.version,
     channel,
     packageDigest: digest,

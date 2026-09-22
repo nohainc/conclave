@@ -47,15 +47,15 @@ importers:
       '@conclave/persistence':
         specifier: workspace:*
         version: link:../../packages/persistence
-      '@conclave/plugin-manifest':
-        specifier: workspace:*
-        version: link:../../packages/plugin-manifest
       '@conclave/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
       '@conclave/security':
         specifier: workspace:*
         version: link:../../packages/security
+      '@conclave/worker-manifest':
+        specifier: workspace:*
+        version: link:../../packages/worker-manifest
 
   packages/agent-protocol:
     dependencies:
@@ -69,7 +69,6 @@ importers:
         specifier: workspace:*
         version: link:../protocol
 
-
   packages/orchestration:
     dependencies:
       '@conclave/core':
@@ -82,14 +81,7 @@ importers:
         specifier: workspace:*
         version: link:../protocol
 
-
   packages/persistence: {}
-
-  packages/plugin-manifest:
-    dependencies:
-      zod:
-        specifier: ^3.24.2
-        version: 3.25.76
 
   packages/protocol:
     dependencies:
@@ -97,10 +89,15 @@ importers:
         specifier: ^4.1.11
         version: 4.6.5
 
-
   packages/sdk: {}
 
   packages/security: {}
+
+  packages/worker-manifest:
+    dependencies:
+      zod:
+        specifier: ^3.24.2
+        version: 3.25.76
 
 packages:
 
