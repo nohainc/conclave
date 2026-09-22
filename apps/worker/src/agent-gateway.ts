@@ -84,7 +84,17 @@ export function assignmentContextMatches(
 }
 
 export function assignmentIsActive(row: Record<string, unknown>): boolean {
-  return !["completed", "failed", "cancelled"].includes(String(row.status));
+  return !["completed", "failed", "cancelled", "timed_out"].includes(
+    String(row.status),
+  );
+}
+
+export function activeAssignmentIds(
+  states: readonly { assignmentId: string; status: string }[],
+): string[] {
+  return states
+    .filter(({ status }) => assignmentIsActive({ status }))
+    .map(({ assignmentId }) => assignmentId);
 }
 
 export function isCurrentSocketSession(
@@ -546,7 +556,7 @@ export class AgentGateway implements DurableObject {
           payload: {
             desiredPlugins,
             desiredWorkers,
-            activeAssignmentIds: [],
+            activeAssignmentIds: activeAssignmentIds(assignmentStates),
             assignmentStates,
           },
         });

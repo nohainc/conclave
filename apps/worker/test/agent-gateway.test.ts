@@ -8,6 +8,7 @@ import {
   AgentGateway,
   assignmentContextMatches,
   assignmentIsActive,
+  activeAssignmentIds,
   isCurrentSocketSession,
 } from "../src/agent-gateway.js";
 import { hashToken } from "../../../packages/security/src/index.js";
@@ -445,5 +446,14 @@ describe("Agent Enrollment & Agent Gateway (Architecture v2)", () => {
       productionEnv,
     );
     expect(response.status).toBe(401);
+  });
+
+  it("preserves active assignment IDs during Agent reconciliation", () => {
+    const states = [
+      { assignmentId: "active-1", status: "running" },
+      { assignmentId: "done-1", status: "completed" },
+      { assignmentId: "failed-1", status: "failed" },
+    ];
+    expect(activeAssignmentIds(states)).toEqual(["active-1"]);
   });
 });
