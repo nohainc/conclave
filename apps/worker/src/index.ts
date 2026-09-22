@@ -3440,8 +3440,95 @@ async function handleStudioSnapshot(
       .bind(...ownershipBind)
       .first(),
   ]);
+  const chatFilter =
+    projectId === null
+      ? isAnonymous
+        ? "1 = 1"
+        : "c.workspace_id = ?1"
+      : isAnonymous
+        ? "c.project_id = ?1"
+        : "c.workspace_id = ?1 AND c.project_id = ?2";
+  const chatBind =
+    projectId === null
+      ? isAnonymous
+        ? []
+        : [context.workspaceId]
+      : isAnonymous
+        ? [projectId]
+        : [context.workspaceId, projectId];
+  const [chats, chatMessages] = await Promise.all([
+    env.CONCLAVE_DB.prepare(
+      `SELECT c.id, c.project_id AS projectId, c.workspace_id AS workspaceId,
+              c.created_by_user_id AS createdByUserId, c.title, c.status,
+              c.created_at AS createdAt, c.updated_at AS updatedAt
+       FROM chats c WHERE ${chatFilter} ORDER BY c.updated_at DESC`,
+    )
+      .bind(...chatBind)
+      .all(),
+    env.CONCLAVE_DB.prepare(
+      `SELECT m.id, m.chat_id AS chatId, m.sender_type AS senderType,
+              m.content, m.kind, m.goal_id AS goalId, m.metadata_json AS metadata,
+              m.created_at AS createdAt
+       FROM chat_messages m
+       JOIN chats c ON c.id = m.chat_id
+       WHERE ${chatFilter}
+       ORDER BY m.created_at ASC`,
+    )
+      .bind(...chatBind)
+      .all(),
+  ]);
   const mapJson = (value: unknown): string[] =>
     typeof value === "string" ? (JSON.parse(value) as string[]) : [];
+  const mapObject = (value: unknown): Record<string, unknown> => {
+    if (typeof value !== "string") return {};
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return typeof parsed === "object" && parsed !== null
+        ? (parsed as Record<string, unknown>)
+        : {};
+    } catch {
+      return {};
+    }
+  };
+  const messagesByChat = new Map<string, Record<string, unknown>[]>();
+  for (const row of chatMessages.results ?? []) {
+    const chatId = String(row.chatId);
+    const metadata = mapObject(row.metadata);
+    const sender =
+      row.senderType === "user"
+        ? "user"
+        : row.senderType === "system"
+          ? "system"
+          : "conclave";
+    const message = {
+      id: row.id,
+      sender,
+      text: row.content,
+      timestamp: row.createdAt,
+      ...(metadata.runPreview ? { runPreview: metadata.runPreview } : {}),
+    };
+    const existing = messagesByChat.get(chatId) ?? [];
+    existing.push(message);
+    messagesByChat.set(chatId, existing);
+  }
+  const chatsByProject = new Map<string, Record<string, unknown>[]>();
+  for (const row of chats.results ?? []) {
+    const chat = {
+      id: row.id,
+      projectId: row.projectId,
+      workspaceId: row.workspaceId,
+      createdByUserId: row.createdByUserId,
+      title: row.title,
+      status: row.status,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      lastActivity: row.updatedAt,
+      messages: messagesByChat.get(String(row.id)) ?? [],
+    };
+    const projectChats = chatsByProject.get(String(row.projectId)) ?? [];
+    projectChats.push(chat);
+    chatsByProject.set(String(row.projectId), projectChats);
+  }
   return json({
     workspaceId: context.workspaceId,
     viewer: {
@@ -3451,7 +3538,10 @@ async function handleStudioSnapshot(
     },
     activeRunId: activeRun?.id ?? null,
     run: latestRun ?? null,
-    projects: projects.results ?? [],
+    projects: (projects.results ?? []).map((project) => ({
+      ...project,
+      chats: chatsByProject.get(String(project.id)) ?? [],
+    })),
     workers: (workers.results ?? []).map((row) => ({
       ...row,
       role: mapJson(row.roles_json)[0] ?? "worker",
