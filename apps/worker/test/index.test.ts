@@ -12,6 +12,13 @@ const identityDb = {
         return this;
       },
       async first<T>() {
+        if (query.includes("SELECT workflow_instance_id FROM runs")) {
+          const runId = String(values[0]);
+          const workflowInstanceId = workflowExecutions.get(runId);
+          return workflowInstanceId
+            ? ({ workflow_instance_id: workflowInstanceId } as T)
+            : null;
+        }
         if (query.includes("FROM runs r JOIN goals")) {
           return {
             policy_snapshot_json: JSON.stringify({
@@ -46,6 +53,9 @@ const identityDb = {
         return { results: [] as readonly T[] };
       },
       async run() {
+        if (query.includes("UPDATE runs SET workflow_instance_id")) {
+          workflowExecutions.set(String(values[2]), String(values[0]));
+        }
         if (query.includes("ci_evidence")) {
           const evidenceId = String(values[0]);
           if (consumedEvidence.has(evidenceId))
