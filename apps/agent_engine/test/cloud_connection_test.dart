@@ -242,7 +242,7 @@ void main() {
         .firstWhere((message) => message['type'] == 'agent.sync.request');
     expect(
       (sync['payload'] as Map<String, dynamic>)['unreconciledAssignmentIds'],
-      ['recovered-running'],
+      ['already-completed', 'recovered-running'],
     );
     await connection.close();
   });

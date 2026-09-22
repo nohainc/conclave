@@ -698,8 +698,10 @@ class AgentCloudConnection {
     if (journal != null) {
       final records = await journal.reconcile();
       for (final record in records.values) {
-        if (record.status == AssignmentStatus.received ||
-            record.status == AssignmentStatus.running) {
+        // Include terminal local results until Cloud acknowledges them. This
+        // closes the crash window after plugin success but before the result
+        // reaches Cloud.
+        if (record.status != AssignmentStatus.reconciled) {
           recoveredAssignmentIds.add(record.assignmentId);
         }
       }
