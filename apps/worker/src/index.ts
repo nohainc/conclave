@@ -2614,9 +2614,10 @@ async function handleCreateWorker(
 
   // Validate agent and plugin references
   const agentRow = await env.CONCLAVE_DB.prepare(
-    `SELECT id, workspace_id as workspaceId, status FROM agents WHERE id = ?1`,
+    `SELECT id, workspace_id as workspaceId, status
+     FROM agents WHERE id = ?1 AND workspace_id = ?2`,
   )
-    .bind(agentId)
+    .bind(agentId, workspaceId)
     .first<{ id: string; workspaceId: string; status: string }>();
 
   if (!agentRow) {

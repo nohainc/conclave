@@ -357,6 +357,44 @@ describe("Worker Configuration REST API (Architecture v2)", () => {
     expect(invalidPluginRes.status).toBe(404);
   });
 
+  it("rejects worker creation with an agent owned by another workspace", async () => {
+    const now = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO workspaces (id, name, slug, status, created_at, updated_at)
+       VALUES ('ws-other', 'Other Workspace', 'other-ws', 'active', ?, ?)`,
+    ).run(now, now);
+    db.prepare(
+      `INSERT INTO agents (id, workspace_id, name, hostname, status, version, capabilities_json, enrolled_at, created_at, updated_at)
+       VALUES ('ag-other', 'ws-other', 'Other Agent', 'other.local', 'online', '2.0.0', '{}', ?, ?, ?)`,
+    ).run(now, now, now);
+
+    const response = await worker.fetch(
+      new Request("http://localhost/api/v2/workspaces/ws-test-1/workers", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: "w-cross-workspace",
+          agentId: "ag-other",
+          pluginId: "codex",
+          name: "Cross Workspace Worker",
+        }),
+      }),
+      mockEnv,
+    );
+
+    expect(response.status).toBe(404);
+    expect(
+      (
+        db
+          .prepare("SELECT COUNT(*) AS count FROM workers WHERE id = ?")
+          .get("w-cross-workspace") as { count: number }
+      ).count,
+    ).toBe(0);
+  });
+
   it("does not allow a workspace member to address fleet routes in another workspace", async () => {
     const response = await worker.fetch(
       new Request("http://localhost/api/v2/workspaces/ws-other/workers", {
