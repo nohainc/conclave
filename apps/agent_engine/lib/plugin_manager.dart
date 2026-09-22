@@ -109,6 +109,7 @@ class PluginManager {
       String packageR2Key,
     ) download,
   }) async {
+    final desiredPluginIds = <String>{};
     for (final item in desired) {
       final pluginId = item['pluginId'];
       final version = item['version'];
@@ -131,7 +132,14 @@ class PluginManager {
       }
       _validatePathComponent(pluginId, 'plugin id');
       _validatePathComponent(version, 'plugin version');
-      if (await activeVersion(pluginId) == version) continue;
+      desiredPluginIds.add(pluginId);
+      if (await activeVersion(pluginId) == version) {
+        // Do not trust the active pointer alone. Re-check the immutable
+        // payload, manifest, platform, permissions, and current trust policy
+        // on every desired-state sync.
+        await _verifiedManifest(pluginId, version);
+        continue;
+      }
       final bytes = await download(pluginId, version, packageR2Key);
       await install(PluginPackage(
         id: pluginId,
@@ -161,6 +169,14 @@ class PluginManager {
               : const [],
         ),
       ));
+    }
+    // Desired state is authoritative. A plugin no longer referenced by any
+    // enabled Worker must stop being executable, including revoked versions.
+    final installed = await inventory();
+    for (final plugin in installed) {
+      if (plugin.active && !desiredPluginIds.contains(plugin.pluginId)) {
+        await deactivate(plugin.pluginId);
+      }
     }
   }
 
@@ -304,6 +320,12 @@ class PluginManager {
     }
     final manifest = jsonDecode(await manifestFile.readAsString()) as Map;
     await _activate(pluginId, version, manifest['digest'] as String?);
+  }
+
+  Future<void> deactivate(String pluginId) async {
+    _validatePathComponent(pluginId, 'plugin id');
+    final activeFile = File('${root.path}/$pluginId/active.json');
+    if (await activeFile.exists()) await activeFile.delete();
   }
 
   Future<PluginProcessSpec?> activeProcessSpec(String pluginId) async {

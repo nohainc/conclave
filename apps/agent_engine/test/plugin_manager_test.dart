@@ -208,6 +208,25 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('deactivates plugins removed from Cloud desired state', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-plugin-revoke-');
+    final manager = PluginManager(directory);
+    final bytes = [51, 52, 53];
+    await manager.install(PluginPackage(
+      id: 'removed-plugin',
+      version: '1.0.0',
+      bytes: bytes,
+      digest: sha256.convert(bytes).toString(),
+    ));
+
+    await manager.reconcile(const [], download: (_, __, ___) async => const []);
+
+    expect(await manager.activeVersion('removed-plugin'), isNull);
+    expect(await manager.activeProcessSpec('removed-plugin'), isNull);
+    await directory.delete(recursive: true);
+  });
+
   test('accepts canonical cross-language permission names', () {
     expect(parsePluginPermission('workspace:read'),
         PluginPermission.readWorkspace);
