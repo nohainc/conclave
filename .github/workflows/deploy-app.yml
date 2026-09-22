@@ -26,6 +26,9 @@ jobs:
       - name: Verify browser bundle contains no server secrets
         working-directory: .
         run: node scripts/assert-no-browser-secrets.mjs apps/flutter_app/build/web
+      - name: Verify production security configuration
+        working-directory: .
+        run: node scripts/verify-production-security.mjs
       - name: Install Wrangler
         run: npm install --global wrangler@4.38.0
       - name: Deploy Forge execution service
