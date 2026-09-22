@@ -1,22 +1,20 @@
 # Conclave AX Architecture
 
-Architecture v3 is the authoritative architecture.
+Architecture v4 is the implementation target.
 
-> **Cloud orchestrates. Agent Engine executes. Worker Plugins integrate. Workers do the work. Flutter apps control and observe.**
+> **Cloud orchestrates. Hosts provide machines. Workers provide AI/tool capabilities. Credential Profiles decide whose account is used.**
 
-## Applications
-
-- **Conclave AX Studio** — Flutter/Dart web + desktop client.
-- **Conclave AX Cloud** — TypeScript on Cloudflare.
-- **Conclave AX Agent App** — Flutter/Dart desktop UI.
-- **Conclave AX Agent Engine** — Dart AOT native background process.
-- **Worker Plugins** — language-independent executable integrations; Dart is preferred for first-party plugins when practical.
+## Product model
+- **Conclave Studio** — Flutter Web user interface.
+- **Conclave Cloud** — TypeScript control plane on Cloudflare.
+- **Conclave Host** — one Flutter/Dart installation per machine.
+- **Worker** — installable AI/tool integration managed automatically by Host.
+- **Credential Profile** — user/workspace account identity used by Worker assignments.
 
 ## Read first
+- [Architecture v4](docs/architecture/ARCHITECTURE_V4.md)
+- [v4 source audit](docs/architecture/V4_SOURCE_AUDIT.md)
+- [v4 implementation roadmap](docs/roadmaps/ARCHITECTURE_V4_IMPLEMENTATION.md)
+- [ADR-004](docs/decisions/ADR-004-host-worker-model.md)
 
-- [Architecture v3](docs/architecture/ARCHITECTURE_V3.md)
-- [Technology Stack](docs/architecture/TECH_STACK.md)
-- [Migration to v3](docs/architecture/MIGRATION_TO_V3.md)
-- [Implementation Roadmap](docs/roadmaps/ARCHITECTURE_V3_IMPLEMENTATION.md)
-
-The repository keeps only current Architecture v3 guidance in active documentation.
+Architecture v3 is historical during migration.
