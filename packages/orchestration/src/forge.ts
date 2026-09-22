@@ -1,6 +1,7 @@
 import type {
   ArtifactRecord,
   AttemptRecord,
+  FindingRecord,
   GoalRecord,
   JsonValue,
   ModelCallRecord,
@@ -9,6 +10,7 @@ import type {
   RunRecord,
   TaskRecord,
   TaskDependencyRecord,
+  VerificationRecord,
 } from "@conclave/persistence";
 import {
   CompletionCriteriaGate,
@@ -100,6 +102,8 @@ export interface ForgePersistence {
   saveTaskDependency(dependency: TaskDependencyRecord): Promise<void>;
   saveAttempt(attempt: AttemptRecord): Promise<void>;
   saveModelCall(call: ModelCallRecord): Promise<void>;
+  saveFinding(finding: FindingRecord): Promise<void>;
+  saveVerification(verification: VerificationRecord): Promise<void>;
   saveArtifact(artifact: ArtifactRecord): Promise<void>;
   appendEvent(event: RunEventRecord): Promise<void>;
   resolve(artifactId: string): Promise<{
@@ -151,6 +155,8 @@ export class InMemoryForgePersistence implements ForgePersistence {
   readonly taskDependencies: TaskDependencyRecord[] = [];
   readonly attempts: AttemptRecord[] = [];
   readonly modelCalls: ModelCallRecord[] = [];
+  readonly findings: FindingRecord[] = [];
+  readonly verifications: VerificationRecord[] = [];
   readonly artifacts: ArtifactRecord[] = [];
   readonly events: RunEventRecord[] = [];
 
@@ -180,6 +186,18 @@ export class InMemoryForgePersistence implements ForgePersistence {
   }
   saveModelCall(call: ModelCallRecord): Promise<void> {
     this.modelCalls.push(call);
+    return Promise.resolve();
+  }
+  saveFinding(finding: FindingRecord): Promise<void> {
+    const index = this.findings.findIndex(
+      (candidate) => candidate.id === finding.id,
+    );
+    if (index >= 0) this.findings[index] = finding;
+    else this.findings.push(finding);
+    return Promise.resolve();
+  }
+  saveVerification(verification: VerificationRecord): Promise<void> {
+    this.verifications.push(verification);
     return Promise.resolve();
   }
   saveArtifact(artifact: ArtifactRecord): Promise<void> {
@@ -261,6 +279,7 @@ export async function executeForgeGoal(
   }
   let sequence = 0;
   const phases = new Map<string, string>();
+  const persistedFindings = new Map<string, FindingRecord>();
 
   const event = async (
     eventType: string,
@@ -369,6 +388,34 @@ export async function executeForgeGoal(
         ? { exitCode: evidence.exitCode }
         : {}),
     });
+  };
+
+  const persistFinding = async (
+    finding: Finding,
+    evidenceArtifactIds: readonly string[] = [],
+  ): Promise<void> => {
+    const previous = persistedFindings.get(finding.findingId);
+    const record: FindingRecord = {
+      id: finding.findingId,
+      runId: input.run.id,
+      taskId: finding.taskId,
+      sourceAttemptId: null,
+      severity: finding.severity,
+      scope: "independent_review",
+      description: finding.description,
+      evidenceArtifactIds: evidenceArtifactIds.length
+        ? [...evidenceArtifactIds]
+        : (previous?.evidenceArtifactIds ?? []),
+      status: finding.status,
+      createdAt: previous?.createdAt ?? now(),
+      updatedAt: now(),
+    };
+    persistedFindings.set(record.id, record);
+    await persistence.saveFinding(record);
+  };
+
+  const persistVerification = async (record: VerificationRecord) => {
+    await persistence.saveVerification(record);
   };
 
   const callOnce = async <T extends ModelResult["messageType"]>(
@@ -885,13 +932,26 @@ export async function executeForgeGoal(
       [implementationEvidenceId],
     );
     reviews.push(review);
+    const reviewVerificationId = id();
     gate.recordVerification({
-      verificationId: id(),
+      verificationId: reviewVerificationId,
       taskId: implementationTask.id,
       method: "independent_review",
       outcome: review.payload.outcome === "pass" ? "passed" : "failed",
       verifierWorkerId: reviewer.resource.id,
       independent: true,
+    });
+    await persistVerification({
+      id: reviewVerificationId,
+      runId: input.run.id,
+      taskId: implementationTask.id,
+      criterionId: "",
+      verifierWorkerId: reviewer.resource.id,
+      method: "independent_review",
+      outcome: review.payload.outcome === "pass" ? "passed" : "failed",
+      evidenceArtifactIds: [implementationEvidenceId],
+      rationale: review.payload.summary,
+      createdAt: now(),
     });
     for (const findingId of review.payload.resolvedFindingIds) {
       if (!pendingReReviewIds.has(findingId)) {
@@ -900,6 +960,10 @@ export async function executeForgeGoal(
         );
       }
       gate.verifyFinding(findingId, reviewer.resource.id);
+      const verifiedFinding = gate
+        .listFindings(implementationTask.id)
+        .find((candidate) => candidate.findingId === findingId);
+      if (verifiedFinding) await persistFinding(verifiedFinding);
       pendingReReviewIds.delete(findingId);
     }
     activeFindingIds = [];
@@ -925,6 +989,7 @@ export async function executeForgeGoal(
       } else {
         gate.openFinding(finding);
       }
+      await persistFinding(finding);
       if (gate.policy.blockingSeverities.includes(finding.severity))
         activeFindingIds.push(finding.findingId);
     }
@@ -980,7 +1045,13 @@ export async function executeForgeGoal(
         operations: implementation.payload.proposedOperations,
       }),
     );
-    for (const findingId of activeFindingIds) gate.fixFinding(findingId);
+    for (const findingId of activeFindingIds) {
+      gate.fixFinding(findingId);
+      const fixedFinding = gate
+        .listFindings(implementationTask.id)
+        .find((candidate) => candidate.findingId === findingId);
+      if (fixedFinding) await persistFinding(fixedFinding);
+    }
     for (const findingId of activeFindingIds) pendingReReviewIds.add(findingId);
   }
 
@@ -1021,13 +1092,26 @@ export async function executeForgeGoal(
   const tests = await call(reviewer, testTask, testRequest, "TestResult", [
     testEvidenceId,
   ]);
+  const testVerificationId = id();
   gate.recordVerification({
-    verificationId: id(),
+    verificationId: testVerificationId,
     taskId: implementationTask.id,
     method: "executable_check",
     outcome: tests.payload.outcome === "pass" ? "passed" : "failed",
     verifierWorkerId: reviewer.resource.id,
     independent: true,
+  });
+  await persistVerification({
+    id: testVerificationId,
+    runId: input.run.id,
+    taskId: implementationTask.id,
+    criterionId: "",
+    verifierWorkerId: reviewer.resource.id,
+    method: "executable_check",
+    outcome: tests.payload.outcome === "pass" ? "passed" : "failed",
+    evidenceArtifactIds: [testEvidenceId],
+    rationale: tests.payload.summary,
+    createdAt: now(),
   });
   if (tests.payload.outcome !== "pass")
     throw new Error("Forge executable verification failed");
@@ -1068,13 +1152,26 @@ export async function executeForgeGoal(
       "VerificationResult",
       [testEvidenceId, implementationEvidenceId],
     );
+    const criterionVerificationId = id();
     criteriaGate.recordVerification({
       criterionId: verification.payload.criterionId,
       method: verification.payload.method,
       outcome: verification.payload.outcome,
-      verificationId: id(),
+      verificationId: criterionVerificationId,
       verifierWorkerId: input.lead.resource.id,
       evidenceArtifactIds: [testEvidenceId, implementationEvidenceId],
+    });
+    await persistVerification({
+      id: criterionVerificationId,
+      runId: input.run.id,
+      taskId: verificationTask.id,
+      criterionId: verification.payload.criterionId,
+      verifierWorkerId: input.lead.resource.id,
+      method: verification.payload.method,
+      outcome: verification.payload.outcome,
+      evidenceArtifactIds: [testEvidenceId, implementationEvidenceId],
+      rationale: verification.payload.rationale,
+      createdAt: now(),
     });
     verificationResults.push(verification);
   }

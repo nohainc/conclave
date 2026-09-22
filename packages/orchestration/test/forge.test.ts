@@ -424,6 +424,9 @@ describe("Forge MVP workflow", () => {
     );
     expect(persistence.modelCalls).toHaveLength(12);
     expect(persistence.artifacts.length).toBeGreaterThan(15);
+    expect(persistence.findings).toHaveLength(1);
+    expect(persistence.findings[0]?.status).toBe("verified");
+    expect(persistence.verifications).toHaveLength(5);
     expect(persistence.taskDependencies).toHaveLength(1);
     expect(
       persistence.events.some(

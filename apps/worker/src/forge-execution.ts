@@ -326,6 +326,18 @@ class DurableForgePersistence implements ForgePersistence {
     return this.repositories.modelCalls.save(call);
   }
 
+  saveFinding(
+    finding: Parameters<ForgePersistence["saveFinding"]>[0],
+  ): Promise<void> {
+    return this.repositories.findings.save(finding);
+  }
+
+  saveVerification(
+    verification: Parameters<ForgePersistence["saveVerification"]>[0],
+  ): Promise<void> {
+    return this.repositories.verifications.save(verification);
+  }
+
   async saveArtifact(artifact: ArtifactRecord): Promise<void> {
     const persisted =
       artifact.payload.kind === "inline"
