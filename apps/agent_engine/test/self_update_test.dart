@@ -98,6 +98,7 @@ void main() {
         client: const AgentReleaseClient(),
         updater: AgentUpdater(root, requireSignature: false),
         reportStatus: (status) => phases.add(status.phase),
+        restartBootstrap: (_) async => true,
       );
       await controller.apply(
         healthCheck: (file) async => await file.exists(),
@@ -114,6 +115,46 @@ void main() {
             'healthy',
           ]));
       expect(await File('${root.path}/agent.active').readAsBytes(), bytes);
+    } finally {
+      await subscription.cancel();
+      await server.close(force: true);
+      await root.delete(recursive: true);
+    }
+  });
+
+  test('does not activate a release without a restart bootstrap', () async {
+    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final bytes = [3, 1, 4];
+    final digest = sha256.convert(bytes).toString();
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final subscription = server.listen((request) {
+      if (request.uri.path.endsWith('/latest')) {
+        request.response
+          ..headers.contentType = ContentType.json
+          ..write(jsonEncode({
+            'updateAvailable': true,
+            'release': {
+              'version': '6.1.0',
+              'channel': 'stable',
+              'packageDigest': digest,
+              'packageR2Key': 'agent/6.1.0.bin',
+            },
+          }));
+      } else {
+        request.response.add(bytes);
+      }
+      request.response.close();
+    });
+    try {
+      final controller = AgentUpdateController(
+        cloudUri: Uri.http('127.0.0.1:${server.port}', '/'),
+        currentVersion: '6.0.0',
+        client: const AgentReleaseClient(),
+        updater: AgentUpdater(root, requireSignature: false),
+      );
+      await controller.apply(healthCheck: (_) async => true);
+      expect(controller.status.phase, 'restart_required');
+      expect(await File('${root.path}/agent.active').exists(), isFalse);
     } finally {
       await subscription.cancel();
       await server.close(force: true);
@@ -151,6 +192,26 @@ void main() {
             bytes: bytes,
             digest: sha256.convert(bytes).toString()),
         healthCheck: (_) async => false,
+      ),
+      throwsStateError,
+    );
+    expect(await old.readAsBytes(), [9]);
+    await root.delete(recursive: true);
+  });
+
+  test('rolls back when the restart bootstrap fails', () async {
+    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final old = File('${root.path}/agent.active')..writeAsBytesSync([9]);
+    final bytes = [1, 2, 3];
+    await expectLater(
+      AgentUpdater(root, requireSignature: false).apply(
+        ReleasePackage(
+            version: '2.1.0',
+            channel: 'beta',
+            bytes: bytes,
+            digest: sha256.convert(bytes).toString()),
+        healthCheck: (_) async => true,
+        onActivated: (_) async => false,
       ),
       throwsStateError,
     );

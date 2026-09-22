@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:conclave_agent_engine/agent_engine.dart';
@@ -275,6 +276,25 @@ Future<void> main(List<String> args) async {
               (connection?.activeAssignmentCount ?? 0) > 0,
           healthCheck: (executable) async =>
               await executable.exists() && await executable.length() > 0,
+          restartBootstrap: (executable) async {
+            try {
+              await Process.start(
+                executable.path,
+                args,
+                mode: ProcessStartMode.detachedWithStdio,
+              );
+              // Allow the IPC response to flush and release the engine lock
+              // before the replacement process starts using the same data
+              // directory.
+              unawaited(Future<void>.delayed(
+                const Duration(milliseconds: 150),
+                () => exit(0),
+              ));
+              return true;
+            } on Object {
+              return false;
+            }
+          },
         );
         updateAvailable = controller.availableRelease?.version;
       } else if (action != 'status') {

@@ -238,6 +238,7 @@ class AgentUpdateStatus {
 }
 
 typedef AgentUpdateStatusReporter = void Function(AgentUpdateStatus status);
+typedef AgentRestartBootstrap = Future<bool> Function(File executable);
 
 /// Coordinates release discovery, download, verification, and activation.
 ///
@@ -256,6 +257,7 @@ class AgentUpdateController {
     this.architecture,
     this.authToken,
     this.reportStatus,
+    this.restartBootstrap,
   });
 
   final Uri cloudUri;
@@ -267,6 +269,7 @@ class AgentUpdateController {
   final String? architecture;
   final String? authToken;
   final AgentUpdateStatusReporter? reportStatus;
+  final AgentRestartBootstrap? restartBootstrap;
 
   AgentUpdateStatus _status = const AgentUpdateStatus(phase: 'idle');
   AgentReleaseDescriptor? _available;
@@ -300,8 +303,10 @@ class AgentUpdateController {
   Future<void> apply({
     required Future<bool> Function(File executable) healthCheck,
     Future<bool> Function()? hasActiveAssignments,
+    AgentRestartBootstrap? restartBootstrap,
     int maxPackageBytes = 512 * 1024 * 1024,
   }) async {
+    final bootstrap = restartBootstrap ?? this.restartBootstrap;
     final release = _available ?? await check();
     if (release == null) {
       _publish(const AgentUpdateStatus(phase: 'idle'));
@@ -323,9 +328,17 @@ class AgentUpdateController {
         return;
       }
       _publish(AgentUpdateStatus(phase: 'staged', version: release.version));
+      if (bootstrap == null) {
+        _publish(AgentUpdateStatus(
+          phase: 'restart_required',
+          version: release.version,
+        ));
+        return;
+      }
       await updater.apply(
         package,
         hasActiveAssignments: hasActiveAssignments,
+        onActivated: bootstrap,
         healthCheck: (executable) async {
           _publish(AgentUpdateStatus(
             phase: 'restarting',
@@ -368,8 +381,11 @@ class AgentUpdater {
   final bool requireSignature;
   final String currentProtocolVersion;
 
+  File get activeExecutable => File('${root.path}/agent.active');
+
   Future<void> apply(ReleasePackage release,
       {required Future<bool> Function(File executable) healthCheck,
+      AgentRestartBootstrap? onActivated,
       Future<bool> Function()? hasActiveAssignments,
       int maxPackageBytes = 512 * 1024 * 1024}) async {
     if (maxPackageBytes <= 0) {
@@ -438,7 +454,7 @@ class AgentUpdater {
     _validateVersion(release.version);
     final staged = File(
         '${root.path}/.agent-${release.version}.staged-${DateTime.now().microsecondsSinceEpoch}');
-    final active = File('${root.path}/agent.active');
+    final active = activeExecutable;
     final backup = File('${root.path}/agent.previous');
     final hadPrevious = await active.exists();
     try {
@@ -452,6 +468,11 @@ class AgentUpdater {
         if (await active.exists()) await active.delete();
         if (await backup.exists()) await backup.rename(active.path);
         throw StateError('agent release health check failed; rolled back');
+      }
+      if (onActivated != null && !await onActivated(active)) {
+        if (await active.exists()) await active.delete();
+        if (await backup.exists()) await backup.rename(active.path);
+        throw StateError('agent release restart failed; rolled back');
       }
     } catch (_) {
       if (await staged.exists()) await staged.delete();
