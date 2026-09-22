@@ -1,5 +1,5 @@
 -- =========================================================================
--- Conclave AX Architecture v2 - Clean D1 Database Schema Baseline
+-- Conclave AX Architecture v3 - Clean D1 Database Schema Baseline
 -- =========================================================================
 PRAGMA foreign_keys = ON;
 
