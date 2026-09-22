@@ -35,6 +35,7 @@ class _StudioAppState extends State<StudioApp> {
   final Set<String> expandedProjectIds = {'forge'};
   bool showNewGoal = false;
   bool showWorkerDrawer = false;
+  String? workerActionMessage;
   StudioAgentEnrollment? enrollmentResult;
   StudioQualityPreset selectedQuality = StudioQualityPreset.balanced;
   final Map<String, bool> workerEnabled = {};
@@ -43,6 +44,12 @@ class _StudioAppState extends State<StudioApp> {
   final chatController = TextEditingController();
   final List<StudioChatMessage> localChatMessages = [];
   late final StudioStore store;
+  final navigatorKey = GlobalKey<NavigatorState>();
+  final messengerKey = GlobalKey<ScaffoldMessengerState>();
+
+  void _showSnackBar(String message) {
+    messengerKey.currentState?.showSnackBar(SnackBar(content: Text(message)));
+  }
 
   StudioProject? get selectedProject => snapshot.projects
       .where((project) => project.id == selectedProjectId)
@@ -194,9 +201,7 @@ class _StudioAppState extends State<StudioApp> {
         channel: agent.updateChannel == '—' ? 'stable' : agent.updateChannel,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Update announced to the Agent.')),
-      );
+      _showSnackBar('Update announced to the Agent.');
     } catch (error) {
       if (mounted) setState(() => loadError = error.toString());
     }
@@ -220,9 +225,22 @@ class _StudioAppState extends State<StudioApp> {
   Future<void> _editWorker([StudioWorker? existing]) async {
     if (snapshot.agents.isEmpty || snapshot.plugins.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Connect an Agent and publish a Plugin first.'),
+        setState(() => workerActionMessage =
+            'Connect an Agent and publish a Plugin before creating a Worker.');
+        await showDialog<void>(
+          context: navigatorKey.currentContext ?? context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Worker prerequisites missing'),
+            content: const Text(
+                'A Worker needs one connected Agent and one published Plugin. '
+                'Open Agents or Plugins in the sidebar to finish setup, then '
+                'return here.'),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Close'),
+              ),
+            ],
           ),
         );
       }
@@ -231,9 +249,21 @@ class _StudioAppState extends State<StudioApp> {
     final workspaceId = activeWorkspaceId;
     if (workspaceId == null || workspaceId.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Select a workspace before creating a Worker.'),
+        setState(() => workerActionMessage =
+            'Select a workspace before creating a Worker.');
+        await showDialog<void>(
+          context: navigatorKey.currentContext ?? context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Workspace required'),
+            content: const Text(
+                'Select a workspace from the sidebar, then try creating the '
+                'Worker again.'),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Close'),
+              ),
+            ],
           ),
         );
       }
@@ -275,7 +305,7 @@ class _StudioAppState extends State<StudioApp> {
     bool? saved;
     try {
       saved = await showDialog<bool>(
-        context: context,
+        context: navigatorKey.currentContext ?? context,
         builder: (dialogContext) => StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
             title: Text(existing == null ? 'Create Worker' : 'Edit Worker'),
@@ -405,9 +435,7 @@ class _StudioAppState extends State<StudioApp> {
       );
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open Worker editor: $error')),
-        );
+        _showSnackBar('Could not open Worker editor: $error');
       }
       nameController.dispose();
       rolesController.dispose();
@@ -526,6 +554,8 @@ class _StudioAppState extends State<StudioApp> {
     return MaterialApp(
       title: 'Conclave Studio',
       debugShowCheckedModeBanner: false,
+      navigatorKey: navigatorKey,
+      scaffoldMessengerKey: messengerKey,
       theme: _theme(),
       home: LayoutBuilder(
         builder: (context, constraints) {
@@ -597,98 +627,111 @@ class _StudioAppState extends State<StudioApp> {
       );
 
   Widget _sidebar({bool compact = false}) {
-    return Container(
-      color: const Color(0xff171725),
-      padding: const EdgeInsets.fromLTRB(18, 24, 14, 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(children: [
-            Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                    color: const Color(0xff7768ee),
-                    borderRadius: BorderRadius.circular(9)),
-                child: const Icon(Icons.hub_rounded,
-                    color: Colors.white, size: 18)),
-            const SizedBox(width: 10),
-            const Text('conclave',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 18,
-                    letterSpacing: -.3)),
-          ]),
-          const SizedBox(height: 32),
-          if (workspaces.length > 1) ...[
-            _workspaceSelector(),
-            const SizedBox(height: 20),
-          ],
-          _sidebarLabel('WORKSPACE'),
-          _navItem(Icons.chat_bubble_outline, 'Chats', 0),
-          _navItem(Icons.track_changes_rounded, 'Goals', 1,
-              badge:
-                  '${snapshot.projects.fold<int>(0, (total, project) => total + project.activeGoals)}'),
-          _navItem(Icons.computer_outlined, 'Agents', 2),
-          _navItem(Icons.extension_outlined, 'Plugins', 3),
-          _navItem(Icons.people_alt_outlined, 'Workers', 4),
-          _navItem(Icons.folder_copy_outlined, 'Artifacts', 5),
-          const SizedBox(height: 26),
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _sidebarLabel('PROJECTS'),
-                  ...snapshot.projects.map((project) => _projectItem(project)),
-                  TextButton.icon(
-                    onPressed: _createChat,
-                    icon: const Icon(Icons.add, size: 15),
-                    label: const Text('New chat'),
-                    style: TextButton.styleFrom(
-                        alignment: Alignment.centerLeft,
-                        foregroundColor: Colors.white54,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8)),
-                  ),
-                ],
+    return Builder(
+      builder: (sidebarContext) => Container(
+        color: const Color(0xff171725),
+        padding: const EdgeInsets.fromLTRB(18, 24, 14, 18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(children: [
+              Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                      color: const Color(0xff7768ee),
+                      borderRadius: BorderRadius.circular(9)),
+                  child: const Icon(Icons.hub_rounded,
+                      color: Colors.white, size: 18)),
+              const SizedBox(width: 10),
+              const Text('conclave',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 18,
+                      letterSpacing: -.3)),
+            ]),
+            const SizedBox(height: 32),
+            if (workspaces.length > 1) ...[
+              _workspaceSelector(),
+              const SizedBox(height: 20),
+            ],
+            _sidebarLabel('WORKSPACE'),
+            _navItem(Icons.chat_bubble_outline, 'Chats', 0,
+                compact: compact, navigationContext: sidebarContext),
+            _navItem(Icons.track_changes_rounded, 'Goals', 1,
+                compact: compact,
+                navigationContext: sidebarContext,
+                badge:
+                    '${snapshot.projects.fold<int>(0, (total, project) => total + project.activeGoals)}'),
+            _navItem(Icons.computer_outlined, 'Agents', 2,
+                compact: compact, navigationContext: sidebarContext),
+            _navItem(Icons.extension_outlined, 'Plugins', 3,
+                compact: compact, navigationContext: sidebarContext),
+            _navItem(Icons.people_alt_outlined, 'Workers', 4,
+                compact: compact, navigationContext: sidebarContext),
+            _navItem(Icons.folder_copy_outlined, 'Artifacts', 5,
+                compact: compact, navigationContext: sidebarContext),
+            const SizedBox(height: 26),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _sidebarLabel('PROJECTS'),
+                    ...snapshot.projects
+                        .map((project) => _projectItem(project)),
+                    TextButton.icon(
+                      onPressed: _createChat,
+                      icon: const Icon(Icons.add, size: 15),
+                      label: const Text('New chat'),
+                      style: TextButton.styleFrom(
+                          alignment: Alignment.centerLeft,
+                          foregroundColor: Colors.white54,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8)),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          if (compact) _navItem(Icons.close_rounded, 'Close menu', -1),
-          _navItem(Icons.settings_outlined, 'Settings', 6),
-          const SizedBox(height: 6),
-          Row(children: [
-            CircleAvatar(
-                radius: 15,
-                backgroundColor: const Color(0xffd8d2ff),
-                child: Text(_viewerInitials,
-                    style: const TextStyle(
-                        fontSize: 10,
-                        color: Color(0xff4238a0),
-                        fontWeight: FontWeight.bold))),
-            const SizedBox(width: 9),
-            Expanded(
-                child: Text(
-                    store.auth.viewer?.displayName ??
-                        snapshot.viewer?.displayName ??
-                        'Signed-out user',
-                    style:
-                        const TextStyle(color: Colors.white70, fontSize: 12))),
-            PopupMenuButton<String>(
-              tooltip: 'Account menu',
-              onSelected: (value) {
-                if (value == 'logout') unawaited(_logout());
-              },
-              itemBuilder: (context) => const [
-                PopupMenuItem(value: 'logout', child: Text('Log out')),
-              ],
-              icon:
-                  const Icon(Icons.more_horiz, color: Colors.white38, size: 18),
-            ),
-          ]),
-        ],
+            if (compact)
+              _navItem(Icons.close_rounded, 'Close menu', -1,
+                  compact: compact, navigationContext: sidebarContext),
+            _navItem(Icons.settings_outlined, 'Settings', 6,
+                compact: compact, navigationContext: sidebarContext),
+            const SizedBox(height: 6),
+            Row(children: [
+              CircleAvatar(
+                  radius: 15,
+                  backgroundColor: const Color(0xffd8d2ff),
+                  child: Text(_viewerInitials,
+                      style: const TextStyle(
+                          fontSize: 10,
+                          color: Color(0xff4238a0),
+                          fontWeight: FontWeight.bold))),
+              const SizedBox(width: 9),
+              Expanded(
+                  child: Text(
+                      store.auth.viewer?.displayName ??
+                          snapshot.viewer?.displayName ??
+                          'Signed-out user',
+                      style: const TextStyle(
+                          color: Colors.white70, fontSize: 12))),
+              PopupMenuButton<String>(
+                tooltip: 'Account menu',
+                onSelected: (value) {
+                  if (value == 'logout') unawaited(_logout());
+                },
+                itemBuilder: (context) => const [
+                  PopupMenuItem(value: 'logout', child: Text('Log out')),
+                ],
+                icon: const Icon(Icons.more_horiz,
+                    color: Colors.white38, size: 18),
+              ),
+            ]),
+          ],
+        ),
       ),
     );
   }
@@ -743,7 +786,8 @@ class _StudioAppState extends State<StudioApp> {
         ),
       );
 
-  Widget _navItem(IconData icon, String label, int index, {String? badge}) {
+  Widget _navItem(IconData icon, String label, int index,
+      {String? badge, bool compact = false, BuildContext? navigationContext}) {
     final active = navigationIndex == index;
     return InkWell(
       onTap: () {
@@ -752,7 +796,7 @@ class _StudioAppState extends State<StudioApp> {
             navigationIndex = index;
             showRunDetails = index != 0;
           });
-          Scaffold.maybeOf(context)?.closeDrawer();
+          Scaffold.maybeOf(navigationContext ?? context)?.closeDrawer();
         }
       },
       borderRadius: BorderRadius.circular(9),
@@ -1021,7 +1065,7 @@ class _StudioAppState extends State<StudioApp> {
     if (projectId == null) return;
     final titleController = TextEditingController();
     final title = await showDialog<String>(
-      context: context,
+      context: navigatorKey.currentContext ?? context,
       builder: (context) => AlertDialog(
         title: const Text('New chat'),
         content: TextField(
@@ -1980,12 +2024,33 @@ class _StudioAppState extends State<StudioApp> {
               'Configured resources resolved by role, capability, and Agent.',
               Icons.people_alt_outlined),
           const SizedBox(height: 24),
+          if (workerActionMessage != null) ...[
+            MaterialBanner(
+              content: Text(workerActionMessage!),
+              leading: const Icon(Icons.info_outline),
+              actions: [
+                TextButton(
+                  onPressed: () => setState(() => workerActionMessage = null),
+                  child: const Text('Dismiss'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
           Align(
               alignment: Alignment.centerRight,
-              child: FilledButton.icon(
-                  onPressed: () => unawaited(_editWorker()),
+              child: SizedBox(
+                height: 48,
+                child: FilledButton.icon(
+                  key: const Key('new-worker-button'),
+                  onPressed: () {
+                    setState(() => workerActionMessage = null);
+                    unawaited(_editWorker());
+                  },
                   icon: const Icon(Icons.add),
-                  label: const Text('New Worker'))),
+                  label: const Text('New Worker'),
+                ),
+              )),
           const SizedBox(height: 16),
           if (snapshot.workers.isEmpty)
             _emptyFleetCard('No workers configured',

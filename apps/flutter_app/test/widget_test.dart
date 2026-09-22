@@ -113,5 +113,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Configured resources'), findsOneWidget);
     expect(find.text('Lead'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('new-worker-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('Create Worker'), findsOneWidget);
   });
 }
