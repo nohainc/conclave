@@ -3383,8 +3383,13 @@ async function handleStudioSnapshot(
       .bind(context.workspaceId)
       .all(),
     env.CONCLAVE_DB.prepare(
-      `SELECT p.id, p.display_name AS name,
+      `SELECT p.id, p.display_name AS name, p.description, p.publisher,
               COALESCE((SELECT v.version FROM worker_plugin_versions v WHERE v.plugin_id = p.id AND v.is_revoked = 0 ORDER BY v.created_at DESC LIMIT 1), '—') AS version,
+              COALESCE((SELECT v.channel FROM worker_plugin_versions v WHERE v.plugin_id = p.id AND v.is_revoked = 0 ORDER BY v.created_at DESC LIMIT 1), '—') AS channel,
+              COALESCE((SELECT v.permissions_json FROM worker_plugin_versions v WHERE v.plugin_id = p.id AND v.is_revoked = 0 ORDER BY v.created_at DESC LIMIT 1), '[]') AS permissions,
+              COALESCE((SELECT v.supported_os_json FROM worker_plugin_versions v WHERE v.plugin_id = p.id AND v.is_revoked = 0 ORDER BY v.created_at DESC LIMIT 1), '[]') AS supportedOS,
+              COALESCE((SELECT v.supported_arch_json FROM worker_plugin_versions v WHERE v.plugin_id = p.id AND v.is_revoked = 0 ORDER BY v.created_at DESC LIMIT 1), '[]') AS supportedArchitecture,
+              (SELECT COUNT(DISTINCT i.agent_id) FROM agent_plugin_installs i WHERE i.plugin_id = p.id AND i.status IN ('installed', 'active')) AS installedAgentCount,
               p.status, p.supported_roles_json AS roles, p.supported_capabilities_json AS capabilities
        FROM worker_plugins p
        JOIN workers w ON w.plugin_id = p.id
@@ -3551,6 +3556,9 @@ async function handleStudioSnapshot(
       ...row,
       roles: mapJson(row.roles),
       capabilities: mapJson(row.capabilities),
+      permissions: mapJson(row.permissions),
+      supportedOS: mapJson(row.supportedOS),
+      supportedArchitecture: mapJson(row.supportedArchitecture),
       status: row.status === "active" ? "Installed" : row.status,
     })),
     tasks: (tasks.results ?? []).map((row) => ({

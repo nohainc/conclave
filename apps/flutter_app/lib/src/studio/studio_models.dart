@@ -380,6 +380,13 @@ class StudioPlugin {
     required this.status,
     required this.roles,
     required this.capabilities,
+    this.description = '',
+    this.publisher = '',
+    this.channel = '—',
+    this.permissions = const [],
+    this.supportedOS = const [],
+    this.supportedArchitecture = const [],
+    this.installedAgentCount = 0,
   });
 
   final String id;
@@ -388,6 +395,13 @@ class StudioPlugin {
   final String status;
   final List<String> roles;
   final List<String> capabilities;
+  final String description;
+  final String publisher;
+  final String channel;
+  final List<String> permissions;
+  final List<String> supportedOS;
+  final List<String> supportedArchitecture;
+  final int installedAgentCount;
 
   factory StudioPlugin.fromJson(Map<String, dynamic> json) => StudioPlugin(
         id: _string(json, 'id'),
@@ -396,6 +410,13 @@ class StudioPlugin {
         status: _string(json, 'status'),
         roles: _strings(json, 'roles'),
         capabilities: _strings(json, 'capabilities'),
+        description: _string(json, 'description'),
+        publisher: _string(json, 'publisher'),
+        channel: _string(json, 'channel'),
+        permissions: _strings(json, 'permissions'),
+        supportedOS: _strings(json, 'supportedOS'),
+        supportedArchitecture: _strings(json, 'supportedArchitecture'),
+        installedAgentCount: json['installedAgentCount'] as int? ?? 0,
       );
 }
 

@@ -1484,7 +1484,16 @@ class _StudioAppState extends State<StudioApp> {
                     title: Text(plugin.name,
                         style: const TextStyle(fontWeight: FontWeight.w700)),
                     subtitle: Text(
-                        '${plugin.version} · ${plugin.roles.join(', ')}\n${plugin.capabilities.join(' · ')}'),
+                        '${plugin.version} · ${plugin.channel} · ${plugin.publisher}\n'
+                        '${plugin.roles.join(', ')} · ${plugin.capabilities.join(' · ')}\n'
+                        'Permissions: ${plugin.permissions.isEmpty ? 'none' : plugin.permissions.join(', ')}\n'
+                        'Platforms: ${[
+                      ...plugin.supportedOS,
+                      ...plugin.supportedArchitecture
+                    ].isEmpty ? 'any' : [
+                            ...plugin.supportedOS,
+                            ...plugin.supportedArchitecture
+                          ].join(', ')} · ${plugin.installedAgentCount} Agents'),
                     isThreeLine: true,
                     trailing: _statusChip(
                         plugin.status,
