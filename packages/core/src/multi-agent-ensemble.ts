@@ -149,6 +149,46 @@ export interface MultiAgentEnsembleInput {
 function validateIndependence(input: MultiAgentEnsembleInput): void {
   const { policy, candidates, synthesizer, selector, reviewers } = input;
 
+  if (
+    policy.maxParallel !== undefined &&
+    (!Number.isInteger(policy.maxParallel) || policy.maxParallel < 1)
+  ) {
+    throw new MultiAgentEnsembleError("maxParallel must be a positive integer");
+  }
+  if (
+    policy.timeoutMs !== undefined &&
+    (!Number.isFinite(policy.timeoutMs) || policy.timeoutMs <= 0)
+  ) {
+    throw new MultiAgentEnsembleError("timeoutMs must be positive");
+  }
+  if (
+    policy.minSuccessfulCandidates !== undefined &&
+    (!Number.isInteger(policy.minSuccessfulCandidates) ||
+      policy.minSuccessfulCandidates < 1)
+  ) {
+    throw new MultiAgentEnsembleError(
+      "minSuccessfulCandidates must be a positive integer",
+    );
+  }
+  if (
+    policy.maxEstimatedCostMicrosPerAttempt !== undefined &&
+    (!Number.isFinite(policy.maxEstimatedCostMicrosPerAttempt) ||
+      policy.maxEstimatedCostMicrosPerAttempt < 0)
+  ) {
+    throw new MultiAgentEnsembleError(
+      "maxEstimatedCostMicrosPerAttempt must be non-negative",
+    );
+  }
+  if (
+    policy.preferredBillingModes?.some(
+      (mode) => typeof mode !== "string" || mode.trim().length === 0,
+    )
+  ) {
+    throw new MultiAgentEnsembleError(
+      "preferredBillingModes must contain non-empty strings",
+    );
+  }
+
   if (candidates.length === 0) {
     throw new MultiAgentEnsembleError(
       "At least one candidate worker is required",

@@ -156,6 +156,39 @@ describe("Multi-Agent & Multi-Worker Ensemble Engine (V2-17)", () => {
     runId: "run-1",
   };
 
+  it("rejects invalid execution limits before dispatching workers", async () => {
+    await expect(
+      executeMultiAgentEnsemble({
+        policy: { mode: "parallel", maxParallel: 0 },
+        task: sampleTask,
+        candidates: [macbookClaudeWorker, linuxGptWorker],
+      }),
+    ).rejects.toThrow("maxParallel must be a positive integer");
+
+    await expect(
+      executeMultiAgentEnsemble({
+        policy: {
+          mode: "parallel",
+          timeoutMs: -1,
+          maxEstimatedCostMicrosPerAttempt: -1,
+        },
+        task: sampleTask,
+        candidates: [macbookClaudeWorker, linuxGptWorker],
+      }),
+    ).rejects.toThrow("timeoutMs must be positive");
+
+    await expect(
+      executeMultiAgentEnsemble({
+        policy: {
+          mode: "parallel",
+          minSuccessfulCandidates: 0,
+        },
+        task: sampleTask,
+        candidates: [macbookClaudeWorker, linuxGptWorker],
+      }),
+    ).rejects.toThrow("minSuccessfulCandidates must be a positive integer");
+  });
+
   it("coordinates parallel execution across 3 disparate machines (MacBook, Linux, Web)", async () => {
     const result = await executeMultiAgentEnsemble({
       policy: { mode: "parallel" },
