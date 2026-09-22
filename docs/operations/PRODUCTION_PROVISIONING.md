@@ -49,6 +49,11 @@ workflow.
 The GitHub Actions deployment workflow performs steps 1–3 after Flutter tests
 and the browser-secret scan pass.
 
+The current production deployment has completed this sequence. The remote D1
+schema is migrated, both Workers are deployed, the app health endpoint returns
+`{"ok":true,"environment":"production"}`, and unauthenticated API requests
+are rejected with `401`.
+
 ## Authentication and secrets
 
 Before private-alpha access:

@@ -20,6 +20,11 @@ Latest local verification:
 - Agent retirement and production security preflights passed.
 - App and Forge Wrangler production dry-runs passed; all 12 D1 migrations
   resolve for `conclave-production`.
+- Production D1 `conclave-production` and R2
+  `conclave-artifacts-production` are provisioned; all 12 migrations are
+  applied remotely.
+- Forge and app Workers are deployed, `https://app.conclaveax.com/health`
+  returns production status, and unauthenticated `/api` access returns `401`.
 
 | Phase | Evidence in the repository | Status |
 | --- | --- | --- |
