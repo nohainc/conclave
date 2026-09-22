@@ -11,15 +11,8 @@ import 'package:conclave_agent_engine/trust_policy.dart';
 import 'package:conclave_agent_engine/worker_configuration.dart';
 
 Set<PluginPermission> _configuredPermissions() {
-  final configured = Platform.environment['CONCLAVE_PLUGIN_PERMISSIONS'];
-  if (configured == null) return {};
-  return configured
-      .split(',')
-      .map((permission) => permission.trim())
-      .map((permission) => PluginPermission.values
-          .where((candidate) => candidate.name == permission))
-      .expand((matches) => matches)
-      .toSet();
+  return parseConfiguredPluginPermissions(
+      Platform.environment['CONCLAVE_PLUGIN_PERMISSIONS']);
 }
 
 Future<List<int>> downloadPluginPackage(Uri cloudUri, String? authToken,

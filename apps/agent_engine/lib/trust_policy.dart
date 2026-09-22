@@ -30,6 +30,16 @@ PluginPermission parsePluginPermission(String value) {
   };
 }
 
+Set<PluginPermission> parseConfiguredPluginPermissions(String? configured) {
+  if (configured == null || configured.trim().isEmpty) return {};
+  return configured
+      .split(',')
+      .map((permission) => permission.trim())
+      .where((permission) => permission.isNotEmpty)
+      .map(parsePluginPermission)
+      .toSet();
+}
+
 class PluginTrustPolicy {
   const PluginTrustPolicy({
     this.trustedSecrets = const {},

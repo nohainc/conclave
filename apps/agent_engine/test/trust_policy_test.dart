@@ -28,6 +28,21 @@ void main() {
         'Authorization: [REDACTED]');
   });
 
+  test('parses canonical and legacy configured permission names', () {
+    expect(
+      parseConfiguredPluginPermissions('workspace:read,network:outbound'),
+      {PluginPermission.readWorkspace, PluginPermission.network},
+    );
+    expect(
+      parseConfiguredPluginPermissions('readWorkspace'),
+      {PluginPermission.readWorkspace},
+    );
+    expect(
+      () => parseConfiguredPluginPermissions('unknown'),
+      throwsStateError,
+    );
+  });
+
   test('supports signing-key rotation and key revocation', () {
     const policy = PluginTrustPolicy(
       trustedKeys: {
