@@ -16,6 +16,7 @@ if (schema.properties.protocol.const !== "conclave.protocol") {
 }
 const requiredFields = schema.required;
 const messageTypes = schema["x-message-types"];
+const messagePayloads = schema["x-message-payloads"];
 if (
   !Array.isArray(requiredFields) ||
   requiredFields.some((field) => typeof field !== "string")
@@ -28,6 +29,23 @@ if (
   messageTypes.some((messageType) => typeof messageType !== "string")
 ) {
   throw new Error("canonical protocol schema has invalid message types");
+}
+if (
+  typeof messagePayloads !== "object" ||
+  messagePayloads === null ||
+  messageTypes.some(
+    (messageType) =>
+      typeof messagePayloads[messageType] !== "string" ||
+      !messagePayloads[messageType].startsWith("#/$defs/") ||
+      !Object.hasOwn(
+        schema.$defs ?? {},
+        messagePayloads[messageType].slice("#/$defs/".length),
+      ),
+  )
+) {
+  throw new Error(
+    "canonical protocol schema must map every message to a payload definition",
+  );
 }
 for (const field of requiredFields) {
   if (!schema.required.includes(field)) {
@@ -94,6 +112,12 @@ for (const messageType of messageTypes) {
   }
   if (!generatedDart.includes(`'${messageType}'`)) {
     throw new Error(`generated Dart binding is missing ${messageType}`);
+  }
+  if (!generated.includes(`PROTOCOL_MESSAGE_PAYLOAD_SCHEMAS`)) {
+    throw new Error("generated TypeScript binding is missing payload schemas");
+  }
+  if (!generatedDart.includes(`protocolMessagePayloadSchemas`)) {
+    throw new Error("generated Dart binding is missing payload schemas");
   }
 }
 globalThis.console.log(

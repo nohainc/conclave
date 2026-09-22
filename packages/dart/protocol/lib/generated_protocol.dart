@@ -27,3 +27,17 @@ const protocolMessageTypes = <String>{
   'CompletionResult',
   'RuntimeOperationRequest',
 };
+const protocolMessagePayloadSchemas = <String, String>{
+  'PlanRequest': '#/\$defs/planRequestPayload',
+  'PlanResult': '#/\$defs/planResultPayload',
+  'TaskRequest': '#/\$defs/taskRequestPayload',
+  'TaskResult': '#/\$defs/taskResultPayload',
+  'ResearchResult': '#/\$defs/researchResultPayload',
+  'ImplementationResult': '#/\$defs/implementationResultPayload',
+  'ReviewResult': '#/\$defs/reviewResultPayload',
+  'TestResult': '#/\$defs/testResultPayload',
+  'VerificationResult': '#/\$defs/verificationResultPayload',
+  'DecisionResult': '#/\$defs/decisionResultPayload',
+  'CompletionResult': '#/\$defs/completionResultPayload',
+  'RuntimeOperationRequest': '#/\$defs/runtimeOperationPayload',
+};

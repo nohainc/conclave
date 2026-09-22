@@ -27,3 +27,17 @@ export const PROTOCOL_MESSAGE_TYPES = [
   "CompletionResult",
   "RuntimeOperationRequest",
 ] as const;
+export const PROTOCOL_MESSAGE_PAYLOAD_SCHEMAS = {
+  PlanRequest: "#/$defs/planRequestPayload",
+  PlanResult: "#/$defs/planResultPayload",
+  TaskRequest: "#/$defs/taskRequestPayload",
+  TaskResult: "#/$defs/taskResultPayload",
+  ResearchResult: "#/$defs/researchResultPayload",
+  ImplementationResult: "#/$defs/implementationResultPayload",
+  ReviewResult: "#/$defs/reviewResultPayload",
+  TestResult: "#/$defs/testResultPayload",
+  VerificationResult: "#/$defs/verificationResultPayload",
+  DecisionResult: "#/$defs/decisionResultPayload",
+  CompletionResult: "#/$defs/completionResultPayload",
+  RuntimeOperationRequest: "#/$defs/runtimeOperationPayload",
+} as const;
