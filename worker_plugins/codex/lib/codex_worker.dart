@@ -32,6 +32,21 @@ class CodexTaskResult {
   final List<Map<String, Object?>> events;
 }
 
+/// Cooperative cancellation handle for one Codex CLI invocation.
+class CodexCancellationToken {
+  final _cancelled = Completer<void>();
+  bool _isCancelled = false;
+
+  bool get isCancelled => _isCancelled;
+  Future<void> get whenCancelled => _cancelled.future;
+
+  void cancel() {
+    if (_isCancelled) return;
+    _isCancelled = true;
+    _cancelled.complete();
+  }
+}
+
 class CodexWorker {
   CodexWorker({CommandInvoker? invoke, ProcessStarter? start})
       : _invoke = invoke ?? _defaultInvoke,
@@ -73,6 +88,7 @@ class CodexWorker {
     String? workingDirectory,
     Duration timeout = const Duration(minutes: 5),
     int maxOutputBytes = 4 * 1024 * 1024,
+    CodexCancellationToken? cancellation,
   }) async {
     if (maxOutputBytes <= 0) {
       throw ArgumentError.value(
@@ -83,6 +99,9 @@ class CodexWorker {
       ['exec', '--json', buildCodexTaskPrompt(objective, input)],
       workingDirectory: workingDirectory ?? _repositoryPath(input),
     );
+    final cancellationSubscription = cancellation?.whenCancelled.then((_) {
+      unawaited(_terminate(process));
+    });
     final stdout = <int>[];
     final stderr = <int>[];
     var outputExceeded = false;
@@ -118,6 +137,9 @@ class CodexWorker {
       if (outputExceeded) {
         throw StateError('Codex output exceeded $maxOutputBytes bytes');
       }
+      if (cancellation?.isCancelled ?? false) {
+        throw StateError('Codex task cancelled');
+      }
       if (exitCode != 0) {
         throw StateError(
           'Codex command failed: ${String.fromCharCodes(stderr)}',
@@ -127,6 +149,7 @@ class CodexWorker {
     } finally {
       await stdoutSubscription.cancel();
       await stderrSubscription.cancel();
+      await cancellationSubscription;
     }
   }
 
