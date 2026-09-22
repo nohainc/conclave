@@ -245,7 +245,9 @@ class AgentEngine {
     await _restrictPermissions(ipcFile.path);
     _running = true;
     _sigint = ProcessSignal.sigint.watch().listen((_) => unawaited(stop()));
-    _sigterm = ProcessSignal.sigterm.watch().listen((_) => unawaited(stop()));
+    if (!Platform.isWindows) {
+      _sigterm = ProcessSignal.sigterm.watch().listen((_) => unawaited(stop()));
+    }
     try {
       await cloudConnection?.connect();
     } on Object {
