@@ -5,6 +5,9 @@ import {
   D1WorkerRepository,
   D1ExtensionRepository,
   D1WorkflowTemplateRepository,
+  D1CredentialRepository,
+  D1RetentionPolicyRepository,
+  D1HumanApprovalRepository,
   D1EventRepository,
   D1ModelCallRepository,
   D1TaskDependencyRepository,
@@ -195,6 +198,66 @@ describe("Cloudflare persistence adapters", () => {
       ]),
     ).listByOrganization("workspace-1");
     expect(templates.map((template) => template.version)).toEqual([1, 2]);
+  });
+
+  it("reads security-sensitive records from tenant tables", async () => {
+    const credential = await new D1CredentialRepository(
+      new FakeDb([
+        {
+          id: "credential-1",
+          organization_id: "workspace-1",
+          provider: "openai",
+          key_id: "key-1",
+          algorithm: "AES-GCM",
+          iv: "iv",
+          ciphertext: "ciphertext",
+          created_at: "now",
+          expires_at: null,
+        },
+      ]),
+    ).get("workspace-1", "openai");
+    expect(credential).toMatchObject({
+      organizationId: "workspace-1",
+      provider: "openai",
+      algorithm: "AES-GCM",
+    });
+
+    const policy = await new D1RetentionPolicyRepository(
+      new FakeDb([
+        {
+          id: "retention-1",
+          organization_id: "workspace-1",
+          audit_days: 30,
+          artifact_days: 90,
+          usage_days: 180,
+          created_at: "now",
+          updated_at: "now",
+        },
+      ]),
+    ).get("workspace-1");
+    expect(policy?.artifactDays).toBe(90);
+
+    const approval = await new D1HumanApprovalRepository(
+      new FakeDb([
+        {
+          id: "approval-1",
+          organization_id: "workspace-1",
+          run_id: "run-1",
+          task_id: null,
+          requested_by_user_id: "user-1",
+          decided_by_user_id: null,
+          prompt: "Deploy?",
+          decision: "pending",
+          requested_at: "now",
+          decided_at: null,
+        },
+      ]),
+    ).get("approval-1");
+    expect(approval).toMatchObject({
+      organizationId: "workspace-1",
+      runId: "run-1",
+      decision: "pending",
+    });
   });
 
   it("resolves tenant scope before saving Goals and Runs", async () => {

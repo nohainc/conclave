@@ -17,6 +17,9 @@ import type {
   WorkerRecord,
   ExtensionRecord,
   WorkflowTemplateRecord,
+  EncryptedCredentialRecord,
+  RetentionPolicyRecord,
+  HumanApprovalRecord,
 } from "./index.js";
 
 export interface D1Result<T> {
@@ -290,6 +293,160 @@ function toWorkflowTemplate(
     createdByUserId: String(row.created_by_user_id),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
+  };
+}
+
+export class D1CredentialRepository {
+  constructor(private readonly db: D1DatabaseLike) {}
+
+  async get(
+    organizationId: string,
+    provider: string,
+  ): Promise<EncryptedCredentialRecord | null> {
+    const row = await this.db
+      .prepare(
+        "SELECT * FROM credentials WHERE organization_id = ?1 AND provider = ?2",
+      )
+      .bind(organizationId, provider)
+      .first();
+    return row ? toCredential(row) : null;
+  }
+
+  async save(credential: EncryptedCredentialRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO credentials (id, organization_id, provider, key_id, algorithm, iv,
+           ciphertext, created_at, expires_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+         ON CONFLICT(id) DO UPDATE SET key_id=excluded.key_id, algorithm=excluded.algorithm,
+           iv=excluded.iv, ciphertext=excluded.ciphertext, expires_at=excluded.expires_at`,
+      )
+      .bind(
+        credential.id,
+        credential.organizationId,
+        credential.provider,
+        credential.keyId,
+        credential.algorithm,
+        credential.iv,
+        credential.ciphertext,
+        credential.createdAt,
+        credential.expiresAt,
+      )
+      .run();
+  }
+}
+
+function toCredential(row: Record<string, unknown>): EncryptedCredentialRecord {
+  return {
+    id: String(row.id),
+    organizationId: String(row.organization_id),
+    provider: String(row.provider),
+    keyId: String(row.key_id),
+    algorithm: "AES-GCM",
+    iv: String(row.iv),
+    ciphertext: String(row.ciphertext),
+    createdAt: String(row.created_at),
+    expiresAt: row.expires_at === null ? null : String(row.expires_at),
+  };
+}
+
+export class D1RetentionPolicyRepository {
+  constructor(private readonly db: D1DatabaseLike) {}
+
+  async get(organizationId: string): Promise<RetentionPolicyRecord | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM retention_policies WHERE organization_id = ?1")
+      .bind(organizationId)
+      .first();
+    return row ? toRetentionPolicy(row) : null;
+  }
+
+  async save(policy: RetentionPolicyRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO retention_policies (id, organization_id, audit_days, artifact_days,
+           usage_days, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+         ON CONFLICT(id) DO UPDATE SET audit_days=excluded.audit_days,
+           artifact_days=excluded.artifact_days, usage_days=excluded.usage_days,
+           updated_at=excluded.updated_at`,
+      )
+      .bind(
+        policy.id,
+        policy.organizationId,
+        policy.auditDays,
+        policy.artifactDays,
+        policy.usageDays,
+        policy.createdAt,
+        policy.updatedAt,
+      )
+      .run();
+  }
+}
+
+function toRetentionPolicy(
+  row: Record<string, unknown>,
+): RetentionPolicyRecord {
+  return {
+    id: String(row.id),
+    organizationId: String(row.organization_id),
+    auditDays: Number(row.audit_days),
+    artifactDays: Number(row.artifact_days),
+    usageDays: Number(row.usage_days),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+export class D1HumanApprovalRepository {
+  constructor(private readonly db: D1DatabaseLike) {}
+
+  async get(id: string): Promise<HumanApprovalRecord | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM human_approvals WHERE id = ?1")
+      .bind(id)
+      .first();
+    return row ? toHumanApproval(row) : null;
+  }
+
+  async save(approval: HumanApprovalRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO human_approvals (id, organization_id, run_id, task_id,
+           requested_by_user_id, decided_by_user_id, prompt, decision, requested_at, decided_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+         ON CONFLICT(id) DO UPDATE SET decided_by_user_id=excluded.decided_by_user_id,
+           prompt=excluded.prompt, decision=excluded.decision, decided_at=excluded.decided_at`,
+      )
+      .bind(
+        approval.id,
+        approval.organizationId,
+        approval.runId,
+        approval.taskId,
+        approval.requestedByUserId,
+        approval.decidedByUserId,
+        approval.prompt,
+        approval.decision,
+        approval.requestedAt,
+        approval.decidedAt,
+      )
+      .run();
+  }
+}
+
+function toHumanApproval(row: Record<string, unknown>): HumanApprovalRecord {
+  return {
+    id: String(row.id),
+    organizationId: String(row.organization_id),
+    runId: String(row.run_id),
+    taskId: row.task_id === null ? null : String(row.task_id),
+    requestedByUserId: String(row.requested_by_user_id),
+    decidedByUserId:
+      row.decided_by_user_id === null ? null : String(row.decided_by_user_id),
+    prompt: String(row.prompt),
+    decision: String(row.decision) as HumanApprovalRecord["decision"],
+    requestedAt: String(row.requested_at),
+    decidedAt: row.decided_at === null ? null : String(row.decided_at),
   };
 }
 

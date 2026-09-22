@@ -2,12 +2,9 @@ import type {
   ArtifactRecord,
   AuditLogRecord,
   BudgetRecord,
-  EncryptedCredentialRecord,
-  HumanApprovalRecord,
   MembershipRecord,
   OrganizationRecord,
   ProjectMembershipRecord,
-  RetentionPolicyRecord,
   ConnectionRecord,
   RunAggregateRows,
   PersistenceRepositories,
@@ -30,6 +27,9 @@ import {
   D1WorkerRepository,
   D1ExtensionRepository,
   D1WorkflowTemplateRepository,
+  D1CredentialRepository,
+  D1RetentionPolicyRepository,
+  D1HumanApprovalRepository,
   type D1DatabaseLike,
 } from "./d1.js";
 
@@ -187,42 +187,6 @@ export class D1BudgetRepository extends RecordRepository<BudgetRecord> {
     super(store, "budgets");
   }
 }
-export class D1CredentialRepository extends RecordRepository<EncryptedCredentialRecord> {
-  constructor(store: D1RecordStore) {
-    super(store, "encrypted_credentials");
-  }
-  async getByProvider(
-    organizationId: string,
-    provider: string,
-  ): Promise<EncryptedCredentialRecord | null> {
-    return (
-      (await this.list(organizationId)).find(
-        (record) =>
-          record.organizationId === organizationId &&
-          record.provider === provider,
-      ) ?? null
-    );
-  }
-}
-export class D1RetentionPolicyRepository extends RecordRepository<RetentionPolicyRecord> {
-  constructor(store: D1RecordStore) {
-    super(store, "retention_policies");
-  }
-  async getByOrganization(
-    organizationId: string,
-  ): Promise<RetentionPolicyRecord | null> {
-    return (
-      (await this.list(organizationId)).find(
-        (record) => record.organizationId === organizationId,
-      ) ?? null
-    );
-  }
-}
-export class D1HumanApprovalRepository extends RecordRepository<HumanApprovalRecord> {
-  constructor(store: D1RecordStore) {
-    super(store, "human_approvals");
-  }
-}
 
 export class D1PersistenceRepositories implements PersistenceRepositories {
   readonly store: D1RecordStore;
@@ -274,11 +238,11 @@ export class D1PersistenceRepositories implements PersistenceRepositories {
     this.projectMemberships = new D1ProjectMembershipRepository(this.store);
     this.auditLog = new D1AuditLogRepository(this.store);
     this.budgets = new D1BudgetRepository(this.store);
-    this.credentials = new D1CredentialRepository(this.store);
-    this.retentionPolicies = new D1RetentionPolicyRepository(this.store);
+    this.credentials = new D1CredentialRepository(db);
+    this.retentionPolicies = new D1RetentionPolicyRepository(db);
     this.extensions = new D1ExtensionRepository(db);
     this.workflowTemplates = new D1WorkflowTemplateRepository(db);
-    this.humanApprovals = new D1HumanApprovalRepository(this.store);
+    this.humanApprovals = new D1HumanApprovalRepository(db);
   }
 
   async loadAggregate(
