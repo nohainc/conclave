@@ -174,6 +174,55 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('does not activate a revoked version during rollback', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-plugin-rollback-');
+    final bytesV1 = [10, 11, 12];
+    final bytesV2 = [13, 14, 15];
+    final digestV1 = sha256.convert(bytesV1).toString();
+    final digestV2 = sha256.convert(bytesV2).toString();
+    const trusted = PluginTrustPolicy(trustedSecrets: {'publisher': 'root'});
+    final manager = PluginManager(
+      directory,
+      trustPolicy: trusted,
+      allowedPermissions: {PluginPermission.readWorkspace},
+    );
+    await manager.install(PluginPackage(
+      id: 'rollback-safe',
+      version: '1.0.0',
+      bytes: bytesV1,
+      digest: digestV1,
+      publisher: 'publisher',
+      signature: trusted.sign('publisher', digestV1),
+      permissions: const [PluginPermission.readWorkspace],
+    ));
+    await manager.install(PluginPackage(
+      id: 'rollback-safe',
+      version: '2.0.0',
+      bytes: bytesV2,
+      digest: digestV2,
+      publisher: 'publisher',
+      signature: trusted.sign('publisher', digestV2),
+      permissions: const [PluginPermission.readWorkspace],
+    ));
+
+    final revoked = PluginManager(
+      directory,
+      trustPolicy: PluginTrustPolicy(
+        trustedSecrets: const {'publisher': 'root'},
+        revokedDigests: {digestV1},
+      ),
+      allowedPermissions: {PluginPermission.readWorkspace},
+    );
+    await expectLater(
+      revoked.rollback('rollback-safe', '1.0.0'),
+      throwsA(isA<StateError>()),
+    );
+    expect(await revoked.activeVersion('rollback-safe'), '2.0.0');
+
+    await directory.delete(recursive: true);
+  });
+
   test('reconciles signed desired plugins from Cloud', () async {
     final directory =
         await Directory.systemTemp.createTemp('conclave-plugins-');
@@ -239,7 +288,8 @@ void main() {
     expect(PluginPermission.networkOpenAi.wireName, 'network:openai');
   });
 
-  test('injects only manifest-declared secrets into a verified plugin', () async {
+  test('injects only manifest-declared secrets into a verified plugin',
+      () async {
     final directory =
         await Directory.systemTemp.createTemp('conclave-plugin-secrets-');
     final bytes = [61, 62, 63];

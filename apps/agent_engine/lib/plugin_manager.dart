@@ -97,6 +97,7 @@ class PluginManager {
   final Directory root;
   final PluginTrustPolicy? trustPolicy;
   final Set<PluginPermission> allowedPermissions;
+
   /// Values are supplied by the Agent's secure configuration boundary and are
   /// injected only when a verified manifest names the variable explicitly.
   final Map<String, String> secretEnvironment;
@@ -331,8 +332,8 @@ class PluginManager {
     if (!await manifestFile.exists()) {
       throw StateError('plugin manifest is missing');
     }
-    final manifest = jsonDecode(await manifestFile.readAsString()) as Map;
-    await _activate(pluginId, version, manifest['digest'] as String?);
+    final manifest = await _verifiedManifest(pluginId, version);
+    await _activate(pluginId, version, manifest['digest'] as String);
   }
 
   Future<void> deactivate(String pluginId) async {
@@ -397,8 +398,7 @@ class PluginManager {
     }
   }
 
-  Map<String, String> _scopedSecretEnvironment(
-      Map<String, Object?> manifest) {
+  Map<String, String> _scopedSecretEnvironment(Map<String, Object?> manifest) {
     final names = manifest['secretEnvironmentVariables'];
     if (names is! List) return const {};
     return {
