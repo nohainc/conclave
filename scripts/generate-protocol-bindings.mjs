@@ -7,6 +7,7 @@ const protocolVersion = schema["x-protocol-version"];
 const messageTypes = schema["x-message-types"];
 const messagePayloads = schema["x-message-payloads"];
 const requiredFields = schema.required;
+const agentProtocol = schema["x-agent-protocol"];
 
 if (
   typeof protocolName !== "string" ||
@@ -20,10 +21,28 @@ if (
   messagePayloads === null ||
   messageTypes.some(
     (messageType) => typeof messagePayloads[messageType] !== "string",
-  )
+  ) ||
+  typeof agentProtocol !== "object" ||
+  agentProtocol === null ||
+  typeof agentProtocol.name !== "string" ||
+  typeof agentProtocol.version !== "string" ||
+  typeof agentProtocol.maxMessageSizeBytes !== "number" ||
+  !Array.isArray(agentProtocol.messageTypes) ||
+  !Array.isArray(agentProtocol.baseEnvelopeFields) ||
+  !Array.isArray(agentProtocol.assignmentEnvelopeFields)
 ) {
   throw new Error("canonical protocol schema is missing generator metadata");
 }
+
+const agentMessageTypes = agentProtocol.messageTypes
+  .map((messageType) => `  ${JSON.stringify(messageType)},`)
+  .join("\n");
+const agentBaseFields = agentProtocol.baseEnvelopeFields
+  .map((field) => `  ${JSON.stringify(field)},`)
+  .join("\n");
+const agentAssignmentFields = agentProtocol.assignmentEnvelopeFields
+  .map((field) => `  ${JSON.stringify(field)},`)
+  .join("\n");
 
 const tsFields = requiredFields
   .map((field) => `  ${JSON.stringify(field)},`)
@@ -37,7 +56,8 @@ const tsPayloads = messageTypes
       `  ${messageType}: ${JSON.stringify(messagePayloads[messageType])},`,
   )
   .join("\n");
-const ts = `// GENERATED FILE. Do not edit by hand.\n\nexport const PROTOCOL_NAME = ${JSON.stringify(protocolName)} as const;\nexport const PROTOCOL_VERSION = ${JSON.stringify(protocolVersion)} as const;\nexport const REQUIRED_ENVELOPE_FIELDS = [\n${tsFields}\n] as const;\nexport const PROTOCOL_MESSAGE_TYPES = [\n${tsMessageTypes}\n] as const;\nexport const PROTOCOL_MESSAGE_PAYLOAD_SCHEMAS = {\n${tsPayloads}\n} as const;\n`;
+const ts = `// GENERATED FILE. Do not edit by hand.\n\nexport const PROTOCOL_NAME = ${JSON.stringify(protocolName)} as const;\nexport const PROTOCOL_VERSION = ${JSON.stringify(protocolVersion)} as const;\nexport const REQUIRED_ENVELOPE_FIELDS = [\n${tsFields}\n] as const;\nexport const PROTOCOL_MESSAGE_TYPES = [\n${tsMessageTypes}\n] as const;\nexport const PROTOCOL_MESSAGE_PAYLOAD_SCHEMAS = {\n${tsPayloads}\n} as const;\nexport const AGENT_PROTOCOL_NAME = ${JSON.stringify(agentProtocol.name)} as const;\nexport const AGENT_PROTOCOL_VERSION = ${JSON.stringify(agentProtocol.version)} as const;\nexport const AGENT_PROTOCOL_MAX_MESSAGE_SIZE_BYTES = ${agentProtocol.maxMessageSizeBytes} as const;\nexport const AGENT_PROTOCOL_MESSAGE_TYPES = [\n${agentMessageTypes}\n] as const;\nexport const AGENT_PROTOCOL_BASE_ENVELOPE_FIELDS = [\n${agentBaseFields}\n] as const;\nexport const AGENT_PROTOCOL_ASSIGNMENT_ENVELOPE_FIELDS = [\n${agentAssignmentFields}\n] as const;\n`;
+const agentTs = `// GENERATED FILE. Do not edit by hand.\n\nexport const AGENT_PROTOCOL_NAME = ${JSON.stringify(agentProtocol.name)} as const;\nexport const AGENT_PROTOCOL_VERSION = ${JSON.stringify(agentProtocol.version)} as const;\nexport const AGENT_PROTOCOL_MAX_MESSAGE_SIZE_BYTES = ${agentProtocol.maxMessageSizeBytes} as const;\nexport const AGENT_PROTOCOL_MESSAGE_TYPES = [\n${agentMessageTypes}\n] as const;\nexport const AGENT_PROTOCOL_BASE_ENVELOPE_FIELDS = [\n${agentBaseFields}\n] as const;\nexport const AGENT_PROTOCOL_ASSIGNMENT_ENVELOPE_FIELDS = [\n${agentAssignmentFields}\n] as const;\n`;
 const dartFields = requiredFields.map((field) => `  '${field}',`).join("\n");
 const dartMessageTypes = messageTypes
   .map((messageType) => `  '${messageType}',`)
@@ -48,7 +68,17 @@ const dartPayloads = messageTypes
       `  '${messageType}': '${messagePayloads[messageType].replaceAll("$", "\\$")}',`,
   )
   .join("\n");
-const dart = `// GENERATED FILE. Do not edit by hand.\n\nconst protocolName = '${protocolName}';\nconst protocolVersion = '${protocolVersion}';\nconst requiredEnvelopeFields = <String>[\n${dartFields}\n];\nconst protocolMessageTypes = <String>{\n${dartMessageTypes}\n};\nconst protocolMessagePayloadSchemas = <String, String>{\n${dartPayloads}\n};\n`;
+const dartAgentMessageTypes = agentProtocol.messageTypes
+  .map((messageType) => `  '${messageType}',`)
+  .join("\n");
+const dartAgentBaseFields = agentProtocol.baseEnvelopeFields
+  .map((field) => `  '${field}',`)
+  .join("\n");
+const dartAgentAssignmentFields = agentProtocol.assignmentEnvelopeFields
+  .map((field) => `  '${field}',`)
+  .join("\n");
+const dart = `// GENERATED FILE. Do not edit by hand.\n\nconst protocolName = '${protocolName}';\nconst protocolVersion = '${protocolVersion}';\nconst requiredEnvelopeFields = <String>[\n${dartFields}\n];\nconst protocolMessageTypes = <String>{\n${dartMessageTypes}\n};\nconst protocolMessagePayloadSchemas = <String, String>{\n${dartPayloads}\n};\nconst agentProtocolName = '${agentProtocol.name}';\nconst agentProtocolVersion = '${agentProtocol.version}';\nconst agentProtocolMaxMessageSizeBytes = ${agentProtocol.maxMessageSizeBytes};\nconst agentProtocolMessageTypes = <String>{\n${dartAgentMessageTypes}\n};\nconst agentProtocolBaseEnvelopeFields = <String>[\n${dartAgentBaseFields}\n];\nconst agentProtocolAssignmentEnvelopeFields = <String>[\n${dartAgentAssignmentFields}\n];\n`;
 
 await writeFile("packages/protocol/src/generated.ts", ts);
+await writeFile("packages/agent-protocol/src/generated.ts", agentTs);
 await writeFile("packages/dart/protocol/lib/generated_protocol.dart", dart);

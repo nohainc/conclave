@@ -1,7 +1,21 @@
 import { z } from "zod";
+import {
+  AGENT_PROTOCOL_BASE_ENVELOPE_FIELDS,
+  AGENT_PROTOCOL_ASSIGNMENT_ENVELOPE_FIELDS,
+  AGENT_PROTOCOL_MAX_MESSAGE_SIZE_BYTES,
+  AGENT_PROTOCOL_MESSAGE_TYPES,
+  AGENT_PROTOCOL_NAME,
+  AGENT_PROTOCOL_VERSION,
+} from "./generated.js";
 
-export const AGENT_PROTOCOL_NAME = "conclave.agent-protocol" as const;
-export const AGENT_PROTOCOL_VERSION = "2.0" as const;
+export {
+  AGENT_PROTOCOL_BASE_ENVELOPE_FIELDS,
+  AGENT_PROTOCOL_ASSIGNMENT_ENVELOPE_FIELDS,
+  AGENT_PROTOCOL_MAX_MESSAGE_SIZE_BYTES,
+  AGENT_PROTOCOL_MESSAGE_TYPES,
+  AGENT_PROTOCOL_NAME,
+  AGENT_PROTOCOL_VERSION,
+};
 
 const protocolVersionPattern = /^\d+\.\d+(?:\.\d+)?$/;
 
@@ -27,7 +41,7 @@ export function isCompatibleAgentProtocolVersion(
   return localMajor === remoteMajor && remoteMinor >= localMinor;
 }
 
-export const MAX_MESSAGE_SIZE_BYTES = 4 * 1024 * 1024; // 4MB safe frame limit
+export const MAX_MESSAGE_SIZE_BYTES = AGENT_PROTOCOL_MAX_MESSAGE_SIZE_BYTES;
 
 const nonEmptyStr = z.string().trim().min(1);
 const timestampStr = z.string().datetime();

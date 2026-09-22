@@ -8,6 +8,8 @@ environment:
 
 dependencies:
   crypto: ^3.0.0
+  conclave_protocol:
+    path: ../../packages/dart/protocol
 
 dev_dependencies:
   lints: ^5.0.0

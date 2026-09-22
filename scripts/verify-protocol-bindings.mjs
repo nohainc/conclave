@@ -56,14 +56,21 @@ if (!schema.properties.version.pattern.includes("[0-9]+")) {
   throw new Error("canonical protocol schema does not constrain versions");
 }
 
-const [dart, generatedDart, generated, typescript, fixtureText] =
-  await Promise.all([
-    read("packages/dart/protocol/lib/conclave_protocol.dart"),
-    read("packages/dart/protocol/lib/generated_protocol.dart"),
-    read("packages/protocol/src/generated.ts"),
-    read("packages/protocol/src/index.ts"),
-    read("packages/protocol/fixtures/task-request.json"),
-  ]);
+const [
+  dart,
+  generatedDart,
+  generated,
+  agentGenerated,
+  typescript,
+  fixtureText,
+] = await Promise.all([
+  read("packages/dart/protocol/lib/conclave_protocol.dart"),
+  read("packages/dart/protocol/lib/generated_protocol.dart"),
+  read("packages/protocol/src/generated.ts"),
+  read("packages/agent-protocol/src/generated.ts"),
+  read("packages/protocol/src/index.ts"),
+  read("packages/protocol/fixtures/task-request.json"),
+]);
 const fixture = JSON.parse(fixtureText);
 for (const field of requiredFields) {
   if (!(field in fixture)) {
@@ -91,6 +98,24 @@ if (!typescript.includes('from "./generated.js"')) {
   throw new Error(
     "TypeScript protocol binding does not import generated constants",
   );
+}
+const agentProtocol = schema["x-agent-protocol"];
+if (
+  !agentGenerated.includes(
+    `AGENT_PROTOCOL_NAME = ${JSON.stringify(agentProtocol.name)}`,
+  ) ||
+  !agentGenerated.includes(
+    `AGENT_PROTOCOL_VERSION = ${JSON.stringify(agentProtocol.version)}`,
+  )
+) {
+  throw new Error("generated Agent protocol binding is out of date");
+}
+for (const messageType of agentProtocol.messageTypes) {
+  if (!agentGenerated.includes(JSON.stringify(messageType))) {
+    throw new Error(
+      `generated Agent protocol binding is missing ${messageType}`,
+    );
+  }
 }
 if (!generatedDart.includes(`const protocolVersion = '${fixture.version}'`)) {
   throw new Error("Dart protocol version does not match the fixture");

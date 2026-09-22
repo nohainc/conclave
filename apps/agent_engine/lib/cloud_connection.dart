@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'assignment_journal.dart';
+import 'package:conclave_protocol/conclave_protocol.dart';
 
 abstract interface class AgentCloudSocket {
   Stream<Object?> get messages;
@@ -173,8 +174,8 @@ class AgentCloudConnection {
     socket.send(jsonEncode(_envelope(type, payload)));
   }
 
-  static const protocol = 'conclave.agent-protocol';
-  static const protocolVersion = '2.0';
+  static const protocol = agentProtocolName;
+  static const protocolVersion = agentProtocolVersion;
 
   static bool _isCompatibleProtocolVersion(String remote) {
     final localParts = protocolVersion.split('.').map(int.parse).toList();

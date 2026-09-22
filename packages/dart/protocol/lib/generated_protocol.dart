@@ -41,3 +41,50 @@ const protocolMessagePayloadSchemas = <String, String>{
   'CompletionResult': '#/\$defs/completionResultPayload',
   'RuntimeOperationRequest': '#/\$defs/runtimeOperationPayload',
 };
+const agentProtocolName = 'conclave.agent-protocol';
+const agentProtocolVersion = '2.0';
+const agentProtocolMaxMessageSizeBytes = 4194304;
+const agentProtocolMessageTypes = <String>{
+  'agent.hello',
+  'agent.hello.ack',
+  'agent.heartbeat',
+  'agent.heartbeat.ack',
+  'agent.sync.request',
+  'agent.sync.response',
+  'agent.capabilities',
+  'agent.update.available',
+  'agent.update.status',
+  'plugin.install',
+  'plugin.update',
+  'plugin.remove',
+  'plugin.status',
+  'worker.configure',
+  'worker.status',
+  'assignment.start',
+  'assignment.ack',
+  'assignment.progress',
+  'assignment.result',
+  'assignment.error',
+  'assignment.cancelled',
+  'assignment.cancel',
+  'assignment.cancel.ack',
+};
+const agentProtocolBaseEnvelopeFields = <String>[
+  'protocol',
+  'protocolVersion',
+  'messageId',
+  'correlationId',
+  'timestamp',
+  'type',
+  'payload',
+];
+const agentProtocolAssignmentEnvelopeFields = <String>[
+  'workspaceId',
+  'agentId',
+  'workerId',
+  'runId',
+  'taskId',
+  'attemptId',
+  'assignmentId',
+  'idempotencyKey',
+];
