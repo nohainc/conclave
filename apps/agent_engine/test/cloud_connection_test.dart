@@ -93,6 +93,31 @@ void main() {
     await connection.close();
   });
 
+  test('accepts a compatible newer minor protocol version', () async {
+    final socket = FakeSocket();
+    final connection = AgentCloudConnection(
+      uri: Uri.parse('wss://cloud.test/agent'),
+      agentId: 'agent-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      heartbeat: const Duration(hours: 1),
+    );
+
+    await connection.connect();
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.agent-protocol',
+      'protocolVersion': '2.1',
+      'messageId': 'server-1',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'agent.hello.ack',
+      'payload': {'sessionId': 'session-1'},
+    }));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    expect(connection.isConnected, isTrue);
+    await connection.close();
+  });
+
   test('reports correlated plugin and Worker readiness', () async {
     final socket = FakeSocket();
     final connection = AgentCloudConnection(

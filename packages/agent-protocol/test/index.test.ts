@@ -4,6 +4,7 @@ import {
   AGENT_PROTOCOL_VERSION,
   parseAgentMessage,
   serializeAgentMessage,
+  isCompatibleAgentProtocolVersion,
   reconcileAssignmentJournal,
   UnsupportedProtocolVersionError,
   MalformedMessageError,
@@ -105,6 +106,32 @@ describe("Conclave Agent Protocol v2", () => {
       const parsedStatus = parseAgentMessage(statusMsg);
       expect(parsedStatus.type).toBe("agent.update.status");
     });
+  });
+
+  it("accepts compatible minor versions and rejects incompatible majors", () => {
+    expect(isCompatibleAgentProtocolVersion("2.0", "2.1")).toBe(true);
+    expect(isCompatibleAgentProtocolVersion("2.0", "1.9")).toBe(false);
+    expect(() =>
+      parseAgentMessage({
+        ...baseEnvelope,
+        protocolVersion: "3.0",
+        type: "agent.hello",
+        payload: {
+          agentId: "agent-01",
+          workspaceId: "ws-test",
+          name: "MacBook Dev",
+          hostname: "mbp.local",
+          agentVersion: "0.2.0",
+          capabilities: {
+            os: "macos",
+            arch: "arm64",
+            agentVersion: "0.2.0",
+            supportedRuntimes: ["dart"],
+            maxConcurrentWorkers: 1,
+          },
+        },
+      }),
+    ).toThrow(UnsupportedProtocolVersionError);
   });
 
   describe("Plugin Management Messages", () => {

@@ -176,6 +176,15 @@ class AgentCloudConnection {
   static const protocol = 'conclave.agent-protocol';
   static const protocolVersion = '2.0';
 
+  static bool _isCompatibleProtocolVersion(String remote) {
+    final localParts = protocolVersion.split('.').map(int.parse).toList();
+    final remoteParts = remote.split('.').map(int.tryParse).toList();
+    if (remoteParts.length < 2 || remoteParts.any((part) => part == null)) {
+      return false;
+    }
+    return remoteParts[0] == localParts[0] && remoteParts[1]! >= localParts[1];
+  }
+
   static Map<String, Object?> _defaultCapabilities() {
     final operatingSystem = switch (Platform.operatingSystem) {
       'macos' => 'macos',
@@ -256,8 +265,10 @@ class AgentCloudConnection {
       return;
     }
     if (decoded is! Map<String, dynamic>) return;
+    final remoteVersion = decoded['protocolVersion'];
     if (decoded['protocol'] != protocol ||
-        decoded['protocolVersion'] != protocolVersion) {
+        remoteVersion is! String ||
+        !_isCompatibleProtocolVersion(remoteVersion)) {
       return;
     }
     if (decoded['type'] == 'agent.hello.ack') {

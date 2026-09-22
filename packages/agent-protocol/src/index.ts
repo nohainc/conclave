@@ -3,6 +3,30 @@ import { z } from "zod";
 export const AGENT_PROTOCOL_NAME = "conclave.agent-protocol" as const;
 export const AGENT_PROTOCOL_VERSION = "2.0" as const;
 
+const protocolVersionPattern = /^\d+\.\d+(?:\.\d+)?$/;
+
+function protocolVersionParts(version: string): [number, number] {
+  if (!protocolVersionPattern.test(version)) {
+    throw new Error(`Invalid agent protocol version: ${version}`);
+  }
+  const [major, minor] = version.split(".").map(Number);
+  return [major ?? 0, minor ?? 0];
+}
+
+/**
+ * A peer may add fields in a newer minor version, but a major-version change
+ * is incompatible. The local version is the minimum minor version this
+ * implementation understands.
+ */
+export function isCompatibleAgentProtocolVersion(
+  local: string,
+  remote: string,
+): boolean {
+  const [localMajor, localMinor] = protocolVersionParts(local);
+  const [remoteMajor, remoteMinor] = protocolVersionParts(remote);
+  return localMajor === remoteMajor && remoteMinor >= localMinor;
+}
+
 export const MAX_MESSAGE_SIZE_BYTES = 4 * 1024 * 1024; // 4MB safe frame limit
 
 const nonEmptyStr = z.string().trim().min(1);
@@ -11,7 +35,7 @@ const timestampStr = z.string().datetime();
 // Base envelope fields present on every agent protocol message
 const baseEnvelopeFields = {
   protocol: z.literal(AGENT_PROTOCOL_NAME),
-  protocolVersion: z.literal(AGENT_PROTOCOL_VERSION),
+  protocolVersion: z.string().regex(protocolVersionPattern),
   messageId: nonEmptyStr,
   correlationId: nonEmptyStr.optional(),
   timestamp: timestampStr,
@@ -536,7 +560,13 @@ export function parseAgentMessage(input: unknown): AgentProtocolMessage {
     );
   }
 
-  if (raw.protocolVersion !== AGENT_PROTOCOL_VERSION) {
+  if (
+    typeof raw.protocolVersion !== "string" ||
+    !isCompatibleAgentProtocolVersion(
+      AGENT_PROTOCOL_VERSION,
+      raw.protocolVersion,
+    )
+  ) {
     throw new UnsupportedProtocolVersionError(raw.protocolVersion);
   }
 
