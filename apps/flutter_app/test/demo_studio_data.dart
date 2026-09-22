@@ -83,6 +83,14 @@ class DemoStudioDataSource implements StudioDataSource {
   }) async {}
 
   @override
+  Future<void> announceAgentUpdate({
+    required String workspaceId,
+    required String agentId,
+    String? channel,
+    String? version,
+  }) async {}
+
+  @override
   Future<void> saveWorker({
     required String workspaceId,
     String? workerId,

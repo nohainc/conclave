@@ -178,6 +178,24 @@ class _StudioAppState extends State<StudioApp> {
     }
   }
 
+  Future<void> _announceAgentUpdate(StudioAgent agent) async {
+    final workspaceId = snapshot.workspaceId;
+    if (workspaceId == null || workspaceId.isEmpty) return;
+    try {
+      await store.agents.announceUpdate(
+        workspaceId,
+        agent.id,
+        channel: agent.updateChannel == '—' ? 'stable' : agent.updateChannel,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Update announced to the Agent.')),
+      );
+    } catch (error) {
+      if (mounted) setState(() => loadError = error.toString());
+    }
+  }
+
   Future<void> _editWorker([StudioWorker? existing]) async {
     final workspaceId = snapshot.workspaceId;
     if (workspaceId == null || workspaceId.isEmpty) return;
@@ -1760,6 +1778,13 @@ class _StudioAppState extends State<StudioApp> {
                                     ? const Color(0xff3ca879)
                                     : const Color(0xff9a98a5)),
                             const SizedBox(width: 8),
+                            IconButton(
+                              tooltip: 'Announce update',
+                              onPressed: agent.status.toLowerCase() == 'revoked'
+                                  ? null
+                                  : () => _announceAgentUpdate(agent),
+                              icon: const Icon(Icons.system_update_outlined),
+                            ),
                             IconButton(
                               tooltip: 'Revoke Agent',
                               onPressed: () => _revokeAgent(agent.id),

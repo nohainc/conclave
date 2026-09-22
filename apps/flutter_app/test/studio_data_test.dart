@@ -262,4 +262,24 @@ void main() {
     expect(worker.billingMode, 'subscription');
     expect(worker.independenceKey, 'codex-main');
   });
+
+  test('announces an Agent update through the Cloud management endpoint',
+      () async {
+    final client = _JsonClient({}, statusCode: 200);
+    final api = StudioApiClient(
+      baseUrl: 'https://conclave.test/api',
+      client: client,
+    );
+
+    await api.announceAgentUpdate(
+      workspaceId: 'workspace-1',
+      agentId: 'agent-1',
+      channel: 'stable',
+    );
+
+    expect(client.lastRequest?.method, 'POST');
+    expect(client.lastRequest?.url.path,
+        '/api/workspaces/workspace-1/agents/agent-1/update');
+    expect(jsonDecode(client.lastBody!)['channel'], 'stable');
+  });
 }

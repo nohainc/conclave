@@ -102,6 +102,14 @@ class AgentStore {
 
   Future<void> revoke(String workspaceId, String agentId) =>
       source.revokeAgent(workspaceId: workspaceId, agentId: agentId);
+
+  Future<void> announceUpdate(String workspaceId, String agentId,
+          {String? channel, String? version}) =>
+      source.announceAgentUpdate(
+          workspaceId: workspaceId,
+          agentId: agentId,
+          channel: channel,
+          version: version);
 }
 
 class WorkerStore {

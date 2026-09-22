@@ -35,6 +35,12 @@ abstract interface class StudioDataSource {
     required String workspaceId,
     required String agentId,
   });
+  Future<void> announceAgentUpdate({
+    required String workspaceId,
+    required String agentId,
+    String? channel,
+    String? version,
+  });
   Future<void> saveWorker({
     required String workspaceId,
     String? workerId,
@@ -261,6 +267,27 @@ class StudioApiClient implements StudioDataSource {
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StudioApiException('Agent revoke failed (${response.statusCode})');
+    }
+  }
+
+  @override
+  Future<void> announceAgentUpdate({
+    required String workspaceId,
+    required String agentId,
+    String? channel,
+    String? version,
+  }) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/workspaces/$workspaceId/agents/$agentId/update'),
+      headers: {'content-type': 'application/json'},
+      body: jsonEncode({
+        if (channel != null) 'channel': channel,
+        if (version != null) 'version': version,
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+          'Agent update announcement failed (${response.statusCode})');
     }
   }
 
