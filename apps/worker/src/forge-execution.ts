@@ -68,6 +68,16 @@ interface ForgeExecutionContext {
   readonly revision: string;
 }
 
+interface ForgeExecutionRecord {
+  readonly executionId: string;
+  readonly runId: string;
+  readonly status:
+    "started" | "completed" | "failed" | "cancelled" | "needs_input";
+  readonly resultArtifactId?: string;
+  readonly error?: string;
+  readonly updatedAt: string;
+}
+
 export function assertSingleAgentForgeBindings(
   bindings: readonly WorkerExecutionBinding[],
   agentIds: ReadonlyMap<string, string>,
@@ -966,16 +976,85 @@ export class ConclaveForgeExecutionService {
   constructor(private readonly env: ForgeExecutionEnv) {}
 
   async fetch(request: Request, ctx: ExecutionContext): Promise<Response> {
-    if (
-      request.method !== "POST" ||
-      new URL(request.url).pathname !== "/execute"
-    ) {
+    const pathname = new URL(request.url).pathname;
+    const statusMatch = pathname.match(/^\/status\/([^/]+)$/);
+    if (request.method === "GET" && statusMatch?.[1]) {
+      const row = await this.env.CONCLAVE_DB.prepare(
+        "SELECT record_json FROM persistence_records WHERE repository = 'forge_executions' AND record_id = ?1",
+      )
+        .bind(statusMatch[1])
+        .first<{ record_json: string }>();
+      if (!row)
+        return Response.json({ error: "execution_not_found" }, { status: 404 });
+      try {
+        return Response.json(JSON.parse(row.record_json));
+      } catch {
+        return Response.json(
+          { error: "execution_record_invalid" },
+          { status: 500 },
+        );
+      }
+    }
+    if (request.method !== "POST" || pathname !== "/execute") {
       return Response.json({ error: "not_found" }, { status: 404 });
     }
     const params = (await request.json()) as Record<string, unknown>;
     const executionId = crypto.randomUUID();
+    const runId = String(params.runId ?? "");
+    const now = new Date().toISOString();
+    const record: ForgeExecutionRecord = {
+      executionId,
+      runId,
+      status: "started",
+      updatedAt: now,
+    };
+    await this.env.CONCLAVE_DB.prepare(
+      `INSERT INTO persistence_records
+       (repository, record_id, organization_id, record_json, created_at, updated_at)
+       VALUES ('forge_executions', ?1, ?2, ?3, ?4, ?4)`,
+    )
+      .bind(
+        executionId,
+        typeof params.organizationId === "string"
+          ? params.organizationId
+          : null,
+        JSON.stringify(record),
+        now,
+      )
+      .run();
     ctx.waitUntil(this.runAndNotify(params, executionId));
     return Response.json({ executionId }, { status: 202 });
+  }
+
+  private async updateExecution(
+    executionId: string,
+    patch: Omit<Partial<ForgeExecutionRecord>, "executionId" | "runId">,
+  ): Promise<void> {
+    const row = await this.env.CONCLAVE_DB.prepare(
+      "SELECT record_json FROM persistence_records WHERE repository = 'forge_executions' AND record_id = ?1",
+    )
+      .bind(executionId)
+      .first<{ record_json: string }>();
+    if (!row) return;
+    let existing: ForgeExecutionRecord;
+    try {
+      existing = JSON.parse(row.record_json) as ForgeExecutionRecord;
+    } catch {
+      return;
+    }
+    const updated: ForgeExecutionRecord = {
+      ...existing,
+      ...patch,
+      executionId,
+      updatedAt: new Date().toISOString(),
+    };
+    await this.env.CONCLAVE_DB.prepare(
+      `UPDATE persistence_records
+       SET record_json = ?1, updated_at = ?2
+       WHERE repository = 'forge_executions' AND record_id = ?3`,
+    )
+      .bind(JSON.stringify(updated), updated.updatedAt, executionId)
+      .run();
   }
 
   private async runAndNotify(
@@ -994,6 +1073,10 @@ export class ConclaveForgeExecutionService {
         params,
         executionId,
       );
+      await this.updateExecution(executionId, {
+        status: "completed",
+        resultArtifactId,
+      });
       await this.notify(runId, {
         eventId: crypto.randomUUID(),
         runId,
@@ -1002,6 +1085,11 @@ export class ConclaveForgeExecutionService {
         resultArtifactId,
       });
     } catch (error) {
+      await this.updateExecution(executionId, {
+        status: "failed",
+        error:
+          error instanceof Error ? error.message : "Forge execution failed",
+      });
       await this.notify(runId, {
         eventId: crypto.randomUUID(),
         runId,
