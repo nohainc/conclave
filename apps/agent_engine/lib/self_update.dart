@@ -222,10 +222,15 @@ class AgentUpdater {
   AgentUpdater(
     this.root, {
     this.trustPolicy,
+    this.requireSignature = true,
     this.currentProtocolVersion = '2.0',
   });
   final Directory root;
   final PluginTrustPolicy? trustPolicy;
+
+  /// Unsigned releases are allowed only when explicitly opted into for local
+  /// development or tests. Production update paths fail closed.
+  final bool requireSignature;
   final String currentProtocolVersion;
 
   Future<void> apply(ReleasePackage release,
@@ -249,6 +254,10 @@ class AgentUpdater {
       throw StateError('agent release digest mismatch');
     }
     final policy = trustPolicy;
+    if (requireSignature && policy == null) {
+      throw StateError(
+          'agent release signature verification is not configured');
+    }
     if (policy != null) {
       final publisher = release.publisher;
       final signature = release.signature;

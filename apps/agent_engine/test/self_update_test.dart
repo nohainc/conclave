@@ -70,7 +70,7 @@ void main() {
   test('activates a verified release and records metadata', () async {
     final root = await Directory.systemTemp.createTemp('conclave-update-');
     final bytes = [1, 2, 3];
-    await AgentUpdater(root).apply(
+    await AgentUpdater(root, requireSignature: false).apply(
       ReleasePackage(
           version: '1.1.0',
           channel: 'stable',
@@ -90,7 +90,7 @@ void main() {
     final old = File('${root.path}/agent.active')..writeAsBytesSync([9]);
     final bytes = [1, 2, 3];
     await expectLater(
-      AgentUpdater(root).apply(
+      AgentUpdater(root, requireSignature: false).apply(
         ReleasePackage(
             version: '2.0.0',
             channel: 'beta',
@@ -125,11 +125,32 @@ void main() {
     await root.delete(recursive: true);
   });
 
+  test('rejects an unsigned release by default', () async {
+    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final bytes = [6, 7, 8];
+    await expectLater(
+      AgentUpdater(root).apply(
+        ReleasePackage(
+          version: '1.3.0',
+          channel: 'stable',
+          bytes: bytes,
+          digest: sha256.convert(bytes).toString(),
+        ),
+        healthCheck: (_) async => true,
+      ),
+      throwsA(predicate((error) => error
+          .toString()
+          .contains('signature verification is not configured'))),
+    );
+    await root.delete(recursive: true);
+  });
+
   test('rejects a release requiring a newer protocol', () async {
     final root = await Directory.systemTemp.createTemp('conclave-update-');
     final bytes = [7, 8, 9];
     await expectLater(
-      AgentUpdater(root, currentProtocolVersion: '2.0').apply(
+      AgentUpdater(root, currentProtocolVersion: '2.0', requireSignature: false)
+          .apply(
         ReleasePackage(
           version: '2.0.0',
           channel: 'stable',
@@ -148,7 +169,7 @@ void main() {
     final root = await Directory.systemTemp.createTemp('conclave-update-');
     final currentBytes = [1, 1, 1];
     final currentDigest = sha256.convert(currentBytes).toString();
-    await AgentUpdater(root).apply(
+    await AgentUpdater(root, requireSignature: false).apply(
       ReleasePackage(
         version: '2.0.0',
         channel: 'stable',
@@ -160,7 +181,7 @@ void main() {
 
     final olderBytes = [0, 0, 1];
     await expectLater(
-      AgentUpdater(root).apply(
+      AgentUpdater(root, requireSignature: false).apply(
         ReleasePackage(
           version: '1.9.9',
           channel: 'stable',
@@ -189,8 +210,10 @@ void main() {
       releaseNotes: 'Security update',
       packageUrl: 'https://example.test/agent.tgz',
     );
-    await AgentUpdater(root).apply(package, healthCheck: (_) async => true);
-    await AgentUpdater(root).apply(package, healthCheck: (_) async => false);
+    await AgentUpdater(root, requireSignature: false)
+        .apply(package, healthCheck: (_) async => true);
+    await AgentUpdater(root, requireSignature: false)
+        .apply(package, healthCheck: (_) async => false);
     expect(await File('${root.path}/agent.active').readAsBytes(), bytes);
     final metadata =
         jsonDecode(await File('${root.path}/release.json').readAsString())
@@ -201,7 +224,7 @@ void main() {
 
     final different = [2, 4, 7];
     await expectLater(
-      AgentUpdater(root).apply(
+      AgentUpdater(root, requireSignature: false).apply(
         ReleasePackage(
           version: '3.0.0',
           channel: 'stable',
@@ -219,7 +242,7 @@ void main() {
     final root = await Directory.systemTemp.createTemp('conclave-update-');
     final bytes = [8];
     await expectLater(
-      AgentUpdater(root).apply(
+      AgentUpdater(root, requireSignature: false).apply(
         ReleasePackage(
           version: '../escape',
           channel: 'stable',
@@ -238,7 +261,7 @@ void main() {
     final root = await Directory.systemTemp.createTemp('conclave-update-');
     final bytes = [1, 2, 3, 4];
     await expectLater(
-      AgentUpdater(root).apply(
+      AgentUpdater(root, requireSignature: false).apply(
         ReleasePackage(
           version: '4.0.0',
           channel: 'stable',
@@ -259,7 +282,7 @@ void main() {
     final root = await Directory.systemTemp.createTemp('conclave-update-');
     final bytes = [10, 11, 12];
     await expectLater(
-      AgentUpdater(root).apply(
+      AgentUpdater(root, requireSignature: false).apply(
         ReleasePackage(
           version: '4.0.0',
           channel: 'stable',
@@ -269,9 +292,8 @@ void main() {
         hasActiveAssignments: () async => true,
         healthCheck: (_) async => true,
       ),
-      throwsA(predicate((error) => error
-          .toString()
-          .contains('waiting for active assignments'))),
+      throwsA(predicate((error) =>
+          error.toString().contains('waiting for active assignments'))),
     );
     expect(await root.list().toList(), isEmpty);
     await root.delete(recursive: true);
