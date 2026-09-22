@@ -1547,6 +1547,12 @@ Show:
 - release channel;
 - installed Agents.
 
+The catalog is read from the active Cloud plugin registry and is independent
+of the tenant's configured Workers. This is required for first-time setup:
+the first Worker selects a registered plugin, and only then does the Agent
+Engine receive that plugin as desired state. A catalog query must therefore
+not join through `workers` or hide every plugin until a Worker already exists.
+
 ### Desired-state behavior
 Studio updates Cloud desired configuration.
 

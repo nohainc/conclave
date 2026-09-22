@@ -3936,12 +3936,9 @@ async function handleStudioSnapshot(
               (SELECT COUNT(DISTINCT i.agent_id) FROM agent_plugin_installs i WHERE i.plugin_id = p.id AND i.status IN ('installed', 'active')) AS installedAgentCount,
               p.status, p.supported_roles_json AS roles, p.supported_capabilities_json AS capabilities
        FROM worker_plugins p
-       JOIN workers w ON w.plugin_id = p.id
-       WHERE w.workspace_id = ?1 AND p.status <> 'deprecated'
+       WHERE p.status <> 'deprecated'
        GROUP BY p.id ORDER BY p.display_name`,
-    )
-      .bind(context.workspaceId)
-      .all(),
+    ).all(),
     env.CONCLAVE_DB.prepare(
       `SELECT t.id, t.objective AS title, ph.name AS phase, t.status, t.role AS worker, t.objective AS detail, CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END AS progress, '[]' AS dependencies, '—' AS tokens, '—' AS cost FROM tasks t JOIN phases ph ON ph.id = t.phase_id JOIN runs r ON r.id = ph.run_id JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${scopedOwnership} ORDER BY t.created_at DESC LIMIT 100`,
     )

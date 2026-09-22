@@ -338,7 +338,10 @@ describe("Studio tenant isolation", () => {
     expect(b.tasks.map((row) => row.id)).toEqual(["task-b"]);
     expect(b.findings.map((row) => row.id)).toEqual(["finding-b"]);
     expect(b.events.map((row) => row.detail)).toEqual(["run-b"]);
-    expect(b.plugins.map((row) => row.id)).toEqual(["plugin-b"]);
+    // Plugin catalog entries are global registry resources. They must remain
+    // visible before a tenant creates its first Worker; tenant-owned Worker
+    // data is still scoped independently below.
+    expect(b.plugins.map((row) => row.id)).toEqual(["plugin-a"]);
     expect(b.artifacts.map((row) => row.name)).toEqual(["artifact-b"]);
     expect(b.modelCalls.map((row) => row.worker)).toEqual(["worker-b"]);
     expect(b.activeRunId).toBe("run-b");
