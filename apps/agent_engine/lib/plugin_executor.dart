@@ -49,16 +49,21 @@ class PluginProcessExecutor {
   final _cancelledOperations = <String>{};
   final _activeCancellations = <String, void Function()>{};
 
-  static Future<Process> _launch(PluginProcessSpec spec) =>
-      startIsolatedProcess(
-        spec.executable,
-        spec.arguments,
-        workingDirectory: spec.workingDirectory,
-        environment: safePluginEnvironment(
-          spec.environment,
-          allowedNames: spec.allowedEnvironmentVariables,
-        ),
-      );
+  static Future<Process> _launch(PluginProcessSpec spec) {
+    final executableName = spec.executable.split(Platform.pathSeparator).last;
+    final arguments = executableName == 'dart' || executableName == 'dart.exe'
+        ? ['--disable-analytics', ...spec.arguments]
+        : spec.arguments;
+    return startIsolatedProcess(
+      spec.executable,
+      arguments,
+      workingDirectory: spec.workingDirectory,
+      environment: safePluginEnvironment(
+        spec.environment,
+        allowedNames: spec.allowedEnvironmentVariables,
+      ),
+    );
+  }
 
   Future<Map<String, Object?>> execute(
     PluginProcessSpec spec,
@@ -94,6 +99,7 @@ class PluginProcessExecutor {
     };
     var stdoutBytes = 0;
     var stderrBytes = 0;
+    final stderrPreview = StringBuffer();
     void fail(String message) {
       for (final pendingResponse in pending.values) {
         if (!pendingResponse.isCompleted) {
@@ -140,11 +146,18 @@ class PluginProcessExecutor {
         // `dart run` may emit its VM service banner on stdout before the
         // plugin starts. It is launcher noise, not a plugin protocol frame.
         if (line.startsWith('The Dart VM service is listening on ')) return;
-        response.completeError(error);
+        for (final pendingResponse in pending.values) {
+          if (!pendingResponse.isCompleted) {
+            pendingResponse.completeError(error);
+          }
+        }
       }
     });
     final stderrSubscription = process.stderr.listen((chunk) {
       stderrBytes += chunk.length;
+      if (stderrPreview.length < 4096) {
+        stderrPreview.write(utf8.decode(chunk, allowMalformed: true));
+      }
       if (stderrBytes > maxStderrBytes) {
         fail('plugin stderr exceeded $maxStderrBytes bytes');
       }
@@ -197,7 +210,10 @@ class PluginProcessExecutor {
         timeout,
         onTimeout: () {
           fail('plugin execution timed out after $timeout');
-          throw TimeoutException('plugin execution timed out', timeout);
+          throw TimeoutException(
+            'plugin execution timed out; stderr: ${stderrPreview.toString()}',
+            timeout,
+          );
         },
       );
       return result;

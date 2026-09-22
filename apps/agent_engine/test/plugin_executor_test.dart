@@ -49,7 +49,7 @@ void main() {
     final result = await PluginProcessExecutor().execute(
       PluginProcessSpec(
         pluginId: 'conclave.echo',
-        executable: Platform.resolvedExecutable,
+        executable: 'dart',
         arguments: ['run', 'bin/echo_plugin.dart'],
         workingDirectory: pluginDirectory.path,
       ),
@@ -57,6 +57,7 @@ void main() {
         'objective': 'inspect repository',
         'pluginId': 'conclave.echo',
       },
+      timeout: const Duration(seconds: 5),
     );
 
     expect(result['status'], 'completed');
@@ -72,7 +73,7 @@ void main() {
       executor: PluginProcessExecutor(),
       resolve: (_) => PluginProcessSpec(
         pluginId: 'conclave.echo',
-        executable: Platform.resolvedExecutable,
+        executable: 'dart',
         arguments: ['run', 'bin/echo_plugin.dart'],
         workingDirectory: pluginDirectory.path,
       ),
@@ -102,7 +103,7 @@ void main() {
       executor: PluginProcessExecutor(),
       resolve: (_) => PluginProcessSpec(
         pluginId: 'conclave.echo',
-        executable: Platform.resolvedExecutable,
+        executable: 'dart',
         arguments: ['run', 'bin/echo_plugin.dart'],
         workingDirectory:
             '${Directory.current.parent.parent.path}/worker_plugins/echo',
@@ -136,7 +137,7 @@ void main() {
         PluginProcessExecutor().execute(
           PluginProcessSpec(
             pluginId: 'silent',
-            executable: Platform.resolvedExecutable,
+            executable: 'dart',
             arguments: ['run', '${directory.path}/silent.dart'],
           ),
           {},
@@ -156,7 +157,7 @@ void main() {
       final execution = executor.execute(
         PluginProcessSpec(
           pluginId: 'silent',
-          executable: Platform.resolvedExecutable,
+          executable: 'dart',
           arguments: ['run', '${directory.path}/silent.dart'],
         ),
         {},
@@ -179,7 +180,7 @@ void main() {
       final result = await PluginProcessExecutor().execute(
         PluginProcessSpec(
           pluginId: 'conclave.forge',
-          executable: Platform.resolvedExecutable,
+          executable: 'dart',
           arguments: ['--disable-analytics', 'run', 'bin/forge_plugin.dart'],
           workingDirectory: '${repository.path}/worker_plugins/forge',
         ),

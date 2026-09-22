@@ -36,12 +36,14 @@ Future<void> main() async {
       };
       stdout.writeln(jsonEncode(
           {'jsonrpc': '2.0', 'id': request['id'], 'result': result}));
+      await stdout.flush();
     } on Object catch (error) {
       stdout.writeln(jsonEncode({
         'jsonrpc': '2.0',
         'id': request['id'],
         'error': {'code': -32000, 'message': '$error'},
       }));
+      await stdout.flush();
     }
   }
 }

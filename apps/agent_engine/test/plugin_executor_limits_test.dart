@@ -25,7 +25,7 @@ void main() {
         PluginProcessExecutor().execute(
           PluginProcessSpec(
             pluginId: 'loud',
-            executable: Platform.resolvedExecutable,
+            executable: 'dart',
             arguments: ['run', '${directory.path}/loud.dart'],
           ),
           {},

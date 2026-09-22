@@ -8,6 +8,7 @@ Future<void> main() async {
 
   void respond(Object? id, Map<String, Object?> result) {
     stdout.writeln(jsonEncode({'jsonrpc': '2.0', 'id': id, 'result': result}));
+    unawaited(stdout.flush());
   }
 
   Future<void> runAssignment(Map<String, dynamic> request) async {
@@ -57,6 +58,7 @@ Future<void> main() async {
             'message': 'Deterministic echo failure',
           },
         }));
+        await stdout.flush();
         return;
       }
       final artifactIds = input['artifactIds'] is List
@@ -99,12 +101,12 @@ Future<void> main() async {
     }
     final result = switch (method) {
       'initialize' => {
-        'pluginId': 'conclave.echo',
-        'version': '1.0.0',
-        'protocolVersion': '2.0',
-        'runtimeLanguage': 'dart',
-        'capabilities': ['deterministic_echo'],
-      },
+          'pluginId': 'conclave.echo',
+          'version': '1.0.0',
+          'protocolVersion': '2.0',
+          'runtimeLanguage': 'dart',
+          'capabilities': ['deterministic_echo'],
+        },
       'health' => {'status': 'healthy'},
       'configure_worker' => {'configured': true},
       'cancel_assignment' => {'cancelled': true},
@@ -113,5 +115,6 @@ Future<void> main() async {
     };
     stdout.writeln(
         jsonEncode({'jsonrpc': '2.0', 'id': request['id'], 'result': result}));
+    await stdout.flush();
   }
 }

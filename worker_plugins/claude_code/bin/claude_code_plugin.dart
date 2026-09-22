@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -67,9 +68,8 @@ Future<void> main() async {
 Future<Map<String, Object?>> _health(ClaudeCodeWorker worker) async {
   final status = await worker.availability();
   return {
-    'status': status.installed && status.authenticated
-        ? 'healthy'
-        : 'unavailable',
+    'status':
+        status.installed && status.authenticated ? 'healthy' : 'unavailable',
     'installed': status.installed,
     'authenticated': status.authenticated,
     if (status.version != null) 'version': status.version,
@@ -78,6 +78,7 @@ Future<Map<String, Object?>> _health(ClaudeCodeWorker worker) async {
 
 void _writeResponse(Object? id, Map<String, Object?> result) {
   stdout.writeln(jsonEncode({'jsonrpc': '2.0', 'id': id, 'result': result}));
+  unawaited(stdout.flush());
 }
 
 void _writeError(Object? id, Object error) {
@@ -86,6 +87,7 @@ void _writeError(Object? id, Object error) {
     'id': id,
     'error': {'code': -32000, 'message': '$error'},
   }));
+  unawaited(stdout.flush());
 }
 
 Future<Map<String, Object?>> _executeAssignment(

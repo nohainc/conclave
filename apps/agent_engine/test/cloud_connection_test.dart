@@ -631,7 +631,7 @@ void main() {
       executor: PluginProcessExecutor(),
       resolve: (_) => PluginProcessSpec(
         pluginId: 'conclave.forge',
-        executable: Platform.resolvedExecutable,
+        executable: 'dart',
         arguments: ['--disable-analytics', 'run', 'bin/forge_plugin.dart'],
         workingDirectory: '${repository.path}/worker_plugins/forge',
       ),
