@@ -249,141 +249,165 @@ class _StudioAppState extends State<StudioApp> {
         TextEditingController(text: existing?.independenceKey ?? '');
     final concurrencyController =
         TextEditingController(text: '${existing?.concurrencyLimit ?? 1}');
-    var agentId = existing?.agentId.isNotEmpty == true
-        ? existing!.agentId
+    final configuredAgentId = existing?.agentId;
+    var agentId = configuredAgentId != null &&
+            snapshot.agents.any((agent) => agent.id == configuredAgentId)
+        ? configuredAgentId
         : snapshot.agents.firstOrNull?.id;
-    var pluginId = existing?.pluginId.isNotEmpty == true
-        ? existing!.pluginId
+    final configuredPluginId = existing?.pluginId;
+    var pluginId = configuredPluginId != null &&
+            snapshot.plugins.any((plugin) => plugin.id == configuredPluginId)
+        ? configuredPluginId
         : snapshot.plugins.firstOrNull?.id;
     var enabled = existing?.status.toLowerCase() != 'disabled';
     var sessionPolicy = existing?.sessionPolicy ?? 'stateless';
     var billingMode = existing?.billingMode ?? 'local_compute';
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(existing == null ? 'Create Worker' : 'Edit Worker'),
-          content: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextField(
-                  controller: nameController,
-                  onChanged: (_) => setDialogState(() {}),
-                  decoration: const InputDecoration(labelText: 'Name')),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                initialValue: agentId,
-                decoration: const InputDecoration(labelText: 'Agent'),
-                items: snapshot.agents
-                    .map((agent) => DropdownMenuItem(
-                        value: agent.id, child: Text(agent.name)))
-                    .toList(),
-                onChanged: (value) => setDialogState(() => agentId = value),
-              ),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                initialValue: pluginId,
-                decoration: const InputDecoration(labelText: 'Plugin'),
-                items: snapshot.plugins
-                    .map((plugin) => DropdownMenuItem(
-                        value: plugin.id, child: Text(plugin.name)))
-                    .toList(),
-                onChanged: (value) => setDialogState(() => pluginId = value),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                  controller: rolesController,
-                  decoration: const InputDecoration(
-                      labelText: 'Roles (comma separated)')),
-              const SizedBox(height: 10),
-              TextField(
-                  controller: capabilitiesController,
-                  decoration: const InputDecoration(
-                      labelText: 'Capabilities (comma separated)')),
-              const SizedBox(height: 10),
-              TextField(
-                  controller: versionPolicyController,
-                  decoration: const InputDecoration(
-                      labelText: 'Plugin version policy')),
-              const SizedBox(height: 10),
-              TextField(
-                  controller: configController,
-                  minLines: 2,
-                  maxLines: 5,
+    bool? saved;
+    try {
+      saved = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: Text(existing == null ? 'Create Worker' : 'Edit Worker'),
+            content: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                TextField(
+                    controller: nameController,
+                    onChanged: (_) => setDialogState(() {}),
+                    decoration: const InputDecoration(labelText: 'Name')),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: agentId,
+                  decoration: const InputDecoration(labelText: 'Agent'),
+                  items: snapshot.agents
+                      .map((agent) => DropdownMenuItem(
+                          value: agent.id, child: Text(agent.name)))
+                      .toList(),
+                  onChanged: (value) => setDialogState(() => agentId = value),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: pluginId,
+                  decoration: const InputDecoration(labelText: 'Plugin'),
+                  items: snapshot.plugins
+                      .map((plugin) => DropdownMenuItem(
+                          value: plugin.id, child: Text(plugin.name)))
+                      .toList(),
+                  onChanged: (value) => setDialogState(() => pluginId = value),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                    controller: rolesController,
+                    decoration: const InputDecoration(
+                        labelText: 'Roles (comma separated)')),
+                const SizedBox(height: 10),
+                TextField(
+                    controller: capabilitiesController,
+                    decoration: const InputDecoration(
+                        labelText: 'Capabilities (comma separated)')),
+                const SizedBox(height: 10),
+                TextField(
+                    controller: versionPolicyController,
+                    decoration: const InputDecoration(
+                        labelText: 'Plugin version policy')),
+                const SizedBox(height: 10),
+                TextField(
+                    controller: configController,
+                    minLines: 2,
+                    maxLines: 5,
+                    decoration: const InputDecoration(
+                        labelText: 'Model/config (JSON)')),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: sessionPolicy,
                   decoration:
-                      const InputDecoration(labelText: 'Model/config (JSON)')),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                initialValue: sessionPolicy,
-                decoration: const InputDecoration(labelText: 'Session policy'),
-                items: const [
-                  DropdownMenuItem(
-                      value: 'stateless', child: Text('Stateless')),
-                  DropdownMenuItem(
-                      value: 'isolated_workspace',
-                      child: Text('Isolated workspace')),
-                  DropdownMenuItem(
-                      value: 'reuse_session', child: Text('Reuse session')),
-                  DropdownMenuItem(
-                      value: 'persistent_context',
-                      child: Text('Persistent context')),
-                ],
-                onChanged: (value) => setDialogState(() {
-                  if (value != null) sessionPolicy = value;
-                }),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                  controller: concurrencyController,
-                  keyboardType: TextInputType.number,
-                  decoration:
-                      const InputDecoration(labelText: 'Concurrency limit')),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                initialValue: billingMode,
-                decoration: const InputDecoration(labelText: 'Billing mode'),
-                items: const [
-                  DropdownMenuItem(
-                      value: 'local_compute', child: Text('Local compute')),
-                  DropdownMenuItem(
-                      value: 'subscription', child: Text('Subscription')),
-                  DropdownMenuItem(
-                      value: 'api_metered', child: Text('API metered')),
-                  DropdownMenuItem(value: 'external', child: Text('External')),
-                  DropdownMenuItem(value: 'manual', child: Text('Manual')),
-                  DropdownMenuItem(value: 'free', child: Text('Free')),
-                ],
-                onChanged: (value) => setDialogState(() {
-                  if (value != null) billingMode = value;
-                }),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                  controller: independenceController,
-                  decoration: const InputDecoration(
-                      labelText: 'Independence key (optional)')),
-              SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Enabled'),
-                  value: enabled,
-                  onChanged: (value) => setDialogState(() => enabled = value)),
-            ]),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Cancel')),
-            FilledButton(
-              onPressed: nameController.text.trim().isEmpty ||
-                      agentId == null ||
-                      pluginId == null
-                  ? null
-                  : () => Navigator.pop(dialogContext, true),
-              child: const Text('Save'),
+                      const InputDecoration(labelText: 'Session policy'),
+                  items: const [
+                    DropdownMenuItem(
+                        value: 'stateless', child: Text('Stateless')),
+                    DropdownMenuItem(
+                        value: 'isolated_workspace',
+                        child: Text('Isolated workspace')),
+                    DropdownMenuItem(
+                        value: 'reuse_session', child: Text('Reuse session')),
+                    DropdownMenuItem(
+                        value: 'persistent_context',
+                        child: Text('Persistent context')),
+                  ],
+                  onChanged: (value) => setDialogState(() {
+                    if (value != null) sessionPolicy = value;
+                  }),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                    controller: concurrencyController,
+                    keyboardType: TextInputType.number,
+                    decoration:
+                        const InputDecoration(labelText: 'Concurrency limit')),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: billingMode,
+                  decoration: const InputDecoration(labelText: 'Billing mode'),
+                  items: const [
+                    DropdownMenuItem(
+                        value: 'local_compute', child: Text('Local compute')),
+                    DropdownMenuItem(
+                        value: 'subscription', child: Text('Subscription')),
+                    DropdownMenuItem(
+                        value: 'api_metered', child: Text('API metered')),
+                    DropdownMenuItem(
+                        value: 'external', child: Text('External')),
+                    DropdownMenuItem(value: 'manual', child: Text('Manual')),
+                    DropdownMenuItem(value: 'free', child: Text('Free')),
+                  ],
+                  onChanged: (value) => setDialogState(() {
+                    if (value != null) billingMode = value;
+                  }),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                    controller: independenceController,
+                    decoration: const InputDecoration(
+                        labelText: 'Independence key (optional)')),
+                SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Enabled'),
+                    value: enabled,
+                    onChanged: (value) =>
+                        setDialogState(() => enabled = value)),
+              ]),
             ),
-          ],
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('Cancel')),
+              FilledButton(
+                onPressed: nameController.text.trim().isEmpty ||
+                        agentId == null ||
+                        pluginId == null
+                    ? null
+                    : () => Navigator.pop(dialogContext, true),
+                child: const Text('Save'),
+              ),
+            ],
+          ),
         ),
-      ),
-    );
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open Worker editor: $error')),
+        );
+      }
+      nameController.dispose();
+      rolesController.dispose();
+      capabilitiesController.dispose();
+      configController.dispose();
+      versionPolicyController.dispose();
+      independenceController.dispose();
+      concurrencyController.dispose();
+      return;
+    }
     if (saved != true || agentId == null || pluginId == null) {
       nameController.dispose();
       rolesController.dispose();
