@@ -999,8 +999,11 @@ export class ConclaveForgeExecutionService {
       return Response.json({ error: "not_found" }, { status: 404 });
     }
     const params = (await request.json()) as Record<string, unknown>;
+    if (typeof params.runId !== "string" || params.runId.length === 0) {
+      return Response.json({ error: "run_id_required" }, { status: 400 });
+    }
     const executionId = crypto.randomUUID();
-    const runId = String(params.runId ?? "");
+    const runId = params.runId;
     const now = new Date().toISOString();
     const record: ForgeExecutionRecord = {
       executionId,
@@ -1062,35 +1065,25 @@ export class ConclaveForgeExecutionService {
     executionId: string,
   ): Promise<void> {
     const runId = String(params.runId ?? "");
-    if (!this.env.CONCLAVE_API && !this.env.CONCLAVE_API_BASE_URL) {
-      throw new Error(
-        "CONCLAVE_API or CONCLAVE_API_BASE_URL is not configured",
-      );
-    }
+    let resultArtifactId: string;
     try {
-      const resultArtifactId = await executeForgeService(
+      if (!this.env.CONCLAVE_API && !this.env.CONCLAVE_API_BASE_URL) {
+        throw new Error(
+          "CONCLAVE_API or CONCLAVE_API_BASE_URL is not configured",
+        );
+      }
+      resultArtifactId = await executeForgeService(
         this.env,
         params,
         executionId,
       );
-      await this.updateExecution(executionId, {
-        status: "completed",
-        resultArtifactId,
-      });
-      await this.notify(runId, {
-        eventId: crypto.randomUUID(),
-        runId,
-        executionId,
-        status: "completed",
-        resultArtifactId,
-      });
     } catch (error) {
       await this.updateExecution(executionId, {
         status: "failed",
         error:
           error instanceof Error ? error.message : "Forge execution failed",
       });
-      await this.notify(runId, {
+      await this.notifyBestEffort(runId, {
         eventId: crypto.randomUUID(),
         runId,
         executionId,
@@ -1098,6 +1091,33 @@ export class ConclaveForgeExecutionService {
         error:
           error instanceof Error ? error.message : "Forge execution failed",
       });
+      return;
+    }
+
+    // Persist the terminal Forge result before notifying the Workflow. A
+    // callback outage must not rewrite a real completion as a Forge failure.
+    await this.updateExecution(executionId, {
+      status: "completed",
+      resultArtifactId,
+    });
+    await this.notifyBestEffort(runId, {
+      eventId: crypto.randomUUID(),
+      runId,
+      executionId,
+      status: "completed",
+      resultArtifactId,
+    });
+  }
+
+  private async notifyBestEffort(
+    runId: string,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await this.notify(runId, payload);
+    } catch {
+      // The D1 execution record is authoritative and can be reconciled after
+      // a callback outage or service restart.
     }
   }
 
