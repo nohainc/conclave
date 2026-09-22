@@ -67,6 +67,9 @@ class PluginProcessExecutor {
     int maxStderrBytes = 1024 * 1024,
     String? operationId,
   }) async {
+    if (maxStdoutBytes <= 0 || maxStderrBytes <= 0) {
+      throw ArgumentError('plugin output limits must be positive');
+    }
     final process = await _launcher(spec);
     final requestId = 'agent-${DateTime.now().microsecondsSinceEpoch}-'
         '${++_requestSequence}';
@@ -99,16 +102,24 @@ class PluginProcessExecutor {
       unawaited(_terminator(process, force: true));
     }
 
-    final stdoutSubscription = process.stdout
+    final boundedStdout = process.stdout.transform(
+      StreamTransformer<List<int>, List<int>>.fromHandlers(
+        handleData: (chunk, sink) {
+          stdoutBytes += chunk.length;
+          if (stdoutBytes > maxStdoutBytes) {
+            fail('plugin stdout exceeded $maxStdoutBytes bytes');
+            sink.close();
+            return;
+          }
+          sink.add(chunk);
+        },
+      ),
+    );
+    final stdoutSubscription = boundedStdout
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen((line) {
       if (response.isCompleted || line.trim().isEmpty) return;
-      stdoutBytes += utf8.encode(line).length + 1;
-      if (stdoutBytes > maxStdoutBytes) {
-        fail('plugin stdout exceeded $maxStdoutBytes bytes');
-        return;
-      }
       try {
         final decoded = jsonDecode(line);
         if (decoded is! Map<String, dynamic> || decoded['id'] is! String) {
