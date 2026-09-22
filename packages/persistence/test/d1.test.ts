@@ -3,6 +3,8 @@ import {
   D1GoalRepository,
   D1ProjectRepository,
   D1WorkerRepository,
+  D1ExtensionRepository,
+  D1WorkflowTemplateRepository,
   D1EventRepository,
   D1ModelCallRepository,
   D1TaskDependencyRepository,
@@ -135,6 +137,64 @@ describe("Cloudflare persistence adapters", () => {
       capabilities: ["repository_write"],
       billingMode: "subscription",
     });
+  });
+
+  it("reconstructs versioned extensions and workflow templates", async () => {
+    const extension = await new D1ExtensionRepository(
+      new FakeDb([
+        {
+          row_id: "workspace-1:codex:1.0.0",
+          organization_id: "workspace-1",
+          extension_id: "codex",
+          kind: "agent",
+          name: "Codex",
+          version: "1.0.0",
+          manifest_json: '{"permissions":["repo.read"]}',
+          status: "active",
+          created_at: "now",
+          updated_at: "now",
+        },
+      ]),
+    ).get("workspace-1:codex:1.0.0");
+    expect(extension).toMatchObject({
+      id: "workspace-1:codex:1.0.0",
+      organizationId: "workspace-1",
+      extensionId: "codex",
+      version: "1.0.0",
+      manifest: { permissions: ["repo.read"] },
+    });
+
+    const templates = await new D1WorkflowTemplateRepository(
+      new FakeDb([
+        [
+          {
+            row_id: "workspace-1:forge:1",
+            organization_id: "workspace-1",
+            template_id: "forge",
+            name: "Forge",
+            version: 1,
+            template_json: '{"steps":["research"]}',
+            status: "active",
+            created_by_user_id: "user-1",
+            created_at: "now",
+            updated_at: "now",
+          },
+          {
+            row_id: "workspace-1:forge:2",
+            organization_id: "workspace-1",
+            template_id: "forge",
+            name: "Forge",
+            version: 2,
+            template_json: '{"steps":["research","review"]}',
+            status: "active",
+            created_by_user_id: "user-1",
+            created_at: "now",
+            updated_at: "now",
+          },
+        ],
+      ]),
+    ).listByOrganization("workspace-1");
+    expect(templates.map((template) => template.version)).toEqual([1, 2]);
   });
 
   it("resolves tenant scope before saving Goals and Runs", async () => {

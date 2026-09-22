@@ -15,6 +15,8 @@ import type {
   VerificationRecord,
   ProjectRecord,
   WorkerRecord,
+  ExtensionRecord,
+  WorkflowTemplateRecord,
 } from "./index.js";
 
 export interface D1Result<T> {
@@ -172,6 +174,123 @@ export class D1WorkerRepository {
       )
       .run();
   }
+}
+
+export class D1ExtensionRepository {
+  constructor(private readonly db: D1DatabaseLike) {}
+
+  async get(id: string): Promise<ExtensionRecord | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM extensions WHERE row_id = ?1")
+      .bind(id)
+      .first();
+    return row ? toExtension(row) : null;
+  }
+
+  async save(extension: ExtensionRecord): Promise<void> {
+    const rowId = extension.id;
+    await this.db
+      .prepare(
+        `INSERT INTO extensions (row_id, organization_id, extension_id, kind, name, version,
+           manifest_json, status, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+         ON CONFLICT(row_id) DO UPDATE SET name=excluded.name, manifest_json=excluded.manifest_json,
+           status=excluded.status, updated_at=excluded.updated_at`,
+      )
+      .bind(
+        rowId,
+        extension.organizationId,
+        extension.extensionId,
+        extension.kind,
+        extension.name,
+        extension.version,
+        json(extension.manifest),
+        extension.status,
+        extension.createdAt,
+        extension.updatedAt,
+      )
+      .run();
+  }
+}
+
+function toExtension(row: Record<string, unknown>): ExtensionRecord {
+  return {
+    id: String(row.row_id),
+    organizationId: String(row.organization_id),
+    extensionId: String(row.extension_id),
+    kind: String(row.kind) as ExtensionRecord["kind"],
+    name: String(row.name),
+    version: String(row.version),
+    manifest: parse(row.manifest_json, {}),
+    status: String(row.status) as ExtensionRecord["status"],
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+export class D1WorkflowTemplateRepository {
+  constructor(private readonly db: D1DatabaseLike) {}
+
+  async get(id: string): Promise<WorkflowTemplateRecord | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM workflow_templates WHERE row_id = ?1")
+      .bind(id)
+      .first();
+    return row ? toWorkflowTemplate(row) : null;
+  }
+
+  async save(template: WorkflowTemplateRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO workflow_templates (row_id, organization_id, template_id, name, version,
+           template_json, status, created_by_user_id, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+         ON CONFLICT(row_id) DO UPDATE SET name=excluded.name, template_json=excluded.template_json,
+           status=excluded.status, updated_at=excluded.updated_at`,
+      )
+      .bind(
+        template.id,
+        template.organizationId,
+        template.templateId,
+        template.name,
+        template.version,
+        json(template.template),
+        template.status,
+        template.createdByUserId,
+        template.createdAt,
+        template.updatedAt,
+      )
+      .run();
+  }
+
+  async listByOrganization(
+    organizationId: string,
+  ): Promise<readonly WorkflowTemplateRecord[]> {
+    const rows = await this.db
+      .prepare(
+        "SELECT * FROM workflow_templates WHERE organization_id = ?1 ORDER BY template_id, version",
+      )
+      .bind(organizationId)
+      .all();
+    return (rows.results ?? []).map(toWorkflowTemplate);
+  }
+}
+
+function toWorkflowTemplate(
+  row: Record<string, unknown>,
+): WorkflowTemplateRecord {
+  return {
+    id: String(row.row_id),
+    organizationId: String(row.organization_id),
+    templateId: String(row.template_id),
+    name: String(row.name),
+    version: Number(row.version),
+    template: parse(row.template_json, {}),
+    status: String(row.status) as WorkflowTemplateRecord["status"],
+    createdByUserId: String(row.created_by_user_id),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
 }
 
 function toWorker(row: Record<string, unknown>): WorkerRecord {

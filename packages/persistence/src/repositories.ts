@@ -3,13 +3,11 @@ import type {
   AuditLogRecord,
   BudgetRecord,
   EncryptedCredentialRecord,
-  ExtensionRecord,
   HumanApprovalRecord,
   MembershipRecord,
   OrganizationRecord,
   ProjectMembershipRecord,
   RetentionPolicyRecord,
-  WorkflowTemplateRecord,
   ConnectionRecord,
   RunAggregateRows,
   PersistenceRepositories,
@@ -30,6 +28,8 @@ import {
   D1VerificationRepository,
   D1ProjectRepository,
   D1WorkerRepository,
+  D1ExtensionRepository,
+  D1WorkflowTemplateRepository,
   type D1DatabaseLike,
 } from "./d1.js";
 
@@ -218,23 +218,6 @@ export class D1RetentionPolicyRepository extends RecordRepository<RetentionPolic
     );
   }
 }
-export class D1ExtensionRepository extends RecordRepository<ExtensionRecord> {
-  constructor(store: D1RecordStore) {
-    super(store, "extensions");
-  }
-}
-export class D1WorkflowTemplateRepository extends RecordRepository<WorkflowTemplateRecord> {
-  constructor(store: D1RecordStore) {
-    super(store, "workflow_templates");
-  }
-  async listByOrganization(
-    organizationId: string,
-  ): Promise<readonly WorkflowTemplateRecord[]> {
-    return (await this.list(organizationId)).filter(
-      (record) => record.organizationId === organizationId,
-    );
-  }
-}
 export class D1HumanApprovalRepository extends RecordRepository<HumanApprovalRecord> {
   constructor(store: D1RecordStore) {
     super(store, "human_approvals");
@@ -293,8 +276,8 @@ export class D1PersistenceRepositories implements PersistenceRepositories {
     this.budgets = new D1BudgetRepository(this.store);
     this.credentials = new D1CredentialRepository(this.store);
     this.retentionPolicies = new D1RetentionPolicyRepository(this.store);
-    this.extensions = new D1ExtensionRepository(this.store);
-    this.workflowTemplates = new D1WorkflowTemplateRepository(this.store);
+    this.extensions = new D1ExtensionRepository(db);
+    this.workflowTemplates = new D1WorkflowTemplateRepository(db);
     this.humanApprovals = new D1HumanApprovalRepository(this.store);
   }
 
