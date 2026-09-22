@@ -148,6 +148,14 @@ class AgentEngine {
             lines.length <= limit ? lines : lines.sublist(lines.length - limit),
       };
     }
+    if (command.type == 'engine.restart') {
+      // Let the IPC response flush before replacing the listening socket.
+      unawaited(Future<void>.delayed(const Duration(milliseconds: 50), () async {
+        await stop();
+        await start();
+      }));
+      return {'accepted': true};
+    }
     if (command.type != 'engine.status') {
       throw StateError('unsupported engine command: ${command.type}');
     }

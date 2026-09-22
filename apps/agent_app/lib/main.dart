@@ -33,6 +33,8 @@ abstract interface class AgentEngineConnection {
 
   Future<List<String>> logs() async => const [];
 
+  Future<bool> restart() async => false;
+
   Future<bool> isOnline() async => (await snapshot()).online;
 
   factory AgentEngineConnection.unavailable() =
@@ -40,6 +42,9 @@ abstract interface class AgentEngineConnection {
 }
 
 class UnavailableAgentEngineConnection implements AgentEngineConnection {
+  @override
+  Future<bool> restart() async => false;
+
   @override
   Future<bool> isOnline() async => false;
 
@@ -141,6 +146,28 @@ class SocketAgentEngineConnection implements AgentEngineConnection {
     }
   }
 
+  @override
+  Future<bool> restart() async {
+    final metadataFile = File('${dataDirectory.path}/ipc.json');
+    if (!await metadataFile.exists()) return false;
+    try {
+      final metadata =
+          jsonDecode(await metadataFile.readAsString()) as Map<String, dynamic>;
+      final port = metadata['port'];
+      final token = metadata['token'];
+      if (port is! int || token is! String || token.isEmpty) return false;
+      final client = await LocalIpcClient.connect(port: port, token: token);
+      try {
+        final result = await client.command('engine.restart', const {});
+        return result['accepted'] == true;
+      } finally {
+        await client.close();
+      }
+    } on Object {
+      return false;
+    }
+  }
+
   static int _integer(Object? value) => value is int ? value : 0;
 
   static List<String> _strings(Object? value) =>
@@ -197,6 +224,22 @@ class _AgentHomeState extends State<AgentHome> {
   }
 
   void _refresh() => setState(() => _snapshot = widget.connection.snapshot());
+
+  Future<void> _restartEngine() async {
+    final accepted = await widget.connection.restart();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(accepted
+            ? 'Agent Engine restart requested.'
+            : 'Agent Engine could not be restarted.'),
+      ),
+    );
+    if (accepted) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      _refresh();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -422,10 +465,19 @@ class _SettingsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _Page(title: 'Settings', children: [
-        const Text(
-            'Connection, permissions, and update settings will appear here.'),
+        const Text('Connection and local host controls.'),
         const SizedBox(height: 12),
         Text('Connection status: ${snapshot.status}'),
+        const SizedBox(height: 12),
+        if (snapshot.online)
+          FilledButton.icon(
+            onPressed: () {
+              final state = context.findAncestorStateOfType<_AgentHomeState>();
+              state?._restartEngine();
+            },
+            icon: const Icon(Icons.restart_alt),
+            label: const Text('Restart Agent Engine'),
+          ),
       ]);
 }
 

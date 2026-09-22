@@ -165,6 +165,26 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('IPC accepts a deferred Engine restart request', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-agent-restart-');
+    final engine = AgentEngine(config: AgentEngineConfig(dataDirectory: directory));
+    await engine.start();
+    final metadata =
+        jsonDecode(await File('${directory.path}/ipc.json').readAsString())
+            as Map<String, dynamic>;
+    final client = await LocalIpcClient.connect(
+      port: metadata['port'] as int,
+      token: metadata['token'] as String,
+    );
+    expect(await client.command('engine.restart', const {}), {'accepted': true});
+    await client.close();
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(engine.isRunning, isTrue);
+    await engine.stop();
+    await directory.delete(recursive: true);
+  });
+
   test('restricts IPC metadata to the current user on POSIX', () async {
     if (Platform.isWindows) return;
     final directory = await Directory.systemTemp.createTemp('conclave-engine-');
