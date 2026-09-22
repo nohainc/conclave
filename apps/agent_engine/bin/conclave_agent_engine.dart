@@ -5,6 +5,7 @@ import 'package:conclave_agent_engine/assignment_journal.dart';
 import 'package:conclave_agent_engine/cloud_connection.dart';
 import 'package:conclave_agent_engine/plugin_executor.dart';
 import 'package:conclave_agent_engine/plugin_manager.dart';
+import 'package:conclave_agent_engine/self_update.dart';
 import 'package:conclave_agent_engine/trust_policy.dart';
 import 'package:conclave_agent_engine/worker_configuration.dart';
 
@@ -97,6 +98,30 @@ Future<void> main(List<String> args) async {
   final pluginHandler = pluginManager.assignmentHandler(
     PluginProcessExecutor(),
   );
+  String? updateAvailable;
+  var lastUpdateCheck = DateTime.fromMillisecondsSinceEpoch(0);
+  Future<void> refreshUpdateAvailability() async {
+    if (config.cloudUri == null ||
+        DateTime.now().difference(lastUpdateCheck) <
+            const Duration(minutes: 5)) {
+      return;
+    }
+    lastUpdateCheck = DateTime.now();
+    try {
+      final release = await const AgentReleaseClient().latest(
+        cloudUri: config.cloudUri!,
+        channel: 'stable',
+        currentVersion: '0.1.0',
+        operatingSystem: Platform.operatingSystem,
+        authToken: config.authToken,
+      );
+      updateAvailable = release?.version;
+    } on Object {
+      // Status remains useful while Cloud is offline; the next interval
+      // retries the check.
+    }
+  }
+
   late final AgentCloudConnection? connection;
   connection = config.cloudUri != null &&
           config.agentId != null &&
@@ -190,6 +215,7 @@ Future<void> main(List<String> args) async {
     config: config,
     cloudConnection: connection,
     statusProvider: () async {
+      await refreshUpdateAvailability();
       final plugins = await pluginManager.inventory();
       return {
         'workers': activeWorkerIds.length,
@@ -198,6 +224,7 @@ Future<void> main(List<String> args) async {
         'activeTasks': connection?.activeAssignmentCount ?? 0,
         'activeAssignmentIds': connection?.activeAssignmentIds ?? const [],
         'cloudConnected': connection?.isConnected ?? false,
+        if (updateAvailable != null) 'updateAvailable': updateAvailable,
       };
     },
   );
