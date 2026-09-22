@@ -163,14 +163,23 @@ class SafeWorkspace {
   }
 
   String _relativePath(String absolutePath) {
-    final prefix = root.path.endsWith(Platform.pathSeparator)
+    String comparable(String value) {
+      final normalized = value.replaceAll('/', Platform.pathSeparator);
+      return Platform.isWindows ? normalized.toLowerCase() : normalized;
+    }
+
+    final rootPath = root.path.endsWith(Platform.pathSeparator)
         ? root.path
         : '${root.path}${Platform.pathSeparator}';
-    if (!absolutePath.startsWith(prefix)) {
+    final normalizedAbsolute =
+        absolutePath.replaceAll('/', Platform.pathSeparator);
+    final comparableRoot = comparable(rootPath);
+    final comparableAbsolute = comparable(normalizedAbsolute);
+    if (!comparableAbsolute.startsWith(comparableRoot)) {
       throw const RuntimeViolation('path escapes workspace root');
     }
-    final relative = absolutePath.substring(prefix.length);
-    return relative == '.' ? relative : relative.replaceFirst('./', '');
+    final relative = normalizedAbsolute.substring(rootPath.length);
+    return relative == '.' ? relative : relative.replaceFirst('.${Platform.pathSeparator}', '');
   }
 }
 
