@@ -30,6 +30,26 @@ void main() {
     await outside.delete(recursive: true);
   });
 
+  test('blocks writes through broken symlinks before target creation',
+      () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-runtime-');
+    final outside =
+        await Directory.systemTemp.createTemp('conclave-runtime-outside-');
+    final missingTarget = '${outside.path}/not-created.txt';
+    await Link('${directory.path}/broken.txt').create(missingTarget);
+    final workspace = SafeWorkspace(directory);
+
+    await expectLater(
+      workspace.write('broken.txt', 'must not escape'),
+      throwsA(isA<RuntimeViolation>()),
+    );
+    expect(await File(missingTarget).exists(), isFalse);
+
+    await directory.delete(recursive: true);
+    await outside.delete(recursive: true);
+  });
+
   test('patches exact content and searches bounded text files', () async {
     final directory =
         await Directory.systemTemp.createTemp('conclave-runtime-');
@@ -60,7 +80,8 @@ void main() {
     final directory =
         await Directory.systemTemp.createTemp('conclave-runtime-git-');
     Future<void> runGit(List<String> arguments) async {
-      final result = await Process.run('git', arguments, workingDirectory: directory.path);
+      final result =
+          await Process.run('git', arguments, workingDirectory: directory.path);
       if (result.exitCode != 0) {
         throw StateError('${result.stdout}\n${result.stderr}');
       }

@@ -50,8 +50,22 @@ class SafeWorkspace {
     if (!normalized.startsWith(normalizedRoot) && resolved != rootReal) {
       throw const RuntimeViolation('path escapes workspace root');
     }
-    if (forWrite && existing && await Link(candidate.path).exists()) {
-      throw const RuntimeViolation('writes through symlinks are not allowed');
+    if (forWrite) {
+      var current = candidate.path;
+      while (true) {
+        final type = await FileSystemEntity.type(
+          current,
+          followLinks: false,
+        );
+        if (type == FileSystemEntityType.link) {
+          throw const RuntimeViolation(
+              'writes through symlinks are not allowed');
+        }
+        if (current == root.path) break;
+        final parent = Directory(current).parent.path;
+        if (parent == current) break;
+        current = parent;
+      }
     }
     return candidate.path;
   }
@@ -305,7 +319,8 @@ class GitRepository {
     }
     final arguments = <String>['worktree', 'add', '--detach', relativePath];
     if (revision != null) {
-      if (revision.isEmpty || revision.contains(RegExp(r'[^A-Za-z0-9_./:@=-]'))) {
+      if (revision.isEmpty ||
+          revision.contains(RegExp(r'[^A-Za-z0-9_./:@=-]'))) {
         throw const RuntimeViolation('invalid Git revision');
       }
       arguments.add(revision);
