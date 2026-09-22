@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:conclave_anthropic_plugin/anthropic_worker.dart';
 import 'package:test/test.dart';
 
@@ -41,5 +43,32 @@ void main() {
           apiKey: 'secret', model: 'claude', prompt: 'hi'),
       throwsFormatException,
     );
+  });
+
+  test('bounds provider response bodies', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final subscription = server.listen((request) {
+      request.response
+        ..headers.contentType = ContentType.json
+        ..write(List.filled(2048, 'x').join());
+      request.response.close();
+    });
+    try {
+      await expectLater(
+        invokeAnthropic(
+          'secret',
+          'claude',
+          'hi',
+          endpoint: Uri.http('127.0.0.1:${server.port}', '/v1/messages'),
+          maxResponseBytes: 1024,
+        ),
+        throwsA(predicate((error) => error
+            .toString()
+            .contains('Anthropic response exceeded 1024 bytes'))),
+      );
+    } finally {
+      await subscription.cancel();
+      await server.close(force: true);
+    }
   });
 }

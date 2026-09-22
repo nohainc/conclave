@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:conclave_openai_plugin/openai_worker.dart';
 import 'package:test/test.dart';
 
@@ -43,5 +45,32 @@ void main() {
           apiKey: 'secret', model: 'gpt', prompt: 'hi'),
       throwsFormatException,
     );
+  });
+
+  test('bounds provider response bodies', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final subscription = server.listen((request) {
+      request.response
+        ..headers.contentType = ContentType.json
+        ..write(List.filled(2048, 'x').join());
+      request.response.close();
+    });
+    try {
+      await expectLater(
+        invokeOpenAi(
+          'secret',
+          'gpt',
+          'hi',
+          endpoint:
+              Uri.http('127.0.0.1:${server.port}', '/v1/chat/completions'),
+          maxResponseBytes: 1024,
+        ),
+        throwsA(predicate((error) =>
+            error.toString().contains('OpenAI response exceeded 1024 bytes'))),
+      );
+    } finally {
+      await subscription.cancel();
+      await server.close(force: true);
+    }
   });
 }

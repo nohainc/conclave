@@ -108,11 +108,23 @@ class RetriableProviderError implements Exception {
 }
 
 Future<ProviderResponse> invokeAnthropic(
-    String apiKey, String model, String prompt) async {
+  String apiKey,
+  String model,
+  String prompt, {
+  Uri? endpoint,
+  Duration timeout = const Duration(seconds: 60),
+  int maxResponseBytes = 8 * 1024 * 1024,
+}) async {
+  if (maxResponseBytes <= 0) {
+    throw ArgumentError.value(
+        maxResponseBytes, 'maxResponseBytes', 'must be positive');
+  }
   final client = HttpClient();
   try {
+    client.connectionTimeout = timeout;
     final request = await client
-        .postUrl(Uri.parse('https://api.anthropic.com/v1/messages'));
+        .postUrl(endpoint ?? Uri.https('api.anthropic.com', '/v1/messages'))
+        .timeout(timeout);
     request.headers
       ..set('x-api-key', apiKey)
       ..set('anthropic-version', '2023-06-01')
@@ -124,10 +136,10 @@ Future<ProviderResponse> invokeAnthropic(
         {'role': 'user', 'content': prompt}
       ],
     }));
-    final response = await request.close();
-    final body = await utf8.decodeStream(response);
-    final decoded = jsonDecode(body);
-    final usage = decoded is Map && decoded['usage'] is Map
+    final response = await request.close().timeout(timeout);
+    final body = await _readBoundedBody(response, maxResponseBytes, timeout);
+    final decoded = _decodeMap(body);
+    final usage = decoded['usage'] is Map
         ? decoded['usage'] as Map
         : const <Object?, Object?>{};
     return ProviderResponse(
@@ -141,5 +153,29 @@ Future<ProviderResponse> invokeAnthropic(
     );
   } finally {
     client.close(force: true);
+  }
+}
+
+Future<String> _readBoundedBody(
+  HttpClientResponse response,
+  int maxBytes,
+  Duration timeout,
+) async {
+  final bytes = <int>[];
+  await for (final chunk in response.timeout(timeout)) {
+    if (bytes.length + chunk.length > maxBytes) {
+      throw StateError('Anthropic response exceeded $maxBytes bytes');
+    }
+    bytes.addAll(chunk);
+  }
+  return utf8.decode(bytes);
+}
+
+Map<String, Object?> _decodeMap(String body) {
+  try {
+    final decoded = jsonDecode(body);
+    return decoded is Map ? Map<String, Object?>.from(decoded) : const {};
+  } on FormatException {
+    return const {};
   }
 }
