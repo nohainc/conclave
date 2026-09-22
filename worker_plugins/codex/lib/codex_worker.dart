@@ -69,6 +69,7 @@ class CodexWorker {
   Future<CodexTaskResult> executeTask(
     String objective, {
     String executable = 'codex',
+    Map<String, Object?> input = const {},
     String? workingDirectory,
     Duration timeout = const Duration(minutes: 5),
     int maxOutputBytes = 4 * 1024 * 1024,
@@ -79,8 +80,8 @@ class CodexWorker {
     }
     final process = await _start(
       executable,
-      ['exec', '--json', objective],
-      workingDirectory: workingDirectory,
+      ['exec', '--json', buildCodexTaskPrompt(objective, input)],
+      workingDirectory: workingDirectory ?? _repositoryPath(input),
     );
     final stdout = <int>[];
     final stderr = <int>[];
@@ -128,6 +129,11 @@ class CodexWorker {
       await stderrSubscription.cancel();
     }
   }
+
+  String? _repositoryPath(Map<String, Object?> input) =>
+      input['repositoryPath'] is String
+          ? input['repositoryPath'] as String
+          : null;
 
   CodexTaskResult parseStructuredOutput(String raw) {
     final events = <Map<String, Object?>>[];
@@ -182,4 +188,18 @@ class CodexWorker {
     String? workingDirectory,
   }) =>
       Process.start(executable, args, workingDirectory: workingDirectory);
+}
+
+String buildCodexTaskPrompt(
+  String objective,
+  Map<String, Object?> input, {
+  int maxBytes = 128 * 1024,
+}) {
+  if (maxBytes <= 0) throw ArgumentError.value(maxBytes, 'maxBytes');
+  if (input.isEmpty) return objective;
+  final context = jsonEncode(input);
+  final prompt = '$objective\n\nConclave task context (JSON):\n$context';
+  final bytes = utf8.encode(prompt);
+  if (bytes.length <= maxBytes) return prompt;
+  return '${utf8.decode(bytes.take(maxBytes).toList(), allowMalformed: true)}\n[context truncated]';
 }

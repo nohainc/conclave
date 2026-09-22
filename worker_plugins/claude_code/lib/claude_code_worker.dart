@@ -74,6 +74,7 @@ class ClaudeCodeWorker {
   Future<ClaudeCodeTaskResult> executeTask(
     String objective, {
     String executable = 'claude',
+    Map<String, Object?> input = const {},
     String? workingDirectory,
     Duration timeout = const Duration(minutes: 5),
     int maxOutputBytes = 4 * 1024 * 1024,
@@ -84,8 +85,13 @@ class ClaudeCodeWorker {
     }
     final process = await _start(
       executable,
-      ['-p', objective, '--output-format', 'json'],
-      workingDirectory: workingDirectory,
+      [
+        '-p',
+        buildClaudeCodeTaskPrompt(objective, input),
+        '--output-format',
+        'json'
+      ],
+      workingDirectory: workingDirectory ?? _repositoryPath(input),
     );
     final stdout = <int>[];
     final stderr = <int>[];
@@ -133,6 +139,11 @@ class ClaudeCodeWorker {
       await stderrSubscription.cancel();
     }
   }
+
+  String? _repositoryPath(Map<String, Object?> input) =>
+      input['repositoryPath'] is String
+          ? input['repositoryPath'] as String
+          : null;
 
   ClaudeCodeTaskResult parseStructuredOutput(String raw) {
     final events = <Map<String, Object?>>[];
@@ -185,4 +196,18 @@ class ClaudeCodeWorker {
     String? workingDirectory,
   }) =>
       Process.start(executable, args, workingDirectory: workingDirectory);
+}
+
+String buildClaudeCodeTaskPrompt(
+  String objective,
+  Map<String, Object?> input, {
+  int maxBytes = 128 * 1024,
+}) {
+  if (maxBytes <= 0) throw ArgumentError.value(maxBytes, 'maxBytes');
+  if (input.isEmpty) return objective;
+  final context = jsonEncode(input);
+  final prompt = '$objective\n\nConclave task context (JSON):\n$context';
+  final bytes = utf8.encode(prompt);
+  if (bytes.length <= maxBytes) return prompt;
+  return '${utf8.decode(bytes.take(maxBytes).toList(), allowMalformed: true)}\n[context truncated]';
 }

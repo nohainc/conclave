@@ -38,6 +38,17 @@ void main() {
     expect(result.events, hasLength(2));
   });
 
+  test('forwards bounded task context to the Codex prompt', () {
+    final prompt = buildCodexTaskPrompt('review repository', {
+      'evidence': 'return a - b',
+      'repositoryPath': '/repo',
+    });
+    expect(prompt, contains('review repository'));
+    expect(prompt, contains('return a - b'));
+    expect(buildCodexTaskPrompt('task', {'large': 'x' * 200}, maxBytes: 32),
+        contains('[context truncated]'));
+  });
+
   test('rejects malformed or empty structured output', () {
     final worker = CodexWorker();
     expect(

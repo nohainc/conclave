@@ -37,6 +37,18 @@ void main() {
         () => worker.parseStructuredOutput('not json'), throwsFormatException);
   });
 
+  test('forwards bounded task context to the Claude prompt', () {
+    final prompt = buildClaudeCodeTaskPrompt('review repository', {
+      'evidence': 'return a - b',
+      'repositoryPath': '/repo',
+    });
+    expect(prompt, contains('review repository'));
+    expect(prompt, contains('return a - b'));
+    expect(
+        buildClaudeCodeTaskPrompt('task', {'large': 'x' * 200}, maxBytes: 32),
+        contains('[context truncated]'));
+  });
+
   test('bounds CLI output and force-terminates a noisy process', () async {
     final directory = await Directory.systemTemp.createTemp('claude-noisy-');
     final script = File('${directory.path}/noisy.dart')..writeAsStringSync('''

@@ -46,7 +46,16 @@ Future<Map<String, Object?>> _executeAssignment(
   if (objective is! String || objective.trim().isEmpty) {
     throw const FormatException('assignment objective is required');
   }
-  final result = await worker.executeTask(objective);
+  final input = params['input'] is Map
+      ? Map<String, Object?>.from(params['input'] as Map)
+      : const <String, Object?>{};
+  final result = await worker.executeTask(
+    objective,
+    input: input,
+    workingDirectory: input['repositoryPath'] is String
+        ? input['repositoryPath'] as String
+        : null,
+  );
   return {
     'status': 'completed',
     'summary': result.summary,
