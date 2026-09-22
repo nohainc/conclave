@@ -57,6 +57,11 @@ class _StudioAppState extends State<StudioApp> {
           .firstOrNull ??
       snapshot.activeChat;
 
+  String? get activeWorkspaceId =>
+      snapshot.workspaceId ??
+      selectedWorkspaceId ??
+      store.workspaces.activeWorkspaceId;
+
   @override
   void initState() {
     super.initState();
@@ -213,8 +218,17 @@ class _StudioAppState extends State<StudioApp> {
   }
 
   Future<void> _editWorker([StudioWorker? existing]) async {
-    final workspaceId = snapshot.workspaceId;
-    if (workspaceId == null || workspaceId.isEmpty) return;
+    final workspaceId = activeWorkspaceId;
+    if (workspaceId == null || workspaceId.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Select a workspace before creating a Worker.'),
+          ),
+        );
+      }
+      return;
+    }
     final nameController = TextEditingController(text: existing?.name ?? '');
     final rolesController = TextEditingController(
         text: (existing?.roles.isNotEmpty == true
