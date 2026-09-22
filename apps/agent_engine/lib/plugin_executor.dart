@@ -5,6 +5,21 @@ import 'dart:io';
 import 'cloud_connection.dart';
 import 'plugin_protocol.dart';
 import 'process_tree.dart';
+import 'trust_policy.dart';
+
+Object? _redactValue(Object? value, Iterable<String> secrets) {
+  if (value is String) return redactSecrets(value, secrets);
+  if (value is List) {
+    return value.map((item) => _redactValue(item, secrets)).toList();
+  }
+  if (value is Map) {
+    return {
+      for (final entry in value.entries)
+        entry.key: _redactValue(entry.value, secrets),
+    };
+  }
+  return value;
+}
 
 class PluginProcessSpec {
   const PluginProcessSpec({
@@ -14,6 +29,7 @@ class PluginProcessSpec {
     this.workingDirectory,
     this.environment = const {},
     this.allowedEnvironmentVariables = const {},
+    this.secretValues = const {},
   });
 
   final String pluginId;
@@ -22,6 +38,7 @@ class PluginProcessSpec {
   final String? workingDirectory;
   final Map<String, String> environment;
   final Set<String> allowedEnvironmentVariables;
+  final Set<String> secretValues;
 }
 
 typedef PluginProcessLauncher = Future<Process> Function(
@@ -211,12 +228,13 @@ class PluginProcessExecutor {
         onTimeout: () {
           fail('plugin execution timed out after $timeout');
           throw TimeoutException(
-            'plugin execution timed out; stderr: ${stderrPreview.toString()}',
+            'plugin execution timed out; stderr: ${redactSecrets(stderrPreview.toString(), spec.secretValues)}',
             timeout,
           );
         },
       );
-      return result;
+      final redacted = _redactValue(result, spec.secretValues);
+      return Map<String, Object?>.from(redacted as Map);
     } finally {
       await process.stdin.close();
       await stdoutSubscription.cancel();

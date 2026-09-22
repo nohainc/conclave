@@ -52,16 +52,19 @@ void main() {
         executable: 'dart',
         arguments: ['run', 'bin/echo_plugin.dart'],
         workingDirectory: pluginDirectory.path,
+        secretValues: {'sensitive-token'},
       ),
       {
         'objective': 'inspect repository',
         'pluginId': 'conclave.echo',
+        'secret': 'sensitive-token',
       },
       timeout: const Duration(seconds: 5),
     );
 
     expect(result['status'], 'completed');
     expect(result['summary'], contains('echo worker'));
+    expect((result['input'] as Map)['secret'], '[REDACTED]');
   });
 
   test('resolves a plugin into an Agent assignment result', () async {

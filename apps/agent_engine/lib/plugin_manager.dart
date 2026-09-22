@@ -384,6 +384,7 @@ class PluginManager {
       environment: _scopedSecretEnvironment(manifest),
       allowedEnvironmentVariables:
           _scopedSecretEnvironment(manifest).keys.toSet(),
+      secretValues: _scopedSecretEnvironment(manifest).values.toSet(),
     );
   }
 
