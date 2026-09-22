@@ -126,4 +126,16 @@ void main() {
         '0967115f2813a3541eaef77de9d9d5773f1c0c04314b0bbfe4ff3b3b1c55b5d5');
     await directory.delete(recursive: true);
   });
+
+  test('rejects artifacts larger than the staging limit', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-runtime-');
+    final file = File('${directory.path}/large.bin')
+      ..writeAsBytesSync(List.filled(16, 1));
+    await expectLater(
+      stageArtifact(file, maxBytes: 8),
+      throwsA(isA<RuntimeViolation>()),
+    );
+    await directory.delete(recursive: true);
+  });
 }

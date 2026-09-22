@@ -311,8 +311,19 @@ class RuntimeArtifact {
   final String sha256;
 }
 
-Future<RuntimeArtifact> stageArtifact(File file) async {
+Future<RuntimeArtifact> stageArtifact(
+  File file, {
+  int maxBytes = 64 * 1024 * 1024,
+}) async {
+  if (maxBytes <= 0) {
+    throw const RuntimeViolation('artifact size limit must be positive');
+  }
   final size = await file.length();
+  if (size > maxBytes) {
+    throw RuntimeViolation(
+      'artifact exceeds the $maxBytes byte staging limit',
+    );
+  }
   final digest = sha256.convert(await file.readAsBytes());
   return RuntimeArtifact(
       path: file.path, sizeBytes: size, sha256: digest.toString());
