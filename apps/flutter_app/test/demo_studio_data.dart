@@ -8,6 +8,14 @@ class DemoStudioDataSource implements StudioDataSource {
   const DemoStudioDataSource();
 
   @override
+  Future<StudioSession> loadSession() async => const StudioSession(
+        authenticated: true,
+      );
+
+  @override
+  Future<void> logout() async {}
+
+  @override
   Future<List<StudioWorkspace>> loadWorkspaces() async => const [
         StudioWorkspace(
           id: 'workspace-demo',

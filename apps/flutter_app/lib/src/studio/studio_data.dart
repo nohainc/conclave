@@ -7,6 +7,8 @@ import '../platform/http_client_stub.dart'
 import 'studio_models.dart';
 
 abstract interface class StudioDataSource {
+  Future<StudioSession> loadSession();
+  Future<void> logout();
   Future<List<StudioWorkspace>> loadWorkspaces();
   Future<StudioSnapshot> loadSnapshot({String? projectId, String? workspaceId});
   Future<void> controlRun(String runId, String command);
@@ -93,6 +95,26 @@ class StudioApiClient implements StudioDataSource {
   final http.Client client;
 
   @override
+  Future<StudioSession> loadSession() async {
+    final response = await client.get(Uri.parse('$baseUrl/session'),
+        headers: {'accept': 'application/json'});
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+          'Session lookup failed (${response.statusCode})');
+    }
+    return StudioSession.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  @override
+  Future<void> logout() async {
+    final response = await client.post(Uri.parse('$baseUrl/session/logout'));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException('Logout failed (${response.statusCode})');
+    }
+  }
+
+  @override
   Future<List<StudioWorkspace>> loadWorkspaces() async {
     final response = await client.get(Uri.parse('$baseUrl/workspaces'),
         headers: {'accept': 'application/json'});
@@ -107,8 +129,8 @@ class StudioApiClient implements StudioDataSource {
     }
     return workspaces
         .whereType<Map>()
-        .map((workspace) => StudioWorkspace.fromJson(
-            Map<String, dynamic>.from(workspace)))
+        .map((workspace) =>
+            StudioWorkspace.fromJson(Map<String, dynamic>.from(workspace)))
         .toList();
   }
 

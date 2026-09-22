@@ -644,6 +644,30 @@ class StudioViewer {
       );
 }
 
+class StudioSession {
+  const StudioSession({
+    required this.authenticated,
+    this.viewer,
+    this.workspaceId,
+    this.workspaceRole,
+  });
+
+  final bool authenticated;
+  final StudioViewer? viewer;
+  final String? workspaceId;
+  final String? workspaceRole;
+
+  factory StudioSession.fromJson(Map<String, dynamic> json) => StudioSession(
+        authenticated: json['authenticated'] == true,
+        viewer: json['user'] is Map
+            ? StudioViewer.fromJson(
+                Map<String, dynamic>.from(json['user'] as Map))
+            : null,
+        workspaceId: json['workspaceId'] as String?,
+        workspaceRole: json['workspaceRole'] as String?,
+      );
+}
+
 class StudioWorkspace {
   const StudioWorkspace({
     required this.id,

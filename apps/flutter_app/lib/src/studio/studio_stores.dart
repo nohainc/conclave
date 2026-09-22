@@ -4,7 +4,7 @@ import 'studio_models.dart';
 /// Focused Cloud-backed stores. The API remains the source of truth.
 class StudioStore {
   StudioStore(this.dataSource)
-      : auth = AuthStore(),
+      : auth = AuthStore(dataSource),
         projects = ProjectStore(dataSource),
         workspaces = WorkspaceStore(dataSource),
         chats = ChatStore(dataSource),
@@ -25,7 +25,8 @@ class StudioStore {
   final PluginStore plugins;
   final UsageStore usage;
 
-  Future<StudioSnapshot> reload({String? projectId, String? workspaceId}) async {
+  Future<StudioSnapshot> reload(
+      {String? projectId, String? workspaceId}) async {
     final snapshot = await dataSource.loadSnapshot(
         projectId: projectId, workspaceId: workspaceId);
     auth.replace(snapshot.viewer);
@@ -156,7 +157,24 @@ class UsageStore {
 }
 
 class AuthStore {
+  AuthStore(this.source);
+
+  final StudioDataSource source;
+  StudioSession? session;
   StudioViewer? viewer;
 
   void replace(StudioViewer? value) => viewer = value;
+
+  Future<StudioSession> load() async {
+    final value = await source.loadSession();
+    session = value;
+    viewer = value.viewer;
+    return value;
+  }
+
+  Future<void> logout() async {
+    await source.logout();
+    session = const StudioSession(authenticated: false);
+    viewer = null;
+  }
 }

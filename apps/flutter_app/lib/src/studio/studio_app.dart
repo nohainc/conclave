@@ -60,8 +60,33 @@ class _StudioAppState extends State<StudioApp> {
     super.initState();
     store = StudioStore(widget.dataSource);
     snapshot = StudioSnapshot.empty();
+    unawaited(_loadSession());
     unawaited(_loadWorkspaces());
     _loadSnapshot();
+  }
+
+  Future<void> _loadSession() async {
+    try {
+      await store.auth.load();
+      if (mounted) setState(() {});
+    } catch (_) {
+      // Snapshot loading reports the primary API error in the main surface.
+    }
+  }
+
+  Future<void> _logout() async {
+    try {
+      await store.auth.logout();
+      if (!mounted) return;
+      setState(() {
+        snapshot = StudioSnapshot.empty();
+        workspaces = const [];
+        selectedWorkspaceId = null;
+        selectedProjectId = null;
+      });
+    } catch (error) {
+      if (mounted) setState(() => loadError = error.toString());
+    }
   }
 
   Future<void> _loadWorkspaces() async {
@@ -456,10 +481,23 @@ class _StudioAppState extends State<StudioApp> {
                         fontWeight: FontWeight.bold))),
             const SizedBox(width: 9),
             Expanded(
-                child: Text(snapshot.viewer?.displayName ?? 'Signed-out user',
+                child: Text(
+                    store.auth.viewer?.displayName ??
+                        snapshot.viewer?.displayName ??
+                        'Signed-out user',
                     style:
                         const TextStyle(color: Colors.white70, fontSize: 12))),
-            const Icon(Icons.more_horiz, color: Colors.white38, size: 18),
+            PopupMenuButton<String>(
+              tooltip: 'Account menu',
+              onSelected: (value) {
+                if (value == 'logout') unawaited(_logout());
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(value: 'logout', child: Text('Log out')),
+              ],
+              icon:
+                  const Icon(Icons.more_horiz, color: Colors.white38, size: 18),
+            ),
           ]),
         ],
       ),
@@ -467,7 +505,9 @@ class _StudioAppState extends State<StudioApp> {
   }
 
   String get _viewerInitials {
-    final name = snapshot.viewer?.displayName.trim() ?? '';
+    final name =
+        (store.auth.viewer?.displayName ?? snapshot.viewer?.displayName ?? '')
+            .trim();
     if (name.isEmpty) return '?';
     final parts = name.split(RegExp(r'\s+')).where((part) => part.isNotEmpty);
     final initials = parts.take(2).map((part) => part[0]).join();
@@ -485,9 +525,10 @@ class _StudioAppState extends State<StudioApp> {
 
   Widget _workspaceSelector() => DropdownButtonHideUnderline(
         child: DropdownButton<String>(
-          value: workspaces.any((workspace) => workspace.id == selectedWorkspaceId)
-              ? selectedWorkspaceId
-              : workspaces.first.id,
+          value:
+              workspaces.any((workspace) => workspace.id == selectedWorkspaceId)
+                  ? selectedWorkspaceId
+                  : workspaces.first.id,
           isExpanded: true,
           dropdownColor: const Color(0xff29283c),
           icon: const Icon(Icons.unfold_more, color: Colors.white54, size: 17),
@@ -495,8 +536,8 @@ class _StudioAppState extends State<StudioApp> {
           items: workspaces
               .map((workspace) => DropdownMenuItem<String>(
                     value: workspace.id,
-                    child: Text(workspace.name,
-                        overflow: TextOverflow.ellipsis),
+                    child:
+                        Text(workspace.name, overflow: TextOverflow.ellipsis),
                   ))
               .toList(),
           onChanged: (workspaceId) {

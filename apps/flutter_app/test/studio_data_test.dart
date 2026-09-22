@@ -30,6 +30,32 @@ class _JsonClient extends http.BaseClient {
 }
 
 void main() {
+  test('loads and clears the Cloud session boundary', () async {
+    final client = _JsonClient({
+      'authenticated': true,
+      'workspaceId': 'workspace-1',
+      'workspaceRole': 'member',
+      'user': {
+        'id': 'user-1',
+        'displayName': 'User One',
+        'email': 'user@example.test',
+      },
+    }, statusCode: 200);
+    final api = StudioApiClient(
+      baseUrl: 'https://conclave.test/api',
+      client: client,
+    );
+
+    final session = await api.loadSession();
+    expect(session.authenticated, isTrue);
+    expect(session.viewer?.email, 'user@example.test');
+    expect(client.lastRequest?.url.path, '/api/session');
+
+    await api.logout();
+    expect(client.lastRequest?.method, 'POST');
+    expect(client.lastRequest?.url.path, '/api/session/logout');
+  });
+
   test('populates focused stores from the Cloud read model', () async {
     final store = StudioStore(const DemoStudioDataSource());
     final snapshot = await store.reload();
