@@ -225,6 +225,25 @@ function bearer(request: Request): string | null {
   return value?.startsWith("Bearer ") ? value.slice(7) : null;
 }
 
+function requireSameOriginForCookieMutation(request: Request): void {
+  if (!request.headers.get("cookie") || bearer(request)) return;
+
+  const requestOrigin = new URL(request.url).origin;
+  const origin = request.headers.get("origin");
+  if (origin === requestOrigin) return;
+
+  const referer = request.headers.get("referer");
+  if (origin === null && referer) {
+    try {
+      if (new URL(referer).origin === requestOrigin) return;
+    } catch {
+      // Treat malformed referers as untrusted.
+    }
+  }
+
+  throw new HttpError(403, "Same-origin request required for cookie session");
+}
+
 function createDefaultSecurityContext(
   userId = "local-development",
   workspaceId = "local-development",
@@ -5032,6 +5051,14 @@ export default {
     }
 
     try {
+      if (
+        request.method === "POST" ||
+        request.method === "PUT" ||
+        request.method === "PATCH" ||
+        request.method === "DELETE"
+      ) {
+        requireSameOriginForCookieMutation(request);
+      }
       if (request.method === "GET" && url.pathname === "/api/runtime/connect") {
         const securityEnv = env as SecurityEnv;
         runtimeToken(request, securityEnv, "CONCLAVE_RUNTIME_CONNECT_TOKEN");

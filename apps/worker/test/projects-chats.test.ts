@@ -105,6 +105,33 @@ describe("Projects and Chats API (Architecture v2)", () => {
       "alice@example.com",
     );
 
+    const cookieMutation = await worker.fetch(
+      new Request("https://cloud.conclave.internal/api/workspaces", {
+        method: "POST",
+        headers: {
+          cookie: `conclave_session=${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ name: "Blocked Workspace" }),
+      }),
+      mockEnv,
+    );
+    expect(cookieMutation.status).toBe(403);
+
+    const sameOriginCookieMutation = await worker.fetch(
+      new Request("https://cloud.conclave.internal/api/workspaces", {
+        method: "POST",
+        headers: {
+          cookie: `conclave_session=${token}`,
+          origin: "https://cloud.conclave.internal",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ name: "Cookie Workspace" }),
+      }),
+      mockEnv,
+    );
+    expect(sameOriginCookieMutation.status).toBe(201);
+
     // 1. Create a workspace
     const createReq = new Request(
       "https://cloud.conclave.internal/api/workspaces",
@@ -140,8 +167,10 @@ describe("Projects and Chats API (Architecture v2)", () => {
     const listData = (await listRes.json()) as {
       workspaces: readonly Workspace[];
     };
-    expect(listData.workspaces).toHaveLength(1);
-    expect(listData.workspaces[0]!.id).toBe(wsId);
+    expect(listData.workspaces).toHaveLength(2);
+    expect(listData.workspaces.map((workspace) => workspace.id)).toContain(
+      wsId,
+    );
 
     // 3. Get workspace by ID
     const getReq = new Request(
