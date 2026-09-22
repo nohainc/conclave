@@ -143,6 +143,51 @@ describe("durable Forge lifecycle", () => {
     expect(result.failureReason).toBe("implementation failed");
   });
 
+  it("reconciles a persisted reviewer timeout as a failed run", async () => {
+    let waited = false;
+    const service = {
+      fetch: async (input: RequestInfo | URL) => {
+        if (String(input).includes("/execute")) {
+          return Response.json(
+            { executionId: "forge-execution-timeout" },
+            { status: 202 },
+          );
+        }
+        return Response.json({
+          executionId: "forge-execution-timeout",
+          runId: "run-1",
+          status: "failed",
+          error: "reviewer timed out before independent verification",
+        });
+      },
+    };
+    const instance = new ConclaveRunWorkflow(
+      {} as never,
+      { CONCLAVE_FORGE_EXECUTION: service } as unknown as Env,
+    );
+    const step = {
+      do: async <T>(
+        _name: string,
+        _config: unknown,
+        callback: () => Promise<T>,
+      ) => callback(),
+      waitForEvent: async <T>() => {
+        if (!waited) {
+          waited = true;
+          throw new Error("Forge callback wait timed out");
+        }
+        return { payload: undefined as T };
+      },
+      sleep: async () => undefined,
+    } as unknown as import("cloudflare:workers").WorkflowStep;
+
+    const result = await instance.run({ payload: params } as never, step);
+    expect(result.stage).toBe("failed");
+    expect(result.status).toBe("failed");
+    expect(result.executionStatus).toBe("failed");
+    expect(result.failureReason).toContain("reviewer timed out");
+  });
+
   it("rejects terminal results for a different run or execution", async () => {
     const { instance, step } = workflow([
       {
