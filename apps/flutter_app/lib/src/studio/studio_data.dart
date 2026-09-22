@@ -159,8 +159,17 @@ class StudioApiClient implements StudioDataSource {
     final response =
         await client.get(uri, headers: {'accept': 'application/json'});
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      var detail = '';
+      try {
+        final body = jsonDecode(response.body);
+        if (body is Map && body['error'] is String) {
+          detail = ': ${body['error']}';
+        }
+      } on Object {
+        // Preserve the HTTP status when the server response is not JSON.
+      }
       throw StudioApiException(
-          'Studio snapshot failed (${response.statusCode})');
+          'Studio snapshot failed (${response.statusCode})$detail');
     }
     return StudioSnapshot.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>);
