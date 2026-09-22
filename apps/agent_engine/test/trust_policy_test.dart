@@ -9,6 +9,13 @@ void main() {
         policy.verify(
             publisher: 'conclave', digest: 'sha256:abc', signature: signature),
         isTrue);
+    expect(
+        policy.verify(
+          publisher: 'conclave',
+          digest: 'sha256:abc',
+          signature: 'sig_pkg_${signature.substring(4)}',
+        ),
+        isTrue);
     final revoked = PluginTrustPolicy(
         trustedSecrets: {'conclave': 'root-key'},
         revokedDigests: {'sha256:abc'});

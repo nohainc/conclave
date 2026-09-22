@@ -213,7 +213,10 @@ class PluginManager {
     _validatePathComponent(package.id, 'plugin id');
     _validatePathComponent(package.version, 'plugin version');
     final actual = sha256.convert(package.bytes).toString();
-    if (actual != package.digest) throw StateError('plugin digest mismatch');
+    final canonicalDigest = 'sha256:$actual';
+    if (package.digest != actual && package.digest != canonicalDigest) {
+      throw StateError('plugin digest mismatch');
+    }
     if (requireSignature && trustPolicy == null) {
       throw StateError('plugin signature verification is not configured');
     }
@@ -223,7 +226,11 @@ class PluginManager {
       if (publisher == null ||
           signature == null ||
           !trustPolicy!.verify(
-              publisher: publisher, digest: actual, signature: signature)) {
+              publisher: publisher,
+              digest: package.digest == canonicalDigest
+                  ? canonicalDigest
+                  : actual,
+              signature: signature)) {
         throw StateError('plugin signature is not trusted');
       }
       trustPolicy!.requirePermissions(package.permissions, allowedPermissions);

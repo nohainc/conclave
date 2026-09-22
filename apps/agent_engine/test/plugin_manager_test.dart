@@ -215,6 +215,33 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('accepts the Cloud sha256-prefixed digest contract', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-plugins-prefixed-');
+    final bytes = [7, 8, 9];
+    final digest = sha256.convert(bytes).toString();
+    final cloudDigest = 'sha256:$digest';
+    const policy = PluginTrustPolicy(trustedSecrets: {'publisher': 'root'});
+    final manager = PluginManager(
+      directory,
+      trustPolicy: policy,
+      allowedPermissions: {PluginPermission.readWorkspace},
+    );
+
+    await manager.install(PluginPackage(
+      id: 'cloud-published',
+      version: '1.0.0',
+      bytes: bytes,
+      digest: cloudDigest,
+      publisher: 'publisher',
+      signature: policy.sign('publisher', cloudDigest),
+      permissions: [PluginPermission.readWorkspace],
+    ));
+
+    expect(await manager.activeVersion('cloud-published'), '1.0.0');
+    await directory.delete(recursive: true);
+  });
+
   test('does not activate a revoked version during rollback', () async {
     final directory =
         await Directory.systemTemp.createTemp('conclave-plugin-rollback-');

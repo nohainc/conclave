@@ -85,14 +85,17 @@ class PluginTrustPolicy {
       return false;
     }
     final legacy = trustedSecrets[publisher];
-    if (legacy != null && signature == 'sig_${_mac(legacy, digest)}') {
+    if (legacy != null &&
+        (signature == 'sig_${_mac(legacy, digest)}' ||
+            signature == 'sig_pkg_${_mac(legacy, digest)}')) {
       return true;
     }
     final keySet = trustedKeys[publisher];
     if (keySet == null) return false;
     return keySet.entries.any((entry) =>
         !revokedKeyIds.contains(entry.key) &&
-        signature == 'sig_${entry.key}_${_mac(entry.value, digest)}');
+        (signature == 'sig_${entry.key}_${_mac(entry.value, digest)}' ||
+            signature == 'sig_pkg_${entry.key}_${_mac(entry.value, digest)}'));
   }
 
   String _mac(String secret, String digest) =>
