@@ -3054,6 +3054,7 @@ async function handleCancelTaskAssignment(
 
   const result = await cancelTaskAssignment(
     env as unknown as AssignmentDispatcherEnv,
+    workspaceId,
     assignmentId,
     reason,
   );

@@ -345,6 +345,7 @@ function createWorkerDescriptor(
         if (completed.status === "timed_out") {
           await cancelTaskAssignment(
             env,
+            workspaceId,
             dispatchRes.assignmentId,
             "Ensemble worker result timed out",
           );

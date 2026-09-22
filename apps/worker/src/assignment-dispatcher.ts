@@ -543,6 +543,7 @@ export async function recordAssignmentCancelled(
  */
 export async function cancelTaskAssignment(
   env: AssignmentDispatcherEnv,
+  workspaceId: string,
   assignmentId: string,
   reason: string,
 ): Promise<{ cancelled: boolean }> {
@@ -550,9 +551,9 @@ export async function cancelTaskAssignment(
 
   const row = await env.CONCLAVE_DB.prepare(
     `SELECT workspace_id, run_id, task_id, attempt_id, agent_id, worker_id, idempotency_key
-     FROM worker_assignments WHERE id = ?1`,
+     FROM worker_assignments WHERE id = ?1 AND workspace_id = ?2`,
   )
-    .bind(assignmentId)
+    .bind(assignmentId, workspaceId)
     .first<Record<string, unknown>>();
 
   if (!row) {

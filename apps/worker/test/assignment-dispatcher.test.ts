@@ -514,6 +514,7 @@ describe("Assignment Dispatcher (Cloud -> Agent -> Worker)", () => {
 
       const cancelResult = await cancelTaskAssignment(
         env,
+        "ws-1",
         dispatchResult.assignmentId,
         "User cancelled run",
       );
@@ -633,6 +634,29 @@ describe("Assignment Dispatcher (Cloud -> Agent -> Worker)", () => {
       const { assignment } = (await dispatchRes.json()) as {
         assignment: { assignmentId: string };
       };
+
+      const wrongWorkspaceRes = await worker.fetch(
+        new Request(
+          `https://conclave.local/api/v2/workspaces/ws-other/assignments/${assignment.assignmentId}/cancel`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${adminToken}`,
+              "Content-Type": "application/json",
+            },
+          },
+        ),
+        env as unknown as Env,
+      );
+      expect(wrongWorkspaceRes.status).toBe(200);
+      expect(await wrongWorkspaceRes.json()).toEqual({ cancelled: false });
+      expect(
+        (
+          db
+            .prepare("SELECT status FROM worker_assignments WHERE id = ?")
+            .get(assignment.assignmentId) as { status: string }
+        ).status,
+      ).not.toBe("cancelled");
 
       // Cancel
       const cancelRes = await worker.fetch(
