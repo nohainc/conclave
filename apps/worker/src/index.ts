@@ -3303,6 +3303,42 @@ async function handleAgentProtocolMessage(
   }
 
   if (message.type === "agent.sync.request") {
+    const assignmentStates: Array<{
+      assignmentId: string;
+      attemptId: string;
+      idempotencyKey: string;
+      status: string;
+    }> = [];
+    const assignmentIds = message.payload.unreconciledAssignmentIds ?? [];
+    if (assignmentIds.length > 0) {
+      const placeholders = assignmentIds
+        .map((_, index) => `?${index + 3}`)
+        .join(",");
+      const rows = await env.CONCLAVE_DB.prepare(
+        `SELECT id, attempt_id, idempotency_key, status
+         FROM worker_assignments
+         WHERE agent_id = ?1 AND workspace_id = ?2 AND id IN (${placeholders})`,
+      )
+        .bind(
+          message.payload.agentId,
+          message.payload.workspaceId,
+          ...assignmentIds,
+        )
+        .all<{
+          id: string;
+          attempt_id: string;
+          idempotency_key: string;
+          status: string;
+        }>();
+      for (const row of rows.results ?? []) {
+        assignmentStates.push({
+          assignmentId: row.id,
+          attemptId: row.attempt_id,
+          idempotencyKey: row.idempotency_key,
+          status: row.status,
+        });
+      }
+    }
     return json({
       protocol: AGENT_PROTOCOL_NAME,
       protocolVersion: AGENT_PROTOCOL_VERSION,
@@ -3313,7 +3349,15 @@ async function handleAgentProtocolMessage(
       payload: {
         desiredPlugins: [],
         desiredWorkers: [],
-        activeAssignmentIds: [],
+        activeAssignmentIds: assignmentStates
+          .filter(
+            ({ status }) =>
+              !["completed", "failed", "cancelled", "timed_out"].includes(
+                status,
+              ),
+          )
+          .map(({ assignmentId }) => assignmentId),
+        assignmentStates,
       },
     });
   }
