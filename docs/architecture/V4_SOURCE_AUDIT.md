@@ -62,7 +62,7 @@ Assignment
 | `WorkerAssignment.pluginId` | `workerId` |
 | current `WorkerAssignment.workerId` | remove configured-instance meaning |
 | `secretRefs` on configured Worker | replace with Credential Profile reference at assignment time |
-| current Cloud `credentials` table | replace with Credential Profiles/Grants; no legacy AES-GCM assumption |
+| current Cloud `credentials` table | replaced by Credential Profiles/Grants; Host secrets stay in the OS secure store |
 | `multi-agent-ensemble.ts` | rename/rewrite as multi-worker execution |
 | Studio Agents page | Hosts |
 | Studio Plugins page | Workers catalog |
@@ -116,7 +116,7 @@ The current Dart process/tree/permission work is valuable and becomes Host runti
 
 Keep platform credential backends.
 
-Refactor storage keys/namespaces around Credential Profiles rather than Agent Worker secret lists.
+Refactor storage keys/namespaces around Credential Profiles rather than Agent Worker secret lists. V4-8 now keys local secrets by Host, Worker, and Credential Profile, with metadata-only Cloud status reporting.
 
 ## 4. Refactor heavily
 

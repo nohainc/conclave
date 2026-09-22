@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'assignment_journal.dart';
+import 'credential_profiles.dart';
 import 'package:conclave_protocol/conclave_protocol.dart';
 
 abstract interface class HostCloudSocket {
@@ -171,6 +172,11 @@ class HostCloudConnection {
       if (healthDetail != null) 'healthDetail': healthDetail,
       if (missingSecrets != null) 'missingSecrets': missingSecrets,
     });
+  }
+
+  /// Reports credential metadata only. Raw secrets never cross this boundary.
+  void reportCredentialStatus(CredentialProfile profile) {
+    _sendIfConnected('credential.status', profile.toCloudMetadata());
   }
 
   void _sendIfConnected(String type, Map<String, Object?> payload) {

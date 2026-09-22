@@ -112,7 +112,13 @@ describe("Architecture v4 clean D1 schema", () => {
       "INSERT INTO workers (id, display_name, publisher, status, created_at, updated_at) VALUES ('codex', 'Codex', 'Conclave', 'active', 'now', 'now')",
     ).run();
     db.prepare(
-      "INSERT INTO credential_profiles (id, workspace_id, owner_type, owner_id, worker_id, host_id, display_name, auth_type, secret_location, secret_reference, status, sharing_policy, provider_metadata_json, created_at, updated_at) VALUES ('cred-a', 'ws-a', 'user', 'user-a', 'codex', NULL, 'Vitalii Codex', 'oauth_browser', 'cloud_vault_reference', 'vault://cred-a', 'ready', 'owner_controlled', '{}', 'now', 'now')",
+      "INSERT INTO hosts (id, name, hostname, status, version, enrolled_at, created_at, updated_at) VALUES ('host-a', 'Host', 'host.local', 'online', '4.0.0', 'now', 'now', 'now')",
+    ).run();
+    db.prepare(
+      "INSERT INTO host_workspace_bindings (id, host_id, workspace_id, created_at, updated_at) VALUES ('binding-a', 'host-a', 'ws-a', 'now', 'now')",
+    ).run();
+    db.prepare(
+      "INSERT INTO credential_profiles (id, workspace_id, owner_type, owner_id, worker_id, host_id, display_name, auth_type, secret_location, secret_reference, status, sharing_policy, provider_metadata_json, created_at, updated_at) VALUES ('cred-a', 'ws-a', 'user', 'user-a', 'codex', 'host-a', 'Vitalii Codex', 'oauth_browser', 'host_secure_store', 'credential-profile/host-a/codex/cred-a', 'ready', 'owner_controlled', '{}', 'now', 'now')",
     ).run();
     db.prepare(
       "INSERT INTO credential_grants (id, credential_profile_id, workspace_id, grantee_type, grantee_id, granted_by_user_id, created_at) VALUES ('grant-a', 'cred-a', 'ws-a', 'user', 'user-a', 'user-a', 'now')",
@@ -129,7 +135,7 @@ describe("Architecture v4 clean D1 schema", () => {
           )
           .get() as { secret_reference: string }
       ).secret_reference,
-    ).toBe("vault://cred-a");
+    ).toBe("credential-profile/host-a/codex/cred-a");
   });
 
   it("reconstructs a v4 assignment from its immutable execution snapshot", () => {
