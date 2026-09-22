@@ -21,10 +21,17 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
     if (key.isEmpty) return null;
     final command = _readCommand(key);
     if (command == null) return null;
-    final result = Process.runSync(command.executable, command.arguments);
-    if (result.exitCode != 0) return null;
-    final value = result.stdout.toString().trim();
-    return value.isEmpty ? null : value;
+    try {
+      final result = Process.runSync(command.executable, command.arguments);
+      if (result.exitCode != 0) return null;
+      final value = result.stdout.toString().trim();
+      return value.isEmpty ? null : value;
+    } on ProcessException {
+      // Minimal Linux/CI environments may not have the platform credential
+      // helper installed. Treat that as secure storage being unavailable,
+      // rather than making configuration parsing fail.
+      return null;
+    }
   }
 
   @override
