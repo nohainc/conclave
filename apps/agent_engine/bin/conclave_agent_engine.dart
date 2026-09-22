@@ -7,12 +7,27 @@ import 'package:conclave_agent_engine/plugin_executor.dart';
 import 'package:conclave_agent_engine/plugin_manager.dart';
 import 'package:conclave_agent_engine/repository_registry.dart';
 import 'package:conclave_agent_engine/self_update.dart';
+import 'package:conclave_agent_engine/secure_credentials.dart';
 import 'package:conclave_agent_engine/trust_policy.dart';
 import 'package:conclave_agent_engine/worker_configuration.dart';
 
 Set<PluginPermission> _configuredPermissions() {
   return parseConfiguredPluginPermissions(
       Platform.environment['CONCLAVE_PLUGIN_PERMISSIONS']);
+}
+
+Map<String, String> _pluginSecrets() {
+  const store = PlatformSecureCredentialStore();
+  final secrets = <String, String>{};
+  for (final name in const [
+    'OPENAI_API_KEY',
+    'ANTHROPIC_API_KEY',
+    'CONCLAVE_CONNECTOR_TOKEN',
+  ]) {
+    final value = store.readSync(name) ?? Platform.environment[name];
+    if (value != null && value.isNotEmpty) secrets[name] = value;
+  }
+  return secrets;
 }
 
 Future<List<int>> downloadPluginPackage(Uri cloudUri, String? authToken,
@@ -78,14 +93,7 @@ Future<void> main(List<String> args) async {
       trustedSecrets: trustSecret == null ? {} : {publisher: trustSecret},
     ),
     allowedPermissions: _configuredPermissions(),
-    secretEnvironment: {
-      for (final name in const [
-        'OPENAI_API_KEY',
-        'ANTHROPIC_API_KEY',
-        'CONCLAVE_CONNECTOR_TOKEN',
-      ])
-        if (Platform.environment[name] != null) name: Platform.environment[name]!,
-    },
+    secretEnvironment: _pluginSecrets(),
   );
   final workerStore = WorkerConfigurationStore(
     Directory('${config.dataDirectory.path}/workers'),
