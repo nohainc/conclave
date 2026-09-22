@@ -58,6 +58,24 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('secure managers reject unsigned packages', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-plugins-secure-');
+    final bytes = [5, 6, 7];
+    await expectLater(
+      PluginManager(directory, requireSignature: true).install(PluginPackage(
+        id: 'unsigned',
+        version: '1.0.0',
+        bytes: bytes,
+        digest: sha256.convert(bytes).toString(),
+      )),
+      throwsA(predicate((error) => error
+          .toString()
+          .contains('signature verification is not configured'))),
+    );
+    await directory.delete(recursive: true);
+  });
+
   test('does not overwrite an installed version with a different payload',
       () async {
     final directory =

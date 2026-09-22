@@ -88,6 +88,7 @@ class InstalledPlugin {
 class PluginManager {
   PluginManager(this.root,
       {this.trustPolicy,
+      this.requireSignature = false,
       this.allowedPermissions = const {},
       this.secretEnvironment = const {},
       String? platformKey,
@@ -96,6 +97,10 @@ class PluginManager {
       : platformKey = platformKey ?? _currentPlatformKey();
   final Directory root;
   final PluginTrustPolicy? trustPolicy;
+
+  /// Require a configured trust policy before admitting any package. Keep the
+  /// opt-out only for local development and fixture-based tests.
+  final bool requireSignature;
   final Set<PluginPermission> allowedPermissions;
 
   /// Values are supplied by the Agent's secure configuration boundary and are
@@ -209,6 +214,9 @@ class PluginManager {
     _validatePathComponent(package.version, 'plugin version');
     final actual = sha256.convert(package.bytes).toString();
     if (actual != package.digest) throw StateError('plugin digest mismatch');
+    if (requireSignature && trustPolicy == null) {
+      throw StateError('plugin signature verification is not configured');
+    }
     if (trustPolicy != null) {
       final publisher = package.publisher;
       final signature = package.signature;

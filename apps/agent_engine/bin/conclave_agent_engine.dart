@@ -89,6 +89,7 @@ Future<void> main(List<String> args) async {
   final trustSecret = Platform.environment['CONCLAVE_PLUGIN_TRUST_SECRET'];
   final pluginManager = PluginManager(
     Directory('${config.dataDirectory.path}/plugins'),
+    requireSignature: true,
     trustPolicy: PluginTrustPolicy(
       trustedSecrets: trustSecret == null ? {} : {publisher: trustSecret},
     ),
