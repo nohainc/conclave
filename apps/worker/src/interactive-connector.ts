@@ -109,6 +109,14 @@ export async function handleConnectorTaskRequest(
         typeof body.taskId === "string" ? body.taskId : crypto.randomUUID(),
       goalId: typeof body.goalId === "string" ? body.goalId : "web-goal",
       runId: typeof body.runId === "string" ? body.runId : "web-run",
+      organizationId:
+        typeof body.organizationId === "string"
+          ? body.organizationId
+          : typeof body.workspaceId === "string"
+            ? body.workspaceId
+            : "local-development",
+      projectId:
+        typeof body.projectId === "string" ? body.projectId : "web-project",
       objective: typeof body.objective === "string" ? body.objective : "",
       context: [],
       messages: [body.prompt ?? body.input ?? {}],

@@ -4,6 +4,8 @@ export interface ConnectorTask {
   readonly taskId: string;
   readonly goalId: string;
   readonly runId: string;
+  readonly organizationId: string;
+  readonly projectId: string;
   readonly objective: string;
   readonly context: readonly WorkerExecutionContextItem[];
   readonly messages: readonly unknown[];
@@ -179,7 +181,10 @@ export class InteractiveConnector {
     const task = taskId
       ? this.tasks.get(taskId)
       : [...this.tasks.values()].find(
-          (candidate) => candidate.status === "queued",
+          (candidate) =>
+            candidate.status === "queued" &&
+            candidate.organizationId === session.organizationId &&
+            candidate.projectId === session.projectId,
         );
     if (!task)
       throw new InteractiveConnectorError("Task is not available", "not_found");
@@ -188,6 +193,15 @@ export class InteractiveConnector {
         "Task is already claimed",
         "conflict",
       );
+    if (
+      task.organizationId !== session.organizationId ||
+      task.projectId !== session.projectId
+    ) {
+      throw new InteractiveConnectorError(
+        "Task is outside the session workspace",
+        "unauthorized",
+      );
+    }
     task.status = "claimed";
     task.claimedBy = session.sessionId;
     session.taskId = task.taskId;
@@ -307,6 +321,15 @@ export class InteractiveConnector {
         "Task is not claimed by this session",
         "unauthorized",
       );
+    if (
+      task.organizationId !== session.organizationId ||
+      task.projectId !== session.projectId
+    ) {
+      throw new InteractiveConnectorError(
+        "Task is outside the session workspace",
+        "unauthorized",
+      );
+    }
     return task;
   }
 

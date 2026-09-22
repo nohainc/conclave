@@ -17,6 +17,8 @@ describe("interactive connector", () => {
       taskId: "task-1",
       goalId: "goal-1",
       runId: "run-1",
+      organizationId: "org-1",
+      projectId: "project-1",
       objective: "Review the proposal",
       context: [],
       messages: [{ type: "review", text: "Inspect the candidate" }],
@@ -97,6 +99,8 @@ describe("interactive connector", () => {
       taskId: "web-task",
       goalId: "goal-1",
       runId: "run-1",
+      organizationId: "org-1",
+      projectId: "project-1",
       objective: "Propose an architecture",
       context: [],
       messages: [{ prompt: "Return a candidate" }],
@@ -113,10 +117,45 @@ describe("interactive connector", () => {
         taskId: "web-task",
         goalId: "goal-1",
         runId: "run-1",
+        organizationId: "org-1",
+        projectId: "project-1",
         objective: "Duplicate",
         context: [],
         messages: [],
       }),
     ).toThrow("already registered");
+  });
+
+  it("never claims a task from another project", () => {
+    const connector = new InteractiveConnector({
+      registrationToken: "register-secret",
+      idFactory: (prefix) => `${prefix}-1`,
+    });
+    connector.registerTask({
+      taskId: "other-task",
+      goalId: "goal-2",
+      runId: "run-2",
+      organizationId: "org-2",
+      projectId: "project-2",
+      objective: "Private task",
+      context: [],
+      messages: [],
+    });
+    const session = connector.registerSession("register-secret", {
+      organizationId: "org-1",
+      projectId: "project-1",
+      workerId: "web-worker",
+      capabilities: [],
+    });
+    expect(() =>
+      connector.claimTask(session.sessionId, session.sessionToken),
+    ).toThrow("not available");
+    expect(() =>
+      connector.claimTask(
+        session.sessionId,
+        session.sessionToken,
+        "other-task",
+      ),
+    ).toThrow("outside the session workspace");
   });
 });
