@@ -1131,24 +1131,18 @@ export class ConclaveForgeExecutionService {
     }
     const requestedWorkspaceId =
       typeof params.organizationId === "string" ? params.organizationId : null;
-    const existing = await this.env.CONCLAVE_DB.prepare(
-      `SELECT execution_id, run_id, workspace_id, status, result_artifact_id, error, updated_at
-       FROM forge_executions WHERE run_id = ?1`,
-    )
-      .bind(params.runId)
-      .first<Record<string, unknown>>();
-    if (existing) {
+    const responseForExecution = (row: Record<string, unknown>): Response => {
       if (
         requestedWorkspaceId &&
-        existing.workspace_id &&
-        String(existing.workspace_id) !== requestedWorkspaceId
+        row.workspace_id &&
+        String(row.workspace_id) !== requestedWorkspaceId
       ) {
         return Response.json(
           { error: "run_workspace_mismatch" },
           { status: 409 },
         );
       }
-      const persisted = forgeExecutionRecord(existing);
+      const persisted = forgeExecutionRecord(row);
       return Response.json(
         {
           executionId: persisted.executionId,
@@ -1161,6 +1155,15 @@ export class ConclaveForgeExecutionService {
         },
         { status: persisted.status === "started" ? 202 : 200 },
       );
+    };
+    const existing = await this.env.CONCLAVE_DB.prepare(
+      `SELECT execution_id, run_id, workspace_id, status, result_artifact_id, error, updated_at
+       FROM forge_executions WHERE run_id = ?1`,
+    )
+      .bind(params.runId)
+      .first<Record<string, unknown>>();
+    if (existing) {
+      return responseForExecution(existing);
     }
     const executionId = crypto.randomUUID();
     const runId = params.runId;
@@ -1174,7 +1177,8 @@ export class ConclaveForgeExecutionService {
     await this.env.CONCLAVE_DB.prepare(
       `INSERT INTO forge_executions
        (execution_id, run_id, workspace_id, status, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?5)`,
+       VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+       ON CONFLICT(run_id) DO NOTHING`,
     )
       .bind(
         executionId,
@@ -1186,6 +1190,21 @@ export class ConclaveForgeExecutionService {
         now,
       )
       .run();
+    const persisted = await this.env.CONCLAVE_DB.prepare(
+      `SELECT execution_id, run_id, workspace_id, status, result_artifact_id, error, updated_at
+       FROM forge_executions WHERE run_id = ?1`,
+    )
+      .bind(runId)
+      .first<Record<string, unknown>>();
+    if (!persisted) {
+      return Response.json(
+        { error: "forge_execution_persistence_failed" },
+        { status: 500 },
+      );
+    }
+    if (String(persisted.execution_id) !== executionId) {
+      return responseForExecution(persisted);
+    }
     ctx.waitUntil(this.runAndNotify(params, executionId));
     return Response.json({ executionId }, { status: 202 });
   }
