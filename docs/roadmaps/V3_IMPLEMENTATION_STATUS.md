@@ -25,6 +25,8 @@ Latest local verification:
   applied remotely.
 - Forge and app Workers are deployed, `https://app.conclaveax.com/health`
   returns production status, and unauthenticated `/api` access returns `401`.
+- The deterministic recovery, Forge, collaboration, and tenant-isolation gate
+  passes: 6 targeted test files and 24 tests passed.
 
 | Phase | Evidence in the repository | Status |
 | --- | --- | --- |
