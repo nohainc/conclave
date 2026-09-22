@@ -5,6 +5,12 @@ Forge execution service, Agent Gateway, and Dart Agent Engine. It is separate
 from the deterministic fixture tests, which run in CI without external
 credentials.
 
+## Related provisioning
+
+Provision the production resources using
+[`PRODUCTION_PROVISIONING.md`](PRODUCTION_PROVISIONING.md) before running this
+drill.
+
 ## Preconditions
 
 - Cloudflare Access protects the deployed Studio/Worker hostname.
