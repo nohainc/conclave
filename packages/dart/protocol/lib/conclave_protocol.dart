@@ -1,7 +1,9 @@
 import 'dart:convert';
 
 export 'generated_protocol.dart';
+export 'generated_local_protocols.dart';
 import 'generated_protocol.dart';
+import 'generated_local_protocols.dart';
 
 class ProtocolException implements Exception {
   const ProtocolException(this.message);

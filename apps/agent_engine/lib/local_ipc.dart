@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:conclave_protocol/conclave_protocol.dart';
+
 sealed class LocalIpcMessage {
   const LocalIpcMessage(this.type, this.payload);
   final String type;
@@ -32,6 +34,9 @@ LocalIpcMessage parseLocalIpcMessage(Object? value) {
     throw const FormatException('invalid local IPC message');
   }
   final type = value['type'] as String;
+  if (!type.startsWith('event.') && !agentAppIpcCommandTypes.contains(type)) {
+    throw FormatException('unsupported local IPC command: $type');
+  }
   final payload = Map<String, Object?>.from(value['payload'] as Map);
   return type.startsWith('event.')
       ? IpcEvent(type, payload)
@@ -123,7 +128,7 @@ class LocalIpcServer {
     this.bindPort = 0,
     this.onCommand,
     this.authenticationTimeout = const Duration(seconds: 2),
-    this.maxFrameBytes = 1024 * 1024,
+    this.maxFrameBytes = agentAppIpcMaxFrameBytes,
   });
 
   final String token;

@@ -61,6 +61,8 @@ const [
   generatedDart,
   generated,
   agentGenerated,
+  localGenerated,
+  localDart,
   typescript,
   fixtureText,
 ] = await Promise.all([
@@ -68,6 +70,8 @@ const [
   read("packages/dart/protocol/lib/generated_protocol.dart"),
   read("packages/protocol/src/generated.ts"),
   read("packages/agent-protocol/src/generated.ts"),
+  read("packages/protocol/src/generated-local-protocols.ts"),
+  read("packages/dart/protocol/lib/generated_local_protocols.dart"),
   read("packages/protocol/src/index.ts"),
   read("packages/protocol/fixtures/task-request.json"),
 ]);
@@ -115,6 +119,31 @@ for (const messageType of agentProtocol.messageTypes) {
     throw new Error(
       `generated Agent protocol binding is missing ${messageType}`,
     );
+  }
+}
+const localProtocols = schema["x-local-protocols"];
+if (
+  !localGenerated.includes("AGENT_APP_IPC_PROTOCOL_NAME") ||
+  !localGenerated.includes("WORKER_PLUGIN_PROTOCOL_NAME") ||
+  !localDart.includes("agentAppIpcProtocolName") ||
+  !localDart.includes("workerPluginProtocolName")
+) {
+  throw new Error("generated local protocol bindings are missing");
+}
+for (const command of localProtocols.agentAppIpc.commandTypes) {
+  if (
+    !localGenerated.includes(JSON.stringify(command)) ||
+    !localDart.includes(`'${command}'`)
+  ) {
+    throw new Error(`generated IPC binding is missing ${command}`);
+  }
+}
+for (const method of localProtocols.workerPlugin.methods) {
+  if (
+    !localGenerated.includes(JSON.stringify(method)) ||
+    !localDart.includes(`'${method}'`)
+  ) {
+    throw new Error(`generated plugin binding is missing ${method}`);
   }
 }
 if (!generatedDart.includes(`const protocolVersion = '${fixture.version}'`)) {

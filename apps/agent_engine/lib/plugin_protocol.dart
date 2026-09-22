@@ -1,31 +1,11 @@
 import 'dart:collection';
+import 'package:conclave_protocol/conclave_protocol.dart';
 
-const pluginProtocolVersion = '2.0';
+const pluginProtocolVersion = workerPluginProtocolVersion;
 
-const pluginMethods = <String>{
-  'initialize',
-  'health',
-  'getCapabilities',
-  'configureWorker',
-  'startAssignment',
-  'cancelAssignment',
-  'shutdown',
-  'get_capabilities',
-  'configure_worker',
-  'start_assignment',
-  'cancel_assignment',
-};
+const pluginMethods = workerPluginMethods;
 
-const pluginNotifications = <String>{
-  'progress',
-  'log',
-  'artifact',
-  'usage',
-  'result',
-  'error',
-  'authentication_required',
-  'rate_limited',
-};
+const pluginNotifications = workerPluginNotifications;
 
 class PluginProtocolViolation implements Exception {
   const PluginProtocolViolation(this.message);
@@ -44,10 +24,11 @@ class PluginRpcResponse {
 
   factory PluginRpcResponse.parse(Object? raw) {
     if (raw is! Map) {
-      throw const PluginProtocolViolation('JSON-RPC response must be an object');
+      throw const PluginProtocolViolation(
+          'JSON-RPC response must be an object');
     }
     final map = Map<String, Object?>.from(raw);
-    if (map['jsonrpc'] != '2.0') {
+    if (map['jsonrpc'] != workerPluginJsonRpcVersion) {
       throw const PluginProtocolViolation('JSON-RPC version must be 2.0');
     }
     final id = map['id'];
@@ -57,7 +38,8 @@ class PluginRpcResponse {
     final hasResult = map['result'] != null;
     final hasError = map['error'] != null;
     if (hasResult == hasError) {
-      throw const PluginProtocolViolation('response must contain result or error');
+      throw const PluginProtocolViolation(
+          'response must contain result or error');
     }
     if (hasResult && map['result'] is! Map) {
       throw const PluginProtocolViolation('response result must be an object');
@@ -67,7 +49,8 @@ class PluginRpcResponse {
     }
     return PluginRpcResponse(
       id: id,
-      result: hasResult ? Map<String, Object?>.from(map['result'] as Map) : null,
+      result:
+          hasResult ? Map<String, Object?>.from(map['result'] as Map) : null,
       error: hasError ? Map<String, Object?>.from(map['error'] as Map) : null,
     );
   }
@@ -84,7 +67,7 @@ class PluginRpcNotification {
       throw const PluginProtocolViolation('notification must be an object');
     }
     final map = Map<String, Object?>.from(raw);
-    if (map['jsonrpc'] != '2.0' || map['id'] != null) {
+    if (map['jsonrpc'] != workerPluginJsonRpcVersion || map['id'] != null) {
       throw const PluginProtocolViolation('invalid JSON-RPC notification');
     }
     final method = map['method'];
@@ -93,17 +76,25 @@ class PluginRpcNotification {
       throw PluginProtocolViolation('unsupported plugin notification: $method');
     }
     if (params != null && params is! Map) {
-      throw const PluginProtocolViolation('notification params must be an object');
+      throw const PluginProtocolViolation(
+          'notification params must be an object');
     }
     return PluginRpcNotification(
       method: method,
-      params: params == null ? <String, Object?>{} : Map<String, Object?>.from(params as Map),
+      params: params == null
+          ? <String, Object?>{}
+          : Map<String, Object?>.from(params as Map),
     );
   }
 }
 
 class PluginIdentity {
-  const PluginIdentity({required this.pluginId, required this.version, required this.protocolVersion, required this.runtimeLanguage, required this.capabilities});
+  const PluginIdentity(
+      {required this.pluginId,
+      required this.version,
+      required this.protocolVersion,
+      required this.runtimeLanguage,
+      required this.capabilities});
 
   final String pluginId;
   final String version;
@@ -123,14 +114,16 @@ class PluginIdentity {
     final capabilities = result['capabilities'];
     if (capabilities is! List ||
         capabilities.any((value) => value is! String || value.isEmpty)) {
-      throw const PluginProtocolViolation('initialize capabilities must be a string list');
+      throw const PluginProtocolViolation(
+          'initialize capabilities must be a string list');
     }
     return PluginIdentity(
       pluginId: required('pluginId'),
       version: required('version'),
       protocolVersion: required('protocolVersion'),
       runtimeLanguage: required('runtimeLanguage'),
-      capabilities: UnmodifiableSetView(Set<String>.from(capabilities.cast<String>())),
+      capabilities:
+          UnmodifiableSetView(Set<String>.from(capabilities.cast<String>())),
     );
   }
 }

@@ -53,6 +53,28 @@
       "idempotencyKey"
     ]
   },
+  "x-local-protocols": {
+    "agentAppIpc": {
+      "name": "conclave.agent-app-ipc",
+      "version": "1.0",
+      "maxFrameBytes": 1048576,
+      "commandTypes": ["engine.status", "engine.logs", "engine.restart"]
+    },
+    "workerPlugin": {
+      "name": "conclave.worker-plugin",
+      "version": "2.0",
+      "jsonRpcVersion": "2.0",
+      "methods": [
+        "initialize", "health", "getCapabilities", "configureWorker",
+        "startAssignment", "cancelAssignment", "shutdown", "get_capabilities",
+        "configure_worker", "start_assignment", "cancel_assignment"
+      ],
+      "notifications": [
+        "progress", "log", "artifact", "usage", "result", "error",
+        "authentication_required", "rate_limited"
+      ]
+    }
+  },
   "x-message-types": [
     "PlanRequest",
     "PlanResult",

@@ -13,6 +13,7 @@ export {
   AGENT_PROTOCOL_BASE_ENVELOPE_FIELDS,
   AGENT_PROTOCOL_ASSIGNMENT_ENVELOPE_FIELDS,
 } from "./generated.js";
+export * from "./generated-local-protocols.js";
 
 const protocolVersionPattern = /^\d+\.\d+(?:\.\d+)?$/;
 
