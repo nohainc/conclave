@@ -356,4 +356,15 @@ describe("Worker Configuration REST API (Architecture v2)", () => {
     );
     expect(invalidPluginRes.status).toBe(404);
   });
+
+  it("does not allow a workspace member to address fleet routes in another workspace", async () => {
+    const response = await worker.fetch(
+      new Request("http://localhost/api/v2/workspaces/ws-other/workers", {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      }),
+      mockEnv,
+    );
+
+    expect(response.status).toBe(404);
+  });
 });

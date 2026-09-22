@@ -2233,6 +2233,7 @@ async function handleCreateAgentEnrollment(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "agents:manage");
+  requireWorkspaceContext(context, env, workspaceId);
 
   const body = parseJson<{ expiresHours?: number; maxUses?: number }>(
     await request.text(),
@@ -2291,6 +2292,7 @@ async function handleListAgentEnrollments(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "agents:read");
+  requireWorkspaceContext(context, env, workspaceId);
 
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT id, workspace_id as workspaceId, created_by_user_id as createdByUserId, expires_at as expiresAt, used_at as usedAt, revoked_at as revokedAt, created_at as createdAt
@@ -2311,6 +2313,7 @@ async function handleRevokeAgentEnrollment(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "agents:manage");
+  requireWorkspaceContext(context, env, workspaceId);
 
   const now = new Date().toISOString();
   await env.CONCLAVE_DB.prepare(
@@ -2411,6 +2414,7 @@ async function handleListAgents(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "agents:read");
+  requireWorkspaceContext(context, env, workspaceId);
 
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT id, workspace_id as workspaceId, name, hostname, status, version, capabilities_json as capabilitiesJson, enrolled_at as enrolledAt, last_heartbeat_at as lastHeartbeatAt, revoked_at as revokedAt, created_at as createdAt, updated_at as updatedAt
@@ -2431,6 +2435,7 @@ async function handleGetAgent(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "agents:read");
+  requireWorkspaceContext(context, env, workspaceId);
 
   const agent = await env.CONCLAVE_DB.prepare(
     `SELECT id, workspace_id as workspaceId, name, hostname, status, version, capabilities_json as capabilitiesJson, enrolled_at as enrolledAt, last_heartbeat_at as lastHeartbeatAt, revoked_at as revokedAt, created_at as createdAt, updated_at as updatedAt
@@ -2460,6 +2465,7 @@ async function handleRevokeAgent(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "agents:manage");
+  requireWorkspaceContext(context, env, workspaceId);
 
   const now = new Date().toISOString();
   await env.CONCLAVE_DB.prepare(
@@ -2483,6 +2489,7 @@ async function handleListWorkers(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "agents:read");
+  requireWorkspaceContext(context, env, workspaceId);
 
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT id, workspace_id as workspaceId, agent_id as agentId, plugin_id as pluginId,
@@ -2530,6 +2537,7 @@ async function handleCreateWorker(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "agents:manage");
+  requireWorkspaceContext(context, env, workspaceId);
 
   const body = (await request.json()) as Record<string, unknown>;
   const now = new Date().toISOString();
@@ -2711,6 +2719,7 @@ async function handleGetWorker(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "agents:read");
+  requireWorkspaceContext(context, env, workspaceId);
 
   const row = await env.CONCLAVE_DB.prepare(
     `SELECT id, workspace_id as workspaceId, agent_id as agentId, plugin_id as pluginId,
@@ -2763,6 +2772,7 @@ async function handleUpdateWorker(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "agents:manage");
+  requireWorkspaceContext(context, env, workspaceId);
 
   const existing = await env.CONCLAVE_DB.prepare(
     `SELECT * FROM workers WHERE workspace_id = ?1 AND id = ?2`,
@@ -2907,6 +2917,7 @@ async function handleDeleteWorker(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "agents:manage");
+  requireWorkspaceContext(context, env, workspaceId);
 
   await env.CONCLAVE_DB.prepare(
     `DELETE FROM workers WHERE workspace_id = ?1 AND id = ?2`,
