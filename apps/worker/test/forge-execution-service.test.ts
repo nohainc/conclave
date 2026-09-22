@@ -17,9 +17,32 @@ class MemoryD1 {
       },
       first: async <T>() => {
         if (query.includes("FROM projects")) return this.contextRow as T;
-        if (!query.includes("FROM persistence_records")) return null;
+        if (
+          !query.includes("FROM persistence_records") &&
+          !query.includes("FROM forge_executions")
+        )
+          return null;
         const record = this.records.get(String(values[0]));
-        return record ? ({ record_json: record } as T) : null;
+        if (!record) return null;
+        if (query.includes("FROM forge_executions")) {
+          const parsed = JSON.parse(record) as {
+            executionId: string;
+            runId: string;
+            status: string;
+            resultArtifactId?: string;
+            error?: string;
+            updatedAt: string;
+          };
+          return {
+            execution_id: parsed.executionId,
+            run_id: parsed.runId,
+            status: parsed.status,
+            result_artifact_id: parsed.resultArtifactId ?? null,
+            error: parsed.error ?? null,
+            updated_at: parsed.updatedAt,
+          } as T;
+        }
+        return { record_json: record } as T;
       },
       all: async <T>() => ({ results: [] as readonly T[] }),
       run: async () => ({ success: true as const }),

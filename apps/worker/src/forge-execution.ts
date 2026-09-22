@@ -71,6 +71,21 @@ interface ForgeExecutionRecord {
   readonly updatedAt: string;
 }
 
+function forgeExecutionRecord(
+  row: Record<string, unknown>,
+): ForgeExecutionRecord {
+  return {
+    executionId: String(row.execution_id),
+    runId: String(row.run_id),
+    status: String(row.status) as ForgeExecutionRecord["status"],
+    ...(row.result_artifact_id
+      ? { resultArtifactId: String(row.result_artifact_id) }
+      : {}),
+    ...(row.error ? { error: String(row.error) } : {}),
+    updatedAt: String(row.updated_at),
+  };
+}
+
 export function assertSingleAgentForgeBindings(
   bindings: readonly WorkerExecutionBinding[],
   agentIds: ReadonlyMap<string, string>,
@@ -1099,20 +1114,13 @@ export class ConclaveForgeExecutionService {
     const statusMatch = pathname.match(/^\/status\/([^/]+)$/);
     if (request.method === "GET" && statusMatch?.[1]) {
       const row = await this.env.CONCLAVE_DB.prepare(
-        "SELECT record_json FROM persistence_records WHERE repository = 'forge_executions' AND record_id = ?1",
+        "SELECT execution_id, run_id, status, result_artifact_id, error, updated_at FROM forge_executions WHERE execution_id = ?1",
       )
         .bind(statusMatch[1])
-        .first<{ record_json: string }>();
+        .first<Record<string, unknown>>();
       if (!row)
         return Response.json({ error: "execution_not_found" }, { status: 404 });
-      try {
-        return Response.json(JSON.parse(row.record_json));
-      } catch {
-        return Response.json(
-          { error: "execution_record_invalid" },
-          { status: 500 },
-        );
-      }
+      return Response.json(forgeExecutionRecord(row));
     }
     if (request.method !== "POST" || pathname !== "/execute") {
       return Response.json({ error: "not_found" }, { status: 404 });
@@ -1131,16 +1139,17 @@ export class ConclaveForgeExecutionService {
       updatedAt: now,
     };
     await this.env.CONCLAVE_DB.prepare(
-      `INSERT INTO persistence_records
-       (repository, record_id, organization_id, record_json, created_at, updated_at)
-       VALUES ('forge_executions', ?1, ?2, ?3, ?4, ?4)`,
+      `INSERT INTO forge_executions
+       (execution_id, run_id, workspace_id, status, created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?5)`,
     )
       .bind(
         executionId,
+        runId,
         typeof params.organizationId === "string"
           ? params.organizationId
           : null,
-        JSON.stringify(record),
+        record.status,
         now,
       )
       .run();
@@ -1153,17 +1162,12 @@ export class ConclaveForgeExecutionService {
     patch: Omit<Partial<ForgeExecutionRecord>, "executionId" | "runId">,
   ): Promise<void> {
     const row = await this.env.CONCLAVE_DB.prepare(
-      "SELECT record_json FROM persistence_records WHERE repository = 'forge_executions' AND record_id = ?1",
+      "SELECT execution_id, run_id, status, result_artifact_id, error, updated_at FROM forge_executions WHERE execution_id = ?1",
     )
       .bind(executionId)
-      .first<{ record_json: string }>();
+      .first<Record<string, unknown>>();
     if (!row) return;
-    let existing: ForgeExecutionRecord;
-    try {
-      existing = JSON.parse(row.record_json) as ForgeExecutionRecord;
-    } catch {
-      return;
-    }
+    const existing = forgeExecutionRecord(row);
     const updated: ForgeExecutionRecord = {
       ...existing,
       ...patch,
@@ -1171,11 +1175,17 @@ export class ConclaveForgeExecutionService {
       updatedAt: new Date().toISOString(),
     };
     await this.env.CONCLAVE_DB.prepare(
-      `UPDATE persistence_records
-       SET record_json = ?1, updated_at = ?2
-       WHERE repository = 'forge_executions' AND record_id = ?3`,
+      `UPDATE forge_executions
+       SET status = ?1, result_artifact_id = ?2, error = ?3, updated_at = ?4
+       WHERE execution_id = ?5`,
     )
-      .bind(JSON.stringify(updated), updated.updatedAt, executionId)
+      .bind(
+        updated.status,
+        updated.resultArtifactId ?? null,
+        updated.error ?? null,
+        updated.updatedAt,
+        executionId,
+      )
       .run();
   }
 
