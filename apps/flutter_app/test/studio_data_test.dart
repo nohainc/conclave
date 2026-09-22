@@ -51,6 +51,52 @@ void main() {
     expect(message.text, 'Fix the bug');
   });
 
+  test('loads workspaces and scopes Studio snapshots', () async {
+    final client = _JsonClient({
+      'workspaceId': 'workspace-1',
+      'projects': [],
+      'workers': [],
+      'agents': [],
+      'plugins': [],
+      'tasks': [],
+      'findings': [],
+      'events': [],
+      'artifacts': [],
+      'modelCalls': [],
+    }, statusCode: 200);
+    final api = StudioApiClient(
+      baseUrl: 'https://conclave.test/api',
+      client: client,
+    );
+
+    // Use separate clients because each response represents a different API.
+    final workspaceApi = StudioApiClient(
+      baseUrl: 'https://conclave.test/api',
+      client: _JsonClient({
+        'workspaces': [
+          {
+            'id': 'workspace-1',
+            'name': 'Workspace One',
+            'slug': 'workspace-one',
+            'status': 'active',
+            'role': 'owner',
+          },
+        ],
+      }, statusCode: 200),
+    );
+    final workspaces = await workspaceApi.loadWorkspaces();
+    expect(workspaces.single.name, 'Workspace One');
+
+    await api.loadSnapshot(
+      projectId: 'project-1',
+      workspaceId: 'workspace-1',
+    );
+    expect(client.lastRequest?.url.queryParameters, {
+      'projectId': 'project-1',
+      'workspaceId': 'workspace-1',
+    });
+  });
+
   test('normalizes the Cloud chat creation wrapper', () async {
     final client = StudioApiClient(
       baseUrl: 'https://conclave.test/api',
