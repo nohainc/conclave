@@ -159,7 +159,7 @@ class SafeWorkspace {
       if (entity is! File || await entity.length() > maxFileBytes) continue;
       final relative = _relativePath(entity.path);
       if (relative
-          .split(Platform.pathSeparator)
+          .split(RegExp(r'[/\\]'))
           .any(ignoredDirectories.contains)) {
         continue;
       }
