@@ -293,6 +293,45 @@ class GitRepository {
     return result.stdout.trim();
   }
 
+  /// Creates a detached Git worktree below the registered workspace root.
+  ///
+  /// The path is always passed to Git as a workspace-relative path. This
+  /// keeps parallel worker checkouts inside the approved repository even when
+  /// a caller supplies a path containing traversal components.
+  Future<void> createWorktree(String relativePath, {String? revision}) async {
+    final path = await workspace._contained(relativePath, forWrite: true);
+    if (await Directory(path).exists() || await File(path).exists()) {
+      throw const RuntimeViolation('worktree path already exists');
+    }
+    final arguments = <String>['worktree', 'add', '--detach', relativePath];
+    if (revision != null) {
+      if (revision.isEmpty || revision.contains(RegExp(r'[^A-Za-z0-9_./:@=-]'))) {
+        throw const RuntimeViolation('invalid Git revision');
+      }
+      arguments.add(revision);
+    }
+    final result = await _run(arguments);
+    if (result.exitCode != 0) {
+      throw RuntimeViolation(
+        'could not create Git worktree: ${result.stderr.trim()}',
+      );
+    }
+  }
+
+  /// Removes a worktree below the registered workspace root.
+  Future<void> removeWorktree(String relativePath, {bool force = false}) async {
+    await workspace._contained(relativePath, forWrite: true);
+    final arguments = <String>['worktree', 'remove'];
+    if (force) arguments.add('--force');
+    arguments.add(relativePath);
+    final result = await _run(arguments);
+    if (result.exitCode != 0) {
+      throw RuntimeViolation(
+        'could not remove Git worktree: ${result.stderr.trim()}',
+      );
+    }
+  }
+
   Future<CommandResult> _run(List<String> arguments) =>
       SafeCommandRunner(workspace).run([gitExecutable, ...arguments],
           policy: CommandPolicy(

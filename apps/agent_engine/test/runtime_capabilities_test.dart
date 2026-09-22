@@ -56,6 +56,41 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('creates and removes contained Git worktrees', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-runtime-git-');
+    Future<void> runGit(List<String> arguments) async {
+      final result = await Process.run('git', arguments, workingDirectory: directory.path);
+      if (result.exitCode != 0) {
+        throw StateError('${result.stdout}\n${result.stderr}');
+      }
+    }
+
+    await runGit(['init', '-q']);
+    await runGit(['config', 'user.email', 'test@example.com']);
+    await runGit(['config', 'user.name', 'Conclave Test']);
+    await File('${directory.path}/README.md').writeAsString('fixture\n');
+    await runGit(['add', 'README.md']);
+    await runGit(['commit', '-qm', 'initial']);
+
+    final repository = GitRepository(SafeWorkspace(directory));
+    await repository.createWorktree('worktrees/candidate', revision: 'HEAD');
+    expect(
+      await File('${directory.path}/worktrees/candidate/README.md').exists(),
+      isTrue,
+    );
+    await repository.removeWorktree('worktrees/candidate');
+    expect(
+      await Directory('${directory.path}/worktrees/candidate').exists(),
+      isFalse,
+    );
+    await expectLater(
+      repository.createWorktree('../outside'),
+      throwsA(isA<RuntimeViolation>()),
+    );
+    await directory.delete(recursive: true);
+  });
+
   test('enforces command allowlist and output policy', () async {
     final directory =
         await Directory.systemTemp.createTemp('conclave-runtime-');
