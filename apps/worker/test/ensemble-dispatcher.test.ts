@@ -333,7 +333,7 @@ describe("Multi-Agent Ensemble Dispatcher (Cloud -> Multi-Agent -> Workers)", ()
           objective: "Design Architecture",
           capabilities: ["architecture"],
         },
-        1,
+        3,
         undefined,
         {
           maxEstimatedCostMicrosPerAttempt: 2000,

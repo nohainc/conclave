@@ -216,8 +216,7 @@ export async function selectEnsembleCandidateWorkers(
           Number(row.concurrency_limit || 1) ||
         usedIndependenceKeys.has(String(row.independence_key)) ||
         (routing.maxEstimatedCostMicrosPerAttempt !== undefined &&
-          cost !== null &&
-          cost > routing.maxEstimatedCostMicrosPerAttempt)
+          (cost === null || cost > routing.maxEstimatedCostMicrosPerAttempt))
       ) {
         continue;
       }
@@ -253,8 +252,7 @@ export async function selectEnsembleCandidateWorkers(
       Number(row.active_assignments || 0) <
         Number(row.concurrency_limit || 1) &&
       (routing.maxEstimatedCostMicrosPerAttempt === undefined ||
-        cost === null ||
-        cost <= routing.maxEstimatedCostMicrosPerAttempt)
+        (cost !== null && cost <= routing.maxEstimatedCostMicrosPerAttempt))
     );
   });
   eligibleRows.sort((left, right) => {
