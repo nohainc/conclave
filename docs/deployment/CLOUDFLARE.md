@@ -53,7 +53,8 @@ Before production backend deployment:
 
 1. verify Cloudflare Access protects the custom domain and the Access identity
    maps to an active Workspace membership;
-2. configure production D1/R2 resources and apply migrations;
+2. provision production D1/R2 resources; the deployment workflow applies the
+   checked-in D1 migrations to `conclave-production`;
 3. configure required signing, callback, and other production secrets;
 4. run the deployed Forge recovery drill, including Agent restart, Cloud
    restart, network loss, and reviewer timeout;

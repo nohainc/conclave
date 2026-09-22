@@ -34,6 +34,12 @@ jobs:
         run: node scripts/verify-production-security.mjs apps/worker/forge-execution.wrangler.jsonc
       - name: Install Wrangler
         run: npm install --global wrangler@4.38.0
+      - name: Apply production D1 migrations
+        working-directory: .
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: wrangler d1 migrations apply conclave-production --remote --config "$GITHUB_WORKSPACE/infra/cloudflare/app.wrangler.jsonc"
       - name: Deploy Forge execution service
         working-directory: .
         env:
