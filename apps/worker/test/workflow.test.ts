@@ -188,6 +188,65 @@ describe("durable Forge lifecycle", () => {
     expect(result.failureReason).toContain("reviewer timed out");
   });
 
+  it("recovers after a Forge restart and transient network loss", async () => {
+    let statusCalls = 0;
+    let reconciliationRetries = 0;
+    const service = {
+      fetch: async (input: RequestInfo | URL) => {
+        if (String(input).includes("/execute")) {
+          return Response.json(
+            { executionId: "forge-execution-restarted" },
+            { status: 202 },
+          );
+        }
+        statusCalls += 1;
+        if (statusCalls === 1) {
+          throw new Error("Forge service restarted while the network was down");
+        }
+        return Response.json({
+          executionId: "forge-execution-restarted",
+          runId: "run-1",
+          status: "completed",
+          resultArtifactId: "artifact-after-restart",
+        });
+      },
+    };
+    const instance = new ConclaveRunWorkflow(
+      {} as never,
+      { CONCLAVE_FORGE_EXECUTION: service } as unknown as Env,
+    );
+    const step = {
+      do: async <T>(
+        name: string,
+        _config: unknown,
+        callback: () => Promise<T>,
+      ) => {
+        if (name === "forge:reconcile:0") {
+          while (true) {
+            try {
+              return await callback();
+            } catch (error) {
+              reconciliationRetries += 1;
+              if (reconciliationRetries > 1) throw error;
+            }
+          }
+        }
+        return callback();
+      },
+      waitForEvent: async <T>() => {
+        throw new Error("terminal callback was lost during Forge restart");
+      },
+      sleep: async () => undefined,
+    } as unknown as import("cloudflare:workers").WorkflowStep;
+
+    const result = await instance.run({ payload: params } as never, step);
+
+    expect(statusCalls).toBe(2);
+    expect(reconciliationRetries).toBe(1);
+    expect(result.stage).toBe("completed");
+    expect(result.resultArtifactId).toBe("artifact-after-restart");
+  });
+
   it("rejects terminal results for a different run or execution", async () => {
     const { instance, step } = workflow([
       {
