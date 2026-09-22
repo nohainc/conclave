@@ -13,7 +13,10 @@ Future<void> main() async {
       final result = switch (request['method']) {
         'initialize' => {
             'pluginId': codexPluginManifest['pluginId'],
-            'protocolVersion': codexPluginManifest['protocolVersion']
+            'version': codexPluginManifest['version'],
+            'protocolVersion': codexPluginManifest['protocolVersion'],
+            'runtimeLanguage': 'dart',
+            'capabilities': codexPluginManifest['capabilities'],
           },
         'health' => {
             'status': (await worker.availability()).installed

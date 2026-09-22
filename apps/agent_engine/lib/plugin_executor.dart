@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'cloud_connection.dart';
+import 'plugin_protocol.dart';
 import 'process_tree.dart';
 
 class PluginProcessSpec {
@@ -122,24 +123,23 @@ class PluginProcessExecutor {
       if (response.isCompleted || line.trim().isEmpty) return;
       try {
         final decoded = jsonDecode(line);
-        if (decoded is! Map<String, dynamic> || decoded['id'] is! String) {
+        if (decoded is Map<String, dynamic> && decoded['id'] == null) {
+          PluginRpcNotification.parse(decoded);
           return;
         }
-        final pendingResponse = pending[decoded['id'] as String];
+        final rpc = PluginRpcResponse.parse(decoded);
+        final pendingResponse = pending[rpc.id];
         if (pendingResponse == null || pendingResponse.isCompleted) return;
-        if (decoded['error'] is Map) {
+        if (rpc.error != null) {
           pendingResponse.completeError(
-              StateError('${(decoded['error'] as Map)['message']}'));
+              StateError('${rpc.error!['message'] ?? 'plugin request failed'}'));
           return;
         }
-        final result = decoded['result'];
-        if (result is! Map) {
-          pendingResponse
-              .completeError(StateError('plugin returned a non-object result'));
-          return;
-        }
-        pendingResponse.complete(Map<String, Object?>.from(result));
+        pendingResponse.complete(rpc.result!);
       } on Object catch (error) {
+        // `dart run` may emit its VM service banner on stdout before the
+        // plugin starts. It is launcher noise, not a plugin protocol frame.
+        if (line.startsWith('The Dart VM service is listening on ')) return;
         response.completeError(error);
       }
     });
@@ -179,10 +179,11 @@ class PluginProcessExecutor {
       final execution = () async {
         final initialized = await request('initialize', {
           'pluginId': spec.pluginId,
-          'protocolVersion': '2.0',
+          'protocolVersion': pluginProtocolVersion,
         });
-        if (initialized['pluginId'] != spec.pluginId ||
-            initialized['protocolVersion'] != '2.0') {
+        final identity = PluginIdentity.parse(initialized);
+        if (identity.pluginId != spec.pluginId ||
+            identity.protocolVersion != pluginProtocolVersion) {
           throw StateError('plugin handshake identity is invalid');
         }
         final health = await request('health', {});

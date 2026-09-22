@@ -12,7 +12,10 @@ Future<void> main() async {
       final result = switch (request['method']) {
         'initialize' => {
             'pluginId': 'conclave.forge',
+            'version': '0.1.0',
             'protocolVersion': '2.0',
+            'runtimeLanguage': 'dart',
+            'capabilities': ['repository_access', 'code_execution', 'verification'],
           },
         'health' => {'status': 'healthy'},
         'start_assignment' => await _runAssignment(request['params']),

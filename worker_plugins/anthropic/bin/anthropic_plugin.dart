@@ -14,7 +14,10 @@ Future<void> main() async {
       final result = switch (request['method']) {
         'initialize' => {
             'pluginId': anthropicPluginManifest['pluginId'],
+            'version': anthropicPluginManifest['version'],
             'protocolVersion': anthropicPluginManifest['protocolVersion'],
+            'runtimeLanguage': 'dart',
+            'capabilities': anthropicPluginManifest['capabilities'],
           },
         'health' => {
             'status':

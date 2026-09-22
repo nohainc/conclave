@@ -14,7 +14,10 @@ Future<void> main() async {
       final result = switch (request['method']) {
         'initialize' => {
             'pluginId': openAiPluginManifest['pluginId'],
+            'version': openAiPluginManifest['version'],
             'protocolVersion': openAiPluginManifest['protocolVersion'],
+            'runtimeLanguage': 'dart',
+            'capabilities': openAiPluginManifest['capabilities'],
           },
         'health' => {
             'status': Platform.environment['OPENAI_API_KEY']?.isNotEmpty == true

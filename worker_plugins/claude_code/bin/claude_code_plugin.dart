@@ -14,7 +14,10 @@ Future<void> main() async {
       final result = switch (request['method']) {
         'initialize' => {
             'pluginId': claudeCodePluginManifest['pluginId'],
+            'version': claudeCodePluginManifest['version'],
             'protocolVersion': claudeCodePluginManifest['protocolVersion'],
+            'runtimeLanguage': 'dart',
+            'capabilities': claudeCodePluginManifest['capabilities'],
           },
         'health' => {
             'status': (await worker.availability()).installed

@@ -51,7 +51,13 @@ Future<void> main() async {
       continue;
     }
     final result = switch (method) {
-      'initialize' => {'protocolVersion': '2.0', 'pluginId': 'conclave.echo'},
+      'initialize' => {
+        'pluginId': 'conclave.echo',
+        'version': '1.0.0',
+        'protocolVersion': '2.0',
+        'runtimeLanguage': 'dart',
+        'capabilities': ['deterministic_echo'],
+      },
       'health' => {'status': 'healthy'},
       'configure_worker' => {'configured': true},
       'cancel_assignment' => {'cancelled': true},
