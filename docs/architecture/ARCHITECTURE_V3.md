@@ -1,6 +1,6 @@
-# Conclave AX Architecture
+# Conclave AX Architecture v3
 
-**Status:** Normative  
+**Status:** Historical — superseded by [Architecture v4](ARCHITECTURE_V4.md)  
 **Version:** Architecture v3  
 **Date:** 2026-09-21
 

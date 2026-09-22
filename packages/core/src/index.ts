@@ -11,6 +11,7 @@ export * from "./task-graph.js";
 export * from "./verification.js";
 export * from "./completion.js";
 export * from "./entities.js";
+export * from "./v4-entities.js";
 export * from "./multi-agent-ensemble.js";
 export * from "./chat-lifecycle.js";
 

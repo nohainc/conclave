@@ -1,13 +1,19 @@
 # Conclave AX Roadmap
 
+Architecture v4 is normative.
+
 The current implementation roadmap is:
 
 [Architecture v4 Implementation Roadmap](docs/roadmaps/ARCHITECTURE_V4_IMPLEMENTATION.md)
 
+Track progress:
+
+[v4 Implementation Status](docs/roadmaps/V4_IMPLEMENTATION_STATUS.md)
+
 Current execution model:
 
 ```text
-Studio -> Cloud -> Host -> Worker
+Studio → Cloud → Host → Worker
 ```
 
 Credential Profiles provide per-user/workspace authentication and usage context.

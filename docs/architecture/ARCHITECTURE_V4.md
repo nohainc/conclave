@@ -1,8 +1,8 @@
 # Conclave AX Architecture v4 — Host + Worker
 
-**Status:** Proposed normative architecture  
+**Status:** Normative  
 **Date:** 2026-09-22  
-**Supersedes:** Architecture v3 after implementation cutover
+**Supersedes:** Architecture v3
 
 ## 1. Product principle
 

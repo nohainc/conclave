@@ -28,6 +28,7 @@ jobs:
       - run: pnpm cloud:execution-boundary-check
       - run: pnpm agent:retirement-check
       - run: pnpm production:preflight
+      - run: pnpm v4:architecture-guard
       - run: pnpm check
       - run: ../../node_modules/.bin/wrangler check startup
         working-directory: apps/worker
@@ -125,7 +126,7 @@ jobs:
                 {name: "Agent Engine Dart", status: "passed", command: "dart analyze", exitCode: 0, artifactIds: []}
               ],
               smokeTests: ["Cloud startup analysis passed"],
-              healthChecks: ["Architecture v3 CI checks passed"],
+              healthChecks: ["Architecture v4 CI checks passed"],
               observedAt: $observedAt
             }')
           curl --fail-with-body --silent --show-error \
