@@ -18,6 +18,8 @@ Latest local verification:
 - Studio web and macOS Agent App release builds passed;
 - native Dart Agent Engine compilation passed;
 - Agent retirement and production security preflights passed.
+- App and Forge Wrangler production dry-runs passed; all 12 D1 migrations
+  resolve for `conclave-production`.
 
 | Phase | Evidence in the repository | Status |
 | --- | --- | --- |
