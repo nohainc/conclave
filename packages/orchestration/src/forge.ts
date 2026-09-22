@@ -8,6 +8,7 @@ import type {
   RunEventRecord,
   RunRecord,
   TaskRecord,
+  TaskDependencyRecord,
 } from "@conclave/persistence";
 import {
   CompletionCriteriaGate,
@@ -96,6 +97,7 @@ export interface ForgePersistence {
   saveRun(run: RunRecord): Promise<void>;
   savePhase(phase: PhaseRecord): Promise<void>;
   saveTask(task: TaskRecord): Promise<void>;
+  saveTaskDependency(dependency: TaskDependencyRecord): Promise<void>;
   saveAttempt(attempt: AttemptRecord): Promise<void>;
   saveModelCall(call: ModelCallRecord): Promise<void>;
   saveArtifact(artifact: ArtifactRecord): Promise<void>;
@@ -146,6 +148,7 @@ export class InMemoryForgePersistence implements ForgePersistence {
   readonly runs: RunRecord[] = [];
   readonly phases: PhaseRecord[] = [];
   readonly tasks: TaskRecord[] = [];
+  readonly taskDependencies: TaskDependencyRecord[] = [];
   readonly attempts: AttemptRecord[] = [];
   readonly modelCalls: ModelCallRecord[] = [];
   readonly artifacts: ArtifactRecord[] = [];
@@ -165,6 +168,10 @@ export class InMemoryForgePersistence implements ForgePersistence {
   }
   saveTask(task: TaskRecord): Promise<void> {
     this.tasks.push(task);
+    return Promise.resolve();
+  }
+  saveTaskDependency(dependency: TaskDependencyRecord): Promise<void> {
+    this.taskDependencies.push(dependency);
     return Promise.resolve();
   }
   saveAttempt(attempt: AttemptRecord): Promise<void> {
@@ -710,11 +717,56 @@ export async function executeForgeGoal(
   };
   const plan = await call(input.lead, planningTask, planRequest, "PlanResult");
   const validatedPlan = validateTaskGraph(plan);
-  const planPhaseTaskIds = validatedPlan.tasks.map(
-    (plannedTask) => plannedTask.taskId,
-  );
-  if (planPhaseTaskIds.length === 0)
+  if (validatedPlan.tasks.length === 0)
     throw new Error("Forge plan contains no tasks");
+
+  // The model-proposed graph is an accepted Core-owned projection of the
+  // plan. Preserve it with durable task IDs and dependencies before Forge
+  // starts its implementation/review lifecycle. Provider-local task IDs must
+  // never become foreign keys in persistence.
+  const plannedTaskIds = new Map<string, string>();
+  for (const plannedTask of validatedPlan.tasks) {
+    plannedTaskIds.set(plannedTask.taskId, id());
+  }
+  for (const plannedTask of validatedPlan.tasks) {
+    const persistedTaskId = plannedTaskIds.get(plannedTask.taskId)!;
+    await persistence.saveTask({
+      id: persistedTaskId,
+      phaseId: planningPhase.id,
+      objective: plannedTask.objective,
+      role: plannedTask.role,
+      capabilities: [...plannedTask.capabilities],
+      input: {
+        repositoryId: input.repositoryId,
+        revision: input.revision,
+        plannedTaskId: plannedTask.taskId,
+        phaseId: plannedTask.phaseId,
+      },
+      outputContract: { messageType: "TaskResult" },
+      status: "pending",
+      requiresIndependentVerification:
+        plannedTask.requiresIndependentVerification,
+      createdAt: now(),
+      updatedAt: now(),
+    });
+    for (const dependencyId of plannedTask.dependsOnTaskIds) {
+      const dependsOnTaskId = plannedTaskIds.get(dependencyId);
+      if (!dependsOnTaskId) {
+        throw new Error(
+          `Validated plan dependency was not materialized: ${dependencyId}`,
+        );
+      }
+      await persistence.saveTaskDependency({
+        taskId: persistedTaskId,
+        dependsOnTaskId,
+      });
+    }
+  }
+  await event("PlanGraphAccepted", "phase", planningPhase.id, {
+    phaseCount: validatedPlan.phases.length,
+    taskCount: validatedPlan.tasks.length,
+    taskIds: [...plannedTaskIds.values()],
+  });
 
   const implementationPhase = await phase(
     "implementation",

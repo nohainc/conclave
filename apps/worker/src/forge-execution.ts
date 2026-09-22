@@ -308,6 +308,12 @@ class DurableForgePersistence implements ForgePersistence {
     return this.repositories.tasks.save(task);
   }
 
+  saveTaskDependency(
+    dependency: Parameters<ForgePersistence["saveTaskDependency"]>[0],
+  ): Promise<void> {
+    return this.repositories.taskDependencies.save(dependency);
+  }
+
   saveAttempt(
     attempt: Parameters<ForgePersistence["saveAttempt"]>[0],
   ): Promise<void> {
@@ -442,13 +448,7 @@ class AgentWorkerRuntime implements ForgeRuntimeAdapter {
     revision: string,
   ): Promise<ForgeRuntimeEvidence> {
     const { kind, ...details } = operation;
-    return this.execute(
-      kind,
-      details,
-      taskId,
-      repositoryId,
-      revision,
-    );
+    return this.execute(kind, details, taskId, repositoryId, revision);
   }
 
   private async execute(

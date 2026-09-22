@@ -249,6 +249,14 @@ describe("Forge MVP workflow", () => {
                   dependsOnTaskIds: [],
                   requiresIndependentVerification: true,
                 },
+                {
+                  taskId: "plan-test",
+                  objective: "Add a regression test",
+                  role: "Implementer",
+                  capabilities: ["repository_write"],
+                  dependsOnTaskIds: ["plan-task"],
+                  requiresIndependentVerification: false,
+                },
               ],
             },
           ],
@@ -416,6 +424,12 @@ describe("Forge MVP workflow", () => {
     );
     expect(persistence.modelCalls).toHaveLength(12);
     expect(persistence.artifacts.length).toBeGreaterThan(15);
+    expect(persistence.taskDependencies).toHaveLength(1);
+    expect(
+      persistence.events.some(
+        (event) => event.eventType === "PlanGraphAccepted",
+      ),
+    ).toBe(true);
     expect(persistence.events.at(-1)?.eventType).toBe("RunCompleted");
     expect(
       persistence.events.some(
