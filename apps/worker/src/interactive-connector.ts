@@ -103,6 +103,12 @@ export async function handleConnectorTaskRequest(
   const service = connector(env);
   const token = bearer(request) ?? "";
   if (request.method === "POST" && !taskId) {
+    if (token !== env.CONCLAVE_CONNECTOR_REGISTRATION_TOKEN) {
+      return Response.json(
+        { error: "Connector registration authentication required" },
+        { status: 401 },
+      );
+    }
     const body = (await request.json()) as Record<string, unknown>;
     service.registerTask({
       taskId:

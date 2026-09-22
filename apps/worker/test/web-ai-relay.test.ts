@@ -2,6 +2,27 @@ import { describe, expect, it } from "vitest";
 import worker from "../src/index.js";
 
 describe("web AI connector relay", () => {
+  it("rejects task registration without the connector registration token", async () => {
+    const env = {
+      CONCLAVE_ENVIRONMENT: "development",
+      CONCLAVE_CONNECTOR_REGISTRATION_TOKEN: "relay-auth-token",
+    } as unknown as Env;
+    const response = await worker.fetch(
+      new Request("https://conclave.test/api/connector/tasks/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          taskId: "unauthorized-task",
+          organizationId: "other-tenant",
+          objective: "Should not be accepted",
+        }),
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(401);
+  });
+
   it("registers and reports a subscription-backed relay task", async () => {
     const env = {
       CONCLAVE_ENVIRONMENT: "development",
