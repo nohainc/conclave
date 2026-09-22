@@ -120,7 +120,19 @@ class SocketAgentEngineConnection implements AgentEngineConnection {
       }));
       final response = await request.close();
       final body = await response.transform(utf8.decoder).join();
-      final decoded = jsonDecode(body);
+      final trimmedBody = body.trim();
+      final isHtml = response.headers.contentType?.mimeType == 'text/html' ||
+          trimmedBody.startsWith('<!DOCTYPE') ||
+          trimmedBody.startsWith('<html');
+      if (isHtml) {
+        throw StateError(
+          'Cloud returned an HTML page instead of the enrollment API response. '
+          'This usually means Cloudflare Access is protecting the Agent enrollment endpoint. '
+          'Allow the enrollment route or provide an Agent service credential. '
+          'HTTP ${response.statusCode}.',
+        );
+      }
+      final decoded = trimmedBody.isEmpty ? null : jsonDecode(trimmedBody);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         final message = decoded is Map && decoded['error'] is String
             ? decoded['error'] as String
@@ -430,7 +442,13 @@ class _AgentHomeState extends State<AgentHome> {
           barrierDismissible: false,
           builder: (context) => AlertDialog(
             title: const Text('Agent enrollment failed'),
-            content: SelectableText('$error'),
+            content: SizedBox(
+              width: 560,
+              height: 360,
+              child: SingleChildScrollView(
+                child: SelectableText('$error'),
+              ),
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
