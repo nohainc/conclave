@@ -6,7 +6,14 @@ Phase 13 defines the security boundary for a multi-user Conclave deployment. The
 
 Every organization-scoped record carries an organization identifier. Projects belong to one organization, and project membership is explicit. Organization owners and administrators may manage organization resources; project roles grant only the permissions assigned to that project. A suspended organization or user cannot create, control, or inspect runs.
 
-The shared security package is the policy source for roles and permissions. The Worker now requires a configured bearer token in production, maps it to `CONCLAVE_AUTH_USER_ID` and `CONCLAVE_AUTH_ORGANIZATION_ID`, and loads active organization/project memberships from D1. Anonymous access is allowed only when `CONCLAVE_ENVIRONMENT=development` and `CONCLAVE_ALLOW_ANONYMOUS_DEV=true`. A verified identity-provider/JWT adapter remains the next production identity upgrade; development-only bypass is never accepted in production.
+The shared security package is the policy source for roles and permissions. In
+the private alpha, Cloudflare Access authenticates browser requests before they
+reach the Worker. The Worker resolves the Access identity to an active
+Workspace membership in D1 and derives project authorization from that
+membership; it never trusts a client-supplied tenant header. Anonymous access
+is allowed only when `CONCLAVE_ENVIRONMENT=development` and
+`CONCLAVE_ALLOW_ANONYMOUS_DEV=true`. Cloudflare Access protection is required
+for production and private-alpha deployment.
 
 ## Credentials
 
@@ -24,7 +31,7 @@ Authorization decisions, credential changes, run controls, budget decisions, and
 
 | Threat | Control | Residual risk |
 | --- | --- | --- |
-| Cross-organization read/write | Organization and project membership checks before authorization | A misconfigured identity-provider claim mapping must be detected operationally |
+| Cross-organization read/write | Cloudflare Access identity plus organization and project membership checks before authorization | A misconfigured Access identity mapping must be detected operationally |
 | Credential disclosure | AES-GCM envelope encryption; KEK outside D1; no plaintext logging | Compromise of the Worker/KMS boundary |
 | Replay or duplicate mutation | Idempotency keys and event correlation | Expired idempotency records cannot prevent very old replays |
 | Run abuse or runaway spend | Organization/project/run rate limits, budgets, timeouts, cancellation | Accounting depends on provider-reported usage being truthful |
@@ -34,4 +41,10 @@ Authorization decisions, credential changes, run controls, budget decisions, and
 
 ## Production readiness conditions
 
-Before exposing a deployment to multiple external organizations, replace the bootstrap bearer-token identity with a verified identity provider, set `CONCLAVE_AUTH_TOKEN`/identity secrets, configure a CI ingest token, set non-zero retention policies, rotate the KEK, enable encrypted transport and access logging, and exercise cross-tenant authorization tests against the deployed Worker. Run and artifact lookups are organization-scoped through their project relationship before D1/R2-backed data is returned.
+Before exposing a deployment to multiple external organizations, protect the
+custom domain with Cloudflare Access, configure the Access-to-Workspace
+membership mapping, configure a CI ingest token, set non-zero retention
+policies, rotate the KEK, enable encrypted transport and access logging, and
+exercise cross-tenant authorization tests against the deployed Worker. Run and
+artifact lookups are organization-scoped through their project relationship
+before D1/R2-backed data is returned.
