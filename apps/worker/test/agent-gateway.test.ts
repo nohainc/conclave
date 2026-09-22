@@ -154,7 +154,7 @@ describe("Agent Enrollment & Agent Gateway (Architecture v2)", () => {
       CONCLAVE_ENVIRONMENT: "development",
       CONCLAVE_DB: d1,
       CONCLAVE_AGENT_GATEWAY: agentGatewayNamespace,
-    } as TestEnv;
+    } as unknown as TestEnv;
 
     // Seed test user and workspace
     const now = new Date().toISOString();
@@ -391,5 +391,42 @@ describe("Agent Enrollment & Agent Gateway (Architecture v2)", () => {
     expect(helloRes.status).toBe(200);
     const helloAck = (await helloRes.json()) as AgentProtocolMessage;
     expect(helloAck.type).toBe("agent.hello.ack");
+  });
+
+  it("rejects tokenless HTTP protocol messages outside development", async () => {
+    const productionEnv = {
+      ...mockEnv,
+      CONCLAVE_ENVIRONMENT: "production",
+    } as unknown as TestEnv;
+    const message: AgentProtocolMessage = {
+      protocol: AGENT_PROTOCOL_NAME,
+      protocolVersion: AGENT_PROTOCOL_VERSION,
+      messageId: "msg-production-1",
+      timestamp: new Date().toISOString(),
+      type: "agent.hello",
+      payload: {
+        agentId: "agent-http-1",
+        workspaceId: "ws-test-1",
+        name: "Test Agent",
+        hostname: "test-host",
+        agentVersion: "0.2.0",
+        capabilities: {
+          os: "macos",
+          arch: "arm64",
+          agentVersion: "0.2.0",
+          supportedRuntimes: ["node"],
+          maxConcurrentWorkers: 1,
+        },
+      },
+    };
+    const response = await worker.fetch(
+      new Request("http://localhost/api/v2/agent-protocol/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(message),
+      }),
+      productionEnv,
+    );
+    expect(response.status).toBe(401);
   });
 });

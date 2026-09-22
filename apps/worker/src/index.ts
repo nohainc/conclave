@@ -3243,16 +3243,19 @@ async function handleAgentProtocolMessage(
   }
 
   const token = extractAuthToken(request.headers);
+  let authenticatedAgent: { id: string; workspace_id: string } | null = null;
   if (token) {
     const tokenHash = await hashToken(token);
-    const agent = await env.CONCLAVE_DB.prepare(
+    authenticatedAgent = await env.CONCLAVE_DB.prepare(
       `SELECT id, workspace_id FROM agents WHERE auth_token_hash = ?1 AND revoked_at IS NULL`,
     )
       .bind(tokenHash)
       .first<{ id: string; workspace_id: string }>();
-    if (!agent) {
+    if (!authenticatedAgent) {
       return json({ error: "Unauthorized agent token" }, { status: 401 });
     }
+  } else if (!anonymousDevelopment(env)) {
+    return json({ error: "Agent authentication required" }, { status: 401 });
   }
 
   const now = new Date().toISOString();
@@ -3305,8 +3308,42 @@ async function handleAgentProtocolMessage(
   }
 
   if (message.type === "assignment.result") {
+    if (
+      authenticatedAgent &&
+      (authenticatedAgent.id !== message.agentId ||
+        authenticatedAgent.workspace_id !== message.workspaceId)
+    ) {
+      return json(
+        { error: "Agent assignment identity mismatch" },
+        { status: 403 },
+      );
+    }
+    const assignment = await env.CONCLAVE_DB.prepare(
+      `SELECT id FROM worker_assignments
+       WHERE id = ?1 AND workspace_id = ?2 AND agent_id = ?3 AND worker_id = ?4
+         AND run_id = ?5 AND task_id = ?6 AND attempt_id = ?7
+         AND idempotency_key = ?8`,
+    )
+      .bind(
+        message.assignmentId,
+        message.workspaceId,
+        message.agentId,
+        message.workerId,
+        message.runId,
+        message.taskId,
+        message.attemptId,
+        message.idempotencyKey,
+      )
+      .first<{ id: string }>();
+    if (!assignment) {
+      return json(
+        { error: "Assignment correlation mismatch" },
+        { status: 409 },
+      );
+    }
     await env.CONCLAVE_DB.prepare(
-      `UPDATE worker_assignments SET status = 'completed', output_json = ?1, updated_at = ?2 WHERE id = ?3`,
+      `UPDATE worker_assignments SET status = 'completed', output_json = ?1, updated_at = ?2
+       WHERE id = ?3 AND status NOT IN ('completed', 'failed', 'cancelled')`,
     )
       .bind(JSON.stringify(message.payload), now, message.assignmentId)
       .run();
@@ -3314,8 +3351,42 @@ async function handleAgentProtocolMessage(
   }
 
   if (message.type === "assignment.error") {
+    if (
+      authenticatedAgent &&
+      (authenticatedAgent.id !== message.agentId ||
+        authenticatedAgent.workspace_id !== message.workspaceId)
+    ) {
+      return json(
+        { error: "Agent assignment identity mismatch" },
+        { status: 403 },
+      );
+    }
+    const assignment = await env.CONCLAVE_DB.prepare(
+      `SELECT id FROM worker_assignments
+       WHERE id = ?1 AND workspace_id = ?2 AND agent_id = ?3 AND worker_id = ?4
+         AND run_id = ?5 AND task_id = ?6 AND attempt_id = ?7
+         AND idempotency_key = ?8`,
+    )
+      .bind(
+        message.assignmentId,
+        message.workspaceId,
+        message.agentId,
+        message.workerId,
+        message.runId,
+        message.taskId,
+        message.attemptId,
+        message.idempotencyKey,
+      )
+      .first<{ id: string }>();
+    if (!assignment) {
+      return json(
+        { error: "Assignment correlation mismatch" },
+        { status: 409 },
+      );
+    }
     await env.CONCLAVE_DB.prepare(
-      `UPDATE worker_assignments SET status = 'failed', error_json = ?1, updated_at = ?2 WHERE id = ?3`,
+      `UPDATE worker_assignments SET status = 'failed', error_json = ?1, updated_at = ?2
+       WHERE id = ?3 AND status NOT IN ('completed', 'failed', 'cancelled')`,
     )
       .bind(JSON.stringify(message.payload), now, message.assignmentId)
       .run();
