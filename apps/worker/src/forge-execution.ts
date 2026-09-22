@@ -29,7 +29,10 @@ import {
   type ForgeRuntimeAdapter,
   type ForgeRuntimeEvidence,
 } from "@conclave/orchestration";
-import type { ImplementationOperation } from "@conclave/protocol";
+import {
+  parseRuntimeOperationRequest,
+  type ImplementationOperation,
+} from "@conclave/protocol";
 import {
   dispatchTaskAssignment,
   type AssignmentDispatcherEnv,
@@ -438,9 +441,10 @@ class AgentWorkerRuntime implements ForgeRuntimeAdapter {
     repositoryId: string,
     revision: string,
   ): Promise<ForgeRuntimeEvidence> {
+    const { kind: _operationKind, ...details } = operation;
     return this.execute(
       operation.kind,
-      operation,
+      details,
       taskId,
       repositoryId,
       revision,
@@ -454,6 +458,23 @@ class AgentWorkerRuntime implements ForgeRuntimeAdapter {
     repositoryId = this.context.repositoryId,
     revision = this.context.revision,
   ): Promise<ForgeRuntimeEvidence> {
+    const operationPayload = parseRuntimeOperationRequest({
+      protocol: "conclave.protocol",
+      version: "0.1",
+      messageId: crypto.randomUUID(),
+      goalId: this.context.goalId,
+      runId: this.context.runId,
+      workerId: this.worker.resource.id,
+      createdAt: new Date().toISOString(),
+      messageType: "RuntimeOperationRequest",
+      payload: {
+        operation: kind,
+        taskId,
+        repositoryId,
+        revision,
+        ...details,
+      },
+    }).payload;
     const result = await this.worker.execute({
       requestId: crypto.randomUUID(),
       goalId: this.context.goalId,
@@ -467,12 +488,7 @@ class AgentWorkerRuntime implements ForgeRuntimeAdapter {
         protocol: "conclave.protocol",
         version: "0.1",
         messageType: "RuntimeOperationRequest",
-        payload: {
-          operation: kind,
-          repositoryId,
-          revision,
-          ...details,
-        },
+        payload: operationPayload,
       },
       context: [],
       deadlineAt: new Date(Date.now() + 15 * 60_000).toISOString(),

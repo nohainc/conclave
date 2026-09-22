@@ -97,10 +97,75 @@ class ProtocolEnvelope {
   }
 }
 
+/// Canonical payload validation for repository operations sent to an Agent
+/// Worker. The envelope is shared with TypeScript; this validator keeps the
+/// operation discriminator and required fields aligned on the Dart side.
+class RuntimeOperationRequest {
+  RuntimeOperationRequest._(this.envelope, this.operation);
+
+  final ProtocolEnvelope envelope;
+  final String operation;
+
+  Map<String, Object?> get payload => envelope.payload;
+
+  static RuntimeOperationRequest parse(ProtocolEnvelope envelope) {
+    if (envelope.messageType != 'RuntimeOperationRequest') {
+      throw const ProtocolException('message is not a RuntimeOperationRequest');
+    }
+    final operation = _requiredString(envelope.payload, 'operation');
+    _requiredString(envelope.payload, 'taskId');
+    final repositoryId = _requiredString(envelope.payload, 'repositoryId');
+    _requiredString(envelope.payload, 'revision');
+    switch (operation) {
+      case 'search':
+        _requiredString(envelope.payload, 'query');
+        _requiredString(envelope.payload, 'path');
+      case 'write_file':
+        _requiredString(envelope.payload, 'path');
+        _requiredString(envelope.payload, 'content');
+      case 'patch_file':
+        _requiredString(envelope.payload, 'path');
+        final patches = envelope.payload['patches'];
+        if (patches is! List || patches.isEmpty) {
+          throw const ProtocolException('patches must be a non-empty list');
+        }
+      case 'delete_file':
+        _requiredString(envelope.payload, 'path');
+      case 'test':
+        final command = envelope.payload['command'];
+        final changedFiles = envelope.payload['changedFiles'];
+        if (command is! List ||
+            command.isEmpty ||
+            command.any((item) => item is! String || item.isEmpty)) {
+          throw const ProtocolException('command must be a non-empty list');
+        }
+        if (changedFiles is! List ||
+            changedFiles.any((item) => item is! String || item.isEmpty)) {
+          throw const ProtocolException('changedFiles must be a string list');
+        }
+        _requiredString(envelope.payload, 'cwd');
+      default:
+        throw ProtocolException('unsupported runtime operation: $operation');
+    }
+    if (repositoryId.isEmpty) {
+      throw const ProtocolException('repositoryId is required');
+    }
+    return RuntimeOperationRequest._(envelope, operation);
+  }
+}
+
 bool isCompatibleVersion(String local, String remote) {
   final localParts = _versionParts(local);
   final remoteParts = _versionParts(remote);
   return localParts.$1 == remoteParts.$1 && remoteParts.$2 >= localParts.$2;
+}
+
+String _requiredString(Map<String, Object?> map, String key) {
+  final value = map[key];
+  if (value is! String || value.isEmpty) {
+    throw ProtocolException('$key is required');
+  }
+  return value;
 }
 
 (int, int, int) _versionParts(String version) {

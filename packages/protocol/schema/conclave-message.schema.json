@@ -17,6 +17,125 @@
     "messageType",
     "payload"
   ],
+  "x-message-payloads": {
+    "RuntimeOperationRequest": { "$ref": "#/$defs/runtimeOperationPayload" }
+  },
+  "$defs": {
+    "runtimeOperationPayload": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation",
+            "taskId",
+            "repositoryId",
+            "revision",
+            "query",
+            "path"
+          ],
+          "properties": {
+            "operation": { "const": "search" },
+            "taskId": { "type": "string", "minLength": 1 },
+            "repositoryId": { "type": "string", "minLength": 1 },
+            "revision": { "type": "string", "minLength": 1 },
+            "query": { "type": "string", "minLength": 1 },
+            "path": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation",
+            "taskId",
+            "repositoryId",
+            "revision",
+            "path",
+            "content"
+          ],
+          "properties": {
+            "operation": { "const": "write_file" },
+            "taskId": { "type": "string", "minLength": 1 },
+            "repositoryId": { "type": "string", "minLength": 1 },
+            "revision": { "type": "string", "minLength": 1 },
+            "path": { "type": "string", "minLength": 1 },
+            "content": { "type": "string" },
+            "expectedDigest": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation",
+            "taskId",
+            "repositoryId",
+            "revision",
+            "path",
+            "patches"
+          ],
+          "properties": {
+            "operation": { "const": "patch_file" },
+            "taskId": { "type": "string", "minLength": 1 },
+            "repositoryId": { "type": "string", "minLength": 1 },
+            "revision": { "type": "string", "minLength": 1 },
+            "path": { "type": "string", "minLength": 1 },
+            "patches": { "type": "array", "minItems": 1 },
+            "expectedDigest": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation",
+            "taskId",
+            "repositoryId",
+            "revision",
+            "path"
+          ],
+          "properties": {
+            "operation": { "const": "delete_file" },
+            "taskId": { "type": "string", "minLength": 1 },
+            "repositoryId": { "type": "string", "minLength": 1 },
+            "revision": { "type": "string", "minLength": 1 },
+            "path": { "type": "string", "minLength": 1 },
+            "expectedDigest": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation",
+            "taskId",
+            "repositoryId",
+            "revision",
+            "command",
+            "cwd",
+            "changedFiles"
+          ],
+          "properties": {
+            "operation": { "const": "test" },
+            "taskId": { "type": "string", "minLength": 1 },
+            "repositoryId": { "type": "string", "minLength": 1 },
+            "revision": { "type": "string", "minLength": 1 },
+            "command": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "cwd": { "type": "string", "minLength": 1 },
+            "changedFiles": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      ]
+    }
+  },
   "properties": {
     "protocol": { "const": "conclave.protocol" },
     "version": {

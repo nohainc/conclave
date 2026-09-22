@@ -56,4 +56,28 @@ void main() {
     expect(parsed.messageType, equals('TaskRequest'));
     expect(parsed.payload['taskId'], equals('task-1'));
   });
+
+  test('validates a canonical runtime operation request', () {
+    final runtime = ProtocolEnvelope.parse({
+      ...message,
+      'messageType': 'RuntimeOperationRequest',
+      'payload': {
+        'operation': 'test',
+        'taskId': 'task-runtime',
+        'repositoryId': 'repo-1',
+        'revision': 'HEAD',
+        'command': ['pnpm', 'test'],
+        'cwd': '.',
+        'changedFiles': ['lib/add.js'],
+      },
+    });
+    expect(RuntimeOperationRequest.parse(runtime).operation, equals('test'));
+    expect(
+      () => RuntimeOperationRequest.parse(ProtocolEnvelope.parse({
+        ...runtime.toJson(),
+        'payload': {...runtime.payload, 'operation': 'unknown'},
+      })),
+      throwsA(isA<ProtocolException>()),
+    );
+  });
 }

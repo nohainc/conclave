@@ -115,6 +115,72 @@ const taskRequestPayload = z
   })
   .strict();
 
+const runtimeOperationPayload = z.discriminatedUnion("operation", [
+  z
+    .object({
+      operation: z.literal("search"),
+      taskId: id,
+      repositoryId: id,
+      revision: nonEmpty,
+      query: nonEmpty,
+      path: nonEmpty,
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("write_file"),
+      taskId: id,
+      repositoryId: id,
+      revision: nonEmpty,
+      path: nonEmpty,
+      content: z.string(),
+      expectedDigest: id.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("patch_file"),
+      taskId: id,
+      repositoryId: id,
+      revision: nonEmpty,
+      path: nonEmpty,
+      patches: z
+        .array(
+          z
+            .object({
+              oldText: z.string(),
+              newText: z.string(),
+              maxReplacements: z.number().int().min(1).optional(),
+            })
+            .strict(),
+        )
+        .min(1),
+      expectedDigest: id.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("delete_file"),
+      taskId: id,
+      repositoryId: id,
+      revision: nonEmpty,
+      path: nonEmpty,
+      expectedDigest: id.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("test"),
+      taskId: id,
+      repositoryId: id,
+      revision: nonEmpty,
+      command: z.array(nonEmpty).min(1),
+      cwd: nonEmpty,
+      changedFiles: z.array(nonEmpty),
+    })
+    .strict(),
+]);
+
 const taskResultPayload = z
   .object({
     taskId: id,
@@ -328,6 +394,10 @@ const completionResultPayload = z
 export const PlanRequestSchema = message("PlanRequest", planRequestPayload);
 export const PlanResultSchema = message("PlanResult", planResultPayload);
 export const TaskRequestSchema = message("TaskRequest", taskRequestPayload);
+export const RuntimeOperationRequestSchema = message(
+  "RuntimeOperationRequest",
+  runtimeOperationPayload,
+);
 export const TaskResultSchema = message("TaskResult", taskResultPayload);
 export const ResearchResultSchema = message(
   "ResearchResult",
@@ -368,6 +438,7 @@ export const ModelResultSchema = z.discriminatedUnion("messageType", [
 export const ProtocolMessageSchema = z.discriminatedUnion("messageType", [
   PlanRequestSchema,
   TaskRequestSchema,
+  RuntimeOperationRequestSchema,
   PlanResultSchema,
   TaskResultSchema,
   ResearchResultSchema,
@@ -382,6 +453,10 @@ export const ProtocolMessageSchema = z.discriminatedUnion("messageType", [
 export type PlanRequest = z.infer<typeof PlanRequestSchema>;
 export type PlanResult = z.infer<typeof PlanResultSchema>;
 export type TaskRequest = z.infer<typeof TaskRequestSchema>;
+export type RuntimeOperationRequest = z.infer<
+  typeof RuntimeOperationRequestSchema
+>;
+export type RuntimeOperationPayload = z.infer<typeof runtimeOperationPayload>;
 export type TaskResult = z.infer<typeof TaskResultSchema>;
 export type ResearchResult = z.infer<typeof ResearchResultSchema>;
 export type ImplementationResult = z.infer<typeof ImplementationResultSchema>;
@@ -442,6 +517,14 @@ export function parsePlanRequest(input: unknown): PlanRequest {
 
 export function parseTaskRequest(input: unknown): TaskRequest {
   const parsed = TaskRequestSchema.parse(input);
+  assertCompatibleProtocolVersion(parsed.version);
+  return parsed;
+}
+
+export function parseRuntimeOperationRequest(
+  input: unknown,
+): RuntimeOperationRequest {
+  const parsed = RuntimeOperationRequestSchema.parse(input);
   assertCompatibleProtocolVersion(parsed.version);
   return parsed;
 }

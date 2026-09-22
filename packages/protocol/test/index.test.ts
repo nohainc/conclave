@@ -8,6 +8,7 @@ import {
   parseModelResult,
   parsePlanRequest,
   parseProtocolMessage,
+  parseRuntimeOperationRequest,
   PROTOCOL_NAME,
   PROTOCOL_VERSION,
   ReviewResultSchema,
@@ -208,6 +209,28 @@ describe("versioned protocol contracts", () => {
     const parsed = parseProtocolMessage(canonicalTaskRequest);
     expect(parsed.messageType).toBe("TaskRequest");
     expect(parsed.payload.taskId).toBe("task-1");
+  });
+
+  it("validates each runtime operation payload discriminator", () => {
+    const runtime = parseRuntimeOperationRequest({
+      ...envelope,
+      messageType: "RuntimeOperationRequest",
+      payload: {
+        operation: "patch_file",
+        taskId: "task-runtime",
+        repositoryId: "repo-1",
+        revision: "HEAD",
+        path: "lib/add.js",
+        patches: [{ oldText: "a - b", newText: "a + b" }],
+      },
+    });
+    expect(runtime.payload.operation).toBe("patch_file");
+    expect(() =>
+      parseRuntimeOperationRequest({
+        ...runtime,
+        payload: { ...runtime.payload, operation: "shell" },
+      }),
+    ).toThrow();
   });
 
   it("requires executable operations for successful implementations", () => {
