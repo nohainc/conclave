@@ -20,13 +20,14 @@ Set<PluginPermission> _configuredPermissions() {
       .toSet();
 }
 
-Future<List<int>> _downloadPlugin(
-  Uri cloudUri,
-  String? authToken,
-  String pluginId,
-  String version,
-  String packageR2Key,
-) async {
+Future<List<int>> downloadPluginPackage(Uri cloudUri, String? authToken,
+    String pluginId, String version, String packageR2Key,
+    {int maxPackageBytes = 512 * 1024 * 1024,
+    Duration timeout = const Duration(seconds: 30)}) async {
+  if (maxPackageBytes <= 0) {
+    throw ArgumentError.value(
+        maxPackageBytes, 'maxPackageBytes', 'must be positive');
+  }
   final scheme = cloudUri.scheme == 'wss' ? 'https' : 'http';
   final uri = cloudUri.replace(
     scheme: scheme,
@@ -42,19 +43,28 @@ Future<List<int>> _downloadPlugin(
   );
   final client = HttpClient();
   try {
-    final request = await client.getUrl(uri);
+    client.connectionTimeout = timeout;
+    final request = await client.getUrl(uri).timeout(timeout);
     if (authToken != null) {
       request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
     }
-    final response = await request.close();
-    final bytes = await response.fold<List<int>>(
-      <int>[],
-      (buffer, chunk) => buffer..addAll(chunk),
-    );
+    final response = await request.close().timeout(timeout);
     if (response.statusCode != HttpStatus.ok) {
       throw StateError(
         'plugin download failed with HTTP ${response.statusCode}',
       );
+    }
+    if (response.contentLength > maxPackageBytes) {
+      throw StateError(
+          'plugin package exceeds the $maxPackageBytes byte package limit');
+    }
+    final bytes = <int>[];
+    await for (final chunk in response.timeout(timeout)) {
+      if (bytes.length + chunk.length > maxPackageBytes) {
+        throw StateError(
+            'plugin package exceeds the $maxPackageBytes byte package limit');
+      }
+      bytes.addAll(chunk);
     }
     return bytes;
   } finally {
@@ -110,7 +120,8 @@ Future<void> main(List<String> args) async {
             try {
               await pluginManager.reconcile(
                 desired,
-                download: (pluginId, version, packageR2Key) => _downloadPlugin(
+                download: (pluginId, version, packageR2Key) =>
+                    downloadPluginPackage(
                   config.cloudUri!,
                   config.authToken,
                   pluginId,
