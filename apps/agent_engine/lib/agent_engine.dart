@@ -73,8 +73,13 @@ class AgentEngineConfig {
 }
 
 class AgentEngineLogger {
-  AgentEngineLogger(this._output);
-  final IOSink _output;
+  AgentEngineLogger(this._output, {this.redact = _identity});
+  IOSink _output;
+  final String Function(String) redact;
+
+  static String _identity(String value) => value;
+
+  void attach(IOSink output) => _output = output;
 
   void info(String message, [Map<String, Object?> details = const {}]) {
     final record = <String, Object?>{
@@ -83,7 +88,7 @@ class AgentEngineLogger {
       'message': message,
       if (details.isNotEmpty) 'details': details,
     };
-    _output.writeln(jsonEncode(record));
+    _output.writeln(redact(jsonEncode(record)));
   }
 }
 
@@ -93,12 +98,24 @@ class AgentEngine {
     IOSink? logOutput,
     this.cloudConnection,
     this.statusProvider,
-  }) : _log = AgentEngineLogger(logOutput ?? stdout);
+    String Function(String)? redactLog,
+    this.logFileMaxBytes = 1024 * 1024,
+  })  : _configuredLogOutput = logOutput,
+        _log = AgentEngineLogger(logOutput ?? stdout,
+            redact: redactLog ?? AgentEngineLogger._identity) {
+    if (logFileMaxBytes <= 0) {
+      throw ArgumentError.value(
+          logFileMaxBytes, 'logFileMaxBytes', 'must be positive');
+    }
+  }
 
   final AgentEngineConfig config;
   final AgentCloudConnection? cloudConnection;
   final AgentEngineStatusProvider? statusProvider;
+  final IOSink? _configuredLogOutput;
+  final int logFileMaxBytes;
   final AgentEngineLogger _log;
+  IOSink? _ownedLogOutput;
   RandomAccessFile? _lock;
   LocalIpcServer? _ipc;
   bool _running = false;
@@ -128,6 +145,10 @@ class AgentEngine {
     if (_running) return;
     await config.dataDirectory.create(recursive: true);
     await _restrictPermissions(config.dataDirectory.path, directory: true);
+    if (_configuredLogOutput == null) {
+      _ownedLogOutput = await _openLogFile();
+      _log.attach(_ownedLogOutput!);
+    }
     final lockFile = File('${config.dataDirectory.path}/engine.lock');
     try {
       _lock = await lockFile.open(mode: FileMode.writeOnlyAppend);
@@ -189,6 +210,25 @@ class AgentEngine {
     await _lock?.close();
     _lock = null;
     _log.info('Agent Engine stopped');
+    await _ownedLogOutput?.flush();
+    await _ownedLogOutput?.close();
+    _ownedLogOutput = null;
+    if (_configuredLogOutput == null) _log.attach(stdout);
+  }
+
+  Future<IOSink> _openLogFile() async {
+    final logsDirectory = Directory('${config.dataDirectory.path}/logs');
+    await logsDirectory.create(recursive: true);
+    await _restrictPermissions(logsDirectory.path, directory: true);
+    final current = File('${logsDirectory.path}/agent-engine.log');
+    if (await current.exists() && await current.length() >= logFileMaxBytes) {
+      final previous = File('${logsDirectory.path}/agent-engine.log.1');
+      if (await previous.exists()) await previous.delete();
+      await current.rename(previous.path);
+    }
+    final output = current.openWrite(mode: FileMode.append);
+    await _restrictPermissions(current.path);
+    return output;
   }
 
   String _newIpcToken() => base64UrlEncode(
