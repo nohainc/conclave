@@ -79,6 +79,7 @@ class AssignmentJournal {
   Future<Map<String, AssignmentRecord>> reconcile() async {
     if (!await file.exists()) return {};
     final records = <String, AssignmentRecord>{};
+    final history = <String, List<_JournalEntry>>{};
     final lines = await file.readAsLines();
     for (var index = 0; index < lines.length; index++) {
       final line = lines[index];
@@ -87,6 +88,9 @@ class AssignmentJournal {
         final record = AssignmentRecord.fromJson(
           Map<String, Object?>.from(jsonDecode(line) as Map),
         );
+        history
+            .putIfAbsent(record.assignmentId, () => [])
+            .add(_JournalEntry(index, record));
         final previous = records[record.assignmentId];
         if (previous == null ||
             record.updatedAt.isAfter(previous.updatedAt) ||
@@ -101,6 +105,74 @@ class AssignmentJournal {
         // remains fatal so durable state is not silently discarded.
       }
     }
+    for (final entries in history.values) {
+      entries.sort((left, right) {
+        final timestamp =
+            left.record.updatedAt.compareTo(right.record.updatedAt);
+        return timestamp == 0 ? left.index.compareTo(right.index) : timestamp;
+      });
+      for (var index = 1; index < entries.length; index++) {
+        final previous = entries[index - 1].record.status;
+        final next = entries[index].record.status;
+        if (!_canTransition(previous, next)) {
+          throw FormatException(
+            'invalid assignment transition: ${previous.name} -> ${next.name}',
+          );
+        }
+      }
+    }
     return records;
   }
+}
+
+class _JournalEntry {
+  const _JournalEntry(this.index, this.record);
+  final int index;
+  final AssignmentRecord record;
+}
+
+bool _canTransition(AssignmentStatus previous, AssignmentStatus next) {
+  if (previous == next) return true;
+  return switch (previous) {
+    AssignmentStatus.received => {
+        AssignmentStatus.accepted,
+        AssignmentStatus.running,
+        AssignmentStatus.cancelling,
+        AssignmentStatus.cancelled,
+        AssignmentStatus.interrupted,
+      }.contains(next),
+    AssignmentStatus.accepted => {
+        AssignmentStatus.running,
+        AssignmentStatus.cancelling,
+        AssignmentStatus.cancelled,
+        AssignmentStatus.interrupted,
+      }.contains(next),
+    AssignmentStatus.running => {
+        AssignmentStatus.cancelling,
+        AssignmentStatus.completed,
+        AssignmentStatus.failed,
+        AssignmentStatus.cancelled,
+        AssignmentStatus.interrupted,
+        AssignmentStatus.resultPendingUpload,
+      }.contains(next),
+    AssignmentStatus.cancelling => {
+        AssignmentStatus.cancelled,
+        AssignmentStatus.failed,
+        AssignmentStatus.interrupted,
+      }.contains(next),
+    AssignmentStatus.interrupted => {
+        AssignmentStatus.resultPendingUpload,
+        AssignmentStatus.reconciled,
+      }.contains(next),
+    AssignmentStatus.resultPendingUpload => {
+        AssignmentStatus.completed,
+        AssignmentStatus.failed,
+        AssignmentStatus.reconciled,
+      }.contains(next),
+    AssignmentStatus.completed ||
+    AssignmentStatus.failed ||
+    AssignmentStatus.cancelled =>
+      next == AssignmentStatus.reconciled,
+    AssignmentStatus.reconciled => false,
+  };
 }

@@ -95,4 +95,22 @@ void main() {
         AssignmentStatus.completed);
     await directory.delete(recursive: true);
   });
+
+  test('rejects a transition from a terminal state back to running', () async {
+    final directory = await Directory.systemTemp.createTemp('journal-');
+    final file = File('${directory.path}/assignments.jsonl');
+    final journal = AssignmentJournal(file);
+    await journal.append(AssignmentRecord(
+      assignmentId: 'assignment-1',
+      status: AssignmentStatus.completed,
+      updatedAt: DateTime.utc(2026, 1, 1),
+    ));
+    await journal.append(AssignmentRecord(
+      assignmentId: 'assignment-1',
+      status: AssignmentStatus.running,
+      updatedAt: DateTime.utc(2026, 1, 1, 0, 0, 1),
+    ));
+    await expectLater(journal.reconcile(), throwsFormatException);
+    await directory.delete(recursive: true);
+  });
 }
