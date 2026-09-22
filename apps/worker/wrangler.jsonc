@@ -16,7 +16,7 @@
       "binding": "CONCLAVE_DB",
       "database_name": "conclave-development",
       "database_id": "local",
-      "migrations_dir": "migrations",
+      "migrations_dir": "migrations-v4",
     },
   ],
   "r2_buckets": [
