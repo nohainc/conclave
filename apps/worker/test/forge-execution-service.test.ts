@@ -72,7 +72,21 @@ class MemoryD1 {
         return { record_json: record } as T;
       },
       all: async <T>() => ({ results: [] as readonly T[] }),
-      run: async () => ({ success: true as const }),
+      run: async () => {
+        if (query.includes("INSERT INTO forge_executions")) {
+          this.records.set(
+            String(values[0]),
+            JSON.stringify({
+              executionId: String(values[0]),
+              runId: String(values[1]),
+              workspaceId: values[2] ?? null,
+              status: String(values[3]),
+              updatedAt: String(values[4]),
+            }),
+          );
+        }
+        return { success: true as const };
+      },
     };
     return statement;
   }
@@ -199,7 +213,7 @@ describe("durable Forge execution service", () => {
         method: "POST",
         body: JSON.stringify({ runId: "run-1" }),
       }),
-      {} as ExecutionContext,
+      { waitUntil: () => undefined } as unknown as ExecutionContext,
     );
     expect(response.status).toBe(202);
     await expect(response.json()).resolves.toMatchObject({
@@ -207,5 +221,23 @@ describe("durable Forge execution service", () => {
       runId: "run-1",
       status: "started",
     });
+  });
+
+  it("accepts direct Agent Gateway execution without an internal HTTP API", async () => {
+    const db = new MemoryD1();
+    const gateway = {} as DurableObjectNamespace;
+    const response = await new ConclaveForgeExecutionService({
+      CONCLAVE_DB: db,
+      CONCLAVE_ARTIFACTS: {} as R2Bucket,
+      CONCLAVE_AGENT_GATEWAY: gateway,
+    }).fetch(
+      new Request("https://conclave.internal/execute", {
+        method: "POST",
+        body: JSON.stringify({ runId: "run-1" }),
+      }),
+      { waitUntil: () => undefined } as unknown as ExecutionContext,
+    );
+
+    expect(response.status).toBe(202);
   });
 });

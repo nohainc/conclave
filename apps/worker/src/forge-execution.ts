@@ -1248,9 +1248,13 @@ export class ConclaveForgeExecutionService {
     const runId = String(params.runId ?? "");
     let resultArtifactId: string;
     try {
-      if (!this.env.CONCLAVE_API && !this.env.CONCLAVE_API_BASE_URL) {
+      if (
+        !this.env.CONCLAVE_API &&
+        !this.env.CONCLAVE_API_BASE_URL &&
+        !this.env.CONCLAVE_AGENT_GATEWAY
+      ) {
         throw new Error(
-          "CONCLAVE_API or CONCLAVE_API_BASE_URL is not configured",
+          "CONCLAVE_AGENT_GATEWAY, CONCLAVE_API, or CONCLAVE_API_BASE_URL is not configured",
         );
       }
       resultArtifactId = await executeForgeService(
