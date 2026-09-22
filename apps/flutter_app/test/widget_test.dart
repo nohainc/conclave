@@ -97,7 +97,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Agents'));
     await tester.pumpAndSettle();
-    expect(find.text('Vitalii MacBook'), findsOneWidget);
+    expect(find.text('Development Agent'), findsOneWidget);
     expect(find.text('3 plugins'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.menu_rounded));

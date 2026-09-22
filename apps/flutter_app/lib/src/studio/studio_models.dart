@@ -928,8 +928,8 @@ class StudioSnapshot {
         agents: [
           StudioAgent(
             id: 'agent-macbook',
-            name: 'Vitalii MacBook',
-            hostname: 'vitalii-macbook.local',
+            name: 'Development Agent',
+            hostname: 'development-agent.local',
             status: 'ONLINE',
             version: '1.5.0',
             pluginCount: 3,
