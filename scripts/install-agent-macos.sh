@@ -50,6 +50,20 @@ done
   echo "Agent Engine executable does not exist: $engine" >&2
   exit 1
 }
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]] || {
+  echo "Invalid Agent version: $version" >&2
+  exit 2
+}
+
+xml_escape() {
+  local value="$1"
+  value="${value//&/&amp;}"
+  value="${value//</&lt;}"
+  value="${value//>/&gt;}"
+  value="${value//\"/&quot;}"
+  value="${value//\'/&apos;}"
+  printf '%s' "$value"
+}
 
 support_dir="${HOME}/Library/Application Support/Conclave AX"
 app_destination="${HOME}/Applications/Conclave AX.app"
@@ -58,6 +72,10 @@ label="com.conclaveax.agent-engine"
 plist="${launch_agents}/${label}.plist"
 engine_destination="${support_dir}/bin/conclave_agent_engine"
 log_dir="${support_dir}/logs"
+
+escaped_engine_destination="$(xml_escape "$engine_destination")"
+escaped_version="$(xml_escape "$version")"
+escaped_log_dir="$(xml_escape "$log_dir")"
 
 mkdir -p "${HOME}/Applications" "$support_dir/bin" "$log_dir" "$launch_agents"
 rm -rf "$app_destination"
@@ -77,7 +95,7 @@ cat > "$plist" <<EOF
   <string>${label}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${engine_destination}</string>
+    <string>${escaped_engine_destination}</string>
   </array>
   <key>RunAtLoad</key>
   <true/>
@@ -86,12 +104,12 @@ cat > "$plist" <<EOF
   <key>EnvironmentVariables</key>
   <dict>
     <key>CONCLAVE_AGENT_VERSION</key>
-    <string>${version}</string>
+    <string>${escaped_version}</string>
   </dict>
   <key>StandardOutPath</key>
-  <string>${log_dir}/engine.out.log</string>
+    <string>${escaped_log_dir}/engine.out.log</string>
   <key>StandardErrorPath</key>
-  <string>${log_dir}/engine.err.log</string>
+    <string>${escaped_log_dir}/engine.err.log</string>
 </dict>
 </plist>
 EOF
