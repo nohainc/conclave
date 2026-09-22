@@ -73,6 +73,6 @@ for (const field of [
     throw new Error(`Dart binding is missing ${field}`);
   }
 }
-console.log(
+globalThis.console.log(
   "Protocol schema, fixture, TypeScript, and Dart bindings are aligned.",
 );

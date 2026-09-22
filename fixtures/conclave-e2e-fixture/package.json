@@ -2,5 +2,7 @@
   "name": "conclave-e2e-fixture",
   "private": true,
   "type": "module",
-  "scripts": {"test": "node --test"}
+  "scripts": {
+    "test": "node --test"
+  }
 }
