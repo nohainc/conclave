@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'credential_backend.dart';
+
 /// OS-backed storage for credentials used by the Agent Engine.
 abstract interface class SecureCredentialStore {
   String? readSync(String key);
@@ -19,7 +21,7 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
   @override
   String? readSync(String key) {
     if (key.isEmpty) return null;
-    final command = _readCommand(key);
+    final command = currentCredentialBackend.read(service, key);
     if (command == null) return null;
     try {
       final result = Process.runSync(command.executable, command.arguments);
@@ -39,7 +41,7 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
     if (key.isEmpty || value.isEmpty) {
       throw ArgumentError('credential key and value are required');
     }
-    final command = _writeCommand(key);
+    final command = currentCredentialBackend.write(service, key);
     if (command == null) {
       throw UnsupportedError(
           'OS secure credential storage is unavailable on ${Platform.operatingSystem}');
@@ -56,7 +58,7 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
   @override
   Future<void> delete(String key) async {
     if (key.isEmpty) return;
-    final command = _deleteCommand(key);
+    final command = currentCredentialBackend.delete(service, key);
     if (command == null) return;
     final result = await Process.run(command.executable, command.arguments);
     // Deleting a missing credential is idempotent. Other failures are not.
@@ -65,63 +67,4 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
       throw StateError('OS secure credential storage rejected the delete');
     }
   }
-
-  _SecureCommand? _readCommand(String key) {
-    return switch (Platform.operatingSystem) {
-      'macos' => _SecureCommand(
-          'security',
-          ['find-generic-password', '-a', key, '-s', service, '-w'],
-        ),
-      'linux' => _SecureCommand(
-          'secret-tool',
-          ['lookup', 'service', service, 'account', key],
-        ),
-      _ => null,
-    };
-  }
-
-  _SecureCommand? _writeCommand(String key) {
-    return switch (Platform.operatingSystem) {
-      'macos' => _SecureCommand(
-          'security',
-          [
-            'add-generic-password',
-            '-a',
-            key,
-            '-s',
-            service,
-            '-U',
-            // With -w as the final option, security prompts on stdin rather
-            // than exposing the credential in the process argument list.
-            '-w',
-          ],
-        ),
-      'linux' => _SecureCommand(
-          'secret-tool',
-          ['store', '--label', service, 'service', service, 'account', key],
-        ),
-      _ => null,
-    };
-  }
-
-  _SecureCommand? _deleteCommand(String key) {
-    return switch (Platform.operatingSystem) {
-      'macos' => _SecureCommand(
-          'security',
-          ['delete-generic-password', '-a', key, '-s', service],
-        ),
-      'linux' => _SecureCommand(
-          'secret-tool',
-          ['clear', 'service', service, 'account', key],
-        ),
-      _ => null,
-    };
-  }
-}
-
-class _SecureCommand {
-  const _SecureCommand(this.executable, this.arguments);
-
-  final String executable;
-  final List<String> arguments;
 }

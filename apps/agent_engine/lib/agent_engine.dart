@@ -7,6 +7,7 @@ import 'cloud_connection.dart';
 import 'agent_configuration.dart';
 import 'local_ipc.dart';
 import 'secure_credentials.dart';
+import 'platform_runtime.dart';
 
 typedef AgentEngineStatusProvider = Future<Map<String, Object?>> Function();
 typedef AgentEngineUpdateHandler = Future<Map<String, Object?>> Function(
@@ -47,7 +48,7 @@ class AgentEngineConfig {
         ? args[index + 1]
         : Platform.environment['CONCLAVE_AGENT_DATA_DIR'];
     final dataDirectory = Directory(path ??
-        '${Platform.environment['HOME'] ?? Directory.current.path}/.conclave-agent');
+        '${currentPlatformRuntime.homeDirectory}${Platform.pathSeparator}.conclave-agent');
     final registration = AgentRegistrationStore(dataDirectory).readSync();
     final cloudUrl = cloudIndex >= 0 && cloudIndex + 1 < args.length
         ? args[cloudIndex + 1]
@@ -154,8 +155,7 @@ class AgentEngine {
   RandomAccessFile? _lock;
   LocalIpcServer? _ipc;
   bool _running = false;
-  StreamSubscription<ProcessSignal>? _sigint;
-  StreamSubscription<ProcessSignal>? _sigterm;
+  final List<StreamSubscription<ProcessSignal>> _signalSubscriptions = [];
 
   bool get isRunning => _running;
   int? get ipcPort => _ipc?.port;
@@ -210,7 +210,10 @@ class AgentEngine {
   Future<void> start() async {
     if (_running) return;
     await config.dataDirectory.create(recursive: true);
-    await _restrictPermissions(config.dataDirectory.path, directory: true);
+    await currentPlatformRuntime.restrictPermissions(
+      config.dataDirectory.path,
+      directory: true,
+    );
     if (_configuredLogOutput == null) {
       _ownedLogOutput = await _openLogFile();
       _log.attach(_ownedLogOutput!);
@@ -242,12 +245,12 @@ class AgentEngine {
       jsonEncode({'port': _ipc!.port, 'token': token}),
       flush: true,
     );
-    await _restrictPermissions(ipcFile.path);
+    await currentPlatformRuntime.restrictPermissions(ipcFile.path,
+        directory: false);
     _running = true;
-    _sigint = ProcessSignal.sigint.watch().listen((_) => unawaited(stop()));
-    if (!Platform.isWindows) {
-      _sigterm = ProcessSignal.sigterm.watch().listen((_) => unawaited(stop()));
-    }
+    _signalSubscriptions.addAll(
+      currentPlatformRuntime.watchTermination(() => unawaited(stop())),
+    );
     try {
       await cloudConnection?.connect();
     } on Object {
@@ -261,8 +264,10 @@ class AgentEngine {
   Future<void> stop() async {
     if (!_running) return;
     _running = false;
-    await _sigint?.cancel();
-    await _sigterm?.cancel();
+    for (final subscription in _signalSubscriptions) {
+      await subscription.cancel();
+    }
+    _signalSubscriptions.clear();
     await cloudConnection?.close();
     await _ipc?.close();
     _ipc = null;
@@ -287,7 +292,8 @@ class AgentEngine {
   Future<IOSink> _openLogFile() async {
     final logsDirectory = Directory('${config.dataDirectory.path}/logs');
     await logsDirectory.create(recursive: true);
-    await _restrictPermissions(logsDirectory.path, directory: true);
+    await currentPlatformRuntime.restrictPermissions(logsDirectory.path,
+        directory: true);
     final current = File('${logsDirectory.path}/agent-engine.log');
     if (await current.exists() && await current.length() >= logFileMaxBytes) {
       final previous = File('${logsDirectory.path}/agent-engine.log.1');
@@ -296,23 +302,12 @@ class AgentEngine {
     }
     _logFile = current;
     final output = current.openWrite(mode: FileMode.append);
-    await _restrictPermissions(current.path);
+    await currentPlatformRuntime.restrictPermissions(current.path,
+        directory: false);
     return output;
   }
 
   String _newIpcToken() => base64UrlEncode(
         List<int>.generate(32, (_) => Random.secure().nextInt(256)),
       );
-
-  Future<void> _restrictPermissions(String path,
-      {bool directory = false}) async {
-    if (Platform.isWindows) return;
-    final result = await Process.run(
-      'chmod',
-      [directory ? '700' : '600', path],
-    );
-    if (result.exitCode != 0) {
-      throw StateError('failed to restrict permissions for $path');
-    }
-  }
 }

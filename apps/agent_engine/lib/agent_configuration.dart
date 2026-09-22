@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'platform_runtime.dart';
+
 class AgentRegistration {
   const AgentRegistration({
     required this.agentId,
@@ -44,11 +46,13 @@ class AgentRegistration {
 }
 
 class AgentRegistrationStore {
-  const AgentRegistrationStore(this.dataDirectory);
+  const AgentRegistrationStore(this.dataDirectory, {this.platform});
 
   final Directory dataDirectory;
+  final PlatformRuntime? platform;
 
-  File get file => File('${dataDirectory.path}/agent-config.json');
+  File get file =>
+      File('${dataDirectory.path}${Platform.pathSeparator}agent-config.json');
 
   AgentRegistration? readSync() {
     if (!file.existsSync()) return null;
@@ -65,6 +69,7 @@ class AgentRegistrationStore {
   Future<void> write(AgentRegistration registration) async {
     await dataDirectory.create(recursive: true);
     await file.writeAsString(jsonEncode(registration.toJson()), flush: true);
-    await Process.run('chmod', ['600', file.path]);
+    await (platform ?? currentPlatformRuntime)
+        .restrictPermissions(file.path, directory: false);
   }
 }
