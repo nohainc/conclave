@@ -1,6 +1,8 @@
 import 'package:conclave_app/src/studio/studio_data.dart';
 import 'package:conclave_app/src/studio/studio_models.dart';
 
+import 'demo_snapshot.dart';
+
 /// Test-only fixture source. Production Studio always uses StudioApiClient.
 class DemoStudioDataSource implements StudioDataSource {
   const DemoStudioDataSource();
@@ -19,7 +21,7 @@ class DemoStudioDataSource implements StudioDataSource {
   @override
   Future<StudioSnapshot> loadSnapshot(
           {String? projectId, String? workspaceId}) async =>
-      StudioSnapshot.demo();
+      demoStudioSnapshot();
 
   @override
   Future<void> controlRun(String runId, String command) async {}
