@@ -1299,6 +1299,9 @@ class StudioSnapshot {
 
   StudioSnapshot copyWith({
     List<StudioProject>? projects,
+    List<StudioAgent>? agents,
+    List<StudioWorker>? workers,
+    List<StudioCredentialProfile>? accounts,
     String? activeChatId,
   }) =>
       StudioSnapshot(
@@ -1308,8 +1311,8 @@ class StudioSnapshot {
         activeChatId: activeChatId ?? this.activeChatId,
         run: run,
         projects: projects ?? this.projects,
-        workers: workers,
-        agents: agents,
+        workers: workers ?? this.workers,
+        agents: agents ?? this.agents,
         plugins: plugins,
         tasks: tasks,
         findings: findings,
@@ -1319,7 +1322,7 @@ class StudioSnapshot {
         policy: policy,
         candidateOutputs: candidateOutputs,
         synthesisDecision: synthesisDecision,
-        accounts: accounts,
+        accounts: accounts ?? this.accounts,
         usageReport: usageReport,
       );
 

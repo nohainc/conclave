@@ -50,6 +50,11 @@ abstract interface class StudioDataSource {
   Future<void> deletePasskey(String id);
   Future<void> signInWithPasskey();
   Future<List<StudioWorkspace>> loadWorkspaces();
+  Future<List<StudioProject>> loadProjects();
+  Future<List<StudioAgent>> loadHosts({required String workspaceId});
+  Future<List<StudioWorker>> loadWorkers({required String workspaceId});
+  Future<List<StudioCredentialProfile>> loadCredentialProfiles(
+      {required String workspaceId});
   Future<StudioWorkspace> updateWorkspace({
     required String workspaceId,
     required String name,
@@ -229,6 +234,69 @@ class StudioApiClient implements StudioDataSource {
         if (activeWorkspaceId != null)
           'x-conclave-workspace-id': activeWorkspaceId!,
       };
+
+  Future<Map<String, dynamic>> _getJson(Uri uri) async {
+    final response = await client.get(uri, headers: _headers());
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+        'Read model failed for ${uri.path} (${response.statusCode})',
+        statusCode: response.statusCode,
+      );
+    }
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map) {
+      throw const StudioApiException('Read model response is malformed');
+    }
+    return Map<String, dynamic>.from(decoded);
+  }
+
+  @override
+  Future<List<StudioProject>> loadProjects() async {
+    final body = await _getJson(Uri.parse('$baseUrl/projects'));
+    return (body['projects'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) => StudioProject.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
+  @override
+  Future<List<StudioAgent>> loadHosts({required String workspaceId}) async {
+    final body =
+        await _getJson(Uri.parse('$baseUrl/workspaces/$workspaceId/hosts'));
+    return (body['hosts'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) => StudioAgent.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
+  @override
+  Future<List<StudioWorker>> loadWorkers({required String workspaceId}) async {
+    final body =
+        await _getJson(Uri.parse('$baseUrl/workspaces/$workspaceId/workers'));
+    return (body['workers'] as List? ?? const []).whereType<Map>().map((item) {
+      final value = Map<String, dynamic>.from(item);
+      return StudioWorker.fromJson({
+        ...value,
+        'name': value['displayName'] ?? value['name'] ?? '',
+        'version': value['latestVersion'] ?? value['version'] ?? '—',
+        'roles': value['roles'] ?? const [],
+        'capabilities': value['capabilities'] ?? const [],
+        'status': value['status'] ?? 'available',
+      });
+    }).toList();
+  }
+
+  @override
+  Future<List<StudioCredentialProfile>> loadCredentialProfiles(
+      {required String workspaceId}) async {
+    final body =
+        await _getJson(Uri.parse('$baseUrl/workspaces/$workspaceId/accounts'));
+    return (body['accounts'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) =>
+            StudioCredentialProfile.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
 
   @override
   Future<StudioSession> loadSession() async {

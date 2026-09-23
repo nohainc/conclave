@@ -12,6 +12,7 @@ class StudioStore {
         agents = AgentStore(dataSource),
         workers = WorkerStore(dataSource),
         plugins = PluginStore(dataSource),
+        accounts = AccountStore(dataSource),
         usage = UsageStore(dataSource);
 
   final StudioDataSource dataSource;
@@ -23,6 +24,7 @@ class StudioStore {
   final AgentStore agents;
   final WorkerStore workers;
   final PluginStore plugins;
+  final AccountStore accounts;
   final UsageStore usage;
 
   Future<StudioSnapshot> reload(
@@ -37,6 +39,7 @@ class StudioStore {
     agents.replace(snapshot.agents);
     workers.replace(snapshot.workers);
     plugins.replace(snapshot.plugins);
+    accounts.replace(snapshot.accounts);
     usage.replace(snapshot.run);
     return snapshot;
   }
@@ -48,6 +51,12 @@ class ProjectStore {
   List<StudioProject> items = const [];
 
   void replace(List<StudioProject> value) => items = List.unmodifiable(value);
+
+  Future<List<StudioProject>> refresh() async {
+    final value = await source.loadProjects();
+    replace(value);
+    return value;
+  }
 }
 
 class WorkspaceStore {
@@ -104,6 +113,12 @@ class AgentStore {
 
   void replace(List<StudioAgent> value) => items = List.unmodifiable(value);
 
+  Future<List<StudioAgent>> refresh(String workspaceId) async {
+    final value = await source.loadHosts(workspaceId: workspaceId);
+    replace(value);
+    return value;
+  }
+
   Future<void> revoke(String workspaceId, String agentId) =>
       source.revokeAgent(workspaceId: workspaceId, agentId: agentId);
 
@@ -133,6 +148,12 @@ class WorkerStore {
   List<StudioWorker> items = const [];
 
   void replace(List<StudioWorker> value) => items = List.unmodifiable(value);
+
+  Future<List<StudioWorker>> refresh(String workspaceId) async {
+    final value = await source.loadWorkers(workspaceId: workspaceId);
+    replace(value);
+    return value;
+  }
 
   Future<void> setEnabled(String workspaceId, String workerId, bool enabled,
           {String? hostId}) =>
@@ -183,6 +204,21 @@ class PluginStore {
   List<StudioPlugin> items = const [];
 
   void replace(List<StudioPlugin> value) => items = List.unmodifiable(value);
+}
+
+class AccountStore {
+  AccountStore(this.source);
+  final StudioDataSource source;
+  List<StudioCredentialProfile> items = const [];
+
+  void replace(List<StudioCredentialProfile> value) =>
+      items = List.unmodifiable(value);
+
+  Future<List<StudioCredentialProfile>> refresh(String workspaceId) async {
+    final value = await source.loadCredentialProfiles(workspaceId: workspaceId);
+    replace(value);
+    return value;
+  }
 }
 
 class UsageStore {

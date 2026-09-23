@@ -427,7 +427,53 @@ class _StudioAppState extends State<ConclaveAppShell> {
       }
     }
     _announceRealtimeProgress(event);
-    unawaited(_loadSnapshot(projectId: selectedProjectId, showSpinner: false));
+    unawaited(_refreshRealtimeFeatures(type is String ? type : ''));
+  }
+
+  Future<void> _refreshRealtimeFeatures(String type) async {
+    final workspaceId = activeWorkspaceId;
+    if (workspaceId == null || workspaceId.isEmpty) return;
+    try {
+      if (type.startsWith('host.') || type.startsWith('desired_state.')) {
+        final hosts = await store.agents.refresh(workspaceId);
+        if (!mounted) return;
+        setState(() => snapshot = snapshot.copyWith(agents: hosts));
+        return;
+      }
+      if (type.startsWith('worker.')) {
+        final workers = await store.workers.refresh(workspaceId);
+        if (!mounted) return;
+        setState(() => snapshot = snapshot.copyWith(workers: workers));
+        return;
+      }
+      if (type.startsWith('account.') || type.startsWith('credential.')) {
+        final accounts = await store.accounts.refresh(workspaceId);
+        if (!mounted) return;
+        setState(() => snapshot = snapshot.copyWith(accounts: accounts));
+        return;
+      }
+      if (type.startsWith('project.') || type.startsWith('chat.')) {
+        final projects = await store.projects.refresh();
+        if (!mounted) return;
+        store.chats
+            .replace(projects.expand((project) => project.chats).toList());
+        setState(() => snapshot = snapshot.copyWith(projects: projects));
+        return;
+      }
+      // Run/Task/Assignment events refresh only the focused execution read
+      // model. A reconnect gap still uses the full initial read model.
+      if (type.startsWith('run.') ||
+          type.startsWith('task.') ||
+          type.startsWith('attempt.') ||
+          type.startsWith('assignment.') ||
+          type.startsWith('artifact.') ||
+          type.startsWith('finding.') ||
+          type.startsWith('verification.')) {
+        await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
+      }
+    } catch (error) {
+      if (mounted) _showSnackBar('Live update refresh failed: $error');
+    }
   }
 
   void _recordNotification(Map<String, dynamic> event) {
