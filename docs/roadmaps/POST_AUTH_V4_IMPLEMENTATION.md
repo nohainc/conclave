@@ -1165,6 +1165,10 @@ Large outputs now use an authenticated Cloud artifact service backed by R2. Uplo
 
 Realtime Gateway connections now use bounded per-connection queues. Ephemeral progress and status frames are coalesced or dropped when stale, while durable and domain events remain recoverable through durable sequence cursors. If a connection cannot retain durable delivery, it receives a reconnect/resync signal instead of causing unbounded queue growth. Gateway metrics expose active App sockets, event rate, ephemeral drops and coalescing, reconnects, queue depth, and event-to-UI latency.
 
+## PA-16 — Notifications and background UX
+
+Conclave AX now keeps an in-app notification center for important Run completion, failure, and approval-required events. Notifications are retained in the current App session, show an unread badge without requesting browser permission, and link back to the relevant Run when its project context is available. Ephemeral progress remains a live status signal rather than a notification, and the event semantics remain suitable for a future mobile delivery adapter.
+
 # Delegation guidance
 
 For each phase, give the implementation AI this structure:

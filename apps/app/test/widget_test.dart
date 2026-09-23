@@ -199,4 +199,17 @@ void main() {
     expect(find.text('Conversation'), findsOneWidget);
     expect(find.text('Improve authentication architecture'), findsWidgets);
   });
+
+  testWidgets('opens the in-app notification center without browser permission',
+      (WidgetTester tester) async {
+    await tester
+        .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Notifications'));
+    await tester.pumpAndSettle();
+    expect(find.text('Notifications'), findsOneWidget);
+    expect(find.text('You are all caught up.'), findsOneWidget);
+    expect(find.text('Allow notifications'), findsNothing);
+  });
 }

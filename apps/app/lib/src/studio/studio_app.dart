@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../navigation/studio_browser_navigation.dart';
 import '../navigation/studio_navigation.dart';
+import '../notifications/notification_models.dart';
 import '../platform/platform_services.dart';
 import '../realtime/realtime_client.dart';
 import 'studio_models.dart';
@@ -54,6 +55,7 @@ class _StudioAppState extends State<StudioApp> {
   final revisionController = TextEditingController();
   final chatController = TextEditingController();
   final List<StudioChatMessage> localChatMessages = [];
+  final List<StudioNotification> notifications = [];
   late final StudioStore store;
   final navigatorKey = GlobalKey<NavigatorState>();
   final messengerKey = GlobalKey<ScaffoldMessengerState>();
@@ -98,6 +100,9 @@ class _StudioAppState extends State<StudioApp> {
       snapshot.workspaceId ??
       selectedWorkspaceId ??
       store.workspaces.activeWorkspaceId;
+
+  int get unreadNotificationCount =>
+      notifications.where((notification) => !notification.read).length;
 
   @override
   void initState() {
@@ -205,6 +210,7 @@ class _StudioAppState extends State<StudioApp> {
       return;
     }
     if (event['workspaceId'] != activeWorkspaceId) return;
+    _recordNotification(event);
     if (type is String && type.startsWith('typing')) return;
     if (type is String &&
         (type.startsWith('assignment.progress') ||
@@ -222,6 +228,97 @@ class _StudioAppState extends State<StudioApp> {
     }
     _announceRealtimeProgress(event);
     unawaited(_loadSnapshot(projectId: selectedProjectId, showSpinner: false));
+  }
+
+  void _recordNotification(Map<String, dynamic> event) {
+    final notification = notificationFromRealtimeEvent(event);
+    if (notification == null ||
+        notifications.any((item) => item.id == notification.id)) {
+      return;
+    }
+    final currentRunId = snapshot.run?.id ?? snapshot.activeRunId;
+    final isViewingRun = showRunDetails &&
+        notification.runId != null &&
+        notification.runId == currentRunId;
+    setState(() {
+      notifications.insert(
+        0,
+        isViewingRun ? notification.markRead() : notification,
+      );
+      if (notifications.length > 50) notifications.removeLast();
+    });
+  }
+
+  Future<void> _showNotifications() async {
+    final dialogContext = navigatorKey.currentState?.context ?? context;
+    final selected = await showDialog<StudioNotification>(
+      context: dialogContext,
+      builder: (context) => AlertDialog(
+        title: const Text('Notifications'),
+        content: SizedBox(
+          width: 420,
+          child: notifications.isEmpty
+              ? const Text('You are all caught up.')
+              : ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: notifications.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final notification = notifications[index];
+                    return ListTile(
+                      leading: Icon(
+                        switch (notification.kind) {
+                          StudioNotificationKind.completed =>
+                            Icons.check_circle_outline,
+                          StudioNotificationKind.failed => Icons.error_outline,
+                          StudioNotificationKind.approvalRequired =>
+                            Icons.help_outline,
+                        },
+                        color: notification.read
+                            ? const Color(0xff8e8e9a)
+                            : const Color(0xff6254d9),
+                      ),
+                      title: Text(notification.title),
+                      subtitle: Text(notification.message),
+                      trailing: notification.read
+                          ? null
+                          : const Icon(Icons.circle, size: 9),
+                      onTap: () => Navigator.of(context).pop(notification),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: notifications.isEmpty
+                ? null
+                : () {
+                    setState(() {
+                      for (var index = 0;
+                          index < notifications.length;
+                          index++) {
+                        notifications[index] = notifications[index].markRead();
+                      }
+                    });
+                    Navigator.of(context).pop();
+                  },
+            child: const Text('Mark all as read'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || selected == null) return;
+    setState(() {
+      final index = notifications.indexWhere((item) => item.id == selected.id);
+      if (index >= 0) notifications[index] = notifications[index].markRead();
+    });
+    if (selected.projectId != null && selected.runId != null) {
+      _navigateTo(StudioNavigation.run(selected.projectId!, selected.runId!));
+    }
   }
 
   void _announceRealtimeProgress(Map<String, dynamic> event) {
@@ -1495,10 +1592,44 @@ class _StudioAppState extends State<StudioApp> {
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
                     color: Color(0xff20202c)))),
-        IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.notifications_none_rounded,
-                size: 21, color: Color(0xff6e6e7a))),
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            IconButton(
+              tooltip: 'Notifications',
+              onPressed: _showNotifications,
+              icon: const Icon(Icons.notifications_none_rounded,
+                  size: 21, color: Color(0xff6e6e7a)),
+            ),
+            if (unreadNotificationCount > 0)
+              Positioned(
+                right: 5,
+                top: 5,
+                child: Semantics(
+                  label: '$unreadNotificationCount unread notifications',
+                  child: Container(
+                    constraints:
+                        const BoxConstraints(minWidth: 16, minHeight: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: const BoxDecoration(
+                      color: Color(0xff6254d9),
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      unreadNotificationCount > 9
+                          ? '9+'
+                          : '$unreadNotificationCount',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
         const SizedBox(width: 5),
         OutlinedButton.icon(
             onPressed: () =>
