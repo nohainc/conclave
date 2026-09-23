@@ -2473,6 +2473,33 @@ async function startChatExecution(
   return { goalId, runId, status: String(run.status) };
 }
 
+async function resumeChatExecution(
+  env: Env,
+  context: SecurityContext,
+  goalId: string,
+): Promise<{ goalId: string; runId: string; status: string }> {
+  const row = await env.CONCLAVE_DB.prepare(
+    `SELECT id, status FROM runs WHERE goal_id = ?1 ORDER BY created_at DESC LIMIT 1`,
+  )
+    .bind(goalId)
+    .first<{ id: string; status: string }>();
+  if (!row) throw new HttpError(404, "Run not found for the referenced Goal");
+  const instance = await env.CONCLAVE_RUN_WORKFLOW.get(
+    await resolveWorkflowInstanceId(env, row.id),
+  );
+  await instance.resume();
+  const now = new Date().toISOString();
+  await env.CONCLAVE_DB.batch([
+    env.CONCLAVE_DB.prepare(
+      "UPDATE goals SET status = 'running', updated_at = ?1 WHERE id = ?2 AND workspace_id = ?3",
+    ).bind(now, goalId, context.workspaceId),
+    env.CONCLAVE_DB.prepare(
+      "UPDATE runs SET status = 'running', updated_at = ?1 WHERE id = ?2 AND workspace_id = ?3",
+    ).bind(now, row.id, context.workspaceId),
+  ]);
+  return { goalId, runId: row.id, status: "running" };
+}
+
 async function handleCreateChatMessage(
   request: Request,
   env: SecurityEnv,
@@ -2618,7 +2645,12 @@ async function handleCreateChatMessage(
         content,
         projectRepositoryId,
       )
-    : null;
+    : intentDecision.accepted &&
+        (intentDecision.kind === "continue_goal" ||
+          intentDecision.kind === "approval") &&
+        intentDecision.targetGoalId
+      ? await resumeChatExecution(env, context, intentDecision.targetGoalId)
+      : null;
   const now = new Date().toISOString();
   const id = `msg-${crypto.randomUUID()}`;
 
