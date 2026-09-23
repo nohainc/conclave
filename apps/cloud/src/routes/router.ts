@@ -778,6 +778,28 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
+    const projectReadModelMatch = url.pathname.match(
+      /^\/api\/projects\/([^/]+)\/read-model$/,
+    );
+    if (request.method === "GET" && projectReadModelMatch?.[1]) {
+      return await handlers.handleProjectReadModel!(
+        env,
+        request,
+        projectReadModelMatch[1],
+        ctx,
+      );
+    }
+    const usageReadModelMatch = url.pathname.match(
+      /^\/api\/workspaces\/([^/]+)\/usage$/,
+    );
+    if (request.method === "GET" && usageReadModelMatch?.[1]) {
+      return await handlers.handleWorkspaceUsage!(
+        request,
+        env,
+        usageReadModelMatch[1],
+        ctx,
+      );
+    }
     const runMatch = url.pathname.match(
       /^\/api\/runs\/([^/]+)(?:\/(pause|resume|restart|cancel|events|ci-evidence|forge-events))?$/,
     );

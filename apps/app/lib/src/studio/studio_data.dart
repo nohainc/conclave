@@ -19,6 +19,11 @@ abstract interface class StudioDataSource {
   Future<void> deletePasskey(String id);
   Future<void> signInWithPasskey();
   Future<List<StudioWorkspace>> loadWorkspaces();
+
+  /// Loads the focused Workspace/project read models in parallel. The legacy
+  /// snapshot remains available for compatibility and fixtures only.
+  Future<StudioSnapshot> loadReadModels(
+      {String? projectId, String? workspaceId});
   Future<StudioSnapshot> loadSnapshot({String? projectId, String? workspaceId});
   Future<void> controlRun(String runId, String command);
   Future<void> createGoal({
@@ -294,6 +299,83 @@ class StudioApiClient implements StudioDataSource {
         .map((workspace) =>
             StudioWorkspace.fromJson(Map<String, dynamic>.from(workspace)))
         .toList();
+  }
+
+  @override
+  Future<StudioSnapshot> loadReadModels(
+      {String? projectId, String? workspaceId}) async {
+    final selectedWorkspaceId = workspaceId ?? activeWorkspaceId;
+    if (selectedWorkspaceId == null || selectedWorkspaceId.isEmpty) {
+      return loadSnapshot(projectId: projectId, workspaceId: workspaceId);
+    }
+
+    Future<Map<String, dynamic>> getJson(Uri uri) async {
+      final response = await client.get(uri, headers: _headers());
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw StudioApiException(
+          'Read model failed (${response.statusCode})',
+          statusCode: response.statusCode,
+        );
+      }
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) {
+        throw const StudioApiException('Read model response is malformed');
+      }
+      return Map<String, dynamic>.from(decoded);
+    }
+
+    final responses = await Future.wait([
+      getJson(Uri.parse('$baseUrl/projects')),
+      getJson(Uri.parse('$baseUrl/workspaces/$selectedWorkspaceId/hosts')),
+      getJson(Uri.parse('$baseUrl/workspaces/$selectedWorkspaceId/workers')),
+      getJson(Uri.parse('$baseUrl/workspaces/$selectedWorkspaceId/accounts')),
+      getJson(Uri.parse('$baseUrl/workspaces/$selectedWorkspaceId/usage')),
+    ]);
+    final projects = (responses[0]['projects'] as List? ?? const [])
+        .whereType<Map>()
+        .map((value) => Map<String, dynamic>.from(value))
+        .toList();
+    final selected = projectId ??
+        (projects.isNotEmpty ? projects.first['id'] as String? : null);
+    final detail = selected == null
+        ? <String, dynamic>{}
+        : await getJson(Uri.parse('$baseUrl/projects/$selected/read-model'));
+    final detailProject = detail['project'];
+    final mergedProjects = projects.map((project) {
+      if (detailProject is Map && project['id'] == detailProject['id']) {
+        return Map<String, dynamic>.from(detailProject);
+      }
+      return project;
+    }).toList();
+    final usage = (responses[4]['usage'] as List? ?? const [])
+        .whereType<Map>()
+        .map((value) => Map<String, dynamic>.from(value))
+        .toList();
+    return StudioSnapshot.fromJson({
+      'workspaceId': selectedWorkspaceId,
+      'projects': mergedProjects,
+      'hosts': responses[1]['hosts'] ?? const [],
+      'plugins': (responses[2]['workers'] as List? ?? const []).map((worker) {
+        final value = Map<String, dynamic>.from(worker as Map);
+        return {
+          ...value,
+          'name': value['displayName'] ?? value['name'] ?? '',
+          'version': value['latestVersion'] ?? value['version'] ?? '—',
+          'roles': value['roles'] ?? const [],
+          'capabilities': value['capabilities'] ?? const [],
+          'status': value['status'] ?? 'available',
+        };
+      }).toList(),
+      'accounts': responses[3]['accounts'] ?? const [],
+      'run': detail['run'],
+      'activeRunId': detail['activeRunId'],
+      'tasks': detail['tasks'] ?? const [],
+      'findings': detail['findings'] ?? const [],
+      'events': detail['events'] ?? const [],
+      'artifacts': detail['artifacts'] ?? const [],
+      'modelCalls':
+          usage.isNotEmpty ? usage : (detail['modelCalls'] ?? const []),
+    });
   }
 
   @override

@@ -29,6 +29,25 @@ class _JsonClient extends http.BaseClient {
   }
 }
 
+class _ReadModelClient extends http.BaseClient {
+  _ReadModelClient(this.responses);
+
+  final Map<String, Map<String, dynamic>> responses;
+  final requests = <String>[];
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    requests.add(request.url.path);
+    final body = responses[request.url.path] ?? const <String, dynamic>{};
+    return http.StreamedResponse(
+      Stream<List<int>>.value(utf8.encode(jsonEncode(body))),
+      200,
+      request: request,
+      headers: const {'content-type': 'application/json'},
+    );
+  }
+}
+
 void main() {
   test('loads and clears the Cloud session boundary', () async {
     final client = _JsonClient({
@@ -164,6 +183,61 @@ void main() {
       'projectId': 'project-1',
       'workspaceId': 'workspace-1',
     });
+  });
+
+  test('composes focused read models without the workspace snapshot', () async {
+    final client = _ReadModelClient({
+      '/api/projects': {
+        'projects': [
+          {
+            'id': 'project-1',
+            'name': 'Project One',
+            'repository': 'repo',
+            'activeGoals': 0,
+            'lastActivity': 'today',
+          },
+        ],
+      },
+      '/api/workspaces/workspace-1/hosts': {'hosts': []},
+      '/api/workspaces/workspace-1/workers': {'workers': []},
+      '/api/workspaces/workspace-1/accounts': {'accounts': []},
+      '/api/workspaces/workspace-1/usage': {'usage': []},
+      '/api/projects/project-1/read-model': {
+        'workspaceId': 'workspace-1',
+        'project': {
+          'id': 'project-1',
+          'name': 'Project One',
+          'repository': 'repo',
+          'activeGoals': 0,
+          'lastActivity': 'today',
+          'chats': [
+            {
+              'id': 'chat-1',
+              'projectId': 'project-1',
+              'title': 'Chat',
+              'lastActivity': 'today',
+              'messages': [],
+            },
+          ],
+        },
+        'tasks': [],
+        'findings': [],
+        'events': [],
+        'artifacts': [],
+        'modelCalls': [],
+      },
+    });
+    final api = StudioApiClient(
+      baseUrl: 'https://conclave.test/api',
+      client: client,
+    )..setActiveWorkspace('workspace-1');
+
+    final readModel = await api.loadReadModels();
+
+    expect(readModel.projects.single.chats.single.id, 'chat-1');
+    expect(client.requests, isNot(contains('/api/studio/snapshot')));
+    expect(client.requests, contains('/api/projects/project-1/read-model'));
+    expect(client.requests, contains('/api/workspaces/workspace-1/usage'));
   });
 
   test('normalizes the Cloud chat creation wrapper', () async {

@@ -176,12 +176,19 @@ class _StudioAppState extends State<StudioApp> {
     final type = event['type'];
     if (!mounted) return;
     if (type == 'reconnect.required') {
+      // A cursor gap invalidates only the active project read model.
       unawaited(
           _loadSnapshot(projectId: selectedProjectId, showSpinner: false));
       return;
     }
     if (event['workspaceId'] != activeWorkspaceId) return;
     if (type is String && type.startsWith('typing')) return;
+    if (type is String &&
+        (type.startsWith('assignment.progress') ||
+            type.startsWith('worker.status') ||
+            type.startsWith('heartbeat'))) {
+      return;
+    }
     unawaited(_loadSnapshot(projectId: selectedProjectId, showSpinner: false));
   }
 

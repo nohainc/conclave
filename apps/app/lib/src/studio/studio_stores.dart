@@ -27,7 +27,7 @@ class StudioStore {
 
   Future<StudioSnapshot> reload(
       {String? projectId, String? workspaceId}) async {
-    final snapshot = await dataSource.loadSnapshot(
+    final snapshot = await dataSource.loadReadModels(
         projectId: projectId, workspaceId: workspaceId);
     auth.replace(snapshot.viewer);
     workspaces.replace(snapshot.workspaceId);

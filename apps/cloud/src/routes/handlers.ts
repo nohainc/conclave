@@ -4755,6 +4755,68 @@ async function handleStudioSnapshot(
   });
 }
 
+/**
+ * Project-scoped read model used by the web App. Keep this response limited to
+ * the active project so a large Workspace does not turn every refresh into a
+ * full application snapshot.
+ */
+async function handleProjectReadModel(
+  env: Env,
+  request: Request,
+  projectId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const response = await handleStudioSnapshot(
+    env,
+    request,
+    projectId,
+    accessContext,
+  );
+  if (!response.ok) return response;
+  const body = (await response.json()) as Record<string, unknown>;
+  const projects = Array.isArray(body.projects) ? body.projects : [];
+  const project = projects[0] ?? null;
+  return json({
+    workspaceId: body.workspaceId,
+    project,
+    run: body.run ?? null,
+    activeRunId: body.activeRunId ?? null,
+    tasks: body.tasks ?? [],
+    findings: body.findings ?? [],
+    events: body.events ?? [],
+    artifacts: body.artifacts ?? [],
+    modelCalls: body.modelCalls ?? [],
+  });
+}
+
+async function handleWorkspaceUsage(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, accessContext);
+  authorize(context, "project:read");
+  requireWorkspaceContext(context, env, workspaceId);
+  const rows = await env.CONCLAVE_DB.prepare(
+    `SELECT u.id, u.project_id AS projectId, u.run_id AS runId,
+            u.requester_user_id AS requesterUserId,
+            u.credential_profile_id AS credentialProfileId,
+            u.worker_id AS workerId, u.provider, u.model,
+            u.input_tokens AS inputTokens, u.output_tokens AS outputTokens,
+            (u.input_tokens + u.output_tokens) AS tokens,
+            u.cost_micros AS costMicros, u.duration_ms AS durationMs,
+            u.recorded_at AS recordedAt
+       FROM usage u
+      WHERE u.workspace_id = ?1
+      ORDER BY u.recorded_at DESC
+      LIMIT 500`,
+  )
+    .bind(workspaceId)
+    .all();
+  return json({ usage: rows.results ?? [] });
+}
+
 async function validateAndClaimCiEvidence(
   env: Env,
   runId: string,
@@ -6102,5 +6164,7 @@ export {
   handleRunRequest,
   handleGoalRequest,
   handleStudioSnapshot,
+  handleProjectReadModel,
+  handleWorkspaceUsage,
   handleRunCommand,
 };

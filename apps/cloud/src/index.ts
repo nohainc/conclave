@@ -103,6 +103,8 @@ const routeHandlers = {
   handleRunRequest: handlers.handleRunRequest,
   handleGoalRequest: handlers.handleGoalRequest,
   handleStudioSnapshot: handlers.handleStudioSnapshot,
+  handleProjectReadModel: handlers.handleProjectReadModel,
+  handleWorkspaceUsage: handlers.handleWorkspaceUsage,
   handleRunCommand: handlers.handleRunCommand,
 } as unknown as WorkerRouteHandlers;
 

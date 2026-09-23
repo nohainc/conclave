@@ -1149,6 +1149,10 @@ Architecture v4 is not only implemented but consistent in code, naming, connecti
 
 ---
 
+## PA-12 — Replace large App snapshot refresh with feature read models
+
+The App now loads Workspace catalogs, Hosts, Workers, Accounts, and Usage through focused HTTPS read models in parallel. The active Project uses a project-scoped read model for Chats, Run details, Tasks, Findings, Events, Artifacts, and model activity. The legacy `/api/studio/snapshot` endpoint remains as a compatibility path for fixtures and migration tooling, but normal authenticated App reloads and realtime gap recovery no longer request it.
+
 # Delegation guidance
 
 For each phase, give the implementation AI this structure:

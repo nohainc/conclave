@@ -68,6 +68,11 @@ class StudioFixtureDataSource implements StudioDataSource {
       ];
 
   @override
+  Future<StudioSnapshot> loadReadModels(
+          {String? projectId, String? workspaceId}) async =>
+      studioFixtureSnapshot();
+
+  @override
   Future<StudioSnapshot> loadSnapshot(
           {String? projectId, String? workspaceId}) async =>
       studioFixtureSnapshot();
