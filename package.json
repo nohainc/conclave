@@ -19,6 +19,7 @@
     "site:build": "cd apps/site && ./node_modules/.bin/astro build",
     "site:test": "cd apps/site && ./node_modules/.bin/vitest run test",
     "site:performance": "cd apps/site && node scripts/check-performance.mjs",
+    "site:accessibility": "cd apps/site && node scripts/check-accessibility.mjs",
     "site:preview": "cd apps/site && ./node_modules/.bin/astro preview",
     "check": "prettier --check . && eslint . && tsc -p packages/protocol/tsconfig.json && tsc -p packages/host-protocol/tsconfig.json && tsc -p packages/worker-manifest/tsconfig.json && tsc -p packages/persistence/tsconfig.json && tsc -p packages/security/tsconfig.json && tsc -p packages/sdk/tsconfig.json && tsc -p packages/core/tsconfig.json && tsc -p packages/orchestration/tsconfig.json && tsc -p apps/cloud/tsconfig.json && vitest run packages/protocol/test packages/host-protocol/test packages/worker-manifest/test packages/persistence/test packages/security/test packages/sdk/test packages/core/test packages/orchestration/test apps/cloud/test",
     "protocol:generate": "node scripts/generate-protocol-bindings.mjs",

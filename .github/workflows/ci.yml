@@ -71,6 +71,7 @@ jobs:
       - run: ./node_modules/.bin/astro check
       - run: ./node_modules/.bin/astro build
       - run: node scripts/check-performance.mjs
+      - run: node scripts/check-accessibility.mjs
       - run: ./node_modules/.bin/vitest run test
       - name: Verify static routes
         run: |

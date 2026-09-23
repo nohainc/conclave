@@ -271,7 +271,7 @@ h3 {
   border-radius: var(--radius-sm);
   font: 700 var(--text-xs) / 1 var(--font-mono);
 }
-.workflow-step h3 {
+.workflow-step h2 {
   margin: 0 0 5px;
   font-size: 1.15rem;
 }

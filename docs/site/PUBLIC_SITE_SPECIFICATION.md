@@ -164,6 +164,13 @@ JavaScript, system fonts, and small generated assets. CI checks built HTML,
 CSS, and script sizes and rejects external script sources. Production workers
 cache fingerprinted assets immutably; HTML remains revalidated.
 
+Generated pages also pass an accessibility gate for document landmarks, one
+logical `h1`, heading order, viewport zoom, image alternatives, button types,
+and keyboard-safe tabindex values. Architecture diagrams retain visible text
+labels in addition to visual connectors. Manual release review must traverse
+the header, mobile menu, links, buttons, and footer by keyboard at narrow and
+zoomed layouts.
+
 ## Visual system contract
 
 The site uses one restrained, technical visual theme: warm paper surfaces, ink
