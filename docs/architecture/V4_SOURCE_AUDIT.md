@@ -284,6 +284,15 @@ logs, updates, and quitting. Projects, Chats, orchestration, Workspace
 management, configured Worker CRUD, and Worker catalog management are not
 present in the Host UI. Advanced Host identity and connection details are
 progressively disclosed behind an accessible details panel.
+
+V4-16 updates Studio execution UX to expose Hosts, Workers, and Accounts as
+separate v4 concepts. Host cards show presence, bindings, load, installed
+Workers, and updates; Worker cards show capabilities, ready Hosts, and
+connected Accounts; Account cards show Credential Profile owner, Worker,
+Host, sharing, usage, and auth state. The chat composer defaults to Auto and
+Balanced, with explicit advanced controls for Worker, model, Account, Host,
+candidate count, and cost. Navigation collapses into a drawer at medium and
+narrow widths without hover-only actions.
 - make Studio read models purpose-built instead of one large snapshot response over time.
 
 ## 8. Suggested source organization

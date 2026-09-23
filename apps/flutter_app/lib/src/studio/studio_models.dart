@@ -386,6 +386,7 @@ class StudioAgent {
     this.appVersion = '—',
     this.updateChannel = '—',
     this.lastSeen = '—',
+    this.workspaceBindings = const [],
   });
 
   final String id;
@@ -401,6 +402,7 @@ class StudioAgent {
   final String appVersion;
   final String updateChannel;
   final String lastSeen;
+  final List<String> workspaceBindings;
 
   factory StudioAgent.fromJson(Map<String, dynamic> json) => StudioAgent(
         id: _string(json, 'id'),
@@ -416,6 +418,7 @@ class StudioAgent {
         appVersion: _string(json, 'appVersion'),
         updateChannel: _string(json, 'updateChannel'),
         lastSeen: _string(json, 'lastSeen'),
+        workspaceBindings: _strings(json, 'workspaceBindings'),
       );
 }
 
@@ -456,6 +459,7 @@ class StudioPlugin {
     this.supportedOS = const [],
     this.supportedArchitecture = const [],
     this.installedAgentCount = 0,
+    this.connectedAccountCount = 0,
   });
 
   final String id;
@@ -471,6 +475,7 @@ class StudioPlugin {
   final List<String> supportedOS;
   final List<String> supportedArchitecture;
   final int installedAgentCount;
+  final int connectedAccountCount;
 
   factory StudioPlugin.fromJson(Map<String, dynamic> json) => StudioPlugin(
         id: _string(json, 'id'),
@@ -486,6 +491,42 @@ class StudioPlugin {
         supportedOS: _strings(json, 'supportedOS'),
         supportedArchitecture: _strings(json, 'supportedArchitecture'),
         installedAgentCount: json['installedAgentCount'] as int? ?? 0,
+        connectedAccountCount: json['connectedAccountCount'] as int? ?? 0,
+      );
+}
+
+class StudioCredentialProfile {
+  const StudioCredentialProfile({
+    required this.id,
+    required this.displayName,
+    required this.owner,
+    required this.worker,
+    required this.host,
+    required this.sharing,
+    required this.status,
+    this.usage = 'No usage recorded',
+  });
+
+  final String id;
+  final String displayName;
+  final String owner;
+  final String worker;
+  final String host;
+  final String sharing;
+  final String status;
+  final String usage;
+
+  factory StudioCredentialProfile.fromJson(Map<String, dynamic> json) =>
+      StudioCredentialProfile(
+        id: _string(json, 'id'),
+        displayName: _string(json, 'displayName', _string(json, 'name')),
+        owner: _string(json, 'owner', _string(json, 'ownerId')),
+        worker: _string(json, 'worker', _string(json, 'workerId')),
+        host: _string(json, 'host', _string(json, 'hostId', 'Cloud')),
+        sharing:
+            _string(json, 'sharing', _string(json, 'sharingPolicy', 'Private')),
+        status: _string(json, 'status', 'setup_required'),
+        usage: _string(json, 'usage', 'No usage recorded'),
       );
 }
 
@@ -760,6 +801,7 @@ class StudioSnapshot {
     this.policy,
     this.candidateOutputs = const [],
     this.synthesisDecision,
+    this.accounts = const [],
   });
 
   final String? workspaceId;
@@ -776,6 +818,7 @@ class StudioSnapshot {
   final List<StudioEvent> events;
   final List<StudioArtifact> artifacts;
   final List<StudioModelCall> modelCalls;
+  final List<StudioCredentialProfile> accounts;
   final StudioPolicy? policy;
   final List<StudioCandidateOutput> candidateOutputs;
   final StudioSynthesisDecision? synthesisDecision;
@@ -801,7 +844,8 @@ class StudioSnapshot {
       findings: [],
       events: [],
       artifacts: [],
-      modelCalls: []);
+      modelCalls: [],
+      accounts: []);
 
   factory StudioSnapshot.fromJson(Map<String, dynamic> json) => StudioSnapshot(
         workspaceId: json['workspaceId'] as String?,
@@ -822,7 +866,7 @@ class StudioSnapshot {
             .map((item) =>
                 StudioWorker.fromJson(Map<String, dynamic>.from(item as Map)))
             .toList(),
-        agents: (json['agents'] as List? ?? const [])
+        agents: (json['hosts'] as List? ?? json['agents'] as List? ?? const [])
             .map((item) =>
                 StudioAgent.fromJson(Map<String, dynamic>.from(item as Map)))
             .toList(),
@@ -848,6 +892,10 @@ class StudioSnapshot {
             .toList(),
         modelCalls: (json['modelCalls'] as List? ?? const [])
             .map((item) => StudioModelCall.fromJson(
+                Map<String, dynamic>.from(item as Map)))
+            .toList(),
+        accounts: (json['accounts'] as List? ?? const [])
+            .map((item) => StudioCredentialProfile.fromJson(
                 Map<String, dynamic>.from(item as Map)))
             .toList(),
         policy: json['policy'] == null

@@ -158,10 +158,22 @@ StudioSnapshot studioFixtureSnapshot() => const StudioSnapshot(
           cost: 'Local',
         ),
       ],
+      accounts: [
+        StudioCredentialProfile(
+          id: 'account-codex',
+          displayName: 'Vitalii Codex',
+          owner: 'Vitalii',
+          worker: 'Codex',
+          host: 'Development Host',
+          sharing: 'Private',
+          status: 'ready',
+          usage: '12.4k tokens · \$2.10 this month',
+        ),
+      ],
       agents: [
         StudioAgent(
           id: 'agent-macbook',
-          name: 'Development Agent',
+          name: 'Development Host',
           hostname: 'development-agent.local',
           status: 'ONLINE',
           version: '1.5.0',

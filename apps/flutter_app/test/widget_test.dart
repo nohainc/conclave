@@ -87,7 +87,7 @@ void main() {
         find.text('Compare the migration rollback strategies.'), findsWidgets);
   });
 
-  testWidgets('opens separate Agent, Plugin, and Worker management pages',
+  testWidgets('opens Hosts, Workers, and Accounts without v3 terminology',
       (WidgetTester tester) async {
     await tester
         .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
@@ -95,27 +95,64 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.menu_rounded));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Agents'));
+    await tester.tap(find.text('Hosts'));
     await tester.pumpAndSettle();
-    expect(find.text('Development Agent'), findsOneWidget);
-    expect(find.text('3 plugins'), findsOneWidget);
+    expect(find.text('Development Host'), findsOneWidget);
+    expect(find.text('Pair Host'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.menu_rounded));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Plugins'));
+    await tester.tap(find.text('Workers'));
     await tester.pumpAndSettle();
     expect(find.text('Claude Code'), findsOneWidget);
     expect(find.text('Docker'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.menu_rounded));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Workers'));
+    await tester.tap(find.text('Accounts'));
     await tester.pumpAndSettle();
-    expect(find.text('Configured resources'), findsOneWidget);
-    expect(find.text('Lead'), findsOneWidget);
+    expect(find.text('Credential Profiles'), findsOneWidget);
+    expect(find.text('Vitalii Codex'), findsOneWidget);
+    expect(find.text('Create Worker'), findsNothing);
+    expect(find.text('Agents'), findsNothing);
+    expect(find.text('Plugins'), findsNothing);
+  });
 
-    await tester.tap(find.byKey(const Key('new-worker-button')));
+  testWidgets(
+      'chat composer defaults to Auto and Balanced with advanced controls',
+      (WidgetTester tester) async {
+    await tester
+        .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
     await tester.pumpAndSettle();
-    expect(find.text('Create Worker'), findsOneWidget);
+
+    expect(find.text('Auto'), findsOneWidget);
+    expect(find.text('Balanced'), findsOneWidget);
+    await tester.ensureVisible(find.text('Advanced execution'));
+    await tester.tap(find.text('Advanced execution'));
+    await tester.pumpAndSettle();
+    expect(find.text('Model'), findsOneWidget);
+    expect(find.text('Account'), findsOneWidget);
+    expect(find.text('Host'), findsOneWidget);
+    expect(find.text('Candidates'), findsOneWidget);
+    expect(find.text('Cost'), findsOneWidget);
+  });
+
+  testWidgets('navigation adapts from wide sidebar to compact drawer',
+      (WidgetTester tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    await tester
+        .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
+    await tester.pumpAndSettle();
+    expect(find.text('Hosts'), findsOneWidget);
+    expect(find.text('Accounts'), findsOneWidget);
+
+    await tester.binding.setSurfaceSize(const Size(720, 900));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.menu_rounded), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.menu_rounded));
+    await tester.pumpAndSettle();
+    expect(find.text('Hosts', skipOffstage: false), findsOneWidget);
+    expect(find.text('Accounts', skipOffstage: false), findsOneWidget);
+    await tester.binding.setSurfaceSize(null);
   });
 }

@@ -265,6 +265,41 @@ void main() {
     expect(worker.independenceKey, 'codex-main');
   });
 
+  test('parses v4 Hosts and Credential Profiles from the read model', () {
+    final snapshot = StudioSnapshot.fromJson({
+      'workspaceId': 'workspace-1',
+      'hosts': [
+        {
+          'id': 'host-1',
+          'name': 'Mac Host',
+          'hostname': 'mac.local',
+          'status': 'online',
+          'version': '4.0.0',
+          'workerCount': 2,
+          'workspaceBindings': ['workspace-1', 'workspace-2'],
+        },
+      ],
+      'accounts': [
+        {
+          'id': 'profile-1',
+          'displayName': 'Personal Codex',
+          'owner': 'user-1',
+          'worker': 'codex',
+          'host': 'host-1',
+          'sharingPolicy': 'private_only',
+          'status': 'ready',
+          'usage': '1.2k tokens',
+        },
+      ],
+    });
+
+    expect(snapshot.agents.single.name, 'Mac Host');
+    expect(snapshot.agents.single.workspaceBindings,
+        ['workspace-1', 'workspace-2']);
+    expect(snapshot.accounts.single.displayName, 'Personal Codex');
+    expect(snapshot.accounts.single.sharing, 'private_only');
+  });
+
   test('announces an Agent update through the Cloud management endpoint',
       () async {
     final client = _JsonClient({}, statusCode: 200);

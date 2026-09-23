@@ -37,6 +37,11 @@ class _StudioAppState extends State<StudioApp> {
   String? workerActionMessage;
   StudioAgentEnrollment? enrollmentResult;
   StudioQualityPreset selectedQuality = StudioQualityPreset.balanced;
+  String selectedExecutionWorker = 'Auto';
+  String selectedExecutionModel = 'Auto';
+  String selectedExecutionAccount = 'Auto';
+  String selectedExecutionHost = 'Auto';
+  bool showAdvancedExecution = false;
   final Map<String, bool> workerEnabled = {};
   final objectiveController = TextEditingController();
   final revisionController = TextEditingController();
@@ -649,11 +654,11 @@ class _StudioAppState extends State<StudioApp> {
             _sidebarLabel('WORKSPACE'),
             _navItem(Icons.chat_bubble_outline, 'Chats', 0,
                 compact: compact, navigationContext: sidebarContext),
-            _navItem(Icons.computer_outlined, 'Agents', 1,
+            _navItem(Icons.computer_outlined, 'Hosts', 1,
                 compact: compact, navigationContext: sidebarContext),
-            _navItem(Icons.extension_outlined, 'Plugins', 2,
+            _navItem(Icons.extension_outlined, 'Workers', 2,
                 compact: compact, navigationContext: sidebarContext),
-            _navItem(Icons.people_alt_outlined, 'Workers', 3,
+            _navItem(Icons.account_circle_outlined, 'Accounts', 3,
                 compact: compact, navigationContext: sidebarContext),
             _navItem(Icons.analytics_outlined, 'Usage', 4,
                 compact: compact, navigationContext: sidebarContext),
@@ -943,7 +948,7 @@ class _StudioAppState extends State<StudioApp> {
                 setState(() => showWorkerDrawer = !showWorkerDrawer),
             icon: const Icon(Icons.circle, size: 8, color: Color(0xff55bf8f)),
             label: Text(
-                '${snapshot.workers.where((worker) => worker.status.toLowerCase() == 'available' || worker.status.toLowerCase() == 'online').length} workers online'),
+                '${snapshot.agents.where((host) => host.status.toLowerCase() == 'online').length} hosts online'),
             style: OutlinedButton.styleFrom(
                 foregroundColor: const Color(0xff565665),
                 side: const BorderSide(color: Color(0xffe2e2e8)),
@@ -954,9 +959,9 @@ class _StudioAppState extends State<StudioApp> {
   }
 
   Widget _runDetailsView(bool compact) {
-    if (navigationIndex == 1) return _agentsView();
-    if (navigationIndex == 2) return _pluginsView();
-    if (navigationIndex == 3) return _workersView();
+    if (navigationIndex == 1) return _hostsView();
+    if (navigationIndex == 2) return _catalogView();
+    if (navigationIndex == 3) return _accountsView();
     if (navigationIndex == 4) return _usageView();
     if (navigationIndex == 5) return _settingsView();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1140,6 +1145,8 @@ class _StudioAppState extends State<StudioApp> {
           children: [
             ...messages.map(_chatMessage),
             const SizedBox(height: 10),
+            _composerExecutionControls(),
+            const SizedBox(height: 12),
             Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
               Expanded(
                 child: TextField(
@@ -1167,6 +1174,139 @@ class _StudioAppState extends State<StudioApp> {
       ),
     ]);
   }
+
+  Widget _composerExecutionControls() {
+    final workerOptions = {
+      'Auto',
+      ...snapshot.workers.map((worker) => worker.name),
+    }.toList();
+    final accountOptions = {
+      'Auto',
+      ...snapshot.accounts.map((account) => account.displayName),
+    }.toList();
+    final hostOptions = {
+      'Auto',
+      ...snapshot.agents.map((host) => host.name),
+    }.toList();
+
+    Widget choice(String label, String value, List<String> options,
+        ValueChanged<String?> onChanged) {
+      return ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 126, maxWidth: 190),
+        child: DropdownButtonFormField<String>(
+          initialValue: options.contains(value) ? value : 'Auto',
+          isDense: true,
+          isExpanded: true,
+          decoration: InputDecoration(
+            labelText: label,
+            filled: true,
+            fillColor: const Color(0xfff7f7fa),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide.none,
+            ),
+          ),
+          items: options
+              .map((option) => DropdownMenuItem(
+                    value: option,
+                    child: Text(option, overflow: TextOverflow.ellipsis),
+                  ))
+              .toList(),
+          onChanged: onChanged,
+        ),
+      );
+    }
+
+    return Card(
+      color: const Color(0xfffafaff),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                choice(
+                    'Worker',
+                    selectedExecutionWorker,
+                    workerOptions,
+                    (value) => setState(
+                        () => selectedExecutionWorker = value ?? 'Auto')),
+                ChoiceChip(
+                  label: const Text('Balanced'),
+                  selected: selectedQuality == StudioQualityPreset.balanced,
+                  onSelected: (_) => setState(
+                      () => selectedQuality = StudioQualityPreset.balanced),
+                ),
+                TextButton.icon(
+                  onPressed: () => setState(
+                      () => showAdvancedExecution = !showAdvancedExecution),
+                  icon: Icon(showAdvancedExecution
+                      ? Icons.expand_less
+                      : Icons.tune_outlined),
+                  label: Text(showAdvancedExecution
+                      ? 'Hide advanced'
+                      : 'Advanced execution'),
+                ),
+              ],
+            ),
+            if (showAdvancedExecution) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  choice(
+                      'Model',
+                      selectedExecutionModel,
+                      const ['Auto', 'Fast', 'Reasoning'],
+                      (value) => setState(
+                          () => selectedExecutionModel = value ?? 'Auto')),
+                  choice(
+                      'Account',
+                      selectedExecutionAccount,
+                      accountOptions,
+                      (value) => setState(
+                          () => selectedExecutionAccount = value ?? 'Auto')),
+                  choice(
+                      'Host',
+                      selectedExecutionHost,
+                      hostOptions,
+                      (value) => setState(
+                          () => selectedExecutionHost = value ?? 'Auto')),
+                  _executionHint(
+                      'Candidates', '${snapshot.policy?.candidateCount ?? 1}'),
+                  _executionHint(
+                      'Cost', snapshot.policy?.costCeiling ?? 'Auto'),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _executionHint(String label, String value) => Container(
+        constraints: const BoxConstraints(minWidth: 92),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+        decoration: BoxDecoration(
+          color: const Color(0xfff0effa),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label,
+                style: const TextStyle(color: Color(0xff777683), fontSize: 10)),
+            const SizedBox(height: 2),
+            Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+          ],
+        ),
+      );
 
   Widget _chatMessage(StudioChatMessage message) {
     final isUser = message.sender == StudioMessageSender.user;
@@ -1844,20 +1984,20 @@ class _StudioAppState extends State<StudioApp> {
         ],
       );
 
-  Widget _agentsView() => Column(
+  Widget _hostsView() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(children: [
             Expanded(
               child: _fleetHeader(
-                  'Agents',
-                  'Execution hosts connected to this workspace.',
+                  'Hosts',
+                  'Machines connected to this workspace.',
                   Icons.computer_outlined),
             ),
             FilledButton.icon(
               onPressed: snapshot.workspaceId == null ? null : _enrollAgent,
               icon: const Icon(Icons.add_link),
-              label: const Text('Enroll Agent'),
+              label: const Text('Pair Host'),
             ),
           ]),
           if (enrollmentResult != null) ...[
@@ -1871,7 +2011,7 @@ class _StudioAppState extends State<StudioApp> {
                   children: [
                     Row(children: [
                       const Expanded(
-                        child: Text('Agent enrollment token',
+                        child: Text('Host pairing token',
                             style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
                       IconButton(
@@ -1882,8 +2022,7 @@ class _StudioAppState extends State<StudioApp> {
                       ),
                     ]),
                     const SizedBox(height: 8),
-                    const Text(
-                        'Copy this one-time token into the Agent setup.'),
+                    const Text('Copy this one-time token into the Host setup.'),
                     const SizedBox(height: 12),
                     SelectableText(enrollmentResult!.token,
                         style: const TextStyle(fontFamily: 'monospace')),
@@ -1896,8 +2035,8 @@ class _StudioAppState extends State<StudioApp> {
           ],
           const SizedBox(height: 24),
           if (snapshot.agents.isEmpty)
-            _emptyFleetCard('No agents enrolled',
-                'Enroll a Conclave Agent to host local workers.')
+            _emptyFleetCard('No Hosts paired',
+                'Pair a Host to run Workers on a local machine.')
           else
             ...snapshot.agents.map((agent) => Card(
                   margin: const EdgeInsets.only(bottom: 12),
@@ -1926,22 +2065,24 @@ class _StudioAppState extends State<StudioApp> {
                               icon: const Icon(Icons.system_update_outlined),
                             ),
                             IconButton(
-                              tooltip: 'Revoke Agent',
+                              tooltip: 'Revoke Host',
                               onPressed: () => _revokeAgent(agent.id),
                               icon: const Icon(Icons.link_off_outlined),
                             ),
                           ]),
                           const SizedBox(height: 8),
-                          Text('${agent.hostname} · Agent ${agent.version}',
+                          Text('${agent.hostname} · Host ${agent.version}',
                               style: const TextStyle(color: Color(0xff777683))),
                           const SizedBox(height: 14),
                           Wrap(spacing: 20, runSpacing: 8, children: [
                             Text('${agent.os} · ${agent.architecture}'),
                             Text('Channel: ${agent.updateChannel}'),
                             Text('Last seen: ${agent.lastSeen}'),
-                            Text('${agent.pluginCount} plugins'),
-                            Text('${agent.workerCount} workers'),
+                            Text('${agent.workerCount} installed Workers'),
                             Text('${agent.activeTaskCount} active task'),
+                            Text(agent.workspaceBindings.isEmpty
+                                ? '1 Workspace binding'
+                                : '${agent.workspaceBindings.length} Workspace bindings'),
                           ]),
                         ]),
                   ),
@@ -1949,17 +2090,17 @@ class _StudioAppState extends State<StudioApp> {
         ],
       );
 
-  Widget _pluginsView() => Column(
+  Widget _catalogView() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _fleetHeader(
-              'Plugins',
-              'Installed integrations and execution capabilities.',
+              'Workers',
+              'Capabilities available to your paired Hosts.',
               Icons.extension_outlined),
           const SizedBox(height: 24),
           if (snapshot.plugins.isEmpty)
-            _emptyFleetCard('No plugins available',
-                'Plugins will appear when an Agent reports its inventory.')
+            _emptyFleetCard('No Workers available',
+                'Workers appear when the catalog has a compatible release.')
           else
             ...snapshot.plugins.map((plugin) => Card(
                   margin: const EdgeInsets.only(bottom: 10),
@@ -1982,7 +2123,7 @@ class _StudioAppState extends State<StudioApp> {
                     ].isEmpty ? 'any' : [
                             ...plugin.supportedOS,
                             ...plugin.supportedArchitecture
-                          ].join(', ')} · ${plugin.installedAgentCount} Agents'),
+                          ].join(', ')} · ${plugin.installedAgentCount} ready Hosts · ${plugin.connectedAccountCount} connected Accounts'),
                     isThreeLine: true,
                     trailing: _statusChip(
                         plugin.status,
@@ -2003,13 +2144,13 @@ class _StudioAppState extends State<StudioApp> {
                 style: TextStyle(color: Color(0xff777683)))),
       );
 
-  Widget _workersView() => Column(
+  Widget _accountsView() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _fleetHeader(
-              'Workers',
-              'Configured resources resolved by role, capability, and Agent.',
-              Icons.people_alt_outlined),
+              'Accounts',
+              'Credential Profiles used by Workers on your Hosts.',
+              Icons.account_circle_outlined),
           const SizedBox(height: 24),
           if (workerActionMessage != null) ...[
             MaterialBanner(
@@ -2024,38 +2165,32 @@ class _StudioAppState extends State<StudioApp> {
             ),
             const SizedBox(height: 16),
           ],
-          if (snapshot.workers.isEmpty)
-            _emptyFleetCard('No Worker catalog entries',
-                'Workers are selected dynamically from catalog availability, accounts, and execution preferences.')
+          if (snapshot.accounts.isEmpty)
+            _emptyFleetCard('No Accounts connected',
+                'Connect a Credential Profile to make a Worker ready for execution.')
           else ...[
-            const Text('Worker catalog',
+            const Text('Credential Profiles',
                 style: TextStyle(color: Color(0xff777683), fontSize: 13)),
             const SizedBox(height: 24),
-            _policyCard(),
-            const SizedBox(height: 16),
-            ...snapshot.workers.map(
-              (worker) => Card(
+            ...snapshot.accounts.map(
+              (account) => Card(
                 margin: const EdgeInsets.only(bottom: 12),
                 child: ListTile(
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-                  leading: CircleAvatar(
-                    backgroundColor: const Color(0xffeeecff),
-                    child: Icon(
-                        worker.role == 'reviewer'
-                            ? Icons.rate_review_outlined
-                            : Icons.smart_toy_outlined,
-                        color: const Color(0xff6254d9),
-                        size: 20),
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xffeeecff),
+                    child: Icon(Icons.account_circle_outlined,
+                        color: Color(0xff6254d9), size: 20),
                   ),
-                  title: Text(worker.name,
+                  title: Text(account.displayName,
                       style: const TextStyle(fontWeight: FontWeight.w700)),
                   subtitle: Text(
-                      '${worker.agentName} · ${worker.pluginName}\n${worker.roles.isEmpty ? worker.role : worker.roles.join(', ')} · ${worker.capabilities.join(' · ')}'),
+                      'Owner: ${account.owner}\nWorker: ${account.worker} · Host: ${account.host}\nSharing: ${account.sharing} · Usage: ${account.usage}'),
                   isThreeLine: true,
                   trailing: _statusChip(
-                    worker.status,
-                    worker.status.toLowerCase() == 'online'
+                    account.status,
+                    account.status.toLowerCase() == 'ready'
                         ? const Color(0xff3ca879)
                         : const Color(0xff777683),
                   ),
