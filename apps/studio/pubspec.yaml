@@ -1,5 +1,5 @@
-name: conclave_app
-description: Conclave AX Studio and Cloud web UI.
+name: conclave_studio
+description: Conclave AX Studio web application.
 publish_to: none
 version: 0.1.0+1
 

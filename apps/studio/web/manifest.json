@@ -1,6 +1,6 @@
 {
-  "name": "conclave_app",
-  "short_name": "conclave_app",
+  "name": "Conclave Studio",
+  "short_name": "Studio",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#0175C2",

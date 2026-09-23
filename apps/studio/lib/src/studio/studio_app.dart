@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../navigation/studio_browser_navigation.dart';
+import '../navigation/studio_navigation.dart';
 import '../platform/platform_services.dart';
 import 'studio_models.dart';
 import 'studio_data.dart';
@@ -10,10 +12,14 @@ import 'studio_stores.dart';
 
 class StudioApp extends StatefulWidget {
   const StudioApp(
-      {super.key, required this.services, required this.dataSource});
+      {super.key,
+      required this.services,
+      required this.dataSource,
+      this.initialUri});
 
   final PlatformServices services;
   final StudioDataSource dataSource;
+  final Uri? initialUri;
 
   @override
   State<StudioApp> createState() => _StudioAppState();
@@ -50,6 +56,11 @@ class _StudioAppState extends State<StudioApp> {
   late final StudioStore store;
   final navigatorKey = GlobalKey<NavigatorState>();
   final messengerKey = GlobalKey<ScaffoldMessengerState>();
+  late final StudioBrowserNavigation browserNavigation;
+  late StudioNavigation navigation;
+  StreamSubscription<Uri>? navigationSubscription;
+  bool authRequired = false;
+  bool isReconnecting = false;
 
   void _showSnackBar(String message) {
     messengerKey.currentState?.showSnackBar(SnackBar(content: Text(message)));
@@ -78,19 +89,37 @@ class _StudioAppState extends State<StudioApp> {
   @override
   void initState() {
     super.initState();
+    browserNavigation = createStudioBrowserNavigation();
+    navigation = StudioNavigation.fromUri(
+        widget.initialUri ?? browserNavigation.current);
+    navigationSubscription =
+        browserNavigation.changes.listen(_onBrowserNavigation);
     store = StudioStore(widget.dataSource);
     snapshot = StudioSnapshot.empty();
     unawaited(_loadSession());
-    unawaited(_loadWorkspaces());
-    _loadSnapshot();
   }
 
   Future<void> _loadSession() async {
     try {
-      await store.auth.load();
-      if (mounted) setState(() {});
+      final session = await store.auth.load();
+      if (!session.authenticated) {
+        if (!mounted) return;
+        setState(() {
+          authRequired = true;
+          isLoading = false;
+        });
+        browserNavigation.replaceWithLogin(navigation.toUri());
+        return;
+      }
+      await _loadWorkspaces();
+      await _loadSnapshot();
     } catch (_) {
-      // Snapshot loading reports the primary API error in the main surface.
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+          loadError = 'Authentication service is unavailable.';
+        });
+      }
     }
   }
 
@@ -102,7 +131,9 @@ class _StudioAppState extends State<StudioApp> {
         snapshot = StudioSnapshot.empty();
         selectedWorkspaceId = null;
         selectedProjectId = null;
+        authRequired = true;
       });
+      browserNavigation.replaceWithLogin(navigation.toUri());
     } catch (error) {
       if (mounted) setState(() => loadError = error.toString());
     }
@@ -122,10 +153,13 @@ class _StudioAppState extends State<StudioApp> {
 
   Future<void> _loadSnapshot(
       {String? projectId, String? workspaceId, bool showSpinner = true}) async {
+    if (store.auth.session?.authenticated == false) return;
     if (showSpinner) {
+      final reconnecting = !isLoading && snapshot.projects.isNotEmpty;
       setState(() {
         isLoading = true;
         loadError = null;
+        isReconnecting = reconnecting;
       });
     }
     try {
@@ -144,6 +178,9 @@ class _StudioAppState extends State<StudioApp> {
             : loaded.projects.firstOrNull?.id;
         selectedChatId = loaded.activeChatId ?? loaded.activeChat?.id;
         isLoading = false;
+        isReconnecting = false;
+        authRequired = false;
+        _applyNavigationToSnapshot(loaded);
         if (loaded.run?.status == RunStatus.paused) {
           // The API is the source of truth; no local pause state is maintained.
         }
@@ -153,8 +190,57 @@ class _StudioAppState extends State<StudioApp> {
       if (!mounted) return;
       setState(() {
         isLoading = false;
+        isReconnecting = false;
         loadError = error.toString();
       });
+    }
+  }
+
+  void _applyNavigationToSnapshot(StudioSnapshot loaded) {
+    final routeProject = navigation.projectId;
+    if (routeProject != null &&
+        loaded.projects.any((project) => project.id == routeProject)) {
+      selectedProjectId = routeProject;
+    }
+    final project = loaded.projects
+        .where((value) => value.id == selectedProjectId)
+        .firstOrNull;
+    if (navigation.chatId != null &&
+        project?.chats.any((chat) => chat.id == navigation.chatId) == true) {
+      selectedChatId = navigation.chatId;
+    }
+    if (navigation.runId != null) showRunDetails = true;
+  }
+
+  void _onBrowserNavigation(Uri uri) {
+    final next = StudioNavigation.fromUri(uri);
+    if (next == navigation) return;
+    final projectChanged =
+        next.projectId != null && next.projectId != selectedProjectId;
+    setState(() {
+      navigation = next;
+      selectedProjectId = next.projectId ?? selectedProjectId;
+      selectedChatId = next.chatId ?? selectedChatId;
+      showRunDetails = next.kind == StudioRouteKind.run;
+      navigationIndex = 0;
+    });
+    if (projectChanged) {
+      unawaited(_loadSnapshot(projectId: next.projectId));
+    }
+  }
+
+  void _navigateTo(StudioNavigation next,
+      {bool replace = false, bool? showDetails}) {
+    setState(() {
+      navigation = next;
+      selectedProjectId = next.projectId ?? selectedProjectId;
+      selectedChatId = next.chatId ?? selectedChatId;
+      showRunDetails = showDetails ?? next.kind == StudioRouteKind.run;
+    });
+    if (replace) {
+      browserNavigation.replace(next.toUri());
+    } else {
+      browserNavigation.push(next.toUri());
     }
   }
 
@@ -513,6 +599,8 @@ class _StudioAppState extends State<StudioApp> {
   @override
   void dispose() {
     refreshTimer?.cancel();
+    navigationSubscription?.cancel();
+    browserNavigation.dispose();
     objectiveController.dispose();
     revisionController.dispose();
     chatController.dispose();
@@ -555,6 +643,7 @@ class _StudioAppState extends State<StudioApp> {
       home: LayoutBuilder(
         builder: (context, constraints) {
           if (isLoading) return _loadingScaffold();
+          if (authRequired) return _authScaffold();
           if (loadError != null) return _errorScaffold();
           if (snapshot.projects.isEmpty) return _emptyWorkspaceScaffold();
           final compact = constraints.maxWidth < 900;
@@ -576,6 +665,40 @@ class _StudioAppState extends State<StudioApp> {
   Widget _loadingScaffold() =>
       const Scaffold(body: Center(child: CircularProgressIndicator()));
 
+  Widget _authScaffold() => Scaffold(
+        body: Center(
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.lock_outline, size: 42),
+                    const SizedBox(height: 16),
+                    const Text('Sign in to Conclave',
+                        style: TextStyle(
+                            fontSize: 24, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 8),
+                    const Text(
+                        'Use your organization identity to access Projects, Hosts, Workers, and Accounts.',
+                        textAlign: TextAlign.center),
+                    const SizedBox(height: 20),
+                    FilledButton.icon(
+                      onPressed: () => browserNavigation
+                          .replaceWithLogin(navigation.toUri()),
+                      icon: const Icon(Icons.login),
+                      label: const Text('Continue to sign in'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
   Widget _errorScaffold() => Scaffold(
           body: Center(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -585,7 +708,9 @@ class _StudioAppState extends State<StudioApp> {
         const SizedBox(height: 6),
         Text(loadError ?? '', style: const TextStyle(color: Colors.grey)),
         const SizedBox(height: 16),
-        FilledButton(onPressed: _loadSnapshot, child: const Text('Retry')),
+        FilledButton(
+            onPressed: () => _loadSnapshot(),
+            child: Text(isReconnecting ? 'Reconnecting…' : 'Reconnect')),
       ])));
 
   Widget _emptyWorkspaceScaffold() => Scaffold(
@@ -786,6 +911,20 @@ class _StudioAppState extends State<StudioApp> {
             navigationIndex = index;
             showRunDetails = index != 0;
           });
+          if (index == 0) {
+            final project = selectedProject;
+            final chat = selectedChat;
+            if (project != null && chat != null) {
+              _navigateTo(StudioNavigation.chat(project.id, chat.id),
+                  replace: true);
+            } else {
+              _navigateTo(const StudioNavigation.home(),
+                  replace: true, showDetails: false);
+            }
+          } else {
+            _navigateTo(const StudioNavigation.home(),
+                replace: true, showDetails: true);
+          }
           Scaffold.maybeOf(navigationContext ?? context)?.closeDrawer();
         }
       },
@@ -836,6 +975,12 @@ class _StudioAppState extends State<StudioApp> {
             expandedProjectIds.add(project.id);
             selectedChatId = project.chats.firstOrNull?.id;
           });
+          final chat = project.chats.firstOrNull;
+          _navigateTo(
+              chat == null
+                  ? StudioNavigation.project(project.id)
+                  : StudioNavigation.chat(project.id, chat.id),
+              replace: true);
           _loadSnapshot(projectId: project.id);
         },
         borderRadius: BorderRadius.circular(9),
@@ -871,12 +1016,15 @@ class _StudioAppState extends State<StudioApp> {
       if (expanded)
         ...project.chats.map(
           (chat) => InkWell(
-            onTap: () => setState(() {
-              selectedProjectId = project.id;
-              selectedChatId = chat.id;
-              showRunDetails = false;
-              navigationIndex = 0;
-            }),
+            onTap: () {
+              setState(() {
+                selectedProjectId = project.id;
+                selectedChatId = chat.id;
+                showRunDetails = false;
+                navigationIndex = 0;
+              });
+              _navigateTo(StudioNavigation.chat(project.id, chat.id));
+            },
             child: Padding(
               padding: const EdgeInsets.fromLTRB(30, 7, 8, 7),
               child: Row(children: [
@@ -925,7 +1073,15 @@ class _StudioAppState extends State<StudioApp> {
       child: Row(children: [
         if (showRunDetails)
           IconButton(
-              onPressed: () => setState(() => showRunDetails = false),
+              onPressed: () {
+                final project = selectedProject;
+                final chat = selectedChat;
+                if (project != null && chat != null) {
+                  _navigateTo(StudioNavigation.chat(project.id, chat.id));
+                } else {
+                  _navigateTo(const StudioNavigation.home());
+                }
+              },
               icon: const Icon(Icons.arrow_back_rounded)),
         if (compact)
           Builder(
@@ -1375,10 +1531,13 @@ class _StudioAppState extends State<StudioApp> {
           Align(
             alignment: Alignment.centerLeft,
             child: OutlinedButton.icon(
-              onPressed: () => setState(() {
-                showRunDetails = true;
-                navigationIndex = 0;
-              }),
+              onPressed: () {
+                final project = selectedProject;
+                final run = snapshot.run;
+                if (project != null && run != null) {
+                  _navigateTo(StudioNavigation.run(project.id, run.id));
+                }
+              },
               icon: const Icon(Icons.open_in_new, size: 15),
               label: const Text('Open run details'),
             ),
@@ -1830,7 +1989,13 @@ class _StudioAppState extends State<StudioApp> {
       subtitle:
           '${snapshot.findings.length} findings · ${snapshot.artifacts.length} artifacts',
       trailing: TextButton(
-          onPressed: () => setState(() => showRunDetails = true),
+          onPressed: () {
+            final project = selectedProject;
+            final run = snapshot.run;
+            if (project != null && run != null) {
+              _navigateTo(StudioNavigation.run(project.id, run.id));
+            }
+          },
           child: const Text('Open run details')),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [

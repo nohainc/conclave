@@ -6,8 +6,7 @@ Conclave AX has three primary applications and one extension type.
 
 ## 1. Conclave Studio
 
-**Path:** `apps/studio` after v4 migration  
-**Current transitional path:** `apps/flutter_app`
+**Path:** `apps/studio`
 
 **Technology**
 - Flutter;

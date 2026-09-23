@@ -1,16 +1,17 @@
-import 'package:conclave_app/src/studio/studio_data.dart';
-import 'package:conclave_app/src/studio/studio_models.dart';
+import 'package:conclave_studio/src/studio/studio_data.dart';
+import 'package:conclave_studio/src/studio/studio_models.dart';
 
 import 'studio_fixture_snapshot.dart';
 
 /// Test-only fixture source. Production Studio always uses StudioApiClient.
 class StudioFixtureDataSource implements StudioDataSource {
-  const StudioFixtureDataSource();
+  const StudioFixtureDataSource({this.authenticated = true});
+
+  final bool authenticated;
 
   @override
-  Future<StudioSession> loadSession() async => const StudioSession(
-        authenticated: true,
-      );
+  Future<StudioSession> loadSession() async =>
+      StudioSession(authenticated: authenticated);
 
   @override
   Future<void> logout() async {}

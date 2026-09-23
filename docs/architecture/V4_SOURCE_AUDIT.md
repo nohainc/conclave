@@ -45,7 +45,7 @@ Assignment
 
 | Current source/concept | v4 action |
 | --- | --- |
-| `apps/flutter_app` | Keep; rename to `apps/studio`; web-only target |
+| `apps/studio` | Web-only Studio application |
 | `apps/worker` | Keep; rename to `apps/cloud` |
 | `apps/agent_app` | Merged into `apps/host` |
 | `apps/agent_engine` | Merged into `apps/host`; IPC/process split removed |
@@ -293,6 +293,15 @@ Host, sharing, usage, and auth state. The chat composer defaults to Auto and
 Balanced, with explicit advanced controls for Worker, model, Account, Host,
 candidate count, and cost. Navigation collapses into a drawer at medium and
 narrow widths without hover-only actions.
+
+V4-17 makes Studio explicitly web-only at `apps/studio`. Native Flutter
+targets and desktop project metadata are not part of the package. Projects,
+Chats, and Runs have browser URLs; push/replace state and pop-state keep
+refresh, back, and forward navigation inside the same Cloud-backed app.
+Unauthenticated sessions redirect to sign-in with a return URL. Responsive
+breakpoints retain the wide sidebar and compact drawer/single-column layout,
+while multiple browser tabs keep independent navigation state. The existing
+Cloud HTTP/refresh path remains the only Studio realtime mechanism.
 - make Studio read models purpose-built instead of one large snapshot response over time.
 
 ## 8. Suggested source organization

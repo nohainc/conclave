@@ -758,7 +758,7 @@ New user can pair Host, connect account, and execute without Agent/Plugin termin
 Make Studio explicitly web-first.
 
 ### Scope
-- rename `apps/flutter_app` -> `apps/studio`;
+- use `apps/studio` as the web-only Studio package;
 - remove desktop Studio targets/assumptions;
 - deep-link Projects/Chats/Runs;
 - browser refresh/back/forward;

@@ -13,16 +13,19 @@ class ConclaveApp extends StatelessWidget {
     super.key,
     this.services = const DefaultPlatformServices(),
     this.dataSource,
+    this.initialUri,
   });
 
   final PlatformServices services;
   final StudioDataSource? dataSource;
+  final Uri? initialUri;
 
   @override
   Widget build(BuildContext context) {
     return StudioApp(
       services: services,
       dataSource: dataSource ?? StudioApiClient(),
+      initialUri: initialUri,
     );
   }
 }

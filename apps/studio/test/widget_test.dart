@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 
-import 'package:conclave_app/main.dart';
+import 'package:conclave_studio/main.dart';
 import 'studio_fixture_data.dart';
 
 void main() {
@@ -71,9 +71,10 @@ void main() {
     await tester.ensureVisible(find.text('Atlas API', skipOffstage: false));
     await tester.tap(find.text('Atlas API'));
     await tester.pumpAndSettle();
-    await tester
-        .ensureVisible(find.text('Database migration v2', skipOffstage: false));
-    await tester.tap(find.text('Database migration v2', skipOffstage: false));
+    final migrationChat =
+        find.text('Database migration v2', skipOffstage: false).last;
+    await tester.ensureVisible(migrationChat);
+    await tester.tap(migrationChat);
     await tester.pumpAndSettle();
     expect(find.text('Database migration v2'), findsWidgets);
 
@@ -154,5 +155,29 @@ void main() {
     expect(find.text('Hosts', skipOffstage: false), findsOneWidget);
     expect(find.text('Accounts', skipOffstage: false), findsOneWidget);
     await tester.binding.setSurfaceSize(null);
+  });
+
+  testWidgets('auth redirects to sign-in without loading workspace data',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(const ConclaveApp(
+        dataSource: StudioFixtureDataSource(authenticated: false)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sign in to Conclave'), findsOneWidget);
+    expect(find.text('Continue to sign in'), findsOneWidget);
+    expect(find.text('Improve authentication architecture'), findsNothing);
+  });
+
+  testWidgets('chat and run links can be opened from a refreshed URL',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      ConclaveApp(
+        dataSource: const StudioFixtureDataSource(),
+        initialUri: Uri(path: '/projects/forge/chats/chat-auth-1'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Conversation'), findsOneWidget);
+    expect(find.text('Improve authentication architecture'), findsWidgets);
   });
 }
