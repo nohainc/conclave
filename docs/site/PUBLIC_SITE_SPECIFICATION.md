@@ -210,6 +210,14 @@ The system supports wide, medium, and narrow layouts; visible keyboard focus;
 reduced-motion preferences; and forced-colors/high-contrast mode. Motion is
 limited to short state transitions and must not carry essential meaning.
 
+The public site, Conclave AX, and Conclave Host share the same recognizable
+brand foundation: the C mark, Conclave AX purple accent, warm neutral surfaces,
+ink text, restrained borders, and the product terms Conclave AX, Host, Worker,
+Account, Workspace, Project, Chat, and Run. The application and Host may use
+denser layouts and darker navigation for productivity, but their entry screens,
+titles, buttons, and marks should make the transition from the website feel
+intentional. Public-site navigation never duplicates application login logic.
+
 ## Acceptance checklist
 
 An implementation is conformant when a visitor can, without signing in:

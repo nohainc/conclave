@@ -9,6 +9,7 @@ import '../navigation/studio_navigation.dart';
 import '../notifications/notification_models.dart';
 import '../platform/platform_services.dart';
 import '../realtime/realtime_client.dart';
+import '../brand.dart';
 import 'studio_models.dart';
 import 'studio_data.dart';
 import 'studio_stores.dart';
@@ -1044,7 +1045,7 @@ class _StudioAppState extends State<StudioApp> {
           if (snapshot.projects.isEmpty) return _emptyWorkspaceScaffold();
           final compact = constraints.maxWidth < 900;
           return Scaffold(
-            backgroundColor: const Color(0xfff7f8fa),
+            backgroundColor: ConclaveBrand.paper,
             drawer: compact ? Drawer(child: _sidebar(compact: true)) : null,
             body: Row(
               children: [
@@ -1100,9 +1101,19 @@ class _StudioAppState extends State<StudioApp> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.lock_outline, size: 42),
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: ConclaveBrand.brandMark,
+                    alignment: Alignment.center,
+                    child: const Text('C',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800)),
+                  ),
                   const SizedBox(height: 16),
-                  const Text('Sign in to Conclave',
+                  const Text('Welcome to Conclave AX',
                       style:
                           TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 8),
@@ -1215,22 +1226,29 @@ class _StudioAppState extends State<StudioApp> {
 
   ThemeData _theme() => ThemeData(
         useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xfff7f8fa),
+        scaffoldBackgroundColor: ConclaveBrand.paper,
         colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xff6254d9), brightness: Brightness.light),
-        fontFamily: 'Arial',
+            seedColor: ConclaveBrand.accent, brightness: Brightness.light),
+        fontFamily: 'Inter',
+        textTheme: const TextTheme(
+          bodyMedium: TextStyle(color: ConclaveBrand.ink),
+          titleLarge:
+              TextStyle(color: ConclaveBrand.ink, fontWeight: FontWeight.w700),
+        ),
         cardTheme: const CardThemeData(
-            margin: EdgeInsets.zero, elevation: 0, color: Colors.white),
+            margin: EdgeInsets.zero,
+            elevation: 0,
+            color: ConclaveBrand.surface),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: Colors.white,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xffe1e1e8)),
+            borderSide: const BorderSide(color: ConclaveBrand.line),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xffe1e1e8)),
+            borderSide: const BorderSide(color: ConclaveBrand.line),
           ),
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
@@ -1240,7 +1258,7 @@ class _StudioAppState extends State<StudioApp> {
   Widget _sidebar({bool compact = false}) {
     return Builder(
       builder: (sidebarContext) => Container(
-        color: const Color(0xff171725),
+        color: ConclaveBrand.navigation,
         padding: const EdgeInsets.fromLTRB(18, 24, 14, 18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1249,18 +1267,23 @@ class _StudioAppState extends State<StudioApp> {
               Container(
                   width: 30,
                   height: 30,
-                  decoration: BoxDecoration(
-                      color: const Color(0xff7768ee),
-                      borderRadius: BorderRadius.circular(9)),
-                  child: const Icon(Icons.hub_rounded,
-                      color: Colors.white, size: 18)),
+                  decoration: ConclaveBrand.brandMark,
+                  alignment: Alignment.center,
+                  child: const Text('C',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 17))),
               const SizedBox(width: 10),
-              const Text('conclave',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 18,
-                      letterSpacing: -.3)),
+              const Flexible(
+                child: Text('Conclave AX',
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 18,
+                        letterSpacing: -.3)),
+              ),
             ]),
             const SizedBox(height: 32),
             if (workspaces.length > 1) ...[
@@ -1326,6 +1349,8 @@ class _StudioAppState extends State<StudioApp> {
                           color: Colors.white70, fontSize: 12))),
               PopupMenuButton<String>(
                 tooltip: 'Account menu',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(width: 32),
                 onSelected: (value) {
                   if (value == 'logout') unawaited(_logout());
                 },

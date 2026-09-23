@@ -180,7 +180,7 @@ void main() {
         dataSource: StudioFixtureDataSource(authenticated: false)));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sign in to Conclave'), findsOneWidget);
+    expect(find.text('Welcome to Conclave AX'), findsOneWidget);
     expect(find.text('Continue with GitHub'), findsOneWidget);
     expect(find.text('Continue with Google'), findsOneWidget);
     expect(find.text('Continue with Passkey'), findsOneWidget);

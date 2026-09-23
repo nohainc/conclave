@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 
+import 'brand.dart';
 import 'diagnostics.dart';
 import 'host.dart';
 
@@ -219,11 +220,38 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     return MaterialApp(
       title: 'Conclave Host',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+        useMaterial3: true,
+        scaffoldBackgroundColor: ConclaveBrand.paper,
+        colorScheme: ColorScheme.fromSeed(seedColor: ConclaveBrand.accent),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: ConclaveBrand.paper,
+          foregroundColor: ConclaveBrand.ink,
+          elevation: 0,
+        ),
       ),
       home: Scaffold(
         appBar: AppBar(
-          title: const Text('Conclave Host'),
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: const BoxDecoration(
+                  color: ConclaveBrand.accent,
+                  borderRadius: BorderRadius.all(Radius.circular(9)),
+                ),
+                alignment: Alignment.center,
+                child: const Text('C',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 17)),
+              ),
+              const SizedBox(width: 10),
+              const Text('Conclave Host'),
+            ],
+          ),
           actions: [
             IconButton(
               tooltip: lifecycle.hidden ? 'Restore' : 'Minimize',
