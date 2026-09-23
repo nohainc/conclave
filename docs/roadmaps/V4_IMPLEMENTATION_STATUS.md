@@ -25,7 +25,7 @@ Track progress of the [v4 implementation roadmap](ARCHITECTURE_V4_IMPLEMENTATION
 | V4-18 | Authentication and Workspace authorization alignment | ✅ Complete |
 | V4-19 | Host desired-state controller | ✅ Complete |
 | V4-20 | Session/history isolation | ✅ Complete |
-| V4-21 | Forge migration | ⬜ Not started |
+| V4-21 | Forge migration | ✅ Complete |
 | V4-22 | Usage, budgets, shared-account accounting | ⬜ Not started |
 | V4-23 | Security and supply-chain hardening | ⬜ Not started |
 | V4-24 | Aggressive v3 cleanup | ⬜ Not started |

@@ -409,6 +409,12 @@ Interactive assignments also carry the requesting Conclave user when known,
 preventing two users on a shared Host/profile from claiming one another's
 provider session.
 
+V4-21 Forge execution resolves and persists Host + Worker + Credential Profile
+targets for implementation, review, research, and runtime work. Forge consumes
+assignment results and machine evidence; provider routing remains inside the
+Worker boundary, and v4 Forge dispatch writes immutable `worker_assignments`
+instead of configured Worker or Agent/Plugin records.
+
 ## 9. Architectural deletion gate
 
 Architecture v4 cleanup is complete when active source search returns no product/domain usage of:

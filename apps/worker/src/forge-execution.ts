@@ -15,6 +15,7 @@ import type {
   WorkerAssignmentResult,
   WorkerAvailability,
   WorkerCostMetadata,
+  ResolvedExecutionTarget,
 } from "@conclave/core";
 import {
   executeForgeGoal,
@@ -51,6 +52,7 @@ interface ForgeExecutionContext {
   readonly taskId: string;
   readonly goalId: string;
   readonly organizationId: string;
+  readonly requestedByUserId: string;
   readonly projectId: string;
   readonly repositoryId: string;
   readonly revision: string;
@@ -113,6 +115,28 @@ export function assertMultiWorkerForgeBindings(
   }
 }
 
+export function assertV4ForgeBindings(
+  bindings: readonly ForgeWorkerBinding[],
+): void {
+  if (
+    bindings.length < 3 ||
+    bindings.some((binding) => !binding.executionTarget)
+  ) {
+    throw new Error(
+      "Forge requires Host + Worker + Credential Profile execution targets",
+    );
+  }
+  const targets = bindings.map((binding) => binding.executionTarget!);
+  if (
+    targets.some(
+      (target) =>
+        !target.hostId || !target.workerId || !target.credentialProfileId,
+    )
+  ) {
+    throw new Error("Forge execution targets must be immutable v4 snapshots");
+  }
+}
+
 function digest(value: string): string {
   return [...new Uint8Array(new TextEncoder().encode(value))]
     .map((byte) => byte.toString(16).padStart(2, "0"))
@@ -155,6 +179,8 @@ function cost(value: unknown): WorkerCostMetadata {
 export interface ForgeWorkerBinding {
   readonly worker: Worker;
   readonly agent: ConclaveAgent;
+  /** v4 immutable target snapshot used by Forge dispatch. */
+  readonly executionTarget?: ResolvedExecutionTarget;
 }
 
 function workerEntity(row: Record<string, unknown>): Worker {
@@ -575,6 +601,7 @@ class HostGatewayForgeWorker implements ForgeWorker {
     readonly agent: ConclaveAgent,
     private readonly env: ForgeExecutionEnv,
     private readonly context: ForgeExecutionContext,
+    private readonly executionTarget?: ResolvedExecutionTarget,
   ) {}
 
   async execute(request: ForgeWorkerRequest): Promise<WorkerAssignmentResult> {
@@ -684,6 +711,9 @@ class HostGatewayForgeWorker implements ForgeWorker {
       input: Record<string, unknown>;
     },
   ): Promise<DispatchAssignmentResult> {
+    if (this.executionTarget) {
+      return this.dispatchV4(request, task);
+    }
     const dispatcherEnv = this.env as unknown as AssignmentDispatcherEnv;
     if (this.env.CONCLAVE_HOST_GATEWAY) {
       return dispatchTaskAssignment(dispatcherEnv, {
@@ -748,6 +778,129 @@ class HostGatewayForgeWorker implements ForgeWorker {
       };
     }
     return body.assignment;
+  }
+
+  private async dispatchV4(
+    request: ForgeWorkerRequest,
+    task: {
+      id: string;
+      role: string;
+      objective: string;
+      capabilities: readonly string[];
+      contextArtifactIds: readonly string[];
+      timeoutMs: number;
+      input: Record<string, unknown>;
+    },
+  ): Promise<DispatchAssignmentResult> {
+    const target = this.executionTarget!;
+    const now = new Date().toISOString();
+    const attemptId = `att-${request.taskId}-${crypto.randomUUID().slice(0, 12)}`;
+    const assignmentId = `asg-${request.taskId}-${crypto.randomUUID().slice(0, 12)}`;
+    const idempotencyKey = `idem-${assignmentId}`;
+    await this.env.CONCLAVE_DB.prepare(
+      `INSERT INTO attempts
+       (id, task_id, worker_id, attempt_number, input_snapshot_json, status, started_at)
+       VALUES (?1, ?2, ?3, 1, ?4, 'running', ?5)`,
+    )
+      .bind(
+        attemptId,
+        request.taskId,
+        target.workerId,
+        JSON.stringify(task.input),
+        now,
+      )
+      .run();
+    await this.env.CONCLAVE_DB.prepare(
+      `INSERT INTO worker_assignments
+       (id, workspace_id, project_id, run_id, task_id, attempt_id,
+        requested_by_user_id, host_id, worker_id, resolved_worker_version,
+        credential_profile_id, config_json, session_policy, permissions_json,
+        context_refs_json, timeout_ms, idempotency_key, status, input_json,
+        created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
+               'stateless', '[]', ?13, ?14, ?15, 'dispatched', ?16, ?17, ?17)`,
+    )
+      .bind(
+        assignmentId,
+        this.context.organizationId,
+        this.context.projectId,
+        request.runId,
+        request.taskId,
+        attemptId,
+        this.context.requestedByUserId,
+        target.hostId,
+        target.workerId,
+        target.resolvedWorkerVersion,
+        target.credentialProfileId,
+        JSON.stringify(task.input),
+        JSON.stringify(
+          task.contextArtifactIds.map((artifactId) => ({ artifactId })),
+        ),
+        task.timeoutMs,
+        idempotencyKey,
+        JSON.stringify(task.input),
+        now,
+      )
+      .run();
+    const namespace = this.env.CONCLAVE_HOST_GATEWAY;
+    if (!namespace) {
+      return {
+        assignmentId,
+        attemptId,
+        workerId: target.workerId,
+        agentId: target.hostId,
+        pluginId: target.workerId,
+        status: "failed",
+        accepted: false,
+        error: "Host Gateway is not configured",
+      };
+    }
+    const stub = namespace.get(namespace.idFromName(target.hostId));
+    const response = await stub.fetch("http://gateway/dispatch-assignment", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: this.context.organizationId,
+        hostId: target.hostId,
+        workerId: target.workerId,
+        runId: request.runId,
+        taskId: request.taskId,
+        attemptId,
+        assignmentId,
+        idempotencyKey,
+        payload: {
+          pluginId: target.workerId,
+          resolvedPluginVersion: target.resolvedWorkerVersion,
+          role: task.role,
+          objective: task.objective,
+          input: task.input,
+          contextArtifactIds: [...task.contextArtifactIds],
+          timeoutMs: task.timeoutMs,
+          credentialProfileId: target.credentialProfileId,
+        },
+      }),
+    });
+    if (!response.ok) {
+      return {
+        assignmentId,
+        attemptId,
+        workerId: target.workerId,
+        agentId: target.hostId,
+        pluginId: target.workerId,
+        status: "failed",
+        accepted: false,
+        error: await response.text(),
+      };
+    }
+    return {
+      assignmentId,
+      attemptId,
+      workerId: target.workerId,
+      agentId: target.hostId,
+      pluginId: target.workerId,
+      status: "dispatched",
+      accepted: true,
+    };
   }
 
   private deadline(request: ForgeWorkerRequest): number {
@@ -816,6 +969,7 @@ function modelFor(
     binding.agent,
     env,
     context,
+    binding.executionTarget,
   );
 }
 
@@ -838,6 +992,7 @@ export async function readExecutionContext(
   const runId = String(params.runId ?? "");
   const goalId = String(params.goalId ?? "");
   const organizationId = String(params.organizationId ?? "");
+  const requestedByUserId = String(params.requestedByUserId ?? "");
   if (!runId || !goalId || !organizationId) {
     throw new Error(
       "Forge execution requires runId, goalId, and organizationId",
@@ -845,7 +1000,8 @@ export async function readExecutionContext(
   }
   const project = await env.CONCLAVE_DB.prepare(
     `SELECT p.id AS project_id, p.repository_id,
-            g.id AS goal_id, r.goal_id AS run_goal_id,
+            g.id AS goal_id, g.created_by_user_id,
+            r.goal_id AS run_goal_id,
             r.project_id AS run_project_id
      FROM projects p
      JOIN goals g ON g.project_id = p.id
@@ -859,6 +1015,7 @@ export async function readExecutionContext(
       goal_id: string;
       run_goal_id: string | null;
       run_project_id: string | null;
+      created_by_user_id: string | null;
     }>();
   if (!project)
     throw new Error("Goal is not owned by the execution organization");
@@ -888,6 +1045,8 @@ export async function readExecutionContext(
     taskId: String(params.taskId ?? `${runId}:runtime`),
     goalId,
     organizationId,
+    requestedByUserId:
+      requestedByUserId || String(project.created_by_user_id ?? ""),
     projectId: String(params.projectId ?? project.project_id),
     repositoryId: String(params.repositoryId ?? project.repository_id ?? ""),
     revision: String(params.revision ?? "HEAD"),
@@ -922,20 +1081,28 @@ export async function executeForgeService(
   };
   const workers = await env.CONCLAVE_DB.prepare(
     `SELECT
-       w.id, w.agent_id, w.name, w.plugin_id, w.plugin_version_policy,
-       w.roles_json, w.capabilities_json, w.secret_refs_json,
-       w.independence_key, w.billing_mode, w.cost_metadata_json,
-       w.config_json, w.concurrency_limit, w.session_policy,
-       w.created_at, w.updated_at,
-       a.id AS agent_id, a.name AS agent_name, a.hostname AS agent_hostname,
-       a.status AS agent_status, a.version AS agent_version,
-       a.capabilities_json AS agent_capabilities_json,
-       a.enrolled_at, a.last_heartbeat_at, a.revoked_at,
-       w.workspace_id
-     FROM workers w
-     JOIN agents a ON a.id = w.agent_id
-     WHERE w.workspace_id = ?1
-     ORDER BY w.id`,
+       w.id, h.id AS agent_id, w.display_name AS name,
+       w.id AS plugin_id, wv.version AS plugin_version_policy,
+       '[]' AS roles_json, wv.capabilities_json, '[]' AS secret_refs_json,
+       w.id AS independence_key, 'local' AS billing_mode, '{}' AS cost_metadata_json,
+       '{}' AS config_json, 1 AS concurrency_limit, 'stateless' AS session_policy,
+       w.created_at, w.updated_at, h.id AS agent_id,
+       h.name AS agent_name, h.hostname AS agent_hostname, h.status AS agent_status,
+       h.version AS agent_version, h.capabilities_json AS agent_capabilities_json,
+       h.enrolled_at, h.last_heartbeat_at, h.revoked_at, w.workspace_id,
+       cp.id AS credential_profile_id
+     FROM host_worker_installations i
+     JOIN hosts h ON h.id = i.host_id AND h.status = 'online' AND h.revoked_at IS NULL
+     JOIN workers w ON w.id = i.worker_id AND w.status = 'active'
+     JOIN worker_versions wv ON wv.id = i.worker_version_id AND wv.is_revoked = 0
+     JOIN credential_profiles cp
+       ON cp.worker_id = w.id AND cp.host_id = h.id AND cp.status = 'ready'
+     WHERE i.status = 'active' AND w.workspace_id = ?1
+       AND cp.id = (
+         SELECT MIN(cp2.id) FROM credential_profiles cp2
+         WHERE cp2.worker_id = w.id AND cp2.host_id = h.id AND cp2.status = 'ready'
+       )
+     ORDER BY w.id, h.id`,
   )
     .bind(context.organizationId)
     .all<Record<string, unknown>>();
@@ -943,6 +1110,13 @@ export async function executeForgeService(
     (workers.results ?? []).map((row) => ({
       worker: workerEntity(row),
       agent: hostEntity(row),
+      executionTarget: {
+        hostId: String(row.agent_id),
+        workerId: String(row.id),
+        credentialProfileId: String(row.credential_profile_id),
+        resolvedWorkerVersion: String(row.plugin_version_policy),
+        config: {},
+      },
     })),
   );
   const leadResource =
@@ -972,6 +1146,7 @@ export async function executeForgeService(
     implementerResource,
     reviewerResource,
   ];
+  assertV4ForgeBindings(selectedBindings);
   if (executionMode === "single_worker") {
     assertSingleHostForgeBindings(selectedBindings);
   }
@@ -1027,6 +1202,7 @@ export async function executeForgeService(
           runtimeResource.agent,
           env,
           context,
+          runtimeResource.executionTarget,
         ),
       ),
       persistence,
