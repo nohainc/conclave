@@ -447,7 +447,10 @@ void main() {
         'timeoutMs': 1000,
       },
     }));
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await waitFor(() => socket.sent.any((message) {
+          final decoded = jsonDecode(message as String) as Map<String, dynamic>;
+          return decoded['type'] == 'assignment.result';
+        }));
 
     final messages = socket.sent
         .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
@@ -743,7 +746,10 @@ void main() {
     expect((duplicateAck['payload'] as Map<String, dynamic>)['reason'],
         contains('already exists'));
     release.complete();
-    await Future<void>.delayed(const Duration(milliseconds: 10));
+    await waitFor(() => socket.sent.any((message) {
+          final decoded = jsonDecode(message as String) as Map<String, dynamic>;
+          return decoded['type'] == 'assignment.result';
+        }));
     await connection.close();
     await directory.delete(recursive: true);
   });
