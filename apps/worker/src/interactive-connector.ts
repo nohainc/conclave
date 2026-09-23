@@ -131,8 +131,12 @@ export async function handleConnectorTaskRequest(
         typeof body.assignmentId === "string" ? body.assignmentId : undefined,
       attemptId:
         typeof body.attemptId === "string" ? body.attemptId : undefined,
-      agentId: typeof body.agentId === "string" ? body.agentId : undefined,
+      hostId: typeof body.hostId === "string" ? body.hostId : undefined,
       workerId: typeof body.workerId === "string" ? body.workerId : undefined,
+      credentialProfileId:
+        typeof body.credentialProfileId === "string"
+          ? body.credentialProfileId
+          : undefined,
       objective: typeof body.objective === "string" ? body.objective : "",
       context: [],
       messages: [body.prompt ?? body.input ?? {}],

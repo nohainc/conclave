@@ -19,6 +19,7 @@ describe("interactive connector", () => {
       runId: "run-1",
       organizationId: "org-1",
       projectId: "project-1",
+      credentialProfileId: "profile-1",
       objective: "Review the proposal",
       context: [],
       messages: [{ type: "review", text: "Inspect the candidate" }],
@@ -27,6 +28,7 @@ describe("interactive connector", () => {
       organizationId: "org-1",
       projectId: "project-1",
       workerId: "web-reviewer",
+      credentialProfileId: "profile-1",
       capabilities: ["code_review"],
       leaseMs: 10_000,
     });
@@ -68,7 +70,8 @@ describe("interactive connector", () => {
       runId: assignment.runId,
       taskId: assignment.taskId,
       workerId: assignment.workerId,
-      agentId: assignment.agentId,
+      hostId: assignment.hostId,
+      credentialProfileId: assignment.credentialProfileId,
       status: "completed",
     });
     connector.reportStatus(session.sessionId, session.sessionToken, {
@@ -101,6 +104,7 @@ describe("interactive connector", () => {
         organizationId: "org-1",
         projectId: "project-1",
         workerId: "web-worker",
+        credentialProfileId: "profile-1",
         capabilities: [],
       }),
     ).toThrow("authentication");
@@ -108,6 +112,7 @@ describe("interactive connector", () => {
       organizationId: "org-1",
       projectId: "project-1",
       workerId: "web-worker",
+      credentialProfileId: "profile-1",
       capabilities: [],
       leaseMs: 1_000,
     });
@@ -128,6 +133,7 @@ describe("interactive connector", () => {
       runId: "run-1",
       organizationId: "org-1",
       projectId: "project-1",
+      credentialProfileId: "profile-1",
       objective: "Propose an architecture",
       context: [],
       messages: [{ prompt: "Return a candidate" }],
@@ -148,6 +154,7 @@ describe("interactive connector", () => {
         runId: "run-1",
         organizationId: "org-1",
         projectId: "project-1",
+        credentialProfileId: "profile-1",
         objective: "Duplicate",
         context: [],
         messages: [],
@@ -174,6 +181,7 @@ describe("interactive connector", () => {
       organizationId: "org-1",
       projectId: "project-1",
       workerId: "web-worker",
+      credentialProfileId: "profile-1",
       capabilities: [],
     });
     expect(() =>
@@ -186,5 +194,70 @@ describe("interactive connector", () => {
         "other-task",
       ),
     ).toThrow("outside the session workspace");
+  });
+
+  it("does not allow a session to reuse another Credential Profile", () => {
+    const connector = new InteractiveConnector({
+      registrationToken: "register-secret",
+    });
+    connector.registerAssignment({
+      taskId: "profile-task",
+      goalId: "goal-1",
+      runId: "run-1",
+      organizationId: "org-1",
+      projectId: "project-1",
+      credentialProfileId: "profile-owner",
+      objective: "Use the private web account",
+      context: [],
+      messages: [],
+    });
+    const session = connector.registerSession("register-secret", {
+      organizationId: "org-1",
+      projectId: "project-1",
+      workerId: "web-worker",
+      credentialProfileId: "profile-other",
+      capabilities: [],
+    });
+    expect(() =>
+      connector.claimAssignment(
+        session.sessionId,
+        session.sessionToken,
+        "profile-task",
+      ),
+    ).toThrow("credential Profile");
+  });
+
+  it("reports quota exhaustion without executing a web assignment", () => {
+    const connector = new InteractiveConnector({
+      registrationToken: "register-secret",
+    });
+    connector.registerAssignment({
+      taskId: "quota-task",
+      goalId: "goal-1",
+      runId: "run-1",
+      organizationId: "org-1",
+      projectId: "project-1",
+      credentialProfileId: "profile-quota",
+      objective: "Use a quota-limited account",
+      context: [],
+      messages: [],
+    });
+    const session = connector.registerSession("register-secret", {
+      organizationId: "org-1",
+      projectId: "project-1",
+      workerId: "web-worker",
+      credentialProfileId: "profile-quota",
+      capabilities: [],
+      quotaRemaining: 0,
+    });
+    expect(() =>
+      connector.claimAssignment(
+        session.sessionId,
+        session.sessionToken,
+        "quota-task",
+      ),
+    ).toThrow("quota");
+    expect(connector.getAssignmentStatus("register-secret", "quota-task"))
+      .toMatchObject({ statusReport: { status: "quota_exceeded" } });
   });
 });

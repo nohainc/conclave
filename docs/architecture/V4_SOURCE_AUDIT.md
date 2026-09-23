@@ -270,6 +270,13 @@ surface. Their manifests declare Host compatibility, credential-profile policy,
 session/concurrency behavior, permissions, usage/billing metadata, digest, and
 signature. Provider Workers receive assignment configuration and opaque
 credential-profile references; raw credentials remain outside assignment data.
+
+V4-14 brings subscription-backed Web AI through the same lifecycle: Host-owned
+Web AI Worker, private Credential Profile, leased session, and immutable
+assignment identity. The Cloud connector remains a mailbox/callback relay; it
+does not execute provider work. Sessions are profile-bound, support reconnect,
+waiting-for-user, quota, and fallback states, and cannot be reused across
+profiles.
 - make Studio read models purpose-built instead of one large snapshot response over time.
 
 ## 8. Suggested source organization

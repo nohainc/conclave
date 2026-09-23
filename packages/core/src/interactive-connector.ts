@@ -8,8 +8,9 @@ export interface ConnectorAssignment {
   readonly runId: string;
   readonly organizationId: string;
   readonly projectId: string;
-  readonly agentId: string;
+  readonly hostId: string;
   readonly workerId: string;
+  readonly credentialProfileId: string;
   readonly objective: string;
   readonly context: readonly AssignmentContextItem[];
   readonly messages: readonly unknown[];
@@ -17,12 +18,13 @@ export interface ConnectorAssignment {
 
 export type ConnectorAssignmentRegistration = Omit<
   ConnectorAssignment,
-  "assignmentId" | "attemptId" | "agentId" | "workerId"
+  "assignmentId" | "attemptId" | "hostId" | "workerId" | "credentialProfileId"
 > & {
   readonly assignmentId?: string;
   readonly attemptId?: string;
-  readonly agentId?: string;
+  readonly hostId?: string;
   readonly workerId?: string;
+  readonly credentialProfileId?: string;
 };
 
 export interface ConnectorSession {
@@ -31,6 +33,7 @@ export interface ConnectorSession {
   readonly organizationId: string;
   readonly projectId: string;
   readonly workerId: string;
+  readonly credentialProfileId: string;
   readonly leaseExpiresAt: string;
 }
 
@@ -38,13 +41,23 @@ export interface ConnectorSessionRegistration {
   readonly organizationId: string;
   readonly projectId: string;
   readonly workerId: string;
+  readonly credentialProfileId: string;
   readonly displayName?: string;
   readonly capabilities: readonly string[];
   readonly leaseMs?: number;
+  readonly quotaRemaining?: number;
 }
 
 export interface ConnectorStatus {
-  readonly status: "available" | "busy" | "waiting" | "completed" | "failed";
+  readonly status:
+    | "available"
+    | "busy"
+    | "waiting"
+    | "waiting_for_user"
+    | "quota_exceeded"
+    | "reconnecting"
+    | "completed"
+    | "failed";
   readonly detail?: string;
 }
 
@@ -67,6 +80,7 @@ interface SessionState extends Omit<ConnectorSession, "leaseExpiresAt"> {
   leaseExpiresAt: string;
   readonly capabilities: readonly string[];
   readonly leaseMs: number;
+  readonly quotaRemaining?: number;
   assignmentId: string | null;
 }
 
@@ -86,9 +100,9 @@ export interface InteractiveConnectorOptions {
 }
 
 /**
- * Assignment mailbox and session lease relay for web Worker Plugins.
+ * Assignment mailbox and session lease relay for web AI Workers.
  * It does not execute work or create Core state; Cloud remains authoritative
- * for the WorkerAssignment and the Agent/Plugin reports the result here.
+ * for the WorkerAssignment and the Web AI Worker reports the result here.
  */
 export class InteractiveConnector {
   private readonly sessions = new Map<string, SessionState>();
@@ -115,8 +129,9 @@ export class InteractiveConnector {
       ...input,
       assignmentId: input.assignmentId ?? `assignment:${input.taskId}`,
       attemptId: input.attemptId ?? `attempt:${input.taskId}`,
-      agentId: input.agentId ?? "web-agent",
+      hostId: input.hostId ?? "web-host",
       workerId: input.workerId ?? "web-worker",
+      credentialProfileId: input.credentialProfileId ?? "web-profile",
       status: "queued",
       claimedBy: null,
       candidates: [],
@@ -147,6 +162,22 @@ export class InteractiveConnector {
     registration: ConnectorSessionRegistration,
   ): ConnectorSession {
     this.requireRegistrationToken(token);
+    if (!registration.credentialProfileId?.trim()) {
+      throw new InteractiveConnectorError(
+        "Credential Profile is required for a web Worker session",
+        "invalid_request",
+      );
+    }
+    if (
+      registration.quotaRemaining !== undefined &&
+      (!Number.isInteger(registration.quotaRemaining) ||
+        registration.quotaRemaining < 0)
+    ) {
+      throw new InteractiveConnectorError(
+        "Credential Profile quota is invalid",
+        "invalid_request",
+      );
+    }
     const leaseMs = registration.leaseMs ?? 5 * 60_000;
     if (!Number.isInteger(leaseMs) || leaseMs < 1_000)
       throw new InteractiveConnectorError(
@@ -159,8 +190,10 @@ export class InteractiveConnector {
       organizationId: registration.organizationId,
       projectId: registration.projectId,
       workerId: registration.workerId,
+      credentialProfileId: registration.credentialProfileId,
       capabilities: registration.capabilities,
       leaseMs,
+      quotaRemaining: registration.quotaRemaining,
       leaseExpiresAt: new Date(this.now() + leaseMs).toISOString(),
       assignmentId: null,
     } satisfies SessionState;
@@ -198,6 +231,16 @@ export class InteractiveConnector {
         "conflict",
       );
     this.authorizeAssignment(session, assignment);
+    if (
+      session.quotaRemaining !== undefined &&
+      session.quotaRemaining <= 0
+    ) {
+      assignment.statusReport = { status: "quota_exceeded" };
+      throw new InteractiveConnectorError(
+        "Credential Profile quota is exhausted",
+        "conflict",
+      );
+    }
     assignment.status = "claimed";
     assignment.claimedBy = session.sessionId;
     session.assignmentId = assignment.assignmentId;
@@ -345,6 +388,12 @@ export class InteractiveConnector {
         "unauthorized",
       );
     }
+    if (assignment.credentialProfileId !== session.credentialProfileId) {
+      throw new InteractiveConnectorError(
+        "Assignment credential Profile is not available to this session",
+        "unauthorized",
+      );
+    }
   }
 
   private matchesAssignment(
@@ -359,7 +408,8 @@ export class InteractiveConnector {
       value.runId === assignment.runId &&
       value.taskId === assignment.taskId &&
       value.workerId === assignment.workerId &&
-      value.agentId === assignment.agentId &&
+      value.hostId === assignment.hostId &&
+      value.credentialProfileId === assignment.credentialProfileId &&
       typeof value.status === "string" &&
       ["completed", "failed", "cancelled"].includes(value.status)
     );
@@ -372,6 +422,7 @@ export class InteractiveConnector {
       organizationId: session.organizationId,
       projectId: session.projectId,
       workerId: session.workerId,
+      credentialProfileId: session.credentialProfileId,
       leaseExpiresAt: session.leaseExpiresAt,
     };
   }
