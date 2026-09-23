@@ -6,12 +6,11 @@ type SocialProviderCredentials = {
   scope: string[];
 };
 
-export type BetterAuthRuntimeEnv = Pick<
-  Env,
-  "CONCLAVE_DB" | "CONCLAVE_ENVIRONMENT"
-> & {
+export type BetterAuthRuntimeEnv = Pick<Env, "CONCLAVE_DB"> & {
+  CONCLAVE_ENVIRONMENT: string;
   BETTER_AUTH_SECRET?: string;
   BETTER_AUTH_URL?: string;
+  BETTER_AUTH_TRUSTED_ORIGINS?: string;
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;
   GOOGLE_CLIENT_ID?: string;
@@ -52,6 +51,22 @@ export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
     env.GOOGLE_CLIENT_SECRET,
     ["email", "profile"],
   );
+  const trustedOrigins = [
+    "https://app.conclaveax.com",
+    "http://localhost:3000",
+    "http://localhost:8080",
+    "http://localhost:8787",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:8080",
+    "http://127.0.0.1:8787",
+    ...(env.BETTER_AUTH_URL ? [new URL(env.BETTER_AUTH_URL).origin] : []),
+    ...(env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",") ?? []),
+  ]
+    .map((origin) => origin.trim().replace(/\/$/, ""))
+    .filter(
+      (origin, index, origins) =>
+        origin.length > 0 && origins.indexOf(origin) === index,
+    );
 
   return {
     database: env.CONCLAVE_DB,
@@ -113,6 +128,18 @@ export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
       },
       cookieCache: {
         enabled: false,
+      },
+      expiresIn: 60 * 60 * 24 * 14,
+      updateAge: 60 * 60 * 24,
+      disableSessionRefresh: false,
+    },
+    trustedOrigins,
+    advanced: {
+      useSecureCookies: env.CONCLAVE_ENVIRONMENT === "production",
+      defaultCookieAttributes: {
+        httpOnly: true,
+        sameSite: "Lax" as const,
+        path: "/",
       },
     },
   };

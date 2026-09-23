@@ -94,3 +94,11 @@ silently accepting privileged membership.
 request header. Cloud resolves Better Auth’s User first, validates that the
 selected Workspace membership is active on every request, and never treats
 the browser selection as an authorization claim.
+
+## AUTH-9 — Session and cookie hardening
+
+✅ Better Auth now uses database-backed, HttpOnly browser sessions with
+explicit production Secure/SameSite policy, trusted origins, bounded expiry,
+refresh, disabled cookie session caching, and standard server-side listing and
+revocation endpoints. Same-origin mutation protection no longer depends on
+Cloudflare Access service-token exceptions.

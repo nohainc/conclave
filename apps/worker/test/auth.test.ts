@@ -7,6 +7,7 @@ import {
   safeAuthReturnTo,
   type AuthenticatedIdentity,
 } from "../src/auth/index.js";
+import { requireSameOriginForCookieMutation } from "../src/routes/handlers.js";
 
 describe("IdentityService", () => {
   it("keeps social login return paths same-origin", () => {
@@ -47,6 +48,28 @@ describe("IdentityService", () => {
     });
     expect(options.session?.modelName).toBe("auth_sessions");
     expect(options.verification?.modelName).toBe("auth_verifications");
+    expect(options.session).toMatchObject({
+      expiresIn: 60 * 60 * 24 * 14,
+      updateAge: 60 * 60 * 24,
+      disableSessionRefresh: false,
+      cookieCache: { enabled: false },
+    });
+    expect(options.trustedOrigins).toContain("https://app.conclaveax.com");
+    expect(options.advanced).toMatchObject({
+      useSecureCookies: false,
+      defaultCookieAttributes: {
+        httpOnly: true,
+        sameSite: "Lax",
+        path: "/",
+      },
+    });
+    const productionOptions = buildBetterAuthOptions({
+      CONCLAVE_DB: {} as D1Database,
+      CONCLAVE_ENVIRONMENT: "production",
+      BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
+      BETTER_AUTH_URL: "https://app.conclaveax.com",
+    });
+    expect(productionOptions.advanced?.useSecureCookies).toBe(true);
     expect(options.socialProviders).toMatchObject({
       github: {
         scope: ["user:email"],
@@ -105,6 +128,32 @@ describe("IdentityService", () => {
         CONCLAVE_ENVIRONMENT: "development",
       }),
     ).resolves.toBeNull();
+  });
+
+  it("enforces same-origin mutations for cookie sessions", () => {
+    expect(() =>
+      requireSameOriginForCookieMutation(
+        new Request("https://app.conclave.test/api/projects", {
+          method: "POST",
+          headers: {
+            cookie: "better-auth.session_token=opaque",
+            origin: "https://evil.example",
+          },
+        }),
+      ),
+    ).toThrow("Same-origin request required");
+
+    expect(() =>
+      requireSameOriginForCookieMutation(
+        new Request("https://app.conclave.test/api/projects", {
+          method: "POST",
+          headers: {
+            cookie: "better-auth.session_token=opaque",
+            origin: "https://app.conclave.test",
+          },
+        }),
+      ),
+    ).not.toThrow();
   });
 
   it("provisions a deterministic personal workspace idempotently", async () => {

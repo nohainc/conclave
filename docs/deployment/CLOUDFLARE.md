@@ -46,13 +46,22 @@ Set these values in the Worker environment:
 - `GITHUB_CLIENT_SECRET` — GitHub OAuth client secret;
 - `GOOGLE_CLIENT_ID` — Google OAuth client ID;
 - `GOOGLE_CLIENT_SECRET` — Google OAuth client secret;
-- `BETTER_AUTH_SECRET` — Better Auth encryption/signing secret.
+- `BETTER_AUTH_SECRET` — Better Auth encryption/signing secret;
+- `BETTER_AUTH_TRUSTED_ORIGINS` — optional comma-separated additional Studio
+  origins for local or controlled preview environments.
 
 Store `GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_SECRET`, and
 `BETTER_AUTH_SECRET` only with Cloudflare Worker secrets (for example,
 `wrangler secret put`). Do not commit values to source, Wrangler configuration,
 CI files, or browser bundles. Client IDs may be ordinary environment
 configuration, but should still be managed per deployment.
+
+Better Auth uses database-backed HttpOnly sessions in `auth_sessions`. The
+production policy is a 14-day session with daily refresh, no session data
+cookie cache, Secure/HttpOnly/SameSite=Lax cookies, and same-origin mutation
+protection. Better Auth's standard session listing and revocation endpoints
+remain available under `/api/auth/*`; Studio never receives or stores the
+session token.
 
 Repository Settings -> Secrets and variables -> Actions:
 

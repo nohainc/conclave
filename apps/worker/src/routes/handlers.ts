@@ -19,6 +19,7 @@ export { handleConnectorRequest } from "../interactive-connector.js";
 import { handleConnectorTaskRequest } from "../interactive-connector.js";
 import {
   identityService,
+  handleBetterAuthRequest,
   listPendingInvitations,
   provisionConclaveUser,
 } from "../auth/index.js";
@@ -232,23 +233,6 @@ function bearer(request: Request): string | null {
 
 export function requireSameOriginForCookieMutation(request: Request): void {
   if (!request.headers.get("cookie") || bearer(request)) return;
-
-  // Cloudflare Access consumes the service-token client headers at the edge
-  // and forwards a signed application JWT instead. The assertion's
-  // `common_name` is the service-token client ID and service-token assertions
-  // have no user `sub`. This is only a CSRF classification hint; Access
-  // authentication and Conclave authorization still happen below.
-  if (accessServiceTokenId(request)) return;
-
-  // Keep this fallback for local gateways that preserve the original
-  // service-token headers instead of forwarding the assertion.
-  const serviceTokenClientId = request.headers
-    .get("cf-access-client-id")
-    ?.trim();
-  const serviceTokenClientSecret = request.headers
-    .get("cf-access-client-secret")
-    ?.trim();
-  if (serviceTokenClientId && serviceTokenClientSecret) return;
 
   const requestOrigin = new URL(request.url).origin;
   const origin = request.headers.get("origin");
@@ -949,6 +933,25 @@ async function handleSessionLogout(
   env: SecurityEnv,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
+  if (env.BETTER_AUTH_SECRET) {
+    const context = await securityContext(request, env, accessContext);
+    const headers = new Headers(request.headers);
+    headers.delete("content-length");
+    headers.set("content-type", "application/json");
+    const authRequest = new Request(
+      new URL("/api/auth/sign-out", request.url),
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ disableRedirect: true }),
+      },
+    );
+    const response = await handleBetterAuthRequest(authRequest, env);
+    if (response.ok && env.CONCLAVE_DB) {
+      await recordAudit(env, context, "logout", "session", context.sessionId);
+    }
+    return response;
+  }
   const context = await securityContext(request, env, accessContext);
   const token = extractAuthToken(request.headers);
   if (token && env.CONCLAVE_DB) {
