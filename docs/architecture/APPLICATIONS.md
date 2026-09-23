@@ -4,9 +4,10 @@
 
 Conclave AX has three primary applications and one extension type.
 
-## 1. Conclave Studio
+## 1. Conclave AX
 
-**Path:** `apps/studio`
+**Current path:** `apps/studio`  
+**Target path:** `apps/app`
 
 **Technology**
 - Flutter;
@@ -24,14 +25,14 @@ Conclave AX has three primary applications and one extension type.
 - usage/cost;
 - approvals and evidence.
 
-Studio is web-first in v4. Desktop Studio is not a product requirement.
+Conclave AX is web-first in v4. Desktop distribution of the main application is not a v4 requirement. Native mobile applications may be added later.
 
-Studio communicates only with Cloud.
+Conclave AX communicates only with Conclave Cloud.
 
 ## 2. Conclave Cloud
 
-**Path:** `apps/cloud` after v4 migration  
-**Current transitional path:** `apps/worker`
+**Current path:** `apps/worker`  
+**Target path:** `apps/cloud`
 
 **Technology**
 - TypeScript;
@@ -44,6 +45,8 @@ Studio communicates only with Cloud.
 **Purpose**
 - authoritative multi-user state;
 - orchestration;
+- human authentication;
+- realtime App connections;
 - Host Gateway;
 - Worker catalog/package registry;
 - Credential Profile authorization;
@@ -52,11 +55,11 @@ Studio communicates only with Cloud.
 - artifacts;
 - budgets/usage.
 
-Cloud never executes an external AI/model/tool directly.
+Conclave Cloud never executes an external AI/model/tool directly.
 
 ## 3. Conclave Host
 
-**Path:** `apps/host` after v4 migration
+**Path:** `apps/host`
 
 **Technology**
 - Flutter;
@@ -71,7 +74,7 @@ Cloud never executes an external AI/model/tool directly.
 **Purpose**
 - one machine identity;
 - pairing;
-- Cloud connection;
+- Cloud WebSocket connection;
 - Worker installation/update/removal;
 - secure local credentials;
 - assignment journal;
@@ -81,12 +84,11 @@ Cloud never executes an external AI/model/tool directly.
 - Host updates;
 - minimal local UX.
 
-One Host is installed per machine. Users do not log in/out of Host accounts; Cloud authorization determines who may use the Host.
+One Host is installed per machine. Humans do not sign into or switch accounts inside the Host; Cloud authorization determines who may use/manage the Host.
 
 ## 4. Workers
 
-**Path:** `workers/<worker-id>` after v4 migration  
-**Current path:** `workers/*`
+**Path:** `workers/<worker-id>`
 
 A Worker is an installable execution integration.
 
@@ -101,15 +103,26 @@ Examples:
 
 Workers execute out-of-process under Host supervision.
 
+A Worker does not connect directly to Conclave Cloud and does not hold a Host machine credential.
+
 Workers are language-independent executable packages. First-party Workers use Dart when practical.
+
+## User-facing vocabulary
+
+Use:
+- Conclave AX;
+- Host;
+- Worker;
+- Account.
+
+Use `CredentialProfile` only as the internal/domain term for Account.
 
 ## Removed v4 product concepts
 
-Architecture v4 does not expose these as product/domain concepts:
+Architecture v4 does not expose:
+- Studio as a product name;
 - Agent;
 - Agent Engine;
 - Plugin;
 - configured Worker instance;
 - Connection.
-
-Their useful responsibilities are represented by Host, Worker, Credential Profile, and Assignment.
