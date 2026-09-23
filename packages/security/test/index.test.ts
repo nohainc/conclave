@@ -23,6 +23,9 @@ import {
   createRetentionExportManifest,
   AuthorizationError,
   AuthenticationError,
+  canUseCredentialProfile,
+  authorizeCredentialProfileUse,
+  authorizeHostWorkspaceBinding,
   type WorkspaceSecurityContext,
   type DatabaseAdapter,
 } from "../src/index.js";
@@ -91,6 +94,122 @@ describe("Architecture v2 Security & Authentication Suite", () => {
       expect(() => authorize(ownerContext, "members:manage")).not.toThrow();
       // Owner has automatic access to any project in workspace
       expect(canAccessProject(ownerContext, "proj-unlisted")).toBe(true);
+    });
+
+    it("uses canonical v4 permissions: members use, administrators manage", () => {
+      expect(() => authorize(sampleContext, "credential.use")).not.toThrow();
+      expect(() => authorize(sampleContext, "run.start")).not.toThrow();
+      expect(() => authorize(sampleContext, "host.manage")).toThrow(
+        AuthorizationError,
+      );
+      expect(() => authorize(sampleContext, "worker.install")).toThrow(
+        AuthorizationError,
+      );
+
+      const adminContext = {
+        ...sampleContext,
+        workspaceRole: "admin" as const,
+        roles: ["admin" as const],
+      };
+      expect(() => authorize(adminContext, "host.manage")).not.toThrow();
+      expect(() => authorize(adminContext, "credential.share")).not.toThrow();
+    });
+
+    it("denies private profiles and accepts explicit user/workspace grants", () => {
+      const profile = {
+        id: "profile-a",
+        workspace_id: "ws-primary",
+        owner_type: "user" as const,
+        owner_id: "user-owner",
+        sharing_policy: "owner_controlled" as const,
+      };
+      expect(
+        canUseCredentialProfile(
+          sampleContext,
+          { ...profile, sharing_policy: "private_only" },
+          [],
+        ),
+      ).toBe(false);
+      expect(
+        canUseCredentialProfile(sampleContext, profile, [
+          { grantee_type: "user", grantee_id: "user-123", use_permission: 1 },
+        ]),
+      ).toBe(true);
+      expect(
+        canUseCredentialProfile(sampleContext, profile, [
+          {
+            grantee_type: "user",
+            grantee_id: "user-123",
+            use_permission: 1,
+            revoked_at: "2026-01-01",
+          },
+        ]),
+      ).toBe(false);
+    });
+
+    it("rejects a host that is not actively bound to the requested workspace", async () => {
+      const db: DatabaseAdapter = {
+        prepare(query: string) {
+          return {
+            bind() {
+              return this;
+            },
+            async first<T>() {
+              if (query.includes("host_workspace_bindings")) return null as T;
+              return null as T;
+            },
+            async all<T>() {
+              return { results: [] as T[] };
+            },
+            async run() {
+              return { success: true };
+            },
+          };
+        },
+      };
+      await expect(
+        authorizeHostWorkspaceBinding(db, "ws-other", "host-a"),
+      ).rejects.toThrow(AuthorizationError);
+    });
+
+    it("enforces credential grants at the database boundary", async () => {
+      const db: DatabaseAdapter = {
+        prepare(query: string) {
+          return {
+            bind() {
+              return this;
+            },
+            async first<T>() {
+              return query.includes("credential_profiles")
+                ? ({
+                    id: "profile-a",
+                    workspace_id: "ws-primary",
+                    owner_type: "user",
+                    owner_id: "owner",
+                    sharing_policy: "owner_controlled",
+                  } as T)
+                : (null as T);
+            },
+            async all<T>() {
+              return {
+                results: [
+                  {
+                    grantee_type: "user",
+                    grantee_id: "user-123",
+                    use_permission: 1,
+                  },
+                ] as T[],
+              };
+            },
+            async run() {
+              return { success: true };
+            },
+          };
+        },
+      };
+      await expect(
+        authorizeCredentialProfileUse(db, sampleContext, "profile-a"),
+      ).resolves.toBeUndefined();
     });
   });
 

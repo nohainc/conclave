@@ -22,6 +22,15 @@ export const ROLES = WORKSPACE_ROLES;
 export type Role = WorkspaceRole;
 
 export const PERMISSIONS = [
+  // V4 canonical Cloud authorization permissions.
+  "host.view",
+  "host.manage",
+  "worker.install",
+  "credential.create",
+  "credential.share",
+  "credential.use",
+  "run.start",
+  "run.control",
   "workspace:manage",
   "members:manage",
   "billing:manage",
@@ -57,6 +66,14 @@ export const WORKSPACE_ROLE_PERMISSIONS: Record<
 > = {
   owner: PERMISSIONS,
   admin: [
+    "host.view",
+    "host.manage",
+    "worker.install",
+    "credential.create",
+    "credential.share",
+    "credential.use",
+    "run.start",
+    "run.control",
     "members:manage",
     "projects:manage",
     "projects:read",
@@ -81,6 +98,10 @@ export const WORKSPACE_ROLE_PERMISSIONS: Record<
     "secrets:manage",
   ],
   member: [
+    "host.view",
+    "credential.use",
+    "run.start",
+    "run.control",
     "projects:read",
     "projects:write",
     "agents:read",
@@ -96,6 +117,7 @@ export const WORKSPACE_ROLE_PERMISSIONS: Record<
     "run:create",
   ],
   viewer: [
+    "host.view",
     "projects:read",
     "agents:read",
     "hosts:read",
@@ -233,6 +255,114 @@ export function authorize(
   if (!workspacePerms.has(permission)) {
     throw new AuthorizationError(permission, projectId);
   }
+}
+
+export interface CredentialProfileAccessRecord {
+  readonly id: string;
+  readonly workspace_id: string;
+  readonly owner_type: "user" | "workspace";
+  readonly owner_id: string;
+  readonly sharing_policy: "private_only" | "owner_controlled" | "workspace";
+}
+
+export interface CredentialGrantAccessRecord {
+  readonly grantee_type: "user" | "workspace" | "role";
+  readonly grantee_id: string;
+  readonly use_permission?: number | boolean | null;
+  readonly expires_at?: string | null;
+  readonly revoked_at?: string | null;
+}
+
+/**
+ * V4 credential authorization is intentionally data-shaped: role membership
+ * and explicit grants are evaluated directly, without a policy DSL and
+ * without ever returning a secret or a secret-read capability.
+ */
+export function canUseCredentialProfile(
+  context: Pick<
+    WorkspaceSecurityContext,
+    "userId" | "workspaceId" | "workspaceRole"
+  >,
+  profile: CredentialProfileAccessRecord,
+  grants: readonly CredentialGrantAccessRecord[],
+  now = new Date(),
+): boolean {
+  if (profile.workspace_id !== context.workspaceId) return false;
+  if (profile.owner_type === "user" && profile.owner_id === context.userId) {
+    return true;
+  }
+  if (profile.sharing_policy === "private_only") return false;
+
+  return grants.some((grant) => {
+    if (
+      grant.revoked_at ||
+      grant.use_permission === false ||
+      grant.use_permission === 0
+    ) {
+      return false;
+    }
+    if (
+      grant.expires_at &&
+      new Date(grant.expires_at).getTime() <= now.getTime()
+    ) {
+      return false;
+    }
+    if (grant.grantee_type === "user")
+      return grant.grantee_id === context.userId;
+    if (grant.grantee_type === "workspace")
+      return grant.grantee_id === context.workspaceId;
+    return (
+      grant.grantee_type === "role" &&
+      grant.grantee_id === context.workspaceRole
+    );
+  });
+}
+
+export async function authorizeCredentialProfileUse(
+  db: DatabaseAdapter,
+  context: Pick<
+    WorkspaceSecurityContext,
+    "userId" | "workspaceId" | "workspaceRole"
+  >,
+  credentialProfileId: string,
+  now = new Date(),
+): Promise<void> {
+  const profile = await db
+    .prepare(
+      `SELECT id, workspace_id, owner_type, owner_id, sharing_policy
+       FROM credential_profiles WHERE id = ?1 AND workspace_id = ?2`,
+    )
+    .bind(credentialProfileId, context.workspaceId)
+    .first<CredentialProfileAccessRecord>();
+  if (!profile)
+    throw new AuthorizationError("credential.use", credentialProfileId);
+
+  const grants = await db
+    .prepare(
+      `SELECT grantee_type, grantee_id, use_permission, expires_at, revoked_at
+       FROM credential_grants
+       WHERE credential_profile_id = ?1 AND workspace_id = ?2`,
+    )
+    .bind(credentialProfileId, context.workspaceId)
+    .all<CredentialGrantAccessRecord>();
+  if (!canUseCredentialProfile(context, profile, grants.results ?? [], now)) {
+    throw new AuthorizationError("credential.use", credentialProfileId);
+  }
+}
+
+export async function authorizeHostWorkspaceBinding(
+  db: DatabaseAdapter,
+  workspaceId: string,
+  hostId: string,
+): Promise<void> {
+  const binding = await db
+    .prepare(
+      `SELECT host_id FROM host_workspace_bindings
+       WHERE host_id = ?1 AND workspace_id = ?2 AND status = 'active'`,
+    )
+    .bind(hostId, workspaceId)
+    .first<{ host_id: string }>();
+  if (!binding) throw new AuthorizationError("host.view", hostId);
 }
 
 // =========================================================================

@@ -381,6 +381,20 @@ apps/host/lib/
 
 Avoid a separate Engine application unless future measured reliability requirements justify reintroducing it.
 
+## 8.1 Authentication and workspace authorization
+
+V4-18 uses the existing managed-session/OIDC-compatible identity boundary and
+keeps User, Workspace, membership role, and explicit CredentialGrant records
+authoritative in Cloud/D1. Canonical permissions are `host.view`,
+`host.manage`, `worker.install`, `credential.create`, `credential.share`,
+`credential.use`, `run.start`, and `run.control`.
+
+Credential use is checked against the requester’s workspace, profile owner,
+sharing policy, and active non-expired grant. Grants authorize use only; they
+never authorize secret reads. Host machine tokens are accepted only for an
+active `host_workspace_bindings` row, so a Host cannot cross Workspace
+boundaries through the transient gateway.
+
 ## 9. Architectural deletion gate
 
 Architecture v4 cleanup is complete when active source search returns no product/domain usage of:

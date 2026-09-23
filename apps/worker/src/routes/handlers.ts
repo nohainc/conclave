@@ -36,6 +36,7 @@ import {
   signPackageDigest,
   verifyPackageDigestSignature,
   resolveSecurityContextFromDb,
+  authorizeCredentialProfileUse,
   type Permission,
   type Role,
   type SecurityContext,
@@ -653,7 +654,7 @@ async function handleRunRequest(
   const context = await authorizeRequest(
     request,
     securityEnv,
-    "run:create",
+    "run.start",
     undefined,
     accessContext,
   );
@@ -663,10 +664,17 @@ async function handleRunRequest(
   await authorizeRequest(
     request,
     securityEnv,
-    "run:create",
+    "run.start",
     projectId,
     accessContext,
   );
+  if (typeof body.credentialProfileId === "string") {
+    await authorizeCredentialProfileUse(
+      securityEnv.CONCLAVE_DB,
+      context,
+      body.credentialProfileId,
+    );
+  }
   const expectedCommitSha =
     typeof body.commitSha === "string"
       ? body.commitSha
@@ -2336,7 +2344,7 @@ async function handleCreateHostEnrollment(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "hosts:manage");
+  authorize(context, "host.manage");
   requireWorkspaceContext(context, env, workspaceId);
 
   const body = parseJson<{ expiresHours?: number; maxUses?: number }>(
@@ -2395,7 +2403,7 @@ async function handleListHostEnrollments(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "hosts:read");
+  authorize(context, "host.view");
   requireWorkspaceContext(context, env, workspaceId);
 
   const rows = await env.CONCLAVE_DB.prepare(
@@ -2416,7 +2424,7 @@ async function handleRevokeHostEnrollment(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "hosts:manage");
+  authorize(context, "host.manage");
   requireWorkspaceContext(context, env, workspaceId);
 
   const now = new Date().toISOString();
@@ -2534,7 +2542,7 @@ async function handleListHosts(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "hosts:read");
+  authorize(context, "host.view");
   requireWorkspaceContext(context, env, workspaceId);
 
   const rows = await env.CONCLAVE_DB.prepare(
@@ -2556,7 +2564,7 @@ async function handleGetHost(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "hosts:read");
+  authorize(context, "host.view");
   requireWorkspaceContext(context, env, workspaceId);
 
   const host = await env.CONCLAVE_DB.prepare(
@@ -2587,7 +2595,7 @@ async function handleRevokeHost(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "hosts:manage");
+  authorize(context, "host.manage");
   requireWorkspaceContext(context, env, workspaceId);
 
   const now = new Date().toISOString();
@@ -2613,7 +2621,7 @@ async function handleAnnounceHostUpdate(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "hosts:manage");
+  authorize(context, "host.manage");
   requireWorkspaceContext(context, env, workspaceId);
 
   const body = parseJson<{
@@ -2752,7 +2760,7 @@ export async function handleListWorkerCatalog(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "hosts:read");
+  authorize(context, "host.view");
   requireWorkspaceContext(context, env, workspaceId);
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT w.id, w.display_name, w.description, w.publisher, w.status,
@@ -2787,7 +2795,7 @@ export async function handleGetWorkerCatalog(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "hosts:read");
+  authorize(context, "host.view");
   requireWorkspaceContext(context, env, workspaceId);
   const row = await env.CONCLAVE_DB.prepare(
     `SELECT w.id, w.display_name, w.description, w.publisher, w.status,
@@ -2824,7 +2832,7 @@ async function handleListWorkers(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "hosts:read");
+  authorize(context, "host.view");
   requireWorkspaceContext(context, env, workspaceId);
 
   const rows = await env.CONCLAVE_DB.prepare(
@@ -2872,7 +2880,7 @@ async function handleCreateWorker(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "hosts:manage");
+  authorize(context, "worker.install");
   requireWorkspaceContext(context, env, workspaceId);
 
   const body = (await request.json()) as Record<string, unknown>;
@@ -3056,7 +3064,7 @@ async function handleGetWorker(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "hosts:read");
+  authorize(context, "host.view");
   requireWorkspaceContext(context, env, workspaceId);
 
   const row = await env.CONCLAVE_DB.prepare(
@@ -3109,7 +3117,7 @@ async function handleUpdateWorker(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "hosts:manage");
+  authorize(context, "worker.install");
   requireWorkspaceContext(context, env, workspaceId);
 
   const existing = await env.CONCLAVE_DB.prepare(
@@ -3283,7 +3291,7 @@ async function handleDeleteWorker(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "hosts:manage");
+  authorize(context, "worker.install");
   requireWorkspaceContext(context, env, workspaceId);
 
   await env.CONCLAVE_DB.prepare(
@@ -4372,7 +4380,7 @@ async function handleRunCommand(
     controlContext = await authorizeRequest(
       request,
       securityEnv,
-      "run:control",
+      "run.control",
       projectId,
       accessContext,
     );
@@ -4772,7 +4780,7 @@ async function handleDownloadPluginVersion(
         );
       }
     } else {
-      await authorizeRequest(request, env, "workers:read", undefined, ctx);
+      await authorizeRequest(request, env, "worker.install", undefined, ctx);
     }
   }
   const row = await env.CONCLAVE_DB.prepare(
@@ -5205,7 +5213,7 @@ async function handleDownloadHostRelease(
         );
       }
     } else {
-      await authorizeRequest(request, env, "hosts:read", undefined, ctx);
+      await authorizeRequest(request, env, "host.view", undefined, ctx);
     }
   }
   const row = await env.CONCLAVE_DB.prepare(
