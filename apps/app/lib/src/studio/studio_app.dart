@@ -497,20 +497,24 @@ class _StudioAppState extends State<ConclaveAppShell> {
 
   Future<void> _showNotifications() async {
     final dialogContext = navigatorKey.currentState?.context ?? context;
+    final orderedNotifications = [...notifications]..sort((a, b) {
+        final priority = b.priority.index.compareTo(a.priority.index);
+        return priority != 0 ? priority : b.createdAt.compareTo(a.createdAt);
+      });
     final selected = await showDialog<StudioNotification>(
       context: dialogContext,
       builder: (context) => AlertDialog(
-        title: const Text('Notifications'),
+        title: const Text('Attention center'),
         content: SizedBox(
           width: 420,
           child: notifications.isEmpty
               ? const Text('You are all caught up.')
               : ListView.separated(
                   shrinkWrap: true,
-                  itemCount: notifications.length,
+                  itemCount: orderedNotifications.length,
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (context, index) {
-                    final notification = notifications[index];
+                    final notification = orderedNotifications[index];
                     return ListTile(
                       leading: Icon(
                         switch (notification.kind) {
@@ -519,13 +523,25 @@ class _StudioAppState extends State<ConclaveAppShell> {
                           StudioNotificationKind.failed => Icons.error_outline,
                           StudioNotificationKind.approvalRequired =>
                             Icons.help_outline,
+                          StudioNotificationKind.hostOffline =>
+                            Icons.cloud_off_outlined,
+                          StudioNotificationKind.accountExpired =>
+                            Icons.key_off_outlined,
+                          StudioNotificationKind.workerInstallFailed =>
+                            Icons.download_for_offline_outlined,
+                          StudioNotificationKind.invitationReceived =>
+                            Icons.mail_outline,
                         },
                         color: notification.read
                             ? const Color(0xff8e8e9a)
-                            : const Color(0xff6254d9),
+                            : notification.priority ==
+                                    StudioNotificationPriority.high
+                                ? const Color(0xffc64b4b)
+                                : const Color(0xff6254d9),
                       ),
                       title: Text(notification.title),
-                      subtitle: Text(notification.message),
+                      subtitle: Text(
+                          '${notification.message} · ${notification.priority.name} priority'),
                       trailing: notification.read
                           ? null
                           : const Icon(Icons.circle, size: 9),
@@ -562,8 +578,26 @@ class _StudioAppState extends State<ConclaveAppShell> {
       final index = notifications.indexWhere((item) => item.id == selected.id);
       if (index >= 0) notifications[index] = notifications[index].markRead();
     });
-    if (selected.projectId != null && selected.runId != null) {
-      _navigateTo(StudioNavigation.run(selected.projectId!, selected.runId!));
+    _navigateToNotification(selected);
+  }
+
+  void _navigateToNotification(StudioNotification notification) {
+    switch (notification.target) {
+      case StudioNotificationTarget.run:
+        if (notification.projectId != null && notification.runId != null) {
+          _navigateTo(StudioNavigation.run(
+              notification.projectId!, notification.runId!));
+        }
+      case StudioNotificationTarget.hosts:
+        _navigateTo(const StudioNavigation.hosts());
+      case StudioNotificationTarget.workers:
+        _navigateTo(const StudioNavigation.workers());
+      case StudioNotificationTarget.accounts:
+        _navigateTo(const StudioNavigation.accounts());
+      case StudioNotificationTarget.workspace:
+        _navigateTo(const StudioNavigation.workspaceSettings());
+      case null:
+        break;
     }
   }
 

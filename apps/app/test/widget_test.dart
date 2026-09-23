@@ -283,7 +283,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Notifications'));
     await tester.pumpAndSettle();
-    expect(find.text('Notifications'), findsOneWidget);
+    expect(find.text('Attention center'), findsOneWidget);
     expect(find.text('You are all caught up.'), findsOneWidget);
     expect(find.text('Allow notifications'), findsNothing);
   });

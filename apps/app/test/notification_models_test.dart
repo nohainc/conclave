@@ -35,4 +35,28 @@ void main() {
       isNull,
     );
   });
+
+  test('maps operational attention events to prioritized destinations', () {
+    final events = <Map<String, dynamic>>[
+      {'type': 'host.offline'},
+      {'type': 'credential.expired'},
+      {'type': 'worker.install.failed'},
+      {'type': 'workspace.invitation.received'},
+    ];
+    final notifications = events
+        .map(notificationFromRealtimeEvent)
+        .whereType<StudioNotification>()
+        .toList();
+
+    expect(notifications.map((item) => item.title), [
+      'Host offline',
+      'AI Account expired',
+      'Worker install failed',
+      'Invitation received',
+    ]);
+    expect(notifications[0].target, StudioNotificationTarget.hosts);
+    expect(notifications[1].priority, StudioNotificationPriority.high);
+    expect(notifications[2].target, StudioNotificationTarget.workers);
+    expect(notifications[3].target, StudioNotificationTarget.workspace);
+  });
 }
