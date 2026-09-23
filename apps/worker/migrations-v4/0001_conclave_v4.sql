@@ -76,6 +76,30 @@ CREATE TABLE passkeys (
 );
 CREATE INDEX idx_passkeys_user ON passkeys(user_id);
 
+-- A passkey ceremony creates a short-lived, session-bound step-up proof.
+-- Events are consumed by the application boundary and never become a general
+-- authorization grant.
+CREATE TABLE auth_step_up_events (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  method TEXT NOT NULL CHECK (method IN ('passkey', 'totp')),
+  created_at TEXT NOT NULL,
+  consumed_at TEXT
+);
+CREATE INDEX idx_auth_step_up_events_user
+  ON auth_step_up_events(user_id, created_at);
+
+CREATE TABLE auth_step_up_sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  session_id TEXT NOT NULL,
+  method TEXT NOT NULL CHECK (method IN ('passkey', 'totp')),
+  authenticated_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX idx_auth_step_up_sessions_session
+  ON auth_step_up_sessions(session_id);
+
 CREATE TABLE workspaces (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,

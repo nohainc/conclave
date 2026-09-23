@@ -17,6 +17,19 @@ real Better Auth OAuth flow. Neither mechanism exists in production.
 Cloudflare Access may additionally protect staging, admin, debug, or internal
 environments, but is not required for production Studio authentication.
 
+### Step-up authentication
+
+Normal sign-in is not treated as a universal MFA gate. The application keeps an
+explicit sensitive-operation registry for Workspace ownership transfer,
+Credential Profile sharing, Host revocation, billing/security changes, and API
+credential sharing. These operations require a recent strong proof bound to the
+current Better Auth session. Passkey authentication is the first implemented
+strong proof and is valid for a short window; Host and Host-enrollment
+revocation currently enforce it. TOTP, OTP, backup codes, and trusted-device
+policies must be integrated deliberately before being listed as accepted
+factors. Better Auth's ordinary 2FA plugin does not automatically gate every
+social or passkey flow.
+
 ## Credentials
 
 BYOK credentials are encrypted with AES-GCM before persistence. D1 stores only the envelope (key id, IV, ciphertext, timestamps, and provider). The key-encryption key is a Worker secret or external KMS-managed key and is never stored in D1, R2, logs, events, or model prompts. Decryption is allowed only for an authorized server-side provider call.

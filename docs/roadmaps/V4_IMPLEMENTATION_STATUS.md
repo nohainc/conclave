@@ -137,3 +137,14 @@ Studio Web supports browser-native passkey enrollment, passkey sign-in, and
 credential removal. D1 stores only public WebAuthn credential material in the
 `passkeys` table; private keys remain on the user's authenticator. Password
 authentication is intentionally out of scope.
+
+## AUTH-15 — MFA and step-up authentication
+
+✅ Sensitive-operation policy now identifies Workspace ownership transfer,
+Credential Profile sharing, Host revocation, billing/security changes, and API
+credential sharing as step-up protected operations. The first enforced route is
+Host and Host-enrollment revocation. A successful passkey sign-in creates a
+short-lived proof bound to the Better Auth session; mutations fail closed with
+HTTP 428 when that proof is missing or stale. TOTP and backup-code support are
+reserved for a deliberate follow-up and are not implied by ordinary social or
+passkey login.

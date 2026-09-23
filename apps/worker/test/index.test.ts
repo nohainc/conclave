@@ -181,6 +181,21 @@ describe("Worker smoke tests", () => {
     expect(productionResponse.status).toBe(404);
   });
 
+  it("fails closed when step-up completion has no passkey ceremony", async () => {
+    const response = await worker.fetch(
+      new Request("https://conclave.test/api/auth/step-up/passkey/complete", {
+        method: "POST",
+        headers: { origin: "https://conclave.test" },
+        body: "{}",
+      }),
+      env,
+    );
+    expect(response.status).toBe(428);
+    expect(await response.json()).toEqual({
+      error: "No recent strong authentication ceremony is available",
+    });
+  });
+
   it("exposes an authenticated interactive connector session", async () => {
     const connectorEnv = {
       ...env,

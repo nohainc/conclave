@@ -83,7 +83,8 @@
       const options = await request(`${baseUrl}/auth/passkey/generate-authenticate-options`, { method: 'GET' });
       const credential = await navigator.credentials.get({ publicKey: publicKeyOptions(options) });
       if (!credential) throw new Error('Passkey sign-in was cancelled');
-      return request(`${baseUrl}/auth/passkey/verify-authentication`, { method: 'POST', body: JSON.stringify({ response: authenticationResponse(credential) }) });
+      await request(`${baseUrl}/auth/passkey/verify-authentication`, { method: 'POST', body: JSON.stringify({ response: authenticationResponse(credential) }) });
+      return request(`${baseUrl}/auth/step-up/passkey/complete`, { method: 'POST', body: '{}' });
     },
   };
 })();

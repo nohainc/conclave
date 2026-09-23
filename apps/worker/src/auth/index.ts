@@ -16,3 +16,12 @@ export {
   type PendingInvitation,
   type ProvisioningDatabase,
 } from "./provisioning-service.js";
+export {
+  SENSITIVE_OPERATIONS,
+  STEP_UP_REQUIREMENTS,
+  hasRecentStepUp,
+  isStepUpSatisfied,
+  type SensitiveOperation,
+  type StepUpMethod,
+  type StepUpRecord,
+} from "./step-up.js";

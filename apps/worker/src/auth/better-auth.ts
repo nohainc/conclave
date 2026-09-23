@@ -88,6 +88,24 @@ export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
         },
       },
     },
+    authentication: {
+      afterVerification: async ({
+        clientData,
+      }: {
+        clientData: { id?: string };
+      }) => {
+        const credentialId = clientData.id;
+        if (!credentialId) return;
+        await env.CONCLAVE_DB.prepare(
+          `INSERT INTO auth_step_up_events
+             (id, user_id, method, created_at)
+           SELECT ?1, user_id, 'passkey', ?2
+           FROM passkeys WHERE credential_id = ?3`,
+        )
+          .bind(crypto.randomUUID(), new Date().toISOString(), credentialId)
+          .run();
+      },
+    },
   };
 
   return {

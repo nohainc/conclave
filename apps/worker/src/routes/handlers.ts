@@ -22,6 +22,9 @@ import {
   handleBetterAuthRequest,
   listPendingInvitations,
   provisionConclaveUser,
+  hasRecentStepUp,
+  SENSITIVE_OPERATIONS,
+  type SensitiveOperation,
 } from "../auth/index.js";
 import {
   dispatchTaskAssignment,
@@ -337,6 +340,22 @@ function requireWorkspaceContext(
 ): void {
   if (!testAuthenticationEnabled(env) && context.workspaceId !== workspaceId) {
     throw new HttpError(404, "Resource not found");
+  }
+}
+
+async function requireRecentStepUp(
+  env: SecurityEnv,
+  context: SecurityContext,
+  operation: SensitiveOperation,
+): Promise<void> {
+  const satisfied = await hasRecentStepUp(
+    env.CONCLAVE_DB,
+    context.userId,
+    context.sessionId,
+    operation,
+  );
+  if (!satisfied) {
+    throw new HttpError(428, "Fresh strong authentication required");
   }
 }
 
@@ -725,6 +744,58 @@ async function handleSessionLogout(
     await recordAudit(env, context, "logout", "session", context.sessionId);
   }
   return response;
+}
+
+/** Complete the browser passkey ceremony as a session-bound step-up proof. */
+async function handleCompleteStepUp(
+  request: Request,
+  env: SecurityEnv,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  const event = await env.CONCLAVE_DB.prepare(
+    `SELECT id, method FROM auth_step_up_events
+     WHERE user_id = ?1 AND consumed_at IS NULL
+     ORDER BY created_at DESC LIMIT 1`,
+  )
+    .bind(context.userId)
+    .first<{ id: string; method: "passkey" | "totp" }>();
+  if (!event) {
+    return json(
+      { error: "No recent strong authentication ceremony is available" },
+      { status: 428 },
+    );
+  }
+
+  const now = new Date();
+  const authenticatedAt = now.toISOString();
+  const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString();
+  await env.CONCLAVE_DB.batch([
+    env.CONCLAVE_DB
+      .prepare(
+        `INSERT INTO auth_step_up_sessions
+           (id, user_id, session_id, method, authenticated_at, expires_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(session_id) DO UPDATE SET
+           method = excluded.method,
+           authenticated_at = excluded.authenticated_at,
+           expires_at = excluded.expires_at`,
+      )
+      .bind(
+        crypto.randomUUID(),
+        context.userId,
+        context.sessionId,
+        event.method,
+        authenticatedAt,
+        expiresAt,
+      ),
+    env.CONCLAVE_DB
+      .prepare(
+        "UPDATE auth_step_up_events SET consumed_at = ?1 WHERE id = ?2 AND consumed_at IS NULL",
+      )
+      .bind(authenticatedAt, event.id),
+  ]);
+  return json({ ok: true, method: event.method, expiresAt });
 }
 
 async function handleListWorkspaces(
@@ -2242,6 +2313,11 @@ async function handleRevokeHostEnrollment(
   const context = await securityContext(request, env, ctx);
   authorize(context, "host.manage");
   requireWorkspaceContext(context, env, workspaceId);
+  await requireRecentStepUp(
+    env,
+    context,
+    SENSITIVE_OPERATIONS.hostRevoke,
+  );
 
   const now = new Date().toISOString();
   await env.CONCLAVE_DB.prepare(
@@ -2413,6 +2489,11 @@ async function handleRevokeHost(
   const context = await securityContext(request, env, ctx);
   authorize(context, "host.manage");
   requireWorkspaceContext(context, env, workspaceId);
+  await requireRecentStepUp(
+    env,
+    context,
+    SENSITIVE_OPERATIONS.hostRevoke,
+  );
 
   const now = new Date().toISOString();
   await env.CONCLAVE_DB.prepare(
@@ -5061,6 +5142,7 @@ export {
   resolveWorkflowInstanceId,
   handleSession,
   handleSessionLogout,
+  handleCompleteStepUp,
   handleListPendingInvitations,
   handleConnectorTaskRequest,
   handleListWorkspaces,

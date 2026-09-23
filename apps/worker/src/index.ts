@@ -34,6 +34,7 @@ import {
 const routeHandlers = {
   handleSession: handlers.handleSession,
   handleSessionLogout: handlers.handleSessionLogout,
+  handleCompleteStepUp: handlers.handleCompleteStepUp,
   handleListPendingInvitations: handlers.handleListPendingInvitations,
   handleConnectorRequest: handlers.handleConnectorRequest,
   handleConnectorTaskRequest: handlers.handleConnectorTaskRequest,
@@ -136,6 +137,13 @@ export default {
       const signInUrl = new URL(`/api/auth/sign-in/${provider}`, request.url);
       signInUrl.searchParams.set("returnTo", returnTo);
       return Response.redirect(signInUrl.toString(), 302);
+    }
+    if (
+      request.method === "POST" &&
+      url.pathname === "/api/auth/step-up/passkey/complete"
+    ) {
+      handlers.requireSameOriginForCookieMutation(request);
+      return handlers.handleCompleteStepUp(request, env, ctx);
     }
     if (url.pathname === "/api/auth" || url.pathname.startsWith("/api/auth/")) {
       return handleBetterAuthRequest(request, env);
