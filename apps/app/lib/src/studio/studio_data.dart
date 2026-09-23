@@ -26,7 +26,7 @@ abstract interface class StudioDataSource {
     required String token,
     required String password,
   });
-  Future<void> createProject({
+  Future<StudioProject> createProject({
     required String name,
     String? description,
   });
@@ -384,7 +384,7 @@ class StudioApiClient implements StudioDataSource {
   }
 
   @override
-  Future<void> createProject(
+  Future<StudioProject> createProject(
       {required String name, String? description}) async {
     final response = await client.post(
       Uri.parse('$baseUrl/projects'),
@@ -410,6 +410,20 @@ class StudioApiClient implements StudioDataSource {
         statusCode: response.statusCode,
       );
     }
+    final body = jsonDecode(response.body);
+    final project = body is Map ? body['project'] : null;
+    if (project is! Map) {
+      throw const StudioApiException('Project creation response is malformed');
+    }
+    final value = Map<String, dynamic>.from(project);
+    return StudioProject.fromJson({
+      ...value,
+      'repository': value['repository'] ?? value['repositoryId'] ?? '',
+      'branch': value['branch'] ?? '',
+      'activeGoals': value['activeGoals'] ?? 0,
+      'lastActivity': value['lastActivity'] ?? value['updatedAt'] ?? '',
+      'chats': value['chats'] ?? const [],
+    });
   }
 
   @override
@@ -683,7 +697,7 @@ class StudioApiClient implements StudioDataSource {
     required String agentId,
   }) async {
     final response = await client.delete(
-      Uri.parse('$baseUrl/workspaces/$workspaceId/agents/$agentId'),
+      Uri.parse('$baseUrl/workspaces/$workspaceId/hosts/$agentId'),
       headers: _headers(),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -699,7 +713,7 @@ class StudioApiClient implements StudioDataSource {
     String? version,
   }) async {
     final response = await client.post(
-      Uri.parse('$baseUrl/workspaces/$workspaceId/agents/$agentId/update'),
+      Uri.parse('$baseUrl/workspaces/$workspaceId/hosts/$agentId/update'),
       headers: _headers(contentType: 'application/json'),
       body: jsonEncode({
         if (channel != null) 'channel': channel,
@@ -718,7 +732,7 @@ class StudioApiClient implements StudioDataSource {
     int expiresHours = 24,
   }) async {
     final response = await client.post(
-      Uri.parse('$baseUrl/workspaces/$workspaceId/agent-enrollments'),
+      Uri.parse('$baseUrl/workspaces/$workspaceId/host-enrollments'),
       headers: _headers(contentType: 'application/json'),
       body: jsonEncode({'expiresHours': expiresHours}),
     );
@@ -748,40 +762,8 @@ class StudioApiClient implements StudioDataSource {
     String independenceKey = '',
     Map<String, dynamic> costMetadata = const {},
   }) async {
-    final uri = workerId == null
-        ? Uri.parse('$baseUrl/workspaces/$workspaceId/workers')
-        : Uri.parse('$baseUrl/workspaces/$workspaceId/workers/$workerId');
-    final payload = {
-      'name': name,
-      'roles': roles,
-      'capabilities': capabilities,
-      'enabled': enabled,
-      'workerVersionPolicy': workerVersionPolicy,
-      'config': config,
-      'sessionPolicy': sessionPolicy,
-      'concurrencyLimit': concurrencyLimit,
-      'billingMode': billingMode,
-      'independenceKey': independenceKey,
-      'costMetadata': costMetadata,
-    };
-    final response = workerId == null
-        ? await client.post(uri,
-            headers: _headers(contentType: 'application/json'),
-            body: jsonEncode({
-              ...payload,
-              'name': name,
-              'agentId': agentId,
-              'workerCatalogId': workerCatalogId,
-            }))
-        : await client.put(uri,
-            headers: _headers(contentType: 'application/json'),
-            body: jsonEncode({
-              ...payload,
-              'agentId': agentId,
-              'workerCatalogId': workerCatalogId,
-            }));
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StudioApiException('Worker save failed (${response.statusCode})');
-    }
+    throw const StudioApiException(
+      'Configured Worker instances were removed. Manage Workers through Host desired state.',
+    );
   }
 }

@@ -263,68 +263,57 @@ void main() {
     expect(chat.lastActivity, '2026-09-22T00:00:00Z');
   });
 
-  test('creates a Worker with explicit Host and catalog bindings', () async {
-    final client = _JsonClient({}, statusCode: 201);
+  test('returns the created Project from the Cloud response', () async {
+    final client = _JsonClient({
+      'project': {
+        'id': 'project-created',
+        'workspaceId': 'workspace-1',
+        'name': 'Authentication redesign',
+        'description': 'Improve the sign-in flow',
+        'repositoryId': 'repo-1',
+        'updatedAt': '2026-09-23T00:00:00Z',
+      },
+    });
     final api = StudioApiClient(
       baseUrl: 'https://conclave.test/api',
       client: client,
     );
 
-    await api.saveWorker(
-      workspaceId: 'workspace-1',
-      name: 'Codex Main',
-      agentId: 'agent-1',
-      workerCatalogId: 'worker-codex',
-      roles: const ['implementation'],
-      capabilities: const ['repository_write'],
-      enabled: true,
-      workerVersionPolicy: 'compatible',
-      config: const {'model': 'codex', 'temperature': 0.1},
-      sessionPolicy: 'persistent',
-      concurrencyLimit: 3,
-      billingMode: 'subscription',
-      independenceKey: 'codex-main',
+    final project = await api.createProject(
+      name: 'Authentication redesign',
+      description: 'Improve the sign-in flow',
     );
 
+    expect(project.id, 'project-created');
+    expect(project.name, 'Authentication redesign');
     expect(client.lastRequest?.method, 'POST');
-    expect(client.lastRequest?.url.path, '/api/workspaces/workspace-1/workers');
-    expect(jsonDecode(client.lastBody!)['agentId'], 'agent-1');
-    expect(jsonDecode(client.lastBody!)['workerCatalogId'], 'worker-codex');
-    expect(jsonDecode(client.lastBody!)['workerVersionPolicy'], 'compatible');
-    expect(jsonDecode(client.lastBody!)['config']['model'], 'codex');
-    expect(jsonDecode(client.lastBody!)['sessionPolicy'], 'persistent');
-    expect(jsonDecode(client.lastBody!)['concurrencyLimit'], 3);
-    expect(jsonDecode(client.lastBody!)['billingMode'], 'subscription');
-    expect(jsonDecode(client.lastBody!)['independenceKey'], 'codex-main');
+    expect(client.lastRequest?.url.path, '/api/projects');
   });
 
-  test('updates Worker configuration and bindings', () async {
+  test('rejects removed configured Worker writes', () async {
     final client = _JsonClient({}, statusCode: 200);
     final api = StudioApiClient(
       baseUrl: 'https://conclave.test/api',
       client: client,
     );
 
-    await api.saveWorker(
-      workspaceId: 'workspace-1',
-      workerId: 'worker-1',
-      name: 'Codex Main',
-      agentId: 'agent-1',
-      workerCatalogId: 'worker-codex',
-      roles: const ['reviewer'],
-      capabilities: const ['code_review'],
-      enabled: false,
-      config: const {'model': 'claude'},
+    await expectLater(
+      api.saveWorker(
+        workspaceId: 'workspace-1',
+        name: 'Codex Main',
+        agentId: 'agent-1',
+        workerCatalogId: 'worker-codex',
+        roles: const ['reviewer'],
+        capabilities: const ['code_review'],
+        enabled: false,
+      ),
+      throwsA(isA<StudioApiException>().having(
+        (error) => error.message,
+        'message',
+        contains('Configured Worker instances were removed'),
+      )),
     );
-
-    expect(client.lastRequest?.method, 'PUT');
-    expect(client.lastRequest?.url.path,
-        '/api/workspaces/workspace-1/workers/worker-1');
-    expect(jsonDecode(client.lastBody!)['enabled'], false);
-    expect(jsonDecode(client.lastBody!)['roles'], ['reviewer']);
-    expect(jsonDecode(client.lastBody!)['agentId'], 'agent-1');
-    expect(jsonDecode(client.lastBody!)['workerCatalogId'], 'worker-codex');
-    expect(jsonDecode(client.lastBody!)['config']['model'], 'claude');
+    expect(client.lastRequest, isNull);
   });
 
   test('parses full Worker desired state from the Cloud read model', () {
@@ -399,8 +388,32 @@ void main() {
 
     expect(client.lastRequest?.method, 'POST');
     expect(client.lastRequest?.url.path,
-        '/api/workspaces/workspace-1/agents/agent-1/update');
+        '/api/workspaces/workspace-1/hosts/agent-1/update');
     expect(jsonDecode(client.lastBody!)['channel'], 'stable');
+  });
+
+  test('uses Host paths for enrollment and revocation', () async {
+    final client = _JsonClient({
+      'enrollment': {
+        'id': 'enrollment-1',
+        'token': 'token-1',
+        'workspaceId': 'workspace-1',
+        'expiresAt': '2099-01-01T00:00:00Z',
+      },
+    }, statusCode: 200);
+    final api = StudioApiClient(
+      baseUrl: 'https://conclave.test/api',
+      client: client,
+    );
+
+    await api.createHostEnrollment(workspaceId: 'workspace-1');
+    expect(client.lastRequest?.url.path,
+        '/api/workspaces/workspace-1/host-enrollments');
+
+    await api.revokeAgent(workspaceId: 'workspace-1', agentId: 'host-1');
+    expect(client.lastRequest?.method, 'DELETE');
+    expect(client.lastRequest?.url.path,
+        '/api/workspaces/workspace-1/hosts/host-1');
   });
 
   test('sends the explicitly selected Workspace on scoped requests', () async {

@@ -5,6 +5,36 @@ import 'package:conclave_app/main.dart';
 import 'studio_fixture_data.dart';
 
 void main() {
+  testWidgets('onboards an empty Workspace into a Project and Chat',
+      (WidgetTester tester) async {
+    final dataSource = EmptyWorkspaceFixtureDataSource();
+    await tester.pumpWidget(ConclaveApp(dataSource: dataSource));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Conclave AX'), findsOneWidget);
+    expect(find.text('Start a conversation'), findsOneWidget);
+    expect(find.text('Create project'), findsOneWidget);
+
+    await tester.tap(find.text('Create project'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('My first project'), findsWidgets);
+    expect(find.text('New chat'), findsOneWidget);
+
+    await tester.tap(find.text('New chat'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'First chat');
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('First chat'), findsWidgets);
+    expect(dataSource.hasProject, isTrue);
+    expect(dataSource.hasChat, isTrue);
+    await tester.pump(const Duration(seconds: 4));
+  });
+
   testWidgets('renders the chat-first Conclave AX workspace',
       (WidgetTester tester) async {
     await tester

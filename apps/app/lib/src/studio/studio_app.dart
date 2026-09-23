@@ -144,7 +144,8 @@ class _StudioAppState extends State<StudioApp> {
         },
         onToggleTheme: () {
           setState(() {
-            _themeMode = _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+            _themeMode =
+                _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
           });
         },
         onNewGoal: () {
@@ -1224,8 +1225,10 @@ class _StudioAppState extends State<StudioApp> {
       themeMode: _themeMode,
       home: CallbackShortcuts(
         bindings: <ShortcutActivator, VoidCallback>{
-          const SingleActivator(LogicalKeyboardKey.keyK, meta: true): _openCommandPalette,
-          const SingleActivator(LogicalKeyboardKey.keyK, control: true): _openCommandPalette,
+          const SingleActivator(LogicalKeyboardKey.keyK, meta: true):
+              _openCommandPalette,
+          const SingleActivator(LogicalKeyboardKey.keyK, control: true):
+              _openCommandPalette,
         },
         child: Focus(
           autofocus: true,
@@ -1236,10 +1239,10 @@ class _StudioAppState extends State<StudioApp> {
                   if (isLoading) return _loadingScaffold();
                   if (authRequired) return _authScaffold();
                   if (loadError != null) return _errorScaffold();
-                  if (snapshot.projects.isEmpty) return _emptyWorkspaceScaffold();
                   final compact = constraints.maxWidth < 900;
                   return Scaffold(
-                    drawer: compact ? Drawer(child: _sidebar(compact: true)) : null,
+                    drawer:
+                        compact ? Drawer(child: _sidebar(compact: true)) : null,
                     body: Row(
                       children: [
                         if (!compact) SizedBox(width: 248, child: _sidebar()),
@@ -1251,7 +1254,8 @@ class _StudioAppState extends State<StudioApp> {
               ),
               ToastOverlay(
                 toasts: activeToasts,
-                onDismiss: (id) => setState(() => activeToasts.removeWhere((t) => t.id == id)),
+                onDismiss: (id) =>
+                    setState(() => activeToasts.removeWhere((t) => t.id == id)),
               ),
             ],
           ),
@@ -1495,48 +1499,11 @@ class _StudioAppState extends State<StudioApp> {
         ),
       );
 
-  Widget _emptyWorkspaceScaffold() => Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.folder_open_outlined,
-                  size: 48, color: Color(0xff6254d9)),
-              const SizedBox(height: 14),
-              if (pendingInvitations.isNotEmpty) ...[
-                _pendingInvitationBanner(),
-                const SizedBox(height: 20),
-              ],
-              const Text('No projects yet',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              const Text('Create a project to start your first Conclave goal.',
-                  textAlign: TextAlign.center),
-              const SizedBox(height: 6),
-              const Text(
-                  'Projects keep your chats, runs and evidence organized.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Color(0xff777683))),
-              const SizedBox(height: 18),
-              FilledButton.icon(
-                  onPressed: _createProject,
-                  icon: const Icon(Icons.create_new_folder_outlined),
-                  label: const Text('Create project')),
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                  onPressed: _loadSnapshot,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Reload')),
-            ]),
-          ),
-        ),
-      );
-
   Future<void> _createProject() async {
-    final nameController = TextEditingController();
-    final descriptionController = TextEditingController();
+    var name = '';
+    var description = '';
     final values = await showDialog<(String, String?)>(
-      context: context,
+      context: navigatorKey.currentContext ?? context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Create project'),
         content: SizedBox(
@@ -1545,13 +1512,13 @@ class _StudioAppState extends State<StudioApp> {
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
-                controller: nameController,
                 autofocus: true,
+                onChanged: (value) => name = value,
                 decoration: const InputDecoration(labelText: 'Project name'),
               ),
               const SizedBox(height: 12),
               TextField(
-                controller: descriptionController,
+                onChanged: (value) => description = value,
                 decoration: const InputDecoration(
                   labelText: 'Description (optional)',
                 ),
@@ -1567,12 +1534,11 @@ class _StudioAppState extends State<StudioApp> {
           ),
           FilledButton(
             onPressed: () {
-              final name = nameController.text.trim();
               Navigator.pop(
                 dialogContext,
                 (
                   name.isEmpty ? 'My first project' : name,
-                  descriptionController.text.trim(),
+                  description.trim(),
                 ),
               );
             },
@@ -1581,17 +1547,37 @@ class _StudioAppState extends State<StudioApp> {
         ],
       ),
     );
-    nameController.dispose();
-    descriptionController.dispose();
     if (values == null) return;
+    if (mounted) {
+      setState(() {
+        isLoading = true;
+        loadError = null;
+      });
+    }
     try {
-      await widget.dataSource.createProject(
+      final project = await widget.dataSource.createProject(
         name: values.$1,
         description: values.$2,
       );
-      await _loadSnapshot(showSpinner: false);
+      if (!mounted) return;
+      setState(() {
+        snapshot = snapshot.copyWith(
+          projects: [...snapshot.projects, project],
+        );
+        selectedProjectId = project.id;
+        selectedChatId = null;
+        isLoading = false;
+      });
+      _navigateTo(StudioNavigation.project(project.id), replace: true);
+      _showSnackBar('Project created. Start your first chat.');
     } catch (error) {
-      if (mounted) _showSnackBar(error.toString());
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+          loadError = null;
+        });
+        _showSnackBar(error.toString(), type: ToastType.error);
+      }
     }
   }
 
@@ -1985,15 +1971,18 @@ class _StudioAppState extends State<StudioApp> {
 
   void _toggleTheme() {
     setState(() {
-      _themeMode = _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+      _themeMode =
+          _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
     });
   }
 
   Widget _topbar(bool compact) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final borderColor = isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine;
+    final borderColor =
+        isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine;
     final inkColor = isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk;
-    final mutedInk = isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted;
+    final mutedInk =
+        isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted;
 
     return Container(
       height: 66,
@@ -2031,9 +2020,7 @@ class _StudioAppState extends State<StudioApp> {
               Text(
                 navigationIndex == 5
                     ? 'Account'
-                    : (showRunDetails
-                        ? 'Run details'
-                        : 'Conclave AX'),
+                    : (showRunDetails ? 'Run details' : 'Conclave AX'),
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
@@ -2053,12 +2040,14 @@ class _StudioAppState extends State<StudioApp> {
                     onTap: () {
                       final chat = selectedChat;
                       if (chat != null) {
-                        _navigateTo(StudioNavigation.chat(selectedProject!.id, chat.id));
+                        _navigateTo(StudioNavigation.chat(
+                            selectedProject!.id, chat.id));
                       }
                     },
                     borderRadius: BorderRadius.circular(4),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 2),
                       child: Text(
                         selectedProject!.name,
                         maxLines: 1,
@@ -2097,7 +2086,8 @@ class _StudioAppState extends State<StudioApp> {
             IconButton(
               tooltip: 'Notifications',
               onPressed: _showNotifications,
-              icon: Icon(Icons.notifications_none_rounded, size: 21, color: mutedInk),
+              icon: Icon(Icons.notifications_none_rounded,
+                  size: 21, color: mutedInk),
             ),
             if (unreadNotificationCount > 0)
               Positioned(
@@ -2106,7 +2096,8 @@ class _StudioAppState extends State<StudioApp> {
                 child: Semantics(
                   label: '$unreadNotificationCount unread notifications',
                   child: Container(
-                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                    constraints:
+                        const BoxConstraints(minWidth: 16, minHeight: 16),
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     decoration: const BoxDecoration(
                       color: ConclaveBrand.accent,
@@ -2114,7 +2105,9 @@ class _StudioAppState extends State<StudioApp> {
                     ),
                     alignment: Alignment.center,
                     child: Text(
-                      unreadNotificationCount > 9 ? '9+' : '$unreadNotificationCount',
+                      unreadNotificationCount > 9
+                          ? '9+'
+                          : '$unreadNotificationCount',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 9,
@@ -2222,14 +2215,6 @@ class _StudioAppState extends State<StudioApp> {
     final text = chatController.text.trim();
     if (chat == null || text.isEmpty) return;
     chatController.clear();
-    setState(() {
-      localChatMessages.add(StudioChatMessage(
-        id: 'local-${DateTime.now().microsecondsSinceEpoch}',
-        sender: StudioMessageSender.user,
-        text: text,
-        timestamp: 'Just now',
-      ));
-    });
     try {
       final response = await store.chats.send(chat.projectId, chat.id, text);
       if (!mounted) return;
@@ -2242,14 +2227,14 @@ class _StudioAppState extends State<StudioApp> {
   Future<void> _createChat() async {
     final projectId = selectedProjectId;
     if (projectId == null) return;
-    final titleController = TextEditingController();
+    var titleValue = '';
     final title = await showDialog<String>(
       context: navigatorKey.currentContext ?? context,
       builder: (context) => AlertDialog(
         title: const Text('New chat'),
         content: TextField(
-          controller: titleController,
           autofocus: true,
+          onChanged: (value) => titleValue = value,
           decoration: const InputDecoration(
               hintText: 'What would you like to work on?'),
         ),
@@ -2258,13 +2243,11 @@ class _StudioAppState extends State<StudioApp> {
               onPressed: () => Navigator.pop(context),
               child: const Text('Cancel')),
           FilledButton(
-              onPressed: () =>
-                  Navigator.pop(context, titleController.text.trim()),
+              onPressed: () => Navigator.pop(context, titleValue.trim()),
               child: const Text('Create')),
         ],
       ),
     );
-    titleController.dispose();
     if (title == null || title.isEmpty) return;
     try {
       final chat = await store.chats.create(projectId, title);
@@ -2289,11 +2272,13 @@ class _StudioAppState extends State<StudioApp> {
     if (chat == null) {
       return _panel(
         title: 'Start a conversation',
-        subtitle: 'Choose a project chat from the sidebar',
+        subtitle: selectedProject == null
+            ? 'Create a project to start working with Conclave AX.'
+            : 'Start the first chat for this project.',
         child: FilledButton.icon(
-          onPressed: () {},
+          onPressed: selectedProject == null ? _createProject : _createChat,
           icon: const Icon(Icons.add),
-          label: const Text('New chat'),
+          label: Text(selectedProject == null ? 'Create project' : 'New chat'),
         ),
       );
     }
@@ -2641,9 +2626,7 @@ class _StudioAppState extends State<StudioApp> {
           ),
           const SizedBox(height: 5),
           Text(message.timestamp,
-              style: TextStyle(
-                  color: mutedInk,
-                  fontSize: 10)),
+              style: TextStyle(color: mutedInk, fontSize: 10)),
           if (message.runPreview != null) ...[
             const SizedBox(height: 14),
             _runPreviewCard(message.runPreview!),
@@ -3292,7 +3275,8 @@ class _StudioAppState extends State<StudioApp> {
       Builder(
         builder: (context) {
           final isDark = Theme.of(context).brightness == Brightness.dark;
-          final mutedColor = isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted;
+          final mutedColor =
+              isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted;
           return Card(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
@@ -3310,8 +3294,8 @@ class _StudioAppState extends State<StudioApp> {
                                     fontWeight: FontWeight.w700, fontSize: 14)),
                             const SizedBox(height: 3),
                             Text(subtitle,
-                                style: TextStyle(
-                                    color: mutedColor, fontSize: 10)),
+                                style:
+                                    TextStyle(color: mutedColor, fontSize: 10)),
                           ],
                         ),
                       ),

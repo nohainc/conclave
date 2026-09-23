@@ -42,8 +42,16 @@ class StudioFixtureDataSource implements StudioDataSource {
   }) async {}
 
   @override
-  Future<void> createProject(
-      {required String name, String? description}) async {}
+  Future<StudioProject> createProject(
+          {required String name, String? description}) async =>
+      StudioProject(
+        id: 'project-created',
+        name: name,
+        repository: '',
+        branch: '',
+        activeGoals: 0,
+        lastActivity: 'Just now',
+      );
 
   @override
   Future<StudioAccountSecurity> loadAccountSecurity() async =>
@@ -209,4 +217,75 @@ class StudioFixtureDataSource implements StudioDataSource {
     String independenceKey = '',
     Map<String, dynamic> costMetadata = const {},
   }) async {}
+}
+
+/// Stateful fixture used by the empty-workspace onboarding test. It mirrors
+/// the production API flow closely enough to verify the shell, project
+/// creation, chat creation, and subsequent read-model refresh together.
+class EmptyWorkspaceFixtureDataSource extends StudioFixtureDataSource {
+  EmptyWorkspaceFixtureDataSource() : super();
+
+  bool hasProject = false;
+  bool hasChat = false;
+
+  @override
+  Future<StudioSnapshot> loadReadModels(
+      {String? projectId, String? workspaceId}) async {
+    return _snapshot();
+  }
+
+  @override
+  Future<StudioSnapshot> loadSnapshot(
+      {String? projectId, String? workspaceId}) async {
+    return _snapshot();
+  }
+
+  @override
+  Future<StudioProject> createProject(
+      {required String name, String? description}) async {
+    hasProject = true;
+    return StudioProject(
+      id: 'project-created',
+      name: name,
+      repository: '',
+      branch: '',
+      activeGoals: 0,
+      lastActivity: 'Just now',
+    );
+  }
+
+  @override
+  Future<StudioChat> createChat({
+    required String projectId,
+    required String title,
+  }) async {
+    hasChat = true;
+    return super.createChat(projectId: projectId, title: title);
+  }
+
+  StudioSnapshot _snapshot() {
+    final project = StudioProject(
+      id: 'project-created',
+      name: 'My first project',
+      repository: '',
+      branch: '',
+      activeGoals: 0,
+      lastActivity: 'Just now',
+      chats: hasChat
+          ? const [
+              StudioChat(
+                id: 'chat-created',
+                projectId: 'project-created',
+                title: 'First chat',
+                lastActivity: 'Just now',
+                messages: [],
+              ),
+            ]
+          : const [],
+    );
+    return studioFixtureSnapshot().copyWith(
+      projects: hasProject ? [project] : const [],
+      activeChatId: hasChat ? 'chat-created' : null,
+    );
+  }
 }

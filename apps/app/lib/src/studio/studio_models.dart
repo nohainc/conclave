@@ -1021,6 +1021,31 @@ class StudioSnapshot {
   final List<StudioCandidateOutput> candidateOutputs;
   final StudioSynthesisDecision? synthesisDecision;
 
+  StudioSnapshot copyWith({
+    List<StudioProject>? projects,
+    String? activeChatId,
+  }) =>
+      StudioSnapshot(
+        workspaceId: workspaceId,
+        viewer: viewer,
+        activeRunId: activeRunId,
+        activeChatId: activeChatId ?? this.activeChatId,
+        run: run,
+        projects: projects ?? this.projects,
+        workers: workers,
+        agents: agents,
+        plugins: plugins,
+        tasks: tasks,
+        findings: findings,
+        events: events,
+        artifacts: artifacts,
+        modelCalls: modelCalls,
+        policy: policy,
+        candidateOutputs: candidateOutputs,
+        synthesisDecision: synthesisDecision,
+        accounts: accounts,
+      );
+
   List<StudioChat> get allChats =>
       projects.expand((project) => project.chats).toList();
 
