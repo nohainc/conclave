@@ -191,6 +191,53 @@ for (const notif of workerProtocol.notifications) {
   }
 }
 
+const realtimeEvents = schema["x-realtime-events"];
+if (
+  typeof realtimeEvents !== "object" ||
+  realtimeEvents === null ||
+  typeof realtimeEvents.name !== "string" ||
+  typeof realtimeEvents.version !== "string" ||
+  !Object.hasOwn(schema.$defs ?? {}, "realtimeEventPayload") ||
+  !Array.isArray(realtimeEvents.envelopeFields) ||
+  !Array.isArray(realtimeEvents.optionalEnvelopeFields) ||
+  !Array.isArray(realtimeEvents.durableTypes) ||
+  !Array.isArray(realtimeEvents.ephemeralTypes)
+) {
+  throw new Error("realtime event metadata is incomplete");
+}
+const durable = new Set(realtimeEvents.durableTypes);
+const ephemeral = new Set(realtimeEvents.ephemeralTypes);
+if ([...durable].some((type) => ephemeral.has(type))) {
+  throw new Error("realtime event type cannot be both durable and ephemeral");
+}
+for (const type of [...durable, ...ephemeral]) {
+  if (
+    !agentGenerated.includes(JSON.stringify(type)) ||
+    !generated.includes(JSON.stringify(type)) ||
+    !generatedDart.includes(`'${type}'`)
+  ) {
+    throw new Error(`generated realtime event binding is missing ${type}`);
+  }
+}
+for (const field of [
+  "REALTIME_EVENTS_NAME",
+  "REALTIME_EVENTS_VERSION",
+  "DURABLE_REALTIME_EVENT_TYPES",
+  "EPHEMERAL_REALTIME_EVENT_TYPES",
+]) {
+  if (!generated.includes(field) || !agentGenerated.includes(field)) {
+    throw new Error(
+      `generated TypeScript realtime binding is missing ${field}`,
+    );
+  }
+}
+if (
+  !generatedDart.includes(`realtimeEventsName = '${realtimeEvents.name}'`) ||
+  !generatedDart.includes(`realtimeEventsVersion = '${realtimeEvents.version}'`)
+) {
+  throw new Error("generated Dart realtime binding is out of date");
+}
+
 const agentProtocol = schema["x-agent-protocol"];
 if (agentProtocol) {
   for (const messageType of agentProtocol.messageTypes) {

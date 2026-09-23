@@ -70,3 +70,22 @@ Worker:
 - not a Conclave Cloud principal.
 
 These identities must not be conflated.
+
+## Realtime event contract
+
+PA-4 defines the canonical event vocabulary in
+`packages/protocol/schema/conclave-message.schema.json` under
+`x-realtime-events`. Events are facts, never commands. Durable domain events
+are retained for history and recovery; ephemeral events are bounded delivery
+signals and are not assumed to be replayable.
+
+Every event carries an event ID, event type and version, timestamp, Workspace
+scope, monotonically increasing sequence, and typed payload. Project, Chat,
+Run, Task, Attempt, Assignment, and Host references are optional envelope
+context. Payloads reject unknown fields, raw credentials, and large artifact
+bodies; streaming deltas are explicitly bounded and may be coalesced.
+
+Clients may preserve an unknown event type when its event version is a
+compatible minor version. They must never use event payloads as authorization;
+authorization is independently checked against the authenticated request and
+active Workspace membership.

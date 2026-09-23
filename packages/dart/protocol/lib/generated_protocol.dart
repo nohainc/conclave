@@ -86,6 +86,62 @@ const hostProtocolAssignmentEnvelopeFields = <String>[
   'idempotencyKey',
 ];
 
+const realtimeEventsName = 'conclave.realtime-events';
+const realtimeEventsVersion = '1.0';
+const realtimeEventEnvelopeFields = <String>[
+  'eventId',
+  'type',
+  'version',
+  'timestamp',
+  'workspaceId',
+  'sequence',
+  'payload',
+];
+const realtimeEventOptionalEnvelopeFields = <String>[
+  'projectId',
+  'chatId',
+  'runId',
+  'taskId',
+  'attemptId',
+  'assignmentId',
+  'hostId',
+];
+const durableRealtimeEventTypes = <String>{
+  'chat.message.created',
+  'run.started',
+  'run.paused',
+  'run.resumed',
+  'run.completed',
+  'run.failed',
+  'task.started',
+  'task.completed',
+  'task.failed',
+  'attempt.started',
+  'attempt.completed',
+  'attempt.failed',
+  'assignment.accepted',
+  'assignment.completed',
+  'assignment.failed',
+  'assignment.cancelled',
+  'artifact.created',
+  'finding.created',
+  'finding.resolved',
+  'verification.completed',
+  'host.enrolled',
+  'host.revoked',
+  'account.sharing.changed',
+};
+const ephemeralRealtimeEventTypes = <String>{
+  'assignment.progress',
+  'worker.status',
+  'stream.delta',
+  'tool.invocation.status',
+  'typing',
+  'heartbeat',
+  'host.load',
+};
+const realtimeEventPayloadSchema = '#/\$defs/realtimeEventPayload';
+
 const agentProtocolName = 'conclave.agent-protocol';
 const agentProtocolVersion = '2.0';
 const agentProtocolMaxMessageSizeBytes = 4194304;

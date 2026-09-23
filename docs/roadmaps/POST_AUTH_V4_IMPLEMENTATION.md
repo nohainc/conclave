@@ -248,6 +248,10 @@ Repository top-level names directly correspond to App / Cloud / Host / Workers.
 
 # PA-4 — Define the realtime event contract
 
+**Status: Complete.** The canonical schema, generated TypeScript/Dart bindings,
+parsers, and cross-language contract tests are in place. Browser WebSocket
+transport remains deferred to PA-5.
+
 ## Goal
 Create one canonical event model before adding a browser WebSocket.
 

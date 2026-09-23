@@ -9,6 +9,7 @@ const messagePayloads = schema["x-message-payloads"];
 const requiredFields = schema.required;
 const hostProtocol = schema["x-host-protocol"];
 const workerProtocol = schema["x-worker-protocol"];
+const realtimeEvents = schema["x-realtime-events"];
 const agentProtocol = schema["x-agent-protocol"];
 const localProtocols = schema["x-local-protocols"];
 
@@ -39,7 +40,16 @@ if (
   typeof workerProtocol.version !== "string" ||
   typeof workerProtocol.jsonRpcVersion !== "string" ||
   !Array.isArray(workerProtocol.methods) ||
-  !Array.isArray(workerProtocol.notifications)
+  !Array.isArray(workerProtocol.notifications) ||
+  typeof realtimeEvents !== "object" ||
+  realtimeEvents === null ||
+  typeof realtimeEvents.name !== "string" ||
+  typeof realtimeEvents.version !== "string" ||
+  !Array.isArray(realtimeEvents.envelopeFields) ||
+  !Array.isArray(realtimeEvents.optionalEnvelopeFields) ||
+  !Array.isArray(realtimeEvents.durableTypes) ||
+  !Array.isArray(realtimeEvents.ephemeralTypes) ||
+  typeof realtimeEvents.payloadSchema !== "string"
 ) {
   throw new Error("canonical protocol schema is missing generator metadata");
 }
@@ -59,6 +69,18 @@ const workerMethods = workerProtocol.methods
   .join("\n");
 const workerNotifications = workerProtocol.notifications
   .map((method) => `  ${JSON.stringify(method)},`)
+  .join("\n");
+const realtimeEnvelopeFields = realtimeEvents.envelopeFields
+  .map((field) => `  ${JSON.stringify(field)},`)
+  .join("\n");
+const realtimeOptionalEnvelopeFields = realtimeEvents.optionalEnvelopeFields
+  .map((field) => `  ${JSON.stringify(field)},`)
+  .join("\n");
+const realtimeDurableTypes = realtimeEvents.durableTypes
+  .map((type) => `  ${JSON.stringify(type)},`)
+  .join("\n");
+const realtimeEphemeralTypes = realtimeEvents.ephemeralTypes
+  .map((type) => `  ${JSON.stringify(type)},`)
   .join("\n");
 
 const agentMessageTypes = (agentProtocol?.messageTypes ?? [])
@@ -119,6 +141,23 @@ export const HOST_PROTOCOL_ASSIGNMENT_ENVELOPE_FIELDS = [
 ${hostAssignmentFields}
 ] as const;
 
+export const REALTIME_EVENTS_NAME = ${JSON.stringify(realtimeEvents.name)} as const;
+export const REALTIME_EVENTS_VERSION = ${JSON.stringify(realtimeEvents.version)} as const;
+export const REALTIME_EVENT_ENVELOPE_FIELDS = [
+${realtimeEnvelopeFields}
+] as const;
+export const REALTIME_EVENT_OPTIONAL_ENVELOPE_FIELDS = [
+${realtimeOptionalEnvelopeFields}
+] as const;
+export const DURABLE_REALTIME_EVENT_TYPES = [
+${realtimeDurableTypes}
+] as const;
+export const EPHEMERAL_REALTIME_EVENT_TYPES = [
+${realtimeEphemeralTypes}
+] as const;
+export const REALTIME_EVENT_PAYLOAD_SCHEMA =
+  ${JSON.stringify(realtimeEvents.payloadSchema)} as const;
+
 export const AGENT_PROTOCOL_NAME = ${JSON.stringify(agentProtocol?.name ?? "conclave.agent-protocol")} as const;
 export const AGENT_PROTOCOL_VERSION = ${JSON.stringify(agentProtocol?.version ?? "2.0")} as const;
 export const AGENT_PROTOCOL_MAX_MESSAGE_SIZE_BYTES = ${agentProtocol?.maxMessageSizeBytes ?? 4194304} as const;
@@ -156,6 +195,23 @@ ${workerMethods}
 export const WORKER_PROTOCOL_NOTIFICATIONS = [
 ${workerNotifications}
 ] as const;
+
+export const REALTIME_EVENTS_NAME = ${JSON.stringify(realtimeEvents.name)} as const;
+export const REALTIME_EVENTS_VERSION = ${JSON.stringify(realtimeEvents.version)} as const;
+export const REALTIME_EVENT_ENVELOPE_FIELDS = [
+${realtimeEnvelopeFields}
+] as const;
+export const REALTIME_EVENT_OPTIONAL_ENVELOPE_FIELDS = [
+${realtimeOptionalEnvelopeFields}
+] as const;
+export const DURABLE_REALTIME_EVENT_TYPES = [
+${realtimeDurableTypes}
+] as const;
+export const EPHEMERAL_REALTIME_EVENT_TYPES = [
+${realtimeEphemeralTypes}
+] as const;
+export const REALTIME_EVENT_PAYLOAD_SCHEMA =
+  ${JSON.stringify(realtimeEvents.payloadSchema)} as const;
 
 export const AGENT_PROTOCOL_NAME = ${JSON.stringify(agentProtocol?.name ?? "conclave.agent-protocol")} as const;
 export const AGENT_PROTOCOL_VERSION = ${JSON.stringify(agentProtocol?.version ?? "2.0")} as const;
@@ -225,6 +281,18 @@ const dartWorkerMethods = workerProtocol.methods
 const dartWorkerNotifications = workerProtocol.notifications
   .map((method) => `  '${method}',`)
   .join("\n");
+const dartRealtimeEnvelopeFields = realtimeEvents.envelopeFields
+  .map((field) => `  '${field}',`)
+  .join("\n");
+const dartRealtimeOptionalEnvelopeFields = realtimeEvents.optionalEnvelopeFields
+  .map((field) => `  '${field}',`)
+  .join("\n");
+const dartRealtimeDurableTypes = realtimeEvents.durableTypes
+  .map((type) => `  '${type}',`)
+  .join("\n");
+const dartRealtimeEphemeralTypes = realtimeEvents.ephemeralTypes
+  .map((type) => `  '${type}',`)
+  .join("\n");
 
 const dartAgentMessageTypes = (agentProtocol?.messageTypes ?? [])
   .map((messageType) => `  '${messageType}',`)
@@ -264,6 +332,22 @@ ${dartHostBaseFields}
 const hostProtocolAssignmentEnvelopeFields = <String>[
 ${dartHostAssignmentFields}
 ];
+
+const realtimeEventsName = '${realtimeEvents.name}';
+const realtimeEventsVersion = '${realtimeEvents.version}';
+const realtimeEventEnvelopeFields = <String>[
+${dartRealtimeEnvelopeFields}
+];
+const realtimeEventOptionalEnvelopeFields = <String>[
+${dartRealtimeOptionalEnvelopeFields}
+];
+const durableRealtimeEventTypes = <String>{
+${dartRealtimeDurableTypes}
+};
+const ephemeralRealtimeEventTypes = <String>{
+${dartRealtimeEphemeralTypes}
+};
+const realtimeEventPayloadSchema = '${realtimeEvents.payloadSchema.replaceAll("$", "\\$")}';
 
 const agentProtocolName = '${agentProtocol?.name ?? "conclave.agent-protocol"}';
 const agentProtocolVersion = '${agentProtocol?.version ?? "2.0"}';

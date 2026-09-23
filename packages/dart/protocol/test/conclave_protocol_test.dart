@@ -146,4 +146,46 @@ void main() {
       throwsA(isA<ProtocolException>()),
     );
   });
+
+  test('round trips durable and ephemeral realtime events', () {
+    final event = RealtimeEvent.parse({
+      'eventId': 'event-1',
+      'type': 'run.completed',
+      'version': '1.0',
+      'timestamp': '2026-09-23T10:00:00.000Z',
+      'workspaceId': 'workspace-1',
+      'sequence': 7,
+      'payload': <String, Object?>{
+        'entityId': 'run-1',
+        'status': 'completed',
+      },
+    });
+    expect(RealtimeEvent.parse(event.encode()).type, equals('run.completed'));
+    expect(durableRealtimeEventTypes, contains('run.completed'));
+    expect(ephemeralRealtimeEventTypes, contains('stream.delta'));
+  });
+
+  test('accepts unknown compatible events and rejects secrets or bad order', () {
+    final base = <String, Object?>{
+      'eventId': 'event-1',
+      'type': 'future.new.fact',
+      'version': '1.1',
+      'timestamp': '2026-09-23T10:00:00.000Z',
+      'workspaceId': 'workspace-1',
+      'sequence': 0,
+      'payload': <String, Object?>{},
+    };
+    expect(RealtimeEvent.parse(base).type, equals('future.new.fact'));
+    expect(
+      () => RealtimeEvent.parse({...base, 'sequence': -1}),
+      throwsA(isA<ProtocolException>()),
+    );
+    expect(
+      () => RealtimeEvent.parse({
+        ...base,
+        'payload': {'rawApiKey': 'secret'},
+      }),
+      throwsA(isA<ProtocolException>()),
+    );
+  });
 }

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://conclaveax.com/schemas/conclave-message.schema.json",
   "title": "Conclave canonical message",
-  "description": "Strict cross-language contract shared by Cloud, Agent Engine, and Worker Plugins.",
+  "description": "Strict cross-language contract shared by Conclave Cloud, App, Host, and Workers.",
   "x-protocol-version": "0.1",
   "x-host-protocol": {
     "name": "conclave.host-protocol",
@@ -104,6 +104,63 @@
       "error": "#/$defs/workerErrorNotification",
       "log": "#/$defs/workerLogNotification"
     }
+  },
+  "x-realtime-events": {
+    "name": "conclave.realtime-events",
+    "version": "1.0",
+    "envelopeFields": [
+      "eventId",
+      "type",
+      "version",
+      "timestamp",
+      "workspaceId",
+      "sequence",
+      "payload"
+    ],
+    "optionalEnvelopeFields": [
+      "projectId",
+      "chatId",
+      "runId",
+      "taskId",
+      "attemptId",
+      "assignmentId",
+      "hostId"
+    ],
+    "durableTypes": [
+      "chat.message.created",
+      "run.started",
+      "run.paused",
+      "run.resumed",
+      "run.completed",
+      "run.failed",
+      "task.started",
+      "task.completed",
+      "task.failed",
+      "attempt.started",
+      "attempt.completed",
+      "attempt.failed",
+      "assignment.accepted",
+      "assignment.completed",
+      "assignment.failed",
+      "assignment.cancelled",
+      "artifact.created",
+      "finding.created",
+      "finding.resolved",
+      "verification.completed",
+      "host.enrolled",
+      "host.revoked",
+      "account.sharing.changed"
+    ],
+    "ephemeralTypes": [
+      "assignment.progress",
+      "worker.status",
+      "stream.delta",
+      "tool.invocation.status",
+      "typing",
+      "heartbeat",
+      "host.load"
+    ],
+    "payloadSchema": "#/$defs/realtimeEventPayload"
   },
   "x-agent-protocol": {
     "name": "conclave.agent-protocol",
@@ -616,6 +673,29 @@
         "visibility": { "enum": ["private", "workspace"] },
         "lastCheckedAt": { "$ref": "#/$defs/timestamp" },
         "errorMessage": { "type": "string" }
+      }
+    },
+    "realtimeEventPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "entityId": { "$ref": "#/$defs/nonEmpty" },
+        "status": { "$ref": "#/$defs/nonEmpty" },
+        "message": { "type": "string", "maxLength": 32768 },
+        "summary": { "type": "string", "maxLength": 32768 },
+        "text": { "type": "string", "maxLength": 32768 },
+        "delta": { "type": "string", "maxLength": 8192 },
+        "tool": { "$ref": "#/$defs/nonEmpty" },
+        "artifactId": { "$ref": "#/$defs/nonEmpty" },
+        "findingId": { "$ref": "#/$defs/nonEmpty" },
+        "verificationId": { "$ref": "#/$defs/nonEmpty" },
+        "hostId": { "$ref": "#/$defs/nonEmpty" },
+        "workerId": { "$ref": "#/$defs/nonEmpty" },
+        "credentialProfileId": { "$ref": "#/$defs/nonEmpty" },
+        "percentage": { "type": "number", "minimum": 0, "maximum": 100 },
+        "durationMs": { "type": "integer", "minimum": 0 },
+        "tokenCount": { "type": "integer", "minimum": 0 },
+        "coalesced": { "type": "boolean" }
       }
     },
     "assignmentStartPayload": {
