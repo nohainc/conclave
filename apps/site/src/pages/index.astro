@@ -7,6 +7,7 @@ import FeatureCard from "../components/FeatureCard.astro";
 import HeroArchitecture from "../components/HeroArchitecture.astro";
 import HostTopology from "../components/HostTopology.astro";
 import PrincipleCard from "../components/PrincipleCard.astro";
+import QualityFlow from "../components/QualityFlow.astro";
 import Section from "../components/Section.astro";
 import SectionHeader from "../components/SectionHeader.astro";
 ---
@@ -57,6 +58,24 @@ import SectionHeader from "../components/SectionHeader.astro";
           <p>Turn findings into corrections and check again.</p>
           <div class="principle-iterate"><span>Finding</span><i aria-hidden="true">↓</i><span>Correction</span><i aria-hidden="true">↓</i><span>Reverification</span></div>
         </PrincipleCard>
+      </div>
+    </Container>
+  </Section>
+
+  <Section>
+    <Container>
+      <div class="quality-section">
+        <div>
+          <SectionHeader
+            eyebrow="Quality and verification"
+            title="More models are not enough. Their work has to be checked."
+            description="Conclave AX treats orchestration as a quality process: compare candidates, review independently, correct findings, and verify the result against explicit criteria."
+          />
+          <div class="quality-points">
+            <span>Multiple candidates</span><span>Independent review</span><span>Correction loops</span><span>Automated tests</span><span>Structured evidence</span><span>Completion criteria</span>
+          </div>
+        </div>
+        <QualityFlow />
       </div>
     </Container>
   </Section>
