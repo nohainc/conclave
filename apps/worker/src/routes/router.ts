@@ -317,6 +317,22 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
+    const desiredStateMatch = url.pathname.match(
+      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/hosts\/([^/]+)\/desired-state$/,
+    );
+    if (
+      request.method === "PUT" &&
+      desiredStateMatch?.[1] &&
+      desiredStateMatch?.[2]
+    ) {
+      return await handlers.handleSetHostDesiredState!(
+        request,
+        env,
+        desiredStateMatch[1],
+        desiredStateMatch[2],
+        ctx,
+      );
+    }
 
     // Workspace Workers Fleet (Architecture v2)
     const workersMatch = url.pathname.match(

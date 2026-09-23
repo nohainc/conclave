@@ -23,7 +23,7 @@ Track progress of the [v4 implementation roadmap](ARCHITECTURE_V4_IMPLEMENTATION
 | V4-16 | Redesign Studio execution UX | ✅ Complete |
 | V4-17 | Web-only Studio cleanup | ✅ Complete |
 | V4-18 | Authentication and Workspace authorization alignment | ✅ Complete |
-| V4-19 | Host desired-state controller | ⬜ Not started |
+| V4-19 | Host desired-state controller | ✅ Complete |
 | V4-20 | Session/history isolation | ⬜ Not started |
 | V4-21 | Forge migration | ⬜ Not started |
 | V4-22 | Usage, budgets, shared-account accounting | ⬜ Not started |

@@ -395,6 +395,13 @@ never authorize secret reads. Host machine tokens are accepted only for an
 active `host_workspace_bindings` row, so a Host cannot cross Workspace
 boundaries through the transient gateway.
 
+V4-19 stores Host desired state in `host_desired_states` and
+`host_desired_workers`. Studio updates are authorized and tenant-scoped;
+required versions are rejected unless they are active, non-revoked Worker
+catalog entries. Hosts receive only the resolved package metadata during sync,
+then reconcile idempotently through the existing signed WorkerManager,
+reporting observed status and errors back to Cloud.
+
 ## 9. Architectural deletion gate
 
 Architecture v4 cleanup is complete when active source search returns no product/domain usage of:

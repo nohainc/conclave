@@ -2753,6 +2753,164 @@ async function handleAnnounceHostUpdate(
   });
 }
 
+async function handleSetHostDesiredState(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  hostId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  authorize(context, "worker.install");
+  requireWorkspaceContext(context, env, workspaceId);
+
+  const binding = await env.CONCLAVE_DB.prepare(
+    `SELECT h.id FROM hosts h
+     JOIN host_workspace_bindings b ON b.host_id = h.id
+     WHERE h.id = ?1 AND b.workspace_id = ?2 AND b.status = 'active'
+       AND h.revoked_at IS NULL`,
+  )
+    .bind(hostId, workspaceId)
+    .first<{ id: string }>();
+  if (!binding) throw new HttpError(404, "Host not found");
+
+  const body = (await request.json()) as Record<string, unknown>;
+  const rawWorkers = Array.isArray(body.requiredWorkers)
+    ? body.requiredWorkers
+    : [];
+  const requiredWorkers = rawWorkers.map((item, index) => {
+    if (!item || typeof item !== "object") {
+      throw new HttpError(400, `requiredWorkers[${index}] must be an object`);
+    }
+    const worker = item as Record<string, unknown>;
+    if (
+      typeof worker.workerId !== "string" ||
+      typeof worker.version !== "string" ||
+      worker.workerId.length === 0 ||
+      worker.version.length === 0
+    ) {
+      throw new HttpError(
+        400,
+        `requiredWorkers[${index}] requires workerId and version`,
+      );
+    }
+    return { workerId: worker.workerId, version: worker.version };
+  });
+  const uniqueWorkers = new Map(
+    requiredWorkers.map((worker) => [worker.workerId, worker]),
+  );
+
+  const releaseChannel =
+    body.releaseChannel === undefined ? "stable" : body.releaseChannel;
+  if (
+    releaseChannel !== "stable" &&
+    releaseChannel !== "beta" &&
+    releaseChannel !== "development"
+  ) {
+    throw new HttpError(400, "Unsupported Host release channel");
+  }
+  const listOfStrings = (value: unknown, field: string): string[] => {
+    if (value === undefined) return [];
+    if (
+      !Array.isArray(value) ||
+      value.some((item) => typeof item !== "string")
+    ) {
+      throw new HttpError(400, `${field} must be an array of strings`);
+    }
+    return value as string[];
+  };
+  const credentialSetupRequests = listOfStrings(
+    body.credentialSetupRequests,
+    "credentialSetupRequests",
+  );
+  const localPermissionRequests = listOfStrings(
+    body.localPermissionRequests,
+    "localPermissionRequests",
+  );
+
+  for (const worker of uniqueWorkers.values()) {
+    const version = await env.CONCLAVE_DB.prepare(
+      `SELECT wv.id FROM worker_versions wv
+       JOIN workers w ON w.id = wv.worker_id
+       WHERE wv.worker_id = ?1 AND wv.version = ?2
+         AND w.status = 'active' AND wv.is_revoked = 0`,
+    )
+      .bind(worker.workerId, worker.version)
+      .first<{ id: string }>();
+    if (!version) {
+      throw new HttpError(
+        409,
+        `Worker version ${worker.workerId}@${worker.version} is unavailable`,
+      );
+    }
+  }
+
+  const existing = await env.CONCLAVE_DB.prepare(
+    "SELECT revision FROM host_desired_states WHERE host_id = ?1",
+  )
+    .bind(hostId)
+    .first<{ revision: number }>();
+  const revision = (existing?.revision ?? 0) + 1;
+  const now = new Date().toISOString();
+  const statements: D1PreparedStatement[] = [
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO host_desired_states
+       (host_id, release_channel, credential_setup_requests_json,
+        local_permission_requests_json, revision, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+       ON CONFLICT(host_id) DO UPDATE SET
+         release_channel = excluded.release_channel,
+         credential_setup_requests_json = excluded.credential_setup_requests_json,
+         local_permission_requests_json = excluded.local_permission_requests_json,
+         revision = excluded.revision,
+         updated_at = excluded.updated_at`,
+    ).bind(
+      hostId,
+      releaseChannel,
+      JSON.stringify(credentialSetupRequests),
+      JSON.stringify(localPermissionRequests),
+      revision,
+      now,
+    ),
+    env.CONCLAVE_DB.prepare(
+      "DELETE FROM host_desired_workers WHERE host_id = ?1",
+    ).bind(hostId),
+  ];
+  for (const worker of uniqueWorkers.values()) {
+    statements.push(
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO host_desired_workers
+         (host_id, worker_id, required_version, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?4)`,
+      ).bind(hostId, worker.workerId, worker.version, now),
+    );
+  }
+  await env.CONCLAVE_DB.batch(statements);
+  await recordAudit(
+    env,
+    context,
+    "host.desired_state.updated",
+    "host",
+    hostId,
+    {
+      revision,
+      requiredWorkers: [...uniqueWorkers.values()],
+      releaseChannel,
+    },
+  );
+
+  return json({
+    hostId,
+    workspaceId,
+    revision,
+    releaseChannel,
+    requiredWorkers: [...uniqueWorkers.values()],
+    credentialSetupRequests,
+    localPermissionRequests,
+    updatedAt: now,
+  });
+}
+
 export async function handleListWorkerCatalog(
   request: Request,
   env: SecurityEnv,
@@ -5553,6 +5711,7 @@ export {
   handleGetHost,
   handleRevokeHost,
   handleAnnounceHostUpdate,
+  handleSetHostDesiredState,
   handleDispatchEnsembleTaskAssignment,
   handleDispatchTaskAssignment,
   handleCancelTaskAssignment,

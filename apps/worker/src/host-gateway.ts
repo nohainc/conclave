@@ -462,68 +462,47 @@ export class HostGateway implements DurableObject {
 
         try {
           const workerRows = await this.env.CONCLAVE_DB.prepare(
-            `SELECT * FROM workers
-             WHERE host_id = ?1 AND workspace_id = ?2 AND enabled = 1`,
+            `SELECT dw.worker_id, dw.required_version, w.display_name,
+                    wv.protocol_version, wv.min_host_version,
+                    wv.supported_os_json, wv.supported_arch_json,
+                    wv.capabilities_json, wv.permissions_json,
+                    wv.credential_requirements_json, wv.package_digest,
+                    wv.package_r2_key, wv.signature, wv.entrypoint
+             FROM host_desired_workers dw
+             JOIN workers w ON w.id = dw.worker_id AND w.status = 'active'
+             JOIN worker_versions wv
+               ON wv.worker_id = dw.worker_id AND wv.version = dw.required_version
+             WHERE dw.host_id = ?1 AND wv.is_revoked = 0
+             ORDER BY dw.worker_id ASC`,
           )
-            .bind(payload.agentId, payload.workspaceId)
+            .bind(payload.agentId)
             .all<Record<string, unknown>>();
 
           desiredWorkers = (workerRows.results || []).map((row) => ({
-            id: String(row.id),
-            workerId: String(row.id),
-            workspaceId: String(row.workspace_id || payload.workspaceId),
-            hostId: String(row.host_id || payload.agentId),
-            pluginId: String(row.plugin_id),
-            pluginVersionPolicy: String(row.plugin_version_policy || "latest"),
-            name: String(row.name),
-            roles: JSON.parse(String(row.roles_json || "[]")),
-            capabilities: JSON.parse(String(row.capabilities_json || "[]")),
-            config: JSON.parse(String(row.config_json || "{}")),
-            secretRefs: JSON.parse(String(row.secret_refs_json || "[]")),
-            billingMode: row.billing_mode as DesiredWorker["billingMode"],
-            costMetadata: JSON.parse(String(row.cost_metadata_json || "{}")),
-            independenceKey: String(row.independence_key),
-            concurrencyLimit: Number(row.concurrency_limit || 1),
-            sessionPolicy:
-              (row.session_policy as DesiredWorker["sessionPolicy"]) ||
-              "stateless",
-            availability:
-              (row.status as DesiredWorker["availability"]) || "available",
-            enabled: Number(row.enabled) === 1,
-          }));
-
-          const pluginRows = await this.env.CONCLAVE_DB.prepare(
-            `SELECT pv.*, p.id as plugin_id, p.publisher as publisher FROM worker_plugin_versions pv
-             JOIN worker_plugins p ON p.id = pv.plugin_id
-             JOIN workers w ON w.plugin_id = p.id
-             WHERE p.status = 'active'
-               AND w.host_id = ?1 AND w.workspace_id = ?2 AND w.enabled = 1
-             GROUP BY pv.id`,
-          )
-            .bind(payload.agentId, payload.workspaceId)
-            .all<Record<string, unknown>>();
-
-          desiredPlugins = (pluginRows.results || []).map((row) => ({
-            pluginId: String(row.plugin_id),
-            version: String(row.version),
-            publisher: String(row.publisher),
+            workerId: String(row.worker_id),
+            version: String(row.required_version),
+            publisher: "conclave",
             protocolVersion: String(row.protocol_version),
-            minAgentVersion: String(row.min_agent_version),
-            supportedPlatforms: [
-              ...parseJsonArray(row.supported_os_json),
-            ].flatMap((os) =>
-              parseJsonArray(row.supported_arch_json).map(
-                (arch) => `${os}-${arch}`,
-              ),
-            ),
+            minHostVersion: String(row.min_host_version),
             packageR2Key: String(row.package_r2_key),
             packageDigest: String(row.package_digest),
             signature: String(row.signature),
+            entrypoint: String(row.entrypoint),
             permissions: JSON.parse(String(row.permissions_json || "[]")),
+            supportedPlatforms: parseJsonArray(row.supported_os_json).flatMap(
+              (os) =>
+                parseJsonArray(row.supported_arch_json).map(
+                  (arch) => `${os}-${arch}`,
+                ),
+            ),
             secretEnvironmentVariables: parseJsonObjectKeys(
-              row.secret_schema_json,
+              row.credential_requirements_json,
             ),
           }));
+          // The v4 Worker package is the installable unit. Keep the legacy
+          // plugin collection empty so a Host cannot accidentally reinstall
+          // removed v3 plugin packages.
+          desiredPlugins = [];
 
           const assignmentIds = payload.unreconciledAssignmentIds ?? [];
           if (assignmentIds.length > 0) {
@@ -568,22 +547,69 @@ export class HostGateway implements DurableObject {
       case "worker.status": {
         const payload = message.payload as any;
         try {
-          if (payload.agentId !== this.hostId) {
+          const statuses = Array.isArray(payload.workers)
+            ? payload.workers
+            : [payload];
+          if (
+            statuses.some(
+              (status: any) =>
+                status.hostId !== undefined && status.hostId !== this.hostId,
+            )
+          ) {
             this.sendError("Worker status identity does not match the session");
             break;
           }
-          await this.env.CONCLAVE_DB.prepare(
-            `UPDATE workers SET status = ?1, updated_at = ?2
-             WHERE id = ?3 AND host_id = ?4 AND workspace_id = ?5`,
-          )
-            .bind(
-              payload.status,
-              now,
-              payload.workerId,
-              this.hostId,
-              this.workspaceId,
+          for (const status of statuses) {
+            if (
+              typeof status?.workerId !== "string" ||
+              typeof status?.version !== "string" ||
+              typeof status?.status !== "string"
+            ) {
+              continue;
+            }
+            const desired = await this.env.CONCLAVE_DB.prepare(
+              `SELECT worker_id FROM host_desired_workers
+               WHERE host_id = ?1 AND worker_id = ?2 AND required_version = ?3`,
             )
-            .run();
+              .bind(this.hostId, status.workerId, status.version)
+              .first<{ worker_id: string }>();
+            if (!desired) continue;
+            const installationStatus = [
+              "active",
+              "installed",
+              "error",
+            ].includes(status.status)
+              ? status.status
+              : "error";
+            await this.env.CONCLAVE_DB.prepare(
+              `INSERT INTO host_worker_installations
+               (id, host_id, worker_id, worker_version_id, status, error,
+                installed_at, updated_at)
+               SELECT ?1, ?2, ?3, wv.id, ?4, ?5,
+                      CASE WHEN ?4 IN ('active', 'installed') THEN COALESCE(?6, ?7) ELSE NULL END,
+                      ?7
+               FROM worker_versions wv
+               WHERE wv.worker_id = ?3 AND wv.version = ?8
+               ON CONFLICT(host_id, worker_id, worker_version_id) DO UPDATE SET
+                 status = excluded.status,
+                 error = excluded.error,
+                 installed_at = COALESCE(excluded.installed_at, host_worker_installations.installed_at),
+                 updated_at = excluded.updated_at`,
+            )
+              .bind(
+                `installation-${this.hostId}-${status.workerId}-${status.version}`,
+                this.hostId,
+                status.workerId,
+                installationStatus,
+                typeof status.error === "string" ? status.error : null,
+                typeof status.installedAt === "string"
+                  ? status.installedAt
+                  : null,
+                now,
+                status.version,
+              )
+              .run();
+          }
         } catch (err) {
           console.error("Failed to update worker status", err);
         }
