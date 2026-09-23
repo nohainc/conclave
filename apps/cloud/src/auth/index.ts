@@ -1,5 +1,6 @@
 export {
   buildBetterAuthOptions,
+  copySetCookieHeaders,
   createBetterAuth,
   handleBetterAuthRequest,
   safeAuthReturnTo,

@@ -291,7 +291,12 @@ export async function handleBetterAuthRequest(
       });
     }
     recordAuthMetric(socialSignIn[1], "success");
-    return Response.redirect(body.url, 302);
+    const redirect = new Response(null, {
+      status: 302,
+      headers: { location: body.url },
+    });
+    copySetCookieHeaders(response.headers, redirect.headers);
+    return redirect;
   }
 
   const metadata = await requestMetadata(request);
@@ -318,6 +323,19 @@ export async function handleBetterAuthRequest(
     });
   }
   return response;
+}
+
+/** Preserve Better Auth's OAuth state/CSRF cookies across the redirect shim. */
+export function copySetCookieHeaders(source: Headers, target: Headers): void {
+  const getSetCookie = (source as Headers & { getSetCookie?: () => string[] })
+    .getSetCookie;
+  const cookies =
+    typeof getSetCookie === "function"
+      ? getSetCookie.call(source)
+      : source.get("set-cookie")
+        ? [source.get("set-cookie") as string]
+        : [];
+  for (const cookie of cookies) target.append("set-cookie", cookie);
 }
 
 type AuthRequestMetadata = {

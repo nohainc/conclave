@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildBetterAuthOptions,
+  copySetCookieHeaders,
   IdentityService,
   listPendingInvitations,
   provisionConclaveUser,
@@ -10,6 +11,18 @@ import {
 import { requireSameOriginForCookieMutation } from "../src/routes/handlers.js";
 
 describe("IdentityService", () => {
+  it("preserves all OAuth state cookies when redirecting to a provider", () => {
+    const source = new Headers();
+    source.append("set-cookie", "oauth_state=one; Path=/; HttpOnly");
+    source.append("set-cookie", "oauth_nonce=two; Path=/; HttpOnly");
+    const target = new Headers();
+
+    copySetCookieHeaders(source, target);
+
+    expect(target.get("set-cookie")).toContain("oauth_state=one");
+    expect(target.get("set-cookie")).toContain("oauth_nonce=two");
+  });
+
   it("keeps social login return paths same-origin", () => {
     const request = new Request(
       "https://app.conclave.test/api/auth/sign-in/github",
