@@ -15,6 +15,7 @@ import '../features/common/code_block_view.dart';
 import '../features/common/command_palette.dart';
 import '../features/common/diff_viewer.dart';
 import '../features/chat/typing_indicator.dart';
+import '../features/chat/prompt_composer.dart';
 import '../features/execution/task_pipeline_dag.dart';
 import '../features/home/home_page.dart';
 import '../features/projects/projects_pages.dart';
@@ -22,6 +23,17 @@ import '../features/workspace/workspace_settings_page.dart';
 import 'studio_models.dart';
 import 'studio_data.dart';
 import 'studio_stores.dart';
+
+enum _ChatDeliveryStatus { pending, failed }
+
+class _PendingChatMessage {
+  _PendingChatMessage({required this.id, required this.text});
+
+  final String id;
+  final String text;
+  _ChatDeliveryStatus status = _ChatDeliveryStatus.pending;
+  String? error;
+}
 
 class ConclaveAppShell extends StatefulWidget {
   const ConclaveAppShell(
@@ -62,6 +74,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
   String selectedExecutionAccount = 'Auto';
   String selectedExecutionHost = 'Auto';
   bool showAdvancedExecution = false;
+  bool isSendingChat = false;
   final Map<String, bool> workerEnabled = {};
   final objectiveController = TextEditingController();
   final revisionController = TextEditingController();
@@ -71,6 +84,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
   final authPasswordController = TextEditingController();
   final authConfirmPasswordController = TextEditingController();
   final List<StudioChatMessage> localChatMessages = [];
+  final List<_PendingChatMessage> pendingChatMessages = [];
   final List<StudioNotification> notifications = [];
   late final StudioStore store;
   final navigatorKey = GlobalKey<NavigatorState>();
@@ -2472,15 +2486,26 @@ class _StudioAppState extends State<ConclaveAppShell> {
     ]);
   }
 
-  Future<void> _sendChatMessage() async {
+  Future<void> _sendChatMessage([String? submittedText]) async {
     final chat = selectedChat;
-    final text = chatController.text.trim();
+    final text = (submittedText ?? chatController.text).trim();
     if (chat == null || text.isEmpty) return;
     chatController.clear();
+    final pending = _PendingChatMessage(
+      id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
+      text: text,
+    );
+    setState(() {
+      pendingChatMessages.add(pending);
+      isSendingChat = true;
+    });
     try {
       final response = await store.chats.send(chat.projectId, chat.id, text);
       if (!mounted) return;
-      setState(() => localChatMessages.add(response));
+      setState(() {
+        pendingChatMessages.removeWhere((item) => item.id == pending.id);
+        isSendingChat = false;
+      });
       if (response.runId != null && response.runId!.isNotEmpty) {
         await _loadSnapshot(projectId: chat.projectId, showSpinner: false);
         if (!mounted) return;
@@ -2489,8 +2514,21 @@ class _StudioAppState extends State<ConclaveAppShell> {
         await _loadSnapshot(projectId: chat.projectId, showSpinner: false);
       }
     } catch (error) {
-      if (mounted) _showSnackBar(error.toString());
+      if (mounted) {
+        setState(() {
+          pending.status = _ChatDeliveryStatus.failed;
+          pending.error = error.toString();
+          isSendingChat = false;
+        });
+      }
     }
+  }
+
+  Future<void> _retryPendingChat(_PendingChatMessage pending) async {
+    if (!mounted) return;
+    setState(
+        () => pendingChatMessages.removeWhere((item) => item.id == pending.id));
+    await _sendChatMessage(pending.text);
   }
 
   Future<void> _createChat() async {
@@ -2604,32 +2642,31 @@ class _StudioAppState extends State<ConclaveAppShell> {
               const SizedBox(height: 6),
             ],
             const SizedBox(height: 10),
-            _composerExecutionControls(),
-            const SizedBox(height: 12),
-            Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Expanded(
-                child: TextField(
-                  controller: chatController,
-                  minLines: 1,
-                  maxLines: 5,
-                  onSubmitted: (_) => _sendChatMessage(),
-                  decoration: InputDecoration(
-                    hintText: 'Ask Conclave to research, plan, or implement…',
-                    filled: true,
-                    fillColor: Theme.of(context).brightness == Brightness.dark
-                        ? ConclaveBrand.darkPaper
-                        : ConclaveBrand.lightCodeBackground,
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton.filled(
-                  onPressed: _sendChatMessage,
-                  icon: const Icon(Icons.arrow_upward_rounded)),
-            ]),
+            ...pendingChatMessages.map(_pendingChatMessage),
+            PromptComposer(
+              controller: chatController,
+              onSubmitted: _sendChatMessage,
+              selectedQuality: selectedQuality,
+              onQualityChanged: (value) =>
+                  setState(() => selectedQuality = value),
+              selectedWorker: selectedExecutionWorker,
+              onWorkerChanged: (value) =>
+                  setState(() => selectedExecutionWorker = value),
+              selectedModel: selectedExecutionModel,
+              onModelChanged: (value) =>
+                  setState(() => selectedExecutionModel = value),
+              selectedAccount: selectedExecutionAccount,
+              onAccountChanged: (value) =>
+                  setState(() => selectedExecutionAccount = value),
+              selectedHost: selectedExecutionHost,
+              onHostChanged: (value) =>
+                  setState(() => selectedExecutionHost = value),
+              showAdvanced: showAdvancedExecution,
+              onToggleAdvanced: () => setState(
+                  () => showAdvancedExecution = !showAdvancedExecution),
+              snapshot: snapshot,
+              isBusy: isSendingChat,
+            ),
           ],
         ),
       ),
@@ -2693,6 +2730,63 @@ class _StudioAppState extends State<ConclaveAppShell> {
     );
   }
 
+  Widget _pendingChatMessage(_PendingChatMessage pending) => Align(
+        alignment: Alignment.centerRight,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 760),
+          margin: const EdgeInsets.only(bottom: 14),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xff6254d9).withValues(alpha: .12),
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(
+              color: pending.status == _ChatDeliveryStatus.failed
+                  ? Colors.redAccent
+                  : const Color(0xffc8c2f3),
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(pending.text, textAlign: TextAlign.right),
+                    const SizedBox(height: 5),
+                    Text(
+                      pending.status == _ChatDeliveryStatus.failed
+                          ? 'Not sent${pending.error == null ? '' : ': ${pending.error}'}'
+                          : 'Sending…',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: pending.status == _ChatDeliveryStatus.failed
+                            ? Colors.redAccent
+                            : const Color(0xff777683),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (pending.status == _ChatDeliveryStatus.failed) ...[
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: () => _retryPendingChat(pending),
+                  child: const Text('Retry'),
+                ),
+              ] else ...[
+                const SizedBox(width: 8),
+                const SizedBox(
+                  width: 15,
+                  height: 15,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+
   Widget _approvalPromptCard() => _panel(
         title: 'Conclave needs your input',
         subtitle: 'The Run is waiting safely for a response.',
@@ -2713,139 +2807,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
                 onPressed: _respondToRunPrompt, child: const Text('Continue')),
           ]),
         ]),
-      );
-
-  Widget _composerExecutionControls() {
-    final workerOptions = {
-      'Auto',
-      ...snapshot.workers.map((worker) => worker.name),
-    }.toList();
-    final accountOptions = {
-      'Auto',
-      ...snapshot.accounts.map((account) => account.displayName),
-    }.toList();
-    final hostOptions = {
-      'Auto',
-      ...snapshot.agents.map((host) => host.name),
-    }.toList();
-
-    Widget choice(String label, String value, List<String> options,
-        ValueChanged<String?> onChanged) {
-      return ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 126, maxWidth: 190),
-        child: DropdownButtonFormField<String>(
-          initialValue: options.contains(value) ? value : 'Auto',
-          isDense: true,
-          isExpanded: true,
-          decoration: InputDecoration(
-            labelText: label,
-            filled: true,
-            fillColor: const Color(0xfff7f7fa),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide.none,
-            ),
-          ),
-          items: options
-              .map((option) => DropdownMenuItem(
-                    value: option,
-                    child: Text(option, overflow: TextOverflow.ellipsis),
-                  ))
-              .toList(),
-          onChanged: onChanged,
-        ),
-      );
-    }
-
-    return Card(
-      color: const Color(0xfffafaff),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                choice(
-                    'Worker',
-                    selectedExecutionWorker,
-                    workerOptions,
-                    (value) => setState(
-                        () => selectedExecutionWorker = value ?? 'Auto')),
-                ChoiceChip(
-                  label: const Text('Balanced'),
-                  selected: selectedQuality == StudioQualityPreset.balanced,
-                  onSelected: (_) => setState(
-                      () => selectedQuality = StudioQualityPreset.balanced),
-                ),
-                TextButton.icon(
-                  onPressed: () => setState(
-                      () => showAdvancedExecution = !showAdvancedExecution),
-                  icon: Icon(showAdvancedExecution
-                      ? Icons.expand_less
-                      : Icons.tune_outlined),
-                  label: Text(showAdvancedExecution
-                      ? 'Hide advanced'
-                      : 'Advanced execution'),
-                ),
-              ],
-            ),
-            if (showAdvancedExecution) ...[
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  choice(
-                      'Model',
-                      selectedExecutionModel,
-                      const ['Auto', 'Fast', 'Reasoning'],
-                      (value) => setState(
-                          () => selectedExecutionModel = value ?? 'Auto')),
-                  choice(
-                      'Account',
-                      selectedExecutionAccount,
-                      accountOptions,
-                      (value) => setState(
-                          () => selectedExecutionAccount = value ?? 'Auto')),
-                  choice(
-                      'Host',
-                      selectedExecutionHost,
-                      hostOptions,
-                      (value) => setState(
-                          () => selectedExecutionHost = value ?? 'Auto')),
-                  _executionHint(
-                      'Candidates', '${snapshot.policy?.candidateCount ?? 1}'),
-                  _executionHint(
-                      'Cost', snapshot.policy?.costCeiling ?? 'Auto'),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _executionHint(String label, String value) => Container(
-        constraints: const BoxConstraints(minWidth: 92),
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-        decoration: BoxDecoration(
-          color: const Color(0xfff0effa),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label,
-                style: const TextStyle(color: Color(0xff777683), fontSize: 10)),
-            const SizedBox(height: 2),
-            Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
-          ],
-        ),
       );
 
   Widget _chatMessage(StudioChatMessage message) {

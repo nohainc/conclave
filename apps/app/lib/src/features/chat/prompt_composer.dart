@@ -127,8 +127,12 @@ class _PromptComposerState extends State<PromptComposer> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        const Text(
+                          'Candidates',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                        ),
                         Text(
-                          'Candidates: ${widget.snapshot.workers.length}',
+                          ': ${widget.snapshot.workers.length}',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
@@ -136,8 +140,12 @@ class _PromptComposerState extends State<PromptComposer> {
                           ),
                         ),
                         const SizedBox(width: 8),
+                        const Text(
+                          'Cost',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                        ),
                         Text(
-                          'Cost: Auto',
+                          ': Auto',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
@@ -196,6 +204,23 @@ class _PromptComposerState extends State<PromptComposer> {
               children: [
                 Row(
                   children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? ConclaveBrand.darkPaper
+                            : ConclaveBrand.lightPaper,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: const Text(
+                        'Auto',
+                        style: TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     // Quality Preset Selector
                     PopupMenuButton<StudioQualityPreset>(
                       tooltip: 'Select quality preset',
@@ -324,13 +349,14 @@ class _DropdownSelector extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          '$label: ',
+          label,
           style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w600,
             color: isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted,
           ),
         ),
+        const Text(': '),
         DropdownButton<String>(
           value: options.contains(value) ? value : options.first,
           isDense: true,
