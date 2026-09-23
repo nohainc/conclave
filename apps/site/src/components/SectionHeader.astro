@@ -3,13 +3,14 @@ interface Props {
   eyebrow: string;
   title: string;
   description?: string;
+  headingLevel?: 1 | 2;
 }
 
-const { eyebrow, title, description } = Astro.props;
+const { eyebrow, title, description, headingLevel = 2 } = Astro.props;
 ---
 
 <header class="section-header">
   <span class="section-header__eyebrow">{eyebrow}</span>
-  <h2 class="section-header__title">{title}</h2>
+  {headingLevel === 1 ? <h1 class="section-header__title">{title}</h1> : <h2 class="section-header__title">{title}</h2>}
   {description && <p class="section-header__description">{description}</p>}
 </header>

@@ -1,20 +1,35 @@
 ---
 import Button from "../components/Button.astro";
 import Container from "../components/Container.astro";
-import FeatureCard from "../components/FeatureCard.astro";
 import Section from "../components/Section.astro";
 import SectionHeader from "../components/SectionHeader.astro";
 import SiteLayout from "../layouts/SiteLayout.astro";
+import WorkflowStep from "../components/WorkflowStep.astro";
 ---
 
 <SiteLayout title="How Conclave AX works" description="Understand the Conclave AX Cloud, Host, Worker, and Account model.">
   <Section>
     <Container>
-      <SectionHeader eyebrow="How it works" title="One path from request to result." description="Conclave AX separates coordination from local capability, so your execution path stays understandable as work gets more complex." />
-      <div class="cards">
-        <FeatureCard title="1. Conclave AX"><p>Ask questions, start work, review progress, and inspect the result in the authenticated app.</p></FeatureCard>
-        <FeatureCard title="2. Conclave Cloud"><p>Cloud authenticates people, enforces Workspace permissions, and coordinates the execution.</p></FeatureCard>
-        <FeatureCard title="3. Host and Worker"><p>Your Host provides a machine. A Worker provides the AI or tool capability for one assignment.</p></FeatureCard>
+      <SectionHeader eyebrow="How it works" title="From a question to a verified result." description="Conclave AX turns a complex goal into visible phases, focused tasks, independent checks, and one result you can inspect." headingLevel={1} />
+      <div class="workflow-layout">
+        <ol class="workflow-steps">
+          <WorkflowStep number="01" title="Ask"><p>“Improve the authentication architecture.”</p></WorkflowStep>
+          <WorkflowStep number="02" title="Plan"><p>Conclave AX creates phases and tasks with clear completion criteria.</p></WorkflowStep>
+          <WorkflowStep number="03" title="Delegate"><p>Research → Worker A · Implementation → Worker B · Review → Worker C.</p></WorkflowStep>
+          <WorkflowStep number="04" title="Verify"><p>Tests, review findings, and evidence check whether the work is complete.</p></WorkflowStep>
+          <WorkflowStep number="05" title="Complete"><p>One verified final result, with the work and evidence kept together.</p></WorkflowStep>
+        </ol>
+        <div class="run-card" aria-label="Authentication redesign run progress">
+          <div class="run-card__header"><span>Run</span><strong>Authentication redesign</strong></div>
+          <div class="run-card__progress"><span style="width: 58%"></span></div>
+          <ul>
+            <li class="is-complete"><span aria-hidden="true">✓</span>Research</li>
+            <li class="is-complete"><span aria-hidden="true">✓</span>Architecture</li>
+            <li class="is-active"><span aria-hidden="true">●</span>Implementation</li>
+            <li><span aria-hidden="true">○</span>Review</li>
+            <li><span aria-hidden="true">○</span>Verification</li>
+          </ul>
+        </div>
       </div>
       <div class="actions"><Button href="https://app.conclaveax.com" label="Open Conclave AX" /></div>
     </Container>
