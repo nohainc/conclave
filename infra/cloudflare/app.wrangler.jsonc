@@ -55,7 +55,12 @@
   },
   "migrations": [
     {
-      "tag": "v1-host-gateway",
+      "tag": "v1-runtime-connection",
+      "new_sqlite_classes": ["RuntimeConnection"],
+    },
+    {
+      "tag": "v2-host-gateway",
+      "deleted_classes": ["RuntimeConnection"],
       "new_sqlite_classes": ["HostGateway"],
     },
   ],
