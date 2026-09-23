@@ -39,3 +39,9 @@ Completed 2026-09-23. The architecture guard baseline is clean, CI paths target
 `apps/studio` and `apps/host`, and the TypeScript, protocol, Flutter, Dart,
 documentation, Wrangler, and security preflight checks pass. Human
 authentication migration is intentionally not included in this baseline.
+
+## AUTH-1 — Freeze the long-term authentication architecture
+
+✅ Accepted in [ADR-005](../decisions/ADR-005-authentication-architecture.md).
+Better Auth owns human authentication and D1 persistence; Conclave owns all
+Workspace, Project, Host, and Credential Profile authorization.
