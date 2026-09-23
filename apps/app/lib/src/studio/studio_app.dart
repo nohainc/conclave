@@ -1940,7 +1940,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
             _navItem(Icons.extension_outlined, 'Workers',
                 const StudioNavigation.workers(),
                 compact: compact, navigationContext: sidebarContext),
-            _navItem(Icons.account_circle_outlined, 'Accounts',
+            _navItem(Icons.account_circle_outlined, 'AI Accounts',
                 const StudioNavigation.accounts(),
                 compact: compact, navigationContext: sidebarContext),
             _navItem(Icons.analytics_outlined, 'Usage',
@@ -4129,12 +4129,231 @@ class _StudioAppState extends State<ConclaveAppShell> {
                 style: TextStyle(color: Color(0xff777683)))),
       );
 
+  Future<void> _createCredentialProfile() async {
+    final workspaceId = activeWorkspaceId ?? snapshot.workspaceId;
+    if (workspaceId == null || workspaceId.isEmpty) return;
+    if (snapshot.plugins.isEmpty) {
+      _showSnackBar('Add a Worker before creating an AI Account.',
+          type: ToastType.error);
+      return;
+    }
+
+    final nameController = TextEditingController();
+    var workerId = snapshot.plugins.first.id;
+    var hostId = snapshot.agents.firstOrNull?.id;
+    var authType = snapshot.agents.isEmpty ? 'none' : 'oauth_browser';
+    var ownerType = 'user';
+    var sharingPolicy = 'private_only';
+    final values = await showDialog<Map<String, dynamic>>(
+      context: navigatorKey.currentContext ?? context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final needsHost = authType != 'none';
+          return AlertDialog(
+            title: const Text('Add AI Account'),
+            content: SizedBox(
+              width: 480,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                        'Connect an AI identity to a Worker. Secrets stay on the selected Host.'),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: nameController,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Account name',
+                        hintText: 'My Codex',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: workerId,
+                      decoration: const InputDecoration(labelText: 'Worker'),
+                      items: snapshot.plugins
+                          .map((worker) => DropdownMenuItem(
+                                value: worker.id,
+                                child: Text(worker.name),
+                              ))
+                          .toList(),
+                      onChanged: (value) =>
+                          setDialogState(() => workerId = value ?? workerId),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: authType,
+                      decoration:
+                          const InputDecoration(labelText: 'Authentication'),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'oauth_browser',
+                            child: Text('Browser OAuth')),
+                        DropdownMenuItem(
+                            value: 'api_key', child: Text('API key on Host')),
+                        DropdownMenuItem(
+                            value: 'local_cli_session',
+                            child: Text('CLI login on Host')),
+                        DropdownMenuItem(
+                            value: 'none', child: Text('No authentication')),
+                      ],
+                      onChanged: (value) => setDialogState(() {
+                        authType = value ?? authType;
+                        if (authType == 'none') hostId = null;
+                        if (authType != 'none' &&
+                            hostId == null &&
+                            snapshot.agents.isNotEmpty) {
+                          hostId = snapshot.agents.first.id;
+                        }
+                      }),
+                    ),
+                    if (needsHost) ...[
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: hostId,
+                        decoration:
+                            const InputDecoration(labelText: 'Host storage'),
+                        items: snapshot.agents
+                            .map((host) => DropdownMenuItem(
+                                  value: host.id,
+                                  child: Text(host.name),
+                                ))
+                            .toList(),
+                        onChanged: (value) =>
+                            setDialogState(() => hostId = value),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                          'The Host will show the local authentication action. Conclave AX never receives the secret.',
+                          style: TextStyle(
+                              color: Color(0xff777683), fontSize: 12)),
+                    ],
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: ownerType,
+                      decoration: const InputDecoration(labelText: 'Owner'),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'user', child: Text('Personal account')),
+                        DropdownMenuItem(
+                            value: 'workspace',
+                            child: Text('Workspace account')),
+                      ],
+                      onChanged: (value) =>
+                          setDialogState(() => ownerType = value ?? ownerType),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: sharingPolicy,
+                      decoration: const InputDecoration(labelText: 'Sharing'),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'private_only', child: Text('Private')),
+                        DropdownMenuItem(
+                            value: 'owner_controlled',
+                            child: Text('Selected users')),
+                        DropdownMenuItem(
+                            value: 'workspace_capable',
+                            child: Text('Workspace')),
+                      ],
+                      onChanged: (value) => setDialogState(
+                          () => sharingPolicy = value ?? sharingPolicy),
+                    ),
+                    if (sharingPolicy == 'owner_controlled') ...[
+                      const SizedBox(height: 6),
+                      const Text(
+                          'You can add individual users after creation. They can use the Account but never read its secret.',
+                          style: TextStyle(
+                              color: Color(0xff777683), fontSize: 12)),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel')),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, {
+                  'displayName': nameController.text.trim(),
+                  'workerId': workerId,
+                  'hostId': hostId,
+                  'authType': authType,
+                  'ownerType': ownerType,
+                  'sharingPolicy': sharingPolicy,
+                }),
+                child: const Text('Create Account'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    nameController.dispose();
+    if (values == null) return;
+    final displayName = values['displayName'] as String? ?? '';
+    if (displayName.isEmpty) {
+      _showSnackBar('Enter an Account name.', type: ToastType.error);
+      return;
+    }
+    final selectedAuthType = values['authType'] as String;
+    final selectedHostId = values['hostId'] as String?;
+    if (selectedAuthType != 'none' && selectedHostId == null) {
+      _showSnackBar('Choose a Host for local authentication.',
+          type: ToastType.error);
+      return;
+    }
+    setState(() => workerActionMessage = 'Creating Account…');
+    try {
+      final account = await widget.dataSource.createCredentialProfile(
+        workspaceId: workspaceId,
+        displayName: displayName,
+        workerId: values['workerId'] as String,
+        authType: selectedAuthType,
+        ownerType: values['ownerType'] as String,
+        sharingPolicy: values['sharingPolicy'] as String,
+        hostId: selectedHostId,
+      );
+      if (selectedHostId != null && selectedAuthType != 'none') {
+        await widget.dataSource.requestCredentialSetup(
+          workspaceId: workspaceId,
+          profileId: account.id,
+          action: 'setup',
+        );
+      }
+      await _loadSnapshot(workspaceId: workspaceId, showSpinner: false);
+      if (mounted) {
+        setState(() => workerActionMessage = null);
+        _showSnackBar(selectedHostId == null
+            ? 'AI Account created.'
+            : 'AI Account created. Complete setup on the Host.');
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => workerActionMessage = null);
+        _showSnackBar(error.toString(), type: ToastType.error);
+      }
+    }
+  }
+
   Widget _accountsView() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _fleetHeader('Accounts', 'Accounts used by Workers on your Hosts.',
+          _fleetHeader('AI Accounts', 'Accounts used by Workers on your Hosts.',
               Icons.account_circle_outlined),
           const SizedBox(height: 24),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.icon(
+              onPressed: _createCredentialProfile,
+              icon: const Icon(Icons.add),
+              label: const Text('Add AI Account'),
+            ),
+          ),
+          const SizedBox(height: 20),
           if (workerActionMessage != null) ...[
             MaterialBanner(
               content: Text(workerActionMessage!),

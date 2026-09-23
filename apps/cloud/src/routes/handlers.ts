@@ -3955,7 +3955,8 @@ async function handleCreateCredentialProfile(
         display_name, auth_type, secret_location, secret_reference, status,
         sharing_policy, provider_metadata_json, concurrency_limit,
         created_at, updated_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'setup_required',
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
+             CASE WHEN ?8 = 'none' THEN 'ready' ELSE 'setup_required' END,
              ?11, ?12, ?13, ?14, ?14)`,
   )
     .bind(

@@ -195,6 +195,26 @@ class StudioFixtureDataSource implements StudioDataSource {
   }) async {}
 
   @override
+  Future<StudioCredentialProfile> createCredentialProfile({
+    required String workspaceId,
+    required String displayName,
+    required String workerId,
+    required String authType,
+    required String ownerType,
+    required String sharingPolicy,
+    String? hostId,
+  }) async =>
+      StudioCredentialProfile(
+        id: 'account-created',
+        displayName: displayName,
+        owner: ownerType == 'workspace' ? 'Workspace' : 'You',
+        worker: workerId,
+        host: hostId ?? 'Cloud',
+        sharing: sharingPolicy,
+        status: authType == 'none' ? 'ready' : 'setup_required',
+      );
+
+  @override
   Future<void> requestCredentialSetup({
     required String workspaceId,
     required String profileId,

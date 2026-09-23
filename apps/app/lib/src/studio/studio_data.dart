@@ -78,6 +78,15 @@ abstract interface class StudioDataSource {
     required bool enabled,
     String? hostId,
   });
+  Future<StudioCredentialProfile> createCredentialProfile({
+    required String workspaceId,
+    required String displayName,
+    required String workerId,
+    required String authType,
+    required String ownerType,
+    required String sharingPolicy,
+    String? hostId,
+  });
   Future<void> requestCredentialSetup({
     required String workspaceId,
     required String profileId,
@@ -770,6 +779,49 @@ class StudioApiClient implements StudioDataSource {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StudioApiException('Worker update failed (${response.statusCode})');
     }
+  }
+
+  @override
+  Future<StudioCredentialProfile> createCredentialProfile({
+    required String workspaceId,
+    required String displayName,
+    required String workerId,
+    required String authType,
+    required String ownerType,
+    required String sharingPolicy,
+    String? hostId,
+  }) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/workspaces/$workspaceId/accounts'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({
+        'displayName': displayName,
+        'workerId': workerId,
+        'authType': authType,
+        'ownerType': ownerType,
+        'sharingPolicy': sharingPolicy,
+        if (hostId != null) 'hostId': hostId,
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      var detail = '';
+      try {
+        final body = jsonDecode(response.body);
+        if (body is Map && body['error'] is String) {
+          detail = ': ${body['error']}';
+        }
+      } on Object {
+        // Preserve the HTTP status when the error body is not JSON.
+      }
+      throw StudioApiException(
+          'Account creation failed (${response.statusCode})$detail');
+    }
+    final body = jsonDecode(response.body);
+    final account = body is Map ? body['account'] : null;
+    if (account is! Map) {
+      throw const StudioApiException('Account creation response is malformed');
+    }
+    return StudioCredentialProfile.fromJson(Map<String, dynamic>.from(account));
   }
 
   @override

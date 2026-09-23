@@ -141,8 +141,10 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.menu_rounded));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Accounts').last);
+    await tester.tap(find.text('AI Accounts').last);
     await tester.pumpAndSettle();
+    expect(find.text('AI Accounts'), findsOneWidget);
+    expect(find.text('Add AI Account'), findsOneWidget);
     expect(find.text('Accounts'), findsWidgets);
     expect(find.text('Vitalii Codex'), findsOneWidget);
     expect(find.text('Create Worker'), findsNothing);

@@ -444,6 +444,41 @@ void main() {
     expect(jsonDecode(client.lastBody!)['hostId'], 'host-1');
   });
 
+  test('creates an AI Account with Host-local setup metadata', () async {
+    final client = _JsonClient({
+      'account': {
+        'id': 'account-1',
+        'displayName': 'My Codex',
+        'owner': 'User One',
+        'worker': 'Codex',
+        'host': 'host-1',
+        'sharing': 'Private',
+        'status': 'setup_required',
+      },
+    }, statusCode: 201);
+    final api = StudioApiClient(
+      baseUrl: 'https://conclave.test/api',
+      client: client,
+    );
+
+    final account = await api.createCredentialProfile(
+      workspaceId: 'workspace-1',
+      displayName: 'My Codex',
+      workerId: 'worker-codex',
+      authType: 'oauth_browser',
+      ownerType: 'user',
+      sharingPolicy: 'private_only',
+      hostId: 'host-1',
+    );
+
+    expect(account.id, 'account-1');
+    expect(client.lastRequest?.method, 'POST');
+    expect(
+        client.lastRequest?.url.path, '/api/workspaces/workspace-1/accounts');
+    expect(jsonDecode(client.lastBody!)['hostId'], 'host-1');
+    expect(jsonDecode(client.lastBody!)['sharingPolicy'], 'private_only');
+  });
+
   test('sends the explicitly selected Workspace on scoped requests', () async {
     final client = _JsonClient({
       'workspaceId': 'workspace-2',
