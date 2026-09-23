@@ -49,6 +49,8 @@ const routeHandlers = {
   handleConnectorTaskRequest: handlers.handleConnectorTaskRequest,
   handleListWorkspaces: handlers.handleListWorkspaces,
   handleCreateWorkspace: handlers.handleCreateWorkspace,
+  handleUploadArtifact: handlers.handleUploadArtifact,
+  handleGetArtifact: handlers.handleGetArtifact,
   handleExportWorkspaceAudit: handlers.handleExportWorkspaceAudit,
   handleCreateWorkspaceBackup: handlers.handleCreateWorkspaceBackup,
   handleVerifyWorkspaceBackup: handlers.handleVerifyWorkspaceBackup,

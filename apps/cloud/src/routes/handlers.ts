@@ -1089,6 +1089,226 @@ const WORKSPACE_BACKUP_QUERIES: readonly WorkspaceBackupQuery[] = [
   },
 ];
 
+const MAX_ARTIFACT_UPLOAD_BYTES = 64 * 1024 * 1024;
+
+function artifactName(value: string | null): string {
+  const normalized = (value ?? "artifact").replace(/[^a-zA-Z0-9._-]/g, "_");
+  return normalized.slice(0, 160) || "artifact";
+}
+
+function artifactMetadata(
+  row: Record<string, unknown>,
+): Record<string, unknown> {
+  const provenance = parseJson<Record<string, unknown>>(
+    row.provenance_json,
+    {},
+  );
+  return {
+    id: String(row.id),
+    workspaceId: String(row.workspace_id),
+    projectId: String(row.project_id),
+    runId: String(row.run_id),
+    ...(row.task_id ? { taskId: String(row.task_id) } : {}),
+    ...(row.attempt_id ? { attemptId: String(row.attempt_id) } : {}),
+    mediaType: String(row.media_type),
+    contentDigest: String(row.content_digest),
+    sizeBytes: Number(row.size_bytes),
+    name: artifactName(
+      typeof provenance.name === "string" ? provenance.name : null,
+    ),
+    storage: "artifact-service",
+    downloadUrl: `/api/artifacts/${encodeURIComponent(String(row.id))}?workspaceId=${encodeURIComponent(String(row.workspace_id))}`,
+    createdAt: String(row.created_at),
+  };
+}
+
+async function handleUploadArtifact(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const url = new URL(request.url);
+  const projectId = url.searchParams.get("projectId");
+  const runId = url.searchParams.get("runId");
+  const taskId = url.searchParams.get("taskId");
+  const attemptId = url.searchParams.get("attemptId");
+  const assignmentId = url.searchParams.get("assignmentId");
+  if (!projectId || !runId) {
+    throw new HttpError(400, "projectId and runId are required");
+  }
+  const context = await workspaceMemberContext(
+    request,
+    env,
+    workspaceId,
+    "project:read",
+    accessContext,
+  );
+  const scope = await env.CONCLAVE_DB.prepare(
+    `SELECT p.workspace_id AS workspaceId
+       FROM projects p JOIN runs r ON r.project_id = p.id
+      WHERE p.id = ?1 AND r.id = ?2 AND p.workspace_id = ?3`,
+  )
+    .bind(projectId, runId, workspaceId)
+    .first<{ workspaceId: string }>();
+  if (!scope) throw new HttpError(404, "Artifact scope not found");
+  const lengthHeader = request.headers.get("content-length");
+  const declaredLength = lengthHeader ? Number(lengthHeader) : null;
+  if (
+    declaredLength !== null &&
+    (!Number.isSafeInteger(declaredLength) ||
+      declaredLength > MAX_ARTIFACT_UPLOAD_BYTES)
+  ) {
+    throw new HttpError(413, "Artifact exceeds the 64 MiB upload limit");
+  }
+  const artifactId =
+    url.searchParams.get("artifactId") ??
+    request.headers.get("x-artifact-id") ??
+    `artifact-${crypto.randomUUID()}`;
+  const existing = await env.CONCLAVE_DB.prepare(
+    "SELECT * FROM artifacts WHERE id = ?1",
+  )
+    .bind(artifactId)
+    .first<Record<string, unknown>>();
+  if (existing) {
+    if (String(existing.workspace_id) !== workspaceId) {
+      throw new HttpError(409, "Artifact upload identity is already in use");
+    }
+    return json({ artifact: artifactMetadata(existing), deduplicated: true });
+  }
+  const body = await request.arrayBuffer();
+  if (body.byteLength > MAX_ARTIFACT_UPLOAD_BYTES) {
+    throw new HttpError(413, "Artifact exceeds the 64 MiB upload limit");
+  }
+  const mediaType =
+    request.headers.get("content-type")?.split(";", 1)[0]?.trim() ||
+    "application/octet-stream";
+  const name = artifactName(
+    url.searchParams.get("name") ?? request.headers.get("x-artifact-name"),
+  );
+  const computedDigest = await computePackageDigest(body);
+  const suppliedDigest = request.headers.get("x-content-digest");
+  if (suppliedDigest && suppliedDigest !== computedDigest) {
+    throw new HttpError(422, "Artifact content digest does not match payload");
+  }
+  const digest = suppliedDigest ?? computedDigest;
+  const storageKey = `artifact-objects/${workspaceId}/${crypto.randomUUID()}`;
+  const bucket = env.CONCLAVE_ARTIFACTS;
+  if (!bucket) throw new HttpError(503, "Artifact storage is not configured");
+  await bucket.put(storageKey, body, {
+    httpMetadata: { contentType: mediaType },
+    customMetadata: { artifactId, workspaceId, digest },
+  });
+  const now = new Date().toISOString();
+  try {
+    await env.CONCLAVE_DB.prepare(
+      `INSERT INTO artifacts
+       (id, workspace_id, project_id, run_id, task_id, attempt_id, assignment_id,
+        media_type, content_digest, storage_kind, storage_key, inline_content,
+        size_bytes, provenance_json, created_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'r2', ?10, NULL, ?11, ?12, ?13)`,
+    )
+      .bind(
+        artifactId,
+        workspaceId,
+        projectId,
+        runId,
+        taskId,
+        attemptId,
+        assignmentId,
+        mediaType,
+        digest,
+        storageKey,
+        body.byteLength,
+        JSON.stringify({ name }),
+        now,
+      )
+      .run();
+  } catch (error) {
+    await bucket.delete(storageKey).catch(() => undefined);
+    throw error;
+  }
+  const row = await env.CONCLAVE_DB.prepare(
+    "SELECT * FROM artifacts WHERE id = ?1",
+  )
+    .bind(artifactId)
+    .first<Record<string, unknown>>();
+  if (!row) throw new HttpError(500, "Artifact record was not created");
+  await createEventPublisher(env).publish({
+    type: "artifact.created",
+    workspaceId,
+    projectId,
+    runId,
+    taskId: taskId ?? undefined,
+    assignmentId: assignmentId ?? undefined,
+    payload: {
+      artifactId,
+      entityId: artifactId,
+      status: "available",
+      summary: `${name} is ready to download`,
+    },
+  });
+  await recordAudit(env, context, "artifact.created", "artifact", artifactId, {
+    projectId,
+    runId,
+    sizeBytes: body.byteLength,
+    mediaType,
+  });
+  return json({ artifact: artifactMetadata(row) }, { status: 201 });
+}
+
+async function handleGetArtifact(
+  request: Request,
+  env: SecurityEnv,
+  artifactId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const row = await env.CONCLAVE_DB.prepare(
+    "SELECT * FROM artifacts WHERE id = ?1",
+  )
+    .bind(artifactId)
+    .first<Record<string, unknown>>();
+  if (!row) throw new HttpError(404, "Artifact not found");
+  const context = await authorizeRequest(
+    request,
+    env,
+    "project:read",
+    String(row.project_id),
+    accessContext,
+  );
+  if (context.workspaceId !== String(row.workspace_id)) {
+    throw new HttpError(404, "Artifact not found");
+  }
+  if (request.method === "HEAD") {
+    return new Response(null, {
+      status: 200,
+      headers: {
+        "content-type": String(row.media_type),
+        "content-length": String(row.size_bytes),
+      },
+    });
+  }
+  if (row.storage_kind === "inline") {
+    return new Response(String(row.inline_content ?? ""), {
+      headers: { "content-type": String(row.media_type) },
+    });
+  }
+  const object = await env.CONCLAVE_ARTIFACTS.get(String(row.storage_key));
+  if (!object) throw new HttpError(404, "Artifact content not found");
+  const provenance = parseJson<Record<string, unknown>>(
+    row.provenance_json,
+    {},
+  );
+  return new Response(object.body, {
+    headers: {
+      "content-type": String(row.media_type),
+      "content-length": String(row.size_bytes),
+      "content-disposition": `inline; filename="${artifactName(typeof provenance.name === "string" ? provenance.name : null)}"`,
+      "cache-control": "private, no-store",
+    },
+  });
+}
+
 function encodeBase64(bytes: Uint8Array): string {
   let value = "";
   for (const byte of bytes) value += String.fromCharCode(byte);
@@ -6106,6 +6326,8 @@ export {
   handleConnectorTaskRequest,
   handleListWorkspaces,
   handleCreateWorkspace,
+  handleUploadArtifact,
+  handleGetArtifact,
   handleExportWorkspaceAudit,
   handleCreateWorkspaceBackup,
   handleVerifyWorkspaceBackup,

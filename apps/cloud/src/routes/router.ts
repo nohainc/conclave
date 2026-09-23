@@ -83,6 +83,29 @@ export async function routeWorkerRequest(
     if (request.method === "POST" && url.pathname === "/api/workspaces") {
       return await handlers.handleCreateWorkspace!(request, env, ctx);
     }
+    const artifactUploadMatch = url.pathname.match(
+      /^\/api\/workspaces\/([^/]+)\/artifacts$/,
+    );
+    if (request.method === "POST" && artifactUploadMatch?.[1]) {
+      return await handlers.handleUploadArtifact!(
+        request,
+        env,
+        artifactUploadMatch[1],
+        ctx,
+      );
+    }
+    const artifactMatch = url.pathname.match(/^\/api\/artifacts\/([^/]+)$/);
+    if (
+      (request.method === "GET" || request.method === "HEAD") &&
+      artifactMatch?.[1]
+    ) {
+      return await handlers.handleGetArtifact!(
+        request,
+        env,
+        artifactMatch[1],
+        ctx,
+      );
+    }
     const auditExportMatch = url.pathname.match(
       /^\/api\/workspaces\/([^/]+)\/audit-export$/,
     );

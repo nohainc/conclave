@@ -1157,6 +1157,10 @@ The App now loads Workspace catalogs, Hosts, Workers, Accounts, and Usage throug
 
 The App now exposes concise live execution progress in Chat, a reconnect/stale-state banner, throttled accessible live-region announcements, and a safe Run input prompt. Selective progress summaries are shown while raw Worker/model chatter remains hidden by default. Run details include the resolved Worker, Account, Host, model, evidence, findings, artifacts, and ordered events. User responses to workflow prompts continue through HTTPS run events; terminal state remains Cloud-authoritative.
 
+## PA-14 — Artifact and large-output transport
+
+Large outputs now use an authenticated Cloud artifact service backed by R2. Uploads are bounded, digest-checked, retry-idempotent, and recorded in D1; realtime publishes only `artifact.created` metadata. Download references contain an opaque artifact ID, never an R2 object key, and Cloud rechecks Workspace/Project authorization on every retrieval. Artifact responses are private and non-cacheable.
+
 # Delegation guidance
 
 For each phase, give the implementation AI this structure:
