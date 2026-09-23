@@ -109,6 +109,25 @@ CREATE TABLE workspaces (
   updated_at TEXT NOT NULL
 );
 
+-- Authentication events are intentionally separate from workspace audit_log:
+-- sign-in and provider failures can happen before a workspace is selected.
+-- details_json is an allow-listed metadata object; it must never contain
+-- cookies, OAuth tokens, passkey material, or raw provider credentials.
+CREATE TABLE auth_audit_events (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  session_id TEXT,
+  workspace_id TEXT REFERENCES workspaces(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  outcome TEXT NOT NULL CHECK (outcome IN ('success', 'failure', 'denied')),
+  details_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_auth_audit_events_user
+  ON auth_audit_events(user_id, created_at);
+CREATE INDEX idx_auth_audit_events_action
+  ON auth_audit_events(action, created_at);
+
 CREATE TABLE workspace_memberships (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

@@ -175,3 +175,12 @@ concurrent sessions, CSRF, OAuth return/state attacks, conservative account
 linking, suspended users, removed members, invitation-email mismatch, Workspace
 and Project ID substitution, Credential Profile grants, Host authorization,
 session revocation, and tenant-scoped Host access.
+
+## AUTH-19 — Audit and observability
+
+✅ Added a secret-free global authentication audit stream for sign-in,
+logout/session revocation, provider linking changes, passkey enrollment and
+removal, step-up completion, invitation acceptance, and suspicious
+authorization denials. Sign-in failure metrics use only an allow-listed
+provider, outcome, and coarse reason; OAuth tokens, session tokens, cookies,
+passkey material, and raw credentials are excluded.

@@ -1,5 +1,10 @@
 import { betterAuth } from "better-auth";
 import { passkey } from "@better-auth/passkey";
+import {
+  recordAuthAuditEvent,
+  recordAuthMetric,
+  safeAuthProvider,
+} from "./observability.js";
 
 type SocialProviderCredentials = {
   clientId: string;
@@ -108,6 +113,21 @@ export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
     },
   };
 
+  const requestFromContext = (context: unknown): Request | undefined => {
+    if (!context || typeof context !== "object") return undefined;
+    const request = (context as { request?: unknown }).request;
+    return request instanceof Request ? request : undefined;
+  };
+  const providerFromContext = (context: unknown): string | undefined => {
+    const request = requestFromContext(context);
+    if (!request) return undefined;
+    const path = new URL(request.url).pathname;
+    const match = path.match(
+      /(?:sign-in|callback|link-social)\/(github|google|passkey)/,
+    );
+    return safeAuthProvider(match?.[1]);
+  };
+
   return {
     database: env.CONCLAVE_DB,
     secret: env.BETTER_AUTH_SECRET,
@@ -157,6 +177,43 @@ export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
       ...(google ? { google } : {}),
     },
     plugins: [passkey(passkeyOptions)],
+    databaseHooks: {
+      session: {
+        create: {
+          after: async (
+            session: { userId: string; id: string },
+            context: unknown,
+          ) => {
+            try {
+              await recordAuthAuditEvent(env.CONCLAVE_DB, {
+                action: "auth.sign_in",
+                outcome: "success",
+                userId: session.userId,
+                sessionId: session.id,
+                provider: providerFromContext(context),
+              });
+              recordAuthMetric(providerFromContext(context), "success");
+            } catch {
+              // Authentication must remain available if observability storage is unavailable.
+            }
+          },
+        },
+        delete: {
+          after: async (session: { userId: string; id: string }) => {
+            try {
+              await recordAuthAuditEvent(env.CONCLAVE_DB, {
+                action: "auth.session.revoked",
+                outcome: "success",
+                userId: session.userId,
+                sessionId: session.id,
+              });
+            } catch {
+              // Best-effort audit only.
+            }
+          },
+        },
+      },
+    },
     session: {
       modelName: "auth_sessions",
       fields: {
@@ -222,17 +279,116 @@ export async function handleBetterAuthRequest(
       },
     );
     const response = await createBetterAuth(env).handler(authRequest);
-    if (!response.ok) return response;
+    if (!response.ok) {
+      recordAuthMetric(socialSignIn[1], "failure", "invalid_callback");
+      return response;
+    }
     const body = (await response.json()) as { url?: unknown };
     if (typeof body.url !== "string") {
+      recordAuthMetric(socialSignIn[1], "failure", "invalid_callback");
       return new Response("Authentication provider did not return a redirect", {
         status: 502,
       });
     }
+    recordAuthMetric(socialSignIn[1], "success");
     return Response.redirect(body.url, 302);
   }
 
-  return createBetterAuth(env).handler(request);
+  const metadata = await requestMetadata(request);
+  const before = await sessionSummary(request, env);
+  const response = await createBetterAuth(env).handler(request);
+  const statusOutcome = response.status >= 400 ? "failure" : "success";
+  if (metadata.signIn) {
+    if (statusOutcome === "failure") {
+      recordAuthMetric(metadata.provider, "failure", "invalid_credentials");
+      await safeRecord(env, {
+        action: "auth.sign_in_failure",
+        outcome: "failure",
+        provider: metadata.provider,
+        reason: "invalid_credentials",
+      });
+    }
+  } else if (before && statusOutcome === "success" && metadata.action) {
+    await safeRecord(env, {
+      action: metadata.action,
+      outcome: "success",
+      userId: before.userId,
+      sessionId: before.sessionId,
+      provider: metadata.provider,
+    });
+  }
+  return response;
+}
+
+type AuthRequestMetadata = {
+  action?:
+    | "auth.logout"
+    | "auth.provider.linked"
+    | "auth.provider.unlinked"
+    | "auth.passkey.enrolled"
+    | "auth.passkey.removed";
+  provider?: string;
+  signIn?: boolean;
+};
+
+async function requestMetadata(request: Request): Promise<AuthRequestMetadata> {
+  const path = new URL(request.url).pathname;
+  if (path.endsWith("/sign-out")) return { action: "auth.logout" };
+  if (path.endsWith("/link-social")) {
+    return {
+      action: "auth.provider.linked",
+      provider: await bodyProvider(request),
+    };
+  }
+  if (path.endsWith("/unlink-account")) {
+    return {
+      action: "auth.provider.unlinked",
+      provider: await bodyProvider(request),
+    };
+  }
+  if (path.endsWith("/add-passkey"))
+    return { action: "auth.passkey.enrolled", provider: "passkey" };
+  if (path.endsWith("/delete-passkey"))
+    return { action: "auth.passkey.removed", provider: "passkey" };
+  if (path.endsWith("/sign-in/social") || path.endsWith("/sign-in/passkey")) {
+    return { signIn: true, provider: await bodyProvider(request) };
+  }
+  return {};
+}
+
+async function bodyProvider(request: Request): Promise<string | undefined> {
+  try {
+    const body = (await request.clone().json()) as { provider?: unknown };
+    return safeAuthProvider(body.provider);
+  } catch {
+    return undefined;
+  }
+}
+
+async function sessionSummary(
+  request: Request,
+  env: BetterAuthRuntimeEnv,
+): Promise<{ userId: string; sessionId: string } | undefined> {
+  try {
+    const session = await createBetterAuth(env).api.getSession({
+      headers: request.headers,
+    });
+    if (!session?.user?.id || !session.session?.id) return undefined;
+    return { userId: session.user.id, sessionId: session.session.id };
+  } catch {
+    return undefined;
+  }
+}
+
+async function safeRecord(
+  env: BetterAuthRuntimeEnv,
+  event: Parameters<typeof recordAuthAuditEvent>[1],
+): Promise<void> {
+  try {
+    await recordAuthAuditEvent(env.CONCLAVE_DB, event);
+  } catch {
+    // Do not turn a successful authentication or account operation into a 500.
+  }
 }
 
 /** Keep OAuth callbacks on this Studio origin and prevent open redirects. */

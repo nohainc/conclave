@@ -24,6 +24,7 @@ import {
   provisionConclaveUser,
   hasRecentStepUp,
   SENSITIVE_OPERATIONS,
+  recordAuthAuditEvent,
   type SensitiveOperation,
 } from "../auth/index.js";
 import {
@@ -319,12 +320,30 @@ async function authorizeRequest(
         workspace_id?: string | null;
       }>();
     const ownerWorkspace = project?.workspace_id;
-    if (!project || ownerWorkspace !== context.workspaceId)
+    if (!project || ownerWorkspace !== context.workspaceId) {
+      await recordAuthAuditEvent(env.CONCLAVE_DB, {
+        action: "auth.authorization.denied",
+        outcome: "denied",
+        userId: context.userId,
+        sessionId: context.sessionId,
+        workspaceId: context.workspaceId,
+        reason: "invalid_project",
+      }).catch(() => undefined);
       throw new HttpError(404, "Resource not found");
+    }
   }
   try {
     authorize(context, permission, projectId);
   } catch (error) {
+    await recordAuthAuditEvent(env.CONCLAVE_DB, {
+      action: "auth.authorization.denied",
+      outcome: "denied",
+      userId: context.userId,
+      sessionId: context.sessionId,
+      workspaceId: context.workspaceId,
+      reason: "not_authorized",
+      operation: permission,
+    }).catch(() => undefined);
     throw new HttpError(
       403,
       error instanceof Error ? error.message : "Forbidden",
@@ -795,6 +814,14 @@ async function handleCompleteStepUp(
       )
       .bind(authenticatedAt, event.id),
   ]);
+  await recordAuthAuditEvent(env.CONCLAVE_DB, {
+    action: "auth.step_up.completed",
+    outcome: "success",
+    userId: context.userId,
+    sessionId: context.sessionId,
+    provider: event.method,
+    operation: "step_up",
+  });
   return json({ ok: true, method: event.method, expiresAt });
 }
 
@@ -1492,6 +1519,12 @@ async function handleAcceptWorkspaceInvitation(
       role: invitation.role,
     },
   );
+  await recordAuthAuditEvent(env.CONCLAVE_DB, {
+    action: "auth.invitation.accepted",
+    outcome: "success",
+    userId: context.userId,
+    workspaceId: invitation.workspaceId,
+  });
   return json({
     workspaceId: invitation.workspaceId,
     projectId: invitation.projectId,

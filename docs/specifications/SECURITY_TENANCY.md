@@ -32,6 +32,22 @@ social or passkey flow.
 
 ### Authentication security coverage
 
+#### Authentication audit and observability
+
+Authentication events are recorded in the global `auth_audit_events` stream
+because sign-in can happen before a user selects a Workspace. The stream
+covers successful and failed sign-in, logout/session revocation, provider
+linking changes, passkey enrollment/removal, step-up completion, invitation
+acceptance, and suspicious authorization denials. Workspace-scoped domain
+actions continue to use `audit_log`.
+
+Authentication telemetry is deliberately metadata-only. Provider, outcome,
+coarse failure reason, and bounded operation names are allow-listed. OAuth
+access/refresh tokens, Better Auth session tokens, cookies, passkey material,
+and raw provider credentials are never written to audit records or metrics.
+Sign-in failure metrics are emitted as structured edge logs with only provider,
+outcome, and coarse reason, so they can be aggregated without user data.
+
 The security suite exercises both provider fixtures and the application
 authorization boundary. It must continue to cover session fixation and
 revocation, concurrent sessions, CSRF and OAuth callback/state attacks,

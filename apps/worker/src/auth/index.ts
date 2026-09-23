@@ -25,3 +25,12 @@ export {
   type StepUpMethod,
   type StepUpRecord,
 } from "./step-up.js";
+export {
+  recordAuthAuditEvent,
+  recordAuthMetric,
+  safeAuthProvider,
+  safeAuthReason,
+  type AuthAuditAction,
+  type AuthAuditEvent,
+  type AuthAuditOutcome,
+} from "./observability.js";
