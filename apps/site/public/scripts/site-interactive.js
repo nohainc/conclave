@@ -17,7 +17,11 @@
 
         tabPanels.forEach((panel) => {
           const isMatch = panel.getAttribute("data-tab-panel") === targetId;
-          panel.hidden = !isMatch;
+          if (isMatch) {
+            panel.removeAttribute("hidden");
+          } else {
+            panel.setAttribute("hidden", "");
+          }
           panel.classList.toggle("is-active", isMatch);
         });
       });
