@@ -22,7 +22,7 @@
     {
       "binding": "CONCLAVE_DB",
       "database_name": "conclave-production",
-      "database_id": "c10d0f8f-71a5-47e9-a60c-be84d6643ba7",
+      "database_id": "e3729ad9-009a-4626-b401-cd218cdb5885",
       "migrations_dir": "../../apps/cloud/migrations-v4",
     },
   ],
