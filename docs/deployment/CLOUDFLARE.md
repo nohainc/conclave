@@ -105,6 +105,22 @@ Actions -> Deploy Conclave AX App -> Run workflow
 
 The custom-domain route in `infra/cloudflare/app.wrangler.jsonc` targets `app.conclaveax.com`. Because `conclaveax.com` is already on Cloudflare, the Worker custom domain can create/manage the required DNS routing and certificate during deployment.
 
+## Durable Objects & Database Migrations
+
+### Durable Object Migration Tags
+Architecture v4 uses `HostGateway` and `RealtimeGateway` Durable Objects. The migration chain in `infra/cloudflare/app.wrangler.jsonc` includes:
+- `v1-runtime-connection`: Legacy initial deployment tag.
+- `v2-host-and-realtime-gateway`: Removes `RuntimeConnection` and `AgentGateway`, registers `HostGateway` and `RealtimeGateway`.
+
+When deploying through Wrangler, migration tags are applied automatically. If re-provisioning or updating Durable Objects, retain all migration tags in sequence so Cloudflare Workers can reconcile schema history.
+
+### D1 Database Provisioning
+The production D1 database `conclave-production` applies migrations from `apps/cloud/migrations-v4`:
+```bash
+pnpm exec wrangler d1 migrations apply conclave-production --remote --config infra/cloudflare/app.wrangler.jsonc
+```
+
+
 ## Backend deployment gate
 
 Do not expose the API publicly until the release gates in
