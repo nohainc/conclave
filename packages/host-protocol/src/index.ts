@@ -940,6 +940,7 @@ export const AgentHelloAckPayloadSchema = z
     authenticatedAt: timestampStr,
     serverVersion: nonEmptyStr,
     sessionToken: nonEmptyStr.optional(),
+    activeWorkspaceBindings: z.array(nonEmptyStr).optional(),
     rejectionReason: z.string().optional(),
   })
   .strict();

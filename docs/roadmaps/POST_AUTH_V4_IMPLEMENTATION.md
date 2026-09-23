@@ -537,6 +537,15 @@ Cloud/Host exchange:
 ## Exit criteria
 One Host connection reliably services all authorized work for that machine.
 
+## Status
+
+Complete. Host Gateway authentication remains machine-credential based, stale
+sockets are fenced by session identity, heartbeat and close handling preserve
+the current session during replacement, and one physical Host connection can
+serve every active Workspace binding returned by Cloud. Reconnect sync now
+reconciles assignments by Host identity, including terminal journal replay and
+installation/credential metadata pathways.
+
 ---
 
 # PA-9 — Finalize multi-Workspace Host sharing

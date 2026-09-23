@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   assignmentContextMatches,
   isCurrentSocketSession,
+  isWorkspaceAuthorized,
 } from "../src/host-gateway.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -34,6 +35,13 @@ function seedWorkspace(db: DatabaseSync, id: string, userId: string) {
 }
 
 describe("V4 Host connectivity", () => {
+  it("keeps one physical Host session authorized for multiple Workspaces", () => {
+    const bindings = new Set(["workspace-a", "workspace-b"]);
+    expect(isWorkspaceAuthorized(bindings, "workspace-a")).toBe(true);
+    expect(isWorkspaceAuthorized(bindings, "workspace-b")).toBe(true);
+    expect(isWorkspaceAuthorized(bindings, "workspace-c")).toBe(false);
+  });
+
   it("supports one Host bound to two Workspaces with tenant-scoped lookup", () => {
     const db = createDb();
     seedWorkspace(db, "workspace-a", "user-a");

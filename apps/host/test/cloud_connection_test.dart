@@ -83,6 +83,7 @@ void main() {
         'heartbeatIntervalMs': 1000,
         'serverTime': DateTime.now().toUtc().toIso8601String(),
         'serverVersion': '2.0.0',
+        'activeWorkspaceBindings': ['workspace-1', 'workspace-2'],
       },
     }));
     await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -97,6 +98,7 @@ void main() {
       (heartbeats.first['payload'] as Map<String, dynamic>)['sessionId'],
       'session-1',
     );
+    expect(connection.authorizedWorkspaceIds, contains('workspace-2'));
     final sync = socket.sent
         .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
         .firstWhere((message) => message['type'] == 'host.sync.request');

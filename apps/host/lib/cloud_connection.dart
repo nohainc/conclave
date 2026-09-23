@@ -101,6 +101,7 @@ class HostCloudConnection {
     required this.hostId,
     required this.workspaceId,
     required this.factory,
+    Set<String>? authorizedWorkspaceIds,
     this.name = 'Conclave Host',
     String? hostname,
     this.hostVersion = '0.1.0',
@@ -116,12 +117,17 @@ class HostCloudConnection {
     this.heartbeat = const Duration(seconds: 15),
     this.reconnectBaseDelay = const Duration(milliseconds: 10),
     this.reconnectMaxDelay = const Duration(seconds: 5),
-  })  : hostname = hostname ?? Platform.localHostname,
+  })  : authorizedWorkspaceIds = {
+          workspaceId,
+          ...?authorizedWorkspaceIds,
+        },
+        hostname = hostname ?? Platform.localHostname,
         capabilities = capabilities ?? _defaultCapabilities();
 
   final Uri uri;
   final String hostId;
   final String workspaceId;
+  final Set<String> authorizedWorkspaceIds;
   final HostCloudSocketFactory factory;
   final String name;
   final String hostname;
@@ -378,6 +384,13 @@ class HostCloudConnection {
       final payload = decoded['payload'];
       if (payload is Map<String, dynamic> && payload['sessionId'] is String) {
         sessionId = payload['sessionId'] as String;
+        final bindings = payload['activeWorkspaceBindings'];
+        if (bindings is List && bindings.every((value) => value is String)) {
+          authorizedWorkspaceIds
+            ..clear()
+            ..addAll(bindings.cast<String>())
+            ..add(workspaceId);
+        }
         unawaited(_sendSyncRequest());
       }
     } else if (decoded['type'] == 'host.sync.result') {
@@ -427,7 +440,8 @@ class HostCloudConnection {
       return;
     }
 
-    if (message['workspaceId'] != workspaceId || message['hostId'] != hostId) {
+    if (!authorizedWorkspaceIds.contains(message['workspaceId']) ||
+        message['hostId'] != hostId) {
       _sendAssignmentError(
         socket,
         message,

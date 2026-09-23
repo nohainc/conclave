@@ -109,10 +109,18 @@ export function isCurrentSocketSession(
   );
 }
 
+export function isWorkspaceAuthorized(
+  authorizedWorkspaceIds: ReadonlySet<string>,
+  workspaceId: string,
+): boolean {
+  return authorizedWorkspaceIds.has(workspaceId);
+}
+
 export class HostGateway implements DurableObject {
   private socket: WebSocket | null = null;
   private hostId: string | null = null;
   private workspaceId: string | null = null;
+  private authorizedWorkspaceIds = new Set<string>();
   private sessionId: string | null = null;
   private readonly pendingAcks = new Map<
     string,
@@ -142,6 +150,7 @@ export class HostGateway implements DurableObject {
         online: this.socket !== null,
         hostId: this.hostId,
         workspaceId: this.workspaceId,
+        authorizedWorkspaceIds: [...this.authorizedWorkspaceIds].sort(),
         sessionId: this.sessionId,
         pendingAcksCount: this.pendingAcks.size,
       });
@@ -204,6 +213,12 @@ export class HostGateway implements DurableObject {
         { status: 401 },
       );
     }
+    const bindings = await this.env.CONCLAVE_DB.prepare(
+      `SELECT workspace_id FROM host_workspace_bindings
+       WHERE host_id = ?1 AND status = 'active'`,
+    )
+      .bind(hostId)
+      .all<{ workspace_id: string }>();
 
     // Close any previous stale socket for this host instance
     if (this.socket) {
@@ -223,6 +238,9 @@ export class HostGateway implements DurableObject {
     this.socket = server;
     this.hostId = hostId;
     this.workspaceId = workspaceId;
+    this.authorizedWorkspaceIds = new Set(
+      (bindings.results ?? []).map((row) => String(row.workspace_id)),
+    );
     this.sessionId = `sess-${crypto.randomUUID()}`;
 
     const now = new Date().toISOString();
@@ -359,7 +377,10 @@ export class HostGateway implements DurableObject {
         const payload = message.payload as Record<string, unknown>;
         if (
           payload.agentId !== this.hostId ||
-          payload.workspaceId !== this.workspaceId
+          !isWorkspaceAuthorized(
+            this.authorizedWorkspaceIds,
+            String(payload.workspaceId),
+          )
         ) {
           this.sendError(
             "Host hello identity does not match the authenticated socket",
@@ -396,6 +417,7 @@ export class HostGateway implements DurableObject {
             heartbeatIntervalMs: 15000,
             serverTime: now,
             serverVersion: "2.0.0",
+            activeWorkspaceBindings: [...this.authorizedWorkspaceIds].sort(),
           },
         });
         break;
@@ -405,7 +427,10 @@ export class HostGateway implements DurableObject {
         const payload = message.payload as Record<string, unknown>;
         if (
           payload.agentId !== this.hostId ||
-          payload.workspaceId !== this.workspaceId ||
+          !isWorkspaceAuthorized(
+            this.authorizedWorkspaceIds,
+            String(payload.workspaceId),
+          ) ||
           payload.sessionId !== this.sessionId
         ) {
           this.sendError(
@@ -510,14 +535,14 @@ export class HostGateway implements DurableObject {
             : [];
           if (assignmentIds.length > 0) {
             const placeholders = assignmentIds
-              .map((_: unknown, index: number) => `?${index + 3}`)
+              .map((_: unknown, index: number) => `?${index + 2}`)
               .join(",");
             const assignmentRows = await this.env.CONCLAVE_DB.prepare(
               `SELECT id, attempt_id, idempotency_key, status
                FROM worker_assignments
-               WHERE host_id = ?1 AND workspace_id = ?2 AND id IN (${placeholders})`,
+               WHERE host_id = ?1 AND id IN (${placeholders})`,
             )
-              .bind(payload.agentId, payload.workspaceId, ...assignmentIds)
+              .bind(payload.agentId, ...assignmentIds)
               .all<Record<string, unknown>>();
             assignmentStates = (assignmentRows.results ?? []).map((row) => ({
               assignmentId: String(row.id),

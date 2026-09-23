@@ -32,6 +32,23 @@ Conclave Host
 
 Workers do not connect directly to Conclave Cloud.
 
+## Host WebSocket lifecycle
+
+PA-8 uses one physical authenticated WebSocket per Host installation. The
+initial binding authorizes the machine credential, after which Cloud resolves
+all active Host-to-Workspace bindings and returns them in the session
+handshake. Assignments remain Workspace-scoped and are checked against the
+persisted Host/Workspace/Worker correlation; the Host does not reconnect when
+authorized work arrives from another Workspace.
+
+Each replacement socket receives a new session ID. Close/error handlers verify
+both socket and session identity before marking the Host offline, so a stale
+socket cannot tear down a newer connection. Heartbeats update the authoritative
+D1 presence record, while reconnect sync uses Host-scoped assignment IDs and
+the local journal to replay terminal results safely. Durable Object memory is
+transient connection state only; D1 remains authoritative for enrollment,
+bindings, assignments, and session history.
+
 ## Rationale
 
 ### Why Conclave AX instead of Studio
