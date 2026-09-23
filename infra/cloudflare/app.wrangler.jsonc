@@ -23,7 +23,7 @@
       "binding": "CONCLAVE_DB",
       "database_name": "conclave-production",
       "database_id": "c10d0f8f-71a5-47e9-a60c-be84d6643ba7",
-      "migrations_dir": "../../apps/worker/migrations",
+      "migrations_dir": "../../apps/worker/migrations-v4",
     },
   ],
   "r2_buckets": [
@@ -48,15 +48,15 @@
   "durable_objects": {
     "bindings": [
       {
-        "name": "CONCLAVE_AGENT_GATEWAY",
-        "class_name": "AgentGateway",
+        "name": "CONCLAVE_HOST_GATEWAY",
+        "class_name": "HostGateway",
       },
     ],
   },
   "migrations": [
     {
-      "tag": "v1-agent-gateway",
-      "new_sqlite_classes": ["AgentGateway"],
+      "tag": "v1-host-gateway",
+      "new_sqlite_classes": ["HostGateway"],
     },
   ],
   "routes": [

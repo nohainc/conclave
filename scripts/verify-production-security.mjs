@@ -20,7 +20,7 @@ const required = isForgeService
       ["R2 artifact binding", /"binding"\s*:\s*"CONCLAVE_ARTIFACTS"/],
       ["Forge service binding", /"binding"\s*:\s*"CONCLAVE_FORGE_EXECUTION"/],
       ["Workflow binding", /"binding"\s*:\s*"CONCLAVE_RUN_WORKFLOW"/],
-      ["Agent Gateway binding", /"name"\s*:\s*"CONCLAVE_AGENT_GATEWAY"/],
+      ["Host Gateway binding", /"name"\s*:\s*"CONCLAVE_HOST_GATEWAY"/],
     ];
 
 const missing = required
