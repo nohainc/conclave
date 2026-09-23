@@ -7,10 +7,13 @@ import FeatureCard from "../components/FeatureCard.astro";
 import ForgeFlow from "../components/ForgeFlow.astro";
 import HeroArchitecture from "../components/HeroArchitecture.astro";
 import HostTopology from "../components/HostTopology.astro";
+import InteractiveWorkflow from "../components/InteractiveWorkflow.astro";
 import PrincipleCard from "../components/PrincipleCard.astro";
 import QualityFlow from "../components/QualityFlow.astro";
 import Section from "../components/Section.astro";
 import SectionHeader from "../components/SectionHeader.astro";
+import TerminalQuickstart from "../components/TerminalQuickstart.astro";
+import WorkerEcosystem from "../components/WorkerEcosystem.astro";
 ---
 
 <SiteLayout
@@ -20,15 +23,30 @@ import SectionHeader from "../components/SectionHeader.astro";
   <Container>
     <section class="hero" id="product">
       <div>
-        <div class="eyebrow">A clearer way to direct AI work</div>
+        <div class="eyebrow">✨ Architecture v4 · Multi-Worker Orchestration</div>
         <h1>Build with a team of AI Workers.</h1>
         <p class="lede">
-          Conclave AX coordinates AI models and tools to research, plan, implement,
-          review, test, and verify complex work.
+          Conclave AX coordinates AI models and tools across machines to research, plan, implement,
+          review, test, and verify complex work with machine-executable evidence.
         </p>
         <div class="actions">
           <Button href="https://app.conclaveax.com" label="Open Conclave AX" />
           <Button href="/how-it-works/" label="See how it works" variant="secondary" />
+        </div>
+
+        <div class="metrics-strip">
+          <div class="metric-item">
+            <strong>100% Provider-Neutral</strong>
+            <span>OpenAI, Anthropic, Gemini, Local</span>
+          </div>
+          <div class="metric-item">
+            <strong>Deterministic Proof</strong>
+            <span>Executable tests & machine evidence</span>
+          </div>
+          <div class="metric-item">
+            <strong>Zero Token Leakage</strong>
+            <span>Tenant-isolated Credential Profiles</span>
+          </div>
         </div>
       </div>
       <HeroArchitecture />
@@ -42,6 +60,7 @@ import SectionHeader from "../components/SectionHeader.astro";
         title="Complex work needs more than one answer."
         description="One large AI request often produces inconsistent quality. Conclave AX breaks complex goals into smaller work, assigns the right Workers, checks results independently, and iterates until the goal is verified."
       />
+      <InteractiveWorkflow />
       <div class="principles">
         <PrincipleCard title="Delegate">
           <p>Give focused work to the right capability.</p>
@@ -65,6 +84,17 @@ import SectionHeader from "../components/SectionHeader.astro";
 
   <Section>
     <Container>
+      <SectionHeader
+        eyebrow="Supported Ecosystem"
+        title="Choose capability, not a permanent machine identity."
+        description="Conclave manages Worker packages dynamically in the background. Connect your private subscription accounts or Workspace API keys."
+      />
+      <WorkerEcosystem />
+    </Container>
+  </Section>
+
+  <Section>
+    <Container>
       <div class="forge-section">
         <div>
           <SectionHeader
@@ -74,9 +104,23 @@ import SectionHeader from "../components/SectionHeader.astro";
           />
           <p class="forge-section__context">Forge is a concrete starting point—not the boundary of the product. Conclave AX provides the same quality-driven coordination for future workflows beyond software development.</p>
           <div class="forge-scope"><strong>Conclave AX</strong><span>├── Forge</span><span>└── Future workflows</span></div>
+          <div class="actions">
+            <Button href="https://app.conclaveax.com" label="Launch Forge in Conclave AX →" />
+          </div>
         </div>
         <ForgeFlow />
       </div>
+    </Container>
+  </Section>
+
+  <Section>
+    <Container>
+      <SectionHeader
+        eyebrow="Developer Quickstart"
+        title="Start executing on your local machine in 60 seconds."
+        description="One lightweight binary connects your machine as a supervised Host while Conclave Cloud manages orchestration."
+      />
+      <TerminalQuickstart />
     </Container>
   </Section>
 
@@ -91,6 +135,9 @@ import SectionHeader from "../components/SectionHeader.astro";
           />
           <div class="quality-points">
             <span>Multiple candidates</span><span>Independent review</span><span>Correction loops</span><span>Automated tests</span><span>Structured evidence</span><span>Completion criteria</span>
+          </div>
+          <div class="actions">
+            <Button href="/how-it-works/" label="Explore How it works →" variant="secondary" />
           </div>
         </div>
         <QualityFlow />
@@ -165,3 +212,4 @@ import SectionHeader from "../components/SectionHeader.astro";
     </Container>
   </Section>
 </SiteLayout>
+

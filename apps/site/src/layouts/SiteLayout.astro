@@ -21,7 +21,7 @@ const imageUrl = new URL(image, Astro.site ?? "https://conclaveax.com").href;
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width" />
     <meta name="description" content={description} />
-    <meta name="theme-color" content="#f4f1eb" />
+    <meta name="theme-color" content="#09090e" />
     <link rel="canonical" href={canonicalUrl} />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/site.webmanifest" />
@@ -47,5 +47,6 @@ const imageUrl = new URL(image, Astro.site ?? "https://conclaveax.com").href;
     </main>
     <Footer />
     <SiteAnalytics />
+    <script is:inline src="/scripts/site-interactive.js" defer></script>
   </body>
 </html>

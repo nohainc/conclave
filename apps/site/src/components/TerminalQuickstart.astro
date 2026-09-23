@@ -1,0 +1,29 @@
+---
+---
+
+<div class="terminal-window" aria-label="Quickstart terminal setup">
+  <div class="terminal-header">
+    <div class="terminal-dots" aria-hidden="true">
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+    <div class="terminal-title">quickstart — zsh</div>
+    <button class="terminal-copy-btn" type="button" data-copy-text="curl -fsSL https://conclaveax.com/install.sh | sh">
+      <span aria-hidden="true">📋</span> Copy
+    </button>
+  </div>
+  <div class="terminal-body">
+    <div><span class="terminal-comment"># 1. Install Conclave CLI & Host runtime</span></div>
+    <div><span class="terminal-prompt">$</span>curl -fsSL https://conclaveax.com/install.sh | sh</div>
+    <div class="terminal-comment">✓ Conclave binary installed to /usr/local/bin/conclave</div>
+    <br />
+    <div><span class="terminal-comment"># 2. Pair Host machine with your Workspace</span></div>
+    <div><span class="terminal-prompt">$</span>conclave host enroll --workspace=nohainc</div>
+    <div class="terminal-success">✓ Host "macbook-pro" securely paired with Conclave Cloud</div>
+    <br />
+    <div><span class="terminal-comment"># 3. Direct multi-worker execution</span></div>
+    <div><span class="terminal-prompt">$</span>conclave run "Refactor database connection pool with telemetry"</div>
+    <div class="terminal-success">✓ 4 Workers coordinated · 12 tests passed · Verified in 14.2s</div>
+  </div>
+</div>

@@ -32,6 +32,8 @@ export default tseslint.config(
         document: "readonly",
         fetch: "readonly",
         IntersectionObserver: "readonly",
+        navigator: "readonly",
+        setTimeout: "readonly",
         window: "readonly",
       },
     },
