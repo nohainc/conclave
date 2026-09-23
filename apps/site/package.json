@@ -10,6 +10,7 @@
     "check:performance": "node scripts/check-performance.mjs",
     "check:responsive": "node scripts/check-responsive.mjs",
     "check:analytics": "node scripts/check-analytics-privacy.mjs",
+    "check:security": "node scripts/check-security.mjs",
     "preview": "astro preview",
     "test": "vitest run test"
   },

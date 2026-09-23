@@ -187,6 +187,12 @@ and event timestamp. The endpoint is opt-in through
 requests. The site does not use cookies, user IDs, Workspace IDs, credentials,
 Chat content, Account data, or application events.
 
+The public Worker sends a self-only Content Security Policy, denies framing,
+sets strict transport/referrer/permissions policies, and strips `Set-Cookie`
+from asset responses. The marketing site’s analytics endpoint must be
+same-origin; the authenticated app owns its own cookie scope and application
+security boundary.
+
 ## Visual system contract
 
 The site uses one restrained, technical visual theme: warm paper surfaces, ink

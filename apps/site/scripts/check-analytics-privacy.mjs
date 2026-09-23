@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 
 const source = await readFile(
-  new URL("../src/components/SiteAnalytics.astro", import.meta.url),
+  new URL("../public/scripts/site-analytics.js", import.meta.url),
   "utf8",
 );
 const layout = await readFile(
