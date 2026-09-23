@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../brand.dart';
 import '../../navigation/studio_navigation.dart';
 import '../../studio/studio_models.dart';
@@ -46,12 +47,16 @@ class CommandPaletteDialog extends StatefulWidget {
 class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
   final _searchController = TextEditingController();
   String _query = '';
+  int _highlightedIndex = 0;
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(() {
-      setState(() => _query = _searchController.text.trim().toLowerCase());
+      setState(() {
+        _query = _searchController.text.trim().toLowerCase();
+        _highlightedIndex = 0;
+      });
     });
   }
 
@@ -180,125 +185,153 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
         side: BorderSide(
             color: isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine),
       ),
-      child: Container(
-        width: 580,
-        constraints: const BoxConstraints(maxHeight: 520),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Search Input Header
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: TextField(
-                controller: _searchController,
-                autofocus: true,
-                style: TextStyle(
-                  fontSize: 14,
-                  color:
-                      isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Type a command, project, or chat...',
-                  prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                  suffixIcon: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    margin: const EdgeInsets.only(right: 8),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? ConclaveBrand.darkLine
-                          : ConclaveBrand.lightLine,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      'ESC',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
+      child: Focus(
+        autofocus: true,
+        onKeyEvent: (node, event) {
+          if (event is! KeyDownEvent || actions.isEmpty) {
+            return KeyEventResult.ignored;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+            setState(() =>
+                _highlightedIndex = (_highlightedIndex + 1) % actions.length);
+            return KeyEventResult.handled;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+            setState(() => _highlightedIndex =
+                (_highlightedIndex - 1 + actions.length) % actions.length);
+            return KeyEventResult.handled;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.enter) {
+            actions[_highlightedIndex].onSelect();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: Container(
+          width: 580,
+          constraints: const BoxConstraints(maxHeight: 520),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Search Input Header
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color:
+                        isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Type a command, project, or chat...',
+                    prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                    suffixIcon: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(
                         color: isDark
-                            ? ConclaveBrand.darkInkMuted
-                            : ConclaveBrand.lightInkMuted,
+                            ? ConclaveBrand.darkLine
+                            : ConclaveBrand.lightLine,
+                        borderRadius: BorderRadius.circular(4),
                       ),
-                    ),
-                  ),
-                  filled: true,
-                  fillColor: isDark
-                      ? ConclaveBrand.darkPaper
-                      : ConclaveBrand.lightPaper,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                ),
-              ),
-            ),
-            Divider(
-                height: 1,
-                color:
-                    isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine),
-            // Results List
-            Flexible(
-              child: actions.isEmpty
-                  ? Padding(
-                      padding: const EdgeInsets.all(32),
                       child: Text(
-                        'No results found for "$_query"',
+                        'ESC',
                         style: TextStyle(
-                          fontSize: 13,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
                           color: isDark
                               ? ConclaveBrand.darkInkMuted
                               : ConclaveBrand.lightInkMuted,
                         ),
                       ),
-                    )
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      itemCount: actions.length,
-                      itemBuilder: (context, index) {
-                        final action = actions[index];
-                        return ListTile(
-                          dense: true,
-                          leading: Icon(action.icon,
-                              size: 18, color: ConclaveBrand.accent),
-                          title: Text(
-                            action.title,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: isDark
-                                  ? ConclaveBrand.darkInk
-                                  : ConclaveBrand.lightInk,
-                            ),
-                          ),
-                          subtitle: action.subtitle != null
-                              ? Text(
-                                  action.subtitle!,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: isDark
-                                        ? ConclaveBrand.darkInkMuted
-                                        : ConclaveBrand.lightInkMuted,
-                                  ),
-                                )
-                              : null,
-                          trailing: Text(
-                            action.category,
-                            style: TextStyle(
-                              fontSize: 10.5,
-                              color: isDark
-                                  ? ConclaveBrand.darkInkMuted
-                                  : ConclaveBrand.lightInkMuted,
-                            ),
-                          ),
-                          onTap: action.onSelect,
-                        );
-                      },
                     ),
-            ),
-          ],
+                    filled: true,
+                    fillColor: isDark
+                        ? ConclaveBrand.darkPaper
+                        : ConclaveBrand.lightPaper,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                  ),
+                ),
+              ),
+              Divider(
+                  height: 1,
+                  color: isDark
+                      ? ConclaveBrand.darkLine
+                      : ConclaveBrand.lightLine),
+              // Results List
+              Flexible(
+                child: actions.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Text(
+                          'No results found for "$_query"',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark
+                                ? ConclaveBrand.darkInkMuted
+                                : ConclaveBrand.lightInkMuted,
+                          ),
+                        ),
+                      )
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        itemCount: actions.length,
+                        itemBuilder: (context, index) {
+                          final action = actions[index];
+                          return ListTile(
+                            dense: true,
+                            selected: index == _highlightedIndex,
+                            selectedTileColor: isDark
+                                ? ConclaveBrand.accentWashDark
+                                : ConclaveBrand.accentWash,
+                            leading: Icon(action.icon,
+                                size: 18, color: ConclaveBrand.accent),
+                            title: Text(
+                              action.title,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: isDark
+                                    ? ConclaveBrand.darkInk
+                                    : ConclaveBrand.lightInk,
+                              ),
+                            ),
+                            subtitle: action.subtitle != null
+                                ? Text(
+                                    action.subtitle!,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: isDark
+                                          ? ConclaveBrand.darkInkMuted
+                                          : ConclaveBrand.lightInkMuted,
+                                    ),
+                                  )
+                                : null,
+                            trailing: Text(
+                              action.category,
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                color: isDark
+                                    ? ConclaveBrand.darkInkMuted
+                                    : ConclaveBrand.lightInkMuted,
+                              ),
+                            ),
+                            onTap: action.onSelect,
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -179,6 +179,12 @@ class _StudioAppState extends State<ConclaveAppShell> {
     );
   }
 
+  void _newChatShortcut() {
+    if (selectedProjectId != null && !isSendingChat) {
+      unawaited(_createChat());
+    }
+  }
+
   StudioProject? get selectedProject => snapshot.projects
       .where((project) => project.id == selectedProjectId)
       .firstOrNull;
@@ -1422,6 +1428,10 @@ class _StudioAppState extends State<ConclaveAppShell> {
               _openCommandPalette,
           const SingleActivator(LogicalKeyboardKey.keyK, control: true):
               _openCommandPalette,
+          const SingleActivator(LogicalKeyboardKey.keyN, meta: true):
+              _newChatShortcut,
+          const SingleActivator(LogicalKeyboardKey.keyN, control: true):
+              _newChatShortcut,
         },
         child: Focus(
           autofocus: true,
@@ -2339,26 +2349,30 @@ class _StudioAppState extends State<ConclaveAppShell> {
     ]);
   }
 
-  Widget _realtimeStatusBanner() => Container(
-        width: double.infinity,
-        color: const Color(0xfffff6df),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
-        child: Row(children: [
-          const Icon(Icons.cloud_off_outlined,
-              size: 17, color: Color(0xff8a6518)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              realtimeNotice ?? 'Live updates are reconnecting.',
-              style: const TextStyle(color: Color(0xff765817), fontSize: 12),
+  Widget _realtimeStatusBanner() => Semantics(
+        liveRegion: true,
+        label: realtimeNotice ?? 'Live updates are reconnecting.',
+        child: Container(
+          width: double.infinity,
+          color: const Color(0xfffff6df),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+          child: Row(children: [
+            const Icon(Icons.cloud_off_outlined,
+                size: 17, color: Color(0xff8a6518)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                realtimeNotice ?? 'Live updates are reconnecting.',
+                style: const TextStyle(color: Color(0xff765817), fontSize: 12),
+              ),
             ),
-          ),
-          const SizedBox(
-            width: 14,
-            height: 14,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-        ]),
+            const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ]),
+        ),
       );
 
   void _toggleTheme() {
@@ -3902,9 +3916,12 @@ class _StudioAppState extends State<ConclaveAppShell> {
           Expanded(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title,
-                  style: const TextStyle(
-                      fontSize: 25, fontWeight: FontWeight.w700)),
+              Semantics(
+                header: true,
+                child: Text(title,
+                    style: const TextStyle(
+                        fontSize: 25, fontWeight: FontWeight.w700)),
+              ),
               const SizedBox(height: 5),
               Text(subtitle,
                   style:
@@ -4603,8 +4620,11 @@ class _StudioAppState extends State<ConclaveAppShell> {
           ),
         );
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('Usage',
-          style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
+      Semantics(
+        header: true,
+        child: const Text('Usage',
+            style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
+      ),
       const SizedBox(height: 6),
       const Text(
           'Workspace usage across Projects, Accounts, Workers and people.',
@@ -4685,8 +4705,11 @@ class _StudioAppState extends State<ConclaveAppShell> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Profile & Security',
-            style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
+        Semantics(
+          header: true,
+          child: const Text('Profile & Security',
+              style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
+        ),
         const SizedBox(height: 6),
         const Text(
             'Manage your Conclave identity, login methods, sessions, and passkeys.',

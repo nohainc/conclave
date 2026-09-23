@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:conclave_app/src/brand.dart';
@@ -154,6 +155,33 @@ void main() {
 
       await tester.tap(find.text('Open Hosts'));
       expect(navigatedTo?.kind, StudioRouteKind.hosts);
+    });
+
+    testWidgets('CommandPaletteDialog supports keyboard navigation',
+        (WidgetTester tester) async {
+      StudioNavigation? navigatedTo;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.lightTheme(),
+          home: Scaffold(
+            body: CommandPaletteDialog(
+              snapshot: studioFixtureSnapshot(),
+              onSelectProject: (_) {},
+              onSelectChat: (_, __) {},
+              onNavigateTo: (route) => navigatedTo = route,
+              onToggleTheme: () {},
+              onNewGoal: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+
+      expect(navigatedTo?.kind, StudioRouteKind.workers);
     });
   });
 }
