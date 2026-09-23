@@ -15,8 +15,8 @@ class ChatMessageTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isUser = message.senderRole == 'user';
-    final isSystem = message.senderRole == 'system';
+    final isUser = message.sender == StudioMessageSender.user;
+    final isSystem = message.sender == StudioMessageSender.system;
 
     if (isSystem) {
       return Container(
@@ -90,13 +90,13 @@ class ChatMessageTile extends StatelessWidget {
                       children: [
                         Text(
                           message.senderName,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w700,
                             color: ConclaveBrand.accent,
                           ),
                         ),
-                        if (message.senderRole.isNotEmpty) ...[
+                        if (message.senderRole.name.isNotEmpty) ...[
                           const SizedBox(width: 6),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
@@ -105,8 +105,8 @@ class ChatMessageTile extends StatelessWidget {
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              message.senderRole.toUpperCase(),
-                              style: TextStyle(
+                              message.senderRole.name.toUpperCase(),
+                              style: const TextStyle(
                                 fontSize: 9,
                                 fontWeight: FontWeight.w700,
                                 color: ConclaveBrand.accent,
@@ -164,9 +164,15 @@ class ChatMessageTile extends StatelessWidget {
     );
   }
 
-  String _formatTime(DateTime time) {
-    final hour = time.hour.toString().padLeft(2, '0');
-    final minute = time.minute.toString().padLeft(2, '0');
-    return '$hour:$minute';
+  String _formatTime(String time) {
+    if (time.contains('T')) {
+      final parsed = DateTime.tryParse(time);
+      if (parsed != null) {
+        final hour = parsed.hour.toString().padLeft(2, '0');
+        final minute = parsed.minute.toString().padLeft(2, '0');
+        return '$hour:$minute';
+      }
+    }
+    return time;
   }
 }

@@ -65,7 +65,7 @@ class StudioSidebar extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 8),
               children: [
-                _NavSectionHeader(title: 'EXECUTION'),
+                const _NavSectionHeader(title: 'EXECUTION'),
                 _NavItem(
                   icon: Icons.chat_bubble_outline_rounded,
                   label: 'Conversation',
@@ -94,7 +94,7 @@ class StudioSidebar extends StatelessWidget {
                   onTap: () => onNavigateTo(3),
                 ),
                 const SizedBox(height: 16),
-                _NavSectionHeader(title: 'PROJECTS & CHATS'),
+                const _NavSectionHeader(title: 'PROJECTS & CHATS'),
                 if (snapshot.projects.isEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

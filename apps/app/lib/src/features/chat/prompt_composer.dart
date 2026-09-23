@@ -203,16 +203,16 @@ class _PromptComposerState extends State<PromptComposer> {
                       onSelected: widget.onQualityChanged,
                       itemBuilder: (context) => [
                         const PopupMenuItem(
-                          value: StudioQualityPreset.fast,
-                          child: Text('Fast (Single Model)'),
+                          value: StudioQualityPreset.economy,
+                          child: Text('Economy (Single Model)'),
                         ),
                         const PopupMenuItem(
                           value: StudioQualityPreset.balanced,
                           child: Text('Balanced (Standard)'),
                         ),
                         const PopupMenuItem(
-                          value: StudioQualityPreset.thorough,
-                          child: Text('Thorough (Multi-Worker Ensemble)'),
+                          value: StudioQualityPreset.highAssurance,
+                          child: Text('High Assurance (Multi-Worker)'),
                         ),
                       ],
                       child: Container(
@@ -225,7 +225,7 @@ class _PromptComposerState extends State<PromptComposer> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.tune_rounded, size: 14, color: ConclaveBrand.accent),
+                            const Icon(Icons.tune_rounded, size: 14, color: ConclaveBrand.accent),
                             const SizedBox(width: 5),
                             Text(
                               widget.selectedQuality.label,

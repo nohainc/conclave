@@ -57,7 +57,7 @@ abstract final class ConclaveBrand {
 
   /// Builds the light [ThemeData] for Conclave AX.
   static ThemeData lightTheme() {
-    final colorScheme = ColorScheme.light(
+    const colorScheme = ColorScheme.light(
       primary: accent,
       primaryContainer: accentWash,
       secondary: accentDark,
@@ -114,7 +114,7 @@ abstract final class ConclaveBrand {
 
   /// Builds the dark [ThemeData] for Conclave AX.
   static ThemeData darkTheme() {
-    final colorScheme = ColorScheme.dark(
+    const colorScheme = ColorScheme.dark(
       primary: accent,
       primaryContainer: accentWashDark,
       secondary: accentDark,

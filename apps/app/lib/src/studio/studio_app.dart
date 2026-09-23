@@ -94,7 +94,8 @@ class _StudioAppState extends State<StudioApp> {
   ThemeMode _themeMode = ThemeMode.system;
   final List<ToastMessage> activeToasts = [];
 
-  void _showSnackBar(String message) {
+  void _showSnackBar(String message, {ToastType type = ToastType.info}) {
+    _showToast(message, type: type);
     messengerKey.currentState?.showSnackBar(SnackBar(content: Text(message)));
   }
 
@@ -1609,37 +1610,6 @@ class _StudioAppState extends State<StudioApp> {
               ),
             ],
           ),
-        ),
-      );
-
-  ThemeData _theme() => ThemeData(
-        useMaterial3: true,
-        scaffoldBackgroundColor: ConclaveBrand.paper,
-        colorScheme: ColorScheme.fromSeed(
-            seedColor: ConclaveBrand.accent, brightness: Brightness.light),
-        fontFamily: 'Inter',
-        textTheme: const TextTheme(
-          bodyMedium: TextStyle(color: ConclaveBrand.ink),
-          titleLarge:
-              TextStyle(color: ConclaveBrand.ink, fontWeight: FontWeight.w700),
-        ),
-        cardTheme: const CardThemeData(
-            margin: EdgeInsets.zero,
-            elevation: 0,
-            color: ConclaveBrand.surface),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: ConclaveBrand.line),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: ConclaveBrand.line),
-          ),
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
         ),
       );
 

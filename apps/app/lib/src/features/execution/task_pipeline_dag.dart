@@ -48,11 +48,11 @@ class TaskPipelineDAG extends StatelessWidget {
               ),
               Row(
                 children: [
-                  _StatusLegend(color: ConclaveBrand.success, label: 'Completed'),
+                  const _StatusLegend(color: ConclaveBrand.success, label: 'Completed'),
                   const SizedBox(width: 12),
-                  _StatusLegend(color: ConclaveBrand.info, label: 'Running'),
+                  const _StatusLegend(color: ConclaveBrand.info, label: 'Running'),
                   const SizedBox(width: 12),
-                  _StatusLegend(color: ConclaveBrand.error, label: 'Failed'),
+                  const _StatusLegend(color: ConclaveBrand.error, label: 'Failed'),
                   const SizedBox(width: 12),
                   _StatusLegend(color: isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine, label: 'Pending'),
                 ],

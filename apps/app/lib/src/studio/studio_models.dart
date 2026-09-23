@@ -32,6 +32,43 @@ extension StudioTaskHelpers on StudioTask {
   String? get assignedWorkerId => worker.isNotEmpty ? worker : null;
 }
 
+extension StudioQualityPresetHelpers on StudioQualityPreset {
+  String get label => switch (this) {
+        StudioQualityPreset.economy => 'Economy',
+        StudioQualityPreset.balanced => 'Balanced',
+        StudioQualityPreset.highAssurance => 'High Assurance',
+        StudioQualityPreset.exploration => 'Exploration',
+        StudioQualityPreset.custom => 'Custom',
+      };
+}
+
+extension StudioChatMessageHelpers on StudioChatMessage {
+  String get content => text;
+  String get sentAt => timestamp;
+  String get senderName => switch (sender) {
+        StudioMessageSender.user => 'You',
+        StudioMessageSender.conclave => 'Conclave AX',
+        StudioMessageSender.system => 'System',
+      };
+  StudioMessageRole get senderRole => sender.role;
+}
+
+extension StudioWorkerHelpers on StudioWorker {
+  String get displayName => name;
+}
+
+extension StudioCredentialProfileHelpers on StudioCredentialProfile {
+  String get name => displayName;
+}
+
+extension StudioProjectHelpers on StudioProject {
+  String get title => name;
+}
+
+extension StudioSnapshotHelpers on StudioSnapshot {
+  List<StudioAgent> get hosts => agents;
+}
+
 enum FindingSeverity { blocker, major, minor, note }
 
 enum FindingStatus { open, fixed, verified }
