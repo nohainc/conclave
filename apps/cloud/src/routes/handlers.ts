@@ -3072,6 +3072,137 @@ export async function handleGetWorkerCatalog(
   });
 }
 
+export async function handleSetWorkspaceWorkerAvailability(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  workerId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  authorize(context, "worker.manage_on_host");
+  requireWorkspaceContext(context, env, workspaceId);
+
+  const body = (await request.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
+  if (typeof body.enabled !== "boolean") {
+    throw new HttpError(400, "enabled must be a boolean");
+  }
+  const requestedHostId =
+    typeof body.hostId === "string" ? body.hostId : undefined;
+  const requestedVersion =
+    typeof body.version === "string" ? body.version : undefined;
+  const worker = await env.CONCLAVE_DB.prepare(
+    `SELECT w.id, wv.version
+     FROM workers w
+     JOIN worker_versions wv ON wv.worker_id = w.id AND wv.is_revoked = 0
+     WHERE w.id = ?1 AND w.status = 'active'
+       AND (?2 IS NULL OR wv.version = ?2)
+     ORDER BY wv.created_at DESC LIMIT 1`,
+  )
+    .bind(workerId, requestedVersion ?? null)
+    .first<{ id: string; version: string }>();
+  if (!worker) {
+    throw new HttpError(409, `Worker ${workerId} has no available version`);
+  }
+
+  const hosts = await env.CONCLAVE_DB.prepare(
+    `SELECT h.id
+     FROM hosts h
+     JOIN host_workspace_bindings b ON b.host_id = h.id
+       AND b.workspace_id = ?1 AND b.status = 'active'
+     WHERE h.revoked_at IS NULL
+       AND (?2 IS NULL OR h.id = ?2)
+     ORDER BY h.id`,
+  )
+    .bind(workspaceId, requestedHostId ?? null)
+    .all<{ id: string }>();
+  if (requestedHostId && (hosts.results ?? []).length === 0) {
+    return json({ error: "Host not found" }, { status: 404 });
+  }
+
+  const now = new Date().toISOString();
+  for (const host of hosts.results ?? []) {
+    const existing = await env.CONCLAVE_DB.prepare(
+      "SELECT revision, release_channel, credential_setup_requests_json, local_permission_requests_json FROM host_desired_states WHERE host_id = ?1",
+    )
+      .bind(host.id)
+      .first<{
+        revision: number;
+        release_channel: string;
+        credential_setup_requests_json: string;
+        local_permission_requests_json: string;
+      }>();
+    const revision = (existing?.revision ?? 0) + 1;
+    const current = await env.CONCLAVE_DB.prepare(
+      "SELECT worker_id, required_version FROM host_desired_workers WHERE host_id = ?1",
+    )
+      .bind(host.id)
+      .all<{ worker_id: string; required_version: string }>();
+    const desired = new Map(
+      (current.results ?? []).map((row) => [
+        row.worker_id,
+        row.required_version,
+      ]),
+    );
+    if (body.enabled) desired.set(workerId, worker.version);
+    else desired.delete(workerId);
+
+    const statements: D1PreparedStatement[] = [
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO host_desired_states
+         (host_id, release_channel, credential_setup_requests_json,
+          local_permission_requests_json, revision, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(host_id) DO UPDATE SET
+           revision = excluded.revision, updated_at = excluded.updated_at`,
+      ).bind(
+        host.id,
+        existing?.release_channel ?? "stable",
+        existing?.credential_setup_requests_json ?? "[]",
+        existing?.local_permission_requests_json ?? "[]",
+        revision,
+        now,
+      ),
+      env.CONCLAVE_DB.prepare(
+        "DELETE FROM host_desired_workers WHERE host_id = ?1",
+      ).bind(host.id),
+    ];
+    for (const [desiredWorkerId, desiredVersion] of desired) {
+      statements.push(
+        env.CONCLAVE_DB.prepare(
+          `INSERT INTO host_desired_workers
+           (host_id, worker_id, required_version, created_at, updated_at)
+           VALUES (?1, ?2, ?3, ?4, ?4)`,
+        ).bind(host.id, desiredWorkerId, desiredVersion, now),
+      );
+    }
+    await env.CONCLAVE_DB.batch(statements);
+  }
+
+  await recordAudit(
+    env,
+    context,
+    "host.worker.availability.updated",
+    "worker",
+    workerId,
+    {
+      enabled: body.enabled,
+      hostId: requestedHostId ?? null,
+      version: worker.version,
+    },
+  );
+  return json({
+    workerId,
+    version: worker.version,
+    enabled: body.enabled,
+    hostIds: (hosts.results ?? []).map((host) => host.id),
+    updatedAt: now,
+  });
+}
+
 async function handleDispatchTaskAssignment(
   request: Request,
   env: SecurityEnv,

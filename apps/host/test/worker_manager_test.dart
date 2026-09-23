@@ -302,6 +302,7 @@ void main() {
       trustPolicy: policy,
       allowedPermissions: {WorkerPermission.readWorkspace},
     );
+    final states = <String>[];
     await manager.reconcile(
       [
         {
@@ -320,8 +321,21 @@ void main() {
         expect(packageR2Key, contains('cloud-worker'));
         return bytes;
       },
+      onStatus: (status) async {
+        states.add(status['status']! as String);
+      },
     );
     expect(await manager.activeVersion('cloud-worker'), '1.0.0');
+    expect(
+      states,
+      containsAll(<String>[
+        'requested',
+        'downloading',
+        'verifying',
+        'installing',
+        'ready',
+      ]),
+    );
     await directory.delete(recursive: true);
   });
 
@@ -435,10 +449,18 @@ void main() {
       digest: sha256.convert(bytes).toString(),
     ));
 
-    await manager.reconcile(const [], download: (_, __, ___) async => const []);
+    final states = <String>[];
+    await manager.reconcile(
+      const [],
+      download: (_, __, ___) async => const [],
+      onStatus: (status) async {
+        states.add(status['status']! as String);
+      },
+    );
 
     expect(await manager.activeVersion('removed-worker'), isNull);
     expect(await manager.activeProcessSpec('removed-worker'), isNull);
+    expect(states, containsAll(<String>['removing', 'absent']));
     await directory.delete(recursive: true);
   });
 

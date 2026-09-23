@@ -185,6 +185,9 @@ Future<void> main(List<String> args) async {
                   version,
                   packageR2Key,
                 ),
+                onStatus: (status) async {
+                  connection?.reportWorkerStatuses([status]);
+                },
               );
               final inventory = await workerManager.inventory();
               activeWorkerIds = inventory
@@ -197,7 +200,7 @@ Future<void> main(List<String> args) async {
                     .map((worker) => {
                           'workerId': worker.workerId,
                           'version': worker.version,
-                          'status': worker.active ? 'active' : 'installed',
+                          'status': worker.active ? 'ready' : 'verifying',
                           'installedAt':
                               DateTime.now().toUtc().toIso8601String(),
                         })
@@ -212,7 +215,7 @@ Future<void> main(List<String> args) async {
                   {
                     'workerId': workerId,
                     'version': version,
-                    'status': 'error',
+                    'status': 'failed',
                     'error': '$error',
                     'installedAt': DateTime.now().toUtc().toIso8601String(),
                   },

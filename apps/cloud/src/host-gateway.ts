@@ -595,20 +595,19 @@ export class HostGateway implements DurableObject {
             ) {
               continue;
             }
-            const desired = await this.env.CONCLAVE_DB.prepare(
-              `SELECT worker_id FROM host_desired_workers
-               WHERE host_id = ?1 AND worker_id = ?2 AND required_version = ?3`,
-            )
-              .bind(this.hostId, status.workerId, status.version)
-              .first<{ worker_id: string }>();
-            if (!desired) continue;
-            const installationStatus = [
-              "active",
-              "installed",
-              "error",
-            ].includes(status.status)
-              ? status.status
-              : "error";
+            const removalStatus = ["removing", "absent"].includes(
+              status.status,
+            );
+            if (!removalStatus) {
+              const desired = await this.env.CONCLAVE_DB.prepare(
+                `SELECT worker_id FROM host_desired_workers
+                 WHERE host_id = ?1 AND worker_id = ?2 AND required_version = ?3`,
+              )
+                .bind(this.hostId, status.workerId, status.version)
+                .first<{ worker_id: string }>();
+              if (!desired) continue;
+            }
+            const installationStatus = status.status;
             await this.env.CONCLAVE_DB.prepare(
               `INSERT INTO host_worker_installations
                (id, host_id, worker_id, worker_version_id, status, error,

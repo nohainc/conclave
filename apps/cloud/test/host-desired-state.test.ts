@@ -19,6 +19,12 @@ function createDb() {
       "utf8",
     ),
   );
+  db.exec(
+    fs.readFileSync(
+      path.join(migrations, "0004_worker_installation_states.sql"),
+      "utf8",
+    ),
+  );
   return db;
 }
 
@@ -129,5 +135,32 @@ describe("V4 Host desired state", () => {
         )
         .all("host-1", "other-workspace"),
     ).toEqual([]);
+  });
+
+  it("stores explicit installation states once per Host and Worker version", () => {
+    const db = createDb();
+    seed(db);
+    db.prepare(
+      `INSERT INTO host_worker_installations
+       (id, host_id, worker_id, worker_version_id, status, updated_at)
+       VALUES ('installation-1', 'host-1', 'codex', 'codex-v1', 'requested', 'now')`,
+    ).run();
+    db.prepare(
+      `INSERT INTO host_worker_installations
+       (id, host_id, worker_id, worker_version_id, status, installed_at, updated_at)
+       VALUES ('different-id', 'host-1', 'codex', 'codex-v1', 'ready', 'later', 'later')
+       ON CONFLICT(host_id, worker_id, worker_version_id) DO UPDATE SET
+         status = excluded.status, installed_at = excluded.installed_at,
+         updated_at = excluded.updated_at`,
+    ).run();
+
+    expect(
+      db
+        .prepare(
+          `SELECT status, installed_at FROM host_worker_installations
+           WHERE host_id = 'host-1' AND worker_id = 'codex'`,
+        )
+        .all(),
+    ).toEqual([{ status: "ready", installed_at: "later" }]);
   });
 });

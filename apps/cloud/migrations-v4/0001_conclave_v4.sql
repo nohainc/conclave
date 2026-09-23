@@ -408,7 +408,10 @@ CREATE TABLE host_worker_installations (
   host_id TEXT NOT NULL REFERENCES hosts(id) ON DELETE CASCADE,
   worker_id TEXT NOT NULL REFERENCES workers(id) ON DELETE CASCADE,
   worker_version_id TEXT NOT NULL REFERENCES worker_versions(id),
-  status TEXT NOT NULL CHECK (status IN ('installing', 'installed', 'active', 'error', 'removed')),
+  status TEXT NOT NULL CHECK (status IN (
+    'absent', 'requested', 'downloading', 'verifying', 'installing',
+    'ready', 'updating', 'degraded', 'failed', 'removing'
+  )),
   error TEXT,
   installed_at TEXT,
   updated_at TEXT NOT NULL,

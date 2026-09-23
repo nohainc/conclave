@@ -242,7 +242,18 @@ export const WorkerStatusPayloadSchema = z
     hostId: nonEmptyStr,
     workerId: nonEmptyStr,
     version: nonEmptyStr,
-    status: z.enum(["installed", "installing", "failed", "removed"]),
+    status: z.enum([
+      "absent",
+      "requested",
+      "downloading",
+      "verifying",
+      "installing",
+      "ready",
+      "updating",
+      "degraded",
+      "failed",
+      "removing",
+    ]),
     error: z.string().optional(),
   })
   .strict();
@@ -1075,14 +1086,39 @@ export type WorkerConfigurePayload = z.infer<
   typeof WorkerConfigurePayloadSchema
 >;
 
-export const WorkerStatusLegacyPayloadSchema = z
+const WorkerStatusRecordSchema = z
   .object({
     workerId: nonEmptyStr,
-    status: z.enum(["ready", "busy", "error", "unconfigured"]),
+    hostId: nonEmptyStr.optional(),
+    version: nonEmptyStr.optional(),
+    status: z.enum([
+      "absent",
+      "requested",
+      "downloading",
+      "verifying",
+      "installing",
+      "ready",
+      "updating",
+      "degraded",
+      "failed",
+      "removing",
+      "busy",
+      "error",
+      "unconfigured",
+    ]),
     activeAssignmentCount: z.number().int().min(0).default(0),
     error: z.string().optional(),
+    installedAt: z.string().optional(),
   })
   .strict();
+export const WorkerStatusLegacyPayloadSchema = z.union([
+  WorkerStatusRecordSchema,
+  z
+    .object({
+      workers: z.array(WorkerStatusRecordSchema),
+    })
+    .strict(),
+]);
 export type WorkerStatusLegacyPayload = z.infer<
   typeof WorkerStatusLegacyPayloadSchema
 >;

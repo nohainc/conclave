@@ -162,7 +162,14 @@ class HostCloudConnection {
   final _lastEphemeralWorkerEvent = <String, DateTime>{};
 
   void reportWorkerStatuses(List<Map<String, Object?>> workers) {
-    _sendIfConnected('worker.status', {'workers': workers});
+    _sendIfConnected('worker.status', {
+      'workers': workers
+          .map((worker) => {
+                ...worker,
+                'hostId': hostId,
+              })
+          .toList(),
+    });
   }
 
   void reportWorkerStatus({

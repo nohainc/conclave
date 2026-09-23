@@ -290,7 +290,7 @@ describe("Architecture v4 Core Domain Entities and Invariants", () => {
       workerId: "codex",
       workerVersionId: "ver-codex-1.0.0",
       resolvedVersion: "1.0.0",
-      status: "installed",
+      status: "ready",
       installedAt: "2026-09-21T10:10:00Z",
       updatedAt: "2026-09-21T10:10:00Z",
     };

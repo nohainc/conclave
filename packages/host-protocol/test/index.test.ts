@@ -223,7 +223,7 @@ describe("Conclave Host & Worker Protocol v4", () => {
           hostId: "host-macbook-pro",
           workerId: "codex",
           version: "1.0.0",
-          status: "installed",
+          status: "ready",
         },
       };
       expect(parseHostMessage(statusMsg).type).toBe("worker.status");

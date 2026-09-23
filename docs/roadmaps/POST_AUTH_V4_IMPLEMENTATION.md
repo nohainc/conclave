@@ -655,6 +655,17 @@ One Worker binary/version installed once per Host regardless of number of users/
 ## Exit criteria
 Normal operation requires no manual Worker package installation.
 
+## Status
+
+Complete. Conclave AX can enable or disable a catalog Worker for a selected
+Host (or all active Hosts in the Workspace), while Cloud stores one
+deduplicated desired Worker set per Host. Hosts reconcile that set through an
+explicit requested/downloading/verifying/installing/ready/updating/degraded/
+failed/removing/absent state machine, report progress and health over the
+machine connection, retain side-by-side versions for rollback, and remove
+stale versions after reconciliation. Multiple users therefore converge on
+one Host installation rather than downloading duplicate Worker binaries.
+
 ---
 
 # PA-11 — Finalize Account / Credential Profile UX

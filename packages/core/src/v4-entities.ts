@@ -188,7 +188,16 @@ export interface V4WorkerVersion {
 // ── HostWorkerInstallation ────────────────────────────────────────────────
 
 export type HostWorkerInstallationStatus =
-  "pending" | "installing" | "installed" | "failed" | "removing";
+  | "absent"
+  | "requested"
+  | "downloading"
+  | "verifying"
+  | "installing"
+  | "ready"
+  | "updating"
+  | "degraded"
+  | "failed"
+  | "removing";
 
 /**
  * One Worker version installed on one Host.
@@ -450,9 +459,14 @@ const VALID_WORKER_STATUSES: readonly string[] = [
 ];
 
 const VALID_INSTALLATION_STATUSES: readonly string[] = [
-  "pending",
+  "absent",
+  "requested",
+  "downloading",
+  "verifying",
   "installing",
-  "installed",
+  "ready",
+  "updating",
+  "degraded",
   "failed",
   "removing",
 ];

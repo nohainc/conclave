@@ -85,6 +85,10 @@ class InstalledWorker {
   final Map<String, Object?> manifest;
 }
 
+typedef WorkerInstallationStatusReporter = Future<void> Function(
+  Map<String, Object?> status,
+);
+
 class WorkerManager {
   WorkerManager(this.root,
       {this.trustPolicy,
@@ -121,6 +125,7 @@ class WorkerManager {
       String version,
       String packageR2Key,
     ) download,
+    WorkerInstallationStatusReporter? onStatus,
   }) async {
     final desiredWorkerIds = <String>{};
     final desiredWorkerVersions = <String, String>{};
@@ -149,55 +154,109 @@ class WorkerManager {
       _validatePathComponent(version, 'worker version');
       desiredWorkerIds.add(workerId);
       desiredWorkerVersions[workerId] = version;
-      if (await activeVersion(workerId) == version) {
-        // Do not trust the active pointer alone. Re-check the immutable
-        // payload, manifest, platform, permissions, and current trust policy
-        // on every desired-state sync.
-        await _verifiedManifest(workerId, version);
-        continue;
-      }
-      final bytes = await download(workerId, version, packageR2Key);
-      await install(WorkerPackage(
-        id: workerId,
-        version: version,
-        bytes: bytes,
-        digest: digest,
-        publisher: publisher,
-        signature: signature,
-        permissions:
-            permissions.whereType<String>().map(parseWorkerPermission).toList(),
-        manifest: WorkerManifest(
-          workerId: workerId,
+      final previousVersion = await activeVersion(workerId);
+      try {
+        if (previousVersion == version) {
+          await _reportStatus(onStatus, workerId, version, 'verifying');
+          // Do not trust the active pointer alone. Re-check the immutable
+          // payload, manifest, platform, permissions, and current trust policy
+          // on every desired-state sync.
+          await _verifiedManifest(workerId, version);
+          await _reportStatus(onStatus, workerId, version, 'ready');
+          continue;
+        }
+        await _reportStatus(
+          onStatus,
+          workerId,
+          version,
+          previousVersion == null ? 'requested' : 'updating',
+        );
+        await _reportStatus(onStatus, workerId, version, 'downloading');
+        final bytes = await download(workerId, version, packageR2Key);
+        await _reportStatus(onStatus, workerId, version, 'verifying');
+        await _reportStatus(onStatus, workerId, version, 'installing');
+        await install(WorkerPackage(
+          id: workerId,
           version: version,
-          protocolVersion: protocolVersion is String
-              ? protocolVersion
-              : this.protocolVersion,
-          engineVersion:
-              minHostVersion is String ? '>=$minHostVersion' : '>=0.1.0',
-          executable: 'package.bin',
+          bytes: bytes,
+          digest: digest,
           publisher: publisher,
+          signature: signature,
           permissions: permissions
               .whereType<String>()
               .map(parseWorkerPermission)
               .toList(),
-          secretEnvironmentVariables: secretEnvironmentVariables is List
-              ? secretEnvironmentVariables.whereType<String>().toList()
-              : const [],
-          supportedPlatforms: supportedPlatforms is List
-              ? supportedPlatforms.whereType<String>().toList()
-              : const [],
-        ),
-      ));
+          manifest: WorkerManifest(
+            workerId: workerId,
+            version: version,
+            protocolVersion: protocolVersion is String
+                ? protocolVersion
+                : this.protocolVersion,
+            engineVersion:
+                minHostVersion is String ? '>=$minHostVersion' : '>=0.1.0',
+            executable: 'package.bin',
+            publisher: publisher,
+            permissions: permissions
+                .whereType<String>()
+                .map(parseWorkerPermission)
+                .toList(),
+            secretEnvironmentVariables: secretEnvironmentVariables is List
+                ? secretEnvironmentVariables.whereType<String>().toList()
+                : const [],
+            supportedPlatforms: supportedPlatforms is List
+                ? supportedPlatforms.whereType<String>().toList()
+                : const [],
+          ),
+        ));
+        await _reportStatus(onStatus, workerId, version, 'ready');
+      } catch (error) {
+        await _reportStatus(
+          onStatus,
+          workerId,
+          version,
+          previousVersion == null ? 'failed' : 'degraded',
+          error: '$error',
+        );
+        rethrow;
+      }
     }
     // Desired state is authoritative. A worker no longer referenced by any
     // enabled Worker must stop being executable, including revoked versions.
     final installed = await inventory();
     for (final worker in installed) {
       if (worker.active && !desiredWorkerIds.contains(worker.workerId)) {
+        await _reportStatus(
+          onStatus,
+          worker.workerId,
+          worker.version,
+          'removing',
+        );
         await deactivate(worker.workerId);
+        await _reportStatus(
+          onStatus,
+          worker.workerId,
+          worker.version,
+          'absent',
+        );
       }
     }
     await garbageCollect(keepVersions: desiredWorkerVersions);
+  }
+
+  Future<void> _reportStatus(
+    WorkerInstallationStatusReporter? reporter,
+    String workerId,
+    String version,
+    String status, {
+    String? error,
+  }) async {
+    if (reporter == null) return;
+    await reporter({
+      'workerId': workerId,
+      'version': version,
+      'status': status,
+      if (error != null) 'error': error,
+    });
   }
 
   static String _currentPlatformKey() {

@@ -649,7 +649,20 @@
         "hostId": { "$ref": "#/$defs/nonEmpty" },
         "workerId": { "$ref": "#/$defs/nonEmpty" },
         "version": { "$ref": "#/$defs/nonEmpty" },
-        "status": { "enum": ["installed", "installing", "failed", "removed"] },
+        "status": {
+          "enum": [
+            "absent",
+            "requested",
+            "downloading",
+            "verifying",
+            "installing",
+            "ready",
+            "updating",
+            "degraded",
+            "failed",
+            "removing"
+          ]
+        },
         "error": { "type": "string" }
       }
     },

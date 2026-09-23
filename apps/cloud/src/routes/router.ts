@@ -391,9 +391,12 @@ export async function routeWorkerRequest(
       singleWorkerMatch?.[1] &&
       singleWorkerMatch?.[2]
     ) {
-      return deps.json(
-        { error: "Configured Worker instances were removed in v4" },
-        { status: 410 },
+      return await handlers.handleSetWorkspaceWorkerAvailability!(
+        request,
+        env,
+        singleWorkerMatch[1],
+        singleWorkerMatch[2],
+        ctx,
       );
     }
     if (
