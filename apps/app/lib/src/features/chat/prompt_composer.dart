@@ -59,8 +59,10 @@ class _PromptComposerState extends State<PromptComposer> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface;
-    final borderColor = isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine;
+    final bgColor =
+        isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface;
+    final borderColor =
+        isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine;
 
     return Container(
       decoration: BoxDecoration(
@@ -84,8 +86,10 @@ class _PromptComposerState extends State<PromptComposer> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: isDark ? ConclaveBrand.darkPaper : ConclaveBrand.lightPaper,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                color:
+                    isDark ? ConclaveBrand.darkPaper : ConclaveBrand.lightPaper,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(13)),
                 border: Border(bottom: BorderSide(color: borderColor)),
               ),
               child: Wrap(
@@ -96,31 +100,49 @@ class _PromptComposerState extends State<PromptComposer> {
                   _DropdownSelector(
                     label: 'Worker',
                     value: widget.selectedWorker,
-                    options: ['Auto', ...widget.snapshot.workers.map((w) => w.displayName)],
+                    options: [
+                      'Auto',
+                      ...widget.snapshot.workers.map((w) => w.displayName)
+                    ],
                     onChanged: (val) => widget.onWorkerChanged(val ?? 'Auto'),
                   ),
                   _DropdownSelector(
                     label: 'Model',
                     value: widget.selectedModel,
-                    options: const ['Auto', 'gpt-4o', 'claude-3-7-sonnet', 'claude-3-5-sonnet', 'gemini-2.0-flash'],
+                    options: const [
+                      'Auto',
+                      'gpt-4o',
+                      'claude-3-7-sonnet',
+                      'claude-3-5-sonnet',
+                      'gemini-2.0-flash'
+                    ],
                     onChanged: (val) => widget.onModelChanged(val ?? 'Auto'),
                   ),
                   _DropdownSelector(
                     label: 'Account',
                     value: widget.selectedAccount,
-                    options: ['Auto', ...widget.snapshot.accounts.map((a) => a.name)],
+                    options: [
+                      'Auto',
+                      ...widget.snapshot.accounts.map((a) => a.name)
+                    ],
                     onChanged: (val) => widget.onAccountChanged(val ?? 'Auto'),
                   ),
                   _DropdownSelector(
                     label: 'Host',
                     value: widget.selectedHost,
-                    options: ['Auto', ...widget.snapshot.hosts.map((h) => h.name)],
+                    options: [
+                      'Auto',
+                      ...widget.snapshot.hosts.map((h) => h.name)
+                    ],
                     onChanged: (val) => widget.onHostChanged(val ?? 'Auto'),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface,
+                      color: isDark
+                          ? ConclaveBrand.darkSurface
+                          : ConclaveBrand.lightSurface,
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(color: borderColor),
                     ),
@@ -129,27 +151,33 @@ class _PromptComposerState extends State<PromptComposer> {
                       children: [
                         const Text(
                           'Candidates',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                          style: TextStyle(
+                              fontSize: 11, fontWeight: FontWeight.w500),
                         ),
                         Text(
                           ': ${widget.snapshot.workers.length}',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
-                            color: isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted,
+                            color: isDark
+                                ? ConclaveBrand.darkInkMuted
+                                : ConclaveBrand.lightInkMuted,
                           ),
                         ),
                         const SizedBox(width: 8),
                         const Text(
                           'Cost',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                          style: TextStyle(
+                              fontSize: 11, fontWeight: FontWeight.w500),
                         ),
                         Text(
                           ': Auto',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
-                            color: isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted,
+                            color: isDark
+                                ? ConclaveBrand.darkInkMuted
+                                : ConclaveBrand.lightInkMuted,
                           ),
                         ),
                       ],
@@ -179,13 +207,17 @@ class _PromptComposerState extends State<PromptComposer> {
                 style: TextStyle(
                   fontSize: 14,
                   height: 1.4,
-                  color: isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk,
+                  color:
+                      isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk,
                 ),
                 decoration: InputDecoration(
-                  hintText: 'Ask Conclave AX to research, design, code, or verify...',
+                  hintText:
+                      'Ask Conclave AX to research, design, code, or verify...',
                   hintStyle: TextStyle(
                     fontSize: 14,
-                    color: isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted,
+                    color: isDark
+                        ? ConclaveBrand.darkInkMuted
+                        : ConclaveBrand.lightInkMuted,
                   ),
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
@@ -199,10 +231,12 @@ class _PromptComposerState extends State<PromptComposer> {
           // Bottom Controls: Preset + Advanced Toggle + Send
           Padding(
             padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              runSpacing: 8,
               children: [
-                Row(
+                Wrap(
+                  spacing: 8,
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -220,7 +254,6 @@ class _PromptComposerState extends State<PromptComposer> {
                             fontSize: 12, fontWeight: FontWeight.w600),
                       ),
                     ),
-                    const SizedBox(width: 8),
                     // Quality Preset Selector
                     PopupMenuButton<StudioQualityPreset>(
                       tooltip: 'Select quality preset',
@@ -241,41 +274,53 @@ class _PromptComposerState extends State<PromptComposer> {
                         ),
                       ],
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
-                          color: isDark ? ConclaveBrand.darkPaper : ConclaveBrand.lightPaper,
+                          color: isDark
+                              ? ConclaveBrand.darkPaper
+                              : ConclaveBrand.lightPaper,
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(color: borderColor),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.tune_rounded, size: 14, color: ConclaveBrand.accent),
+                            const Icon(Icons.tune_rounded,
+                                size: 14, color: ConclaveBrand.accent),
                             const SizedBox(width: 5),
                             Text(
                               widget.selectedQuality.label,
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk,
+                                color: isDark
+                                    ? ConclaveBrand.darkInk
+                                    : ConclaveBrand.lightInk,
                               ),
                             ),
                             const SizedBox(width: 4),
-                            Icon(Icons.arrow_drop_down_rounded, size: 16, color: isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted),
+                            Icon(Icons.arrow_drop_down_rounded,
+                                size: 16,
+                                color: isDark
+                                    ? ConclaveBrand.darkInkMuted
+                                    : ConclaveBrand.lightInkMuted),
                           ],
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
                     // Advanced Execution Toggle Button
                     InkWell(
                       onTap: widget.onToggleAdvanced,
                       borderRadius: BorderRadius.circular(6),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
                           color: widget.showAdvanced
-                              ? (isDark ? ConclaveBrand.accentWashDark : ConclaveBrand.accentWash)
+                              ? (isDark
+                                  ? ConclaveBrand.accentWashDark
+                                  : ConclaveBrand.accentWash)
                               : Colors.transparent,
                           borderRadius: BorderRadius.circular(6),
                         ),
@@ -283,9 +328,15 @@ class _PromptComposerState extends State<PromptComposer> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
-                              widget.showAdvanced ? Icons.tune_rounded : Icons.settings_outlined,
+                              widget.showAdvanced
+                                  ? Icons.tune_rounded
+                                  : Icons.settings_outlined,
                               size: 14,
-                              color: widget.showAdvanced ? ConclaveBrand.accent : (isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted),
+                              color: widget.showAdvanced
+                                  ? ConclaveBrand.accent
+                                  : (isDark
+                                      ? ConclaveBrand.darkInkMuted
+                                      : ConclaveBrand.lightInkMuted),
                             ),
                             const SizedBox(width: 5),
                             Text(
@@ -293,7 +344,11 @@ class _PromptComposerState extends State<PromptComposer> {
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
-                                color: widget.showAdvanced ? ConclaveBrand.accent : (isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted),
+                                color: widget.showAdvanced
+                                    ? ConclaveBrand.accent
+                                    : (isDark
+                                        ? ConclaveBrand.darkInkMuted
+                                        : ConclaveBrand.lightInkMuted),
                               ),
                             ),
                           ],
@@ -308,14 +363,16 @@ class _PromptComposerState extends State<PromptComposer> {
                       ? const SizedBox(
                           width: 16,
                           height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
                         )
                       : const Icon(Icons.arrow_upward_rounded, size: 18),
                   tooltip: 'Send prompt (Enter)',
                   style: IconButton.styleFrom(
                     backgroundColor: ConclaveBrand.accent,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
                   ),
                   onPressed: widget.isBusy ? null : _handleSubmit,
                 ),
@@ -353,7 +410,9 @@ class _DropdownSelector extends StatelessWidget {
           style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w600,
-            color: isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted,
+            color: isDark
+                ? ConclaveBrand.darkInkMuted
+                : ConclaveBrand.lightInkMuted,
           ),
         ),
         const Text(': '),

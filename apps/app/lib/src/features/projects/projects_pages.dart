@@ -43,10 +43,12 @@ class ProjectsPage extends StatelessWidget {
                   subtitle: project.repository.isEmpty
                       ? 'No repository connected'
                       : project.repository,
-                  child: Row(
+                  child: Wrap(
+                    spacing: 12,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Text('${project.chats.length} chats'),
-                      const Spacer(),
                       OutlinedButton(
                         onPressed: () => onOpenProject(project.id),
                         child: const Text('Open project'),

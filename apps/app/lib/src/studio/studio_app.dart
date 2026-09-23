@@ -2515,19 +2515,23 @@ class _StudioAppState extends State<ConclaveAppShell> {
               ),
           ],
         ),
-        const SizedBox(width: 5),
-        OutlinedButton.icon(
-          onPressed: () => setState(() => showWorkerDrawer = !showWorkerDrawer),
-          icon: const Icon(Icons.circle, size: 8, color: ConclaveBrand.success),
-          label: Text(
-            '${snapshot.agents.where((host) => host.status.toLowerCase() == 'online').length} hosts online',
+        if (!compact) ...[
+          const SizedBox(width: 5),
+          OutlinedButton.icon(
+            onPressed: () =>
+                setState(() => showWorkerDrawer = !showWorkerDrawer),
+            icon:
+                const Icon(Icons.circle, size: 8, color: ConclaveBrand.success),
+            label: Text(
+              '${snapshot.agents.where((host) => host.status.toLowerCase() == 'online').length} hosts online',
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: inkColor,
+              side: BorderSide(color: borderColor),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
           ),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: inkColor,
-            side: BorderSide(color: borderColor),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          ),
-        ),
+        ],
       ]),
     );
   }
@@ -2615,34 +2619,37 @@ class _StudioAppState extends State<ConclaveAppShell> {
         break;
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Expanded(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(selectedProject!.name,
-              style: const TextStyle(color: Color(0xff777683), fontSize: 12)),
-          const SizedBox(height: 7),
-          const Text('Run details',
-              style: TextStyle(
-                  fontSize: 25,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xff20202c),
-                  letterSpacing: -.5)),
-          const SizedBox(height: 5),
-          const Text(
-              'Follow execution, results, verification, and diagnostics.',
-              style: TextStyle(color: Color(0xff777683), fontSize: 13))
-        ])),
-        FilledButton.icon(
-            key: const Key('new-goal-button'),
-            onPressed: () => setState(() => showNewGoal = true),
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('New goal'),
-            style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xff6254d9),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 13))),
-      ]),
+      Wrap(
+          spacing: 16,
+          runSpacing: 10,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(selectedProject!.name,
+                  style:
+                      const TextStyle(color: Color(0xff777683), fontSize: 12)),
+              const SizedBox(height: 7),
+              const Text('Run details',
+                  style: TextStyle(
+                      fontSize: 25,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xff20202c),
+                      letterSpacing: -.5)),
+              const SizedBox(height: 5),
+              const Text(
+                  'Follow execution, results, verification, and diagnostics.',
+                  style: TextStyle(color: Color(0xff777683), fontSize: 13))
+            ]),
+            FilledButton.icon(
+                key: const Key('new-goal-button'),
+                onPressed: () => setState(() => showNewGoal = true),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('New goal'),
+                style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xff6254d9),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 13))),
+          ]),
       const SizedBox(height: 20),
       _runSection(
         title: 'Overview',
@@ -3752,6 +3759,22 @@ class _StudioAppState extends State<ConclaveAppShell> {
                 color: Theme.of(context).colorScheme.onSurface))
       ]));
 
+  Widget _usageMetric(String label, String value) => SizedBox(
+        width: 150,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label,
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 10)),
+          const SizedBox(height: 4),
+          Text(value,
+              style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: Theme.of(context).colorScheme.onSurface)),
+        ]),
+      );
+
   String _formatNumber(int value) => value == 0
       ? '0'
       : '${(value / 1000).toStringAsFixed(value >= 10000 ? 1 : 2)}k';
@@ -3997,19 +4020,20 @@ class _StudioAppState extends State<ConclaveAppShell> {
   Widget _hostsView() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            Expanded(
-              child: _fleetHeader(
-                  'Hosts',
-                  'Machines connected to this workspace.',
+          Wrap(
+            spacing: 16,
+            runSpacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _fleetHeader('Hosts', 'Machines connected to this workspace.',
                   Icons.computer_outlined),
-            ),
-            FilledButton.icon(
-              onPressed: snapshot.workspaceId == null ? null : _enrollAgent,
-              icon: const Icon(Icons.add_link),
-              label: const Text('Add Host'),
-            ),
-          ]),
+              FilledButton.icon(
+                onPressed: snapshot.workspaceId == null ? null : _enrollAgent,
+                icon: const Icon(Icons.add_link),
+                label: const Text('Add Host'),
+              ),
+            ],
+          ),
           if (enrollmentResult != null) ...[
             const SizedBox(height: 16),
             Card(
@@ -4063,56 +4087,64 @@ class _StudioAppState extends State<ConclaveAppShell> {
                     child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(children: [
-                            Expanded(
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              ConstrainedBox(
+                                constraints:
+                                    const BoxConstraints(maxWidth: 220),
                                 child: Text(agent.name,
                                     style: const TextStyle(
                                         fontWeight: FontWeight.w700,
-                                        fontSize: 16))),
-                            _statusChip(
-                                agent.status,
-                                agent.status.toLowerCase() == 'online'
-                                    ? const Color(0xff3ca879)
-                                    : const Color(0xff9a98a5)),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              tooltip: 'Rename Host',
-                              onPressed: () => _renameHost(agent),
-                              icon: const Icon(Icons.edit_outlined),
-                            ),
-                            PopupMenuButton<String>(
-                              tooltip: 'Host actions',
-                              onSelected: (action) {
-                                switch (action) {
-                                  case 'bind':
-                                    _bindHost(agent);
-                                  case 'diagnostics':
-                                    _copyHostDiagnostics(agent);
-                                }
-                              },
-                              itemBuilder: (context) => const [
-                                PopupMenuItem(
-                                    value: 'bind',
-                                    child: Text('Bind Workspace')),
-                                PopupMenuItem(
-                                    value: 'diagnostics',
-                                    child: Text('Copy diagnostics')),
-                              ],
-                              icon: const Icon(Icons.more_horiz),
-                            ),
-                            IconButton(
-                              tooltip: 'Announce update',
-                              onPressed: agent.status.toLowerCase() == 'revoked'
-                                  ? null
-                                  : () => _announceAgentUpdate(agent),
-                              icon: const Icon(Icons.system_update_outlined),
-                            ),
-                            IconButton(
-                              tooltip: 'Revoke Host',
-                              onPressed: () => _revokeAgent(agent.id),
-                              icon: const Icon(Icons.link_off_outlined),
-                            ),
-                          ]),
+                                        fontSize: 16)),
+                              ),
+                              _statusChip(
+                                  agent.status,
+                                  agent.status.toLowerCase() == 'online'
+                                      ? const Color(0xff3ca879)
+                                      : const Color(0xff9a98a5)),
+                              IconButton(
+                                tooltip: 'Rename Host',
+                                onPressed: () => _renameHost(agent),
+                                icon: const Icon(Icons.edit_outlined),
+                              ),
+                              PopupMenuButton<String>(
+                                tooltip: 'Host actions',
+                                onSelected: (action) {
+                                  switch (action) {
+                                    case 'bind':
+                                      _bindHost(agent);
+                                    case 'diagnostics':
+                                      _copyHostDiagnostics(agent);
+                                  }
+                                },
+                                itemBuilder: (context) => const [
+                                  PopupMenuItem(
+                                      value: 'bind',
+                                      child: Text('Bind Workspace')),
+                                  PopupMenuItem(
+                                      value: 'diagnostics',
+                                      child: Text('Copy diagnostics')),
+                                ],
+                                icon: const Icon(Icons.more_horiz),
+                              ),
+                              IconButton(
+                                tooltip: 'Announce update',
+                                onPressed:
+                                    agent.status.toLowerCase() == 'revoked'
+                                        ? null
+                                        : () => _announceAgentUpdate(agent),
+                                icon: const Icon(Icons.system_update_outlined),
+                              ),
+                              IconButton(
+                                tooltip: 'Revoke Host',
+                                onPressed: () => _revokeAgent(agent.id),
+                                icon: const Icon(Icons.link_off_outlined),
+                              ),
+                            ],
+                          ),
                           const SizedBox(height: 8),
                           Text('${agent.hostname} · Host ${agent.version}',
                               style: const TextStyle(color: Color(0xff777683))),
@@ -4158,7 +4190,10 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           const CircleAvatar(
                             backgroundColor: Color(0xffeeecff),
@@ -4166,7 +4201,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
                                 color: Color(0xff6254d9)),
                           ),
                           const SizedBox(width: 12),
-                          Expanded(
+                          SizedBox(
+                            width: 220,
                             child: Text(plugin.name,
                                 style: const TextStyle(
                                     fontWeight: FontWeight.w700, fontSize: 16)),
@@ -4614,11 +4650,11 @@ class _StudioAppState extends State<ConclaveAppShell> {
       ]),
       const SizedBox(height: 20),
       Wrap(spacing: 12, runSpacing: 12, children: [
-        _metric('Tokens', _formatNumber(tokens)),
-        _metric('Known API cost', _formatCost(apiCost)),
-        _metric('Subscription usage', '$subscriptionUses uses'),
-        _metric('Runs', '${runIds.length}'),
-        _metric('Duration', '${(duration / 1000).round()} s'),
+        _usageMetric('Tokens', _formatNumber(tokens)),
+        _usageMetric('Known API cost', _formatCost(apiCost)),
+        _usageMetric('Subscription usage', '$subscriptionUses uses'),
+        _usageMetric('Runs', '${runIds.length}'),
+        _usageMetric('Duration', '${(duration / 1000).round()} s'),
       ]),
       const SizedBox(height: 20),
       _panel(

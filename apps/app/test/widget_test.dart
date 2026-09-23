@@ -214,6 +214,20 @@ void main() {
     await tester.binding.setSurfaceSize(null);
   });
 
+  testWidgets('Workspace Home reflows for narrow phone browsers',
+      (WidgetTester tester) async {
+    await tester.binding.setSurfaceSize(const Size(375, 800));
+    await tester.pumpWidget(const ConclaveApp(
+      dataSource: StudioFixtureDataSource(),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Active Runs'), findsOneWidget);
+    expect(find.text('Attention required'), findsOneWidget);
+    await tester.binding.setSurfaceSize(null);
+  });
+
   testWidgets('opens Profile & Security with methods and sessions',
       (WidgetTester tester) async {
     await tester.pumpWidget(ConclaveApp(

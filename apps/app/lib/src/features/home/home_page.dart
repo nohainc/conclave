@@ -219,10 +219,10 @@ class _EstablishedHome extends StatelessWidget {
               color: Theme.of(context).colorScheme.onSurfaceVariant,
               fontSize: 14)),
       const SizedBox(height: 24),
-      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Expanded(
-          flex: 2,
-          child: _HomeCard(
+      LayoutBuilder(builder: (context, constraints) {
+        final narrow = constraints.maxWidth < 620;
+        final cards = [
+          _HomeCard(
             title: 'Active Runs',
             icon: Icons.play_circle_outline,
             child: run == null
@@ -238,33 +238,39 @@ class _EstablishedHome extends StatelessWidget {
                     ),
                   ),
           ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _HomeCard(
+          _HomeCard(
             title: 'Attention required',
             icon: Icons.flag_outlined,
             child: Text(openFindingCount == 0
                 ? 'Nothing needs your attention.'
                 : '$openFindingCount open finding${openFindingCount == 1 ? '' : 's'}'),
           ),
-        ),
-      ]),
+        ];
+        return narrow
+            ? Column(children: [cards[0], const SizedBox(height: 12), cards[1]])
+            : Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(flex: 2, child: cards[0]),
+                const SizedBox(width: 16),
+                Expanded(child: cards[1]),
+              ]);
+      }),
       const SizedBox(height: 16),
-      Row(children: [
-        Expanded(child: _MetricCard('Hosts', '${hosts.length}', onOpenHosts)),
-        const SizedBox(width: 12),
-        Expanded(
-            child: _MetricCard('Workers', '${workers.length}', onOpenWorkers)),
-        const SizedBox(width: 12),
-        Expanded(
-            child:
-                _MetricCard('Accounts', '${accounts.length}', onOpenAccounts)),
-        const SizedBox(width: 12),
-        Expanded(
-            child:
-                _MetricCard('Usage', _formatTokens(usageTokens), onOpenUsage)),
-      ]),
+      LayoutBuilder(builder: (context, constraints) {
+        final cards = [
+          _MetricCard('Hosts', '${hosts.length}', onOpenHosts),
+          _MetricCard('Workers', '${workers.length}', onOpenWorkers),
+          _MetricCard('Accounts', '${accounts.length}', onOpenAccounts),
+          _MetricCard('Usage', _formatTokens(usageTokens), onOpenUsage),
+        ];
+        return constraints.maxWidth < 620
+            ? Wrap(spacing: 12, runSpacing: 12, children: cards)
+            : Row(children: [
+                for (var index = 0; index < cards.length; index++) ...[
+                  Expanded(child: cards[index]),
+                  if (index < cards.length - 1) const SizedBox(width: 12),
+                ],
+              ]);
+      }),
       const SizedBox(height: 24),
       _HomeCard(
         title: 'Recent Projects',
