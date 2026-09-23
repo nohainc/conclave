@@ -9,7 +9,7 @@ import {
   type AssignmentResultPayload,
   type AssignmentFailurePayload,
   type AssignmentCancelledPayload,
-} from "@conclave/agent-protocol";
+} from "@conclave/host-protocol";
 
 type DesiredWorker = Record<string, unknown>;
 type DesiredPlugin = Record<string, unknown>;

@@ -1,4 +1,4 @@
-name: conclave_studio
+name: conclave_app
 description: Conclave AX web application.
 publish_to: none
 version: 0.1.0+1

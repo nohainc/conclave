@@ -26,21 +26,21 @@ jobs:
       - run: pnpm protocol:check
       - run: pnpm docs:check
       - run: pnpm cloud:execution-boundary-check
-      - run: pnpm agent:retirement-check
+      - run: pnpm host:architecture-check
       - run: pnpm production:preflight
       - run: pnpm auth:access-guard
       - run: pnpm v4:architecture-guard
       - run: pnpm check
       - run: ../../node_modules/.bin/wrangler check startup
-        working-directory: apps/worker
+        working-directory: apps/cloud
       - run: ../../node_modules/.bin/wrangler check startup --config forge-execution.wrangler.jsonc
-        working-directory: apps/worker
+        working-directory: apps/cloud
 
   studio-flutter:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: apps/studio
+        working-directory: apps/app
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2

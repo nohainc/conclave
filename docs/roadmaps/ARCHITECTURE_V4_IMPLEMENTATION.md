@@ -758,7 +758,7 @@ New user can pair Host, connect account, and execute without Agent/Plugin termin
 Make Studio explicitly web-first.
 
 ### Scope
-- use `apps/studio` as the web-only Studio package;
+- use `apps/app` as the web-only Conclave AX package;
 - remove desktop Studio targets/assumptions;
 - deep-link Projects/Chats/Runs;
 - browser refresh/back/forward;

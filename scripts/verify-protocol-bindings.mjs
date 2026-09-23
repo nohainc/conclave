@@ -69,7 +69,7 @@ const [
   read("packages/dart/protocol/lib/conclave_protocol.dart"),
   read("packages/dart/protocol/lib/generated_protocol.dart"),
   read("packages/protocol/src/generated.ts"),
-  read("packages/agent-protocol/src/generated.ts"),
+  read("packages/host-protocol/src/generated.ts"),
   read("packages/protocol/src/generated-local-protocols.ts"),
   read("packages/dart/protocol/lib/generated_local_protocols.dart"),
   read("packages/protocol/src/index.ts"),

@@ -1,5 +1,5 @@
-import 'package:conclave_studio/src/studio/studio_data.dart';
-import 'package:conclave_studio/src/studio/studio_models.dart';
+import 'package:conclave_app/src/studio/studio_data.dart';
+import 'package:conclave_app/src/studio/studio_models.dart';
 
 import 'studio_fixture_snapshot.dart';
 

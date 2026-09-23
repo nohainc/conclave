@@ -3,7 +3,7 @@ import {
   type AssignmentResultPayload,
   type AssignmentFailurePayload,
   type AssignmentCancelPayload,
-} from "@conclave/agent-protocol";
+} from "@conclave/host-protocol";
 import type { GatewayEnv } from "./host-gateway.js";
 
 export interface TaskToDispatch {

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 
-import 'package:conclave_studio/main.dart';
+import 'package:conclave_app/main.dart';
 import 'studio_fixture_data.dart';
 
 void main() {

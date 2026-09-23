@@ -6,7 +6,7 @@ Conclave AX has three primary applications and one extension type.
 
 ## 1. Conclave AX
 
-**Current path:** `apps/studio`  
+**Current path:** `apps/app`
 **Target path:** `apps/app`
 
 **Technology**
@@ -31,7 +31,7 @@ Conclave AX communicates only with Conclave Cloud.
 
 ## 2. Conclave Cloud
 
-**Current path:** `apps/worker`  
+**Current path:** `apps/cloud`
 **Target path:** `apps/cloud`
 
 **Technology**

@@ -1,4 +1,4 @@
-import 'package:conclave_studio/src/studio/studio_models.dart';
+import 'package:conclave_app/src/studio/studio_models.dart';
 
 StudioSnapshot studioFixtureSnapshot() => const StudioSnapshot(
       activeRunId: 'run-fixture',

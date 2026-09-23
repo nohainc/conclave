@@ -319,7 +319,7 @@ ${dartPluginNotifications}
 `;
 
 await writeFile("packages/protocol/src/generated.ts", ts);
-await writeFile("packages/agent-protocol/src/generated.ts", hostTs);
+await writeFile("packages/host-protocol/src/generated.ts", hostTs);
 await writeFile("packages/protocol/src/generated-local-protocols.ts", localTs);
 await writeFile(
   "packages/dart/protocol/lib/generated_local_protocols.dart",

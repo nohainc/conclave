@@ -1,6 +1,6 @@
 # Persistence Contracts
 
-Architecture v4 uses D1 as the structured system of record and R2 for large artifact payloads. Development databases are initialized from the single [0001_conclave_v4.sql](../../apps/worker/migrations-v4/0001_conclave_v4.sql) baseline. Core accesses storage only through the interfaces in `@conclave/persistence`; it does not issue D1 queries directly.
+Architecture v4 uses D1 as the structured system of record and R2 for large artifact payloads. Development databases are initialized from the single [0001_conclave_v4.sql](../../apps/cloud/migrations-v4/0001_conclave_v4.sql) baseline. Core accesses storage only through the interfaces in `@conclave/persistence`; it does not issue D1 queries directly.
 
 ## Row and payload split
 

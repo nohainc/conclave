@@ -3,7 +3,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 
-const root = "apps/worker/src";
+const root = "apps/cloud/src";
 const forbidden = [
   /@conclave\/providers/,
   /api\.openai\.com/i,

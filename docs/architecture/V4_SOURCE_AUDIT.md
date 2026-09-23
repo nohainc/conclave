@@ -45,12 +45,12 @@ Assignment
 
 | Current source/concept | v4 action |
 | --- | --- |
-| `apps/studio` | Web-only Studio application |
-| `apps/worker` | Keep; rename to `apps/cloud` |
+| `apps/app` | Web-only Conclave AX application |
+| `apps/cloud` | Conclave Cloud Worker |
 | `apps/agent_app` | Merged into `apps/host` |
 | `apps/agent_engine` | Merged into `apps/host`; IPC/process split removed |
 | `workers/*` | Keep Worker package implementations |
-| `packages/agent-protocol` | Replace/merge into Host protocol |
+| `packages/host-protocol` | Host protocol bindings |
 | `packages/plugin-manifest` | Rename to `packages/worker-manifest` |
 | `packages/dart/worker_protocol` | Canonical Worker JSON-RPC protocol |
 | Agent Gateway | Rename/refactor to Host Gateway |
@@ -139,7 +139,7 @@ Target:
 - `CredentialGrant`;
 - `WorkerAssignment` with Host + Worker + Credential Profile.
 
-### `apps/worker/src/assignment-dispatcher.ts`
+### `apps/cloud/src/assignment-dispatcher.ts`
 
 The v4 scheduler resolves a Worker dynamically from task requirements, catalog availability, project preferences, user billing preference, online Hosts, active installations, capacity, budget, independence, and authorized Credential Profiles. The result is frozen into one immutable ResolvedExecutionTarget assignment snapshot. Configured Worker rows are no longer an execution identity.
 
@@ -154,7 +154,7 @@ Target scheduler resolves an ephemeral Execution Target:
 
 The resulting snapshot is persisted in Attempt/Assignment.
 
-### `apps/worker/src/host-gateway.ts`
+### `apps/cloud/src/host-gateway.ts`
 
 Keep Durable Object/WebSocket behavior.
 
@@ -294,7 +294,7 @@ Balanced, with explicit advanced controls for Worker, model, Account, Host,
 candidate count, and cost. Navigation collapses into a drawer at medium and
 narrow widths without hover-only actions.
 
-V4-17 makes Studio explicitly web-only at `apps/studio`. Native Flutter
+V4-17 makes Conclave AX explicitly web-only at `apps/app`. Native Flutter
 targets and desktop project metadata are not part of the package. Projects,
 Chats, and Runs have browser URLs; push/replace state and pop-state keep
 refresh, back, and forward navigation inside the same Cloud-backed app.
@@ -337,7 +337,7 @@ Domain rules remain in packages/core where cross-feature.
 ### Studio
 
 ```text
-apps/studio/lib/
+apps/app/lib/
   app/
   design_system/
   features/

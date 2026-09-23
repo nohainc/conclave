@@ -1,7 +1,7 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "conclave-ax-app",
-  "main": "../../apps/worker/src/index.ts",
+  "main": "../../apps/cloud/src/index.ts",
   "compatibility_date": "2026-09-21",
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
@@ -9,7 +9,7 @@
     "head_sampling_rate": 1,
   },
   "assets": {
-    "directory": "../../apps/studio/build/web",
+    "directory": "../../apps/app/build/web",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*", "/health"],
@@ -23,7 +23,7 @@
       "binding": "CONCLAVE_DB",
       "database_name": "conclave-production",
       "database_id": "c10d0f8f-71a5-47e9-a60c-be84d6643ba7",
-      "migrations_dir": "../../apps/worker/migrations-v4",
+      "migrations_dir": "../../apps/cloud/migrations-v4",
     },
   ],
   "r2_buckets": [

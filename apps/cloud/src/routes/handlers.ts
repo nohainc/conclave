@@ -58,7 +58,7 @@ import {
   AGENT_PROTOCOL_VERSION,
   parseAgentMessage,
   type AgentProtocolMessage,
-} from "@conclave/agent-protocol";
+} from "@conclave/host-protocol";
 import {
   validateWorkspace,
   validateProject,

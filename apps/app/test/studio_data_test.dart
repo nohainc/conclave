@@ -1,12 +1,12 @@
 import 'dart:convert';
 
-import 'package:conclave_studio/src/studio/studio_data.dart';
-import 'package:conclave_studio/src/studio/studio_models.dart';
+import 'package:conclave_app/src/studio/studio_data.dart';
+import 'package:conclave_app/src/studio/studio_models.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'studio_fixture_data.dart';
-import 'package:conclave_studio/src/studio/studio_stores.dart';
+import 'package:conclave_app/src/studio/studio_stores.dart';
 
 class _JsonClient extends http.BaseClient {
   _JsonClient(this.body, {this.statusCode = 201});

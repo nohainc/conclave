@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:conclave_studio/src/navigation/studio_navigation.dart';
+import 'package:conclave_app/src/navigation/studio_navigation.dart';
 
 void main() {
   test('parses and serializes project, chat, and run deep links', () {

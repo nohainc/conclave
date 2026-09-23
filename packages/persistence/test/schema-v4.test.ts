@@ -7,11 +7,11 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const migrationPath = path.resolve(
   __dirname,
-  "../../../apps/worker/migrations-v4/0001_conclave_v4.sql",
+  "../../../apps/cloud/migrations-v4/0001_conclave_v4.sql",
 );
 const seedPath = path.resolve(
   __dirname,
-  "../../../apps/worker/seed/v4-development.sql",
+  "../../../apps/cloud/seed/v4-development.sql",
 );
 
 function createDb(): DatabaseSync {

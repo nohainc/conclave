@@ -219,9 +219,9 @@ workers/
 ```
 
 ## Migrations
-- `apps/studio` -> `apps/app`;
-- `apps/worker` -> `apps/cloud`;
-- `packages/agent-protocol` -> `packages/host-protocol`;
+- `apps/studio` -> `apps/app` (complete);
+- `apps/worker` -> `apps/cloud` (complete);
+- `packages/agent-protocol` -> `packages/host-protocol` (complete);
 - rename agent-named install/package scripts to Host equivalents;
 - rename architecture retirement checks from Agent terminology where they now guard Host architecture.
 
@@ -962,11 +962,11 @@ Finish the conceptual cleanup once new paths are proven.
 
 ## Remove/rename
 Examples currently still visible in repository layout:
-- `packages/agent-protocol`;
+- `packages/host-protocol`;
 - `scripts/install-agent-macos.sh`;
 - `scripts/package-agent-macos.sh`;
 - `scripts/uninstall-agent-macos.sh`;
-- `verify-agent-retirement.mjs`;
+- `verify-host-architecture.mjs`;
 - historical runtime identifiers such as `AGENT_PROTOCOL_VERSION`.
 
 Rename to Host equivalents or delete if obsolete.
@@ -975,7 +975,7 @@ Rename to Host equivalents or delete if obsolete.
 Remove unnecessary `studio_*` names after feature decomposition.
 
 ## Cloud
-Rename `apps/worker` to `apps/cloud` if not completed in PA-3.
+PA-3 completes the repository rename to `apps/cloud`.
 
 ## Guard
 Update architecture guard to reject new:

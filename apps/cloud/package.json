@@ -1,5 +1,5 @@
 {
-  "name": "@conclave/worker",
+  "name": "@conclave/cloud",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@better-auth/passkey": "^1.7.5",
-    "@conclave/agent-protocol": "workspace:*",
+    "@conclave/host-protocol": "workspace:*",
     "@conclave/core": "workspace:*",
     "@conclave/orchestration": "workspace:*",
     "@conclave/persistence": "workspace:*",

@@ -33,7 +33,7 @@ workflow.
    ```sh
    node scripts/verify-production-security.mjs
    node scripts/verify-production-security.mjs \
-     apps/worker/forge-execution.wrangler.jsonc
+     apps/cloud/forge-execution.wrangler.jsonc
    ```
 
 2. Apply D1 migrations remotely:
