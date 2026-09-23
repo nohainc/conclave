@@ -65,6 +65,7 @@ class WorkspaceStore {
 
   void replace(String? activeWorkspaceId) {
     this.activeWorkspaceId = activeWorkspaceId;
+    source.setActiveWorkspace(activeWorkspaceId);
   }
 }
 

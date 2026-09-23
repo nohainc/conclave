@@ -270,7 +270,15 @@ describe("Architecture v2 Security & Authentication Suite", () => {
   });
 
   describe("Database-Backed Security Context Resolution", () => {
-    function createIdentityDb(): DatabaseAdapter {
+    function createIdentityDb(
+      workspaceRows = [
+        {
+          workspace_id: "ws-team",
+          role: "member" as const,
+          workspace_status: "active",
+        },
+      ],
+    ): DatabaseAdapter {
       return {
         prepare(query: string) {
           let boundValues: unknown[] = [];
@@ -295,13 +303,7 @@ describe("Architecture v2 Security & Authentication Suite", () => {
             async all<T>() {
               if (query.includes("FROM workspace_memberships wm")) {
                 return {
-                  results: [
-                    {
-                      workspace_id: "ws-team",
-                      role: "member",
-                      workspace_status: "active",
-                    },
-                  ] as unknown as readonly T[],
+                  results: workspaceRows as unknown as readonly T[],
                 };
               }
               if (query.includes("FROM project_memberships pm")) {
@@ -370,6 +372,33 @@ describe("Architecture v2 Security & Authentication Suite", () => {
           sessionId: "better-auth-session",
         }),
       ).rejects.toThrow(AuthenticationError);
+    });
+
+    it("honors an explicitly selected Workspace for a multi-Workspace user", async () => {
+      const ctx = await resolveSecurityContextFromIdentity(
+        createIdentityDb([
+          {
+            workspace_id: "ws-personal",
+            role: "owner",
+            workspace_status: "active",
+          },
+          {
+            workspace_id: "ws-company",
+            role: "member",
+            workspace_status: "active",
+          },
+        ]),
+        {
+          userId: "user-1",
+          email: "alice@example.com",
+          name: "Alice",
+          sessionId: "better-auth-session",
+        },
+        { requestedWorkspaceId: "ws-company" },
+      );
+
+      expect(ctx.workspaceId).toBe("ws-company");
+      expect(ctx.workspaceRole).toBe("member");
     });
 
     function createMockDb(

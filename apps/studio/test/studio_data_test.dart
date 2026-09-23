@@ -328,4 +328,28 @@ void main() {
         '/api/workspaces/workspace-1/agents/agent-1/update');
     expect(jsonDecode(client.lastBody!)['channel'], 'stable');
   });
+
+  test('sends the explicitly selected Workspace on scoped requests', () async {
+    final client = _JsonClient({
+      'workspaceId': 'workspace-2',
+      'projects': [],
+      'workers': [],
+      'agents': [],
+      'plugins': [],
+      'tasks': [],
+      'findings': [],
+      'events': [],
+      'artifacts': [],
+      'modelCalls': [],
+    }, statusCode: 200);
+    final api = StudioApiClient(
+      baseUrl: 'https://conclave.test/api',
+      client: client,
+    )..setActiveWorkspace('workspace-2');
+
+    await api.loadSnapshot();
+
+    expect(
+        client.lastRequest?.headers['x-conclave-workspace-id'], 'workspace-2');
+  });
 }

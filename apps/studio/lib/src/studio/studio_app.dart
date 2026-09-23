@@ -152,6 +152,7 @@ class _StudioAppState extends State<StudioApp> {
       setState(() {
         selectedWorkspaceId ??= loaded.firstOrNull?.id;
       });
+      widget.dataSource.setActiveWorkspace(selectedWorkspaceId);
     } catch (_) {
       // Snapshot loading remains the primary path for anonymous development.
     }
@@ -1026,6 +1027,7 @@ class _StudioAppState extends State<StudioApp> {
               selectedProjectId = null;
               selectedChatId = null;
             });
+            widget.dataSource.setActiveWorkspace(workspaceId);
             _loadSnapshot(workspaceId: workspaceId);
           },
         ),

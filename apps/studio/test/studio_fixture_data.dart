@@ -10,6 +10,9 @@ class StudioFixtureDataSource implements StudioDataSource {
   final bool authenticated;
 
   @override
+  void setActiveWorkspace(String? workspaceId) {}
+
+  @override
   Future<StudioSession> loadSession() async =>
       StudioSession(authenticated: authenticated);
 

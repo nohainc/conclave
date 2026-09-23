@@ -7,6 +7,7 @@ import '../platform/http_client_stub.dart'
 import 'studio_models.dart';
 
 abstract interface class StudioDataSource {
+  void setActiveWorkspace(String? workspaceId);
   Future<StudioSession> loadSession();
   Future<void> logout();
   Future<List<StudioWorkspace>> loadWorkspaces();
@@ -111,11 +112,24 @@ class StudioApiClient implements StudioDataSource {
 
   final String baseUrl;
   final http.Client client;
+  String? activeWorkspaceId;
+
+  @override
+  void setActiveWorkspace(String? workspaceId) {
+    activeWorkspaceId = workspaceId;
+  }
+
+  Map<String, String> _headers({String? contentType}) => {
+        'accept': 'application/json',
+        if (contentType != null) 'content-type': contentType,
+        if (activeWorkspaceId != null)
+          'x-conclave-workspace-id': activeWorkspaceId!,
+      };
 
   @override
   Future<StudioSession> loadSession() async {
-    final response = await client.get(Uri.parse('$baseUrl/session'),
-        headers: {'accept': 'application/json'});
+    final response =
+        await client.get(Uri.parse('$baseUrl/session'), headers: _headers());
     if (response.statusCode == 401) {
       return const StudioSession(authenticated: false);
     }
@@ -130,7 +144,7 @@ class StudioApiClient implements StudioDataSource {
   @override
   Future<void> logout() async {
     final response = await client.post(Uri.parse('$baseUrl/auth/sign-out'),
-        headers: {'accept': 'application/json'});
+        headers: _headers());
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StudioApiException('Logout failed (${response.statusCode})',
           statusCode: response.statusCode);
@@ -139,8 +153,8 @@ class StudioApiClient implements StudioDataSource {
 
   @override
   Future<List<StudioWorkspace>> loadWorkspaces() async {
-    final response = await client.get(Uri.parse('$baseUrl/workspaces'),
-        headers: {'accept': 'application/json'});
+    final response =
+        await client.get(Uri.parse('$baseUrl/workspaces'), headers: _headers());
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StudioApiException(
           'Workspace list failed (${response.statusCode})');
@@ -166,8 +180,7 @@ class StudioApiClient implements StudioDataSource {
         if (workspaceId != null) 'workspaceId': workspaceId,
       },
     );
-    final response =
-        await client.get(uri, headers: {'accept': 'application/json'});
+    final response = await client.get(uri, headers: _headers());
     if (response.statusCode < 200 || response.statusCode >= 300) {
       var detail = '';
       try {
@@ -188,8 +201,8 @@ class StudioApiClient implements StudioDataSource {
 
   @override
   Future<void> controlRun(String runId, String command) async {
-    final response =
-        await client.post(Uri.parse('$baseUrl/runs/$runId/$command'));
+    final response = await client
+        .post(Uri.parse('$baseUrl/runs/$runId/$command'), headers: _headers());
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StudioApiException('Run control failed (${response.statusCode})');
     }
@@ -203,7 +216,7 @@ class StudioApiClient implements StudioDataSource {
   }) async {
     final response = await client.post(
       Uri.parse('$baseUrl/goals'),
-      headers: {'content-type': 'application/json'},
+      headers: _headers(contentType: 'application/json'),
       body: jsonEncode({
         'projectId': projectId,
         'objective': objective,
@@ -224,7 +237,7 @@ class StudioApiClient implements StudioDataSource {
   }) async {
     final response = await client.post(
       Uri.parse('$baseUrl/chats/$chatId/messages'),
-      headers: {'content-type': 'application/json'},
+      headers: _headers(contentType: 'application/json'),
       body: jsonEncode({'content': text}),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -246,7 +259,7 @@ class StudioApiClient implements StudioDataSource {
   }) async {
     final response = await client.post(
       Uri.parse('$baseUrl/projects/$projectId/chats'),
-      headers: {'content-type': 'application/json'},
+      headers: _headers(contentType: 'application/json'),
       body: jsonEncode({'title': title}),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -269,7 +282,7 @@ class StudioApiClient implements StudioDataSource {
   }) async {
     final response = await client.put(
       Uri.parse('$baseUrl/workspaces/$workspaceId/workers/$workerId'),
-      headers: {'content-type': 'application/json'},
+      headers: _headers(contentType: 'application/json'),
       body: jsonEncode({'enabled': enabled}),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -284,6 +297,7 @@ class StudioApiClient implements StudioDataSource {
   }) async {
     final response = await client.delete(
       Uri.parse('$baseUrl/workspaces/$workspaceId/agents/$agentId'),
+      headers: _headers(),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StudioApiException('Agent revoke failed (${response.statusCode})');
@@ -299,7 +313,7 @@ class StudioApiClient implements StudioDataSource {
   }) async {
     final response = await client.post(
       Uri.parse('$baseUrl/workspaces/$workspaceId/agents/$agentId/update'),
-      headers: {'content-type': 'application/json'},
+      headers: _headers(contentType: 'application/json'),
       body: jsonEncode({
         if (channel != null) 'channel': channel,
         if (version != null) 'version': version,
@@ -318,7 +332,7 @@ class StudioApiClient implements StudioDataSource {
   }) async {
     final response = await client.post(
       Uri.parse('$baseUrl/workspaces/$workspaceId/agent-enrollments'),
-      headers: {'content-type': 'application/json'},
+      headers: _headers(contentType: 'application/json'),
       body: jsonEncode({'expiresHours': expiresHours}),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -365,7 +379,7 @@ class StudioApiClient implements StudioDataSource {
     };
     final response = workerId == null
         ? await client.post(uri,
-            headers: {'content-type': 'application/json'},
+            headers: _headers(contentType: 'application/json'),
             body: jsonEncode({
               ...payload,
               'name': name,
@@ -373,7 +387,7 @@ class StudioApiClient implements StudioDataSource {
               'workerCatalogId': workerCatalogId,
             }))
         : await client.put(uri,
-            headers: {'content-type': 'application/json'},
+            headers: _headers(contentType: 'application/json'),
             body: jsonEncode({
               ...payload,
               'agentId': agentId,

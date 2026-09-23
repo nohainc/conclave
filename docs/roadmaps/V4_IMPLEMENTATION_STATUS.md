@@ -87,3 +87,10 @@ rechecks the shared browser session when a tab becomes visible again.
 canonical user, creates a deterministic personal Workspace and owner
 membership when needed, and exposes unexpired pending invitations without
 silently accepting privileged membership.
+
+## AUTH-8 — Make Workspace switching explicit
+
+✅ Studio maintains an explicit active Workspace and sends it as a scoped
+request header. Cloud resolves Better Auth’s User first, validates that the
+selected Workspace membership is active on every request, and never treats
+the browser selection as an authorization claim.
