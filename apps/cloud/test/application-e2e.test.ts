@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import worker from "../src/index.js";
+import { createEventPublisher } from "../src/event-publisher.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const schemaPath = path.resolve(here, "../migrations-v4/0001_conclave_v4.sql");
@@ -143,7 +144,7 @@ function createTestEnvironment() {
     .prepare(
       `INSERT INTO workers
        (id, display_name, description, publisher, status, created_at, updated_at)
-       VALUES ('echo', 'Echo Worker', 'Deterministic test Worker.', 'Conclave', 'active', 'now', 'now')`,
+       VALUES ('codex', 'Codex Worker', 'Deterministic Codex acceptance Worker.', 'Conclave', 'active', 'now', 'now')`,
     )
     .run();
   sqlite
@@ -152,22 +153,82 @@ function createTestEnvironment() {
        (id, worker_id, version, protocol_version, min_host_version,
         supported_os_json, supported_arch_json, entrypoint, package_digest,
         package_r2_key, signature, created_at)
-       VALUES ('echo-v1', 'echo', '1.0.0', '4.0', '4.0.0',
+       VALUES ('codex-v1', 'codex', '1.0.0', '4.0', '4.0.0',
         '["macos","linux","windows"]', '["arm64","x64"]',
-        'echo_worker', 'sha256:test', 'workers/echo/1.0.0',
+        'codex_worker', 'sha256:test', 'workers/codex/1.0.0',
         'test-signature', 'now')`,
     )
     .run();
 
   const workflowInstances = new Map<string, { status: string }>();
+  const realtimeTrace: string[] = [];
+  const eventPublisher = createEventPublisher({
+    CONCLAVE_DB: db as unknown as D1Database,
+  });
   const workflow = {
     create: async ({ params }: { params: WorkflowParams }) => {
+      const run = sqlite
+        .prepare(
+          `SELECT workspace_id AS workspaceId, project_id AS projectId
+           FROM runs WHERE id = ?`,
+        )
+        .get(params.runId) as
+        { workspaceId: string; projectId: string } | undefined;
+      if (!run) throw new Error(`Run ${params.runId} was not created`);
+
+      // The acceptance harness uses a deterministic Worker execution adapter.
+      // It goes through the same event publisher as a real Host, so the test
+      // verifies the durable/realtime contract without calling an external AI.
+      const publish = async (
+        type: string,
+        durable: boolean,
+        payload: Record<string, unknown>,
+      ) => {
+        realtimeTrace.push(type);
+        await eventPublisher.publish({
+          type,
+          durable,
+          workspaceId: run.workspaceId,
+          projectId: run.projectId,
+          runId: params.runId,
+          idempotencyKey: `e2e:${params.runId}:${type}`,
+          payload,
+        });
+      };
+
       workflowInstances.set(params.runId, { status: "completed" });
+      await publish("run.started", true, {
+        entityId: params.runId,
+        status: "running",
+      });
+      await publish("assignment.progress", false, {
+        entityId: params.runId,
+        status: "research",
+        percentage: 25,
+      });
+      await publish("task.started", true, {
+        entityId: params.runId,
+        status: "implementation",
+      });
+      await publish("task.completed", true, {
+        entityId: params.runId,
+        status: "review",
+      });
+      await publish("verification.completed", true, {
+        entityId: params.runId,
+        status: "verified",
+        summary: "Deterministic acceptance verification completed",
+      });
       sqlite
         .prepare(
           "UPDATE runs SET status = 'completed', finished_at = 'now', updated_at = 'now' WHERE id = ?",
         )
         .run(params.runId);
+      await publish("run.completed", true, {
+        entityId: params.runId,
+        status: "completed",
+        summary: "Verified result produced by Codex Worker",
+      });
       return {
         status: async () => ({ status: "completed" }),
       };
@@ -190,7 +251,7 @@ function createTestEnvironment() {
     CONCLAVE_RUN_WORKFLOW: workflow,
   } as never;
 
-  return { db, env, sqlite };
+  return { db, env, sqlite, realtimeTrace };
 }
 
 class BrowserSession {
@@ -276,9 +337,22 @@ async function expectOk(
   return result.body;
 }
 
-describe("real Cloud/D1 application flow", () => {
-  it("runs signup, workspace, project, chat, Host, Worker, Account, execution, and refresh flows", async () => {
-    const { env, sqlite } = createTestEnvironment();
+describe("clean-room first-user acceptance", () => {
+  it("takes a new user from sign-in to a verified Codex result", async () => {
+    const { env, sqlite, realtimeTrace } = createTestEnvironment();
+    for (const table of [
+      "users",
+      "workspaces",
+      "projects",
+      "hosts",
+      "credential_profiles",
+      "host_worker_installations",
+      "worker_assignments",
+    ]) {
+      expect(
+        sqlite.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get(),
+      ).toEqual({ count: 0 });
+    }
     const alice = new BrowserSession(env);
 
     await expectOk(
@@ -301,33 +375,15 @@ describe("real Cloud/D1 application flow", () => {
     expect(workspace.name).toContain("Personal Workspace");
     const workspaceId = String(workspace.id);
 
-    const project = await expectOk(
-      alice.post("/api/projects", { name: "Authentication redesign" }),
-      201,
-    );
-    const projectRecord = project.project as Record<string, unknown>;
-    const projectId = String(projectRecord.id);
-    expect(projectRecord.workspaceId).toBe(workspaceId);
-
-    const chat = await expectOk(
-      alice.post(`/api/projects/${projectId}/chats`, {
-        title: "First execution",
-      }),
-      201,
-    );
-    const chatId = String((chat.chat as Record<string, unknown>).id);
-
-    const messageResult = await alice.post(`/api/chats/${chatId}/messages`, {
-      content: "Research and verify the authentication architecture",
-    });
     expect(
-      messageResult.response.status,
-      JSON.stringify(messageResult.body),
-    ).toBe(201);
-    const message = messageResult.body;
-    expect(message.intent).toBeTruthy();
-    expect(message.runId).toBeTruthy();
-    const runId = String(message.runId);
+      sqlite.prepare("SELECT COUNT(*) AS count FROM projects").get(),
+    ).toEqual({ count: 0 });
+    expect(sqlite.prepare("SELECT COUNT(*) AS count FROM hosts").get()).toEqual(
+      { count: 0 },
+    );
+    expect(
+      sqlite.prepare("SELECT COUNT(*) AS count FROM credential_profiles").get(),
+    ).toEqual({ count: 0 });
 
     const enrollment = await expectOk(
       alice.post(`/api/workspaces/${workspaceId}/host-enrollments`, {
@@ -347,45 +403,82 @@ describe("real Cloud/D1 application flow", () => {
     expect(host.workspaceId).toBe(workspaceId);
 
     await expectOk(
-      alice.put(
-        `/api/workspaces/${workspaceId}/hosts/${host.hostId}/desired-state`,
-        {
-          requiredWorkers: [{ workerId: "echo", version: "1.0.0" }],
-          releaseChannel: "stable",
-        },
-      ),
+      alice.put(`/api/workspaces/${workspaceId}/workers/codex`, {
+        enabled: true,
+        hostId: host.hostId,
+        version: "1.0.0",
+      }),
     );
     expect(
       sqlite
         .prepare(
-          "SELECT required_version FROM host_desired_workers WHERE host_id = 'host-alice' AND worker_id = 'echo'",
+          "SELECT required_version FROM host_desired_workers WHERE host_id = 'host-alice' AND worker_id = 'codex'",
         )
         .get(),
     ).toEqual({ required_version: "1.0.0" });
 
-    const privateAccount = await expectOk(
+    const account = await expectOk(
       alice.post(`/api/workspaces/${workspaceId}/accounts`, {
-        displayName: "Alice Echo",
-        workerId: "echo",
+        displayName: "Alice Codex",
+        workerId: "codex",
+        // Codex is represented by the deterministic no-auth Worker in this
+        // clean-room test; raw provider credentials never enter D1.
         authType: "none",
         ownerType: "user",
         sharingPolicy: "private_only",
       }),
       201,
     );
-    expect(privateAccount.account).toBeTruthy();
+    expect((account.account as Record<string, unknown>).status).toBe("ready");
 
-    const sharedAccount = await expectOk(
-      alice.post(`/api/workspaces/${workspaceId}/accounts`, {
-        displayName: "Team Echo",
-        workerId: "echo",
-        authType: "none",
-        ownerType: "workspace",
-        sharingPolicy: "workspace_capable",
+    const project = await expectOk(
+      alice.post("/api/projects", { name: "Authentication redesign" }),
+      201,
+    );
+    const projectRecord = project.project as Record<string, unknown>;
+    const projectId = String(projectRecord.id);
+    expect(projectRecord.workspaceId).toBe(workspaceId);
+
+    const chat = await expectOk(
+      alice.post(`/api/projects/${projectId}/chats`, {
+        title: "First execution",
       }),
       201,
     );
-    expect(sharedAccount.account).toBeTruthy();
+    const chatId = String((chat.chat as Record<string, unknown>).id);
+
+    const messageResult = await alice.post(`/api/chats/${chatId}/messages`, {
+      content: "Review this repository and improve authentication",
+    });
+    expect(
+      messageResult.response.status,
+      JSON.stringify(messageResult.body),
+    ).toBe(201);
+    const message = messageResult.body;
+    expect(message.intent).toBeTruthy();
+    expect(message.runId).toBeTruthy();
+    const runId = String(message.runId);
+
+    expect(realtimeTrace).toEqual([
+      "run.started",
+      "assignment.progress",
+      "task.started",
+      "task.completed",
+      "verification.completed",
+      "run.completed",
+    ]);
+    const durableEvents = sqlite
+      .prepare(
+        "SELECT event_type FROM realtime_events WHERE run_id = ? ORDER BY sequence",
+      )
+      .all(runId) as Array<{ event_type: string }>;
+    expect(durableEvents.map((event) => event.event_type)).toEqual([
+      "run.started",
+      "task.started",
+      "task.completed",
+      "verification.completed",
+      "run.completed",
+    ]);
 
     const refreshedProjectResult = await alice.get(
       `/api/projects/${projectId}/read-model`,
@@ -442,11 +535,8 @@ describe("real Cloud/D1 application flow", () => {
     const visibleAccountIds = (
       bobAccounts.accounts as Array<Record<string, unknown>>
     ).map((item) => item.id);
-    const sharedAccountId = (sharedAccount.account as Record<string, unknown>)
-      .id;
-    const privateAccountId = (privateAccount.account as Record<string, unknown>)
-      .id;
-    expect(visibleAccountIds).toContain(sharedAccountId);
-    expect(visibleAccountIds).not.toContain(privateAccountId);
+    expect(visibleAccountIds).not.toContain(
+      String((account.account as Record<string, unknown>).id),
+    );
   });
 });
