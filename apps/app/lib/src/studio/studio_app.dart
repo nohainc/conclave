@@ -1484,10 +1484,12 @@ class _StudioAppState extends State<StudioApp> {
           FilledButton(
             onPressed: () {
               final name = nameController.text.trim();
-              if (name.isEmpty) return;
               Navigator.pop(
                 dialogContext,
-                (name, descriptionController.text.trim()),
+                (
+                  name.isEmpty ? 'My first project' : name,
+                  descriptionController.text.trim(),
+                ),
               );
             },
             child: const Text('Create'),
