@@ -3784,12 +3784,25 @@ async function handleHostProtocolMessage(
   let authenticatedHost: { id: string; workspace_id: string } | null = null;
   if (token) {
     const tokenHash = await hashToken(token);
+    const messageWorkspaceId =
+      typeof message.workspaceId === "string"
+        ? message.workspaceId
+        : typeof message.payload?.workspaceId === "string"
+          ? message.payload.workspaceId
+          : null;
+    if (!messageWorkspaceId) {
+      return json(
+        { error: "Host workspace context is required" },
+        { status: 400 },
+      );
+    }
     authenticatedHost = await env.CONCLAVE_DB.prepare(
       `SELECT h.id, b.workspace_id FROM hosts h
        JOIN host_workspace_bindings b ON b.host_id = h.id
-       WHERE h.auth_token_hash = ?1 AND b.status = 'active' AND h.revoked_at IS NULL`,
+       WHERE h.auth_token_hash = ?1 AND b.workspace_id = ?2
+         AND b.status = 'active' AND h.revoked_at IS NULL`,
     )
-      .bind(tokenHash)
+      .bind(tokenHash, messageWorkspaceId)
       .first<{ id: string; workspace_id: string }>();
     if (!authenticatedHost) {
       return json({ error: "Unauthorized host token" }, { status: 401 });

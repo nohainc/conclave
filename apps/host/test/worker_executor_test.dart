@@ -97,6 +97,36 @@ void main() {
         'assignment-1');
   });
 
+  test('rejects assignment permissions not declared by the installed Worker',
+      () async {
+    final handler = WorkerAssignmentHandler(
+      executor: WorkerProcessExecutor(),
+      resolve: (_) => const WorkerProcessSpec(
+        workerId: 'conclave.echo',
+        executable: 'missing-worker',
+      ),
+      resolvePermissions: (_) async => {'workspace:read'},
+    );
+    await expectLater(
+      handler.call(const HostAssignmentContext(
+        workspaceId: 'workspace-1',
+        hostId: 'host-1',
+        workerId: 'worker-1',
+        runId: 'run-1',
+        taskId: 'task-1',
+        attemptId: 'attempt-1',
+        assignmentId: 'assignment-permission-denied',
+        idempotencyKey: 'idem-permission-denied',
+        payload: {
+          'workerId': 'conclave.echo',
+          'permissions': ['shell:execute'],
+        },
+      )),
+      throwsA(predicate((error) =>
+          error.toString().contains('assignment permission is not allowed'))),
+    );
+  });
+
   test('resolves repository IDs through the local registry', () async {
     final repository = await Directory.systemTemp.createTemp('repo-registry-');
     final registryFile = File('${repository.path}/repositories.json')

@@ -587,7 +587,18 @@ class WorkerManager {
         executor: executor,
         resolve: activeProcessSpec,
         resolveRepositoryPath: resolveRepositoryPath,
+        resolvePermissions: activePermissions,
       );
+
+  Future<Set<String>> activePermissions(String workerId) async {
+    final version = await activeVersion(workerId);
+    if (version == null) return const {};
+    final manifest = await _verifiedManifest(workerId, version);
+    final permissions = manifest['permissions'];
+    return permissions is List
+        ? permissions.whereType<String>().toSet()
+        : const {};
+  }
 
   Future<void> _activate(
       String workerId, String version, String? digest) async {

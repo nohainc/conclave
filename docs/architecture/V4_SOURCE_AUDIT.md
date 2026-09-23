@@ -422,6 +422,14 @@ is recorded as unknown rather than assigned a fabricated cost. Workspace,
 Project, Run, and Credential Profile budgets are checked before v4 Forge
 assignments are created, and Studio usage rows expose the accounting dimensions.
 
+V4-23 revalidates Worker package digest/signature/publisher trust, revocation,
+rollback, immutable installation paths, secret redaction, process-scoped secret
+injection, and command/path containment. Host assignment handling now checks
+requested permissions against the verified installed Worker manifest before
+execution. Cloud Host authentication is bound to the message Workspace, so a
+multi-Workspace Host credential cannot authenticate a message through an
+unrelated binding.
+
 ## 9. Architectural deletion gate
 
 Architecture v4 cleanup is complete when active source search returns no product/domain usage of:

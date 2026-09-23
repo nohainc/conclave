@@ -290,11 +290,13 @@ class WorkerAssignmentHandler {
     required this.executor,
     required this.resolve,
     this.resolveRepositoryPath,
+    this.resolvePermissions,
   });
 
   final WorkerProcessExecutor executor;
   final WorkerProcessResolver resolve;
   final Future<String?> Function(String repositoryId)? resolveRepositoryPath;
+  final Future<Set<String>> Function(String workerId)? resolvePermissions;
 
   Future<HostAssignmentResult> call(HostAssignmentContext context) async {
     final workerId = context.payload['workerId'];
@@ -303,6 +305,21 @@ class WorkerAssignmentHandler {
     }
     final spec = await resolve(workerId);
     if (spec == null) throw StateError('worker is not installed: $workerId');
+    final requestedPermissions = context.payload['permissions'];
+    if (requestedPermissions != null) {
+      if (requestedPermissions is! List ||
+          requestedPermissions.any((item) => item is! String)) {
+        throw StateError('assignment permissions must be a list of strings');
+      }
+      final allowed =
+          await resolvePermissions?.call(workerId) ?? const <String>{};
+      final denied = requestedPermissions.whereType<String>().firstWhere(
+          (permission) => !allowed.contains(permission),
+          orElse: () => '');
+      if (denied.isNotEmpty) {
+        throw StateError('assignment permission is not allowed: $denied');
+      }
+    }
     final workerPayload =
         await _repositoryScopedPayload(context.payload, context);
     final output = await executor.execute(
