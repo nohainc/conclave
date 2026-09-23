@@ -132,6 +132,76 @@ describe("IdentityService", () => {
     ).resolves.toBeNull();
   });
 
+  it("does not accept a revoked or expired Better Auth session", async () => {
+    const revoked = new IdentityService(() => ({
+      api: { getSession: async () => null },
+    }));
+    await expect(
+      revoked.resolve(new Request("https://conclave.test/api/session"), {
+        CONCLAVE_DB: {} as D1Database,
+        CONCLAVE_ENVIRONMENT: "production",
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it("keeps concurrent Better Auth sessions distinct and prevents fixation", async () => {
+    const sessions = new Map([
+      ["new-cookie", "session-new"],
+      ["second-cookie", "session-second"],
+    ]);
+    const service = new IdentityService(() => ({
+      api: {
+        getSession: async ({ headers }) => {
+          const sessionId = sessions.get(headers.get("cookie") ?? "");
+          return sessionId
+            ? {
+                user: {
+                  id: "user-1",
+                  email: "person@example.test",
+                  name: "Person",
+                },
+                session: { id: sessionId },
+              }
+            : null;
+        },
+      },
+    }));
+
+    await expect(
+      service.resolve(
+        new Request("https://conclave.test/api/session", {
+          headers: { cookie: "old-cookie" },
+        }),
+        {
+          CONCLAVE_DB: {} as D1Database,
+          CONCLAVE_ENVIRONMENT: "production",
+        },
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      service.resolve(
+        new Request("https://conclave.test/api/session", {
+          headers: { cookie: "new-cookie" },
+        }),
+        {
+          CONCLAVE_DB: {} as D1Database,
+          CONCLAVE_ENVIRONMENT: "production",
+        },
+      ),
+    ).resolves.toMatchObject({ sessionId: "session-new" });
+    await expect(
+      service.resolve(
+        new Request("https://conclave.test/api/session", {
+          headers: { cookie: "second-cookie" },
+        }),
+        {
+          CONCLAVE_DB: {} as D1Database,
+          CONCLAVE_ENVIRONMENT: "production",
+        },
+      ),
+    ).resolves.toMatchObject({ sessionId: "session-second" });
+  });
+
   it("enforces same-origin mutations for cookie sessions", () => {
     expect(() =>
       requireSameOriginForCookieMutation(
@@ -156,6 +226,15 @@ describe("IdentityService", () => {
         }),
       ),
     ).not.toThrow();
+
+    expect(() =>
+      requireSameOriginForCookieMutation(
+        new Request("https://app.conclave.test/api/projects", {
+          method: "POST",
+          headers: { cookie: "better-auth.session_token=opaque" },
+        }),
+      ),
+    ).toThrow("Same-origin request required");
   });
 
   it("provisions a deterministic personal workspace idempotently", async () => {
@@ -252,5 +331,43 @@ describe("IdentityService", () => {
     ).resolves.toEqual([
       expect.objectContaining({ id: "inv-1", status: "pending" }),
     ]);
+  });
+
+  it("does not expose a pending invitation to a different email", async () => {
+    let boundEmail: unknown;
+    const db = {
+      prepare(query: string) {
+        return {
+          bind(...values: unknown[]) {
+            boundEmail = values[0];
+            expect(query).toContain("lower(email) = lower(?1)");
+            return this;
+          },
+          async first() {
+            return null;
+          },
+          async all<T>() {
+            return {
+              results:
+                boundEmail === "attacker@example.test"
+                  ? []
+                  : ([{ id: "inv-1" }] as T[]),
+            } as { results: T[] };
+          },
+          async run() {
+            return {};
+          },
+        };
+      },
+      async batch() {},
+    };
+
+    await expect(
+      listPendingInvitations(
+        db,
+        "attacker@example.test",
+        "2026-09-23T00:00:00.000Z",
+      ),
+    ).resolves.toEqual([]);
   });
 });

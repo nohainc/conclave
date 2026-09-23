@@ -210,6 +210,136 @@ describe("Architecture v2 Security & Authentication Suite", () => {
         authorizeCredentialProfileUse(db, sampleContext, "profile-a"),
       ).resolves.toBeUndefined();
     });
+
+    it("denies suspended users and removed Workspace members", async () => {
+      expect(() =>
+        authorize(
+          { ...sampleContext, user: { ...sampleUser, status: "suspended" } },
+          "projects:read",
+          "proj-conclave",
+        ),
+      ).toThrow(AuthorizationError);
+
+      const removedMemberDb: DatabaseAdapter = {
+        prepare(query: string) {
+          return {
+            bind() {
+              return this;
+            },
+            async first<T>() {
+              if (query.includes("FROM users WHERE id")) {
+                return {
+                  id: "user-1",
+                  email: "alice@example.com",
+                  display_name: "Alice",
+                  avatar_url: null,
+                  status: "active",
+                } as T;
+              }
+              return null;
+            },
+            async all<T>() {
+              return { results: [] as T[] };
+            },
+            async run() {
+              return { success: true };
+            },
+          };
+        },
+      };
+      await expect(
+        resolveSecurityContextFromIdentity(
+          removedMemberDb,
+          {
+            userId: "user-1",
+            email: "alice@example.com",
+            name: "Alice",
+            sessionId: "session-1",
+          },
+          { requestedWorkspaceId: "ws-removed" },
+        ),
+      ).rejects.toThrow(AuthorizationError);
+    });
+
+    it("rejects Workspace and Project ID substitution", async () => {
+      await expect(
+        resolveSecurityContextFromIdentity(
+          {
+            prepare(query: string) {
+              return {
+                bind() {
+                  return this;
+                },
+                async first<T>() {
+                  return query.includes("FROM users WHERE id")
+                    ? ({
+                        id: "user-1",
+                        email: "alice@example.com",
+                        display_name: "Alice",
+                        avatar_url: null,
+                        status: "active",
+                      } as T)
+                    : null;
+                },
+                async all<T>() {
+                  return {
+                    results: [
+                      {
+                        workspace_id: "ws-owned",
+                        role: "member",
+                        workspace_status: "active",
+                      },
+                    ] as T[],
+                  };
+                },
+                async run() {
+                  return { success: true };
+                },
+              };
+            },
+          },
+          {
+            userId: "user-1",
+            email: "alice@example.com",
+            name: "Alice",
+            sessionId: "session-1",
+          },
+          { requestedWorkspaceId: "ws-other" },
+        ),
+      ).rejects.toThrow(AuthorizationError);
+
+      expect(canAccessProject(sampleContext, "proj-other")).toBe(false);
+    });
+
+    it("requires an owner or valid grant for Credential Profile access", () => {
+      const privateProfile = {
+        id: "profile-private",
+        workspace_id: "ws-primary",
+        owner_type: "user" as const,
+        owner_id: "another-user",
+        sharing_policy: "private_only" as const,
+      };
+      expect(canUseCredentialProfile(sampleContext, privateProfile, [])).toBe(
+        false,
+      );
+      expect(
+        canUseCredentialProfile(sampleContext, privateProfile, [
+          {
+            grantee_type: "user",
+            grantee_id: "user-123",
+            use_permission: 1,
+            expires_at: "2020-01-01T00:00:00.000Z",
+          },
+        ]),
+      ).toBe(false);
+      expect(
+        canUseCredentialProfile(
+          { ...sampleContext, workspaceId: "ws-other" },
+          privateProfile,
+          [{ grantee_type: "user", grantee_id: "user-123", use_permission: 1 }],
+        ),
+      ).toBe(false);
+    });
   });
 
   describe("Cryptographic Token & PKCE Utilities", () => {

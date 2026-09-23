@@ -165,3 +165,13 @@ machine credential. Enrollment expiry, one-time use, revocation, credential
 rotation, Workspace binding, and human-session independence are covered by
 Host tests. Logging out or revoking human sessions does not remove enrolled
 Hosts; Host revocation independently blocks machine access.
+
+## AUTH-18 — Authentication security test suite
+
+✅ Added explicit security coverage across the Better Auth identity boundary,
+Host enrollment, and the shared Conclave authorization package. The suite
+covers GitHub and Google entry fixtures, session fixation, expired/revoked and
+concurrent sessions, CSRF, OAuth return/state attacks, conservative account
+linking, suspended users, removed members, invitation-email mismatch, Workspace
+and Project ID substitution, Credential Profile grants, Host authorization,
+session revocation, and tenant-scoped Host access.

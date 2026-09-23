@@ -181,6 +181,22 @@ describe("Worker smoke tests", () => {
     expect(productionResponse.status).toBe(404);
   });
 
+  it.each(["github", "google"])(
+    "keeps the %s OAuth entry point on the same-origin callback boundary",
+    async (provider) => {
+      const response = await worker.fetch(
+        new Request(
+          `https://conclave.test/api/dev/sign-in?provider=${provider}&returnTo=/account`,
+        ),
+        env,
+      );
+      expect(response.status).toBe(302);
+      expect(response.headers.get("location")).toBe(
+        `https://conclave.test/api/auth/sign-in/${provider}?returnTo=%2Faccount`,
+      );
+    },
+  );
+
   it("fails closed when step-up completion has no passkey ceremony", async () => {
     const response = await worker.fetch(
       new Request("https://conclave.test/api/auth/step-up/passkey/complete", {

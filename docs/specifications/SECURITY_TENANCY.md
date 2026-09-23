@@ -30,6 +30,17 @@ policies must be integrated deliberately before being listed as accepted
 factors. Better Auth's ordinary 2FA plugin does not automatically gate every
 social or passkey flow.
 
+### Authentication security coverage
+
+The security suite exercises both provider fixtures and the application
+authorization boundary. It must continue to cover session fixation and
+revocation, concurrent sessions, CSRF and OAuth callback/state attacks,
+account-linking policy, suspended users, removed Workspace members, invitation
+email mismatch, Workspace/Project identifier substitution, Credential Profile
+grants, Host enrollment authorization, and tenant-isolated Host access. A
+successful social-provider mock is not sufficient evidence without the
+corresponding Conclave Workspace and Project authorization checks.
+
 ## Credentials
 
 BYOK credentials are encrypted with AES-GCM before persistence. D1 stores only the envelope (key id, IV, ciphertext, timestamps, and provider). The key-encryption key is a Worker secret or external KMS-managed key and is never stored in D1, R2, logs, events, or model prompts. Decryption is allowed only for an authorized server-side provider call.
