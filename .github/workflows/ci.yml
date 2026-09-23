@@ -36,7 +36,7 @@ jobs:
       - run: ../../node_modules/.bin/wrangler check startup --config forge-execution.wrangler.jsonc
         working-directory: apps/cloud
 
-  studio-flutter:
+  app-flutter:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -81,7 +81,7 @@ jobs:
 
   publish-evidence:
     if: ${{ vars.CONCLAVE_CI_INGEST_URL != '' && vars.CONCLAVE_RUN_ID != '' }}
-    needs: [typescript, studio-flutter, host-flutter]
+    needs: [typescript, app-flutter, host-flutter]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -111,7 +111,7 @@ jobs:
               checks: [
                 {name: "TypeScript checks", status: "passed", command: "pnpm check", exitCode: 0, artifactIds: []},
                 {name: "Cloudflare startup", status: "passed", command: "wrangler check startup", exitCode: 0, artifactIds: []},
-                {name: "Studio Flutter", status: "passed", command: "flutter analyze && flutter test", exitCode: 0, artifactIds: []},
+                {name: "Conclave AX App Flutter", status: "passed", command: "flutter analyze && flutter test", exitCode: 0, artifactIds: []},
                 {name: "Host Dart", status: "passed", command: "dart analyze && dart test", exitCode: 0, artifactIds: []}
               ],
               smokeTests: ["Cloud startup analysis passed"],

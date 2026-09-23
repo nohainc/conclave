@@ -3,6 +3,10 @@ name: Deploy Conclave AX App
 on:
   workflow_dispatch:
 
+concurrency:
+  group: conclave-ax-production-deploy
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -14,6 +18,16 @@ jobs:
         working-directory: apps/app
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install repository toolchain
+        working-directory: .
+        run: pnpm install --frozen-lockfile
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -32,23 +46,21 @@ jobs:
       - name: Verify Forge production configuration
         working-directory: .
         run: node scripts/verify-production-security.mjs apps/cloud/forge-execution.wrangler.jsonc
-      - name: Install Wrangler
-        run: npm install --global wrangler@4.38.0
       - name: Apply production D1 migrations
-        working-directory: .
+        working-directory: apps/cloud
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: wrangler d1 migrations apply conclave-production --remote --config "$GITHUB_WORKSPACE/infra/cloudflare/app.wrangler.jsonc"
+        run: pnpm exec wrangler d1 migrations apply conclave-production --remote --config ../../infra/cloudflare/app.wrangler.jsonc
       - name: Deploy Forge execution service
-        working-directory: .
+        working-directory: apps/cloud
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: wrangler deploy --config "$GITHUB_WORKSPACE/apps/cloud/forge-execution.wrangler.jsonc"
+        run: pnpm exec wrangler deploy --config forge-execution.wrangler.jsonc
       - name: Deploy app.conclaveax.com
-        working-directory: .
+        working-directory: apps/cloud
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: wrangler deploy --config "$GITHUB_WORKSPACE/infra/cloudflare/app.wrangler.jsonc"
+        run: pnpm exec wrangler deploy --config ../../infra/cloudflare/app.wrangler.jsonc
