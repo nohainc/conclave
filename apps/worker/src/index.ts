@@ -100,7 +100,7 @@ const routeDependencies = {
   json: handlers.json,
   requireSameOriginForCookieMutation:
     handlers.requireSameOriginForCookieMutation,
-  anonymousDevelopment: handlers.anonymousDevelopment,
+  testAuthenticationEnabled: handlers.testAuthenticationEnabled,
   runProjectId: handlers.runProjectId,
   authorizeRequest: handlers.authorizeRequest,
   resolveWorkflowInstanceId: handlers.resolveWorkflowInstanceId,
@@ -120,6 +120,22 @@ export default {
         ok: true,
         environment: env.CONCLAVE_ENVIRONMENT,
       });
+    }
+    if (request.method === "GET" && url.pathname === "/api/dev/sign-in") {
+      if (env.CONCLAVE_ENVIRONMENT !== "development") {
+        return new Response("Not found", { status: 404 });
+      }
+      const provider = url.searchParams.get("provider") ?? "github";
+      if (provider !== "github" && provider !== "google") {
+        return handlers.json(
+          { error: "provider must be github or google" },
+          { status: 400 },
+        );
+      }
+      const returnTo = url.searchParams.get("returnTo") ?? "/";
+      const signInUrl = new URL(`/api/auth/sign-in/${provider}`, request.url);
+      signInUrl.searchParams.set("returnTo", returnTo);
+      return Response.redirect(signInUrl.toString(), 302);
     }
     if (url.pathname === "/api/auth" || url.pathname.startsWith("/api/auth/")) {
       return handleBetterAuthRequest(request, env);

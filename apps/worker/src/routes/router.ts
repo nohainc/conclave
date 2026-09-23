@@ -4,7 +4,7 @@ export type WorkerRouteHandlers = Record<string, RouteHandler>;
 export interface WorkerRouteDependencies {
   readonly json: (data: unknown, init?: ResponseInit) => Response;
   readonly requireSameOriginForCookieMutation: (request: Request) => void;
-  readonly anonymousDevelopment: (env: Env) => boolean;
+  readonly testAuthenticationEnabled: (env: Env) => boolean;
   readonly runProjectId: (
     env: Env,
     runId: string,
@@ -677,7 +677,7 @@ export async function routeWorkerRequest(
     );
     if (runMatch?.[1] && request.method === "GET" && !runMatch[2]) {
       const securityEnv = env;
-      const projectId = deps.anonymousDevelopment(securityEnv)
+      const projectId = deps.testAuthenticationEnabled(securityEnv)
         ? undefined
         : await deps.runProjectId(securityEnv, runMatch[1]);
       await deps.authorizeRequest(

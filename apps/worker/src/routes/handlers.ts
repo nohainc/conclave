@@ -43,7 +43,6 @@ import {
   resolveSecurityContextFromIdentity,
   authorizeCredentialProfileUse,
   type Permission,
-  type Role,
   type SecurityContext,
 } from "@conclave/security";
 import {
@@ -206,17 +205,20 @@ type SecurityEnv = Env & {
   readonly CONCLAVE_PLUGIN_SIGNING_KEY?: string;
   readonly CONCLAVE_HOST_SIGNING_KEY?: string;
   readonly CONCLAVE_SECURITY_KEY?: string;
-  readonly CONCLAVE_ALLOW_ANONYMOUS_DEV?: string;
+  readonly TEST_AUTHENTICATION?: (
+    request: Request,
+    env: Env,
+  ) => Promise<SecurityContext>;
   readonly CONCLAVE_CI_INGEST_TOKEN?: string;
   readonly CONCLAVE_FORGE_CALLBACK_TOKEN?: string;
   readonly CONCLAVE_HOST_GATEWAY: DurableObjectNamespace;
   readonly CONCLAVE_CONNECTOR_REGISTRATION_TOKEN?: string;
 };
 
-function anonymousDevelopment(env: SecurityEnv): boolean {
+function testAuthenticationEnabled(env: Env): boolean {
   return (
     env.CONCLAVE_ENVIRONMENT === "development" &&
-    env.CONCLAVE_ALLOW_ANONYMOUS_DEV === "true"
+    typeof (env as SecurityEnv).TEST_AUTHENTICATION === "function"
   );
 }
 
@@ -244,31 +246,6 @@ export function requireSameOriginForCookieMutation(request: Request): void {
   throw new HttpError(403, "Same-origin request required for cookie session");
 }
 
-function createDefaultSecurityContext(
-  userId = "local-development",
-  workspaceId = "local-development",
-  role: Role = "owner",
-): SecurityContext {
-  return {
-    userId,
-    user: {
-      id: userId,
-      email: `${userId}@local`,
-      displayName: "Developer",
-      status: "active",
-    },
-    workspaceId,
-    workspaceRole: role,
-    roles: [role],
-    authorizedProjectIds: [],
-    projectRoles: {},
-    sessionId: `session-${userId}`,
-    clientType: "desktop",
-    organizationId: workspaceId,
-    organizationRoles: [role],
-  };
-}
-
 async function securityContext(
   request: Request,
   env: SecurityEnv,
@@ -277,6 +254,13 @@ async function securityContext(
   // Preserve the route-handler context contract for callers that also use it
   // for non-authentication infrastructure; human identity never comes from it.
   void accessContext;
+  const testAuthentication = env.TEST_AUTHENTICATION;
+  if (
+    env.CONCLAVE_ENVIRONMENT === "development" &&
+    typeof testAuthentication === "function"
+  ) {
+    return testAuthentication(request, env);
+  }
   if (env.BETTER_AUTH_SECRET) {
     const identity = await identityService.resolve(request, env);
     if (!identity) throw new HttpError(401, "Authentication required");
@@ -312,13 +296,6 @@ async function securityContext(
     }
   }
 
-  if (anonymousDevelopment(env)) {
-    return createDefaultSecurityContext(
-      "local-development",
-      "local-development",
-      "owner",
-    );
-  }
   throw new HttpError(401, "Better Auth authentication required");
 }
 
@@ -330,7 +307,7 @@ async function authorizeRequest(
   accessContext?: ExecutionContext,
 ): Promise<SecurityContext> {
   const context = await securityContext(request, env, accessContext);
-  if (projectId && !anonymousDevelopment(env)) {
+  if (projectId && !testAuthenticationEnabled(env)) {
     const project = await env.CONCLAVE_DB.prepare(
       "SELECT workspace_id FROM projects WHERE id = ?1",
     )
@@ -358,14 +335,14 @@ function requireWorkspaceContext(
   env: SecurityEnv,
   workspaceId: string,
 ): void {
-  if (!anonymousDevelopment(env) && context.workspaceId !== workspaceId) {
+  if (!testAuthenticationEnabled(env) && context.workspaceId !== workspaceId) {
     throw new HttpError(404, "Resource not found");
   }
 }
 
 function requireCiAuthentication(request: Request, env: SecurityEnv): void {
   const configuredToken = env.CONCLAVE_CI_INGEST_TOKEN;
-  if (anonymousDevelopment(env) && !configuredToken) return;
+  if (testAuthenticationEnabled(env) && !configuredToken) return;
   if (!configuredToken || bearer(request) !== configuredToken)
     throw new HttpError(401, "CI evidence authentication required");
 }
@@ -374,7 +351,8 @@ function requireForgeCallbackAuthentication(
   request: Request,
   env: SecurityEnv,
 ): void {
-  if (anonymousDevelopment(env) && !env.CONCLAVE_FORGE_CALLBACK_TOKEN) return;
+  if (testAuthenticationEnabled(env) && !env.CONCLAVE_FORGE_CALLBACK_TOKEN)
+    return;
   if (
     !env.CONCLAVE_FORGE_CALLBACK_TOKEN ||
     bearer(request) !== env.CONCLAVE_FORGE_CALLBACK_TOKEN
@@ -486,7 +464,7 @@ async function handleRunRequest(
     undefined,
     accessContext,
   );
-  const projectId = anonymousDevelopment(securityEnv)
+  const projectId = testAuthenticationEnabled(securityEnv)
     ? undefined
     : await goalProjectId(securityEnv, goalId);
   await authorizeRequest(
@@ -572,7 +550,7 @@ async function handleGoalRequest(
       ? body.chatId.trim()
       : null;
 
-  if (chatId && !anonymousDevelopment(securityEnv)) {
+  if (chatId && !testAuthenticationEnabled(securityEnv)) {
     const chat = await env.CONCLAVE_DB.prepare(
       "SELECT id, project_id, workspace_id FROM chats WHERE id = ?1",
     )
@@ -755,7 +733,7 @@ async function handleListWorkspaces(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, accessContext);
-  if (anonymousDevelopment(env)) {
+  if (testAuthenticationEnabled(env)) {
     return json({
       workspaces: [
         {
@@ -838,7 +816,7 @@ async function handleGetWorkspace(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, accessContext);
-  if (context.workspaceId !== workspaceId && !anonymousDevelopment(env)) {
+  if (context.workspaceId !== workspaceId && !testAuthenticationEnabled(env)) {
     const membership = await env.CONCLAVE_DB.prepare(
       "SELECT role FROM workspace_memberships WHERE workspace_id = ?1 AND user_id = ?2 AND status = 'active'",
     )
@@ -1233,7 +1211,7 @@ async function workspaceMemberContext(
   accessContext?: ExecutionContext,
 ): Promise<SecurityContext> {
   const context = await securityContext(request, env, accessContext);
-  if (!anonymousDevelopment(env) && context.workspaceId !== workspaceId) {
+  if (!testAuthenticationEnabled(env) && context.workspaceId !== workspaceId) {
     throw new HttpError(404, "Workspace not found");
   }
   try {
@@ -1579,7 +1557,7 @@ async function handleListProjects(
   const isOwnerOrAdmin =
     context.workspaceRole === "owner" ||
     context.workspaceRole === "admin" ||
-    anonymousDevelopment(env);
+    testAuthenticationEnabled(env);
   const rows = isOwnerOrAdmin
     ? await env.CONCLAVE_DB.prepare(
         `SELECT p.id, p.workspace_id AS workspaceId, p.name, p.description, p.repository_id AS repositoryId,
@@ -3169,7 +3147,7 @@ async function handleHostProtocolMessage(
     if (!authenticatedHost) {
       return json({ error: "Unauthorized host token" }, { status: 401 });
     }
-  } else if (!anonymousDevelopment(env)) {
+  } else if (!testAuthenticationEnabled(env)) {
     return json({ error: "Host authentication required" }, { status: 401 });
   }
 
@@ -3497,25 +3475,25 @@ async function handleStudioSnapshot(
     projectId ?? undefined,
     accessContext,
   );
-  const isAnonymous = anonymousDevelopment(securityEnv);
+  const testMode = testAuthenticationEnabled(securityEnv);
   const projectFilter =
     projectId === null
-      ? isAnonymous
+      ? testMode
         ? ""
         : " WHERE p.workspace_id = ?1"
-      : isAnonymous
+      : testMode
         ? " WHERE p.id = ?1"
         : " WHERE p.id = ?2 AND p.workspace_id = ?1";
   const bind =
     projectId === null
-      ? isAnonymous
+      ? testMode
         ? []
         : [context.workspaceId]
-      : isAnonymous
+      : testMode
         ? [projectId]
         : [context.workspaceId, projectId];
   const restrictProjects =
-    !isAnonymous &&
+    !testMode &&
     context.workspaceRole !== "owner" &&
     context.workspaceRole !== "admin";
   const projectScope = (column: string, start: number): string => {
@@ -3533,10 +3511,10 @@ async function handleStudioSnapshot(
     : bind;
   const ownership =
     projectId === null
-      ? isAnonymous
+      ? testMode
         ? "1 = 1"
         : "p.workspace_id = ?1"
-      : isAnonymous
+      : testMode
         ? "p.id = ?1"
         : "p.workspace_id = ?1 AND p.id = ?2";
   const ownershipBind = bind;
@@ -3664,18 +3642,18 @@ async function handleStudioSnapshot(
   ]);
   const chatFilter =
     projectId === null
-      ? isAnonymous
+      ? testMode
         ? "1 = 1"
         : "c.workspace_id = ?1"
-      : isAnonymous
+      : testMode
         ? "c.project_id = ?1"
         : "c.workspace_id = ?1 AND c.project_id = ?2";
   const chatBind =
     projectId === null
-      ? isAnonymous
+      ? testMode
         ? []
         : [context.workspaceId]
-      : isAnonymous
+      : testMode
         ? [projectId]
         : [context.workspaceId, projectId];
   const scopedChatFilter =
@@ -3924,7 +3902,7 @@ async function handleRunCommand(
   if (command === "forge-terminal") {
     requireForgeCallbackAuthentication(request, securityEnv);
   } else {
-    const projectId = anonymousDevelopment(securityEnv)
+    const projectId = testAuthenticationEnabled(securityEnv)
       ? undefined
       : await runProjectId(securityEnv, runId);
     controlContext = await authorizeRequest(
@@ -4310,7 +4288,7 @@ async function handleDownloadPluginVersion(
   version: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
-  if (!anonymousDevelopment(env)) {
+  if (!testAuthenticationEnabled(env)) {
     const token = extractBearerToken(request.headers);
     if (token) {
       const tokenHash = await hashToken(token);
@@ -4748,7 +4726,7 @@ async function handleDownloadHostRelease(
   version: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
-  if (!anonymousDevelopment(env)) {
+  if (!testAuthenticationEnabled(env)) {
     const token = extractBearerToken(request.headers);
     if (token) {
       const tokenHash = await hashToken(token);
@@ -5077,7 +5055,7 @@ export {
   json,
   errorMessage,
   HttpError,
-  anonymousDevelopment,
+  testAuthenticationEnabled,
   runProjectId,
   authorizeRequest,
   resolveWorkflowInstanceId,

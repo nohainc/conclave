@@ -24,10 +24,10 @@ production application-auth path.
 
 ## Local development
 
-Local development can use the existing anonymous development mode. A
-development-only bearer token is accepted only when
-`CONCLAVE_ENVIRONMENT=development`; it is never a browser build input and is
-rejected by the production authentication path.
+Local manual development can use the explicit `/api/dev/sign-in` helper. It is
+available only when `CONCLAVE_ENVIRONMENT=development` and redirects into the
+normal Better Auth GitHub or Google flow; it does not synthesize a user or
+session. Automated tests inject a test authentication adapter instead.
 
 For an authenticated local Access simulation, Wrangler supports an `access.dev`
 configuration with a test identity. Keep that configuration local and do not

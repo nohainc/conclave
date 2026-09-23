@@ -117,5 +117,7 @@ administrative, debug, and internal environments.
 ✅ Better Auth is now the only human-session implementation. The legacy
 `conclave_session` cookie, custom session-token extraction and formatting,
 database session verification/revocation, and development human bearer
-environment variables were removed. Bearer credentials remain only in
-explicit service-auth paths such as Host, CI, Forge, and connector flows.
+environment variables were removed. Automated tests use an injected test
+authentication adapter, while local development uses the development-only
+Better Auth sign-in helper. Bearer credentials remain only in explicit
+service-auth paths such as Host, CI, Forge, and connector flows.

@@ -10,11 +10,12 @@ The shared security package is the policy source for roles and permissions.
 Better Auth authenticates browser requests before application authorization.
 The Worker resolves the Better Auth identity to an active Conclave User and
 Workspace membership in D1 and derives project authorization from that
-membership; it never trusts a client-supplied tenant header. Anonymous access
-is allowed only when `CONCLAVE_ENVIRONMENT=development` and
-`CONCLAVE_ALLOW_ANONYMOUS_DEV=true`. Cloudflare Access may additionally
-protect staging, admin, debug, or internal environments, but is not required
-for production Studio authentication.
+membership; it never trusts a client-supplied tenant header. Automated tests
+may inject an explicit test authentication adapter, and local manual
+development may use the development-only `/api/dev/sign-in` helper to enter a
+real Better Auth OAuth flow. Neither mechanism exists in production.
+Cloudflare Access may additionally protect staging, admin, debug, or internal
+environments, but is not required for production Studio authentication.
 
 ## Credentials
 

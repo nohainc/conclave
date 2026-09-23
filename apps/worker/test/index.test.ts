@@ -113,7 +113,24 @@ const workflowBinding = {
 
 const env = {
   CONCLAVE_ENVIRONMENT: "development",
-  CONCLAVE_ALLOW_ANONYMOUS_DEV: "true",
+  TEST_AUTHENTICATION: async () => ({
+    userId: "local-development",
+    user: {
+      id: "local-development",
+      email: "local-development@local",
+      displayName: "Developer",
+      status: "active",
+    },
+    workspaceId: "local-development",
+    workspaceRole: "owner",
+    roles: ["owner"],
+    authorizedProjectIds: [],
+    projectRoles: {},
+    sessionId: "session-local-development",
+    clientType: "desktop",
+    organizationId: "local-development",
+    organizationRoles: ["owner"],
+  }),
   CONCLAVE_RUN_WORKFLOW: workflowBinding,
   CONCLAVE_DB: identityDb,
 } as unknown as Env;
@@ -139,6 +156,29 @@ describe("Worker smoke tests", () => {
     );
 
     expect(response.status).toBe(404);
+  });
+
+  it("uses the development sign-in helper only for a real Better Auth flow", async () => {
+    const response = await worker.fetch(
+      new Request(
+        "https://conclave.test/api/dev/sign-in?provider=google&returnTo=/projects",
+      ),
+      env,
+    );
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe(
+      "https://conclave.test/api/auth/sign-in/google?returnTo=%2Fprojects",
+    );
+
+    const productionResponse = await worker.fetch(
+      new Request("https://conclave.test/api/dev/sign-in"),
+      {
+        ...env,
+        CONCLAVE_ENVIRONMENT: "production",
+        TEST_AUTHENTICATION: undefined,
+      } as unknown as Env,
+    );
+    expect(productionResponse.status).toBe(404);
   });
 
   it("exposes an authenticated interactive connector session", async () => {
@@ -192,7 +232,7 @@ describe("Worker smoke tests", () => {
     const productionEnv = {
       ...env,
       CONCLAVE_ENVIRONMENT: "production",
-      CONCLAVE_ALLOW_ANONYMOUS_DEV: undefined,
+      TEST_AUTHENTICATION: undefined,
     } as unknown as Env;
     const response = await worker.fetch(
       new Request("https://conclave.test/api/runs", {
