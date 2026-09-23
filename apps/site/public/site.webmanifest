@@ -1,0 +1,16 @@
+{
+  "name": "Conclave AX",
+  "short_name": "Conclave AX",
+  "description": "Conclave AX coordinates AI Workers across models and machines to verify complex work.",
+  "start_url": "https://app.conclaveax.com",
+  "scope": "https://app.conclaveax.com/",
+  "display": "standalone",
+  "background_color": "#f4f1eb",
+  "theme_color": "#625bd6",
+  "icons": [{
+    "src": "/favicon.svg",
+    "sizes": "any",
+    "type": "image/svg+xml",
+    "purpose": "any maskable"
+  }]
+}

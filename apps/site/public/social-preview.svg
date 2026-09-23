@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#f4f1eb"/>
+  <rect x="72" y="72" width="54" height="54" rx="12" fill="#625bd6"/>
+  <path d="M108 87a18 18 0 1 0 0 29" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round"/>
+  <text x="146" y="110" fill="#191827" font-family="Arial, sans-serif" font-size="24" font-weight="700">CONCLAVE AX</text>
+  <text x="72" y="235" fill="#191827" font-family="Arial, sans-serif" font-size="58" font-weight="700">Give your AI models</text>
+  <text x="72" y="300" fill="#191827" font-family="Arial, sans-serif" font-size="58" font-weight="700">a workflow.</text>
+  <text x="72" y="355" fill="#6c6a78" font-family="Arial, sans-serif" font-size="22">Research · implement · review · test · verify</text>
+  <g font-family="Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle">
+    <rect x="750" y="160" width="250" height="64" rx="12" fill="#282735"/>
+    <text x="875" y="200" fill="#fff">CONCLAVE AX</text>
+    <path d="M875 224v42" stroke="#625bd6" stroke-width="4"/>
+    <path d="m865 256 10 12 10-12" fill="none" stroke="#625bd6" stroke-width="4"/>
+    <rect x="750" y="278" width="250" height="64" rx="12" fill="#282735"/>
+    <text x="875" y="318" fill="#fff">CONCLAVE CLOUD</text>
+    <path d="M875 342v42" stroke="#625bd6" stroke-width="4"/>
+    <path d="m865 374 10 12 10-12" fill="none" stroke="#625bd6" stroke-width="4"/>
+    <rect x="650" y="400" width="200" height="64" rx="12" fill="#353444" stroke="#7770e2"/>
+    <text x="750" y="440" fill="#fff">HOST</text>
+    <rect x="900" y="400" width="200" height="64" rx="12" fill="#353444" stroke="#7770e2"/>
+    <text x="1000" y="440" fill="#fff">WORKERS</text>
+  </g>
+  <text x="72" y="560" fill="#6c6a78" font-family="monospace" font-size="17">Conclave AX · clear execution · verified results</text>
+</svg>

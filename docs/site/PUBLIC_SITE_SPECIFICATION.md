@@ -154,6 +154,8 @@ The website must not:
 - semantic headings, landmarks, links, and buttons;
 - no hover-only content or critical interaction;
 - canonical metadata and a redirect from `www` to the apex domain;
+- OpenGraph/Twitter metadata, a branded social preview, `sitemap.xml`,
+  `robots.txt`, favicon, and a web manifest;
 - links to Conclave AX must remain ordinary HTTPS links and work without shared
   client state.
 
