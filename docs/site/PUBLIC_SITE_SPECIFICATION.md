@@ -176,6 +176,17 @@ layouts. At the 800px breakpoint, navigation becomes a drawer, diagrams and
 comparison grids become vertical or single-column, and primary actions retain
 comfortable tap targets.
 
+## Marketing analytics contract
+
+Marketing analytics are separate from Conclave Cloud application telemetry.
+The site may send only these aggregate event names: `landing.page_view`,
+`cta.open_app`, `navigation.how_it_works`, `section.host_reached`, and
+`section.workers_reached`. Payloads contain only the event name, public path,
+and event timestamp. The endpoint is opt-in through
+`PUBLIC_SITE_ANALYTICS_ENDPOINT`; when it is unset, the site sends no analytics
+requests. The site does not use cookies, user IDs, Workspace IDs, credentials,
+Chat content, Account data, or application events.
+
 ## Visual system contract
 
 The site uses one restrained, technical visual theme: warm paper surfaces, ink

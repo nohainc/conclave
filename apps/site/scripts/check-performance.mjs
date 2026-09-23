@@ -6,6 +6,7 @@ const maxHtmlBytes = 50_000;
 const maxCssBytes = 75_000;
 const maxScriptBytes = 15_000;
 
+/** @param {string} directory @returns {Promise<string[]>} */
 async function filesIn(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = [];

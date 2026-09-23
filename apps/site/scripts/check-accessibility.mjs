@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 const dist = new URL("../dist/", import.meta.url).pathname;
 
+/** @param {string} directory @returns {Promise<string[]>} */
 async function htmlFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = [];

@@ -9,6 +9,7 @@
     "check:accessibility": "node scripts/check-accessibility.mjs",
     "check:performance": "node scripts/check-performance.mjs",
     "check:responsive": "node scripts/check-responsive.mjs",
+    "check:analytics": "node scripts/check-analytics-privacy.mjs",
     "preview": "astro preview",
     "test": "vitest run test"
   },
