@@ -15,11 +15,11 @@ Chat, Run, Host, Worker, or Account state.
 
 ## Domain contract
 
-| Domain | Responsibility | Authentication |
-| --- | --- | --- |
-| `conclaveax.com` | Public Astro/static-first website | None required |
-| `www.conclaveax.com` | Redirect to `https://conclaveax.com` | None required |
-| `app.conclaveax.com` | Authenticated Conclave AX Flutter Web application | Better Auth |
+| Domain               | Responsibility                                    | Authentication |
+| -------------------- | ------------------------------------------------- | -------------- |
+| `conclaveax.com`     | Public Astro/static-first website                 | None required  |
+| `www.conclaveax.com` | Redirect to `https://conclaveax.com`              | None required  |
+| `app.conclaveax.com` | Authenticated Conclave AX Flutter Web application | Better Auth    |
 
 The website must never proxy or embed the authenticated application. Links into
 the product use `https://app.conclaveax.com` and may include a safe route for
@@ -152,6 +152,23 @@ The website must not:
 - links to Conclave AX must remain ordinary HTTPS links and work without shared
   client state.
 
+## Visual system contract
+
+The site uses one restrained, technical visual theme: warm paper surfaces, ink
+text, muted lavender accent color, crisp borders, and compact monospace details.
+It does not depend on decorative gradients, robot imagery, glowing orbs, or
+animation to communicate the architecture.
+
+Design tokens live in `apps/site/src/styles/tokens.css`. Reusable Astro
+primitives live in `apps/site/src/components/` and include layout containers,
+sections, buttons, badges, cards, section headers, architecture nodes, terminal
+panels, navigation, and footer. New sections should compose these primitives
+before adding page-specific CSS.
+
+The system supports wide, medium, and narrow layouts; visible keyboard focus;
+reduced-motion preferences; and forced-colors/high-contrast mode. Motion is
+limited to short state transitions and must not carry essential meaning.
+
 ## Acceptance checklist
 
 An implementation is conformant when a visitor can, without signing in:
@@ -164,4 +181,3 @@ An implementation is conformant when a visitor can, without signing in:
 - find the Product, How it works, Workers, and Security navigation items;
 - find no Studio, Agent, Plugin, or Credential Profile in public copy;
 - use the site on keyboard and narrow screens.
-

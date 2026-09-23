@@ -1,16 +1,20 @@
 ---
+import Container from "../components/Container.astro";
+import FeatureCard from "../components/FeatureCard.astro";
+import Section from "../components/Section.astro";
+import SectionHeader from "../components/SectionHeader.astro";
 import SiteLayout from "../layouts/SiteLayout.astro";
 ---
 
 <SiteLayout title="Workers — Conclave AX" description="Workers are installable AI and tool capabilities managed by Conclave Host.">
-  <section class="section">
-    <div class="eyebrow">Workers</div>
-    <h1>Choose capability, not a permanent machine identity.</h1>
-    <p class="section-intro">Workers are installable integrations that a Host can supervise. The same Worker can serve different Projects and Accounts while each assignment keeps its own context.</p>
+  <Section>
+    <Container>
+      <SectionHeader eyebrow="Workers" title="Choose capability, not a permanent machine identity." description="Workers are installable integrations that a Host can supervise. The same Worker can serve different Projects and Accounts while each assignment keeps its own context." />
     <div class="cards">
-      <article class="card"><h3>AI and coding</h3><p>Connect the AI and coding capabilities your work needs through the Worker catalog.</p></article>
-      <article class="card"><h3>Automatic updates</h3><p>Conclave Host resolves, verifies, installs, health-checks, and rolls back Worker versions.</p></article>
-      <article class="card"><h3>Account-aware execution</h3><p>Accounts keep external AI identity separate from shared Worker software.</p></article>
+      <FeatureCard title="AI and coding"><p>Connect the AI and coding capabilities your work needs through the Worker catalog.</p></FeatureCard>
+      <FeatureCard title="Automatic updates"><p>Conclave Host resolves, verifies, installs, health-checks, and rolls back Worker versions.</p></FeatureCard>
+      <FeatureCard title="Account-aware execution"><p>Accounts keep external AI identity separate from shared Worker software.</p></FeatureCard>
     </div>
-  </section>
+    </Container>
+  </Section>
 </SiteLayout>

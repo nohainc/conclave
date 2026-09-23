@@ -68,9 +68,18 @@ importers:
       '@astrojs/check':
         specifier: ^0.9.4
         version: 0.9.10(@emnapi/runtime@1.11.3)(prettier@3.9.8)(typescript@5.9.3)
+      '@astrojs/markdown-remark':
+        specifier: ^6.3.11
+        version: 6.3.11(supports-color@10.2.2)
       astro:
         specifier: ^5.14.1
         version: 5.18.2(@types/node@24.13.6)(rollup@4.63.4)(supports-color@10.2.2)(typescript@5.9.3)(yaml@2.9.1)
+      mrmime:
+        specifier: ^2.0.1
+        version: 2.0.1
+      shiki:
+        specifier: ^3.21.0
+        version: 3.23.0
       typescript:
         specifier: ^5.9.2
         version: 5.9.3

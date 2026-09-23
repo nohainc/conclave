@@ -1,19 +1,19 @@
 ---
 import SiteLayout from "../layouts/SiteLayout.astro";
+import Button from "../components/Button.astro";
+import Container from "../components/Container.astro";
 ---
 
 <SiteLayout
   title="Page not found — Conclave AX"
   description="The requested Conclave AX public site page could not be found."
 >
-  <section class="section">
-    <div class="eyebrow">404</div>
-    <h1>That page is not here.</h1>
-    <p class="section-intro">
-      The link may be outdated, or the page may have moved.
-    </p>
-    <div class="actions">
-      <a class="button-primary" href="/">Back to Conclave AX</a>
-    </div>
-  </section>
+  <Container>
+    <section class="section">
+      <div class="eyebrow">404</div>
+      <h1>That page is not here.</h1>
+      <p class="section-intro">The link may be outdated, or the page may have moved.</p>
+      <div class="actions"><Button href="/" label="Back to Conclave AX" /></div>
+    </section>
+  </Container>
 </SiteLayout>

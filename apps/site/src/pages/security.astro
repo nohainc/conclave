@@ -1,16 +1,20 @@
 ---
+import Container from "../components/Container.astro";
+import FeatureCard from "../components/FeatureCard.astro";
+import Section from "../components/Section.astro";
+import SectionHeader from "../components/SectionHeader.astro";
 import SiteLayout from "../layouts/SiteLayout.astro";
 ---
 
 <SiteLayout title="Security — Conclave AX" description="Conclave AX security boundaries for people, Hosts, Workers, and Accounts.">
-  <section class="section">
-    <div class="eyebrow">Security</div>
-    <h1>Clear boundaries are a feature.</h1>
-    <p class="section-intro">Conclave AX keeps human identity, machine identity, and external AI Accounts separate so each can be authorized and revoked independently.</p>
+  <Section>
+    <Container>
+      <SectionHeader eyebrow="Security" title="Clear boundaries are a feature." description="Conclave AX keeps human identity, machine identity, and external AI Accounts separate so each can be authorized and revoked independently." />
     <div class="cards">
-      <article class="card"><h3>Human access</h3><p>People sign in to Conclave AX. Cloud owns Workspace membership and authorization.</p></article>
-      <article class="card"><h3>Machine access</h3><p>A Host uses its own machine credential. It never stores a person's browser session.</p></article>
-      <article class="card"><h3>Account privacy</h3><p>Accounts are private by default. Raw secrets stay in Host secure storage and are never public site content.</p></article>
+      <FeatureCard title="Human access"><p>People sign in to Conclave AX. Cloud owns Workspace membership and authorization.</p></FeatureCard>
+      <FeatureCard title="Machine access"><p>A Host uses its own machine credential. It never stores a person's browser session.</p></FeatureCard>
+      <FeatureCard title="Account privacy"><p>Accounts are private by default. Raw secrets stay in Host secure storage and are never public site content.</p></FeatureCard>
     </div>
-  </section>
+    </Container>
+  </Section>
 </SiteLayout>
