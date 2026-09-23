@@ -159,6 +159,11 @@ The website must not:
 - links to Conclave AX must remain ordinary HTTPS links and work without shared
   client state.
 
+The public site is performance-budgeted for static HTML, no third-party
+JavaScript, system fonts, and small generated assets. CI checks built HTML,
+CSS, and script sizes and rejects external script sources. Production workers
+cache fingerprinted assets immutably; HTML remains revalidated.
+
 ## Visual system contract
 
 The site uses one restrained, technical visual theme: warm paper surfaces, ink
