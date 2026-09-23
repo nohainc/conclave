@@ -37,6 +37,7 @@ import {
 const routeHandlers = {
   handleSession: handlers.handleSession,
   handleSessionLogout: handlers.handleSessionLogout,
+  handleListPendingInvitations: handlers.handleListPendingInvitations,
   handleConnectorRequest: handlers.handleConnectorRequest,
   handleConnectorTaskRequest: handlers.handleConnectorTaskRequest,
   handleListWorkspaces: handlers.handleListWorkspaces,

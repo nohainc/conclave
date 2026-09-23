@@ -40,6 +40,14 @@ void main() {
         'displayName': 'User One',
         'email': 'user@example.test',
       },
+      'pendingInvitations': [
+        {
+          'id': 'inv-1',
+          'workspaceId': 'workspace-team',
+          'role': 'member',
+          'expiresAt': '2099-01-01T00:00:00Z',
+        },
+      ],
     }, statusCode: 200);
     final api = StudioApiClient(
       baseUrl: 'https://conclave.test/api',
@@ -49,6 +57,7 @@ void main() {
     final session = await api.loadSession();
     expect(session.authenticated, isTrue);
     expect(session.viewer?.email, 'user@example.test');
+    expect(session.pendingInvitations.single.id, 'inv-1');
     expect(client.lastRequest?.url.path, '/api/session');
 
     await api.logout();

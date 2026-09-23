@@ -80,3 +80,10 @@ legacy human fallback is used only when Better Auth is not configured.
 the Cloud Better Auth boundary, preserves safe deep-link return paths, uses
 Better Auth sign-out instead of the legacy Conclave session cookie, and
 rechecks the shared browser session when a tab becomes visible again.
+
+## AUTH-7 — Implement first-login provisioning
+
+✅ The first authenticated Conclave request idempotently initializes the
+canonical user, creates a deterministic personal Workspace and owner
+membership when needed, and exposes unexpired pending invitations without
+silently accepting privileged membership.

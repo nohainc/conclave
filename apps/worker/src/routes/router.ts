@@ -41,6 +41,12 @@ export async function routeWorkerRequest(
     if (request.method === "POST" && url.pathname === "/api/session/logout") {
       return await handlers.handleSessionLogout!(request, env, ctx);
     }
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/invitations/pending"
+    ) {
+      return await handlers.handleListPendingInvitations!(request, env, ctx);
+    }
     const connectorMatch = url.pathname.match(
       /^\/api\/connector\/(register_session|claim_task|get_task|get_context|get_next_message|submit_candidate|submit_result|submit_finding|report_status|release_task)$/,
     );

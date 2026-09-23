@@ -62,6 +62,7 @@ class _StudioAppState extends State<StudioApp> {
   StreamSubscription<void>? lifecycleSubscription;
   bool authRequired = false;
   bool isReconnecting = false;
+  List<StudioPendingInvitation> pendingInvitations = const [];
 
   void _showSnackBar(String message) {
     messengerKey.currentState?.showSnackBar(SnackBar(content: Text(message)));
@@ -105,6 +106,7 @@ class _StudioAppState extends State<StudioApp> {
   Future<void> _loadSession() async {
     try {
       final session = await store.auth.load();
+      pendingInvitations = session.pendingInvitations;
       if (!session.authenticated) {
         if (!mounted) return;
         setState(() {
@@ -135,6 +137,7 @@ class _StudioAppState extends State<StudioApp> {
         selectedWorkspaceId = null;
         selectedProjectId = null;
         authRequired = true;
+        pendingInvitations = const [];
       });
       browserNavigation.replaceWithLogin(navigation.toUri());
     } catch (error) {
@@ -208,6 +211,7 @@ class _StudioAppState extends State<StudioApp> {
     try {
       final session = await store.auth.load();
       if (!mounted) return;
+      pendingInvitations = session.pendingInvitations;
       if (!session.authenticated && !authRequired) {
         setState(() => authRequired = true);
         browserNavigation.replaceWithLogin(navigation.toUri());
@@ -804,6 +808,10 @@ class _StudioAppState extends State<StudioApp> {
               const Icon(Icons.folder_open_outlined,
                   size: 48, color: Color(0xff6254d9)),
               const SizedBox(height: 14),
+              if (pendingInvitations.isNotEmpty) ...[
+                _pendingInvitationBanner(),
+                const SizedBox(height: 20),
+              ],
               const Text('No projects yet',
                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
@@ -820,6 +828,26 @@ class _StudioAppState extends State<StudioApp> {
                   icon: const Icon(Icons.refresh),
                   label: const Text('Reload')),
             ]),
+          ),
+        ),
+      );
+
+  Widget _pendingInvitationBanner() => Card(
+        color: const Color(0xfff4f1ff),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.mail_outline, color: Color(0xff5143b8)),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  '${pendingInvitations.length} Workspace invitation${pendingInvitations.length == 1 ? '' : 's'} waiting for your review.',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
           ),
         ),
       );
@@ -1155,6 +1183,7 @@ class _StudioAppState extends State<StudioApp> {
   Widget _content(bool compact) {
     return Column(children: [
       _topbar(compact),
+      if (pendingInvitations.isNotEmpty) _pendingInvitationBanner(),
       Expanded(
           child: SingleChildScrollView(
               padding: EdgeInsets.fromLTRB(

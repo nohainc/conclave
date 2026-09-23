@@ -733,18 +733,42 @@ class StudioViewer {
       );
 }
 
+class StudioPendingInvitation {
+  const StudioPendingInvitation({
+    required this.id,
+    required this.workspaceId,
+    required this.role,
+    required this.expiresAt,
+  });
+
+  final String id;
+  final String workspaceId;
+  final String role;
+  final String expiresAt;
+
+  factory StudioPendingInvitation.fromJson(Map<String, dynamic> json) =>
+      StudioPendingInvitation(
+        id: _string(json, 'id'),
+        workspaceId: _string(json, 'workspaceId'),
+        role: _string(json, 'role'),
+        expiresAt: _string(json, 'expiresAt'),
+      );
+}
+
 class StudioSession {
   const StudioSession({
     required this.authenticated,
     this.viewer,
     this.workspaceId,
     this.workspaceRole,
+    this.pendingInvitations = const [],
   });
 
   final bool authenticated;
   final StudioViewer? viewer;
   final String? workspaceId;
   final String? workspaceRole;
+  final List<StudioPendingInvitation> pendingInvitations;
 
   factory StudioSession.fromJson(Map<String, dynamic> json) => StudioSession(
         authenticated: json['authenticated'] == true,
@@ -754,6 +778,11 @@ class StudioSession {
             : null,
         workspaceId: json['workspaceId'] as String?,
         workspaceRole: json['workspaceRole'] as String?,
+        pendingInvitations: (json['pendingInvitations'] as List? ?? const [])
+            .whereType<Map>()
+            .map((invitation) => StudioPendingInvitation.fromJson(
+                Map<String, dynamic>.from(invitation)))
+            .toList(growable: false),
       );
 }
 

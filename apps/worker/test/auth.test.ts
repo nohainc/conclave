@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildBetterAuthOptions,
   IdentityService,
+  listPendingInvitations,
+  provisionConclaveUser,
   safeAuthReturnTo,
   type AuthenticatedIdentity,
 } from "../src/auth/index.js";
@@ -103,5 +105,101 @@ describe("IdentityService", () => {
         CONCLAVE_ENVIRONMENT: "development",
       }),
     ).resolves.toBeNull();
+  });
+
+  it("provisions a deterministic personal workspace idempotently", async () => {
+    const queries: string[] = [];
+    let membershipExists = false;
+    const db = {
+      prepare(query: string) {
+        queries.push(query);
+        let values: unknown[] = [];
+        return {
+          bind(...bound: unknown[]) {
+            values = bound;
+            return this;
+          },
+          async first<T>() {
+            if (query.includes("FROM workspace_memberships")) {
+              return membershipExists
+                ? ({ workspace_id: "existing-workspace" } as T)
+                : null;
+            }
+            return null;
+          },
+          async all<T>() {
+            return { results: [] as readonly T[] };
+          },
+          async run() {
+            return { values };
+          },
+        };
+      },
+      async batch(statements: readonly unknown[]) {
+        expect(statements).toHaveLength(2);
+        membershipExists = true;
+      },
+    };
+    const identity = {
+      userId: "user-1",
+      email: "person@example.test",
+      name: "Person",
+      sessionId: "session-1",
+    };
+
+    await provisionConclaveUser(db, identity, "2026-09-23T00:00:00.000Z");
+    await provisionConclaveUser(db, identity, "2026-09-23T00:01:00.000Z");
+
+    expect(
+      queries.filter((query) => query.includes("INSERT INTO workspaces")),
+    ).toHaveLength(1);
+    expect(
+      queries.filter((query) => query.includes("INSERT INTO users")),
+    ).toHaveLength(2);
+  });
+
+  it("returns pending invitations without accepting them", async () => {
+    const db = {
+      prepare(query: string) {
+        return {
+          bind() {
+            return this;
+          },
+          async first() {
+            return null;
+          },
+          async all<T>() {
+            expect(query).toContain("status = 'pending'");
+            return {
+              results: [
+                {
+                  id: "inv-1",
+                  workspaceId: "ws-team",
+                  projectId: null,
+                  email: "person@example.test",
+                  role: "member",
+                  status: "pending",
+                  expiresAt: "2099-01-01T00:00:00.000Z",
+                } as unknown as T,
+              ],
+            };
+          },
+          async run() {
+            return {};
+          },
+        };
+      },
+      async batch() {},
+    };
+
+    await expect(
+      listPendingInvitations(
+        db,
+        "person@example.test",
+        "2026-09-23T00:00:00.000Z",
+      ),
+    ).resolves.toEqual([
+      expect.objectContaining({ id: "inv-1", status: "pending" }),
+    ]);
   });
 });

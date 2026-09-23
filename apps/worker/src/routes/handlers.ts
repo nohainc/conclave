@@ -17,7 +17,11 @@ export {
 } from "../ensemble-dispatcher.js";
 export { handleConnectorRequest } from "../interactive-connector.js";
 import { handleConnectorTaskRequest } from "../interactive-connector.js";
-import { identityService } from "../auth/index.js";
+import {
+  identityService,
+  listPendingInvitations,
+  provisionConclaveUser,
+} from "../auth/index.js";
 import {
   dispatchTaskAssignment,
   cancelTaskAssignment,
@@ -461,6 +465,7 @@ async function securityContext(
         request.headers.get("x-conclave-workspace-id") ??
         new URL(request.url).searchParams.get("workspaceId") ??
         undefined;
+      await provisionConclaveUser(env.CONCLAVE_DB, identity);
       return await resolveSecurityContextFromIdentity(
         env.CONCLAVE_DB,
         identity,
@@ -910,6 +915,10 @@ async function handleSession(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, accessContext);
+  const pendingInvitations = await listPendingInvitations(
+    env.CONCLAVE_DB,
+    context.user.email,
+  );
   return json({
     authenticated: true,
     user: context.user,
@@ -917,6 +926,21 @@ async function handleSession(
     workspaceRole: context.workspaceRole,
     sessionId: context.sessionId,
     clientType: context.clientType,
+    pendingInvitations,
+  });
+}
+
+async function handleListPendingInvitations(
+  request: Request,
+  env: SecurityEnv,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, accessContext);
+  return json({
+    invitations: await listPendingInvitations(
+      env.CONCLAVE_DB,
+      context.user.email,
+    ),
   });
 }
 
@@ -5284,6 +5308,7 @@ export {
   resolveWorkflowInstanceId,
   handleSession,
   handleSessionLogout,
+  handleListPendingInvitations,
   handleConnectorTaskRequest,
   handleListWorkspaces,
   handleCreateWorkspace,
