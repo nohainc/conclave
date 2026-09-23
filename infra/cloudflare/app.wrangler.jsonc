@@ -51,17 +51,21 @@
         "name": "CONCLAVE_HOST_GATEWAY",
         "class_name": "HostGateway",
       },
+      {
+        "name": "CONCLAVE_REALTIME_GATEWAY",
+        "class_name": "RealtimeGateway",
+      },
     ],
   },
   "migrations": [
     {
       "tag": "v1-runtime-connection",
-      "new_sqlite_classes": ["RuntimeConnection"],
+      "new_sqlite_classes": ["RuntimeConnection", "AgentGateway"],
     },
     {
-      "tag": "v2-host-gateway",
-      "deleted_classes": ["RuntimeConnection"],
-      "new_sqlite_classes": ["HostGateway"],
+      "tag": "v2-host-and-realtime-gateway",
+      "deleted_classes": ["RuntimeConnection", "AgentGateway"],
+      "new_sqlite_classes": ["HostGateway", "RealtimeGateway"],
     },
   ],
   "routes": [
