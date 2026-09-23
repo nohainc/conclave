@@ -19,7 +19,7 @@ import {
   recordAssignmentCancelled,
 } from "./assignment-dispatcher.js";
 import {
-  extractAuthToken,
+  extractBearerToken,
   hashToken,
 } from "../../../packages/security/src/index.js";
 
@@ -180,7 +180,7 @@ export class HostGateway implements DurableObject {
       );
     }
 
-    const token = extractAuthToken(request.headers);
+    const token = extractBearerToken(request.headers);
     if (!token) {
       return Response.json(
         { error: "Host authentication required" },

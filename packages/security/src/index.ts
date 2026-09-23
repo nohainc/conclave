@@ -519,15 +519,14 @@ export async function verifyPackageDigestSignature(
 }
 
 // =========================================================================
-// 4. Session Tokens & Header/Cookie Extraction
+// 4. Service Credential Extraction
 // =========================================================================
 
-export const SESSION_COOKIE_NAME = "conclave_session";
-
 /**
- * Extracts session token from Authorization: Bearer <token> or Cookie header.
+ * Extracts a service credential from an Authorization: Bearer <token> header.
+ * Human browser sessions are handled exclusively by Better Auth.
  */
-export function extractAuthToken(
+export function extractBearerToken(
   headers: Headers | Record<string, string | undefined>,
 ): string | null {
   const getHeader = (name: string): string | null => {
@@ -547,54 +546,7 @@ export function extractAuthToken(
     }
   }
 
-  // 2. Cookie header: conclave_session=<token>
-  const cookieHeader = getHeader("cookie");
-  if (cookieHeader) {
-    const cookies = cookieHeader.split(";").map((c) => c.trim());
-    for (const cookie of cookies) {
-      const [name, val] = cookie.split("=");
-      if (name === SESSION_COOKIE_NAME && val) {
-        return val;
-      }
-    }
-  }
-
   return null;
-}
-
-/**
- * Creates a Set-Cookie header value for secure session storage in browser.
- */
-export function formatSessionCookie(
-  token: string,
-  options: {
-    maxAgeSeconds?: number;
-    secure?: boolean;
-    sameSite?: "Strict" | "Lax" | "None";
-    path?: string;
-    domain?: string;
-  } = {},
-): string {
-  const {
-    maxAgeSeconds = 30 * 24 * 60 * 60, // 30 days default
-    secure = true,
-    sameSite = "Lax",
-    path = "/",
-    domain,
-  } = options;
-
-  const parts = [
-    `${SESSION_COOKIE_NAME}=${token}`,
-    `Path=${path}`,
-    `Max-Age=${maxAgeSeconds}`,
-    `SameSite=${sameSite}`,
-    "HttpOnly",
-  ];
-
-  if (secure) parts.push("Secure");
-  if (domain) parts.push(`Domain=${domain}`);
-
-  return parts.join("; ");
 }
 
 // =========================================================================
@@ -778,173 +730,6 @@ async function resolveWorkspaceSecurityContext(
     projectRoles,
     sessionId,
     clientType,
-    organizationId: workspaceId,
-    organizationRoles: [workspaceRole],
-  };
-}
-
-export async function resolveSecurityContextFromDb(
-  db: DatabaseAdapter,
-  token: string,
-  options?: { requestedWorkspaceId?: string },
-): Promise<WorkspaceSecurityContext> {
-  const tokenHash = await hashToken(token);
-  const now = new Date().toISOString();
-
-  // 1. Resolve auth session
-  const session = await db
-    .prepare(
-      `SELECT s.id AS session_id, s.user_id, s.client_type, s.expires_at, s.revoked_at,
-              u.id AS u_id, u.email, u.display_name, u.avatar_url, u.status AS user_status
-       FROM auth_sessions s
-       JOIN users u ON s.user_id = u.id
-       WHERE s.token_hash = ?1`,
-    )
-    .bind(tokenHash)
-    .first<{
-      session_id: string;
-      user_id: string;
-      client_type: ClientType;
-      expires_at: string;
-      revoked_at: string | null;
-      u_id: string;
-      email: string;
-      display_name: string;
-      avatar_url: string | null;
-      user_status: string;
-    }>();
-
-  if (!session) {
-    throw new AuthenticationError("Invalid authentication token");
-  }
-
-  if (session.revoked_at || session.expires_at < now) {
-    throw new AuthenticationError("Session expired or revoked");
-  }
-
-  if (session.user_status !== "active") {
-    throw new AuthenticationError(`User account is ${session.user_status}`);
-  }
-
-  const user: AuthenticatedUser = {
-    id: session.u_id,
-    email: session.email,
-    displayName: session.display_name,
-    avatarUrl: session.avatar_url,
-    status: session.user_status as "active",
-  };
-
-  // 2. Resolve Workspace Memberships
-  let memberships: {
-    results?: readonly {
-      workspace_id: string;
-      role: WorkspaceRole;
-      workspace_status: string;
-    }[];
-  };
-  try {
-    memberships = await db
-      .prepare(
-        `SELECT wm.workspace_id, wm.role, w.status AS workspace_status
-         FROM workspace_memberships wm
-         JOIN workspaces w ON wm.workspace_id = w.id
-         WHERE wm.user_id = ?1 AND wm.status = 'active' AND w.status = 'active'`,
-      )
-      .bind(user.id)
-      .all();
-  } catch {
-    // Development databases created before V2-21 do not have membership status.
-    memberships = await db
-      .prepare(
-        `SELECT wm.workspace_id, wm.role, w.status AS workspace_status
-         FROM workspace_memberships wm
-         JOIN workspaces w ON wm.workspace_id = w.id
-         WHERE wm.user_id = ?1 AND w.status = 'active'`,
-      )
-      .bind(user.id)
-      .all();
-  }
-
-  const activeMemberships = memberships.results ?? [];
-  if (activeMemberships.length === 0) {
-    if (options?.requestedWorkspaceId) {
-      throw new AuthorizationError(
-        "workspace:manage",
-        options.requestedWorkspaceId,
-      );
-    }
-    return {
-      userId: user.id,
-      user,
-      workspaceId: "",
-      workspaceRole: "viewer",
-      roles: ["viewer"],
-      authorizedProjectIds: [],
-      projectRoles: {},
-      sessionId: session.session_id,
-      clientType: session.client_type,
-      organizationId: "",
-      organizationRoles: ["viewer"],
-    };
-  }
-
-  // 3. Select Target Workspace
-  const targetMembership = options?.requestedWorkspaceId
-    ? activeMemberships.find(
-        (m) => m.workspace_id === options.requestedWorkspaceId,
-      )
-    : activeMemberships[0];
-
-  if (!targetMembership) {
-    throw new AuthorizationError(
-      "workspace:manage",
-      options?.requestedWorkspaceId,
-    );
-  }
-
-  const workspaceId = targetMembership.workspace_id;
-  const workspaceRole = targetMembership.role;
-
-  // 4. Resolve Project Access
-  let authorizedProjectIds: string[] = [];
-  const projectRoles: Record<string, ProjectRole> = {};
-
-  if (workspaceRole === "owner" || workspaceRole === "admin") {
-    // Owners and Admins have access to all projects in workspace
-    const allProjects = await db
-      .prepare("SELECT id FROM projects WHERE workspace_id = ?1")
-      .bind(workspaceId)
-      .all<{ id: string }>();
-    authorizedProjectIds = (allProjects.results ?? []).map((p) => p.id);
-  } else {
-    // Members & Viewers resolve explicit project memberships
-    const projectMems = await db
-      .prepare(
-        `SELECT pm.project_id, pm.role
-         FROM project_memberships pm
-         JOIN projects p ON pm.project_id = p.id
-         WHERE pm.user_id = ?1 AND p.workspace_id = ?2`,
-      )
-      .bind(user.id, workspaceId)
-      .all<{ project_id: string; role: ProjectRole }>();
-
-    for (const pm of projectMems.results ?? []) {
-      authorizedProjectIds.push(pm.project_id);
-      projectRoles[pm.project_id] = pm.role;
-    }
-  }
-
-  return {
-    userId: user.id,
-    user,
-    workspaceId,
-    workspaceRole,
-    roles: [workspaceRole],
-    authorizedProjectIds,
-    projectRoles,
-    sessionId: session.session_id,
-    clientType: session.client_type,
-    // Backward compatibility aliases
     organizationId: workspaceId,
     organizationRoles: [workspaceRole],
   };

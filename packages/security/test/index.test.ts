@@ -6,9 +6,7 @@ import {
   hashToken,
   generatePkceChallenge,
   verifyPkceChallenge,
-  extractAuthToken,
-  formatSessionCookie,
-  resolveSecurityContextFromDb,
+  extractBearerToken,
   resolveSecurityContextFromIdentity,
   encryptCredential,
   decryptCredential,
@@ -242,30 +240,15 @@ describe("Architecture v2 Security & Authentication Suite", () => {
     });
   });
 
-  describe("Header & Cookie Session Extraction", () => {
+  describe("Service Bearer Credential Extraction", () => {
     it("extracts token from Authorization Bearer header", () => {
       const headers = new Headers({
         authorization: "Bearer token-xyz-123",
       });
-      expect(extractAuthToken(headers)).toBe("token-xyz-123");
-    });
-
-    it("extracts token from Cookie header", () => {
-      const headers = {
-        cookie: "other=123; conclave_session=cookie-session-token; theme=dark",
-      };
-      expect(extractAuthToken(headers)).toBe("cookie-session-token");
-    });
-
-    it("formats secure HttpOnly Set-Cookie header", () => {
-      const cookie = formatSessionCookie("test-token", {
-        secure: true,
-        maxAgeSeconds: 3600,
-      });
-      expect(cookie).toContain("conclave_session=test-token");
-      expect(cookie).toContain("HttpOnly");
-      expect(cookie).toContain("Secure");
-      expect(cookie).toContain("Max-Age=3600");
+      expect(extractBearerToken(headers)).toBe("token-xyz-123");
+      expect(
+        extractBearerToken({ cookie: "conclave_session=legacy-token" }),
+      ).toBeNull();
     });
   });
 
@@ -274,7 +257,7 @@ describe("Architecture v2 Security & Authentication Suite", () => {
       workspaceRows = [
         {
           workspace_id: "ws-team",
-          role: "member" as const,
+          role: "member" as "owner" | "admin" | "member" | "viewer",
           workspace_status: "active",
         },
       ],
@@ -399,153 +382,6 @@ describe("Architecture v2 Security & Authentication Suite", () => {
 
       expect(ctx.workspaceId).toBe("ws-company");
       expect(ctx.workspaceRole).toBe("member");
-    });
-
-    function createMockDb(
-      token: string,
-      tokenHash: string,
-      sessionOverrides: Partial<{
-        expires_at: string;
-        revoked_at: string | null;
-        user_status: string;
-      }> = {},
-    ): DatabaseAdapter {
-      return {
-        prepare(query: string) {
-          let boundValues: unknown[] = [];
-          return {
-            bind(...values: unknown[]) {
-              boundValues = values;
-              return this;
-            },
-            async first<T>() {
-              if (query.includes("FROM auth_sessions s")) {
-                if (boundValues[0] === tokenHash) {
-                  return {
-                    session_id: "sess-1",
-                    user_id: "user-1",
-                    client_type: "desktop",
-                    expires_at: "2099-01-01T00:00:00Z",
-                    revoked_at: null,
-                    u_id: "user-1",
-                    email: "dev@conclaveax.com",
-                    display_name: "Alice",
-                    avatar_url: null,
-                    user_status: "active",
-                    ...sessionOverrides,
-                  } as T;
-                }
-                return null;
-              }
-              return null;
-            },
-            async all<T>() {
-              if (query.includes("FROM workspace_memberships wm")) {
-                return {
-                  results: [
-                    {
-                      workspace_id: "ws-personal",
-                      role: "owner",
-                      workspace_status: "active",
-                    },
-                    {
-                      workspace_id: "ws-team",
-                      role: "member",
-                      workspace_status: "active",
-                    },
-                  ] as unknown as readonly T[],
-                };
-              }
-              if (query.includes("FROM project_memberships pm")) {
-                return {
-                  results: [
-                    { project_id: "proj-1", role: "lead" },
-                  ] as unknown as readonly T[],
-                };
-              }
-              if (query.includes("FROM projects WHERE workspace_id")) {
-                return {
-                  results: [
-                    { id: "proj-1" },
-                    { id: "proj-2" },
-                  ] as unknown as readonly T[],
-                };
-              }
-              return { results: [] };
-            },
-            async run() {
-              return { success: true };
-            },
-          };
-        },
-      };
-    }
-
-    it("resolves security context with active workspace, roles and authorized projects", async () => {
-      const token = "valid-session-token";
-      const tokenHash = await hashToken(token);
-      const mockDb = createMockDb(token, tokenHash);
-
-      const ctx = await resolveSecurityContextFromDb(mockDb, token, {
-        requestedWorkspaceId: "ws-personal",
-      });
-
-      expect(ctx.userId).toBe("user-1");
-      expect(ctx.workspaceId).toBe("ws-personal");
-      expect(ctx.workspaceRole).toBe("owner");
-      expect(ctx.roles).toEqual(["owner"]);
-      // Owner automatically gets all workspace projects
-      expect(ctx.authorizedProjectIds).toEqual(["proj-1", "proj-2"]);
-    });
-
-    it("resolves member workspace with explicit project memberships", async () => {
-      const token = "valid-session-token";
-      const tokenHash = await hashToken(token);
-      const mockDb = createMockDb(token, tokenHash);
-
-      const ctx = await resolveSecurityContextFromDb(mockDb, token, {
-        requestedWorkspaceId: "ws-team",
-      });
-
-      expect(ctx.workspaceId).toBe("ws-team");
-      expect(ctx.workspaceRole).toBe("member");
-      expect(ctx.authorizedProjectIds).toEqual(["proj-1"]);
-      expect(ctx.projectRoles).toEqual({ "proj-1": "lead" });
-    });
-
-    it("rejects token when user is not a member of requested workspace", async () => {
-      const token = "valid-session-token";
-      const tokenHash = await hashToken(token);
-      const mockDb = createMockDb(token, tokenHash);
-
-      await expect(
-        resolveSecurityContextFromDb(mockDb, token, {
-          requestedWorkspaceId: "ws-unauthorized",
-        }),
-      ).rejects.toThrow(AuthorizationError);
-    });
-
-    it("rejects invalid or non-existent token", async () => {
-      const token = "unknown-token";
-      const mockDb = createMockDb("token", "different-hash");
-
-      await expect(resolveSecurityContextFromDb(mockDb, token)).rejects.toThrow(
-        AuthenticationError,
-      );
-    });
-
-    it.each([
-      ["expired", { expires_at: "2000-01-01T00:00:00.000Z" }],
-      ["revoked", { revoked_at: "2026-01-01T00:00:00.000Z" }],
-      ["inactive user", { user_status: "suspended" }],
-    ])("rejects a %s session identity", async (_label, sessionOverrides) => {
-      const token = "invalid-session-state";
-      const tokenHash = await hashToken(token);
-      const mockDb = createMockDb(token, tokenHash, sessionOverrides);
-
-      await expect(resolveSecurityContextFromDb(mockDb, token)).rejects.toThrow(
-        AuthenticationError,
-      );
     });
   });
 

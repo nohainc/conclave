@@ -37,4 +37,4 @@ use it as a substitute for Better Auth in production.
 
 The app deployment scans the compiled Flutter web directory and fails if server
 authentication names are present. Flutter receives only `CONCLAVE_API_URL`;
-`CONCLAVE_AUTH_TOKEN` must never be passed through `--dart-define`.
+human session credentials are never passed through `--dart-define`.

@@ -35,14 +35,12 @@ import {
 } from "../ensemble-dispatcher.js";
 import {
   authorize,
-  extractAuthToken,
-  formatSessionCookie,
+  extractBearerToken,
   hashToken,
   computePackageDigest,
   signPackageDigest,
   verifyPackageDigestSignature,
   resolveSecurityContextFromIdentity,
-  resolveSecurityContextFromDb,
   authorizeCredentialProfileUse,
   type Permission,
   type Role,
@@ -205,12 +203,9 @@ type SecurityEnv = Env & {
   readonly GOOGLE_CLIENT_ID?: string;
   readonly GOOGLE_CLIENT_SECRET?: string;
   readonly CONCLAVE_PLUGIN_PUBLISHER_EMAIL?: string;
-  readonly CONCLAVE_AUTH_TOKEN?: string;
   readonly CONCLAVE_PLUGIN_SIGNING_KEY?: string;
   readonly CONCLAVE_HOST_SIGNING_KEY?: string;
   readonly CONCLAVE_SECURITY_KEY?: string;
-  readonly CONCLAVE_AUTH_USER_ID?: string;
-  readonly CONCLAVE_AUTH_ORGANIZATION_ID?: string;
   readonly CONCLAVE_ALLOW_ANONYMOUS_DEV?: string;
   readonly CONCLAVE_CI_INGEST_TOKEN?: string;
   readonly CONCLAVE_FORGE_CALLBACK_TOKEN?: string;
@@ -317,48 +312,12 @@ async function securityContext(
     }
   }
 
-  const token = extractAuthToken(request.headers);
-  if (token && env.CONCLAVE_DB) {
-    try {
-      const requestedWorkspaceId =
-        request.headers.get("x-conclave-workspace-id") ??
-        new URL(request.url).searchParams.get("workspaceId") ??
-        undefined;
-      return await resolveSecurityContextFromDb(env.CONCLAVE_DB, token, {
-        requestedWorkspaceId,
-      });
-    } catch (err: unknown) {
-      if (
-        err instanceof Error &&
-        "code" in err &&
-        (err as { code: string }).code === "UNAUTHORIZED"
-      ) {
-        throw new HttpError(401, err.message);
-      }
-      if (
-        err instanceof Error &&
-        "code" in err &&
-        (err as { code: string }).code === "FORBIDDEN"
-      ) {
-        throw new HttpError(403, err.message);
-      }
-      throw err;
-    }
-  }
   if (anonymousDevelopment(env)) {
     return createDefaultSecurityContext(
       "local-development",
       "local-development",
       "owner",
     );
-  }
-  if (env.CONCLAVE_ENVIRONMENT === "development" && env.CONCLAVE_AUTH_TOKEN) {
-    const devToken = bearer(request);
-    if (!devToken || devToken !== env.CONCLAVE_AUTH_TOKEN)
-      throw new HttpError(401, "Authentication required");
-    const userId = env.CONCLAVE_AUTH_USER_ID ?? "dev-user";
-    const organizationId = env.CONCLAVE_AUTH_ORGANIZATION_ID ?? "dev-workspace";
-    return createDefaultSecurityContext(userId, organizationId, "owner");
   }
   throw new HttpError(401, "Better Auth authentication required");
 }
@@ -774,48 +733,20 @@ async function handleSessionLogout(
   env: SecurityEnv,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  if (env.BETTER_AUTH_SECRET) {
-    const context = await securityContext(request, env, accessContext);
-    const headers = new Headers(request.headers);
-    headers.delete("content-length");
-    headers.set("content-type", "application/json");
-    const authRequest = new Request(
-      new URL("/api/auth/sign-out", request.url),
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ disableRedirect: true }),
-      },
-    );
-    const response = await handleBetterAuthRequest(authRequest, env);
-    if (response.ok && env.CONCLAVE_DB) {
-      await recordAudit(env, context, "logout", "session", context.sessionId);
-    }
-    return response;
-  }
   const context = await securityContext(request, env, accessContext);
-  const token = extractAuthToken(request.headers);
-  if (token && env.CONCLAVE_DB) {
-    await env.CONCLAVE_DB.prepare(
-      "UPDATE auth_sessions SET revoked_at = ?1, updated_at = ?1 WHERE token_hash = ?2 AND revoked_at IS NULL",
-    )
-      .bind(new Date().toISOString(), await hashToken(token))
-      .run();
-  }
-  if (env.CONCLAVE_DB) {
+  const headers = new Headers(request.headers);
+  headers.delete("content-length");
+  headers.set("content-type", "application/json");
+  const authRequest = new Request(new URL("/api/auth/sign-out", request.url), {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ disableRedirect: true }),
+  });
+  const response = await handleBetterAuthRequest(authRequest, env);
+  if (response.ok && env.CONCLAVE_DB) {
     await recordAudit(env, context, "logout", "session", context.sessionId);
   }
-  return json(
-    { authenticated: false },
-    {
-      headers: {
-        "set-cookie": formatSessionCookie("", {
-          maxAgeSeconds: 0,
-          secure: new URL(request.url).protocol === "https:",
-        }),
-      },
-    },
-  );
+  return response;
 }
 
 async function handleListWorkspaces(
@@ -3149,7 +3080,7 @@ async function handleHostGatewayConnect(
   const url = new URL(request.url);
   const hostId = url.searchParams.get("hostId");
   const authToken =
-    extractAuthToken(request.headers) ??
+    extractBearerToken(request.headers) ??
     url.searchParams.get("token") ??
     url.searchParams.get("authToken");
 
@@ -3207,7 +3138,7 @@ async function handleHostProtocolMessage(
     );
   }
 
-  const token = extractAuthToken(request.headers);
+  const token = extractBearerToken(request.headers);
   let authenticatedHost: { id: string; workspace_id: string } | null = null;
   if (token) {
     const tokenHash = await hashToken(token);
@@ -4380,7 +4311,7 @@ async function handleDownloadPluginVersion(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   if (!anonymousDevelopment(env)) {
-    const token = extractAuthToken(request.headers);
+    const token = extractBearerToken(request.headers);
     if (token) {
       const tokenHash = await hashToken(token);
       const agent = await env.CONCLAVE_DB.prepare(
@@ -4818,7 +4749,7 @@ async function handleDownloadHostRelease(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   if (!anonymousDevelopment(env)) {
-    const token = extractAuthToken(request.headers);
+    const token = extractBearerToken(request.headers);
     if (token) {
       const tokenHash = await hashToken(token);
       const agent = await env.CONCLAVE_DB.prepare(

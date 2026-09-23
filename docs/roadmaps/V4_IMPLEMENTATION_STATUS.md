@@ -111,3 +111,11 @@ parsing, Access organization selector, or Access service-token-to-human
 mapping. Better Auth is the only production browser authentication path;
 Cloudflare Access remains optional infrastructure protection for staging,
 administrative, debug, and internal environments.
+
+## AUTH-11 — Delete custom human session infrastructure
+
+✅ Better Auth is now the only human-session implementation. The legacy
+`conclave_session` cookie, custom session-token extraction and formatting,
+database session verification/revocation, and development human bearer
+environment variables were removed. Bearer credentials remain only in
+explicit service-auth paths such as Host, CI, Forge, and connector flows.

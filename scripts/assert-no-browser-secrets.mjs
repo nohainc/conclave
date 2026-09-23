@@ -6,11 +6,7 @@ import { join } from "node:path";
 const root = process.argv[2];
 if (!root) throw new Error("A directory to scan is required");
 
-const forbidden = [
-  "CONCLAVE_AUTH_TOKEN",
-  "CONCLAVE_AUTH_USER_ID",
-  "CONCLAVE_AUTH_ORGANIZATION_ID",
-];
+const forbidden = [];
 
 async function scan(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
