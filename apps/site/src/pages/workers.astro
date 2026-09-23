@@ -9,12 +9,26 @@ import SiteLayout from "../layouts/SiteLayout.astro";
 <SiteLayout title="Workers — Conclave AX" description="Workers are installable AI and tool capabilities managed by Conclave Host.">
   <Section>
     <Container>
-      <SectionHeader eyebrow="Workers" title="Choose capability, not a permanent machine identity." description="Workers are installable integrations that a Host can supervise. The same Worker can serve different Projects and Accounts while each assignment keeps its own context." />
-    <div class="cards">
-      <FeatureCard title="AI and coding"><p>Connect the AI and coding capabilities your work needs through the Worker catalog.</p></FeatureCard>
-      <FeatureCard title="Automatic updates"><p>Conclave Host resolves, verifies, installs, health-checks, and rolls back Worker versions.</p></FeatureCard>
-      <FeatureCard title="Account-aware execution"><p>Accounts keep external AI identity separate from shared Worker software.</p></FeatureCard>
-    </div>
+      <SectionHeader eyebrow="Workers" title="Choose capability, not a permanent machine identity." description="A Worker is an integration that lets Conclave AX use an AI model, CLI, or tool. Workers are installed on Hosts and selected for individual assignments." headingLevel={1} />
+      <div class="cards worker-catalog">
+        <FeatureCard title="Codex"><p>AI coding and repository work through a Host-managed Worker.</p></FeatureCard>
+        <FeatureCard title="Claude Code"><p>AI-assisted coding and review for focused implementation work.</p></FeatureCard>
+        <FeatureCard title="OpenAI"><p>API-backed model execution for structured assignments.</p></FeatureCard>
+        <FeatureCard title="Anthropic"><p>API-backed model execution for structured assignments.</p></FeatureCard>
+      </div>
+      <p class="catalog-note">More Workers coming as integrations become ready for the catalog.</p>
+      <div class="worker-account-model">
+        <div>
+          <SectionHeader eyebrow="One installation, many assignments" title="Software is shared. Accounts stay separate." description="A Worker is installed once on a Host and can serve different user Accounts without turning the installation into an identity." />
+        </div>
+        <div class="account-tree" aria-label="Codex Worker connected to separate Accounts">
+          <strong>Codex Worker</strong>
+          <span class="account-tree__line" aria-hidden="true">│</span>
+          <span>├── Vitalii Account</span>
+          <span>├── Alice Account</span>
+          <span>└── Team Account</span>
+        </div>
+      </div>
     </Container>
   </Section>
 </SiteLayout>
