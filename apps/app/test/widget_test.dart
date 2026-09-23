@@ -174,6 +174,19 @@ void main() {
     expect(find.text('Add passkey'), findsOneWidget);
   });
 
+  testWidgets('exposes lightweight links back to the public product site',
+      (WidgetTester tester) async {
+    await tester
+        .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('About Conclave AX'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('About Conclave AX'), findsOneWidget);
+    expect(find.text('Visit website'), findsOneWidget);
+  });
+
   testWidgets('auth redirects to sign-in without loading workspace data',
       (WidgetTester tester) async {
     await tester.pumpWidget(const ConclaveApp(

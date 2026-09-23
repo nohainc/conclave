@@ -170,6 +170,31 @@ class _StudioAppState extends State<StudioApp> {
     }
   }
 
+  Future<void> _showAboutConclave() {
+    final dialogContext = navigatorKey.currentState?.context ?? context;
+    return showDialog<void>(
+        context: dialogContext,
+        builder: (dialogContext) => AlertDialog(
+              title: const Text('About Conclave AX'),
+              content: const Text(
+                  'Conclave AX coordinates AI Workers across models and machines to research, implement, review, test, and verify complex work.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Close'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+                    browserNavigation
+                        .openExternal(Uri.parse('https://conclaveax.com'));
+                  },
+                  child: const Text('Visit website'),
+                ),
+              ],
+            ));
+  }
+
   Future<void> _loadWorkspaces() async {
     try {
       final loaded = await store.workspaces.list();
@@ -1353,8 +1378,16 @@ class _StudioAppState extends State<StudioApp> {
                 constraints: const BoxConstraints.tightFor(width: 32),
                 onSelected: (value) {
                   if (value == 'logout') unawaited(_logout());
+                  if (value == 'about') unawaited(_showAboutConclave());
+                  if (value == 'website') {
+                    browserNavigation
+                        .openExternal(Uri.parse('https://conclaveax.com'));
+                  }
                 },
                 itemBuilder: (context) => const [
+                  PopupMenuItem(
+                      value: 'about', child: Text('About Conclave AX')),
+                  PopupMenuItem(value: 'website', child: Text('Website')),
                   PopupMenuItem(value: 'logout', child: Text('Log out')),
                 ],
                 icon: const Icon(Icons.more_horiz,
@@ -1649,6 +1682,12 @@ class _StudioAppState extends State<StudioApp> {
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
                     color: Color(0xff20202c)))),
+        IconButton(
+          tooltip: 'About Conclave AX',
+          onPressed: _showAboutConclave,
+          icon: const Icon(Icons.info_outline,
+              size: 20, color: Color(0xff6e6e7a)),
+        ),
         Stack(
           clipBehavior: Clip.none,
           children: [

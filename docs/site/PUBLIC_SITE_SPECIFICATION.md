@@ -218,6 +218,13 @@ denser layouts and darker navigation for productivity, but their entry screens,
 titles, buttons, and marks should make the transition from the website feel
 intentional. Public-site navigation never duplicates application login logic.
 
+Cross-product navigation is deliberately shallow: the website's primary
+**Open Conclave AX** links directly to `https://app.conclaveax.com`; the
+authenticated application may link back to the website or an About surface.
+Host download and pairing remain inside Conclave AX under Hosts, so the public
+site never handles signed downloads, enrollment tokens, or authentication
+state.
+
 ## Acceptance checklist
 
 An implementation is conformant when a visitor can, without signing in:
