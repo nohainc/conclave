@@ -12,6 +12,7 @@
     "check:analytics": "node scripts/check-analytics-privacy.mjs",
     "check:security": "node scripts/check-security.mjs",
     "check:content": "node scripts/check-content.mjs",
+    "check:release": "node scripts/check-release.mjs",
     "preview": "astro preview",
     "test": "vitest run test"
   },

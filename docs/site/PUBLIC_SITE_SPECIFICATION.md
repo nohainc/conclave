@@ -226,6 +226,8 @@ coverage may be added when a stable browser capture environment is available.
 Production claims are tracked and reviewed in
 `docs/site/PUBLIC_SITE_CONTENT_AUDIT.md`; unsupported architecture targets must
 not be presented as current capabilities.
+The final launch criteria and human comprehension review are in
+`docs/site/PUBLIC_SITE_RELEASE_GATE.md`.
 
 The system supports wide, medium, and narrow layouts; visible keyboard focus;
 reduced-motion preferences; and forced-colors/high-contrast mode. Motion is

@@ -76,6 +76,7 @@ jobs:
       - run: node scripts/check-analytics-privacy.mjs
       - run: node scripts/check-security.mjs
       - run: node scripts/check-content.mjs
+      - run: node scripts/check-release.mjs
       - run: ./node_modules/.bin/vitest run test
       - name: Verify static routes
         run: |
