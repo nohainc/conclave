@@ -122,6 +122,9 @@ void main() {
         'createdAt': '2026-09-22T00:00:00Z',
         'metadata': {},
       },
+      'goalId': 'goal-1',
+      'runId': 'run-1',
+      'intent': {'kind': 'new_goal'},
     });
     final client = StudioApiClient(
       baseUrl: 'https://conclave.test/api',
@@ -136,6 +139,9 @@ void main() {
 
     expect(message.sender, StudioMessageSender.user);
     expect(message.text, 'Fix the bug');
+    expect(message.goalId, 'goal-1');
+    expect(message.runId, 'run-1');
+    expect(message.intentKind, 'new_goal');
     expect(requestClient.lastRequest?.url.path, '/api/chats/chat-1/messages');
   });
 

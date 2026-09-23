@@ -2417,6 +2417,62 @@ async function handleListChatMessages(
   return json({ messages });
 }
 
+async function startChatExecution(
+  env: Env,
+  context: SecurityContext,
+  projectId: string,
+  chatId: string,
+  objective: string,
+  repositoryId?: string,
+): Promise<{ goalId: string; runId: string; status: string }> {
+  const now = new Date().toISOString();
+  const goalId = `goal-${crypto.randomUUID()}`;
+  const runId = `run-${crypto.randomUUID()}`;
+  const criterionId = `${goalId}-criterion-1`;
+  await env.CONCLAVE_DB.batch([
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO goals (id, workspace_id, project_id, chat_id, created_by_user_id, original_message, objective, constraints_json, completion_criteria_json, verification_policy_json, status, created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, '[]', ?7, ?8, 'running', ?9, ?9)`,
+    ).bind(
+      goalId,
+      context.workspaceId,
+      projectId,
+      chatId,
+      context.userId,
+      objective,
+      JSON.stringify([criterionId]),
+      JSON.stringify({ mode: "standard" }),
+      now,
+    ),
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO runs (id, workspace_id, project_id, goal_id, policy_snapshot_json, status, started_at, created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, 'running', ?6, ?6, ?6)`,
+    ).bind(
+      runId,
+      context.workspaceId,
+      projectId,
+      goalId,
+      JSON.stringify({ mode: "standard" }),
+      now,
+    ),
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO completion_criteria (id, goal_id, description, verification_requirement, status, evidence_artifact_ids_json, created_at, updated_at)
+       VALUES (?1, ?2, ?3, 'independent verification', 'pending', '[]', ?4, ?4)`,
+    ).bind(criterionId, goalId, objective, now),
+  ]);
+  const run = await createOrGetRun(env, {
+    runId,
+    goalId,
+    idempotencyKey: `chat:${chatId}:${goalId}`,
+    organizationId: context.organizationId,
+    ...(repositoryId ? { repositoryId } : {}),
+    revision: "HEAD",
+    allowedWorkflows: ["CI"],
+    requireCiEvidence: false,
+  });
+  return { goalId, runId, status: String(run.status) };
+}
+
 async function handleCreateChatMessage(
   request: Request,
   env: SecurityEnv,
@@ -2478,13 +2534,17 @@ async function handleCreateChatMessage(
     })),
   });
   const projectRow = await env.CONCLAVE_DB.prepare(
-    "SELECT settings_json AS settingsJson FROM projects WHERE id = ?1",
+    "SELECT repository_id AS repositoryId, settings_json AS settingsJson FROM projects WHERE id = ?1",
   )
     .bind(chatRow.projectId)
-    .first<{ settingsJson: string }>();
+    .first<{ repositoryId: string | null; settingsJson: string }>();
   const projectSettings = parseJson<Record<string, unknown>>(
     projectRow?.settingsJson,
   );
+  const projectRepositoryId =
+    typeof projectRow?.repositoryId === "string"
+      ? projectRow.repositoryId
+      : undefined;
   const projectInstructions =
     typeof projectSettings.instructions === "string" &&
     projectSettings.instructions.trim().length > 0
@@ -2545,6 +2605,20 @@ async function handleCreateChatMessage(
       transcriptIncluded: false,
     },
   };
+  const shouldStartExecution =
+    intentDecision.accepted &&
+    (intentDecision.kind === "new_goal" ||
+      intentDecision.kind === "follow_up_goal");
+  const execution = shouldStartExecution
+    ? await startChatExecution(
+        env,
+        context,
+        chatRow.projectId,
+        chatId,
+        content,
+        projectRepositoryId,
+      )
+    : null;
   const now = new Date().toISOString();
   const id = `msg-${crypto.randomUUID()}`;
 
@@ -2555,7 +2629,7 @@ async function handleCreateChatMessage(
     senderId,
     content,
     kind,
-    goalId,
+    goalId: execution?.goalId ?? goalId,
     metadata: messageMetadata,
     createdAt: now,
   };
@@ -2602,6 +2676,7 @@ async function handleCreateChatMessage(
     {
       message,
       intent: intentDecision,
+      ...(execution ?? {}),
       context: contextItems.map((item) => ({
         id: item.id,
         kind: item.kind,

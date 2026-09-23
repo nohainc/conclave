@@ -711,8 +711,12 @@ class StudioApiClient implements StudioDataSource {
     if (message is! Map) {
       throw const StudioApiException('Send message response is malformed');
     }
-    return StudioChatMessage.fromJson(
-        _studioChatMessageFromApi(Map<String, dynamic>.from(message)));
+    return StudioChatMessage.fromJson({
+      ..._studioChatMessageFromApi(Map<String, dynamic>.from(message)),
+      'goalId': body['goalId'] ?? message['goalId'],
+      'runId': body['runId'],
+      'intentKind': body['intent'] is Map ? body['intent']['kind'] : null,
+    });
   }
 
   @override

@@ -2481,6 +2481,13 @@ class _StudioAppState extends State<ConclaveAppShell> {
       final response = await store.chats.send(chat.projectId, chat.id, text);
       if (!mounted) return;
       setState(() => localChatMessages.add(response));
+      if (response.runId != null && response.runId!.isNotEmpty) {
+        await _loadSnapshot(projectId: chat.projectId, showSpinner: false);
+        if (!mounted) return;
+        _navigateTo(StudioNavigation.run(chat.projectId, response.runId!));
+      } else {
+        await _loadSnapshot(projectId: chat.projectId, showSpinner: false);
+      }
     } catch (error) {
       if (mounted) _showSnackBar(error.toString());
     }

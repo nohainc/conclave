@@ -261,6 +261,9 @@ class StudioChatMessage {
     required this.text,
     required this.timestamp,
     this.runPreview,
+    this.goalId,
+    this.runId,
+    this.intentKind,
   });
 
   final String id;
@@ -268,6 +271,9 @@ class StudioChatMessage {
   final String text;
   final String timestamp;
   final StudioRunPreview? runPreview;
+  final String? goalId;
+  final String? runId;
+  final String? intentKind;
 
   factory StudioChatMessage.fromJson(Map<String, dynamic> json) =>
       StudioChatMessage(
@@ -282,6 +288,9 @@ class StudioChatMessage {
             ? null
             : StudioRunPreview.fromJson(
                 Map<String, dynamic>.from(json['runPreview'] as Map)),
+        goalId: json['goalId'] as String?,
+        runId: json['runId'] as String?,
+        intentKind: json['intentKind'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
