@@ -77,8 +77,11 @@ Store `CONCLAVE_AUTH_GITHUB_CLIENT_SECRET`,
 `CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET`, and
 `BETTER_AUTH_SECRET` only with Cloudflare Worker secrets (for example,
 `wrangler secret put`). Do not commit values to source, Wrangler configuration,
-CI files, or browser bundles. Client IDs may be ordinary environment
-configuration, but should still be managed per deployment.
+CI files, or browser bundles. These are ultimately secrets on the
+`conclave-ax-app` Worker. The production deployment workflow accepts the same
+names as GitHub Actions secrets and copies them to the Worker before
+deployment. Client IDs may be ordinary environment configuration, but should
+still be managed per deployment.
 
 Better Auth uses database-backed HttpOnly sessions in `auth_sessions`. The
 production policy is a 14-day session with daily refresh, no session data

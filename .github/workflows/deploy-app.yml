@@ -43,6 +43,30 @@ jobs:
       - name: Verify production security configuration
         working-directory: .
         run: node scripts/verify-production-security.mjs
+      - name: Sync Better Auth provider secrets to Cloudflare Worker
+        working-directory: apps/cloud
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CONCLAVE_AUTH_GITHUB_CLIENT_ID: ${{ secrets.CONCLAVE_AUTH_GITHUB_CLIENT_ID }}
+          CONCLAVE_AUTH_GITHUB_CLIENT_SECRET: ${{ secrets.CONCLAVE_AUTH_GITHUB_CLIENT_SECRET }}
+          CONCLAVE_AUTH_GOOGLE_CLIENT_ID: ${{ secrets.CONCLAVE_AUTH_GOOGLE_CLIENT_ID }}
+          CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          for name in \
+            CONCLAVE_AUTH_GITHUB_CLIENT_ID \
+            CONCLAVE_AUTH_GITHUB_CLIENT_SECRET \
+            CONCLAVE_AUTH_GOOGLE_CLIENT_ID \
+            CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET; do
+            value="${!name}"
+            if [ -z "$value" ]; then
+              echo "Missing GitHub Actions secret: $name"
+              exit 1
+            fi
+            printf '%s' "$value" | pnpm exec wrangler secret put "$name" \
+              --config ../../infra/cloudflare/app.wrangler.jsonc
+          done
       - name: Verify Better Auth production secrets
         working-directory: apps/cloud
         env:
@@ -65,6 +89,8 @@ jobs:
                 const missing = required.filter((name) => !configured.has(name));
                 if (missing.length > 0) {
                   console.error(`Missing production Worker secrets: ${missing.join(", ")}`);
+                  console.error("These must be Cloudflare Worker secrets on conclave-ax-app, not GitHub Actions repository secrets.");
+                  console.error("Add them with: pnpm exec wrangler secret put NAME --config ../../infra/cloudflare/app.wrangler.jsonc");
                   process.exit(1);
                 }
               });
