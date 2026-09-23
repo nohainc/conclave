@@ -617,18 +617,24 @@ class StudioEvent {
     required this.title,
     required this.detail,
     required this.kind,
+    this.eventId,
+    this.correlationId,
   });
 
   final String time;
   final String title;
   final String detail;
   final String kind;
+  final String? eventId;
+  final String? correlationId;
 
   factory StudioEvent.fromJson(Map<String, dynamic> json) => StudioEvent(
       time: _string(json, 'time'),
       title: _string(json, 'title'),
       detail: _string(json, 'detail'),
-      kind: _string(json, 'kind'));
+      kind: _string(json, 'kind'),
+      eventId: json['eventId'] as String?,
+      correlationId: json['correlationId'] as String?);
 }
 
 class StudioArtifact {

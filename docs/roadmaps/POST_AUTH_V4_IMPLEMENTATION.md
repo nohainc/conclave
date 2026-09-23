@@ -1169,6 +1169,10 @@ Realtime Gateway connections now use bounded per-connection queues. Ephemeral pr
 
 Conclave AX now keeps an in-app notification center for important Run completion, failure, and approval-required events. Notifications are retained in the current App session, show an unread badge without requesting browser permission, and link back to the relevant Run when its project context is available. Ephemeral progress remains a live status signal rather than a notification, and the event semantics remain suitable for a future mobile delivery adapter.
 
+## PA-17 — Observability and correlation across App -> Cloud -> Host -> Worker
+
+Cloud requests receive bounded `x-request-id` correlation and structured JSON logs. Durable Run events expose event and persistence correlation IDs to Conclave AX, where Run diagnostics can be exported without secrets. Conclave Host writes bounded, redacted structured logs and can export a sanitized diagnostics bundle containing machine-safe connection state, assignment identity/status fields, and recent logs. Correlation fields remain workspace, Run, Task, Attempt, Assignment, Host, Worker, Account, request, and event identifiers; raw credentials and session tokens are excluded.
+
 # Delegation guidance
 
 For each phase, give the implementation AI this structure:

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../navigation/studio_browser_navigation.dart';
 import '../navigation/studio_navigation.dart';
@@ -351,6 +352,37 @@ class _StudioAppState extends State<StudioApp> {
     } catch (error) {
       if (mounted) _showSnackBar(error.toString());
     }
+  }
+
+  Future<void> _copyRunDiagnostics() async {
+    final run = snapshot.run;
+    if (run == null) return;
+    final diagnostics = <String, Object?>{
+      'format': 'conclave-run-diagnostics-v1',
+      'exportedAt': DateTime.now().toUtc().toIso8601String(),
+      'workspaceId': snapshot.workspaceId,
+      'projectId': selectedProjectId,
+      'runId': run.id,
+      'status': run.status.name,
+      'tasks': snapshot.tasks
+          .map((task) => {
+                'id': task.id,
+                'status': task.status.name,
+                'worker': task.worker,
+              })
+          .toList(),
+      'events': snapshot.events
+          .map((event) => {
+                'eventId': event.eventId,
+                'correlationId': event.correlationId,
+                'time': event.time,
+                'type': event.kind,
+                'detail': event.detail,
+              })
+          .toList(),
+    };
+    await Clipboard.setData(ClipboardData(text: jsonEncode(diagnostics)));
+    if (mounted) _showSnackBar('Run diagnostics copied without secrets.');
   }
 
   void _startRealtime() {
@@ -2614,7 +2646,9 @@ class _StudioAppState extends State<StudioApp> {
   Widget _timelineCard() => _panel(
         title: 'Run timeline',
         subtitle: 'Ordered events',
-        trailing: TextButton(onPressed: () {}, child: const Text('View all')),
+        trailing: TextButton(
+            onPressed: _copyRunDiagnostics,
+            child: const Text('Export diagnostics')),
         child: Column(
           children: snapshot.events
               .map(

@@ -32,6 +32,17 @@ Conclave Host
 
 Workers do not connect directly to Conclave Cloud.
 
+## Observability and diagnostics
+
+Cloud assigns or preserves a bounded request ID for each HTTP request and
+emits structured JSON logs. Assignment and realtime facts retain Workspace,
+Run, Task, Attempt, Assignment, Host, Worker, Account, request, and event
+correlation where available. Conclave AX can export Run diagnostics containing
+safe identifiers, statuses, and ordered event metadata; Conclave Host can
+export a bounded diagnostics bundle containing redacted logs and assignment
+status. Diagnostic exports never include raw credentials, session tokens,
+authorization headers, or provider secrets.
+
 ## Host WebSocket lifecycle
 
 PA-8 uses one physical authenticated WebSocket per Host installation. The

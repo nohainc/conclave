@@ -4770,7 +4770,7 @@ async function handleStudioSnapshot(
       .bind(...scopedOwnershipBind)
       .all(),
     env.CONCLAVE_DB.prepare(
-      `SELECT e.occurred_at AS time, e.event_type AS title, e.entity_id AS detail, e.event_type AS kind FROM events e JOIN runs r ON r.id = e.run_id JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${scopedOwnership} ORDER BY e.occurred_at DESC LIMIT 100`,
+      `SELECT e.occurred_at AS time, e.event_type AS title, e.entity_id AS detail, e.event_type AS kind, e.id AS eventId, e.correlation_id AS correlationId FROM events e JOIN runs r ON r.id = e.run_id JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${scopedOwnership} ORDER BY e.occurred_at DESC LIMIT 100`,
     )
       .bind(...scopedOwnershipBind)
       .all(),

@@ -101,9 +101,35 @@ class HostLogger {
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'level': 'info',
       'message': message,
-      if (details.isNotEmpty) 'details': details,
+      if (details.isNotEmpty) 'details': _sanitize(details),
     };
     _output.writeln(redact(jsonEncode(record)));
+  }
+
+  static Object? _sanitize(Object? value, {int depth = 0}) {
+    if (depth > 5) return '[depth limited]';
+    if (value is String) {
+      return value.length > 512 ? '${value.substring(0, 512)}…' : value;
+    }
+    if (value == null || value is num || value is bool) return value;
+    if (value is List) {
+      return value
+          .take(50)
+          .map((item) => _sanitize(item, depth: depth + 1))
+          .toList();
+    }
+    if (value is Map) {
+      return <String, Object?>{
+        for (final entry in value.entries.take(80))
+          entry.key.toString():
+              RegExp(r'(secret|token|password|api[_-]?key|authorization|cookie|raw[_-]?credential|private[_-]?key)',
+                          caseSensitive: false)
+                      .hasMatch(entry.key.toString())
+                  ? '[redacted]'
+                  : _sanitize(entry.value, depth: depth + 1),
+      };
+    }
+    return '[${value.runtimeType}]';
   }
 }
 

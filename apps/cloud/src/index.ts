@@ -39,6 +39,7 @@ import {
   type WorkerRouteDependencies,
   type WorkerRouteHandlers,
 } from "./routes/router.js";
+import { logStructured, requestIdFor, withRequestId } from "./observability.js";
 
 const routeHandlers = {
   handleSession: handlers.handleSession,
@@ -128,12 +129,30 @@ export default {
     env: Env,
     ctx?: ExecutionContext,
   ): Promise<Response> {
+    const requestId = requestIdFor(request);
+    if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
+      const requestHeaders = new Headers(request.headers);
+      requestHeaders.set("x-request-id", requestId);
+      request = new Request(request, { headers: requestHeaders });
+    }
     const url = new URL(request.url);
+    logStructured(
+      "info",
+      "http.request",
+      { requestId },
+      {
+        method: request.method,
+        path: url.pathname,
+      },
+    );
     if (request.method === "GET" && url.pathname === "/health") {
-      return handlers.json({
-        ok: true,
-        environment: env.CONCLAVE_ENVIRONMENT,
-      });
+      return withRequestId(
+        handlers.json({
+          ok: true,
+          environment: env.CONCLAVE_ENVIRONMENT,
+        }),
+        requestId,
+      );
     }
     if (request.method === "GET" && url.pathname === "/api/dev/sign-in") {
       if (env.CONCLAVE_ENVIRONMENT !== "development") {
@@ -159,27 +178,33 @@ export default {
       return handlers.handleCompleteStepUp(request, env, ctx);
     }
     if (url.pathname === "/api/auth" || url.pathname.startsWith("/api/auth/")) {
-      return handleBetterAuthRequest(request, env);
+      return withRequestId(
+        await handleBetterAuthRequest(request, env),
+        requestId,
+      );
     }
     if (url.pathname === "/api/realtime") {
       const identity = await identityService.resolve(request, env);
       if (!identity) {
-        return handlers.json(
-          { error: "Authentication required" },
-          { status: 401 },
+        return withRequestId(
+          handlers.json({ error: "Authentication required" }, { status: 401 }),
+          requestId,
         );
       }
       const gateway = env.CONCLAVE_REALTIME_GATEWAY.getByName(
         `user:${identity.userId}`,
       );
-      return gateway.fetch(request);
+      return withRequestId(await gateway.fetch(request), requestId);
     }
-    return routeWorkerRequest(
-      request,
-      env,
-      ctx,
-      routeHandlers,
-      routeDependencies,
+    return withRequestId(
+      await routeWorkerRequest(
+        request,
+        env,
+        ctx,
+        routeHandlers,
+        routeDependencies,
+      ),
+      requestId,
     );
   },
 } satisfies ExportedHandler<Env>;

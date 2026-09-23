@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 
+import 'diagnostics.dart';
 import 'host.dart';
 
 class HostLifecycleController extends ChangeNotifier {
@@ -92,6 +94,12 @@ class HostLifecycleController extends ChangeNotifier {
     await host.stop();
     notifyListeners();
   }
+
+  Future<File> exportDiagnostics() => writeHostDiagnostics(
+        config: host.config,
+        connection: host.cloudConnection,
+        journal: host.cloudConnection?.assignmentJournal,
+      );
 }
 
 enum HostUiMode {
@@ -197,6 +205,14 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     if (shouldQuit == true) await widget.lifecycle.quit();
   }
 
+  Future<void> _exportDiagnostics() async {
+    final file = await widget.lifecycle.exportDiagnostics();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Diagnostics exported to ${file.path}')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final lifecycle = widget.lifecycle;
@@ -232,6 +248,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
                   onPair: lifecycle.restore,
                   onQuit: _confirmQuit,
                   onRetry: lifecycle.launch,
+                  onExportDiagnostics: _exportDiagnostics,
                 ),
         ),
       ),
@@ -246,6 +263,7 @@ class HostDashboard extends StatelessWidget {
     this.onAccountAction,
     this.onQuit,
     this.onRetry,
+    this.onExportDiagnostics,
     super.key,
   });
 
@@ -254,6 +272,7 @@ class HostDashboard extends StatelessWidget {
   final VoidCallback? onAccountAction;
   final VoidCallback? onQuit;
   final Future<void> Function()? onRetry;
+  final Future<void> Function()? onExportDiagnostics;
 
   @override
   Widget build(BuildContext context) {
@@ -356,6 +375,12 @@ class HostDashboard extends StatelessWidget {
               icon: Icons.receipt_long,
               summary:
                   snapshot.logsPath ?? 'Logs will appear after first launch.',
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: onExportDiagnostics,
+              icon: const Icon(Icons.download_outlined),
+              label: const Text('Export diagnostics'),
             ),
             const SizedBox(height: 12),
             _SectionCard(
