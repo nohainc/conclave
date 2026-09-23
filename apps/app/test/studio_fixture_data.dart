@@ -213,6 +213,20 @@ class StudioFixtureDataSource implements StudioDataSource {
   }) async {}
 
   @override
+  Future<void> updateHost({
+    required String workspaceId,
+    required String hostId,
+    String? name,
+    String? channel,
+  }) async {}
+
+  @override
+  Future<void> bindHostWorkspace({
+    required String workspaceId,
+    required String hostId,
+  }) async {}
+
+  @override
   Future<void> announceAgentUpdate({
     required String workspaceId,
     required String agentId,

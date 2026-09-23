@@ -3140,6 +3140,60 @@ async function handleRevokeHost(
   return json({ ok: true, revokedAt: now });
 }
 
+async function handleUpdateHost(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  hostId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  authorize(context, "host.manage");
+  requireWorkspaceContext(context, env, workspaceId);
+  const body = (await request.json()) as Record<string, unknown>;
+  const name = typeof body.name === "string" ? body.name.trim() : undefined;
+  const channel = typeof body.channel === "string" ? body.channel : undefined;
+  if (name !== undefined && name.length === 0) {
+    throw new HttpError(400, "Host name cannot be empty");
+  }
+  if (
+    channel !== undefined &&
+    !["stable", "beta", "development"].includes(channel)
+  ) {
+    throw new HttpError(400, "Unsupported release channel");
+  }
+  const host = await env.CONCLAVE_DB.prepare(
+    `SELECT h.id, h.name, h.capabilities_json AS capabilitiesJson
+     FROM hosts h JOIN host_workspace_bindings b ON b.host_id = h.id
+     WHERE h.id = ?1 AND b.workspace_id = ?2 AND b.status = 'active' AND h.revoked_at IS NULL`,
+  )
+    .bind(hostId, workspaceId)
+    .first<{ id: string; name: string; capabilitiesJson: string }>();
+  if (!host) throw new HttpError(404, "Host not found");
+  const capabilities = parseJson<Record<string, unknown>>(
+    host.capabilitiesJson,
+    {},
+  );
+  if (channel !== undefined) capabilities.updateChannel = channel;
+  const now = new Date().toISOString();
+  await env.CONCLAVE_DB.prepare(
+    `UPDATE hosts SET name = ?1, capabilities_json = ?2, updated_at = ?3
+     WHERE id = ?4`,
+  )
+    .bind(name ?? host.name, JSON.stringify(capabilities), now, hostId)
+    .run();
+  await recordAudit(env, context, "host.updated", "host", hostId, {
+    name: name ?? host.name,
+    channel: channel ?? null,
+  });
+  return json({
+    ok: true,
+    hostId,
+    name: name ?? host.name,
+    channel: channel ?? null,
+  });
+}
+
 async function handleAnnounceHostUpdate(
   request: Request,
   env: SecurityEnv,
@@ -6566,6 +6620,7 @@ export {
   handleListHosts,
   handleGetHost,
   handleRevokeHost,
+  handleUpdateHost,
   handleAnnounceHostUpdate,
   handleSetHostDesiredState,
   handleListCredentialProfiles,

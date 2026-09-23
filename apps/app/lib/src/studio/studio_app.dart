@@ -855,6 +855,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
         agent.id,
         channel: agent.updateChannel == '—' ? 'stable' : agent.updateChannel,
       );
+      await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
       if (!mounted) return;
       _showSnackBar('Update announced to the Host.');
     } catch (error) {
@@ -862,9 +863,107 @@ class _StudioAppState extends State<ConclaveAppShell> {
     }
   }
 
+  Future<void> _renameHost(StudioAgent host) async {
+    final controller = TextEditingController(text: host.name);
+    final name = await showDialog<String>(
+      context: navigatorKey.currentContext ?? context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Rename Host'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Host name'),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, controller.text),
+              child: const Text('Save')),
+        ],
+      ),
+    );
+    controller.dispose();
+    final workspaceId = snapshot.workspaceId;
+    if (name == null || name.trim().isEmpty || workspaceId == null) return;
+    try {
+      await store.agents.updateHost(workspaceId, host.id, name: name.trim());
+      await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
+      if (mounted) _showSnackBar('Host renamed.');
+    } catch (error) {
+      if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
+    }
+  }
+
+  Future<void> _bindHost(StudioAgent host) async {
+    final workspaceId = snapshot.workspaceId;
+    if (workspaceId == null) return;
+    try {
+      await store.agents.bindWorkspace(workspaceId, host.id);
+      await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
+      if (mounted) _showSnackBar('Host Workspace binding saved.');
+    } catch (error) {
+      if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
+    }
+  }
+
+  Future<void> _copyHostDiagnostics(StudioAgent host) async {
+    await Clipboard.setData(ClipboardData(
+        text: jsonEncode({
+      'hostId': host.id,
+      'name': host.name,
+      'status': host.status,
+      'os': host.os,
+      'architecture': host.architecture,
+      'version': host.version,
+      'lastSeen': host.lastSeen,
+      'workerCount': host.workerCount,
+      'activeTaskCount': host.activeTaskCount,
+      'workspaceBindings': host.workspaceBindings,
+    })));
+    if (mounted) _showSnackBar('Host diagnostics copied without secrets.');
+  }
+
   Future<void> _enrollAgent() async {
     final workspaceId = snapshot.workspaceId;
     if (workspaceId == null || workspaceId.isEmpty) return;
+    var platform = 'macOS';
+    final selected = await showDialog<String>(
+      context: navigatorKey.currentContext ?? context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Add Host'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Choose the machine where Conclave Host will run.'),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: platform,
+                decoration: const InputDecoration(labelText: 'Platform'),
+                items: const ['macOS', 'Windows', 'Linux']
+                    .map((value) =>
+                        DropdownMenuItem(value: value, child: Text(value)))
+                    .toList(),
+                onChanged: (value) =>
+                    setDialogState(() => platform = value ?? platform),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, platform),
+                child: const Text('Continue')),
+          ],
+        ),
+      ),
+    );
+    if (selected == null) return;
     try {
       final enrollment = await store.agents.createEnrollment(workspaceId);
       if (!mounted) return;
@@ -872,6 +971,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
         enrollmentResult = enrollment;
         loadError = null;
       });
+      _showSnackBar(
+          'Download Conclave Host for $selected, then enter the one-time code.');
     } catch (error) {
       if (mounted) setState(() => loadError = error.toString());
     }
@@ -3704,7 +3805,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
             FilledButton.icon(
               onPressed: snapshot.workspaceId == null ? null : _enrollAgent,
               icon: const Icon(Icons.add_link),
-              label: const Text('Pair Host'),
+              label: const Text('Add Host'),
             ),
           ]),
           if (enrollmentResult != null) ...[
@@ -3729,7 +3830,15 @@ class _StudioAppState extends State<ConclaveAppShell> {
                       ),
                     ]),
                     const SizedBox(height: 8),
-                    const Text('Copy this one-time token into the Host setup.'),
+                    const Text(
+                        '1. Download and open Conclave Host. 2. Enter this one-time code. 3. Keep this page open until the Host is online.'),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: () => browserNavigation
+                          .openExternal(Uri.parse('https://conclaveax.com')),
+                      icon: const Icon(Icons.download_outlined),
+                      label: const Text('Download Conclave Host'),
+                    ),
                     const SizedBox(height: 12),
                     SelectableText(enrollmentResult!.token,
                         style: const TextStyle(fontFamily: 'monospace')),
@@ -3765,6 +3874,31 @@ class _StudioAppState extends State<ConclaveAppShell> {
                                     : const Color(0xff9a98a5)),
                             const SizedBox(width: 8),
                             IconButton(
+                              tooltip: 'Rename Host',
+                              onPressed: () => _renameHost(agent),
+                              icon: const Icon(Icons.edit_outlined),
+                            ),
+                            PopupMenuButton<String>(
+                              tooltip: 'Host actions',
+                              onSelected: (action) {
+                                switch (action) {
+                                  case 'bind':
+                                    _bindHost(agent);
+                                  case 'diagnostics':
+                                    _copyHostDiagnostics(agent);
+                                }
+                              },
+                              itemBuilder: (context) => const [
+                                PopupMenuItem(
+                                    value: 'bind',
+                                    child: Text('Bind Workspace')),
+                                PopupMenuItem(
+                                    value: 'diagnostics',
+                                    child: Text('Copy diagnostics')),
+                              ],
+                              icon: const Icon(Icons.more_horiz),
+                            ),
+                            IconButton(
                               tooltip: 'Announce update',
                               onPressed: agent.status.toLowerCase() == 'revoked'
                                   ? null
@@ -3786,6 +3920,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
                             Text('Channel: ${agent.updateChannel}'),
                             Text('Last seen: ${agent.lastSeen}'),
                             Text('${agent.workerCount} installed Workers'),
+                            Text(
+                                '${snapshot.accounts.where((account) => account.host == agent.id || account.host == agent.name).length} Accounts stored locally'),
                             Text('${agent.activeTaskCount} active task'),
                             Text(agent.workspaceBindings.isEmpty
                                 ? '1 Workspace binding'

@@ -130,7 +130,7 @@ void main() {
     await tester.tap(find.text('Hosts').last);
     await tester.pumpAndSettle();
     expect(find.text('Development Host'), findsOneWidget);
-    expect(find.text('Pair Host'), findsOneWidget);
+    expect(find.text('Add Host'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.menu_rounded));
     await tester.pumpAndSettle();

@@ -293,7 +293,6 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
-
     // Workspace Agents Fleet
     const hostsMatch = url.pathname.match(
       /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/hosts$/,
@@ -316,6 +315,19 @@ export async function routeWorkerRequest(
     const singleAgentMatch = url.pathname.match(
       /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/hosts\/([^/]+)$/,
     );
+    if (
+      request.method === "PATCH" &&
+      singleAgentMatch?.[1] &&
+      singleAgentMatch?.[2]
+    ) {
+      return await handlers.handleUpdateHost!(
+        request,
+        env,
+        singleAgentMatch[1],
+        singleAgentMatch[2],
+        ctx,
+      );
+    }
     if (
       request.method === "GET" &&
       singleAgentMatch?.[1] &&

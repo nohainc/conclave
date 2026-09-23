@@ -90,6 +90,16 @@ abstract interface class StudioDataSource {
     required String workspaceId,
     required String agentId,
   });
+  Future<void> updateHost({
+    required String workspaceId,
+    required String hostId,
+    String? name,
+    String? channel,
+  });
+  Future<void> bindHostWorkspace({
+    required String workspaceId,
+    required String hostId,
+  });
   Future<void> announceAgentUpdate({
     required String workspaceId,
     required String agentId,
@@ -801,6 +811,43 @@ class StudioApiClient implements StudioDataSource {
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StudioApiException('Host revoke failed (${response.statusCode})');
+    }
+  }
+
+  @override
+  Future<void> updateHost({
+    required String workspaceId,
+    required String hostId,
+    String? name,
+    String? channel,
+  }) async {
+    final response = await client.patch(
+      Uri.parse('$baseUrl/workspaces/$workspaceId/hosts/$hostId'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({
+        if (name != null) 'name': name,
+        if (channel != null) 'channel': channel,
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException('Host update failed (${response.statusCode})',
+          statusCode: response.statusCode);
+    }
+  }
+
+  @override
+  Future<void> bindHostWorkspace({
+    required String workspaceId,
+    required String hostId,
+  }) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/workspaces/$workspaceId/hosts/$hostId/bind'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException('Host binding failed (${response.statusCode})',
+          statusCode: response.statusCode);
     }
   }
 

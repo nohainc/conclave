@@ -114,6 +114,17 @@ class AgentStore {
           agentId: agentId,
           channel: channel,
           version: version);
+
+  Future<void> updateHost(String workspaceId, String hostId,
+          {String? name, String? channel}) =>
+      source.updateHost(
+          workspaceId: workspaceId,
+          hostId: hostId,
+          name: name,
+          channel: channel);
+
+  Future<void> bindWorkspace(String workspaceId, String hostId) =>
+      source.bindHostWorkspace(workspaceId: workspaceId, hostId: hostId);
 }
 
 class WorkerStore {
