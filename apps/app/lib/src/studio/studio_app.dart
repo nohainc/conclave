@@ -16,6 +16,7 @@ import '../features/common/command_palette.dart';
 import '../features/common/diff_viewer.dart';
 import '../features/chat/typing_indicator.dart';
 import '../features/execution/task_pipeline_dag.dart';
+import '../features/home/home_page.dart';
 import '../features/projects/projects_pages.dart';
 import '../features/workspace/workspace_settings_page.dart';
 import 'studio_models.dart';
@@ -1939,7 +1940,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   compact ? 18 : 34, 26, compact ? 18 : 34, 40),
               child: showRunDetails
                   ? _runDetailsView(compact)
-                  : _chatView(compact))),
+                  : navigation.kind == StudioRouteKind.home
+                      ? _homeView()
+                      : _chatView(compact))),
     ]);
   }
 
@@ -2141,6 +2144,30 @@ class _StudioAppState extends State<ConclaveAppShell> {
         onCreateProject: _createProject,
         onOpenProject: (projectId) =>
             _navigateTo(StudioNavigation.project(projectId)),
+      );
+
+  Widget _homeView() => HomePage(
+        projects: snapshot.projects,
+        hosts: snapshot.agents,
+        workers: snapshot.workers,
+        accounts: snapshot.accounts,
+        run: snapshot.run,
+        openFindingCount: snapshot.findings
+            .where((finding) => finding.status == FindingStatus.open)
+            .length,
+        usageTokens: store.usage.tokens,
+        usageCostMicros: store.usage.costMicros,
+        onOpenHosts: () => _navigateTo(const StudioNavigation.hosts()),
+        onOpenWorkers: () => _navigateTo(const StudioNavigation.workers()),
+        onOpenAccounts: () => _navigateTo(const StudioNavigation.accounts()),
+        onOpenUsage: () => _navigateTo(const StudioNavigation.usage()),
+        onOpenProject: (projectId) =>
+            _navigateTo(StudioNavigation.project(projectId)),
+        onOpenChat: (projectId, chatId) =>
+            _navigateTo(StudioNavigation.chat(projectId, chatId)),
+        onOpenRun: (projectId, runId) =>
+            _navigateTo(StudioNavigation.run(projectId, runId)),
+        onCreateProject: _createProject,
       );
 
   Widget _projectOverviewView() {

@@ -12,7 +12,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Conclave AX'), findsOneWidget);
-    expect(find.text('Start a conversation'), findsOneWidget);
+    expect(find.text('Getting started'), findsOneWidget);
     expect(find.text('Create project'), findsOneWidget);
 
     await tester.tap(find.text('Create project'));
@@ -35,7 +35,7 @@ void main() {
     await tester.pump(const Duration(seconds: 4));
   });
 
-  testWidgets('renders the chat-first Conclave AX workspace',
+  testWidgets('renders the Workspace Home for an established Workspace',
       (WidgetTester tester) async {
     await tester
         .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
@@ -45,12 +45,12 @@ void main() {
     await tester.tap(find.byIcon(Icons.menu_rounded));
     await tester.pumpAndSettle();
     expect(find.text('Streaming assignment protocol', skipOffstage: false),
-        findsOneWidget);
+        findsWidgets);
     await tester.tap(find.text('Close menu'));
     await tester.pumpAndSettle();
-    expect(find.text('Research'), findsOneWidget);
-    expect(find.text('Synthesis'), findsOneWidget);
-    expect(find.text('Implementation'), findsOneWidget);
+    expect(find.text('Home'), findsWidgets);
+    expect(find.text('Active Runs'), findsOneWidget);
+    expect(find.text('Recent Projects'), findsOneWidget);
   });
 
   testWidgets('can open run details and return to chat',
@@ -98,8 +98,9 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.menu_rounded));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Atlas API', skipOffstage: false));
-    await tester.tap(find.text('Atlas API'));
+    await tester
+        .ensureVisible(find.text('Atlas API', skipOffstage: false).last);
+    await tester.tap(find.text('Atlas API').last);
     await tester.pumpAndSettle();
     final migrationChat =
         find.text('Database migration v2', skipOffstage: false).last;
@@ -126,21 +127,21 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.menu_rounded));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Hosts'));
+    await tester.tap(find.text('Hosts').last);
     await tester.pumpAndSettle();
     expect(find.text('Development Host'), findsOneWidget);
     expect(find.text('Pair Host'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.menu_rounded));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Workers'));
+    await tester.tap(find.text('Workers').last);
     await tester.pumpAndSettle();
     expect(find.text('Claude Code'), findsOneWidget);
     expect(find.text('Docker'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.menu_rounded));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Accounts'));
+    await tester.tap(find.text('Accounts').last);
     await tester.pumpAndSettle();
     expect(find.text('Accounts'), findsWidgets);
     expect(find.text('Vitalii Codex'), findsOneWidget);
@@ -152,8 +153,10 @@ void main() {
   testWidgets(
       'chat composer defaults to Auto and Balanced with advanced controls',
       (WidgetTester tester) async {
-    await tester
-        .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
+    await tester.pumpWidget(ConclaveApp(
+      dataSource: const StudioFixtureDataSource(),
+      initialUri: Uri(path: '/projects/forge/chats/chat-auth-1'),
+    ));
     await tester.pumpAndSettle();
 
     expect(find.text('Auto'), findsOneWidget);
@@ -174,16 +177,16 @@ void main() {
     await tester
         .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
     await tester.pumpAndSettle();
-    expect(find.text('Hosts'), findsOneWidget);
-    expect(find.text('Accounts'), findsOneWidget);
+    expect(find.text('Hosts').first, findsOneWidget);
+    expect(find.text('Accounts').first, findsOneWidget);
 
     await tester.binding.setSurfaceSize(const Size(720, 900));
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.menu_rounded), findsOneWidget);
     await tester.tap(find.byIcon(Icons.menu_rounded));
     await tester.pumpAndSettle();
-    expect(find.text('Hosts', skipOffstage: false), findsOneWidget);
-    expect(find.text('Accounts', skipOffstage: false), findsOneWidget);
+    expect(find.text('Hosts', skipOffstage: false).last, findsOneWidget);
+    expect(find.text('Accounts', skipOffstage: false).last, findsOneWidget);
     await tester.binding.setSurfaceSize(null);
   });
 
