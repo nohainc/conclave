@@ -1161,6 +1161,10 @@ The App now exposes concise live execution progress in Chat, a reconnect/stale-s
 
 Large outputs now use an authenticated Cloud artifact service backed by R2. Uploads are bounded, digest-checked, retry-idempotent, and recorded in D1; realtime publishes only `artifact.created` metadata. Download references contain an opaque artifact ID, never an R2 object key, and Cloud rechecks Workspace/Project authorization on every retrieval. Artifact responses are private and non-cacheable.
 
+## PA-15 — Realtime ordering, backpressure and performance
+
+Realtime Gateway connections now use bounded per-connection queues. Ephemeral progress and status frames are coalesced or dropped when stale, while durable and domain events remain recoverable through durable sequence cursors. If a connection cannot retain durable delivery, it receives a reconnect/resync signal instead of causing unbounded queue growth. Gateway metrics expose active App sockets, event rate, ephemeral drops and coalescing, reconnects, queue depth, and event-to-UI latency.
+
 # Delegation guidance
 
 For each phase, give the implementation AI this structure:

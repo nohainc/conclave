@@ -8,6 +8,7 @@ import {
   requiresRealtimeReconnect,
   scopeKey,
 } from "../src/realtime-gateway.js";
+import { BoundedRealtimeQueue } from "../src/realtime-queue.js";
 
 const identity = {
   userId: "user-1",
@@ -86,6 +87,42 @@ describe("realtime gateway contract", () => {
     expect(requiresRealtimeReconnect(null, 4)).toBe(false);
     expect(requiresRealtimeReconnect(3, 4)).toBe(false);
     expect(requiresRealtimeReconnect(3, 5)).toBe(true);
+  });
+
+  it("coalesces ephemeral progress and preserves durable frames in a bounded queue", () => {
+    const queue = new BoundedRealtimeQueue(2);
+    expect(
+      queue.enqueue({
+        frame: "progress-1",
+        durable: false,
+        coalesceKey: "run-1",
+      }),
+    ).toBe("queued");
+    expect(
+      queue.enqueue({
+        frame: "progress-2",
+        durable: false,
+        coalesceKey: "run-1",
+      }),
+    ).toBe("coalesced");
+    expect(queue.enqueue({ frame: "domain-1", durable: true })).toBe("queued");
+    expect(queue.enqueue({ frame: "domain-2", durable: true })).toBe("queued");
+    expect(queue.enqueue({ frame: "domain-3", durable: true })).toBe(
+      "resync-required",
+    );
+    expect(queue.drain().map((item) => item.frame)).toEqual([
+      "domain-1",
+      "domain-2",
+    ]);
+  });
+
+  it("drops noisy ephemeral frames once the queue is full", () => {
+    const queue = new BoundedRealtimeQueue(1);
+    expect(queue.enqueue({ frame: "status-1", durable: false })).toBe("queued");
+    expect(queue.enqueue({ frame: "status-2", durable: false })).toBe(
+      "dropped",
+    );
+    expect(queue.depth).toBe(1);
   });
 
   it("requires active Workspace membership and validates nested scopes", async () => {

@@ -8,6 +8,10 @@ import {
   type AuthenticatedIdentity,
   type BetterAuthRuntimeEnv,
 } from "./auth/index.js";
+import {
+  BoundedRealtimeQueue,
+  type RealtimeQueueEnqueueResult,
+} from "./realtime-queue.js";
 
 export interface RealtimeScope {
   workspaceId: string;
@@ -31,7 +35,22 @@ interface ConnectedClient {
   readonly identity: AuthenticatedIdentity;
   readonly subscriptions: Map<string, RealtimeScope>;
   lastDurableSequence: number | null;
+  readonly queue: BoundedRealtimeQueue;
+  flushScheduled: boolean;
 }
+
+export interface RealtimeGatewayMetrics {
+  activeAppSockets: number;
+  publishedEvents: number;
+  ephemeralDropped: number;
+  ephemeralCoalesced: number;
+  reconnects: number;
+  durableResyncs: number;
+  maxQueueDepth: number;
+  eventToUiLatencyMs: number;
+}
+
+const MAX_SOCKET_BUFFERED_BYTES = 256 * 1024;
 
 const scopeFields = ["workspaceId", "projectId", "chatId", "runId"] as const;
 
@@ -190,6 +209,16 @@ export async function authorizeRealtimeScope(
 
 export class RealtimeGateway implements DurableObject {
   private readonly clients = new Map<string, ConnectedClient>();
+  private readonly metrics: RealtimeGatewayMetrics = {
+    activeAppSockets: 0,
+    publishedEvents: 0,
+    ephemeralDropped: 0,
+    ephemeralCoalesced: 0,
+    reconnects: 0,
+    durableResyncs: 0,
+    maxQueueDepth: 0,
+    eventToUiLatencyMs: 0,
+  };
 
   constructor(
     private readonly state: DurableObjectState,
@@ -202,6 +231,16 @@ export class RealtimeGateway implements DurableObject {
     const url = new URL(request.url);
     if (request.method === "POST" && url.pathname === "/publish") {
       return this.publish(request);
+    }
+    if (request.method === "GET" && url.pathname === "/metrics") {
+      return Response.json({
+        ...this.metrics,
+        activeAppSockets: this.clients.size,
+        queueDepth: [...this.clients.values()].reduce(
+          (total, client) => total + client.queue.depth,
+          0,
+        ),
+      });
     }
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
       return Response.json(
@@ -236,10 +275,13 @@ export class RealtimeGateway implements DurableObject {
       identity,
       subscriptions: new Map(),
       lastDurableSequence: null,
+      queue: new BoundedRealtimeQueue(),
+      flushScheduled: false,
     };
     this.clients.set(connectionId, connected);
+    this.metrics.activeAppSockets = this.clients.size;
     server.accept();
-    this.send(server, {
+    this.sendRaw(server, {
       type: "realtime.ready",
       connectionId,
       eventVersion: "1.0",
@@ -247,7 +289,10 @@ export class RealtimeGateway implements DurableObject {
     server.addEventListener("message", (event) => {
       void this.handleClientMessage(connectionId, event.data);
     });
-    const remove = () => this.clients.delete(connectionId);
+    const remove = () => {
+      this.clients.delete(connectionId);
+      this.metrics.activeAppSockets = this.clients.size;
+    };
     server.addEventListener("close", remove);
     server.addEventListener("error", remove);
     return new Response(null, { status: 101, webSocket: client });
@@ -267,12 +312,12 @@ export class RealtimeGateway implements DurableObject {
       );
       const message = parseRealtimeClientMessage(input);
       if (message.type === "ping") {
-        this.send(connected.socket, { type: "realtime.pong" });
+        this.sendRaw(connected.socket, { type: "realtime.pong" });
         return;
       }
       if (message.type === "realtime.hello") {
         connected.lastDurableSequence = message.lastDurableSequence ?? null;
-        this.send(connected.socket, {
+        this.sendRaw(connected.socket, {
           type: "realtime.ready",
           connectionId,
           eventVersion: "1.0",
@@ -288,7 +333,7 @@ export class RealtimeGateway implements DurableObject {
         message.scope,
       );
       if (!result.allowed) {
-        this.send(connected.socket, {
+        this.sendRaw(connected.socket, {
           type: "subscription.denied",
           scope: message.scope,
           reason: result.reason,
@@ -298,20 +343,20 @@ export class RealtimeGateway implements DurableObject {
       const key = scopeKey(message.scope);
       if (message.type === "subscribe") {
         connected.subscriptions.set(key, message.scope);
-        this.send(connected.socket, {
+        this.sendRaw(connected.socket, {
           type: "subscription.confirmed",
           scope: message.scope,
         });
       } else {
         connected.subscriptions.delete(key);
-        this.send(connected.socket, {
+        this.sendRaw(connected.socket, {
           type: "subscription.confirmed",
           scope: message.scope,
           subscribed: false,
         });
       }
     } catch (error) {
-      this.send(connected.socket, {
+      this.sendRaw(connected.socket, {
         type: "subscription.denied",
         reason:
           error instanceof Error ? error.message : "Malformed realtime message",
@@ -322,6 +367,7 @@ export class RealtimeGateway implements DurableObject {
   private async publish(request: Request): Promise<Response> {
     try {
       const event = parseRealtimeEvent(await request.json());
+      this.metrics.publishedEvents += 1;
       for (const connected of this.clients.values()) {
         const matches = [...connected.subscriptions.values()].some((scope) =>
           eventMatchesScope(event, scope),
@@ -334,7 +380,8 @@ export class RealtimeGateway implements DurableObject {
             event.sequence,
           )
         ) {
-          this.send(connected.socket, {
+          this.metrics.reconnects += 1;
+          this.sendRaw(connected.socket, {
             type: "reconnect.required",
             reason: "durable_event_gap",
             lastDurableSequence: connected.lastDurableSequence,
@@ -342,7 +389,8 @@ export class RealtimeGateway implements DurableObject {
           });
           continue;
         }
-        this.send(connected.socket, { type: "event", event });
+        const result = this.enqueueEvent(connected, event);
+        this.recordQueueResult(result);
         if (isDurableRealtimeEventType(event.type)) {
           connected.lastDurableSequence = event.sequence;
         }
@@ -359,9 +407,92 @@ export class RealtimeGateway implements DurableObject {
     }
   }
 
-  private send(socket: WebSocket, message: unknown): void {
+  private enqueueEvent(
+    connected: ConnectedClient,
+    event: RealtimeEventEnvelope,
+  ): RealtimeQueueEnqueueResult {
+    const durable = isDurableRealtimeEventType(event.type);
+    const coalesceKey = durable
+      ? undefined
+      : `${event.type}:${event.workspaceId}:${event.projectId ?? ""}:${event.runId ?? ""}:${event.assignmentId ?? ""}`;
+    const frame = JSON.stringify({ type: "event", event });
+    if (
+      connected.queue.depth === 0 &&
+      (connected.socket as WebSocket & { bufferedAmount?: number })
+        .bufferedAmount !== undefined &&
+      Number(
+        (connected.socket as WebSocket & { bufferedAmount?: number })
+          .bufferedAmount,
+      ) < MAX_SOCKET_BUFFERED_BYTES
+    ) {
+      this.sendRaw(connected.socket, { type: "event", event });
+      this.recordLatency(event);
+      return "queued";
+    }
+    const result = connected.queue.enqueue({ frame, durable, coalesceKey });
+    this.metrics.maxQueueDepth = Math.max(
+      this.metrics.maxQueueDepth,
+      connected.queue.depth,
+    );
+    if (result === "resync-required") {
+      this.metrics.durableResyncs += 1;
+      connected.queue.clear();
+      this.sendRaw(connected.socket, {
+        type: "reconnect.required",
+        reason: "connection_queue_limit",
+        nextSequence: event.sequence,
+      });
+      return result;
+    }
+    this.scheduleFlush(connected);
+    return result;
+  }
+
+  private scheduleFlush(connected: ConnectedClient): void {
+    if (connected.flushScheduled || connected.queue.depth === 0) return;
+    connected.flushScheduled = true;
+    setTimeout(() => {
+      connected.flushScheduled = false;
+      this.flush(connected);
+    }, 25);
+  }
+
+  private flush(connected: ConnectedClient): void {
+    if (connected.socket.readyState !== WebSocket.OPEN) return;
+    const socket = connected.socket as WebSocket & { bufferedAmount?: number };
+    if (Number(socket.bufferedAmount ?? 0) >= MAX_SOCKET_BUFFERED_BYTES) {
+      this.scheduleFlush(connected);
+      return;
+    }
+    let item: ReturnType<BoundedRealtimeQueue["take"]>;
+    while ((item = connected.queue.take())) {
+      this.sendSerialized(connected.socket, item.frame);
+      if (Number(socket.bufferedAmount ?? 0) >= MAX_SOCKET_BUFFERED_BYTES) {
+        break;
+      }
+    }
+    if (connected.queue.depth > 0) this.scheduleFlush(connected);
+  }
+
+  private recordQueueResult(result: RealtimeQueueEnqueueResult): void {
+    if (result === "dropped") this.metrics.ephemeralDropped += 1;
+    if (result === "coalesced") this.metrics.ephemeralCoalesced += 1;
+  }
+
+  private recordLatency(event: RealtimeEventEnvelope): void {
+    const timestamp = Date.parse(event.timestamp);
+    if (!Number.isNaN(timestamp)) {
+      this.metrics.eventToUiLatencyMs = Math.max(0, Date.now() - timestamp);
+    }
+  }
+
+  private sendRaw(socket: WebSocket, message: unknown): void {
+    this.sendSerialized(socket, JSON.stringify(message));
+  }
+
+  private sendSerialized(socket: WebSocket, serialized: string): void {
     try {
-      socket.send(JSON.stringify(message));
+      socket.send(serialized);
     } catch {
       // Close handlers remove dead sockets; delivery is best effort.
     }

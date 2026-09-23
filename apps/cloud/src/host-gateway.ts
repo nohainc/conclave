@@ -148,6 +148,7 @@ export class HostGateway implements DurableObject {
     if (request.method === "GET" && url.pathname === "/status") {
       return Response.json({
         online: this.socket !== null,
+        activeHostSockets: this.socket !== null ? 1 : 0,
         hostId: this.hostId,
         workspaceId: this.workspaceId,
         authorizedWorkspaceIds: [...this.authorizedWorkspaceIds].sort(),
