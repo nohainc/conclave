@@ -11,6 +11,10 @@ describe("IdentityService", () => {
       CONCLAVE_DB: {} as D1Database,
       CONCLAVE_ENVIRONMENT: "development",
       BETTER_AUTH_SECRET: "a-secure-development-secret-that-is-long-enough",
+      GITHUB_CLIENT_ID: "github-client-id",
+      GITHUB_CLIENT_SECRET: "github-client-secret",
+      GOOGLE_CLIENT_ID: "google-client-id",
+      GOOGLE_CLIENT_SECRET: "google-client-secret",
     });
 
     expect(options.user?.modelName).toBe("users");
@@ -20,8 +24,27 @@ describe("IdentityService", () => {
       image: "avatar_url",
     });
     expect(options.account?.modelName).toBe("auth_accounts");
+    expect(options.account?.encryptOAuthTokens).toBe(true);
+    expect(options.account?.accountLinking).toMatchObject({
+      enabled: true,
+      disableImplicitLinking: true,
+      trustedProviders: [],
+      allowDifferentEmails: false,
+    });
     expect(options.session?.modelName).toBe("auth_sessions");
     expect(options.verification?.modelName).toBe("auth_verifications");
+    expect(options.socialProviders).toMatchObject({
+      github: {
+        scope: ["user:email"],
+      },
+      google: {
+        scope: ["email", "profile"],
+      },
+    });
+    expect(Object.keys(options.socialProviders ?? {})).toEqual([
+      "github",
+      "google",
+    ]);
   });
 
   it("maps a Better Auth session to the application identity contract", async () => {

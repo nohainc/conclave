@@ -3,6 +3,7 @@ import { betterAuth } from "better-auth";
 type SocialProviderCredentials = {
   clientId: string;
   clientSecret: string;
+  scope: string[];
 };
 
 export type BetterAuthRuntimeEnv = Pick<
@@ -20,9 +21,10 @@ export type BetterAuthRuntimeEnv = Pick<
 function providerCredentials(
   clientId: string | undefined,
   clientSecret: string | undefined,
+  scope: string[],
 ): SocialProviderCredentials | undefined {
   if (!clientId || !clientSecret) return undefined;
-  return { clientId, clientSecret };
+  return { clientId, clientSecret, scope };
 }
 
 /**
@@ -43,10 +45,12 @@ export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
   const github = providerCredentials(
     env.GITHUB_CLIENT_ID,
     env.GITHUB_CLIENT_SECRET,
+    ["user:email"],
   );
   const google = providerCredentials(
     env.GOOGLE_CLIENT_ID,
     env.GOOGLE_CLIENT_SECRET,
+    ["email", "profile"],
   );
 
   return {
@@ -76,6 +80,13 @@ export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
         refreshTokenExpiresAt: "refresh_token_expires_at",
         createdAt: "created_at",
         updatedAt: "updated_at",
+      },
+      encryptOAuthTokens: true,
+      accountLinking: {
+        enabled: true,
+        disableImplicitLinking: true,
+        trustedProviders: [],
+        allowDifferentEmails: false,
       },
     },
     verification: {

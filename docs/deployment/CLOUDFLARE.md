@@ -28,6 +28,32 @@ The static application is deployed with Cloudflare Workers Static Assets. SPA fa
 
 ## GitHub setup
 
+### Better Auth providers
+
+Configure the OAuth applications with these callback URLs:
+
+- `https://app.conclaveax.com/api/auth/callback/github`
+- `https://app.conclaveax.com/api/auth/callback/google`
+
+The GitHub application must allow the `user:email` scope. Conclave requests
+only identity scopes for sign-in; signing in with GitHub does not grant GitHub
+repository access. Repository authorization is a separate future integration.
+
+Set these values in the Worker environment:
+
+- `BETTER_AUTH_URL` — application origin, such as `https://app.conclaveax.com`;
+- `GITHUB_CLIENT_ID` — GitHub OAuth client ID;
+- `GITHUB_CLIENT_SECRET` — GitHub OAuth client secret;
+- `GOOGLE_CLIENT_ID` — Google OAuth client ID;
+- `GOOGLE_CLIENT_SECRET` — Google OAuth client secret;
+- `BETTER_AUTH_SECRET` — Better Auth encryption/signing secret.
+
+Store `GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_SECRET`, and
+`BETTER_AUTH_SECRET` only with Cloudflare Worker secrets (for example,
+`wrangler secret put`). Do not commit values to source, Wrangler configuration,
+CI files, or browser bundles. Client IDs may be ordinary environment
+configuration, but should still be managed per deployment.
+
 Repository Settings -> Secrets and variables -> Actions:
 
 - `CLOUDFLARE_ACCOUNT_ID`

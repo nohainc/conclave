@@ -58,3 +58,10 @@ them.
 ✅ The clean v4 D1 baseline now maps Better Auth’s core models onto `users`,
 `auth_accounts`, `auth_sessions`, and `auth_verifications`. Conclave retains
 `users.status`; no compatibility migration was added.
+
+## AUTH-4 — Configure GitHub and Google providers
+
+✅ GitHub is configured first with `user:email`; Google is configured second
+with `email` and `profile`. OAuth client secrets remain runtime Cloudflare
+secrets. Implicit identity linking is disabled, different-email linking is
+disabled, and repository authorization is separate from Conclave sign-in.
