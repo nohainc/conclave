@@ -209,8 +209,10 @@ class _WorkspaceSettingsPageState extends State<WorkspaceSettingsPage> {
           const Text('Workspace settings',
               style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
-          const Text('Manage Workspace access, sharing, and security.',
-              style: TextStyle(color: Color(0xff777683), fontSize: 13)),
+          Text('Manage Workspace access, sharing, and security.',
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 13)),
           const SizedBox(height: 18),
           const TabBar(isScrollable: true, tabs: [
             Tab(text: 'General'),
@@ -282,9 +284,10 @@ class _WorkspaceSettingsPageState extends State<WorkspaceSettingsPage> {
               Text(
                   '${members.length} members can access this Workspace. ${widget.hostCount} Hosts and ${widget.accountCount} AI Accounts are visible to authorized members.'),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                   'Private AI Accounts remain private unless explicitly shared.',
-                  style: TextStyle(color: Color(0xff777683))),
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
             ]),
           ),
         ),

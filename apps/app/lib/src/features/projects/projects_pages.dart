@@ -22,8 +22,10 @@ class ProjectsPage extends StatelessWidget {
           const Text('Projects',
               style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
-          const Text('Projects organize Chats, Runs, artifacts, and evidence.',
-              style: TextStyle(color: Color(0xff777683), fontSize: 13)),
+          Text('Projects organize Chats, Runs, artifacts, and evidence.',
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 13)),
           const SizedBox(height: 24),
           if (projects.isEmpty)
             _ProjectPanel(
@@ -86,8 +88,10 @@ class ProjectPage extends StatelessWidget {
               style:
                   const TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
-          const Text('Project overview',
-              style: TextStyle(color: Color(0xff777683), fontSize: 13)),
+          Text('Project overview',
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 13)),
           const SizedBox(height: 24),
           _ProjectPanel(
             title: 'Project details',
@@ -169,7 +173,9 @@ class _ProjectPanel extends StatelessWidget {
                   style: const TextStyle(
                       fontSize: 16, fontWeight: FontWeight.w700)),
               const SizedBox(height: 5),
-              Text(subtitle, style: const TextStyle(color: Color(0xff777683))),
+              Text(subtitle,
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
               const SizedBox(height: 16),
               child,
             ],

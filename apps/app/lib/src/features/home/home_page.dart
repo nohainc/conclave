@@ -89,9 +89,11 @@ class _GettingStarted extends StatelessWidget {
           const Text('Getting started',
               style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
-          const Text(
+          Text(
               'Set up the pieces Conclave AX needs, then make your first request.',
-              style: TextStyle(color: Color(0xff777683), fontSize: 14)),
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 14)),
           const SizedBox(height: 28),
           _SetupStep(
               number: '1',
@@ -117,16 +119,16 @@ class _GettingStarted extends StatelessWidget {
               detail: 'Create a Project to organize your work.',
               action: 'Create project',
               onPressed: onCreateProject),
-          const Card(
-            color: Color(0xfff1efff),
+          Card(
+            color: Theme.of(context).colorScheme.primaryContainer,
             child: ListTile(
-              leading:
-                  Icon(Icons.play_circle_outline, color: Color(0xff6254d9)),
-              title: Text('First request',
+              leading: Icon(Icons.play_circle_outline,
+                  color: Theme.of(context).colorScheme.primary),
+              title: const Text('First request',
                   style: TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: Text(
+              subtitle: const Text(
                   'Once your Project is ready, start a Chat and describe what you want to accomplish.'),
-              trailing: Icon(Icons.arrow_forward_rounded),
+              trailing: const Icon(Icons.arrow_forward_rounded),
             ),
           ),
         ],
@@ -212,8 +214,10 @@ class _EstablishedHome extends StatelessWidget {
       const Text('Home',
           style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
       const SizedBox(height: 8),
-      const Text('Your Workspace at a glance.',
-          style: TextStyle(color: Color(0xff777683), fontSize: 14)),
+      Text('Your Workspace at a glance.',
+          style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 14)),
       const SizedBox(height: 24),
       Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Expanded(
@@ -316,7 +320,8 @@ class _HomeCard extends StatelessWidget {
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              Icon(icon, size: 18, color: const Color(0xff6254d9)),
+              Icon(icon,
+                  size: 18, color: Theme.of(context).colorScheme.primary),
               const SizedBox(width: 8),
               Flexible(
                 child: Text(title,
@@ -348,7 +353,9 @@ class _MetricCard extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, style: const TextStyle(color: Color(0xff777683))),
+              Text(title,
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
               const SizedBox(height: 6),
               Text(value,
                   style: const TextStyle(

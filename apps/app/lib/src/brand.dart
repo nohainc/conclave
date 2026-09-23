@@ -107,8 +107,13 @@ abstract final class ConclaveBrand {
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: accent, width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
+      textTheme: _textTheme(lightInk),
+      filledButtonTheme: _filledButtonTheme(),
+      outlinedButtonTheme: _outlinedButtonTheme(lightLine),
+      chipTheme: _chipTheme(lightSurfaceHover, lightInk),
     );
   }
 
@@ -164,10 +169,48 @@ abstract final class ConclaveBrand {
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: accent, width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
+      textTheme: _textTheme(darkInk),
+      filledButtonTheme: _filledButtonTheme(),
+      outlinedButtonTheme: _outlinedButtonTheme(darkLine),
+      chipTheme: _chipTheme(darkSurfaceHover, darkInk),
     );
   }
+
+  static TextTheme _textTheme(Color foreground) => TextTheme(
+        bodyLarge: TextStyle(color: foreground, height: 1.4),
+        bodyMedium: TextStyle(color: foreground, height: 1.4),
+        titleMedium: TextStyle(color: foreground, fontWeight: FontWeight.w700),
+      );
+
+  static FilledButtonThemeData _filledButtonTheme() => FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: accent,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(ConclaveRadius.md)),
+        ),
+      );
+
+  static OutlinedButtonThemeData _outlinedButtonTheme(Color border) =>
+      OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: accent,
+          side: BorderSide(color: border),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(ConclaveRadius.md)),
+        ),
+      );
+
+  static ChipThemeData _chipTheme(Color surface, Color foreground) =>
+      ChipThemeData(
+        backgroundColor: surface,
+        labelStyle: TextStyle(color: foreground, fontSize: 12),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(ConclaveRadius.pill)),
+      );
 }
 
 /// Spacing scale constants

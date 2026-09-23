@@ -537,7 +537,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                             : notification.priority ==
                                     StudioNotificationPriority.high
                                 ? const Color(0xffc64b4b)
-                                : const Color(0xff6254d9),
+                                : Theme.of(context).colorScheme.primary,
                       ),
                       title: Text(notification.title),
                       subtitle: Text(
@@ -3741,13 +3741,15 @@ class _StudioAppState extends State<ConclaveAppShell> {
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(label,
-            style: const TextStyle(color: Color(0xff9a98a3), fontSize: 10)),
+            style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 10)),
         const SizedBox(height: 4),
         Text(value,
-            style: const TextStyle(
+            style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: Color(0xff393743)))
+                color: Theme.of(context).colorScheme.onSurface))
       ]));
 
   String _formatNumber(int value) => value == 0
@@ -3761,9 +3763,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-          color: const Color(0xfffffaf4),
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xfff2e6d3))),
+          border: Border.all(color: Theme.of(context).colorScheme.outline)),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Icon(
             finding.status == FindingStatus.verified
@@ -3771,8 +3773,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
                 : Icons.warning_amber_rounded,
             size: 17,
             color: finding.status == FindingStatus.verified
-                ? const Color(0xff42ae7e)
-                : const Color(0xffd49a38)),
+                ? ConclaveBrand.success
+                : ConclaveBrand.warning),
         const SizedBox(width: 8),
         Expanded(
             child:
@@ -3782,7 +3784,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   const TextStyle(fontWeight: FontWeight.w600, fontSize: 11)),
           const SizedBox(height: 3),
           Text('${finding.severity.name} · ${finding.status.name}',
-              style: const TextStyle(color: Color(0xff9b8a70), fontSize: 10))
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 10))
         ]))
       ]));
 
@@ -3867,9 +3871,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-                color: const Color(0xffeeecff),
+                color: Theme.of(context).colorScheme.primaryContainer,
                 borderRadius: BorderRadius.circular(12)),
-            child: Icon(icon, color: const Color(0xff6254d9)),
+            child: Icon(icon, color: Theme.of(context).colorScheme.primary),
           ),
           const SizedBox(width: 13),
           Expanded(
