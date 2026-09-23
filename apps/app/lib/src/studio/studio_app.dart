@@ -13,6 +13,8 @@ import '../brand.dart';
 import '../features/common/toast_overlay.dart';
 import '../features/common/code_block_view.dart';
 import '../features/common/command_palette.dart';
+import '../features/common/diff_viewer.dart';
+import '../features/chat/typing_indicator.dart';
 import '../features/execution/task_pipeline_dag.dart';
 import 'studio_models.dart';
 import 'studio_data.dart';
@@ -1981,45 +1983,113 @@ class _StudioAppState extends State<StudioApp> {
         ]),
       );
 
+  void _toggleTheme() {
+    setState(() {
+      _themeMode = _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+    });
+  }
+
   Widget _topbar(bool compact) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final borderColor = isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine;
+    final inkColor = isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk;
+    final mutedInk = isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted;
+
     return Container(
       height: 66,
       padding: EdgeInsets.symmetric(horizontal: compact ? 16 : 32),
-      decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(bottom: BorderSide(color: Color(0xffe8e8ed)))),
+      decoration: BoxDecoration(
+        color: isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface,
+        border: Border(bottom: BorderSide(color: borderColor)),
+      ),
       child: Row(children: [
         if (showRunDetails)
           IconButton(
-              onPressed: () {
-                final project = selectedProject;
-                final chat = selectedChat;
-                if (project != null && chat != null) {
-                  _navigateTo(StudioNavigation.chat(project.id, chat.id));
-                } else {
-                  _navigateTo(const StudioNavigation.home());
-                }
-              },
-              icon: const Icon(Icons.arrow_back_rounded)),
+            onPressed: () {
+              final project = selectedProject;
+              final chat = selectedChat;
+              if (project != null && chat != null) {
+                _navigateTo(StudioNavigation.chat(project.id, chat.id));
+              } else {
+                _navigateTo(const StudioNavigation.home());
+              }
+            },
+            icon: Icon(Icons.arrow_back_rounded, color: inkColor),
+            tooltip: 'Back to chat',
+          ),
         if (compact)
           Builder(
-              builder: (context) => IconButton(
-                  onPressed: () => Scaffold.of(context).openDrawer(),
-                  icon: const Icon(Icons.menu_rounded))),
+            builder: (context) => IconButton(
+              onPressed: () => Scaffold.of(context).openDrawer(),
+              icon: Icon(Icons.menu_rounded, color: inkColor),
+            ),
+          ),
         Expanded(
-            child: Text(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
                 navigationIndex == 5
                     ? 'Account'
-                    : (showRunDetails ? 'Run details' : 'Conclave AX'),
-                style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xff20202c)))),
+                    : (showRunDetails
+                        ? 'Run details'
+                        : 'Conclave AX'),
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: inkColor,
+                ),
+              ),
+              if (selectedProject != null) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Text(
+                    '/',
+                    style: TextStyle(fontSize: 14, color: mutedInk),
+                  ),
+                ),
+                Flexible(
+                  child: InkWell(
+                    onTap: () {
+                      final chat = selectedChat;
+                      if (chat != null) {
+                        _navigateTo(StudioNavigation.chat(selectedProject!.id, chat.id));
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      child: Text(
+                        selectedProject!.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w500,
+                          color: mutedInk,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        // Quick Theme Mode Toggle
+        IconButton(
+          tooltip: isDark ? 'Switch to light mode' : 'Switch to dark mode',
+          onPressed: _toggleTheme,
+          icon: Icon(
+            isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+            size: 19,
+            color: inkColor,
+          ),
+        ),
         IconButton(
           tooltip: 'About Conclave AX',
           onPressed: _showAboutConclave,
-          icon: const Icon(Icons.info_outline,
-              size: 20, color: Color(0xff6e6e7a)),
+          icon: Icon(Icons.info_outline, size: 20, color: mutedInk),
         ),
         Stack(
           clipBehavior: Clip.none,
@@ -2027,8 +2097,7 @@ class _StudioAppState extends State<StudioApp> {
             IconButton(
               tooltip: 'Notifications',
               onPressed: _showNotifications,
-              icon: const Icon(Icons.notifications_none_rounded,
-                  size: 21, color: Color(0xff6e6e7a)),
+              icon: Icon(Icons.notifications_none_rounded, size: 21, color: mutedInk),
             ),
             if (unreadNotificationCount > 0)
               Positioned(
@@ -2037,22 +2106,20 @@ class _StudioAppState extends State<StudioApp> {
                 child: Semantics(
                   label: '$unreadNotificationCount unread notifications',
                   child: Container(
-                    constraints:
-                        const BoxConstraints(minWidth: 16, minHeight: 16),
+                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     decoration: const BoxDecoration(
-                      color: Color(0xff6254d9),
+                      color: ConclaveBrand.accent,
                       shape: BoxShape.circle,
                     ),
                     alignment: Alignment.center,
                     child: Text(
-                      unreadNotificationCount > 9
-                          ? '9+'
-                          : '$unreadNotificationCount',
+                      unreadNotificationCount > 9 ? '9+' : '$unreadNotificationCount',
                       style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700),
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),
@@ -2061,16 +2128,17 @@ class _StudioAppState extends State<StudioApp> {
         ),
         const SizedBox(width: 5),
         OutlinedButton.icon(
-            onPressed: () =>
-                setState(() => showWorkerDrawer = !showWorkerDrawer),
-            icon: const Icon(Icons.circle, size: 8, color: Color(0xff55bf8f)),
-            label: Text(
-                '${snapshot.agents.where((host) => host.status.toLowerCase() == 'online').length} hosts online'),
-            style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xff565665),
-                side: const BorderSide(color: Color(0xffe2e2e8)),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10))),
+          onPressed: () => setState(() => showWorkerDrawer = !showWorkerDrawer),
+          icon: const Icon(Icons.circle, size: 8, color: ConclaveBrand.success),
+          label: Text(
+            '${snapshot.agents.where((host) => host.status.toLowerCase() == 'online').length} hosts online',
+          ),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: inkColor,
+            side: BorderSide(color: borderColor),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          ),
+        ),
       ]),
     );
   }
@@ -2271,6 +2339,18 @@ class _StudioAppState extends State<StudioApp> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             ...messages.map(_chatMessage),
+            if (snapshot.tasks.any((t) => t.status == TaskStatus.running) ||
+                snapshot.run?.status == RunStatus.running ||
+                snapshot.run?.status == RunStatus.active) ...[
+              StreamingTypingIndicator(
+                workerName: snapshot.tasks
+                    .where((t) => t.status == TaskStatus.running)
+                    .firstOrNull
+                    ?.assignedWorkerId,
+                statusText: 'Executing verification pipeline…',
+              ),
+              const SizedBox(height: 6),
+            ],
             const SizedBox(height: 10),
             _composerExecutionControls(),
             const SizedBox(height: 12),
@@ -2284,7 +2364,9 @@ class _StudioAppState extends State<StudioApp> {
                   decoration: InputDecoration(
                     hintText: 'Ask Conclave to research, plan, or implement…',
                     filled: true,
-                    fillColor: const Color(0xfff7f7fa),
+                    fillColor: Theme.of(context).brightness == Brightness.dark
+                        ? ConclaveBrand.darkPaper
+                        : ConclaveBrand.lightCodeBackground,
                     border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none),
@@ -2515,7 +2597,21 @@ class _StudioAppState extends State<StudioApp> {
       );
 
   Widget _chatMessage(StudioChatMessage message) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isUser = message.sender == StudioMessageSender.user;
+    final surfaceColor = isUser
+        ? ConclaveBrand.accent
+        : (isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface);
+    final borderColor = isUser
+        ? null
+        : (isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine);
+    final inkColor = isUser
+        ? Colors.white
+        : (isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk);
+    final mutedInk = isUser
+        ? Colors.white.withValues(alpha: 0.7)
+        : (isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted);
+
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -2523,23 +2619,30 @@ class _StudioAppState extends State<StudioApp> {
         margin: const EdgeInsets.only(bottom: 14),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: isUser ? const Color(0xff6254d9) : const Color(0xfffafaff),
+          color: surfaceColor,
           borderRadius: BorderRadius.circular(13),
-          border: isUser ? null : Border.all(color: const Color(0xffe6e3f8)),
+          border: borderColor != null ? Border.all(color: borderColor) : null,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           MarkdownMessageBody(
             text: message.text,
             textStyle: TextStyle(
-              color: isUser ? Colors.white : const Color(0xff393743),
-              fontSize: 13,
+              color: inkColor,
+              fontSize: 13.5,
               height: 1.45,
             ),
           ),
           const SizedBox(height: 5),
           Text(message.timestamp,
               style: TextStyle(
-                  color: isUser ? Colors.white70 : const Color(0xffaaa8b1),
+                  color: mutedInk,
                   fontSize: 10)),
           if (message.runPreview != null) ...[
             const SizedBox(height: 14),
@@ -3019,6 +3122,16 @@ class _StudioAppState extends State<StudioApp> {
                   : task.dependencies.join(', ')),
           _detailLine(Icons.token_outlined, 'Usage',
               '${task.tokens} tokens  ·  ${task.cost}'),
+          if (task.detail.contains('diff') ||
+              task.detail.contains('@@') ||
+              task.detail.startsWith('---') ||
+              task.detail.startsWith('+++')) ...[
+            const SizedBox(height: 16),
+            const Text('Generated Artifact / Diff',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+            const SizedBox(height: 8),
+            DiffViewer(filePath: task.title, diffContent: task.detail),
+          ],
           const SizedBox(height: 15),
           if (task.status == TaskStatus.running)
             FilledButton.icon(
@@ -3176,37 +3289,43 @@ class _StudioAppState extends State<StudioApp> {
           required String subtitle,
           required Widget child,
           Widget? trailing}) =>
-      Card(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+      Builder(
+        builder: (context) {
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          final mutedColor = isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted;
+          return Card(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(title,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w700, fontSize: 14)),
-                        const SizedBox(height: 3),
-                        Text(subtitle,
-                            style: const TextStyle(
-                                color: Color(0xffaaa8b1), fontSize: 10)),
-                      ],
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(title,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700, fontSize: 14)),
+                            const SizedBox(height: 3),
+                            Text(subtitle,
+                                style: TextStyle(
+                                    color: mutedColor, fontSize: 10)),
+                          ],
+                        ),
+                      ),
+                      const Spacer(),
+                      if (trailing != null) trailing,
+                    ],
                   ),
-                  const Spacer(),
-                  if (trailing != null) trailing,
+                  const SizedBox(height: 15),
+                  child,
                 ],
               ),
-              const SizedBox(height: 15),
-              child,
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       );
 
   Widget _statusChip(String label, Color color) => Container(

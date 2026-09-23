@@ -188,7 +188,10 @@ class _TaskNodeCard extends StatelessWidget {
               ? (isDark ? ConclaveBrand.accentWashDark : ConclaveBrand.accentWash.withValues(alpha: 0.5))
               : (isDark ? ConclaveBrand.darkPaper : ConclaveBrand.lightSurface),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: borderColor, width: isSelected ? 2 : 1.2),
+          border: Border.all(
+            color: borderColor,
+            width: isSelected ? 2 : 1.2,
+          ),
           boxShadow: isSelected
               ? [
                   BoxShadow(
@@ -197,7 +200,15 @@ class _TaskNodeCard extends StatelessWidget {
                     offset: const Offset(0, 2),
                   ),
                 ]
-              : null,
+              : (task.isRunning
+                  ? [
+                      BoxShadow(
+                        color: ConclaveBrand.info.withValues(alpha: 0.15),
+                        blurRadius: 6,
+                        spreadRadius: 1,
+                      ),
+                    ]
+                  : null),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

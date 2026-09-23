@@ -1,0 +1,42 @@
+---
+import Button from "./Button.astro";
+---
+
+<div class="host-quickstart-card" aria-label="Add your first Host workflow">
+  <div class="host-quickstart-header">
+    <strong>Enrolling a machine takes four straightforward steps:</strong>
+  </div>
+  <div class="host-quickstart-steps">
+    <div class="host-quickstart-step">
+      <span class="host-step-num">1</span>
+      <div>
+        <strong>Open Conclave AX</strong>
+        <p>Sign in securely with your passkey and select your Workspace.</p>
+      </div>
+    </div>
+    <div class="host-quickstart-step">
+      <span class="host-step-num">2</span>
+      <div>
+        <strong>Choose Add Host</strong>
+        <p>Generate a one-time enrollment token scoped to your Workspace.</p>
+      </div>
+    </div>
+    <div class="host-quickstart-step">
+      <span class="host-step-num">3</span>
+      <div>
+        <strong>Pair the Machine</strong>
+        <p>Launch Conclave Host on macOS, Windows, or Linux to establish the secure daemon.</p>
+      </div>
+    </div>
+    <div class="host-quickstart-step">
+      <span class="host-step-num">4</span>
+      <div>
+        <strong>Automatic Management</strong>
+        <p>Workers are supervised and assigned tasks automatically in the background.</p>
+      </div>
+    </div>
+  </div>
+  <div class="host-quickstart-cta">
+    <Button href="https://app.conclaveax.com" label="Add your first Host in Conclave AX →" />
+  </div>
+</div>

@@ -38,8 +38,8 @@ const expected = {
   },
   "/terms/": {
     title: "Terms — Conclave AX",
-    heading: "Terms for Conclave AX are being prepared.",
-    content: ["Website use", "Conclave AX"],
+    heading: "Terms of Service",
+    content: ["Website Use", "Conclave AX"],
   },
 };
 const errors = [];

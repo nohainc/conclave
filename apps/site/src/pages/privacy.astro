@@ -8,16 +8,19 @@ import SiteLayout from "../layouts/SiteLayout.astro";
 <SiteLayout title="Privacy — Conclave AX" description="How Conclave AX approaches privacy for people, Workspaces, Hosts, Workers, and Accounts.">
   <Section>
     <Container>
-      <SectionHeader eyebrow="Privacy" title="Privacy is part of the architecture." description="This initial overview explains the boundaries Conclave AX is designed to preserve. A complete production privacy notice will be published before the service accepts public accounts." headingLevel={1} />
+      <SectionHeader eyebrow="Privacy" title="Privacy is part of the architecture." description="Conclave AX is architected with strict boundary separation to protect user credentials, source repositories, and execution telemetry." headingLevel={1} />
       <div class="legal-content">
         <h2>Human identity and Workspace data</h2>
-        <p>Conclave Cloud uses human authentication to identify a person and then applies Conclave Workspace membership and permissions. Workspace, Project, Chat, Run, and evidence data is scoped by those permissions.</p>
+        <p>Conclave Cloud uses human authentication (such as WebAuthn passkeys) to verify identity, then strictly scopes access based on Workspace membership and project permissions. Workspace chats, runs, and artifacts remain confidential to authorized members.</p>
+
         <h2>Accounts and external AI providers</h2>
-        <p>Accounts represent external AI identities. They are private by default. Explicit sharing can allow another person to use an Account without exposing its saved secret. Usage remains attributable to the requester and Account owner.</p>
+        <p>Accounts represent external AI identities (e.g. OpenAI or Anthropic credentials). They are private by default. When shared within a Workspace, Conclave AX enables authorized execution without exposing plaintext secrets. Usage remains attributable to the requester and Account owner.</p>
+
         <h2>Hosts and Workers</h2>
-        <p>Hosts are separate machine identities. Workers run behind a Host and do not receive Conclave user sessions or Host machine credentials. Raw provider secrets are not public website content.</p>
-        <h2>Public website</h2>
-        <p>This website is a static presentation layer. It does not collect API keys, pair Hosts, or provide access to private Workspace data.</p>
+        <p>Hosts are distinct machine identities. Workers execute in supervised processes behind a Host daemon and do not receive ambient machine permissions or Conclave Cloud master keys. Source files and build artifacts remain on your Host machine unless explicitly exported.</p>
+
+        <h2>Telemetry and Public Website</h2>
+        <p>This public website uses minimal, privacy-first, same-origin telemetry without cross-site tracking cookies. No credentials, source code, or private Workspace data are collected through this public site.</p>
       </div>
     </Container>
   </Section>

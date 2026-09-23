@@ -12,6 +12,7 @@ const requiredFiles = [
   "terms/index.html",
   "favicon.svg",
   "social-preview.svg",
+  "social-preview.png",
   "site.webmanifest",
   "robots.txt",
   "sitemap.xml",

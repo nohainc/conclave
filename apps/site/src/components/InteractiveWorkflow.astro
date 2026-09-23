@@ -1,45 +1,96 @@
 ---
 ---
 
-<div class="interactive-workflow" data-interactive-tabs aria-label="Interactive workflow sandbox">
-  <div class="tab-nav" role="tablist">
-    <button class="tab-btn is-active" type="button" role="tab" aria-selected="true" data-tab-target="tab-delegate">
+<div class="interactive-workflow" data-interactive-tabs aria-label="Interactive workflow example">
+  <div class="tab-nav" role="tablist" aria-label="Workflow stages">
+    <button
+      id="tab-btn-delegate"
+      class="tab-btn is-active"
+      type="button"
+      role="tab"
+      aria-selected="true"
+      aria-controls="tab-panel-delegate"
+      tabindex="0"
+      data-tab-target="tab-panel-delegate"
+    >
       <strong>1. Delegate</strong>
-      <span>Dynamic routing to specialized capability</span>
+      <span>Route to specialized capability</span>
     </button>
-    <button class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-target="tab-compare">
+    <button
+      id="tab-btn-compare"
+      class="tab-btn"
+      type="button"
+      role="tab"
+      aria-selected="false"
+      aria-controls="tab-panel-compare"
+      tabindex="-1"
+      data-tab-target="tab-panel-compare"
+    >
       <strong>2. Compare</strong>
-      <span>Multi-candidate parallel evaluation</span>
+      <span>Parallel candidate synthesis</span>
     </button>
-    <button class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-target="tab-verify">
+    <button
+      id="tab-btn-verify"
+      class="tab-btn"
+      type="button"
+      role="tab"
+      aria-selected="false"
+      aria-controls="tab-panel-verify"
+      tabindex="-1"
+      data-tab-target="tab-panel-verify"
+    >
       <strong>3. Verify</strong>
-      <span>Executable evidence & automated testing</span>
+      <span>Executable tests & machine evidence</span>
     </button>
-    <button class="tab-btn" type="button" role="tab" aria-selected="false" data-tab-target="tab-iterate">
+    <button
+      id="tab-btn-iterate"
+      class="tab-btn"
+      type="button"
+      role="tab"
+      aria-selected="false"
+      aria-controls="tab-panel-iterate"
+      tabindex="-1"
+      data-tab-target="tab-panel-iterate"
+    >
       <strong>4. Iterate</strong>
-      <span>Autonomous correction loops</span>
+      <span>Autonomous finding correction</span>
     </button>
   </div>
 
   <div class="tab-content">
-    <div class="tab-panel is-active" data-tab-panel="tab-delegate" role="tabpanel">
+    <div
+      id="tab-panel-delegate"
+      class="tab-panel is-active"
+      data-tab-panel="tab-panel-delegate"
+      role="tabpanel"
+      aria-labelledby="tab-btn-delegate"
+      tabindex="0"
+    >
       <div class="run-card__header">
         <span>Assignment Resolver</span>
         <strong>Target Resolved: Codex Worker on MacBook Host</strong>
       </div>
       <div class="terminal-panel">
-<code is:raw>// Cloud evaluates task constraints and routes to authorized Host
+<code is:raw>// Cloud evaluates task requirements and routes to authorized Host
 const target = await scheduler.resolveTarget({
   task: "Implement D1 durable transaction adapter",
   workspace: "ws_production",
   requiredCapabilities: ["filesystem", "d1_sqlite"]
 });
-// → Dispatched to MacBook Host (Latency: 24ms, Status: Ready)</code>
+// → Dispatched to MacBook Host (Status: Ready, Verified capability: filesystem)</code>
       </div>
       <p>Tasks declare execution requirements. Conclave Cloud matches them against online Hosts, installed Workers, and authorized Accounts without hardcoding model locations.</p>
     </div>
 
-    <div class="tab-panel" data-tab-panel="tab-compare" role="tabpanel" hidden>
+    <div
+      id="tab-panel-compare"
+      class="tab-panel"
+      data-tab-panel="tab-panel-compare"
+      role="tabpanel"
+      aria-labelledby="tab-btn-compare"
+      tabindex="0"
+      hidden
+    >
       <div class="run-card__header">
         <span>Multi-Worker Synthesis</span>
         <strong>Evaluating Candidate Implementations</strong>
@@ -56,30 +107,46 @@ const target = await scheduler.resolveTarget({
       <p>When solving hard problems, run diverse model capabilities in parallel. Conclave synthesizes their strengths and highlights architectural trade-offs.</p>
     </div>
 
-    <div class="tab-panel" data-tab-panel="tab-verify" role="tabpanel" hidden>
+    <div
+      id="tab-panel-verify"
+      class="tab-panel"
+      data-tab-panel="tab-panel-verify"
+      role="tabpanel"
+      aria-labelledby="tab-btn-verify"
+      tabindex="0"
+      hidden
+    >
       <div class="run-card__header">
         <span>Independent Verification</span>
-        <strong>Deterministic Proof Collection</strong>
+        <strong>Machine-Verifiable Proof Collection</strong>
       </div>
       <div class="terminal-panel">
-<code is:raw>✓ Test suite executed: 44 test files, 326 passed (100%)
+<code is:raw>✓ Test suite passed with executable proof
 ✓ Architecture boundary guard: 0 violations
-✓ Security audit: Zero credential leaks detected
-✓ Artifact generated: dist/d1-adapter.mjs (SHA256 verified)</code>
+✓ Credential isolation preserved
+✓ Artifact generated: dist/adapter.mjs (SHA256 verified)</code>
       </div>
       <p>Never trust natural-language claims that "it works". Conclave executes real tests, collects machine evidence, and ensures deterministic completion.</p>
     </div>
 
-    <div class="tab-panel" data-tab-panel="tab-iterate" role="tabpanel" hidden>
+    <div
+      id="tab-panel-iterate"
+      class="tab-panel"
+      data-tab-panel="tab-panel-iterate"
+      role="tabpanel"
+      aria-labelledby="tab-btn-iterate"
+      tabindex="0"
+      hidden
+    >
       <div class="run-card__header">
         <span>Correction Loop</span>
-        <strong>Autonomous Finding Remediation</strong>
+        <strong>Finding Remediation & Reverification</strong>
       </div>
       <div class="terminal-panel">
-<code is:raw>[Finding Detected] Reviewer noted race condition on lock release
-[Auto-Correction] Task dispatched to Worker with review findings
-[Patch Applied] Lock lease timeout bounded to 5000ms
-[Reverification] Test suite passed cleanly on 2nd cycle.</code>
+<code is:raw>[Finding] Reviewer noted edge case on lock release
+[Correction] Task dispatched to Worker with review finding
+[Patch Applied] Lock lease timeout bounded safely
+[Reverification] Test suite passed on reverification cycle</code>
       </div>
       <p>When a reviewer or test finds an issue, Conclave feeds the exact findings back into a focused correction task and reverifies the result.</p>
     </div>

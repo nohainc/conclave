@@ -5,15 +5,28 @@ import SectionHeader from "../components/SectionHeader.astro";
 import SiteLayout from "../layouts/SiteLayout.astro";
 ---
 
-<SiteLayout title="Terms — Conclave AX" description="Initial terms information for the Conclave AX public website.">
+<SiteLayout title="Terms — Conclave AX" description="Terms of Service for Conclave AX orchestration platform and public website.">
   <Section>
     <Container>
-      <SectionHeader eyebrow="Terms" title="Terms for Conclave AX are being prepared." description="The public website is available for product information only. Final service terms will be published before public account creation and paid service use." headingLevel={1} />
+      <SectionHeader eyebrow="Terms" title="Terms of Service" description="Guidelines governing your access to and use of Conclave AX, including Cloud orchestration, Hosts, Workers, and Workspace accounts." headingLevel={1} />
       <div class="legal-content">
-        <h2>Website use</h2>
-        <p>You may browse and link to the public website for informational purposes. Do not submit credentials, API keys, provider secrets, or private Workspace data through this site.</p>
-        <h2>Product availability</h2>
-        <p>Descriptions of Conclave AX, Hosts, Workers, Accounts, and Forge describe the intended product architecture and may change as the service moves toward release.</p>
+        <h2>1. Service Overview</h2>
+        <p>Conclave AX provides a multi-worker orchestration platform that coordinates AI models, code generation tools, and verification workflows across Cloud infrastructure and connected Hosts.</p>
+
+        <h2>2. Workspaces and Account Responsibility</h2>
+        <p>You are responsible for maintaining the confidentiality of your account credentials, passkeys, and connected Workspace profiles. All actions performed through authorized sessions remain attributable to your account.</p>
+
+        <h2>3. Connected Hosts and Local Execution</h2>
+        <p>When you enroll a machine as a Conclave Host, you authorize Conclave Cloud to dispatch assigned Worker tasks to that machine. You retain full control over Host enrollment, local execution privileges, and revocation at all times.</p>
+
+        <h2>4. Third-Party AI Providers and API Keys</h2>
+        <p>Conclave AX integrates with third-party model providers (such as OpenAI and Anthropic) via your configured Account credentials. You are responsible for complying with the terms, acceptable use policies, and usage fees of those respective providers.</p>
+
+        <h2>5. Website Use</h2>
+        <p>You may browse and link to the public website for informational purposes. Do not submit credentials, raw API keys, or proprietary data through unauthenticated public web forms.</p>
+
+        <h2>6. Service Availability and Updates</h2>
+        <p>We continually refine Conclave AX features, protocol specifications, and Worker catalog capabilities. Features and architectural interfaces are updated with versioned compatibility.</p>
       </div>
     </Container>
   </Section>
