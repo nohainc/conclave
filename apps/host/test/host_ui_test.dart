@@ -8,6 +8,7 @@ void main() {
     HostUiSnapshot snapshot, {
     VoidCallback? onPair,
     VoidCallback? onAccountAction,
+    Future<void> Function()? onRetry,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -16,6 +17,7 @@ void main() {
             snapshot: snapshot,
             onPair: onPair,
             onAccountAction: onAccountAction,
+            onRetry: onRetry,
           ),
         ),
       ),
@@ -124,7 +126,31 @@ void main() {
       ),
     );
     expect(find.text('Signature rejected'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Worker diagnostics'), 300);
     expect(find.text('Worker diagnostics'), findsOneWidget);
+  });
+
+  testWidgets('install failure explains safety and offers recovery',
+      (tester) async {
+    var retried = false;
+    await pumpDashboard(
+      tester,
+      const HostUiSnapshot(
+        mode: HostUiMode.installFailure,
+        title: 'Worker update needs attention',
+        detail: 'The last Worker update could not be installed.',
+        issue: 'Signature rejected',
+      ),
+      onRetry: () async => retried = true,
+    );
+
+    expect(find.text('What happened'), findsOneWidget);
+    expect(
+        find.text(
+            'Your work is safe. The Host will not discard an assignment.'),
+        findsOneWidget);
+    await tester.tap(find.text('Retry update'));
+    expect(retried, isTrue);
   });
 
   testWidgets('advanced details are available through accessible labels',

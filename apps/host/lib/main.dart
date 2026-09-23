@@ -175,6 +175,28 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
 
   void _refresh() => setState(() {});
 
+  Future<void> _confirmQuit() async {
+    final shouldQuit = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Quit Conclave Host?'),
+        content: const Text(
+            'Active work will be reconciled safely before this machine disconnects. You can start Host again later.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep running'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Quit Host'),
+          ),
+        ],
+      ),
+    );
+    if (shouldQuit == true) await widget.lifecycle.quit();
+  }
+
   @override
   Widget build(BuildContext context) {
     final lifecycle = widget.lifecycle;
@@ -197,7 +219,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
             ),
             IconButton(
               tooltip: 'Quit Host',
-              onPressed: lifecycle.quit,
+              onPressed: _confirmQuit,
               icon: const Icon(Icons.power_settings_new),
             ),
           ],
@@ -208,7 +230,8 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
               : HostDashboard(
                   snapshot: lifecycle.uiSnapshot,
                   onPair: lifecycle.restore,
-                  onQuit: lifecycle.quit,
+                  onQuit: _confirmQuit,
+                  onRetry: lifecycle.launch,
                 ),
         ),
       ),
@@ -222,6 +245,7 @@ class HostDashboard extends StatelessWidget {
     this.onPair,
     this.onAccountAction,
     this.onQuit,
+    this.onRetry,
     super.key,
   });
 
@@ -229,6 +253,7 @@ class HostDashboard extends StatelessWidget {
   final VoidCallback? onPair;
   final VoidCallback? onAccountAction;
   final VoidCallback? onQuit;
+  final Future<void> Function()? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -271,11 +296,17 @@ class HostDashboard extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(snapshot.detail),
-                    if (snapshot.issue != null) ...[
-                      const SizedBox(height: 12),
-                      Text(snapshot.issue!,
-                          style: TextStyle(color: theme.colorScheme.error)),
-                    ],
+                    if (isError)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 16),
+                        child: _HostRecoveryPanel(
+                          issue: snapshot.issue,
+                          retryLabel: snapshot.mode == HostUiMode.offline
+                              ? 'Retry connection'
+                              : 'Retry update',
+                          onRetry: onRetry,
+                        ),
+                      ),
                     if (snapshot.mode == HostUiMode.firstLaunch) ...[
                       const SizedBox(height: 16),
                       FilledButton.icon(
@@ -405,6 +436,57 @@ class _SectionCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _HostRecoveryPanel extends StatelessWidget {
+  const _HostRecoveryPanel({
+    this.issue,
+    required this.retryLabel,
+    this.onRetry,
+  });
+
+  final String? issue;
+  final String retryLabel;
+  final Future<void> Function()? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colors.errorContainer.withValues(alpha: .45),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('What happened',
+              style: TextStyle(
+                  color: colors.onErrorContainer, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          Text(issue ?? 'The Host needs attention.',
+              style: TextStyle(color: colors.onErrorContainer)),
+          const SizedBox(height: 8),
+          Text('Your work is safe. The Host will not discard an assignment.',
+              style: TextStyle(color: colors.onErrorContainer)),
+          const SizedBox(height: 4),
+          Text(
+              '$retryLabel is available. Automatic retry depends on the error.',
+              style: TextStyle(color: colors.onErrorContainer)),
+          if (onRetry != null) ...[
+            const SizedBox(height: 10),
+            FilledButton.icon(
+              onPressed: () => unawaited(onRetry!()),
+              icon: const Icon(Icons.refresh),
+              label: Text(retryLabel),
+            ),
+          ],
+        ],
       ),
     );
   }

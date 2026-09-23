@@ -444,6 +444,13 @@ path (fresh dependency checkout, deployed Cloud/Host pairing, automatic Echo
 installation, live Codex/OpenAI execution, and the crash/reconnect/rollback
 recovery matrix) remains outstanding and keeps this phase in progress.
 
+V4-26 completes the UI/UX acceptance pass. Studio now gives loading and failure
+states a clear explanation, safety status, next action, and retry behavior,
+with consistent form surfaces and responsive/accessibility coverage. Host now
+confirms quit, exposes actionable connection/update recovery, and keeps local
+machine status, account setup, permissions, diagnostics, logs, and updates
+visible without exposing orchestration controls.
+
 ## 9. Architectural deletion gate
 
 Architecture v4 cleanup is complete when active source search returns no product/domain usage of:

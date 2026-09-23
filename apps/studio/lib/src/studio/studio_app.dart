@@ -662,8 +662,33 @@ class _StudioAppState extends State<StudioApp> {
     );
   }
 
-  Widget _loadingScaffold() =>
-      const Scaffold(body: Center(child: CircularProgressIndicator()));
+  Widget _loadingScaffold() => Scaffold(
+        body: Center(
+          child: Semantics(
+            liveRegion: true,
+            label: 'Loading your Conclave workspace',
+            child: Card(
+              margin: const EdgeInsets.all(24),
+              child: Padding(
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 18),
+                    Text('Loading your workspace',
+                        style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: 6),
+                    const Text(
+                        'Your existing work stays safe while Studio connects.',
+                        textAlign: TextAlign.center),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
 
   Widget _authScaffold() => Scaffold(
         body: Center(
@@ -700,18 +725,18 @@ class _StudioAppState extends State<StudioApp> {
       );
 
   Widget _errorScaffold() => Scaffold(
-          body: Center(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.cloud_off_rounded, size: 40),
-        const SizedBox(height: 12),
-        const Text('Studio could not load live data'),
-        const SizedBox(height: 6),
-        Text(loadError ?? '', style: const TextStyle(color: Colors.grey)),
-        const SizedBox(height: 16),
-        FilledButton(
-            onPressed: () => _loadSnapshot(),
-            child: Text(isReconnecting ? 'Reconnecting…' : 'Reconnect')),
-      ])));
+        body: Center(
+          child: _RecoveryPanel(
+            icon: Icons.cloud_off_rounded,
+            title: 'Studio could not load live data',
+            happened: loadError ?? 'The workspace connection did not respond.',
+            safe: 'Your existing work is safe. No new work was started.',
+            nextStep: 'Check your connection, then try again.',
+            retrying: isReconnecting,
+            onRetry: () => _loadSnapshot(),
+          ),
+        ),
+      );
 
   Widget _emptyWorkspaceScaffold() => Scaffold(
         body: Center(
@@ -726,6 +751,11 @@ class _StudioAppState extends State<StudioApp> {
               const SizedBox(height: 8),
               const Text('Create a project before starting a Conclave goal.',
                   textAlign: TextAlign.center),
+              const SizedBox(height: 6),
+              const Text(
+                  'You can return here after creating one in your Workspace.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Color(0xff777683))),
               const SizedBox(height: 18),
               OutlinedButton.icon(
                   onPressed: _loadSnapshot,
@@ -744,6 +774,20 @@ class _StudioAppState extends State<StudioApp> {
         fontFamily: 'Arial',
         cardTheme: const CardThemeData(
             margin: EdgeInsets.zero, elevation: 0, color: Colors.white),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: Color(0xffe1e1e8)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: Color(0xffe1e1e8)),
+          ),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        ),
       );
 
   Widget _sidebar({bool compact = false}) {
@@ -2475,6 +2519,100 @@ class _StudioAppState extends State<StudioApp> {
           ),
         ),
       );
+}
+
+class _RecoveryPanel extends StatelessWidget {
+  const _RecoveryPanel({
+    required this.icon,
+    required this.title,
+    required this.happened,
+    required this.safe,
+    required this.nextStep,
+    required this.retrying,
+    required this.onRetry,
+  });
+
+  final IconData icon;
+  final String title;
+  final String happened;
+  final String safe;
+  final String nextStep;
+  final bool retrying;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Card(
+      margin: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, size: 42, color: colors.error),
+              const SizedBox(height: 16),
+              Text(title, style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: 18),
+              _RecoveryLine(label: 'What happened', value: happened),
+              const SizedBox(height: 10),
+              _RecoveryLine(label: 'Is my work safe?', value: safe),
+              const SizedBox(height: 10),
+              _RecoveryLine(label: 'What can I do?', value: nextStep),
+              const SizedBox(height: 22),
+              FilledButton.icon(
+                onPressed: retrying ? null : onRetry,
+                icon: retrying
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh),
+                label: Text(retrying ? 'Retrying…' : 'Try again'),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                retrying
+                    ? 'Studio is retrying automatically.'
+                    : 'If an active run exists, Studio will keep checking for updates.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RecoveryLine extends StatelessWidget {
+  const _RecoveryLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: '$label: $value',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: Theme.of(context)
+                  .textTheme
+                  .labelLarge
+                  ?.copyWith(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 2),
+          Text(value),
+        ],
+      ),
+    );
+  }
 }
 
 extension _FirstOrNull<T> on Iterable<T> {
