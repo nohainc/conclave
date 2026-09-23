@@ -21,9 +21,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('My first project'), findsWidgets);
-    expect(find.text('New chat'), findsOneWidget);
+    expect(find.text('Start first chat'), findsOneWidget);
 
-    await tester.tap(find.text('New chat'));
+    await tester.tap(find.text('Start first chat'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'First chat');
     await tester.tap(find.text('Create'));

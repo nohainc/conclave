@@ -341,6 +341,10 @@ class StudioProject {
     required this.activeGoals,
     required this.lastActivity,
     this.chats = const [],
+    this.description = '',
+    this.instructions = '',
+    this.defaultExecutionPolicy = 'balanced',
+    this.archived = false,
   });
 
   final String id;
@@ -350,6 +354,10 @@ class StudioProject {
   final int activeGoals;
   final String lastActivity;
   final List<StudioChat> chats;
+  final String description;
+  final String instructions;
+  final String defaultExecutionPolicy;
+  final bool archived;
 
   factory StudioProject.fromJson(Map<String, dynamic> json) => StudioProject(
         id: _string(json, 'id'),
@@ -362,6 +370,24 @@ class StudioProject {
             .map((item) =>
                 StudioChat.fromJson(Map<String, dynamic>.from(item as Map)))
             .toList(),
+        description: _string(json, 'description', ''),
+        instructions: _string(
+            json,
+            'instructions',
+            (json['settings'] is Map &&
+                    (json['settings'] as Map)['instructions'] != null)
+                ? (json['settings'] as Map)['instructions'].toString()
+                : ''),
+        defaultExecutionPolicy: _string(
+            json,
+            'defaultExecutionPolicy',
+            (json['settings'] is Map &&
+                    (json['settings'] as Map)['defaultExecutionPolicy'] != null)
+                ? (json['settings'] as Map)['defaultExecutionPolicy'].toString()
+                : 'balanced'),
+        archived: json['archived'] == true ||
+            (json['settings'] is Map &&
+                (json['settings'] as Map)['archived'] == true),
       );
 }
 

@@ -29,7 +29,20 @@ abstract interface class StudioDataSource {
   Future<StudioProject> createProject({
     required String name,
     String? description,
+    String? repository,
+    String? instructions,
+    String? defaultExecutionPolicy,
   });
+  Future<StudioProject> updateProject({
+    required String projectId,
+    String? name,
+    String? description,
+    String? repository,
+    String? instructions,
+    String? defaultExecutionPolicy,
+  });
+  Future<void> archiveProject({required String projectId});
+  Future<void> deleteProject({required String projectId});
   Future<StudioAccountSecurity> loadAccountSecurity();
   Future<void> revokeAccountSession(String token);
   Future<Uri> beginAccountLink(String provider, Uri returnTo);
@@ -385,7 +398,11 @@ class StudioApiClient implements StudioDataSource {
 
   @override
   Future<StudioProject> createProject(
-      {required String name, String? description}) async {
+      {required String name,
+      String? description,
+      String? repository,
+      String? instructions,
+      String? defaultExecutionPolicy}) async {
     final response = await client.post(
       Uri.parse('$baseUrl/projects'),
       headers: _headers(contentType: 'application/json'),
@@ -393,6 +410,16 @@ class StudioApiClient implements StudioDataSource {
         'name': name,
         if (description != null && description.trim().isNotEmpty)
           'description': description.trim(),
+        if (repository != null && repository.trim().isNotEmpty)
+          'repositoryId': repository.trim(),
+        if (instructions != null && instructions.trim().isNotEmpty ||
+            defaultExecutionPolicy != null)
+          'settings': {
+            if (instructions != null && instructions.trim().isNotEmpty)
+              'instructions': instructions.trim(),
+            if (defaultExecutionPolicy != null)
+              'defaultExecutionPolicy': defaultExecutionPolicy,
+          },
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -423,7 +450,75 @@ class StudioApiClient implements StudioDataSource {
       'activeGoals': value['activeGoals'] ?? 0,
       'lastActivity': value['lastActivity'] ?? value['updatedAt'] ?? '',
       'chats': value['chats'] ?? const [],
+      'settings': value['settings'] ?? const {},
     });
+  }
+
+  @override
+  Future<StudioProject> updateProject({
+    required String projectId,
+    String? name,
+    String? description,
+    String? repository,
+    String? instructions,
+    String? defaultExecutionPolicy,
+  }) async {
+    final response = await client.patch(
+      Uri.parse('$baseUrl/projects/$projectId'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({
+        if (name != null) 'name': name,
+        if (description != null) 'description': description,
+        if (repository != null) 'repositoryId': repository,
+        if (instructions != null || defaultExecutionPolicy != null)
+          'settings': {
+            if (instructions != null) 'instructions': instructions,
+            if (defaultExecutionPolicy != null)
+              'defaultExecutionPolicy': defaultExecutionPolicy,
+          },
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException('Project update failed (${response.statusCode})',
+          statusCode: response.statusCode);
+    }
+    final body = jsonDecode(response.body);
+    final project = body is Map ? body['project'] : null;
+    if (project is! Map) {
+      throw const StudioApiException('Project update response is malformed');
+    }
+    final value = Map<String, dynamic>.from(project);
+    return StudioProject.fromJson({
+      ...value,
+      'repository': value['repository'] ?? value['repositoryId'] ?? '',
+      'lastActivity': value['lastActivity'] ?? value['updatedAt'] ?? '',
+      'settings': value['settings'] ?? const {},
+    });
+  }
+
+  @override
+  Future<void> archiveProject({required String projectId}) async {
+    final response = await client.patch(
+      Uri.parse('$baseUrl/projects/$projectId'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({'archived': true}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+          'Project archive failed (${response.statusCode})',
+          statusCode: response.statusCode);
+    }
+  }
+
+  @override
+  Future<void> deleteProject({required String projectId}) async {
+    final response = await client
+        .delete(Uri.parse('$baseUrl/projects/$projectId'), headers: _headers());
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+          'Project deletion failed (${response.statusCode})',
+          statusCode: response.statusCode);
+    }
   }
 
   @override

@@ -43,7 +43,11 @@ class StudioFixtureDataSource implements StudioDataSource {
 
   @override
   Future<StudioProject> createProject(
-          {required String name, String? description}) async =>
+          {required String name,
+          String? description,
+          String? repository,
+          String? instructions,
+          String? defaultExecutionPolicy}) async =>
       StudioProject(
         id: 'project-created',
         name: name,
@@ -52,6 +56,36 @@ class StudioFixtureDataSource implements StudioDataSource {
         activeGoals: 0,
         lastActivity: 'Just now',
       );
+
+  @override
+  Future<StudioProject> updateProject({
+    required String projectId,
+    String? name,
+    String? description,
+    String? repository,
+    String? instructions,
+    String? defaultExecutionPolicy,
+  }) async {
+    final project = studioFixtureSnapshot()
+        .projects
+        .where((item) => item.id == projectId)
+        .firstOrNull;
+    return StudioProject(
+      id: projectId,
+      name: name ?? project?.name ?? 'Updated project',
+      repository: repository ?? project?.repository ?? '',
+      branch: project?.branch ?? '',
+      activeGoals: project?.activeGoals ?? 0,
+      lastActivity: 'Just now',
+      description: description ?? project?.description ?? '',
+    );
+  }
+
+  @override
+  Future<void> archiveProject({required String projectId}) async {}
+
+  @override
+  Future<void> deleteProject({required String projectId}) async {}
 
   @override
   Future<StudioAccountSecurity> loadAccountSecurity() async =>
@@ -242,7 +276,11 @@ class EmptyWorkspaceFixtureDataSource extends StudioFixtureDataSource {
 
   @override
   Future<StudioProject> createProject(
-      {required String name, String? description}) async {
+      {required String name,
+      String? description,
+      String? repository,
+      String? instructions,
+      String? defaultExecutionPolicy}) async {
     hasProject = true;
     return StudioProject(
       id: 'project-created',

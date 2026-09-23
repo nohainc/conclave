@@ -8,11 +8,13 @@ class ProjectsPage extends StatelessWidget {
     required this.projects,
     required this.onCreateProject,
     required this.onOpenProject,
+    required this.onDeleteProject,
   });
 
   final List<StudioProject> projects;
   final VoidCallback onCreateProject;
   final ValueChanged<String> onOpenProject;
+  final ValueChanged<String> onDeleteProject;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -47,6 +49,11 @@ class ProjectsPage extends StatelessWidget {
                         onPressed: () => onOpenProject(project.id),
                         child: const Text('Open project'),
                       ),
+                      IconButton(
+                        tooltip: 'Delete project',
+                        onPressed: () => onDeleteProject(project.id),
+                        icon: const Icon(Icons.delete_outline),
+                      ),
                     ],
                   ),
                 )),
@@ -60,11 +67,17 @@ class ProjectPage extends StatelessWidget {
     required this.project,
     required this.onCreateChat,
     required this.onOpenChat,
+    required this.onEdit,
+    required this.onArchive,
+    required this.onDelete,
   });
 
   final StudioProject project;
   final VoidCallback onCreateChat;
   final ValueChanged<String> onOpenChat;
+  final VoidCallback onEdit;
+  final VoidCallback onArchive;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -77,12 +90,43 @@ class ProjectPage extends StatelessWidget {
               style: TextStyle(color: Color(0xff777683), fontSize: 13)),
           const SizedBox(height: 24),
           _ProjectPanel(
+            title: 'Project details',
+            subtitle: project.description.isEmpty
+                ? 'Add context and execution preferences for this Project.'
+                : project.description,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Edit settings'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onArchive,
+                  icon: const Icon(Icons.archive_outlined),
+                  label: const Text('Archive'),
+                ),
+                TextButton.icon(
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Delete'),
+                ),
+              ],
+            ),
+          ),
+          _ProjectPanel(
             title: 'Chats',
             subtitle: 'Continue a conversation or start a new one.',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (project.chats.isEmpty) const Text('No chats yet.'),
+                if (project.chats.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: Text('No chats yet. Start the first one below.'),
+                  ),
                 ...project.chats.map((chat) => ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(chat.title),
@@ -92,7 +136,8 @@ class ProjectPage extends StatelessWidget {
                 FilledButton.icon(
                   onPressed: onCreateChat,
                   icon: const Icon(Icons.add),
-                  label: const Text('New chat'),
+                  label: Text(
+                      project.chats.isEmpty ? 'Start first chat' : 'New chat'),
                 ),
               ],
             ),

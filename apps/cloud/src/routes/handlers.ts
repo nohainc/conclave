@@ -1897,7 +1897,9 @@ async function handleListProjects(
     ? await env.CONCLAVE_DB.prepare(
         `SELECT p.id, p.workspace_id AS workspaceId, p.name, p.description, p.repository_id AS repositoryId,
                 p.settings_json AS settingsJson, p.created_at AS createdAt, p.updated_at AS updatedAt
-         FROM projects p WHERE p.workspace_id = ?1 ORDER BY p.updated_at DESC`,
+         FROM projects p WHERE p.workspace_id = ?1
+           AND COALESCE(json_extract(p.settings_json, '$.archived'), 0) = 0
+         ORDER BY p.updated_at DESC`,
       )
         .bind(context.workspaceId)
         .all<{
@@ -1916,6 +1918,7 @@ async function handleListProjects(
          FROM projects p
          JOIN project_memberships pm ON pm.project_id = p.id
          WHERE p.workspace_id = ?1 AND pm.user_id = ?2
+           AND COALESCE(json_extract(p.settings_json, '$.archived'), 0) = 0
          ORDER BY p.updated_at DESC`,
       )
         .bind(context.workspaceId, context.userId)
@@ -2049,6 +2052,114 @@ async function handleGetProject(
       updatedAt: row.updatedAt,
     },
   });
+}
+
+async function handleUpdateProject(
+  request: Request,
+  env: SecurityEnv,
+  projectId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const context = await authorizeRequest(
+    request,
+    env,
+    "projects:manage",
+    projectId,
+    accessContext,
+  );
+  const existing = await env.CONCLAVE_DB.prepare(
+    `SELECT id, workspace_id AS workspaceId, name, description,
+            repository_id AS repositoryId, settings_json AS settingsJson,
+            created_at AS createdAt, updated_at AS updatedAt
+     FROM projects WHERE id = ?1 AND workspace_id = ?2`,
+  )
+    .bind(projectId, context.workspaceId)
+    .first<{
+      id: string;
+      workspaceId: string;
+      name: string;
+      description: string | null;
+      repositoryId: string | null;
+      settingsJson: string;
+      createdAt: string;
+      updatedAt: string;
+    }>();
+  if (!existing) throw new HttpError(404, "Project not found");
+
+  const body = (await request.json()) as Record<string, unknown>;
+  const settings = {
+    ...parseJson(existing.settingsJson),
+    ...(typeof body.settings === "object" && body.settings !== null
+      ? (body.settings as Record<string, unknown>)
+      : {}),
+  };
+  if (body.archived === true) settings.archived = true;
+  if (body.archived === false) settings.archived = false;
+  const now = new Date().toISOString();
+  const project = {
+    id: existing.id,
+    workspaceId: existing.workspaceId,
+    name:
+      typeof body.name === "string"
+        ? requiredString(body.name, "name")
+        : existing.name,
+    description:
+      body.description === null
+        ? null
+        : typeof body.description === "string"
+          ? body.description
+          : existing.description,
+    repositoryId:
+      body.repositoryId === null
+        ? null
+        : typeof body.repositoryId === "string"
+          ? body.repositoryId
+          : existing.repositoryId,
+    settings,
+    createdAt: existing.createdAt,
+    updatedAt: now,
+  };
+  validateProject(project);
+  await env.CONCLAVE_DB.prepare(
+    `UPDATE projects SET name = ?1, description = ?2, repository_id = ?3,
+       settings_json = ?4, updated_at = ?5
+     WHERE id = ?6 AND workspace_id = ?7`,
+  )
+    .bind(
+      project.name,
+      project.description,
+      project.repositoryId,
+      JSON.stringify(project.settings),
+      now,
+      projectId,
+      context.workspaceId,
+    )
+    .run();
+  return json({ project });
+}
+
+async function handleDeleteProject(
+  request: Request,
+  env: SecurityEnv,
+  projectId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const context = await authorizeRequest(
+    request,
+    env,
+    "projects:manage",
+    projectId,
+    accessContext,
+  );
+  const result = await env.CONCLAVE_DB.prepare(
+    "DELETE FROM projects WHERE id = ?1 AND workspace_id = ?2",
+  )
+    .bind(projectId, context.workspaceId)
+    .run();
+  if (!result.success || (result.meta?.changes ?? 0) === 0) {
+    throw new HttpError(404, "Project not found");
+  }
+  return json({ projectId, deleted: true });
 }
 
 // =========================================================================
@@ -6375,6 +6486,8 @@ export {
   handleGetWorkspace,
   handleListProjects,
   handleCreateProject,
+  handleUpdateProject,
+  handleDeleteProject,
   handleListChats,
   handleCreateChat,
   handleGetProject,

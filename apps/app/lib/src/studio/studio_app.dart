@@ -1492,7 +1492,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
   Future<void> _createProject() async {
     var name = '';
     var description = '';
-    final values = await showDialog<(String, String?)>(
+    var repository = '';
+    var instructions = '';
+    final values = await showDialog<(String, String?, String?, String?)>(
       context: navigatorKey.currentContext ?? context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Create project'),
@@ -1514,6 +1516,21 @@ class _StudioAppState extends State<ConclaveAppShell> {
                 ),
                 maxLines: 2,
               ),
+              const SizedBox(height: 12),
+              TextField(
+                onChanged: (value) => repository = value,
+                decoration: const InputDecoration(
+                  labelText: 'Repository (optional)',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                onChanged: (value) => instructions = value,
+                decoration: const InputDecoration(
+                  labelText: 'Project instructions (optional)',
+                ),
+                maxLines: 2,
+              ),
             ],
           ),
         ),
@@ -1529,6 +1546,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
                 (
                   name.isEmpty ? 'My first project' : name,
                   description.trim(),
+                  repository.trim(),
+                  instructions.trim(),
                 ),
               );
             },
@@ -1548,6 +1567,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
       final project = await widget.dataSource.createProject(
         name: values.$1,
         description: values.$2,
+        repository: values.$3,
+        instructions: values.$4,
       );
       if (!mounted) return;
       setState(() {
@@ -1569,6 +1590,172 @@ class _StudioAppState extends State<ConclaveAppShell> {
         _showSnackBar(error.toString(), type: ToastType.error);
       }
     }
+  }
+
+  Future<void> _editProject(StudioProject project) async {
+    var name = project.name;
+    var description = project.description;
+    var repository = project.repository;
+    var instructions = project.instructions;
+    final values = await showDialog<(String, String, String, String)?>(
+      context: navigatorKey.currentContext ?? context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Project settings'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: TextEditingController(text: project.name),
+                onChanged: (value) => name = value,
+                decoration: const InputDecoration(labelText: 'Project name'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: TextEditingController(text: project.description),
+                onChanged: (value) => description = value,
+                decoration: const InputDecoration(labelText: 'Description'),
+                maxLines: 2,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: TextEditingController(text: project.repository),
+                onChanged: (value) => repository = value,
+                decoration:
+                    const InputDecoration(labelText: 'Repository (optional)'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: TextEditingController(text: project.instructions),
+                onChanged: (value) => instructions = value,
+                decoration:
+                    const InputDecoration(labelText: 'Project instructions'),
+                maxLines: 2,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(
+              dialogContext,
+              (
+                name.trim(),
+                description.trim(),
+                repository.trim(),
+                instructions.trim()
+              ),
+            ),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (values == null || values.$1.isEmpty) return;
+    try {
+      final updated = await widget.dataSource.updateProject(
+        projectId: project.id,
+        name: values.$1,
+        description: values.$2,
+        repository: values.$3,
+        instructions: values.$4,
+      );
+      if (!mounted) return;
+      setState(() {
+        snapshot = snapshot.copyWith(
+          projects: snapshot.projects
+              .map((item) => item.id == updated.id ? updated : item)
+              .toList(),
+        );
+      });
+      _showSnackBar('Project updated.');
+    } catch (error) {
+      if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
+    }
+  }
+
+  Future<void> _archiveProject(StudioProject project) async {
+    final confirmed = await _confirmProjectAction(
+      title: 'Archive project?',
+      message: 'Archived projects leave the active Projects list.',
+      action: 'Archive',
+    );
+    if (!confirmed) return;
+    try {
+      await widget.dataSource.archiveProject(projectId: project.id);
+      if (!mounted) return;
+      setState(() {
+        snapshot = snapshot.copyWith(
+          projects:
+              snapshot.projects.where((item) => item.id != project.id).toList(),
+        );
+        selectedProjectId = null;
+      });
+      _navigateTo(const StudioNavigation.projects(), replace: true);
+      _showSnackBar('Project archived.');
+    } catch (error) {
+      if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
+    }
+  }
+
+  Future<void> _deleteProject(String projectId) async {
+    final confirmed = await _confirmProjectAction(
+      title: 'Delete project?',
+      message: 'This permanently removes the Project and its Chats.',
+      action: 'Delete',
+      destructive: true,
+    );
+    if (!confirmed) return;
+    try {
+      await widget.dataSource.deleteProject(projectId: projectId);
+      if (!mounted) return;
+      setState(() {
+        snapshot = snapshot.copyWith(
+          projects:
+              snapshot.projects.where((item) => item.id != projectId).toList(),
+        );
+        selectedProjectId = null;
+        selectedChatId = null;
+      });
+      _navigateTo(const StudioNavigation.projects(), replace: true);
+      _showSnackBar('Project deleted.');
+    } catch (error) {
+      if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
+    }
+  }
+
+  Future<bool> _confirmProjectAction({
+    required String title,
+    required String message,
+    required String action,
+    bool destructive = false,
+  }) async {
+    final result = await showDialog<bool>(
+      context: navigatorKey.currentContext ?? context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: destructive
+                ? FilledButton.styleFrom(backgroundColor: Colors.red)
+                : null,
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(action),
+          ),
+        ],
+      ),
+    );
+    return result == true;
   }
 
   Widget _pendingInvitationBanner() => Card(
@@ -2144,6 +2331,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
         onCreateProject: _createProject,
         onOpenProject: (projectId) =>
             _navigateTo(StudioNavigation.project(projectId)),
+        onDeleteProject: _deleteProject,
       );
 
   Widget _homeView() => HomePage(
@@ -2178,6 +2366,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
       onCreateChat: _createChat,
       onOpenChat: (chatId) =>
           _navigateTo(StudioNavigation.chat(project.id, chatId)),
+      onEdit: () => _editProject(project),
+      onArchive: () => _archiveProject(project),
+      onDelete: () => _deleteProject(project.id),
     );
   }
 

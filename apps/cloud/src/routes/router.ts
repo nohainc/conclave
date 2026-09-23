@@ -750,6 +750,22 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
+    if (request.method === "PATCH" && projectMatch?.[1]) {
+      return await handlers.handleUpdateProject!(
+        request,
+        env,
+        projectMatch[1],
+        ctx,
+      );
+    }
+    if (request.method === "DELETE" && projectMatch?.[1]) {
+      return await handlers.handleDeleteProject!(
+        request,
+        env,
+        projectMatch[1],
+        ctx,
+      );
+    }
 
     const chatGoalsMatch = url.pathname.match(/^\/api\/chats\/([^/]+)\/goals$/);
     if (request.method === "GET" && chatGoalsMatch?.[1]) {
