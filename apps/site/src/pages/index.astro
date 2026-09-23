@@ -4,6 +4,7 @@ import Button from "../components/Button.astro";
 import Container from "../components/Container.astro";
 import FeatureCard from "../components/FeatureCard.astro";
 import HeroArchitecture from "../components/HeroArchitecture.astro";
+import PrincipleCard from "../components/PrincipleCard.astro";
 import Section from "../components/Section.astro";
 import SectionHeader from "../components/SectionHeader.astro";
 ---
@@ -29,6 +30,34 @@ import SectionHeader from "../components/SectionHeader.astro";
       <HeroArchitecture />
     </section>
   </Container>
+
+  <Section>
+    <Container>
+      <SectionHeader
+        eyebrow="Why Conclave AX"
+        title="Complex work needs more than one answer."
+        description="One large AI request often produces inconsistent quality. Conclave AX breaks complex goals into smaller work, assigns the right Workers, checks results independently, and iterates until the goal is verified."
+      />
+      <div class="principles">
+        <PrincipleCard title="Delegate">
+          <p>Give focused work to the right capability.</p>
+          <div class="principle-list"><span>Research</span><span>Implementation</span><span>Testing</span><span>Review</span></div>
+        </PrincipleCard>
+        <PrincipleCard title="Compare">
+          <p>Use independent perspectives when quality matters.</p>
+          <div class="principle-compare"><span>Worker A</span><span>Worker B</span><span>Worker C</span></div>
+        </PrincipleCard>
+        <PrincipleCard title="Verify">
+          <p>Make the result inspectable, not just plausible.</p>
+          <div class="principle-list"><span>Tests</span><span>Reviews</span><span>Evidence</span><span>Artifacts</span></div>
+        </PrincipleCard>
+        <PrincipleCard title="Iterate">
+          <p>Turn findings into corrections and check again.</p>
+          <div class="principle-iterate"><span>Finding</span><i aria-hidden="true">↓</i><span>Correction</span><i aria-hidden="true">↓</i><span>Reverification</span></div>
+        </PrincipleCard>
+      </div>
+    </Container>
+  </Section>
 
   <Section>
     <Container>

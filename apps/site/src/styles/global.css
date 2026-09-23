@@ -246,6 +246,60 @@ h3 {
   gap: var(--space-4);
   margin-top: var(--space-10);
 }
+.principles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-4);
+  margin-top: var(--space-10);
+}
+.principle-card {
+  min-height: 260px;
+  padding: var(--space-6);
+  background: var(--color-surface);
+  border: var(--border-thin);
+  border-radius: var(--radius-lg);
+}
+.principle-card h3 {
+  margin-top: 0;
+}
+.principle-card p {
+  min-height: 52px;
+  color: var(--color-muted);
+}
+.principle-list,
+.principle-compare,
+.principle-iterate {
+  display: grid;
+  gap: 7px;
+  margin-top: var(--space-6);
+  color: var(--color-ink-soft);
+  font: 700 var(--text-xs) / 1.35 var(--font-mono);
+  text-transform: uppercase;
+}
+.principle-list span,
+.principle-compare span,
+.principle-iterate span {
+  padding: 8px 10px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+}
+.principle-compare {
+  grid-template-columns: repeat(3, 1fr);
+  align-items: end;
+}
+.principle-compare span:nth-child(2) {
+  padding-block: 17px;
+  background: var(--color-accent-wash);
+}
+.principle-iterate {
+  justify-items: start;
+  gap: 3px;
+}
+.principle-iterate i {
+  padding-left: 10px;
+  color: var(--color-accent-dark);
+  font-style: normal;
+}
 .site-footer {
   display: flex;
   justify-content: space-between;
@@ -261,6 +315,9 @@ h3 {
 @media (max-width: 960px) {
   .hero {
     gap: var(--space-10);
+  }
+  .principles {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 @media (max-width: 760px) {
@@ -301,6 +358,9 @@ h3 {
     grid-template-columns: 1fr;
   }
   .cards {
+    grid-template-columns: 1fr;
+  }
+  .principles {
     grid-template-columns: 1fr;
   }
   .site-footer {
