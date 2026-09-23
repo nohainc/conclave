@@ -63,6 +63,8 @@ class _StudioAppState extends State<StudioApp> {
   bool authRequired = false;
   bool isReconnecting = false;
   List<StudioPendingInvitation> pendingInvitations = const [];
+  StudioAccountSecurity? accountSecurity;
+  bool accountSecurityLoading = false;
 
   void _showSnackBar(String message) {
     messengerKey.currentState?.showSnackBar(SnackBar(content: Text(message)));
@@ -94,6 +96,8 @@ class _StudioAppState extends State<StudioApp> {
     browserNavigation = createStudioBrowserNavigation();
     navigation = StudioNavigation.fromUri(
         widget.initialUri ?? browserNavigation.current);
+    navigationIndex = navigation.kind == StudioRouteKind.account ? 5 : 0;
+    showRunDetails = navigation.kind == StudioRouteKind.account;
     navigationSubscription =
         browserNavigation.changes.listen(_onBrowserNavigation);
     lifecycleSubscription = browserNavigation.lifecycleChanges
@@ -118,6 +122,9 @@ class _StudioAppState extends State<StudioApp> {
       }
       await _loadWorkspaces();
       await _loadSnapshot();
+      if (navigation.kind == StudioRouteKind.account) {
+        await _loadAccountSecurity();
+      }
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -155,6 +162,45 @@ class _StudioAppState extends State<StudioApp> {
       widget.dataSource.setActiveWorkspace(selectedWorkspaceId);
     } catch (_) {
       // Snapshot loading remains the primary path for anonymous development.
+    }
+  }
+
+  Future<void> _loadAccountSecurity() async {
+    if (!mounted) return;
+    setState(() => accountSecurityLoading = true);
+    try {
+      final loaded = await widget.dataSource.loadAccountSecurity();
+      if (!mounted) return;
+      setState(() {
+        accountSecurity = loaded;
+        accountSecurityLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        accountSecurityLoading = false;
+        loadError = error.toString();
+      });
+    }
+  }
+
+  Future<void> _revokeAccountSession(StudioAuthSession session) async {
+    try {
+      await widget.dataSource.revokeAccountSession(session.token);
+      await _loadAccountSecurity();
+      if (mounted) _showSnackBar('Session revoked.');
+    } catch (error) {
+      if (mounted) _showSnackBar(error.toString());
+    }
+  }
+
+  Future<void> _linkAccountProvider(String provider) async {
+    try {
+      final uri = await widget.dataSource
+          .beginAccountLink(provider, Uri(path: '/account'));
+      browserNavigation.openExternal(uri);
+    } catch (error) {
+      if (mounted) _showSnackBar(error.toString());
     }
   }
 
@@ -264,9 +310,13 @@ class _StudioAppState extends State<StudioApp> {
       navigation = next;
       selectedProjectId = next.projectId ?? selectedProjectId;
       selectedChatId = next.chatId ?? selectedChatId;
-      showRunDetails = next.kind == StudioRouteKind.run;
-      navigationIndex = 0;
+      showRunDetails = next.kind == StudioRouteKind.run ||
+          next.kind == StudioRouteKind.account;
+      navigationIndex = next.kind == StudioRouteKind.account ? 5 : 0;
     });
+    if (next.kind == StudioRouteKind.account) {
+      unawaited(_loadAccountSecurity());
+    }
     if (projectChanged) {
       unawaited(_loadSnapshot(projectId: next.projectId));
     }
@@ -944,7 +994,7 @@ class _StudioAppState extends State<StudioApp> {
             if (compact)
               _navItem(Icons.close_rounded, 'Close menu', -1,
                   compact: compact, navigationContext: sidebarContext),
-            _navItem(Icons.settings_outlined, 'Settings', 5,
+            _navItem(Icons.person_outline_rounded, 'Account', 5,
                 compact: compact, navigationContext: sidebarContext),
             const SizedBox(height: 6),
             Row(children: [
@@ -1053,6 +1103,10 @@ class _StudioAppState extends State<StudioApp> {
               _navigateTo(const StudioNavigation.home(),
                   replace: true, showDetails: false);
             }
+          } else if (index == 5) {
+            _navigateTo(const StudioNavigation.account(),
+                replace: true, showDetails: true);
+            unawaited(_loadAccountSecurity());
           } else {
             _navigateTo(const StudioNavigation.home(),
                 replace: true, showDetails: true);
@@ -1222,7 +1276,10 @@ class _StudioAppState extends State<StudioApp> {
                   onPressed: () => Scaffold.of(context).openDrawer(),
                   icon: const Icon(Icons.menu_rounded))),
         Expanded(
-            child: Text(showRunDetails ? 'Run details' : 'Studio',
+            child: Text(
+                navigationIndex == 5
+                    ? 'Account'
+                    : (showRunDetails ? 'Run details' : 'Studio'),
                 style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -1252,7 +1309,7 @@ class _StudioAppState extends State<StudioApp> {
     if (navigationIndex == 2) return _catalogView();
     if (navigationIndex == 3) return _accountsView();
     if (navigationIndex == 4) return _usageView();
-    if (navigationIndex == 5) return _settingsView();
+    if (navigationIndex == 5) return _accountView();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Expanded(
@@ -2203,17 +2260,19 @@ class _StudioAppState extends State<StudioApp> {
             children: [
               Row(
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w700, fontSize: 14)),
-                      const SizedBox(height: 3),
-                      Text(subtitle,
-                          style: const TextStyle(
-                              color: Color(0xffaaa8b1), fontSize: 10)),
-                    ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 14)),
+                        const SizedBox(height: 3),
+                        Text(subtitle,
+                            style: const TextStyle(
+                                color: Color(0xffaaa8b1), fontSize: 10)),
+                      ],
+                    ),
                   ),
                   const Spacer(),
                   if (trailing != null) trailing,
@@ -2521,6 +2580,116 @@ class _StudioAppState extends State<StudioApp> {
           ),
         ],
       );
+
+  Widget _accountView() {
+    final viewer = store.auth.viewer ?? snapshot.viewer;
+    final security = accountSecurity;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Account',
+            style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        const Text('Manage your Conclave profile, login methods, and sessions.',
+            style: TextStyle(color: Color(0xff777683), fontSize: 13)),
+        const SizedBox(height: 24),
+        _panel(
+          title: 'Profile',
+          subtitle: 'Your stable Conclave identity',
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: CircleAvatar(
+              backgroundColor: const Color(0xffeeecff),
+              child: Text(_viewerInitials,
+                  style: const TextStyle(color: Color(0xff4238a0))),
+            ),
+            title: Text(viewer?.displayName ?? 'Conclave user'),
+            subtitle: Text(viewer?.email ?? 'Email unavailable'),
+          ),
+        ),
+        const SizedBox(height: 16),
+        _panel(
+          title: 'Linked login methods',
+          subtitle:
+              'Link another verified provider so one provider can be unavailable without locking you out.',
+          child: accountSecurityLoading
+              ? const Center(child: CircularProgressIndicator())
+              : Column(
+                  children: [
+                    if (security?.accounts.isEmpty ?? true)
+                      const Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text('No linked methods loaded.')),
+                    ...?security?.accounts.map((account) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(account.providerId == 'github'
+                              ? Icons.code
+                              : Icons.account_circle_outlined),
+                          title: Text(_providerLabel(account.providerId)),
+                          subtitle: Text('Linked account ${account.accountId}'),
+                          trailing: const Icon(Icons.verified_outlined,
+                              color: Color(0xff3ca879)),
+                        )),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: () => _linkAccountProvider('github'),
+                          icon: const Icon(Icons.code, size: 17),
+                          label: const Text('Link GitHub'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () => _linkAccountProvider('google'),
+                          icon: const Icon(Icons.account_circle_outlined,
+                              size: 17),
+                          label: const Text('Link Google'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+        ),
+        const SizedBox(height: 16),
+        _panel(
+          title: 'Active sessions',
+          subtitle: 'Revoke access from a device you no longer recognize.',
+          child: accountSecurityLoading
+              ? const Center(child: CircularProgressIndicator())
+              : Column(
+                  children: [
+                    if (security?.sessions.isEmpty ?? true)
+                      const Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text('No active sessions loaded.')),
+                    ...?security?.sessions.map((session) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.devices_outlined),
+                          title: Text(session.userAgent ?? 'Browser session'),
+                          subtitle: Text(
+                              'Expires ${_formatAccountDate(session.expiresAt)}'),
+                          trailing: TextButton(
+                            onPressed: () => _revokeAccountSession(session),
+                            child: const Text('Revoke'),
+                          ),
+                        )),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+
+  String _providerLabel(String provider) => switch (provider) {
+        'github' => 'GitHub',
+        'google' => 'Google',
+        _ => provider,
+      };
+
+  String _formatAccountDate(String value) {
+    if (value.isEmpty || value == '—') return 'unknown';
+    return value.replaceFirst('T', ' ').replaceFirst('Z', ' UTC');
+  }
 
   Widget _settingsView() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -10,6 +10,9 @@ abstract interface class StudioDataSource {
   void setActiveWorkspace(String? workspaceId);
   Future<StudioSession> loadSession();
   Future<void> logout();
+  Future<StudioAccountSecurity> loadAccountSecurity();
+  Future<void> revokeAccountSession(String token);
+  Future<Uri> beginAccountLink(String provider, Uri returnTo);
   Future<List<StudioWorkspace>> loadWorkspaces();
   Future<StudioSnapshot> loadSnapshot({String? projectId, String? workspaceId});
   Future<void> controlRun(String runId, String command);
@@ -149,6 +152,78 @@ class StudioApiClient implements StudioDataSource {
       throw StudioApiException('Logout failed (${response.statusCode})',
           statusCode: response.statusCode);
     }
+  }
+
+  @override
+  Future<StudioAccountSecurity> loadAccountSecurity() async {
+    final responses = await Future.wait([
+      client.get(Uri.parse('$baseUrl/auth/list-accounts'), headers: _headers()),
+      client.get(Uri.parse('$baseUrl/auth/list-sessions'), headers: _headers()),
+    ]);
+    for (final response in responses) {
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw StudioApiException(
+            'Account security lookup failed (${response.statusCode})',
+            statusCode: response.statusCode);
+      }
+    }
+    final accountsBody = jsonDecode(responses[0].body);
+    final sessionsBody = jsonDecode(responses[1].body);
+    final accounts = accountsBody is List
+        ? accountsBody
+        : accountsBody is Map && accountsBody['accounts'] is List
+            ? accountsBody['accounts'] as List
+            : const [];
+    final sessions = sessionsBody is List
+        ? sessionsBody
+        : sessionsBody is Map && sessionsBody['sessions'] is List
+            ? sessionsBody['sessions'] as List
+            : const [];
+    return StudioAccountSecurity.fromJson(
+      accounts
+          .whereType<Map>()
+          .map((value) => Map<String, dynamic>.from(value))
+          .toList(growable: false),
+      sessions
+          .whereType<Map>()
+          .map((value) => Map<String, dynamic>.from(value))
+          .toList(growable: false),
+    );
+  }
+
+  @override
+  Future<void> revokeAccountSession(String token) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/auth/revoke-session'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({'token': token}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException('Session revocation failed',
+          statusCode: response.statusCode);
+    }
+  }
+
+  @override
+  Future<Uri> beginAccountLink(String provider, Uri returnTo) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/auth/link-social'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({
+        'provider': provider,
+        'callbackURL': returnTo.toString(),
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException('Could not start account linking',
+          statusCode: response.statusCode);
+    }
+    final body = jsonDecode(response.body);
+    final url = body is Map ? body['url'] : null;
+    if (url is! String || url.isEmpty) {
+      throw const StudioApiException('Account linking response is malformed');
+    }
+    return Uri.parse(url);
   }
 
   @override

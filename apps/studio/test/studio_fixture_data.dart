@@ -20,6 +20,30 @@ class StudioFixtureDataSource implements StudioDataSource {
   Future<void> logout() async {}
 
   @override
+  Future<StudioAccountSecurity> loadAccountSecurity() async =>
+      const StudioAccountSecurity(
+        accounts: [
+          StudioAuthAccount(
+              id: 'account-github', providerId: 'github', accountId: 'gh-1'),
+        ],
+        sessions: [
+          StudioAuthSession(
+            token: 'fixture-session-token',
+            createdAt: '2026-09-23T10:00:00Z',
+            expiresAt: '2026-10-07T10:00:00Z',
+            userAgent: 'Fixture browser',
+          ),
+        ],
+      );
+
+  @override
+  Future<void> revokeAccountSession(String token) async {}
+
+  @override
+  Future<Uri> beginAccountLink(String provider, Uri returnTo) async =>
+      Uri.parse('https://accounts.example.test/link/$provider');
+
+  @override
   Future<List<StudioWorkspace>> loadWorkspaces() async => const [
         StudioWorkspace(
           id: 'workspace-fixture',

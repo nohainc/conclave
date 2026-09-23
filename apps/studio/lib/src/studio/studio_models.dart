@@ -786,6 +786,70 @@ class StudioSession {
       );
 }
 
+class StudioAuthAccount {
+  const StudioAuthAccount({
+    required this.id,
+    required this.providerId,
+    required this.accountId,
+  });
+
+  final String id;
+  final String providerId;
+  final String accountId;
+
+  factory StudioAuthAccount.fromJson(Map<String, dynamic> json) =>
+      StudioAuthAccount(
+        id: _string(json, 'id'),
+        providerId: _string(json, 'providerId', _string(json, 'provider_id')),
+        accountId: _string(json, 'accountId', _string(json, 'account_id')),
+      );
+}
+
+class StudioAuthSession {
+  const StudioAuthSession({
+    required this.token,
+    required this.createdAt,
+    required this.expiresAt,
+    this.userAgent,
+    this.ipAddress,
+  });
+
+  final String token;
+  final String createdAt;
+  final String expiresAt;
+  final String? userAgent;
+  final String? ipAddress;
+
+  factory StudioAuthSession.fromJson(Map<String, dynamic> json) =>
+      StudioAuthSession(
+        token: _string(json, 'token'),
+        createdAt: _string(json, 'createdAt', _string(json, 'created_at')),
+        expiresAt: _string(json, 'expiresAt', _string(json, 'expires_at')),
+        userAgent:
+            json['userAgent'] as String? ?? json['user_agent'] as String?,
+        ipAddress:
+            json['ipAddress'] as String? ?? json['ip_address'] as String?,
+      );
+}
+
+class StudioAccountSecurity {
+  const StudioAccountSecurity({required this.accounts, required this.sessions});
+
+  final List<StudioAuthAccount> accounts;
+  final List<StudioAuthSession> sessions;
+
+  factory StudioAccountSecurity.fromJson(
+    List<Map<String, dynamic>> accounts,
+    List<Map<String, dynamic>> sessions,
+  ) =>
+      StudioAccountSecurity(
+        accounts:
+            accounts.map(StudioAuthAccount.fromJson).toList(growable: false),
+        sessions:
+            sessions.map(StudioAuthSession.fromJson).toList(growable: false),
+      );
+}
+
 class StudioWorkspace {
   const StudioWorkspace({
     required this.id,

@@ -100,7 +100,7 @@ export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
       accountLinking: {
         enabled: true,
         disableImplicitLinking: true,
-        trustedProviders: [],
+        trustedProviders: ["github", "google"],
         allowDifferentEmails: false,
       },
     },

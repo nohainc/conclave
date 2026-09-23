@@ -1,4 +1,4 @@
-enum StudioRouteKind { home, project, chat, run, login }
+enum StudioRouteKind { home, project, chat, run, login, account }
 
 class StudioNavigation {
   const StudioNavigation._({
@@ -24,6 +24,8 @@ class StudioNavigation {
   const StudioNavigation.login({String? returnTo})
       : this._(kind: StudioRouteKind.login, loginReturnTo: returnTo);
 
+  const StudioNavigation.account() : this._(kind: StudioRouteKind.account);
+
   final StudioRouteKind kind;
   final String? projectId;
   final String? chatId;
@@ -36,6 +38,7 @@ class StudioNavigation {
     if (parts case ['login']) {
       return StudioNavigation.login(returnTo: uri.queryParameters['returnTo']);
     }
+    if (parts case ['account']) return const StudioNavigation.account();
     if (parts.length >= 4 && parts[0] == 'projects') {
       if (parts[2] == 'chats') {
         return StudioNavigation.chat(parts[1], parts[3]);
@@ -60,6 +63,7 @@ class StudioNavigation {
           path: '/login',
           queryParameters:
               loginReturnTo == null ? null : {'returnTo': loginReturnTo}),
+      StudioRouteKind.account => Uri(path: '/account'),
     };
   }
 

@@ -157,6 +157,20 @@ void main() {
     await tester.binding.setSurfaceSize(null);
   });
 
+  testWidgets('opens the human Account page with methods and sessions',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(ConclaveApp(
+        dataSource: StudioFixtureDataSource(),
+        initialUri: Uri(path: '/account')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Profile'), findsOneWidget);
+    expect(find.text('Linked login methods'), findsOneWidget);
+    expect(find.text('GitHub'), findsOneWidget);
+    expect(find.text('Active sessions'), findsOneWidget);
+    expect(find.text('Revoke'), findsOneWidget);
+  });
+
   testWidgets('auth redirects to sign-in without loading workspace data',
       (WidgetTester tester) async {
     await tester.pumpWidget(const ConclaveApp(

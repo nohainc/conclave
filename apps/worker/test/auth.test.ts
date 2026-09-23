@@ -43,7 +43,7 @@ describe("IdentityService", () => {
     expect(options.account?.accountLinking).toMatchObject({
       enabled: true,
       disableImplicitLinking: true,
-      trustedProviders: [],
+      trustedProviders: ["github", "google"],
       allowDifferentEmails: false,
     });
     expect(options.session?.modelName).toBe("auth_sessions");

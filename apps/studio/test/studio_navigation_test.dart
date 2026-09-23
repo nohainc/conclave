@@ -15,6 +15,10 @@ void main() {
         StudioNavigation.fromUri(Uri.parse('/projects/project-1/runs/run-3'));
     expect(run.kind, StudioRouteKind.run);
     expect(run.toUri().path, '/projects/project-1/runs/run-3');
+
+    final account = StudioNavigation.fromUri(Uri.parse('/account'));
+    expect(account.kind, StudioRouteKind.account);
+    expect(account.toUri().path, '/account');
   });
 
   test('each browser tab can own an independent navigation state', () {

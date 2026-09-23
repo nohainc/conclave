@@ -121,3 +121,11 @@ environment variables were removed. Automated tests use an injected test
 authentication adapter, while local development uses the development-only
 Better Auth sign-in helper. Bearer credentials remain only in explicit
 service-auth paths such as Host, CI, Forge, and connector flows.
+
+## AUTH-13 — Account management
+
+✅ Studio now has a human Account page with the stable Conclave profile,
+linked GitHub/Google methods, active Better Auth sessions, and per-session
+revocation. Explicit provider linking keeps the Conclave User ID unchanged;
+implicit same-email linking remains disabled and different-email linking is
+rejected.
