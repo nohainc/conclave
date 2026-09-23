@@ -2234,7 +2234,7 @@ async function handleCreateHostEnrollment(
   authorize(context, "host.manage");
   requireWorkspaceContext(context, env, workspaceId);
 
-  const body = parseJson<{ expiresHours?: number; maxUses?: number }>(
+  const body = parseJson<{ expiresHours?: number }>(
     await request.text(),
     {},
   );
@@ -2243,6 +2243,12 @@ async function handleCreateHostEnrollment(
   const tokenHash = await hashToken(token);
   const now = new Date();
   const expiresHours = body.expiresHours ?? 24;
+  if (!Number.isInteger(expiresHours) || expiresHours < 1 || expiresHours > 168) {
+    return json(
+      { error: "expiresHours must be an integer between 1 and 168" },
+      { status: 400 },
+    );
+  }
   const expiresAt = new Date(
     now.getTime() + expiresHours * 3600 * 1000,
   ).toISOString();
@@ -2268,7 +2274,7 @@ async function handleCreateHostEnrollment(
     "host.enrollment.created",
     "host_enrollment",
     enrollmentId,
-    { expiresAt, maxUses: body.maxUses ?? null },
+    { expiresAt, oneTime: true },
   );
 
   return json(
@@ -2386,6 +2392,7 @@ async function handleEnrollHost(
      ON CONFLICT(id) DO UPDATE SET
        auth_token_hash = excluded.auth_token_hash,
        status = 'enrolled',
+       revoked_at = NULL,
        updated_at = excluded.updated_at`,
   )
     .bind(

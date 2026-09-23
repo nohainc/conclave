@@ -129,6 +129,15 @@ Agent credentials:
 - are independently revocable;
 - rotate without changing User credentials.
 
+Host pairing is deliberately separate from this human session. An authenticated
+User with `host.manage` creates a one-time, expiring enrollment. The Host
+exchanges that enrollment and receives its own machine credential, which it
+stores in the Host secure store. It never stores the User's Better Auth cookie,
+and it never authenticates as that User. Human logout or session revocation does
+not delete or invalidate an enrolled Host; Host revocation independently
+invalidates its machine credential and live gateway access. Re-enrollment with
+a newly authorized one-time enrollment rotates the machine credential.
+
 ## 7. Plugin and Worker identity
 
 Plugins and Workers are execution resources, not authentication principals for normal Cloud access.

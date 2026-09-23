@@ -156,3 +156,12 @@ passkey login.
 OIDC, OAuth2, or SAML support will use Better Auth SSO and resolve to the same
 `AuthenticatedIdentity`, Conclave User, and Workspace membership flow. No SSO
 plugin or Better Auth Organization authorization was enabled in this phase.
+
+## AUTH-17 — Separate Host pairing from human authentication
+
+✅ Host pairing remains an explicit `host.manage` flow: a human creates a
+one-time enrollment, the Host exchanges it, and Cloud issues a separate hashed
+machine credential. Enrollment expiry, one-time use, revocation, credential
+rotation, Workspace binding, and human-session independence are covered by
+Host tests. Logging out or revoking human sessions does not remove enrolled
+Hosts; Host revocation independently blocks machine access.

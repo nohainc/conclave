@@ -94,6 +94,41 @@ describe("V4 Host connectivity", () => {
     ).toBe(1);
   });
 
+  it("keeps human sessions independent from Host machine credentials", () => {
+    const db = createDb();
+    seedWorkspace(db, "workspace-a", "user-a");
+    db.prepare(
+      "INSERT INTO hosts (id, name, hostname, status, version, capabilities_json, auth_token_hash, enrolled_at, created_at, updated_at) VALUES ('host-1', 'Host', 'local', 'online', '4.0.0', '{}', 'machine-hash', 'now', 'now', 'now')",
+    ).run();
+    db.prepare(
+      "INSERT INTO auth_sessions (id, user_id, token, expires_at, created_at, updated_at) VALUES ('session-1', 'user-a', 'human-session', 'later', 'now', 'now')",
+    ).run();
+
+    db.prepare("DELETE FROM auth_sessions WHERE id = 'session-1'").run();
+
+    expect(
+      db.prepare("SELECT auth_token_hash, status FROM hosts WHERE id = 'host-1'").get(),
+    ).toEqual({ auth_token_hash: "machine-hash", status: "online" });
+  });
+
+  it("enrollment predicates enforce one-time expiry and revocation", () => {
+    const db = createDb();
+    seedWorkspace(db, "workspace-a", "user-a");
+    const query = `SELECT id FROM host_enrollments
+      WHERE token_hash = ? AND revoked_at IS NULL AND used_at IS NULL AND expires_at > ?`;
+    db.prepare(
+      "INSERT INTO host_enrollments (id, workspace_id, token_hash, created_by_user_id, expires_at, created_at) VALUES ('enrollment-1', 'workspace-a', 'hash-1', 'user-a', '2026-09-23T13:00:00.000Z', '2026-09-23T12:00:00.000Z')",
+    ).run();
+
+    expect(db.prepare(query).all("hash-1", "2026-09-23T12:30:00.000Z")).toHaveLength(1);
+    db.prepare("UPDATE host_enrollments SET used_at = 'later' WHERE id = 'enrollment-1'").run();
+    expect(db.prepare(query).all("hash-1", "2026-09-23T12:30:00.000Z")).toHaveLength(0);
+    db.prepare("UPDATE host_enrollments SET used_at = NULL, revoked_at = 'later' WHERE id = 'enrollment-1'").run();
+    expect(db.prepare(query).all("hash-1", "2026-09-23T12:30:00.000Z")).toHaveLength(0);
+    db.prepare("UPDATE host_enrollments SET revoked_at = NULL, expires_at = '2026-09-23T12:30:00.000Z' WHERE id = 'enrollment-1'").run();
+    expect(db.prepare(query).all("hash-1", "2026-09-23T12:30:00.000Z")).toHaveLength(0);
+  });
+
   it("treats reconnect as a new live session and ignores stale socket close", () => {
     const currentSocket = {} as WebSocket;
     const staleSocket = {} as WebSocket;
