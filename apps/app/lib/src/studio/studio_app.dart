@@ -2426,7 +2426,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
           Text(selectedProject!.name,
               style: const TextStyle(color: Color(0xff777683), fontSize: 12)),
           const SizedBox(height: 7),
-          const Text('Workspace overview',
+          const Text('Run details',
               style: TextStyle(
                   fontSize: 25,
                   fontWeight: FontWeight.w700,
@@ -2434,7 +2434,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   letterSpacing: -.5)),
           const SizedBox(height: 5),
           const Text(
-              'Follow the work, inspect the evidence, and keep the run moving.',
+              'Follow execution, results, verification, and diagnostics.',
               style: TextStyle(color: Color(0xff777683), fontSize: 13))
         ])),
         FilledButton.icon(
@@ -2447,44 +2447,87 @@ class _StudioAppState extends State<ConclaveAppShell> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 13))),
       ]),
-      const SizedBox(height: 25),
-      _runHeader(compact),
-      const SizedBox(height: 16),
-      _runContextCard(),
-      const SizedBox(height: 16),
-      _policyCard(),
-      const SizedBox(height: 16),
-      if (compact) ...[
-        _executionCard(),
-        const SizedBox(height: 16),
-        _taskDetailsCard(),
-        const SizedBox(height: 16),
-        _candidateOutputsCard()
-      ] else
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Expanded(flex: 6, child: _executionCard()),
-          const SizedBox(width: 16),
-          Expanded(flex: 4, child: _taskDetailsCard())
+      const SizedBox(height: 20),
+      _runSection(
+        title: 'Overview',
+        subtitle: 'Status, elapsed work, Workers, Account, and usage',
+        icon: Icons.dashboard_outlined,
+        child: Column(children: [
+          _runHeader(compact),
+          const SizedBox(height: 16),
+          _runContextCard(),
+          const SizedBox(height: 16),
+          _policyCard(),
         ]),
-      if (!compact) ...[
-        const SizedBox(height: 16),
-        _candidateOutputsCard(),
-      ],
+      ),
       const SizedBox(height: 16),
-      if (compact) ...[
-        _timelineCard(),
-        const SizedBox(height: 16),
-        _evidenceCard()
-      ] else
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Expanded(flex: 6, child: _timelineCard()),
-          const SizedBox(width: 16),
-          Expanded(flex: 4, child: _evidenceCard())
+      _runSection(
+        title: 'Execution',
+        subtitle: 'Task DAG, progress, and active Worker details',
+        icon: Icons.account_tree_outlined,
+        child: compact
+            ? Column(children: [
+                _executionCard(),
+                const SizedBox(height: 16),
+                _taskDetailsCard(),
+              ])
+            : Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(flex: 6, child: _executionCard()),
+                const SizedBox(width: 16),
+                Expanded(flex: 4, child: _taskDetailsCard()),
+              ]),
+      ),
+      const SizedBox(height: 16),
+      _runSection(
+        title: 'Results',
+        subtitle: 'Candidate answers, synthesis, and artifacts',
+        icon: Icons.auto_awesome_outlined,
+        child: _resultsDetailsCard(),
+      ),
+      const SizedBox(height: 16),
+      _runSection(
+        title: 'Verification',
+        subtitle: 'Tests, findings, review, and completion criteria',
+        icon: Icons.verified_outlined,
+        child: _evidenceCard(),
+      ),
+      const SizedBox(height: 16),
+      _runSection(
+        title: 'Technical',
+        subtitle: 'Events, model calls, correlation IDs, and diagnostics',
+        icon: Icons.code_outlined,
+        initiallyExpanded: false,
+        child: Column(children: [
+          _technicalDetailsCard(),
+          const SizedBox(height: 16),
+          _timelineCard(),
         ]),
+      ),
       if (showWorkerDrawer) ...[const SizedBox(height: 16), _workerStrip()],
       if (showNewGoal) _newGoalDialog(),
     ]);
   }
+
+  Widget _runSection({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Widget child,
+    bool initiallyExpanded = true,
+  }) =>
+      Card(
+        clipBehavior: Clip.antiAlias,
+        child: ExpansionTile(
+          initiallyExpanded: initiallyExpanded,
+          leading: Icon(icon, color: const Color(0xff6254d9)),
+          title: Text(title,
+              style:
+                  const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+          subtitle: Text(subtitle),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+          children: [child],
+        ),
+      );
 
   Future<void> _sendChatMessage([String? submittedText]) async {
     final chat = selectedChat;
@@ -3167,6 +3210,58 @@ class _StudioAppState extends State<ConclaveAppShell> {
       ),
     );
   }
+
+  Widget _resultsDetailsCard() => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _candidateOutputsCard(),
+          const SizedBox(height: 16),
+          _panel(
+            title: 'Artifacts and changes',
+            subtitle: '${snapshot.artifacts.length} stored result artifacts',
+            child: snapshot.artifacts.isEmpty
+                ? const Text(
+                    'Artifacts will appear here as the Run produces results.')
+                : Column(
+                    children: snapshot.artifacts
+                        .map((artifact) => ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.description_outlined),
+                              title: Text(artifact.name),
+                              subtitle:
+                                  Text('${artifact.type} · ${artifact.size}'),
+                              trailing: Text(artifact.source),
+                            ))
+                        .toList(),
+                  ),
+          ),
+        ],
+      );
+
+  Widget _technicalDetailsCard() => _panel(
+        title: 'Technical context',
+        subtitle: 'Read-only execution diagnostics',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (snapshot.modelCalls.isEmpty)
+              const Text('Model calls will appear as Workers execute.')
+            else
+              ...snapshot.modelCalls.map((call) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.smart_toy_outlined),
+                    title: Text('${call.worker} · ${call.model}'),
+                    subtitle: Text(
+                        '${call.task} · ${call.tokens} tokens · ${call.duration}'),
+                    trailing: _statusChip(call.status, const Color(0xff6254d9)),
+                  )),
+            const Divider(),
+            Text(
+                'Correlation IDs: ${snapshot.events.where((event) => event.correlationId != null).map((event) => event.correlationId).toSet().join(', ')}',
+                style: const TextStyle(fontSize: 11, color: Color(0xff777683))),
+          ],
+        ),
+      );
 
   Widget _candidateOutputsCard() {
     final outputs = snapshot.candidateOutputs;
