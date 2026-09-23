@@ -4,6 +4,7 @@ import Button from "../components/Button.astro";
 import AccountPrivacyDiagram from "../components/AccountPrivacyDiagram.astro";
 import Container from "../components/Container.astro";
 import FeatureCard from "../components/FeatureCard.astro";
+import ForgeFlow from "../components/ForgeFlow.astro";
 import HeroArchitecture from "../components/HeroArchitecture.astro";
 import HostTopology from "../components/HostTopology.astro";
 import PrincipleCard from "../components/PrincipleCard.astro";
@@ -58,6 +59,23 @@ import SectionHeader from "../components/SectionHeader.astro";
           <p>Turn findings into corrections and check again.</p>
           <div class="principle-iterate"><span>Finding</span><i aria-hidden="true">↓</i><span>Correction</span><i aria-hidden="true">↓</i><span>Reverification</span></div>
         </PrincipleCard>
+      </div>
+    </Container>
+  </Section>
+
+  <Section>
+    <Container>
+      <div class="forge-section">
+        <div>
+          <SectionHeader
+            eyebrow="Conclave Forge"
+            title="Software development is the first Conclave AX workflow."
+            description="Ask for a meaningful change and Forge carries it through research, architecture, implementation, tests, review, correction, and verification."
+          />
+          <p class="forge-section__context">Forge is a concrete starting point—not the boundary of the product. Conclave AX provides the same quality-driven coordination for future workflows beyond software development.</p>
+          <div class="forge-scope"><strong>Conclave AX</strong><span>├── Forge</span><span>└── Future workflows</span></div>
+        </div>
+        <ForgeFlow />
       </div>
     </Container>
   </Section>
