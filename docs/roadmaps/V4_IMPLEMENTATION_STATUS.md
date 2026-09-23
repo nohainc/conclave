@@ -102,3 +102,12 @@ explicit production Secure/SameSite policy, trusted origins, bounded expiry,
 refresh, disabled cookie session caching, and standard server-side listing and
 revocation endpoints. Same-origin mutation protection no longer depends on
 Cloudflare Access service-token exceptions.
+
+## AUTH-10 — Remove Cloudflare Access from application authentication
+
+✅ Production Studio no longer depends on Cloudflare Access for human
+authentication. The Worker has no Access identity fallback, Access JWT/header
+parsing, Access organization selector, or Access service-token-to-human
+mapping. Better Auth is the only production browser authentication path;
+Cloudflare Access remains optional infrastructure protection for staging,
+administrative, debug, and internal environments.

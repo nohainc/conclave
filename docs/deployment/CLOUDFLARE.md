@@ -11,8 +11,10 @@
 ## Current deployment
 
 `app.conclaveax.com` is the Studio/Cloud application. It runs the real Studio
-application; there is no demo-mode runtime branch. Cloudflare Access must
-protect the hostname before production or private-alpha use.
+application; there is no demo-mode runtime branch. Production Studio is a
+public login application whose human sessions are handled by Better Auth.
+Cloudflare Access is optional for staging, administrative, debug, and other
+internal environments; it is not an application authentication dependency.
 
 The deployment builds Flutter Web with the planned same-origin API endpoint:
 
@@ -86,19 +88,17 @@ complete.
 
 Before production backend deployment:
 
-1. verify Cloudflare Access protects the custom domain and the Access identity
-   maps to an active Workspace membership;
-2. provision production D1/R2 resources; the deployment workflow applies the
+1. provision production D1/R2 resources; the deployment workflow applies the
    checked-in D1 migrations to `conclave-production`;
-3. configure required signing, callback, and other production secrets;
-4. run the deployed Forge recovery drill, including Agent restart, Cloud
+2. configure required signing, callback, and other production secrets;
+3. run the deployed Forge recovery drill, including Host restart, Cloud
    restart, network loss, and reviewer timeout;
-5. run the external-user security gate, including tenant isolation and
+4. run the external-user security gate, including tenant isolation and
    backup/restore verification;
-6. enable API/CI ingress only after the release gates pass.
+5. enable API/CI ingress only after the release gates pass.
 
-Cloud owns orchestration and persistence. The Dart Agent Engine provides the
-outbound execution channel; Worker Plugins perform model, repository, and tool
+Cloud owns orchestration and persistence. The Conclave Host provides the
+outbound execution channel; Workers perform model, repository, and tool
 operations. The former Local Runtime product concept is not a deployable
 service.
 

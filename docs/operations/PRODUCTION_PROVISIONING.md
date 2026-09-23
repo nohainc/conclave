@@ -1,7 +1,7 @@
 # Production provisioning
 
-This runbook provisions the Cloudflare resources required by the Architecture
-v3 app and Forge Workers. It does not contain credentials. Run it from the
+This runbook provisions the Cloudflare resources required by the v4 app and
+Forge Workers. It does not contain credentials. Run it from the
 repository root with a scoped Cloudflare API token and account ID.
 
 ## Resource names
@@ -56,25 +56,24 @@ are rejected with `401`.
 
 ## Authentication and secrets
 
-Before private-alpha access:
+Before production login:
 
-- protect `app.conclaveax.com` and every alternate API hostname with
-  Cloudflare Access;
-- create active Workspace memberships matching normalized Access identities;
-- set `CONCLAVE_ACCESS_ORGANIZATION_ID` when one private-alpha Workspace is
-  selected;
+- configure Better Auth GitHub and Google OAuth credentials as Cloudflare
+  Worker secrets;
+- create or provision Conclave Workspace memberships through the application;
 - configure `CONCLAVE_CI_INGEST_TOKEN`;
 - configure `CONCLAVE_FORGE_CALLBACK_TOKEN`;
-- configure production plugin, Agent, and backup/signing secrets;
+- configure production Worker, Host, and backup/signing secrets;
 - rotate all values that were used for development or tests.
 
 Never pass these secrets to Flutter through `--dart-define`. The browser uses
-the Access session and same-origin `/api` requests.
+the Better Auth HttpOnly session cookie and same-origin `/api` requests.
 
 ## Release validation
 
 After deployment, execute the [Forge recovery drill](FORGE_RECOVERY_DRILL.md)
 and the tenant/security integration suite. The P0–P25 objective is not closed
-until Agent restart, Cloud restart, network loss, reviewer timeout, Cloudflare
-Access, backup/restore, and cross-tenant isolation have been exercised against
-the deployed system.
+until Host restart, Cloud restart, network loss, reviewer timeout,
+backup/restore, and cross-tenant isolation have been exercised against the
+deployed system. Access protection may be enabled separately for staging,
+admin, debug, or other internal environments.

@@ -204,7 +204,6 @@ type SecurityEnv = Env & {
   readonly GITHUB_CLIENT_SECRET?: string;
   readonly GOOGLE_CLIENT_ID?: string;
   readonly GOOGLE_CLIENT_SECRET?: string;
-  readonly CONCLAVE_ACCESS_ORGANIZATION_ID?: string;
   readonly CONCLAVE_PLUGIN_PUBLISHER_EMAIL?: string;
   readonly CONCLAVE_AUTH_TOKEN?: string;
   readonly CONCLAVE_PLUGIN_SIGNING_KEY?: string;
@@ -250,37 +249,6 @@ export function requireSameOriginForCookieMutation(request: Request): void {
   throw new HttpError(403, "Same-origin request required for cookie session");
 }
 
-type AccessServiceTokenClaims = { common_name?: unknown; sub?: unknown };
-
-export function accessServiceTokenId(request: Request): string | null {
-  const assertion = request.headers.get("cf-access-jwt-assertion");
-  if (!assertion) return null;
-  try {
-    const payload = assertion.split(".")[1];
-    if (!payload) return null;
-    const claims = JSON.parse(
-      new TextDecoder().decode(
-        Uint8Array.from(
-          atob(
-            payload
-              .replace(/-/g, "+")
-              .replace(/_/g, "/")
-              .padEnd(Math.ceil(payload.length / 4) * 4, "="),
-          ),
-          (character) => character.charCodeAt(0),
-        ),
-      ),
-    ) as AccessServiceTokenClaims;
-    return typeof claims.common_name === "string" &&
-      claims.common_name &&
-      !claims.sub
-      ? claims.common_name
-      : null;
-  } catch {
-    return null;
-  }
-}
-
 function createDefaultSecurityContext(
   userId = "local-development",
   workspaceId = "local-development",
@@ -306,141 +274,14 @@ function createDefaultSecurityContext(
   };
 }
 
-async function accessSecurityContext(
-  env: SecurityEnv,
-  request: Request,
-  accessContext: ExecutionContext | undefined,
-): Promise<SecurityContext> {
-  const identity = await accessContext?.access?.getIdentity();
-  const accessEmail = identity?.email?.trim().toLowerCase();
-  const serviceTokenId =
-    (typeof identity?.common_name === "string" && !identity.sub
-      ? identity.common_name
-      : undefined) ?? accessServiceTokenId(request);
-  // Worker Access normally exposes the identity through ctx.access. The
-  // custom-domain Access path also forwards the verified identity header;
-  // accept that fallback only on the production Studio hostname so a direct
-  // workers.dev request cannot spoof a browser identity.
-  const forwardedEmail = request.headers
-    .get("cf-access-authenticated-user-email")
-    ?.trim()
-    .toLowerCase();
-  const url = new URL(request.url);
-  const servicePublisherEmail =
-    url.pathname === "/api/v2/plugins/publish" ||
-    url.pathname === "/api/plugins/publish"
-      ? env.CONCLAVE_PLUGIN_PUBLISHER_EMAIL?.trim().toLowerCase()
-      : undefined;
-  const userId =
-    accessEmail ??
-    (serviceTokenId && servicePublisherEmail
-      ? servicePublisherEmail
-      : undefined) ??
-    (url.hostname === "app.conclaveax.com" ? forwardedEmail : undefined);
-  if (!userId)
-    throw new HttpError(401, "Cloudflare Access authentication required");
-
-  const targetOrgOrWs = env.CONCLAVE_ACCESS_ORGANIZATION_ID;
-  const membershipQuery = targetOrgOrWs
-    ? `SELECT u.id AS user_id, u.email, u.display_name, u.status AS user_status,
-              wm.workspace_id, wm.role, wm.status, w.status AS workspace_status
-       FROM workspace_memberships wm
-       JOIN users u ON u.id = wm.user_id
-       JOIN workspaces w ON w.id = wm.workspace_id
-       WHERE wm.workspace_id = ?1 AND u.email = ?2`
-    : `SELECT u.id AS user_id, u.email, u.display_name, u.status AS user_status,
-              wm.workspace_id, wm.role, wm.status, w.status AS workspace_status
-       FROM workspace_memberships wm
-       JOIN users u ON u.id = wm.user_id
-       JOIN workspaces w ON w.id = wm.workspace_id
-       WHERE u.email = ?1`;
-  type AccessMembership = {
-    user_id: string;
-    email: string;
-    display_name: string;
-    user_status: string;
-    workspace_id: string;
-    role: string;
-    status?: string;
-    workspace_status?: string;
-  };
-  let memberships: { results?: readonly AccessMembership[] };
-  try {
-    const statement = env.CONCLAVE_DB.prepare(membershipQuery);
-    memberships = targetOrgOrWs
-      ? await statement.bind(targetOrgOrWs, userId).all<AccessMembership>()
-      : await statement.bind(userId).all<AccessMembership>();
-  } catch {
-    // Older development databases do not yet have membership status.
-    const legacyMembershipQuery = targetOrgOrWs
-      ? `SELECT u.id AS user_id, u.email, u.display_name, u.status AS user_status,
-                wm.workspace_id, wm.role, w.status AS workspace_status
-         FROM workspace_memberships wm
-         JOIN users u ON u.id = wm.user_id
-         JOIN workspaces w ON w.id = wm.workspace_id
-         WHERE wm.workspace_id = ?1 AND u.email = ?2`
-      : `SELECT u.id AS user_id, u.email, u.display_name, u.status AS user_status,
-                wm.workspace_id, wm.role, w.status AS workspace_status
-         FROM workspace_memberships wm
-         JOIN users u ON u.id = wm.user_id
-         JOIN workspaces w ON w.id = wm.workspace_id
-         WHERE u.email = ?1`;
-    const statement = env.CONCLAVE_DB.prepare(legacyMembershipQuery);
-    memberships = targetOrgOrWs
-      ? await statement.bind(targetOrgOrWs, userId).all<AccessMembership>()
-      : await statement.bind(userId).all<AccessMembership>();
-  }
-  const activeMemberships = (memberships.results ?? []).filter(
-    (m) =>
-      (m.status === undefined || m.status === "active") &&
-      (m.workspace_status === undefined || m.workspace_status === "active"),
-  );
-  if (activeMemberships.length !== 1)
-    throw new HttpError(
-      activeMemberships.length === 0 ? 403 : 409,
-      activeMemberships.length === 0
-        ? "Workspace membership is not active"
-        : "A workspace must be selected for this identity",
-    );
-  const membership = activeMemberships[0]!;
-  const wsId = membership.workspace_id;
-  if (membership.user_status !== "active")
-    throw new HttpError(403, "User account is not active");
-  const resolvedUserId = membership.user_id;
-  const projects = await env.CONCLAVE_DB.prepare(
-    "SELECT pm.project_id, pm.role FROM project_memberships pm JOIN projects p ON p.id = pm.project_id WHERE p.workspace_id = ?1 AND pm.user_id = ?2",
-  )
-    .bind(wsId, resolvedUserId)
-    .all<{ project_id: string; role: string }>();
-  const projectRoles: Record<string, "lead" | "collaborator" | "viewer"> = {};
-  for (const project of projects.results ?? [])
-    projectRoles[project.project_id] = project.role as
-      "lead" | "collaborator" | "viewer";
-  return {
-    userId: resolvedUserId,
-    user: {
-      id: resolvedUserId,
-      email: membership.email,
-      displayName: membership.display_name,
-      status: "active",
-    },
-    workspaceId: wsId,
-    workspaceRole: membership.role as Role,
-    roles: [membership.role as Role],
-    authorizedProjectIds: Object.keys(projectRoles),
-    projectRoles,
-    sessionId: `access-${userId}`,
-    clientType: "web",
-    organizationId: wsId,
-    organizationRoles: [membership.role as Role],
-  };
-}
-
 async function securityContext(
   request: Request,
   env: SecurityEnv,
   accessContext?: ExecutionContext,
 ): Promise<SecurityContext> {
+  // Preserve the route-handler context contract for callers that also use it
+  // for non-authentication infrastructure; human identity never comes from it.
+  void accessContext;
   if (env.BETTER_AUTH_SECRET) {
     const identity = await identityService.resolve(request, env);
     if (!identity) throw new HttpError(401, "Authentication required");
@@ -519,7 +360,7 @@ async function securityContext(
     const organizationId = env.CONCLAVE_AUTH_ORGANIZATION_ID ?? "dev-workspace";
     return createDefaultSecurityContext(userId, organizationId, "owner");
   }
-  return accessSecurityContext(env, request, accessContext);
+  throw new HttpError(401, "Better Auth authentication required");
 }
 
 async function authorizeRequest(

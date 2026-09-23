@@ -21,10 +21,7 @@ export {
   identityService,
   type AuthenticatedIdentity,
 } from "./auth/index.js";
-export {
-  accessServiceTokenId,
-  requireSameOriginForCookieMutation,
-} from "./routes/handlers.js";
+export { requireSameOriginForCookieMutation } from "./routes/handlers.js";
 
 import * as handlers from "./routes/handlers.js";
 import { handleBetterAuthRequest } from "./auth/index.js";

@@ -13,11 +13,12 @@ drill.
 
 ## Preconditions
 
-- Cloudflare Access protects the deployed Studio/Worker hostname.
-- The test Workspace has one enrolled online Agent with three local Workers:
+- The deployed production Studio/Worker uses Better Auth login; Cloudflare
+  Access is not required for the drill.
+- The test Workspace has one enrolled online Host with three local Workers:
   Lead, Implementer, and Reviewer.
-- The Workers resolve to the same Agent for `single_agent` mode, or to at
-  least two Agents for `multi_agent` mode.
+- The Workers resolve to the same Host for `single_worker` mode, or to at
+  least two Hosts for `multi_worker` mode.
 - The fixture repository is registered with the Project and has a known
   revision.
 - `CONCLAVE_FORGE_CALLBACK_TOKEN` and the CI evidence token are configured in

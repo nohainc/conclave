@@ -197,7 +197,11 @@ describe("Worker smoke tests", () => {
     const response = await worker.fetch(
       new Request("https://conclave.test/api/runs", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "cf-access-authenticated-user-email": "operator@example.com",
+          "cf-access-jwt-assertion": "ignored-by-application-auth",
+        },
         body: JSON.stringify({
           runId: "run-1",
           goalId: "goal-1",
