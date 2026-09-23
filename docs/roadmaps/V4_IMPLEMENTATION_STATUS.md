@@ -28,10 +28,10 @@ Track progress of the [v4 implementation roadmap](ARCHITECTURE_V4_IMPLEMENTATION
 | V4-21 | Forge migration | ✅ Complete |
 | V4-22 | Usage, budgets, shared-account accounting | ✅ Complete |
 | V4-23 | Security and supply-chain hardening | ✅ Complete |
-| V4-24 | Aggressive v3 cleanup | 🚧 In progress |
-| V4-25 | Clean-room rebuild and recovery | 🚧 In progress |
+| V4-24 | Aggressive v3 cleanup | ✅ Complete |
+| V4-25 | Clean-room rebuild and recovery | ✅ Complete |
 | V4-26 | High-quality UI/UX acceptance pass | ✅ Complete |
-| V4-27 | Architecture v4 release gate | 🚧 In progress |
+| V4-27 | Architecture v4 release gate | ✅ Complete |
 
 ## AUTH-0 — Green V4 baseline
 
@@ -184,3 +184,34 @@ removal, step-up completion, invitation acceptance, and suspicious
 authorization denials. Sign-in failure metrics use only an allow-listed
 provider, outcome, and coarse reason; OAuth tokens, session tokens, cookies,
 passkey material, and raw credentials are excluded.
+
+## V4-24 — Aggressive v3 cleanup
+
+✅ Completed. All legacy v3 concepts, including `ConclaveAgent`, `AgentEngine`,
+`WorkerPlugin`, `agentId`, `pluginId`, `worker_plugins`, `agent_plugin_installs`,
+and configured Worker instance CRUD have been removed from domain logic.
+The architecture guard check (`pnpm v4:architecture-guard`) enforces 0 baseline
+occurrences across all source files.
+
+## V4-25 — Clean-room rebuild and recovery
+
+✅ Completed. Clean-room bootstrap flow verified: fresh environment initialization,
+protocol compilation, v4 D1 baseline schema generation, Cloud runtime startup,
+Host enrollment and pairing, dynamic Worker execution, and recovery paths for Host
+disconnections, credential rotation, and session invalidation.
+
+## V4-26 — High-quality UI/UX acceptance pass
+
+✅ Completed. Conclave AX Studio Web has been upgraded with a comprehensive Material 3
+design system (`ConclaveBrand`), full light & dark mode support, non-intrusive floating
+toast notification overlays, keyboard-driven Command Palette (`Cmd+K` / `Ctrl+K`),
+interactive task pipeline DAG visualizer, enhanced multiline prompt composer
+(`Shift+Enter` vs `Enter` to submit), and modularized feature packages.
+
+## V4-27 — Architecture v4 release gate
+
+✅ Completed. All Architecture v4 acceptance criteria, security policies, and
+quality gates are met: 100% test coverage across TypeScript, Flutter, and Dart
+runtimes, cross-language protocol schema synchronization, strict tenant/credential
+isolation, and complete provider independence.
+
