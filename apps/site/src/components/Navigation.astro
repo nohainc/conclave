@@ -3,11 +3,42 @@
     <span class="brand-mark">C</span>
     <span>Conclave AX</span>
   </a>
-  <nav aria-label="Primary navigation">
+  <button class="menu-toggle" type="button" aria-controls="site-navigation" aria-expanded="false">
+    <span class="menu-toggle__label">Menu</span>
+    <span class="menu-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span>
+  </button>
+  <nav class="site-nav" id="site-navigation" aria-label="Primary navigation">
     <a href="/#product">Product</a>
     <a href="/how-it-works/">How it works</a>
     <a href="/workers/">Workers</a>
     <a href="/security/">Security</a>
-    <a class="button button--primary nav-cta" href="https://app.conclaveax.com">Open Conclave AX</a>
+    <a class="button button--primary nav-cta" href="https://app.conclaveax.com">Open Conclave AX <span aria-hidden="true">→</span></a>
   </nav>
 </header>
+
+<script>
+  const toggle = document.querySelector<HTMLButtonElement>(".menu-toggle");
+  const navigation = document.querySelector<HTMLElement>("#site-navigation");
+
+  if (toggle && navigation) {
+    const closeMenu = () => {
+      toggle.setAttribute("aria-expanded", "false");
+      navigation.removeAttribute("data-open");
+    };
+
+    toggle.addEventListener("click", () => {
+      const isOpen = toggle.getAttribute("aria-expanded") === "true";
+      toggle.setAttribute("aria-expanded", String(!isOpen));
+      if (isOpen) navigation.removeAttribute("data-open");
+      else navigation.setAttribute("data-open", "");
+    });
+
+    navigation.querySelectorAll("a").forEach((link) => link.addEventListener("click", closeMenu));
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        closeMenu();
+        toggle.focus();
+      }
+    });
+  }
+</script>
