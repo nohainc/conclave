@@ -425,6 +425,15 @@ Prefer Workspace/Run-scoped Durable Object fanout rather than one global broadca
 ## Exit criteria
 Cloud features emit events through one reusable pipeline.
 
+## Status
+
+Complete. Cloud chat-message and run-start application paths publish through
+the shared `EventPublisher`; durable history uses per-Workspace cursors and
+idempotency keys, while realtime fanout is best-effort and isolated from
+domain writes. Tests cover durable and ephemeral publication, disconnected
+subscribers, duplicate publication, multiple members, and sequence-gap
+recovery.
+
 ---
 
 # PA-7 — Stream Worker progress through Host immediately

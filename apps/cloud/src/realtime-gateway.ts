@@ -130,6 +130,16 @@ export function eventMatchesScope(
   );
 }
 
+export function requiresRealtimeReconnect(
+  lastDurableSequence: number | null,
+  nextDurableSequence: number,
+): boolean {
+  return (
+    lastDurableSequence !== null &&
+    nextDurableSequence > lastDurableSequence + 1
+  );
+}
+
 export async function authorizeRealtimeScope(
   db: Pick<D1Database, "prepare">,
   userId: string,
@@ -319,8 +329,10 @@ export class RealtimeGateway implements DurableObject {
         if (!matches) continue;
         if (
           isDurableRealtimeEventType(event.type) &&
-          connected.lastDurableSequence !== null &&
-          event.sequence > connected.lastDurableSequence + 1
+          requiresRealtimeReconnect(
+            connected.lastDurableSequence,
+            event.sequence,
+          )
         ) {
           this.send(connected.socket, {
             type: "reconnect.required",

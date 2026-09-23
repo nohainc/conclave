@@ -13,6 +13,10 @@ const seedPath = path.resolve(
   __dirname,
   "../../../apps/cloud/seed/v4-development.sql",
 );
+const realtimeMigrationPath = path.resolve(
+  __dirname,
+  "../../../apps/cloud/migrations-v4/0003_realtime_events.sql",
+);
 
 function createDb(): DatabaseSync {
   const db = new DatabaseSync(":memory:");
@@ -352,5 +356,38 @@ describe("Architecture v4 clean D1 schema", () => {
           .get() as { count: number }
       ).count,
     ).toBe(0);
+  });
+
+  it("adds Workspace-scoped realtime history with foreign keys and idempotency", () => {
+    const db = createDb();
+    db.exec(fs.readFileSync(realtimeMigrationPath, "utf8"));
+    seedTenant(db, "ws-a", "user-a");
+    db.prepare(
+      "INSERT INTO realtime_event_cursors (workspace_id, next_sequence) VALUES ('ws-a', 1)",
+    ).run();
+    db.prepare(
+      "INSERT INTO realtime_events (event_id, workspace_id, sequence, event_type, payload_json, idempotency_key, occurred_at) VALUES ('event-a', 'ws-a', 0, 'run.started', '{}', 'run-a-started', 'now')",
+    ).run();
+    expect(() =>
+      db
+        .prepare(
+          "INSERT INTO realtime_events (event_id, workspace_id, sequence, event_type, payload_json, idempotency_key, occurred_at) VALUES ('event-b', 'ws-a', 0, 'run.completed', '{}', 'run-a-completed', 'now')",
+        )
+        .run(),
+    ).toThrow();
+    expect(() =>
+      db
+        .prepare(
+          "INSERT INTO realtime_events (event_id, workspace_id, sequence, event_type, payload_json, idempotency_key, occurred_at) VALUES ('event-c', 'ws-a', 1, 'run.completed', '{}', 'run-a-started', 'now')",
+        )
+        .run(),
+    ).toThrow();
+    expect(
+      (
+        db.prepare("SELECT COUNT(*) AS count FROM realtime_events").get() as {
+          count: number;
+        }
+      ).count,
+    ).toBe(1);
   });
 });

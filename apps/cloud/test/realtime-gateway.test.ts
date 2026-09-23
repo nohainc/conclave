@@ -5,6 +5,7 @@ import {
   parseRealtimeClientMessage,
   realtimeAuthenticationError,
   reconnectDelayMs,
+  requiresRealtimeReconnect,
   scopeKey,
 } from "../src/realtime-gateway.js";
 
@@ -79,6 +80,12 @@ describe("realtime gateway contract", () => {
     expect(reconnectDelayMs(0, 0)).toBe(375);
     expect(reconnectDelayMs(3, 1)).toBe(5000);
     expect(reconnectDelayMs(99, 0)).toBe(22500);
+  });
+
+  it("detects durable sequence gaps for HTTP resync", () => {
+    expect(requiresRealtimeReconnect(null, 4)).toBe(false);
+    expect(requiresRealtimeReconnect(3, 4)).toBe(false);
+    expect(requiresRealtimeReconnect(3, 5)).toBe(true);
   });
 
   it("requires active Workspace membership and validates nested scopes", async () => {

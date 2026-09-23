@@ -2,6 +2,14 @@ export { ConclaveRunWorkflow } from "./workflow.js";
 export { HostGateway } from "./host-gateway.js";
 export { RealtimeGateway } from "./realtime-gateway.js";
 export {
+  CloudEventPublisher,
+  createEventPublisher,
+  type DomainEventInput,
+  type EventPublisher,
+  type EventPublisherEnv,
+  type PublishedEventResult,
+} from "./event-publisher.js";
+export {
   selectWorkerForTask,
   dispatchTaskAssignment,
   recordAssignmentResult,

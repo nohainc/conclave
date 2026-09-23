@@ -76,6 +76,7 @@ import {
   recommendChatIntent,
 } from "@conclave/core";
 import { parseMachineCheckEvidence } from "@conclave/protocol";
+import { createEventPublisher } from "../event-publisher.js";
 
 function parseJson<T = Record<string, unknown>>(
   value: unknown,
@@ -216,6 +217,7 @@ type SecurityEnv = Env & {
   readonly CONCLAVE_CI_INGEST_TOKEN?: string;
   readonly CONCLAVE_FORGE_CALLBACK_TOKEN?: string;
   readonly CONCLAVE_HOST_GATEWAY: DurableObjectNamespace;
+  readonly CONCLAVE_REALTIME_GATEWAY?: DurableObjectNamespace;
   readonly CONCLAVE_CONNECTOR_REGISTRATION_TOKEN?: string;
 };
 
@@ -564,6 +566,18 @@ async function handleRunRequest(
     ...(body.startPaused === true ? { startPaused: true } : {}),
   };
   const run = await createOrGetRun(env, params);
+  try {
+    await createEventPublisher(securityEnv).publish({
+      type: "run.started",
+      workspaceId: context.workspaceId,
+      projectId,
+      runId: params.runId,
+      idempotencyKey: `run:${params.runId}:started`,
+      payload: { entityId: params.runId, status: String(run.status) },
+    });
+  } catch (error) {
+    console.error("Failed to publish run.started", error);
+  }
   return json(run, { status: 202 });
 }
 
@@ -2234,6 +2248,23 @@ async function handleCreateChatMessage(
       "UPDATE chats SET updated_at = ?1 WHERE id = ?2",
     ).bind(now, chatId),
   ]);
+
+  try {
+    await createEventPublisher(env).publish({
+      type: "chat.message.created",
+      workspaceId: chatRow.workspaceId,
+      projectId: chatRow.projectId,
+      chatId,
+      idempotencyKey: `chat-message:${id}`,
+      payload: {
+        entityId: id,
+        status: kind,
+        summary: content.slice(0, 32768),
+      },
+    });
+  } catch (error) {
+    console.error("Failed to publish chat.message.created", error);
+  }
 
   return json(
     {

@@ -95,3 +95,20 @@ WebSocket upgrade revalidates the Better Auth session, and every subscription
 is checked against active Workspace membership plus Project, Chat, and Run
 ownership. Mutations continue over HTTPS; the socket carries delivery facts,
 subscription acknowledgements, heartbeats, and reconnect-gap notices.
+
+## Event publication pipeline
+
+PA-6 adds `EventPublisher` as the Cloud boundary for publishing domain facts.
+Cloud application services provide authorized domain identifiers and typed
+payloads; they do not know about WebSockets, Flutter, or browser clients.
+Durable facts are stored in `realtime_events` with a per-Workspace sequence and
+idempotency key before best-effort fanout. Ephemeral facts skip persistence and
+are delivered only when a realtime gateway is available. Fanout failures are
+isolated from the already-committed domain transaction, while durable events
+remain available for cursor-based gap recovery.
+
+The publisher fans out through the existing user-scoped Durable Objects after
+resolving active Workspace members. This keeps authorization in Cloud and
+avoids a global broadcast object. The legacy run event repository remains the
+history API for workflow internals; new Cloud-facing realtime facts use the
+PA-6 publisher and `realtime_events` contract.
