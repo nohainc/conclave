@@ -436,6 +436,14 @@ progress: Cloud route compatibility code, the legacy protocol package, and
 some persistence/Studio adapters still require migration before the search
 gate can pass.
 
+V4-25 has verified the local clean-room baseline: protocol generation and
+binding checks pass, an empty SQLite D1 applies the v4 schema without retired
+fleet tables, the v4 seed is clean, and the TypeScript, Studio, Dart Host
+protocol, and Dart Worker protocol suites pass. The full external acceptance
+path (fresh dependency checkout, deployed Cloud/Host pairing, automatic Echo
+installation, live Codex/OpenAI execution, and the crash/reconnect/rollback
+recovery matrix) remains outstanding and keeps this phase in progress.
+
 ## 9. Architectural deletion gate
 
 Architecture v4 cleanup is complete when active source search returns no product/domain usage of:
