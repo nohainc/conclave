@@ -1,6 +1,6 @@
 {
-  "name": "Conclave Studio",
-  "short_name": "Studio",
+  "name": "Conclave AX",
+  "short_name": "Conclave AX",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#0175C2",

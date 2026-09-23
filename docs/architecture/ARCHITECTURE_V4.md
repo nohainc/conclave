@@ -11,7 +11,7 @@ Conclave AX is a cloud-orchestrated system for coordinating AI work across machi
 The v4 architecture deliberately reduces the execution model to four concepts:
 
 ```text
-Studio -> Cloud -> Host -> Worker
+Conclave AX -> Cloud -> Host -> Worker
 ```
 
 A fifth concept, **Credential Profile**, determines whose AI account, API key, subscription, or local model identity a Worker uses for one assignment.
@@ -23,7 +23,7 @@ There is no separate product-level Agent, Agent Engine, Plugin, Connection, or c
 ## 2. Product topology
 
 ```text
-                         CONCLAVE STUDIO
+                         CONCLAVE AX
                          Flutter Web
                               |
                               | HTTPS / realtime updates
@@ -53,9 +53,9 @@ A Host may run many Worker assignments in parallel, subject to host, Worker, cre
 
 ## 3. Applications
 
-### 3.1 Conclave Studio
+### 3.1 Conclave AX
 
-Conclave Studio is the primary user interface.
+Conclave AX is the primary user interface.
 
 **Technology**
 - Flutter;
@@ -63,9 +63,9 @@ Conclave Studio is the primary user interface.
 - web-first deployment.
 
 **v4 targets**
-- Web is the only required Studio platform for v4.
+- Web is the only required Conclave AX platform for v4.
 - Mobile applications may be added later using the same Cloud APIs and Flutter design system.
-- Desktop Studio is not a v4 product requirement.
+- Desktop Conclave AX is not a v4 product requirement.
 
 **Responsibilities**
 - authentication;
@@ -79,7 +79,7 @@ Conclave Studio is the primary user interface.
 - usage and cost visibility;
 - approvals and final results.
 
-Studio never talks directly to a Host or Worker. All communication goes through Cloud.
+Conclave AX never talks directly to a Host or Worker. All communication goes through Cloud.
 
 ### 3.2 Conclave Cloud
 
@@ -158,7 +158,7 @@ Examples:
 
 A Worker is versioned software downloaded and managed by the Host.
 
-There is no separate Plugin concept in v4.
+There is no separate Plugin concept in v4; users see these integrations as Workers.
 
 A Worker package declares:
 - Worker ID and version;
@@ -293,7 +293,7 @@ Optional saved execution presets may be added later without changing the core mo
 
 A Host is a machine identity, not a human login session.
 
-Users authenticate only to Studio/Cloud.
+Users authenticate only to Conclave AX/Cloud.
 
 A Host may be bound to one or more Workspaces:
 
@@ -461,7 +461,7 @@ The Host acts as a supervisor:
 
 ## 11. Desired-state reconciliation
 
-Studio/Cloud should manage the desired Worker state.
+Conclave AX/Cloud should manage the desired Worker state.
 
 Users should not manually download Worker packages.
 
@@ -542,9 +542,9 @@ Independence policy should distinguish:
 
 Do not treat different Host IDs alone as intellectual independence.
 
-## 14. Studio UX v4
+## 14. Conclave AX UX v4
 
-Studio is chat-first.
+Conclave AX is chat-first.
 
 Primary navigation:
 
@@ -584,11 +584,11 @@ Primary action: **Add Host**.
 
 Pairing flow:
 1. User selects Workspace.
-2. Studio creates one-time pairing code/link.
+2. Conclave AX creates one-time pairing code/link.
 3. User installs/opens Conclave Host.
 4. Host accepts pairing.
 5. Cloud creates Host binding.
-6. Studio shows Host online.
+6. Conclave AX shows Host online.
 
 ### 14.2 Workers
 
@@ -670,7 +670,7 @@ Raw Worker logs and inter-worker messages stay in Run details.
 
 ### 14.6 Responsive design
 
-Studio must be adaptive:
+Conclave AX must be adaptive:
 - wide screen: project/chat sidebar + conversation + optional details;
 - medium: collapsible sidebar;
 - narrow/mobile: single-column navigation with sheets/drawers.
@@ -833,7 +833,7 @@ Core validates:
 
 ## 17. Technology stack
 
-### Studio
+### Conclave AX
 - Flutter/Dart;
 - Web only for v4;
 - Cloud API only.
@@ -861,7 +861,7 @@ Core validates:
 
 ```text
 apps/
-  studio/                 # Flutter Web
+  studio/                 # Flutter Web package (Conclave AX)
   cloud/                  # TypeScript / Cloudflare
   host/                   # Flutter + Dart desktop Host
 
@@ -966,4 +966,4 @@ Resolved Host + Worker + Credential Profile + execution snapshot.
 
 The v4 mental model should fit in one sentence:
 
-> **Conclave Cloud coordinates work; Studio lets people control it; Hosts provide machines; Workers connect those machines to AI and tools; Credential Profiles decide whose account is used.**
+> **Conclave Cloud coordinates work; Conclave AX lets people control it; Hosts provide machines; Workers connect those machines to AI and tools; Credential Profiles decide whose account is used.**

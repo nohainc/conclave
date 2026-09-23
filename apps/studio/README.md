@@ -1,11 +1,11 @@
-# Conclave Studio
+# Conclave AX
 
-Conclave Studio is the web-only Flutter application for Conclave AX. It owns
+Conclave AX is the web-only Flutter application. It owns
 human authentication, Workspaces, Projects, Chats, Runs, Host pairing, Worker
 catalog visibility, Accounts, execution settings, usage, and evidence.
 
 The package intentionally has no native desktop targets. Desktop execution is
-provided by Conclave Host; Studio communicates with Cloud over the existing
+provided by Conclave Host; Conclave AX communicates with Cloud over the existing
 HTTP/realtime surface.
 
 ## Getting Started

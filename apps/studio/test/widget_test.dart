@@ -5,12 +5,12 @@ import 'package:conclave_studio/main.dart';
 import 'studio_fixture_data.dart';
 
 void main() {
-  testWidgets('renders the chat-first Studio workspace',
+  testWidgets('renders the chat-first Conclave AX workspace',
       (WidgetTester tester) async {
     await tester
         .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
     await tester.pumpAndSettle();
-    expect(find.text('Studio'), findsOneWidget);
+    expect(find.text('Conclave AX'), findsOneWidget);
     expect(find.text('Improve authentication architecture'), findsWidgets);
     await tester.tap(find.byIcon(Icons.menu_rounded));
     await tester.pumpAndSettle();
@@ -112,7 +112,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Accounts'));
     await tester.pumpAndSettle();
-    expect(find.text('Credential Profiles'), findsOneWidget);
+    expect(find.text('Accounts'), findsWidgets);
     expect(find.text('Vitalii Codex'), findsOneWidget);
     expect(find.text('Create Worker'), findsNothing);
     expect(find.text('Agents'), findsNothing);

@@ -206,7 +206,7 @@ class _StudioAppState extends State<StudioApp> {
 
   Future<void> _registerPasskey() async {
     try {
-      await widget.dataSource.registerPasskey('Studio browser passkey');
+      await widget.dataSource.registerPasskey('Conclave AX browser passkey');
       await _loadAccountSecurity();
       if (mounted) _showSnackBar('Passkey added.');
     } catch (error) {
@@ -402,7 +402,7 @@ class _StudioAppState extends State<StudioApp> {
         channel: agent.updateChannel == '—' ? 'stable' : agent.updateChannel,
       );
       if (!mounted) return;
-      _showSnackBar('Update announced to the Agent.');
+      _showSnackBar('Update announced to the Host.');
     } catch (error) {
       if (mounted) setState(() => loadError = error.toString());
     }
@@ -423,21 +423,21 @@ class _StudioAppState extends State<StudioApp> {
     }
   }
 
-  // Retained only while the legacy Studio data adapter is being retired. It
+  // Retained only while the legacy data adapter is being retired. It
   // is no longer reachable from the v4 catalog UI.
   // ignore: unused_element
   Future<void> _editWorker([StudioWorker? existing]) async {
     if (snapshot.agents.isEmpty || snapshot.plugins.isEmpty) {
       if (mounted) {
         setState(() => workerActionMessage =
-            'Connect an Agent and publish a Plugin before creating a Worker.');
+            'Connect a Host and make a Worker available before starting work.');
         await showDialog<void>(
           context: navigatorKey.currentContext ?? context,
           builder: (dialogContext) => AlertDialog(
             title: const Text('Worker prerequisites missing'),
             content: const Text(
-                'A Worker needs one connected Agent and one published Plugin. '
-                'Open Agents or Plugins in the sidebar to finish setup, then '
+            'A Worker needs one connected Host and an available Worker package. '
+                'Open Hosts or Workers in the navigation to finish setup, then '
                 'return here.'),
             actions: [
               FilledButton(
@@ -522,7 +522,7 @@ class _StudioAppState extends State<StudioApp> {
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   initialValue: agentId,
-                  decoration: const InputDecoration(labelText: 'Agent'),
+                  decoration: const InputDecoration(labelText: 'Host'),
                   items: snapshot.agents
                       .map((agent) => DropdownMenuItem(
                           value: agent.id, child: Text(agent.name)))
@@ -532,7 +532,7 @@ class _StudioAppState extends State<StudioApp> {
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   initialValue: workerCatalogId,
-                  decoration: const InputDecoration(labelText: 'Plugin'),
+                  decoration: const InputDecoration(labelText: 'Worker'),
                   items: snapshot.plugins
                       .map((plugin) => DropdownMenuItem(
                           value: plugin.id, child: Text(plugin.name)))
@@ -554,7 +554,7 @@ class _StudioAppState extends State<StudioApp> {
                 TextField(
                     controller: versionPolicyController,
                     decoration: const InputDecoration(
-                        labelText: 'Plugin version policy')),
+                        labelText: 'Worker version policy')),
                 const SizedBox(height: 10),
                 TextField(
                     controller: configController,
@@ -759,7 +759,7 @@ class _StudioAppState extends State<StudioApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Conclave Studio',
+      title: 'Conclave AX',
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey,
       scaffoldMessengerKey: messengerKey,
@@ -804,7 +804,7 @@ class _StudioAppState extends State<StudioApp> {
                         style: Theme.of(context).textTheme.titleLarge),
                     const SizedBox(height: 6),
                     const Text(
-                        'Your existing work stays safe while Studio connects.',
+                        'Your existing work stays safe while Conclave AX connects.',
                         textAlign: TextAlign.center),
                   ],
                 ),
@@ -879,7 +879,7 @@ class _StudioAppState extends State<StudioApp> {
         body: Center(
           child: _RecoveryPanel(
             icon: Icons.cloud_off_rounded,
-            title: 'Studio could not load live data',
+            title: 'Conclave AX could not load live data',
             happened: loadError ?? 'The workspace connection did not respond.',
             safe: 'Your existing work is safe. No new work was started.',
             nextStep: 'Check your connection, then try again.',
@@ -1317,7 +1317,7 @@ class _StudioAppState extends State<StudioApp> {
             child: Text(
                 navigationIndex == 5
                     ? 'Account'
-                    : (showRunDetails ? 'Run details' : 'Studio'),
+                    : (showRunDetails ? 'Run details' : 'Conclave AX'),
                 style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -2544,7 +2544,7 @@ class _StudioAppState extends State<StudioApp> {
         children: [
           _fleetHeader(
               'Accounts',
-              'Credential Profiles used by Workers on your Hosts.',
+              'Accounts used by Workers on your Hosts.',
               Icons.account_circle_outlined),
           const SizedBox(height: 24),
           if (workerActionMessage != null) ...[
@@ -2562,9 +2562,9 @@ class _StudioAppState extends State<StudioApp> {
           ],
           if (snapshot.accounts.isEmpty)
             _emptyFleetCard('No Accounts connected',
-                'Connect a Credential Profile to make a Worker ready for execution.')
+                'Connect an Account to make a Worker ready for execution.')
           else ...[
-            const Text('Credential Profiles',
+            const Text('Accounts',
                 style: TextStyle(color: Color(0xff777683), fontSize: 13)),
             const SizedBox(height: 24),
             ...snapshot.accounts.map(
@@ -2872,8 +2872,8 @@ class _RecoveryPanel extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 retrying
-                    ? 'Studio is retrying automatically.'
-                    : 'If an active run exists, Studio will keep checking for updates.',
+                    ? 'Conclave AX is retrying automatically.'
+                    : 'If an active run exists, Conclave AX will keep checking for updates.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],

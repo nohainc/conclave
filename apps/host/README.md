@@ -4,7 +4,7 @@ The Conclave Host is the machine-side desktop application. Its local UI is
 intentionally focused on pairing, machine health, local account actions,
 repository permissions, Worker diagnostics, logs, updates, and quitting.
 Projects, Chats, Workspace administration, orchestration, and Worker catalog
-management belong in Conclave Studio.
+management belong in Conclave AX.
 
 ## Getting Started
 

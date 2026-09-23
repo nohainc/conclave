@@ -6,7 +6,7 @@
 
 | Layer | Technology |
 | --- | --- |
-| Studio | Flutter + Dart, Web |
+| Conclave AX | Flutter + Dart, Web |
 | Cloud | TypeScript + Cloudflare |
 | Host | Flutter + Dart desktop |
 | Worker protocol | language-independent structured protocol |
@@ -21,7 +21,7 @@
 | CI/CD | GitHub Actions |
 | Cloud deploy | Wrangler |
 
-## Studio
+## Conclave AX
 
 Flutter remains appropriate because:
 - one responsive web UI;
@@ -29,7 +29,7 @@ Flutter remains appropriate because:
 - consistent design system;
 - good adaptive layout support.
 
-v4 does not require a desktop Studio binary.
+v4 does not require a desktop Conclave AX binary.
 
 ## Cloud
 
@@ -48,7 +48,7 @@ Do not add PostgreSQL/Redis/Kafka/Kubernetes without measured need.
 
 The Host is one Flutter/Dart desktop application.
 
-Unlike v3, there is no separate Agent App + Agent Engine product split.
+Unlike v3, there is no separate Host UI and execution runtime product split.
 
 The Host process owns:
 - Cloud WebSocket;

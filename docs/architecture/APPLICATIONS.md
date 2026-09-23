@@ -107,7 +107,7 @@ A Worker does not connect directly to Conclave Cloud and does not hold a Host ma
 
 Workers are language-independent executable packages. First-party Workers use Dart when practical.
 
-## User-facing vocabulary
+## Product vocabulary
 
 Use:
 - Conclave AX;
@@ -120,7 +120,7 @@ Use `CredentialProfile` only as the internal/domain term for Account.
 ## Removed v4 product concepts
 
 Architecture v4 does not expose:
-- Studio as a product name;
+- Conclave AX Studio as a product name;
 - Agent;
 - Agent Engine;
 - Plugin;

@@ -1,15 +1,15 @@
-# Studio Chat and Project Model
+# Conclave AX Chat and Project Model
 
 **Status:** Proposed product model  
-**Scope:** Conclave AX Studio, Cloud API, domain navigation
+**Scope:** Conclave AX, Conclave Cloud API, domain navigation
 
 ## 1. Product principle
 
-Conclave AX Studio should feel familiar to users of modern AI chat applications.
+Conclave AX should feel familiar to users of modern AI chat applications.
 
 The primary user surface is **conversation**, while Conclave orchestration remains visible and inspectable without forcing users to operate a workflow dashboard for every request.
 
-Studio should support:
+Conclave AX should support:
 - Projects;
 - Chats;
 - conversational requests/follow-ups;
@@ -44,9 +44,9 @@ A Project may define shared context such as:
 
 - name/description;
 - repositories/resources;
-- default Conclave Agents/Workers;
+- default Hosts/Workers;
 - default quality preset;
-- plugin configuration;
+- Worker configuration;
 - budget;
 - environment;
 - project instructions;
@@ -58,10 +58,10 @@ Example:
 Project: Conclave AX
 
 Chats:
-- Agent/plugin architecture
+- Host/Worker architecture
 - Authentication design
 - Cloud deployment
-- Studio UX
+- Conclave AX UX
 ```
 
 This is more useful than creating a separate Project for every request.
@@ -98,7 +98,7 @@ ChatMessage M-20
       -> Run R-10
 ```
 
-Studio immediately shows an execution card inside the conversation:
+Conclave AX immediately shows an execution card inside the conversation:
 
 ```text
 Conclave AX
@@ -140,7 +140,7 @@ The Lead/intent logic proposes which behavior applies; Core validates the transi
 The normative transition and scoped context rules are defined in
 [Chat Intent and Scoped Context](CHAT_INTENT_CONTEXT.md).
 
-## 7. Studio layout
+## 7. Conclave AX layout
 
 Recommended desktop/web layout:
 
@@ -152,7 +152,7 @@ Recommended desktop/web layout:
 │                │ Project: Conclave AX                   │
 │ PROJECTS       │                                        │
 │ ▾ Conclave AX  │ User                                   │
-│   Agent design │ Review plugin architecture...          │
+│   Host design  │ Review Worker architecture...          │
 │   Auth design  │                                        │
 │   Cloud setup  │ Conclave AX                            │
 │                │ Researching with 2 workers...          │
@@ -222,7 +222,7 @@ Do not require those for v1.
 
 ## 11. Search and history
 
-Studio search should eventually cover:
+Conclave AX search should eventually cover:
 - Projects;
 - Chat titles/messages;
 - Goals;

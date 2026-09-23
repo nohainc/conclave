@@ -308,7 +308,7 @@ class StudioApiClient implements StudioDataSource {
         // Preserve the HTTP status when the server response is not JSON.
       }
       throw StudioApiException(
-          'Studio snapshot failed (${response.statusCode})$detail',
+          'Conclave AX snapshot failed (${response.statusCode})$detail',
           statusCode: response.statusCode);
     }
     return StudioSnapshot.fromJson(
@@ -416,7 +416,7 @@ class StudioApiClient implements StudioDataSource {
       headers: _headers(),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StudioApiException('Agent revoke failed (${response.statusCode})');
+      throw StudioApiException('Host revoke failed (${response.statusCode})');
     }
   }
 
@@ -437,7 +437,7 @@ class StudioApiClient implements StudioDataSource {
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StudioApiException(
-          'Agent update announcement failed (${response.statusCode})');
+          'Host update announcement failed (${response.statusCode})');
     }
   }
 
@@ -453,7 +453,7 @@ class StudioApiClient implements StudioDataSource {
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StudioApiException(
-          'Agent enrollment failed (${response.statusCode})');
+          'Host enrollment failed (${response.statusCode})');
     }
     return StudioHostEnrollment.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>);

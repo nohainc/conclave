@@ -3,15 +3,15 @@
 ## Domain plan
 
 - `conclaveax.com` — public landing page later.
-- `app.conclaveax.com` — Conclave AX Studio / Cloud web application.
+- `app.conclaveax.com` — Conclave AX / Conclave Cloud web application.
 - `api.conclaveax.com` — reserved for a separately exposed API when production authentication and API separation are complete.
 - `docs.conclaveax.com` — documentation later.
 - `status.conclaveax.com` — status page later.
 
 ## Current deployment
 
-`app.conclaveax.com` is the Studio/Cloud application. It runs the real Studio
-application; there is no demo-mode runtime branch. Production Studio is a
+`app.conclaveax.com` is the Conclave AX/Cloud application. It runs the real
+application; there is no demo-mode runtime branch. Production Conclave AX is a
 public login application whose human sessions are handled by Better Auth.
 Cloudflare Access is optional for staging, administrative, debug, and other
 internal environments; it is not an application authentication dependency.
@@ -22,7 +22,7 @@ The deployment builds Flutter Web with the planned same-origin API endpoint:
 flutter build web --release --dart-define=CONCLAVE_API_URL=https://app.conclaveax.com/api
 ```
 
-Studio uses its normal connection-error state when the API is unavailable. This
+Conclave AX uses its normal connection-error state when the API is unavailable. This
 is intentional: development should expose integration gaps rather than hide
 them behind fake runtime data.
 
@@ -49,7 +49,7 @@ Set these values in the Worker environment:
 - `GOOGLE_CLIENT_ID` — Google OAuth client ID;
 - `GOOGLE_CLIENT_SECRET` — Google OAuth client secret;
 - `BETTER_AUTH_SECRET` — Better Auth encryption/signing secret;
-- `BETTER_AUTH_TRUSTED_ORIGINS` — optional comma-separated additional Studio
+- `BETTER_AUTH_TRUSTED_ORIGINS` — optional comma-separated additional Conclave AX
   origins for local or controlled preview environments.
 
 Store `GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_SECRET`, and
@@ -62,7 +62,7 @@ Better Auth uses database-backed HttpOnly sessions in `auth_sessions`. The
 production policy is a 14-day session with daily refresh, no session data
 cookie cache, Secure/HttpOnly/SameSite=Lax cookies, and same-origin mutation
 protection. Better Auth's standard session listing and revocation endpoints
-remain available under `/api/auth/*`; Studio never receives or stores the
+remain available under `/api/auth/*`; Conclave AX never receives or stores the
 session token.
 
 Repository Settings -> Secrets and variables -> Actions:
