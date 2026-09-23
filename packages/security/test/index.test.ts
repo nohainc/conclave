@@ -9,6 +9,7 @@ import {
   extractAuthToken,
   formatSessionCookie,
   resolveSecurityContextFromDb,
+  resolveSecurityContextFromIdentity,
   encryptCredential,
   decryptCredential,
   consumeRateLimit,
@@ -269,6 +270,108 @@ describe("Architecture v2 Security & Authentication Suite", () => {
   });
 
   describe("Database-Backed Security Context Resolution", () => {
+    function createIdentityDb(): DatabaseAdapter {
+      return {
+        prepare(query: string) {
+          let boundValues: unknown[] = [];
+          return {
+            bind(...values: unknown[]) {
+              boundValues = values;
+              return this;
+            },
+            async first<T>() {
+              if (query.includes("FROM users WHERE id")) {
+                expect(boundValues).toEqual(["user-1"]);
+                return {
+                  id: "user-1",
+                  email: "alice@example.com",
+                  display_name: "Alice",
+                  avatar_url: null,
+                  status: "active",
+                } as T;
+              }
+              return null;
+            },
+            async all<T>() {
+              if (query.includes("FROM workspace_memberships wm")) {
+                return {
+                  results: [
+                    {
+                      workspace_id: "ws-team",
+                      role: "member",
+                      workspace_status: "active",
+                    },
+                  ] as unknown as readonly T[],
+                };
+              }
+              if (query.includes("FROM project_memberships pm")) {
+                return {
+                  results: [
+                    { project_id: "proj-1", role: "lead" },
+                  ] as unknown as readonly T[],
+                };
+              }
+              return { results: [] };
+            },
+            async run() {
+              return { success: true };
+            },
+          };
+        },
+      };
+    }
+
+    it("maps Better Auth identity into existing workspace authorization", async () => {
+      const ctx = await resolveSecurityContextFromIdentity(
+        createIdentityDb(),
+        {
+          userId: "user-1",
+          email: "alice@example.com",
+          name: "Alice",
+          sessionId: "better-auth-session",
+        },
+        { requestedWorkspaceId: "ws-team" },
+      );
+
+      expect(ctx.userId).toBe("user-1");
+      expect(ctx.workspaceId).toBe("ws-team");
+      expect(ctx.workspaceRole).toBe("member");
+      expect(ctx.authorizedProjectIds).toEqual(["proj-1"]);
+      expect(ctx.projectRoles).toEqual({ "proj-1": "lead" });
+      expect(ctx.sessionId).toBe("better-auth-session");
+      expect(ctx.clientType).toBe("web");
+    });
+
+    it("rejects an authenticated identity without a Conclave user", async () => {
+      const db: DatabaseAdapter = {
+        prepare() {
+          return {
+            bind() {
+              return this;
+            },
+            async first() {
+              return null;
+            },
+            async all() {
+              return { results: [] };
+            },
+            async run() {
+              return { success: true };
+            },
+          };
+        },
+      };
+
+      await expect(
+        resolveSecurityContextFromIdentity(db, {
+          userId: "missing-user",
+          email: "missing@example.com",
+          name: "Missing",
+          sessionId: "better-auth-session",
+        }),
+      ).rejects.toThrow(AuthenticationError);
+    });
+
     function createMockDb(
       token: string,
       tokenHash: string,

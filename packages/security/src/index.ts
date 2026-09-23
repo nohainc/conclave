@@ -612,6 +612,177 @@ export interface DatabaseAdapter {
   prepare(query: string): DatabaseStatement;
 }
 
+/** Identity returned by the application authentication boundary. */
+export interface AuthenticatedIdentity {
+  readonly userId: string;
+  readonly email: string;
+  readonly name: string;
+  readonly sessionId: string;
+}
+
+/**
+ * Resolve Conclave authorization from an already-authenticated human.
+ * Better Auth is deliberately not imported here: this package owns only the
+ * User -> Workspace -> Project authorization boundary.
+ */
+export async function resolveSecurityContextFromIdentity(
+  db: DatabaseAdapter,
+  identity: AuthenticatedIdentity,
+  options?: { requestedWorkspaceId?: string },
+): Promise<WorkspaceSecurityContext> {
+  const userRow = await db
+    .prepare(
+      `SELECT id, email, display_name, avatar_url, status
+       FROM users WHERE id = ?1`,
+    )
+    .bind(identity.userId)
+    .first<{
+      id: string;
+      email: string;
+      display_name: string;
+      avatar_url: string | null;
+      status: string;
+    }>();
+
+  if (!userRow) throw new AuthenticationError("Conclave user not found");
+  if (!["active", "suspended", "deactivated"].includes(userRow.status)) {
+    throw new AuthenticationError("Invalid Conclave user status");
+  }
+  if (userRow.status !== "active") {
+    throw new AuthenticationError(`User account is ${userRow.status}`);
+  }
+
+  return resolveWorkspaceSecurityContext(
+    db,
+    {
+      id: userRow.id,
+      email: userRow.email,
+      displayName: userRow.display_name,
+      avatarUrl: userRow.avatar_url,
+      status: userRow.status,
+    },
+    identity.sessionId,
+    "web",
+    options,
+  );
+}
+
+async function resolveWorkspaceSecurityContext(
+  db: DatabaseAdapter,
+  user: AuthenticatedUser,
+  sessionId: string,
+  clientType: ClientType,
+  options?: { requestedWorkspaceId?: string },
+): Promise<WorkspaceSecurityContext> {
+  let memberships: {
+    results?: readonly {
+      workspace_id: string;
+      role: WorkspaceRole;
+      workspace_status: string;
+    }[];
+  };
+  try {
+    memberships = await db
+      .prepare(
+        `SELECT wm.workspace_id, wm.role, w.status AS workspace_status
+         FROM workspace_memberships wm
+         JOIN workspaces w ON wm.workspace_id = w.id
+         WHERE wm.user_id = ?1 AND wm.status = 'active' AND w.status = 'active'`,
+      )
+      .bind(user.id)
+      .all();
+  } catch {
+    memberships = await db
+      .prepare(
+        `SELECT wm.workspace_id, wm.role, w.status AS workspace_status
+         FROM workspace_memberships wm
+         JOIN workspaces w ON wm.workspace_id = w.id
+         WHERE wm.user_id = ?1 AND w.status = 'active'`,
+      )
+      .bind(user.id)
+      .all();
+  }
+
+  const activeMemberships = memberships.results ?? [];
+  if (activeMemberships.length === 0) {
+    if (options?.requestedWorkspaceId) {
+      throw new AuthorizationError(
+        "workspace:manage",
+        options.requestedWorkspaceId,
+      );
+    }
+    return {
+      userId: user.id,
+      user,
+      workspaceId: "",
+      workspaceRole: "viewer",
+      roles: ["viewer"],
+      authorizedProjectIds: [],
+      projectRoles: {},
+      sessionId,
+      clientType,
+      organizationId: "",
+      organizationRoles: ["viewer"],
+    };
+  }
+
+  const targetMembership = options?.requestedWorkspaceId
+    ? activeMemberships.find(
+        (membership) =>
+          membership.workspace_id === options.requestedWorkspaceId,
+      )
+    : activeMemberships[0];
+  if (!targetMembership) {
+    throw new AuthorizationError(
+      "workspace:manage",
+      options?.requestedWorkspaceId,
+    );
+  }
+
+  const workspaceId = targetMembership.workspace_id;
+  const workspaceRole = targetMembership.role;
+  let authorizedProjectIds: string[] = [];
+  const projectRoles: Record<string, ProjectRole> = {};
+
+  if (workspaceRole === "owner" || workspaceRole === "admin") {
+    const allProjects = await db
+      .prepare("SELECT id FROM projects WHERE workspace_id = ?1")
+      .bind(workspaceId)
+      .all<{ id: string }>();
+    authorizedProjectIds = (allProjects.results ?? []).map(
+      (project) => project.id,
+    );
+  } else {
+    const projectMemberships = await db
+      .prepare(
+        `SELECT pm.project_id, pm.role
+         FROM project_memberships pm
+         JOIN projects p ON pm.project_id = p.id
+         WHERE pm.user_id = ?1 AND p.workspace_id = ?2`,
+      )
+      .bind(user.id, workspaceId)
+      .all<{ project_id: string; role: ProjectRole }>();
+    for (const membership of projectMemberships.results ?? []) {
+      authorizedProjectIds.push(membership.project_id);
+      projectRoles[membership.project_id] = membership.role;
+    }
+  }
+
+  return {
+    userId: user.id,
+    user,
+    workspaceId,
+    workspaceRole,
+    roles: [workspaceRole],
+    authorizedProjectIds,
+    projectRoles,
+    sessionId,
+    clientType,
+    organizationId: workspaceId,
+    organizationRoles: [workspaceRole],
+  };
+}
+
 export async function resolveSecurityContextFromDb(
   db: DatabaseAdapter,
   token: string,

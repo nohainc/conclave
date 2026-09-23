@@ -17,6 +17,7 @@ export {
 } from "../ensemble-dispatcher.js";
 export { handleConnectorRequest } from "../interactive-connector.js";
 import { handleConnectorTaskRequest } from "../interactive-connector.js";
+import { identityService } from "../auth/index.js";
 import {
   dispatchTaskAssignment,
   cancelTaskAssignment,
@@ -35,6 +36,7 @@ import {
   computePackageDigest,
   signPackageDigest,
   verifyPackageDigestSignature,
+  resolveSecurityContextFromIdentity,
   resolveSecurityContextFromDb,
   authorizeCredentialProfileUse,
   type Permission,
@@ -191,6 +193,12 @@ class HttpError extends Error {
 }
 
 type SecurityEnv = Env & {
+  readonly BETTER_AUTH_SECRET?: string;
+  readonly BETTER_AUTH_URL?: string;
+  readonly GITHUB_CLIENT_ID?: string;
+  readonly GITHUB_CLIENT_SECRET?: string;
+  readonly GOOGLE_CLIENT_ID?: string;
+  readonly GOOGLE_CLIENT_SECRET?: string;
   readonly CONCLAVE_ACCESS_ORGANIZATION_ID?: string;
   readonly CONCLAVE_PLUGIN_PUBLISHER_EMAIL?: string;
   readonly CONCLAVE_AUTH_TOKEN?: string;
@@ -445,6 +453,40 @@ async function securityContext(
   env: SecurityEnv,
   accessContext?: ExecutionContext,
 ): Promise<SecurityContext> {
+  if (env.BETTER_AUTH_SECRET) {
+    const identity = await identityService.resolve(request, env);
+    if (!identity) throw new HttpError(401, "Authentication required");
+    try {
+      const requestedWorkspaceId =
+        request.headers.get("x-conclave-workspace-id") ??
+        new URL(request.url).searchParams.get("workspaceId") ??
+        undefined;
+      return await resolveSecurityContextFromIdentity(
+        env.CONCLAVE_DB,
+        identity,
+        {
+          requestedWorkspaceId,
+        },
+      );
+    } catch (err: unknown) {
+      if (
+        err instanceof Error &&
+        "code" in err &&
+        (err as { code: string }).code === "UNAUTHORIZED"
+      ) {
+        throw new HttpError(401, err.message);
+      }
+      if (
+        err instanceof Error &&
+        "code" in err &&
+        (err as { code: string }).code === "FORBIDDEN"
+      ) {
+        throw new HttpError(403, err.message);
+      }
+      throw err;
+    }
+  }
+
   const token = extractAuthToken(request.headers);
   if (token && env.CONCLAVE_DB) {
     try {

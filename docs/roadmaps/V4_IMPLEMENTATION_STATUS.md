@@ -65,3 +65,11 @@ them.
 with `email` and `profile`. OAuth client secrets remain runtime Cloudflare
 secrets. Implicit identity linking is disabled, different-email linking is
 disabled, and repository authorization is separate from Conclave sign-in.
+
+## AUTH-5 — Replace `securityContext()` identity resolution
+
+✅ Normal human application APIs resolve the Better Auth session through the
+Cloud authentication boundary, then convert that identity into the existing
+Conclave Workspace, membership, role, Project, and grant authorization
+context. Machine and transitional development paths remain separate; the
+legacy human fallback is used only when Better Auth is not configured.
