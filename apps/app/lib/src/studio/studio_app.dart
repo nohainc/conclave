@@ -244,6 +244,35 @@ class _StudioAppState extends State<StudioApp> {
     }
   }
 
+  Future<void> _requestCredentialSetup(StudioCredentialProfile account) async {
+    final workspaceId = activeWorkspaceId;
+    if (workspaceId == null) return;
+    try {
+      await widget.dataSource.requestCredentialSetup(
+        workspaceId: workspaceId,
+        profileId: account.id,
+      );
+      if (mounted) _showSnackBar('Local Account setup requested on the Host.');
+    } catch (error) {
+      if (mounted) _showSnackBar(error.toString());
+    }
+  }
+
+  Future<void> _revokeCredentialProfile(StudioCredentialProfile account) async {
+    final workspaceId = activeWorkspaceId;
+    if (workspaceId == null) return;
+    try {
+      await widget.dataSource.revokeCredentialProfile(
+        workspaceId: workspaceId,
+        profileId: account.id,
+      );
+      await _loadSnapshot(workspaceId: workspaceId, showSpinner: false);
+      if (mounted) _showSnackBar('Account revoked.');
+    } catch (error) {
+      if (mounted) _showSnackBar(error.toString());
+    }
+  }
+
   Future<void> _registerPasskey() async {
     try {
       await widget.dataSource.registerPasskey('Conclave AX browser passkey');
@@ -2622,13 +2651,29 @@ class _StudioAppState extends State<StudioApp> {
                   title: Text(account.displayName,
                       style: const TextStyle(fontWeight: FontWeight.w700)),
                   subtitle: Text(
-                      'Owner: ${account.owner}\nWorker: ${account.worker} · Host: ${account.host}\nSharing: ${account.sharing} · Usage: ${account.usage}'),
+                      'Owner: ${account.owner}\nWorker: ${account.worker} · Host: ${account.host}\nStorage: ${account.storageLocation} · Sharing: ${account.sharing}\nLast used: ${account.lastUsed} · Usage: ${account.usage}'),
                   isThreeLine: true,
-                  trailing: _statusChip(
-                    account.status,
-                    account.status.toLowerCase() == 'ready'
-                        ? const Color(0xff3ca879)
-                        : const Color(0xff777683),
+                  trailing: PopupMenuButton<String>(
+                    tooltip: 'Account actions',
+                    onSelected: (action) {
+                      if (action == 'setup') {
+                        _requestCredentialSetup(account);
+                      } else if (action == 'revoke') {
+                        _revokeCredentialProfile(account);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'setup',
+                        child: Text(account.status.toLowerCase() == 'ready'
+                            ? 'Reconnect / re-authenticate'
+                            : 'Connect Account'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'revoke',
+                        child: Text('Revoke Account'),
+                      ),
+                    ],
                   ),
                 ),
               ),

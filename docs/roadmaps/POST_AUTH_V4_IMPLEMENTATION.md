@@ -723,6 +723,16 @@ If setup requires Host-local action, Conclave AX creates setup intent and Host s
 ## Exit criteria
 Users understand that Worker software is shared but Accounts/credentials are isolated.
 
+## Status
+
+Complete. Accounts are exposed with Worker, owner, Host-local storage,
+readiness, sharing policy, last-used time, aggregate usage, and safe
+re-authentication/revocation actions. Cloud responses never include secret
+values or secret references. Personal and Workspace-owned Accounts are
+authorized separately from Worker sharing; selected-user and Workspace grants
+are checked at the database boundary. Host-local setup is represented by
+metadata-only setup intents so the Host can surface the required local action.
+
 ---
 
 # PA-12 — Replace large App snapshot refresh with feature read models

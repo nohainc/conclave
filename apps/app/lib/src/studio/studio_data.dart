@@ -40,6 +40,15 @@ abstract interface class StudioDataSource {
     required String workerId,
     required bool enabled,
   });
+  Future<void> requestCredentialSetup({
+    required String workspaceId,
+    required String profileId,
+    String action = 'reauthenticate',
+  });
+  Future<void> revokeCredentialProfile({
+    required String workspaceId,
+    required String profileId,
+  });
   Future<void> revokeAgent({
     required String workspaceId,
     required String agentId,
@@ -403,6 +412,39 @@ class StudioApiClient implements StudioDataSource {
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StudioApiException('Worker update failed (${response.statusCode})');
+    }
+  }
+
+  @override
+  Future<void> requestCredentialSetup({
+    required String workspaceId,
+    required String profileId,
+    String action = 'reauthenticate',
+  }) async {
+    final response = await client.post(
+      Uri.parse(
+          '$baseUrl/workspaces/$workspaceId/accounts/$profileId/setup-intent'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({'action': action}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+          'Account setup request failed (${response.statusCode})');
+    }
+  }
+
+  @override
+  Future<void> revokeCredentialProfile({
+    required String workspaceId,
+    required String profileId,
+  }) async {
+    final response = await client.delete(
+      Uri.parse('$baseUrl/workspaces/$workspaceId/accounts/$profileId'),
+      headers: _headers(),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+          'Account revoke failed (${response.statusCode})');
     }
   }
 

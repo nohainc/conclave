@@ -3203,6 +3203,555 @@ export async function handleSetWorkspaceWorkerAvailability(
   });
 }
 
+type CredentialProfileRow = {
+  id: string;
+  workspaceId: string;
+  ownerType: "user" | "workspace";
+  ownerId: string;
+  workerId: string;
+  workerName: string;
+  hostId: string | null;
+  hostName: string | null;
+  displayName: string;
+  authType: string;
+  secretLocation: string;
+  status: string;
+  sharingPolicy: string;
+  providerMetadataJson: string;
+  concurrencyLimit: number | null;
+  ownerName: string | null;
+  lastUsedAt: string | null;
+  usageCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  costMicros: number | null;
+  durationMs: number;
+};
+
+function accountSharingLabel(policy: string): string {
+  if (policy === "private_only") return "Private";
+  if (policy === "workspace_capable") return "Workspace";
+  return "Selected users";
+}
+
+function accountMetadata(row: CredentialProfileRow): Record<string, unknown> {
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    displayName: row.displayName,
+    workerId: row.workerId,
+    worker: row.workerName,
+    ownerType: row.ownerType,
+    ownerId: row.ownerId,
+    owner: row.ownerName ?? row.ownerId,
+    hostId: row.hostId,
+    host: row.hostName ?? (row.hostId ? "Host unavailable" : "No Host"),
+    storageLocation:
+      row.secretLocation === "host_secure_store" ? "Host secure store" : "None",
+    authType: row.authType,
+    status: row.status,
+    sharingPolicy: row.sharingPolicy,
+    sharing: accountSharingLabel(row.sharingPolicy),
+    providerMetadata: parseJson(row.providerMetadataJson, {}),
+    concurrencyLimit: row.concurrencyLimit,
+    lastUsedAt: row.lastUsedAt,
+    usage: {
+      count: row.usageCount,
+      inputTokens: row.inputTokens,
+      outputTokens: row.outputTokens,
+      costMicros: row.costMicros,
+      durationMs: row.durationMs,
+    },
+  };
+}
+
+async function loadCredentialProfile(
+  env: SecurityEnv,
+  workspaceId: string,
+  profileId: string,
+): Promise<CredentialProfileRow | null> {
+  return env.CONCLAVE_DB.prepare(
+    `SELECT cp.id, cp.workspace_id as workspaceId,
+            cp.owner_type as ownerType, cp.owner_id as ownerId,
+            cp.worker_id as workerId, w.display_name as workerName,
+            cp.host_id as hostId, h.name as hostName,
+            cp.display_name as displayName, cp.auth_type as authType,
+            cp.secret_location as secretLocation, cp.status,
+            cp.sharing_policy as sharingPolicy,
+            cp.provider_metadata_json as providerMetadataJson,
+            cp.concurrency_limit as concurrencyLimit,
+            CASE WHEN cp.owner_type = 'user' THEN u.display_name ELSE ws.name END as ownerName,
+            MAX(us.recorded_at) as lastUsedAt,
+            COUNT(us.id) as usageCount,
+            COALESCE(SUM(us.input_tokens), 0) as inputTokens,
+            COALESCE(SUM(us.output_tokens), 0) as outputTokens,
+            SUM(us.cost_micros) as costMicros,
+            COALESCE(SUM(us.duration_ms), 0) as durationMs
+     FROM credential_profiles cp
+     JOIN workers w ON w.id = cp.worker_id
+     LEFT JOIN hosts h ON h.id = cp.host_id
+     LEFT JOIN users u ON cp.owner_type = 'user' AND u.id = cp.owner_id
+     LEFT JOIN workspaces ws ON cp.owner_type = 'workspace' AND ws.id = cp.owner_id
+     LEFT JOIN usage us ON us.credential_profile_id = cp.id
+     WHERE cp.id = ?1 AND cp.workspace_id = ?2
+     GROUP BY cp.id`,
+  )
+    .bind(profileId, workspaceId)
+    .first<CredentialProfileRow>();
+}
+
+async function authorizeCredentialProfileOwner(
+  env: SecurityEnv,
+  context: SecurityContext,
+  profileId: string,
+  permission: Permission,
+): Promise<CredentialProfileRow> {
+  const profile = await loadCredentialProfile(
+    env,
+    context.workspaceId,
+    profileId,
+  );
+  if (!profile) throw new HttpError(404, "Account not found");
+  if (profile.ownerType === "user" && profile.ownerId === context.userId) {
+    return profile;
+  }
+  authorize(context, permission);
+  return profile;
+}
+
+function assertSafeProviderMetadata(value: unknown): Record<string, unknown> {
+  if (value === undefined) return {};
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new HttpError(400, "providerMetadata must be an object");
+  }
+  const forbidden = /secret|token|password|api[_-]?key|private/i;
+  const metadata = value as Record<string, unknown>;
+  if (Object.keys(metadata).some((key) => forbidden.test(key))) {
+    throw new HttpError(400, "providerMetadata cannot contain credentials");
+  }
+  return metadata;
+}
+
+async function handleListCredentialProfiles(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  authorize(context, "credential.use");
+  requireWorkspaceContext(context, env, workspaceId);
+  const rows = await env.CONCLAVE_DB.prepare(
+    `SELECT cp.id FROM credential_profiles cp
+     WHERE cp.workspace_id = ?1 AND cp.status <> 'revoked'
+     ORDER BY cp.display_name`,
+  )
+    .bind(workspaceId)
+    .all<{ id: string }>();
+  const accounts = [];
+  for (const row of rows.results ?? []) {
+    const profile = await loadCredentialProfile(env, workspaceId, row.id);
+    if (!profile) continue;
+    try {
+      await authorizeCredentialProfileUse(env.CONCLAVE_DB, context, row.id);
+      accounts.push(accountMetadata(profile));
+    } catch {
+      // Account metadata is visible only to the owner or an authorized user.
+    }
+  }
+  return json({ accounts });
+}
+
+async function handleCreateCredentialProfile(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  authorize(context, "credential.create");
+  requireWorkspaceContext(context, env, workspaceId);
+  const body = (await request.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
+  const displayName = requiredString(body.displayName, "displayName");
+  const workerId = requiredString(body.workerId, "workerId");
+  const authType = body.authType ?? "none";
+  const ownerType = body.ownerType ?? "user";
+  const sharingPolicy = body.sharingPolicy ?? "private_only";
+  const hostId = typeof body.hostId === "string" ? body.hostId : null;
+  if (
+    ![
+      "none",
+      "api_key",
+      "oauth_browser",
+      "local_cli_session",
+      "interactive_custom",
+    ].includes(String(authType)) ||
+    !["user", "workspace"].includes(String(ownerType)) ||
+    !["private_only", "owner_controlled", "workspace_capable"].includes(
+      String(sharingPolicy),
+    )
+  ) {
+    throw new HttpError(400, "Unsupported Account configuration");
+  }
+  if (ownerType === "workspace") {
+    authorize(context, "credential.share");
+  }
+  const ownerId = ownerType === "workspace" ? workspaceId : context.userId;
+  if (hostId) {
+    const host = await env.CONCLAVE_DB.prepare(
+      `SELECT h.id FROM hosts h
+       JOIN host_workspace_bindings b ON b.host_id = h.id
+        AND b.workspace_id = ?2 AND b.status = 'active'
+       WHERE h.id = ?1 AND h.revoked_at IS NULL`,
+    )
+      .bind(hostId, workspaceId)
+      .first<{ id: string }>();
+    if (!host) throw new HttpError(404, "Host not found");
+  } else if (authType !== "none") {
+    throw new HttpError(400, "A Host is required for local Account storage");
+  }
+  const worker = await env.CONCLAVE_DB.prepare(
+    "SELECT id FROM workers WHERE id = ?1 AND status <> 'revoked'",
+  )
+    .bind(workerId)
+    .first<{ id: string }>();
+  if (!worker) throw new HttpError(404, "Worker not found");
+  const providerMetadata = assertSafeProviderMetadata(body.providerMetadata);
+  const id = `cred-${crypto.randomUUID().slice(0, 16)}`;
+  const now = new Date().toISOString();
+  await env.CONCLAVE_DB.prepare(
+    `INSERT INTO credential_profiles
+       (id, workspace_id, owner_type, owner_id, worker_id, host_id,
+        display_name, auth_type, secret_location, secret_reference, status,
+        sharing_policy, provider_metadata_json, concurrency_limit,
+        created_at, updated_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'setup_required',
+             ?11, ?12, ?13, ?14, ?14)`,
+  )
+    .bind(
+      id,
+      workspaceId,
+      ownerType,
+      ownerId,
+      workerId,
+      hostId,
+      displayName,
+      authType,
+      authType === "none" ? "none" : "host_secure_store",
+      hostId ? `credential-profile/${hostId}/${workerId}/${id}` : null,
+      sharingPolicy,
+      JSON.stringify(providerMetadata),
+      typeof body.concurrencyLimit === "number" ? body.concurrencyLimit : null,
+      now,
+    )
+    .run();
+  await recordAudit(
+    env,
+    context,
+    "credential_profile.created",
+    "credential_profile",
+    id,
+    {
+      workerId,
+      ownerType,
+      hostId,
+    },
+  );
+  const profile = await loadCredentialProfile(env, workspaceId, id);
+  return json(
+    { account: profile ? accountMetadata(profile) : { id } },
+    { status: 201 },
+  );
+}
+
+async function handleUpdateCredentialProfile(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  profileId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  requireWorkspaceContext(context, env, workspaceId);
+  const profile = await authorizeCredentialProfileOwner(
+    env,
+    context,
+    profileId,
+    "credential.share",
+  );
+  const body = (await request.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
+  const sharingPolicy = body.sharingPolicy;
+  if (
+    sharingPolicy !== undefined &&
+    !["private_only", "owner_controlled", "workspace_capable"].includes(
+      String(sharingPolicy),
+    )
+  ) {
+    throw new HttpError(400, "Unsupported sharing policy");
+  }
+  const displayName = body.displayName;
+  if (displayName !== undefined && typeof displayName !== "string") {
+    throw new HttpError(400, "displayName must be a string");
+  }
+  const now = new Date().toISOString();
+  await env.CONCLAVE_DB.prepare(
+    `UPDATE credential_profiles
+     SET display_name = COALESCE(?1, display_name),
+         sharing_policy = COALESCE(?2, sharing_policy), updated_at = ?3
+     WHERE id = ?4 AND workspace_id = ?5`,
+  )
+    .bind(
+      displayName ?? null,
+      sharingPolicy ?? null,
+      now,
+      profile.id,
+      workspaceId,
+    )
+    .run();
+  const updated = await loadCredentialProfile(env, workspaceId, profileId);
+  await recordAudit(
+    env,
+    context,
+    "credential_profile.updated",
+    "credential_profile",
+    profileId,
+    {
+      sharingPolicy: sharingPolicy ?? profile.sharingPolicy,
+    },
+  );
+  return json({ account: updated ? accountMetadata(updated) : null });
+}
+
+async function handleRevokeCredentialProfile(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  profileId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  requireWorkspaceContext(context, env, workspaceId);
+  await authorizeCredentialProfileOwner(
+    env,
+    context,
+    profileId,
+    "credential.share",
+  );
+  const now = new Date().toISOString();
+  await env.CONCLAVE_DB.prepare(
+    "UPDATE credential_profiles SET status = 'revoked', updated_at = ?1 WHERE id = ?2 AND workspace_id = ?3",
+  )
+    .bind(now, profileId, workspaceId)
+    .run();
+  await recordAudit(
+    env,
+    context,
+    "credential_profile.revoked",
+    "credential_profile",
+    profileId,
+  );
+  return json({ ok: true, revokedAt: now });
+}
+
+async function handleCreateCredentialSetupIntent(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  profileId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  requireWorkspaceContext(context, env, workspaceId);
+  const profile = await authorizeCredentialProfileOwner(
+    env,
+    context,
+    profileId,
+    "credential.use",
+  );
+  if (!profile.hostId)
+    return json(
+      { error: "This Account does not require Host-local setup" },
+      { status: 400 },
+    );
+  const body = (await request.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
+  const action = body.action ?? "setup";
+  if (!["setup", "reauthenticate", "clear"].includes(String(action))) {
+    throw new HttpError(400, "Unsupported Account setup action");
+  }
+  const id = `setup-${crypto.randomUUID().slice(0, 16)}`;
+  const now = new Date().toISOString();
+  await env.CONCLAVE_DB.prepare(
+    `INSERT INTO credential_setup_intents
+       (id, credential_profile_id, workspace_id, host_id, requested_by_user_id,
+        action, requested_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`,
+  )
+    .bind(
+      id,
+      profileId,
+      workspaceId,
+      profile.hostId,
+      context.userId,
+      action,
+      now,
+    )
+    .run();
+  await recordAudit(
+    env,
+    context,
+    "credential_profile.setup_requested",
+    "credential_profile",
+    profileId,
+    {
+      action,
+      hostId: profile.hostId,
+    },
+  );
+  return json(
+    {
+      setupIntent: {
+        id,
+        profileId,
+        hostId: profile.hostId,
+        action,
+        status: "requested",
+        requestedAt: now,
+      },
+    },
+    { status: 202 },
+  );
+}
+
+async function handleCreateCredentialGrant(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  profileId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  requireWorkspaceContext(context, env, workspaceId);
+  const profile = await authorizeCredentialProfileOwner(
+    env,
+    context,
+    profileId,
+    "credential.share",
+  );
+  if (profile.sharingPolicy === "private_only") {
+    throw new HttpError(409, "Private Accounts cannot be shared");
+  }
+  const body = (await request.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
+  const granteeType = body.granteeType;
+  const granteeId = requiredString(body.granteeId, "granteeId");
+  if (!["user", "workspace", "role"].includes(String(granteeType))) {
+    throw new HttpError(400, "Unsupported Account grantee type");
+  }
+  if (granteeType === "workspace" && granteeId !== workspaceId) {
+    throw new HttpError(400, "Account grants cannot target another Workspace");
+  }
+  if (granteeType === "user") {
+    const user = await env.CONCLAVE_DB.prepare(
+      `SELECT user_id FROM workspace_memberships
+       WHERE workspace_id = ?1 AND user_id = ?2 AND status = 'active'`,
+    )
+      .bind(workspaceId, granteeId)
+      .first<{ user_id: string }>();
+    if (!user)
+      throw new HttpError(404, "Selected user is not a Workspace member");
+  }
+  const id = `grant-${crypto.randomUUID().slice(0, 16)}`;
+  const now = new Date().toISOString();
+  const expiresAt = typeof body.expiresAt === "string" ? body.expiresAt : null;
+  const usageLimit =
+    typeof body.usageLimit === "number" ? body.usageLimit : null;
+  await env.CONCLAVE_DB.prepare(
+    `INSERT INTO credential_grants
+       (id, credential_profile_id, workspace_id, grantee_type, grantee_id,
+        use_permission, granted_by_user_id, created_at, expires_at, usage_limit)
+     VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?7, ?8, ?9)
+     ON CONFLICT(credential_profile_id, grantee_type, grantee_id) DO UPDATE SET
+       use_permission = 1, granted_by_user_id = excluded.granted_by_user_id,
+       expires_at = excluded.expires_at, usage_limit = excluded.usage_limit,
+       revoked_at = NULL`,
+  )
+    .bind(
+      id,
+      profileId,
+      workspaceId,
+      granteeType,
+      granteeId,
+      context.userId,
+      now,
+      expiresAt,
+      usageLimit,
+    )
+    .run();
+  await recordAudit(
+    env,
+    context,
+    "credential_profile.grant.created",
+    "credential_profile",
+    profileId,
+    {
+      granteeType,
+      granteeId,
+      expiresAt,
+    },
+  );
+  return json(
+    { grant: { id, profileId, granteeType, granteeId, expiresAt, usageLimit } },
+    { status: 201 },
+  );
+}
+
+async function handleRevokeCredentialGrant(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  profileId: string,
+  grantId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  requireWorkspaceContext(context, env, workspaceId);
+  await authorizeCredentialProfileOwner(
+    env,
+    context,
+    profileId,
+    "credential.share",
+  );
+  const now = new Date().toISOString();
+  await env.CONCLAVE_DB.prepare(
+    `UPDATE credential_grants SET revoked_at = ?1
+     WHERE id = ?2 AND credential_profile_id = ?3 AND workspace_id = ?4`,
+  )
+    .bind(now, grantId, profileId, workspaceId)
+    .run();
+  await recordAudit(
+    env,
+    context,
+    "credential_profile.grant.revoked",
+    "credential_profile",
+    profileId,
+    {
+      grantId,
+    },
+  );
+  return json({ ok: true, revokedAt: now });
+}
+
 async function handleDispatchTaskAssignment(
   request: Request,
   env: SecurityEnv,
@@ -4140,6 +4689,28 @@ async function handleStudioSnapshot(
     projectChats.push(chat);
     chatsByProject.set(String(row.projectId), projectChats);
   }
+  const accountRows = await env.CONCLAVE_DB.prepare(
+    `SELECT id FROM credential_profiles
+     WHERE workspace_id = ?1 AND status <> 'revoked'
+     ORDER BY display_name`,
+  )
+    .bind(context.workspaceId)
+    .all<{ id: string }>();
+  const accounts = [];
+  for (const row of accountRows.results ?? []) {
+    const profile = await loadCredentialProfile(
+      env,
+      context.workspaceId,
+      row.id,
+    );
+    if (!profile) continue;
+    try {
+      await authorizeCredentialProfileUse(env.CONCLAVE_DB, context, row.id);
+      accounts.push(accountMetadata(profile));
+    } catch {
+      // Snapshot Account data is requester-specific and metadata-only.
+    }
+  }
   return json({
     workspaceId: context.workspaceId,
     viewer: {
@@ -4180,6 +4751,7 @@ async function handleStudioSnapshot(
     events: events.results ?? [],
     artifacts: artifacts.results ?? [],
     modelCalls: modelCalls.results ?? [],
+    accounts,
   });
 }
 
@@ -5494,6 +6066,13 @@ export {
   handleRevokeHost,
   handleAnnounceHostUpdate,
   handleSetHostDesiredState,
+  handleListCredentialProfiles,
+  handleCreateCredentialProfile,
+  handleUpdateCredentialProfile,
+  handleRevokeCredentialProfile,
+  handleCreateCredentialSetupIntent,
+  handleCreateCredentialGrant,
+  handleRevokeCredentialGrant,
   handleDispatchEnsembleTaskAssignment,
   handleDispatchTaskAssignment,
   handleCancelTaskAssignment,

@@ -118,6 +118,19 @@ class StudioFixtureDataSource implements StudioDataSource {
   }) async {}
 
   @override
+  Future<void> requestCredentialSetup({
+    required String workspaceId,
+    required String profileId,
+    String action = 'reauthenticate',
+  }) async {}
+
+  @override
+  Future<void> revokeCredentialProfile({
+    required String workspaceId,
+    required String profileId,
+  }) async {}
+
+  @override
   Future<void> revokeAgent({
     required String workspaceId,
     required String agentId,

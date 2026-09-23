@@ -190,6 +190,18 @@ describe("Architecture v2 Security & Authentication Suite", () => {
           },
         ]),
       ).toBe(false);
+      expect(
+        canUseCredentialProfile(
+          sampleContext,
+          {
+            ...profile,
+            owner_type: "workspace",
+            owner_id: sampleContext.workspaceId,
+            sharing_policy: "workspace_capable",
+          },
+          [],
+        ),
+      ).toBe(true);
     });
 
     it("rejects a host that is not actively bound to the requested workspace", async () => {

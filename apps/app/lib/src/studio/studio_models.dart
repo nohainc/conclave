@@ -504,6 +504,8 @@ class StudioCredentialProfile {
     required this.host,
     required this.sharing,
     required this.status,
+    this.storageLocation = 'None',
+    this.lastUsed = 'Never',
     this.usage = 'No usage recorded',
   });
 
@@ -514,6 +516,8 @@ class StudioCredentialProfile {
   final String host;
   final String sharing;
   final String status;
+  final String storageLocation;
+  final String lastUsed;
   final String usage;
 
   factory StudioCredentialProfile.fromJson(Map<String, dynamic> json) =>
@@ -526,7 +530,11 @@ class StudioCredentialProfile {
         sharing:
             _string(json, 'sharing', _string(json, 'sharingPolicy', 'Private')),
         status: _string(json, 'status', 'setup_required'),
-        usage: _string(json, 'usage', 'No usage recorded'),
+        storageLocation: _string(json, 'storageLocation', 'None'),
+        lastUsed: _string(json, 'lastUsedAt', 'Never'),
+        usage: json['usage'] is Map
+            ? '${_string(Map<String, dynamic>.from(json['usage'] as Map), 'count', '0')} uses · ${_string(Map<String, dynamic>.from(json['usage'] as Map), 'durationMs', '0')} ms'
+            : _string(json, 'usage', 'No usage recorded'),
       );
 }
 

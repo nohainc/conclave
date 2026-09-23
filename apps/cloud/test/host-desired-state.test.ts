@@ -25,6 +25,12 @@ function createDb() {
       "utf8",
     ),
   );
+  db.exec(
+    fs.readFileSync(
+      path.join(migrations, "0005_credential_setup_intents.sql"),
+      "utf8",
+    ),
+  );
   return db;
 }
 

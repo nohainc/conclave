@@ -108,6 +108,7 @@ export const WORKSPACE_ROLE_PERMISSIONS: Record<
   member: [
     "host.view",
     "host.use",
+    "credential.create",
     "credential.use",
     "run.start",
     "run.control",
@@ -271,7 +272,8 @@ export interface CredentialProfileAccessRecord {
   readonly workspace_id: string;
   readonly owner_type: "user" | "workspace";
   readonly owner_id: string;
-  readonly sharing_policy: "private_only" | "owner_controlled" | "workspace";
+  readonly sharing_policy:
+    "private_only" | "owner_controlled" | "workspace" | "workspace_capable";
 }
 
 export interface CredentialGrantAccessRecord {
@@ -298,6 +300,13 @@ export function canUseCredentialProfile(
 ): boolean {
   if (profile.workspace_id !== context.workspaceId) return false;
   if (profile.owner_type === "user" && profile.owner_id === context.userId) {
+    return true;
+  }
+  if (
+    profile.owner_type === "workspace" &&
+    (profile.sharing_policy === "workspace" ||
+      profile.sharing_policy === "workspace_capable")
+  ) {
     return true;
   }
   if (profile.sharing_policy === "private_only") return false;

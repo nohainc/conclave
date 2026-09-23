@@ -477,6 +477,7 @@ export class HostGateway implements DurableObject {
         // Fetch desired workers from D1
         let desiredWorkers: DesiredWorker[] = [];
         let desiredPlugins: DesiredPlugin[] = [];
+        let credentialSetupIntents: Array<Record<string, unknown>> = [];
         let assignmentStates: Array<{
           assignmentId: string;
           attemptId: string;
@@ -523,6 +524,17 @@ export class HostGateway implements DurableObject {
               row.credential_requirements_json,
             ),
           }));
+          const setupRows = await this.env.CONCLAVE_DB.prepare(
+            `SELECT id, credential_profile_id as credentialProfileId,
+                    workspace_id as workspaceId, action, status,
+                    requested_at as requestedAt
+             FROM credential_setup_intents
+             WHERE host_id = ?1 AND status IN ('requested', 'in_progress')
+             ORDER BY requested_at ASC`,
+          )
+            .bind(payload.agentId)
+            .all<Record<string, unknown>>();
+          credentialSetupIntents = setupRows.results ?? [];
           // The v4 Worker package is the installable unit. Keep the legacy
           // plugin collection empty so a Host cannot accidentally reinstall
           // removed v3 plugin packages.
@@ -565,6 +577,7 @@ export class HostGateway implements DurableObject {
           payload: {
             desiredPlugins,
             desiredWorkers,
+            credentialSetupIntents,
             activeAssignmentIds: activeAssignmentIds(assignmentStates),
             assignmentStates,
           },
