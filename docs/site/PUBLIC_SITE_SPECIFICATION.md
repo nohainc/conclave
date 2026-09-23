@@ -171,6 +171,11 @@ labels in addition to visual connectors. Manual release review must traverse
 the header, mobile menu, links, buttons, and footer by keyboard at narrow and
 zoomed layouts.
 
+Responsive review covers 320px, 375px, 430px, 768px, 1024px, and wide desktop
+layouts. At the 800px breakpoint, navigation becomes a drawer, diagrams and
+comparison grids become vertical or single-column, and primary actions retain
+comfortable tap targets.
+
 ## Visual system contract
 
 The site uses one restrained, technical visual theme: warm paper surfaces, ink

@@ -892,7 +892,7 @@ h3 {
     gap: var(--space-8);
   }
 }
-@media (max-width: 760px) {
+@media (max-width: 800px) {
   .site-header {
     align-items: center;
     padding-block: var(--space-4);
