@@ -1,0 +1,43 @@
+---
+import "../styles/global.css";
+
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="description" content={description} />
+    <link rel="canonical" href={Astro.url} />
+    <title>{title}</title>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Conclave AX home">
+        <span class="brand-mark">C</span>
+        <span>Conclave AX</span>
+      </a>
+      <nav aria-label="Primary navigation">
+        <a href="/#product">Product</a>
+        <a href="/how-it-works/">How it works</a>
+        <a href="/workers/">Workers</a>
+        <a href="/security/">Security</a>
+        <a class="nav-cta" href="https://app.conclaveax.com">Open Conclave AX</a>
+      </nav>
+    </header>
+    <main>
+      <slot />
+    </main>
+    <footer class="site-footer">
+      <span>Conclave AX</span>
+      <span>Cloud control. Local capability. Clear evidence.</span>
+    </footer>
+  </body>
+</html>

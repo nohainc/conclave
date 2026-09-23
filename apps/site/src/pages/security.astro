@@ -1,0 +1,16 @@
+---
+import SiteLayout from "../layouts/SiteLayout.astro";
+---
+
+<SiteLayout title="Security — Conclave AX" description="Conclave AX security boundaries for people, Hosts, Workers, and Accounts.">
+  <section class="section">
+    <div class="eyebrow">Security</div>
+    <h1>Clear boundaries are a feature.</h1>
+    <p class="section-intro">Conclave AX keeps human identity, machine identity, and external AI Accounts separate so each can be authorized and revoked independently.</p>
+    <div class="cards">
+      <article class="card"><h3>Human access</h3><p>People sign in to Conclave AX. Cloud owns Workspace membership and authorization.</p></article>
+      <article class="card"><h3>Machine access</h3><p>A Host uses its own machine credential. It never stores a person's browser session.</p></article>
+      <article class="card"><h3>Account privacy</h3><p>Accounts are private by default. Raw secrets stay in Host secure storage and are never public site content.</p></article>
+    </div>
+  </section>
+</SiteLayout>

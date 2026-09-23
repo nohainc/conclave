@@ -52,6 +52,31 @@ jobs:
       - run: flutter test
       - run: flutter build web --release --dart-define=CONCLAVE_API_URL=/api
 
+  site-astro:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        working-directory: .
+      - run: ./node_modules/.bin/astro check
+      - run: ./node_modules/.bin/astro build
+      - name: Verify static routes
+        run: |
+          test -f dist/index.html
+          test -f dist/how-it-works/index.html
+          test -f dist/workers/index.html
+          test -f dist/security/index.html
+
   host-flutter:
     strategy:
       fail-fast: false
@@ -81,7 +106,7 @@ jobs:
 
   publish-evidence:
     if: ${{ vars.CONCLAVE_CI_INGEST_URL != '' && vars.CONCLAVE_RUN_ID != '' }}
-    needs: [typescript, app-flutter, host-flutter]
+    needs: [typescript, app-flutter, site-astro, host-flutter]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -112,6 +137,7 @@ jobs:
                 {name: "TypeScript checks", status: "passed", command: "pnpm check", exitCode: 0, artifactIds: []},
                 {name: "Cloudflare startup", status: "passed", command: "wrangler check startup", exitCode: 0, artifactIds: []},
                 {name: "Conclave AX App Flutter", status: "passed", command: "flutter analyze && flutter test", exitCode: 0, artifactIds: []},
+                {name: "Public Astro Site", status: "passed", command: "astro check && astro build", exitCode: 0, artifactIds: []},
                 {name: "Host Dart", status: "passed", command: "dart analyze && dart test", exitCode: 0, artifactIds: []}
               ],
               smokeTests: ["Cloud startup analysis passed"],

@@ -10,7 +10,9 @@ packages:
   - packages/sdk
   - packages/security
   - apps/cloud
+  - apps/site
 
 allowBuilds:
   esbuild: true
+  sharp: true
   workerd: true
