@@ -56,10 +56,10 @@ describe("IdentityService", () => {
       CONCLAVE_DB: {} as D1Database,
       CONCLAVE_ENVIRONMENT: "development",
       BETTER_AUTH_SECRET: "a-secure-development-secret-that-is-long-enough",
-      GITHUB_CLIENT_ID: "github-client-id",
-      GITHUB_CLIENT_SECRET: "github-client-secret",
-      GOOGLE_CLIENT_ID: "google-client-id",
-      GOOGLE_CLIENT_SECRET: "google-client-secret",
+      CONCLAVE_AUTH_GITHUB_CLIENT_ID: "github-client-id",
+      CONCLAVE_AUTH_GITHUB_CLIENT_SECRET: "github-client-secret",
+      CONCLAVE_AUTH_GOOGLE_CLIENT_ID: "google-client-id",
+      CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET: "google-client-secret",
     });
 
     expect(options.user?.modelName).toBe("users");

@@ -203,10 +203,10 @@ class HttpError extends Error {
 type SecurityEnv = Env & {
   readonly BETTER_AUTH_SECRET?: string;
   readonly BETTER_AUTH_URL?: string;
-  readonly GITHUB_CLIENT_ID?: string;
-  readonly GITHUB_CLIENT_SECRET?: string;
-  readonly GOOGLE_CLIENT_ID?: string;
-  readonly GOOGLE_CLIENT_SECRET?: string;
+  readonly CONCLAVE_AUTH_GITHUB_CLIENT_ID?: string;
+  readonly CONCLAVE_AUTH_GITHUB_CLIENT_SECRET?: string;
+  readonly CONCLAVE_AUTH_GOOGLE_CLIENT_ID?: string;
+  readonly CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET?: string;
   readonly CONCLAVE_PLUGIN_PUBLISHER_EMAIL?: string;
   readonly CONCLAVE_PLUGIN_SIGNING_KEY?: string;
   readonly CONCLAVE_HOST_SIGNING_KEY?: string;

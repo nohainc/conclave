@@ -58,10 +58,10 @@ repository access. Repository authorization is a separate future integration.
 Set these values in the Worker environment:
 
 - `BETTER_AUTH_URL` — application origin, such as `https://app.conclaveax.com`;
-- `GITHUB_CLIENT_ID` — GitHub OAuth client ID;
-- `GITHUB_CLIENT_SECRET` — GitHub OAuth client secret;
-- `GOOGLE_CLIENT_ID` — Google OAuth client ID;
-- `GOOGLE_CLIENT_SECRET` — Google OAuth client secret;
+- `CONCLAVE_AUTH_GITHUB_CLIENT_ID` — GitHub OAuth client ID;
+- `CONCLAVE_AUTH_GITHUB_CLIENT_SECRET` — GitHub OAuth client secret;
+- `CONCLAVE_AUTH_GOOGLE_CLIENT_ID` — Google OAuth client ID;
+- `CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET` — Google OAuth client secret;
 - `BETTER_AUTH_SECRET` — Better Auth encryption/signing secret;
 - `BETTER_AUTH_TRUSTED_ORIGINS` — optional comma-separated additional Conclave AX
   origins for local or controlled preview environments.
@@ -73,7 +73,8 @@ If Conclave later enables Email Sending directly for `conclaveax.com`, update
 `CONCLAVE_EMAIL_FROM` in the production Wrangler configuration. Local
 development logs the generated link instead of sending mail.
 
-Store `GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_SECRET`, and
+Store `CONCLAVE_AUTH_GITHUB_CLIENT_SECRET`,
+`CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET`, and
 `BETTER_AUTH_SECRET` only with Cloudflare Worker secrets (for example,
 `wrangler secret put`). Do not commit values to source, Wrangler configuration,
 CI files, or browser bundles. Client IDs may be ordinary environment

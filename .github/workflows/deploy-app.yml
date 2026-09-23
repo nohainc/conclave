@@ -57,10 +57,10 @@ jobs:
                 const configured = new Set(JSON.parse(input).map((secret) => secret.name));
                 const required = [
                   "BETTER_AUTH_SECRET",
-                  "GITHUB_CLIENT_ID",
-                  "GITHUB_CLIENT_SECRET",
-                  "GOOGLE_CLIENT_ID",
-                  "GOOGLE_CLIENT_SECRET",
+                  "CONCLAVE_AUTH_GITHUB_CLIENT_ID",
+                  "CONCLAVE_AUTH_GITHUB_CLIENT_SECRET",
+                  "CONCLAVE_AUTH_GOOGLE_CLIENT_ID",
+                  "CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET",
                 ];
                 const missing = required.filter((name) => !configured.has(name));
                 if (missing.length > 0) {

@@ -21,10 +21,10 @@ export type BetterAuthRuntimeEnv = Pick<Env, "CONCLAVE_DB"> & {
   BETTER_AUTH_ORIGIN?: string;
   CONCLAVE_EMAIL?: SendEmail;
   CONCLAVE_EMAIL_FROM?: string;
-  GITHUB_CLIENT_ID?: string;
-  GITHUB_CLIENT_SECRET?: string;
-  GOOGLE_CLIENT_ID?: string;
-  GOOGLE_CLIENT_SECRET?: string;
+  CONCLAVE_AUTH_GITHUB_CLIENT_ID?: string;
+  CONCLAVE_AUTH_GITHUB_CLIENT_SECRET?: string;
+  CONCLAVE_AUTH_GOOGLE_CLIENT_ID?: string;
+  CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET?: string;
 };
 
 function providerCredentials(
@@ -99,13 +99,13 @@ export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
   }
 
   const github = providerCredentials(
-    env.GITHUB_CLIENT_ID,
-    env.GITHUB_CLIENT_SECRET,
+    env.CONCLAVE_AUTH_GITHUB_CLIENT_ID,
+    env.CONCLAVE_AUTH_GITHUB_CLIENT_SECRET,
     ["user:email"],
   );
   const google = providerCredentials(
-    env.GOOGLE_CLIENT_ID,
-    env.GOOGLE_CLIENT_SECRET,
+    env.CONCLAVE_AUTH_GOOGLE_CLIENT_ID,
+    env.CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET,
     ["email", "profile"],
   );
   const trustedOrigins = [
