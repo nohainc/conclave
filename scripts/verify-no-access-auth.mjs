@@ -11,7 +11,12 @@ const roots = [
   ".github",
   ".env.example",
 ];
-const ignored = [/\.test\./, /(^|\/)test\//, /worker-configuration\.d\.ts$/];
+const ignored = [
+  /\.test\./,
+  /(^|\/)test\//,
+  /worker-configuration\.d\.ts$/,
+  /^scripts\/verify-no-access-auth\.mjs$/,
+];
 const retiredApplicationAuth = [
   /CF_Authorization/i,
   /Cf-Access-Jwt-Assertion/i,

@@ -1065,6 +1065,16 @@ Repository terminology mirrors the final product architecture.
 
 # PA-20 — Clean-room end-to-end acceptance
 
+Local clean-room acceptance evidence is green: the v4 protocol/schema checks,
+Cloud TypeScript build and 44-file/324-test Cloud suite, App analyzer and
+30-test Flutter suite, Host analyzer and 133-test Flutter suite, both Dart
+protocol suites, architecture/security guards, documentation links, and
+Wrangler startup check all pass. The development seed is intentionally empty
+of users, credentials, and assignments. OAuth provider callbacks, real Host
+pairing, and external Worker credentials remain deployment acceptance steps;
+they cannot be proven from this repository without configured provider secrets,
+a deployed hostname, and a physical Host installation.
+
 ## Goal
 Verify the product exactly as a new customer would experience it.
 
