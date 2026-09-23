@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildBetterAuthOptions,
   copySetCookieHeaders,
+  handleBetterAuthRequest,
   IdentityService,
   listPendingInvitations,
   provisionConclaveUser,
@@ -11,6 +12,22 @@ import {
 import { requireSameOriginForCookieMutation } from "../src/routes/handlers.js";
 
 describe("IdentityService", () => {
+  it("fails closed with a diagnostic response when Better Auth is not configured", async () => {
+    const response = await handleBetterAuthRequest(
+      new Request("https://app.conclave.test/api/auth/sign-in/github"),
+      {
+        CONCLAVE_DB: {} as D1Database,
+        CONCLAVE_ENVIRONMENT: "production",
+      },
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error: "Authentication is not configured on this deployment",
+      code: "auth_not_configured",
+    });
+  });
+
   it("preserves all OAuth state cookies when redirecting to a provider", () => {
     const source = new Headers();
     source.append("set-cookie", "oauth_state=one; Path=/; HttpOnly");

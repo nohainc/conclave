@@ -17,6 +17,7 @@
   "vars": {
     "CONCLAVE_ENVIRONMENT": "production",
     "CONCLAVE_PLUGIN_PUBLISHER_EMAIL": "vitalii@nohainc.com",
+    "BETTER_AUTH_URL": "https://app.conclaveax.com",
   },
   "d1_databases": [
     {

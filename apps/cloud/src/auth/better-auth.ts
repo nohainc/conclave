@@ -247,6 +247,21 @@ export async function handleBetterAuthRequest(
   request: Request,
   env: BetterAuthRuntimeEnv,
 ): Promise<Response> {
+  let auth: ReturnType<typeof createBetterAuth>;
+  try {
+    auth = createBetterAuth(env);
+  } catch {
+    return new Response(
+      JSON.stringify({
+        error: "Authentication is not configured on this deployment",
+        code: "auth_not_configured",
+      }),
+      {
+        status: 503,
+        headers: { "content-type": "application/json" },
+      },
+    );
+  }
   const url = new URL(request.url);
   const socialSignIn = url.pathname.match(
     /^\/api\/auth\/sign-in\/(github|google)$/,
@@ -278,7 +293,7 @@ export async function handleBetterAuthRequest(
         }),
       },
     );
-    const response = await createBetterAuth(env).handler(authRequest);
+    const response = await auth.handler(authRequest);
     if (!response.ok) {
       recordAuthMetric(socialSignIn[1], "failure", "invalid_callback");
       return response;
@@ -301,7 +316,7 @@ export async function handleBetterAuthRequest(
 
   const metadata = await requestMetadata(request);
   const before = await sessionSummary(request, env);
-  const response = await createBetterAuth(env).handler(request);
+  const response = await auth.handler(request);
   const statusOutcome = response.status >= 400 ? "failure" : "success";
   if (metadata.signIn) {
     if (statusOutcome === "failure") {
