@@ -278,6 +278,18 @@ export async function routeWorkerRequest(
     if (request.method === "GET" && hostsMatch?.[1]) {
       return await handlers.handleListHosts!(request, env, hostsMatch[1], ctx);
     }
+    const bindHostMatch = url.pathname.match(
+      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/hosts\/([^/]+)\/bind$/,
+    );
+    if (request.method === "POST" && bindHostMatch?.[1] && bindHostMatch?.[2]) {
+      return await handlers.handleBindHostWorkspace!(
+        request,
+        env,
+        bindHostMatch[1],
+        bindHostMatch[2],
+        ctx,
+      );
+    }
     const singleAgentMatch = url.pathname.match(
       /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/hosts\/([^/]+)$/,
     );

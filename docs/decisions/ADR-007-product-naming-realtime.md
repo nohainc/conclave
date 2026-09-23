@@ -88,6 +88,17 @@ Worker:
 
 These identities must not be conflated.
 
+## Multi-Workspace Host sharing
+
+A Host is a machine security principal, not an extension of the user who
+performed enrollment. Enrollment authorizes only the initial machine exchange;
+the Host stores its machine credential and never stores a human session. A
+Host may have active bindings to multiple Workspaces. Cloud re-evaluates the
+requester's current Workspace membership for `host.view`, `host.use`,
+`host.manage`, `host.bind_workspace`, `host.revoke`, and
+`worker.manage_on_host` on every request. Removing a member therefore removes
+their access immediately without revoking the Host itself.
+
 ## Realtime event contract
 
 PA-4 defines the canonical event vocabulary in

@@ -25,6 +25,7 @@ import {
   canUseCredentialProfile,
   authorizeCredentialProfileUse,
   authorizeHostWorkspaceBinding,
+  authorizeHostWorkspaceAction,
   type WorkspaceSecurityContext,
   type DatabaseAdapter,
 } from "../src/index.js";
@@ -112,6 +113,51 @@ describe("Architecture v2 Security & Authentication Suite", () => {
       };
       expect(() => authorize(adminContext, "host.manage")).not.toThrow();
       expect(() => authorize(adminContext, "credential.share")).not.toThrow();
+      expect(() => authorize(sampleContext, "host.use")).not.toThrow();
+      expect(() => authorize(sampleContext, "host.revoke")).toThrow(
+        AuthorizationError,
+      );
+      expect(() => authorize(sampleContext, "worker.manage_on_host")).toThrow(
+        AuthorizationError,
+      );
+      expect(() =>
+        authorize(adminContext, "host.bind_workspace"),
+      ).not.toThrow();
+      expect(() => authorize(adminContext, "host.revoke")).not.toThrow();
+      expect(() =>
+        authorize(adminContext, "worker.manage_on_host"),
+      ).not.toThrow();
+    });
+
+    it("authorizes Host management through a current active binding", async () => {
+      const db: DatabaseAdapter = {
+        prepare(query: string) {
+          return {
+            bind() {
+              return this;
+            },
+            async first<T>() {
+              return null as T;
+            },
+            async all<T>() {
+              return query.includes("host_workspace_bindings")
+                ? ({
+                    results: [{ workspaceId: "ws-primary", role: "admin" }],
+                  } as { results: T[] })
+                : ({ results: [] } as { results: T[] });
+            },
+            async run() {
+              return { success: true };
+            },
+          };
+        },
+      };
+      await expect(
+        authorizeHostWorkspaceAction(db, "user-123", "host-a", "host.manage"),
+      ).resolves.toEqual({ workspaceId: "ws-primary", role: "admin" });
+      await expect(
+        authorizeHostWorkspaceAction(db, "user-123", "host-a", "host.revoke"),
+      ).resolves.toEqual({ workspaceId: "ws-primary", role: "admin" });
     });
 
     it("denies private profiles and accepts explicit user/workspace grants", () => {

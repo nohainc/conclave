@@ -590,6 +590,16 @@ Host details in Conclave AX show:
 ## Exit criteria
 Host ownership is machine/Workspace-based, never installer-session-based.
 
+## Status
+
+Complete. Enrollment is limited to the initial machine exchange. Subsequent
+Host use, management, revocation, Worker management, and Workspace binding
+are evaluated from current Workspace membership and explicit role permissions.
+Host details expose active bindings, Workspace members, installed Workers,
+requester-authorized Accounts, current load, and last-seen presence without
+returning secrets. Removing a member immediately removes access while the
+machine enrollment and binding remain intact.
+
 ---
 
 # PA-10 — Finalize Worker desired-state management

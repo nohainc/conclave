@@ -39,6 +39,7 @@ import {
 } from "../ensemble-dispatcher.js";
 import {
   authorize,
+  authorizeHostWorkspaceAction,
   extractBearerToken,
   hashToken,
   computePackageDigest,
@@ -2491,6 +2492,59 @@ async function handleEnrollHost(
   );
 }
 
+async function handleBindHostWorkspace(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  hostId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  authorize(context, "host.bind_workspace");
+  requireWorkspaceContext(context, env, workspaceId);
+
+  // Binding a Host to another Workspace is an administrative action in the
+  // target Workspace and also requires management authority through an
+  // existing active binding. This prevents the original installer from
+  // becoming a permanent ownership shortcut.
+  await authorizeHostWorkspaceAction(
+    env.CONCLAVE_DB,
+    context.userId,
+    hostId,
+    "host.manage",
+  );
+
+  const host = await env.CONCLAVE_DB.prepare(
+    `SELECT id FROM hosts WHERE id = ?1 AND revoked_at IS NULL`,
+  )
+    .bind(hostId)
+    .first<{ id: string }>();
+  if (!host) return json({ error: "Host not found" }, { status: 404 });
+
+  const now = new Date().toISOString();
+  await env.CONCLAVE_DB.prepare(
+    `INSERT INTO host_workspace_bindings
+       (id, host_id, workspace_id, status, granted_by_user_id, created_at, updated_at)
+     VALUES (?1, ?2, ?3, 'active', ?4, ?5, ?5)
+     ON CONFLICT(host_id, workspace_id) DO UPDATE SET
+       status = 'active', granted_by_user_id = excluded.granted_by_user_id,
+       updated_at = excluded.updated_at`,
+  )
+    .bind(
+      `binding-${hostId}-${workspaceId}`,
+      hostId,
+      workspaceId,
+      context.userId,
+      now,
+    )
+    .run();
+
+  await recordAudit(env, context, "host.workspace.bound", "host", hostId, {
+    workspaceId,
+  });
+  return json({ ok: true, hostId, workspaceId, boundAt: now }, { status: 201 });
+}
+
 async function handleListHosts(
   request: Request,
   env: SecurityEnv,
@@ -2540,7 +2594,85 @@ async function handleGetHost(
     .bind(hostId)
     .all();
 
-  return json({ host, sessions: sessions.results ?? [] });
+  const bindings = await env.CONCLAVE_DB.prepare(
+    `SELECT workspace_id as workspaceId, status,
+            granted_by_user_id as grantedByUserId, created_at as createdAt,
+            updated_at as updatedAt
+     FROM host_workspace_bindings WHERE host_id = ?1 ORDER BY created_at`,
+  )
+    .bind(hostId)
+    .all();
+  const members = await env.CONCLAVE_DB.prepare(
+    `SELECT DISTINCT m.workspace_id as workspaceId, m.user_id as userId,
+            u.display_name as displayName, u.email, m.role
+     FROM host_workspace_bindings b
+     JOIN workspace_memberships m
+       ON m.workspace_id = b.workspace_id AND m.status = 'active'
+     JOIN users u ON u.id = m.user_id
+     WHERE b.host_id = ?1 AND b.status = 'active'
+     ORDER BY m.workspace_id, m.role, u.display_name`,
+  )
+    .bind(hostId)
+    .all();
+  const installedWorkers = await env.CONCLAVE_DB.prepare(
+    `SELECT i.worker_id as workerId, w.display_name as displayName,
+            i.worker_version_id as workerVersionId, v.version, i.status,
+            i.error, i.installed_at as installedAt, i.updated_at as updatedAt
+     FROM host_worker_installations i
+     JOIN workers w ON w.id = i.worker_id
+     JOIN worker_versions v ON v.id = i.worker_version_id
+     WHERE i.host_id = ?1 AND i.status <> 'removed'
+     ORDER BY w.display_name, v.version`,
+  )
+    .bind(hostId)
+    .all();
+  const load = await env.CONCLAVE_DB.prepare(
+    `SELECT COUNT(*) as activeAssignments
+     FROM worker_assignments
+     WHERE host_id = ?1 AND status IN ('queued', 'assigned', 'running', 'cancelling')`,
+  )
+    .bind(hostId)
+    .first<{ activeAssignments: number }>();
+  const accountRows = await env.CONCLAVE_DB.prepare(
+    `SELECT id, display_name as displayName, owner_type as ownerType,
+            owner_id as ownerId, worker_id as workerId, host_id as hostId,
+            auth_type as authType, status, sharing_policy as sharingPolicy,
+            provider_metadata_json as providerMetadataJson,
+            concurrency_limit as concurrencyLimit
+     FROM credential_profiles
+     WHERE workspace_id = ?1 AND (host_id IS NULL OR host_id = ?2)
+       AND status <> 'revoked'
+     ORDER BY display_name`,
+  )
+    .bind(workspaceId, hostId)
+    .all<Record<string, unknown>>();
+  const accounts = [];
+  for (const account of accountRows.results ?? []) {
+    try {
+      await authorizeCredentialProfileUse(
+        env.CONCLAVE_DB,
+        context,
+        String(account.id),
+      );
+      accounts.push({
+        ...account,
+        providerMetadata: parseJson(account.providerMetadataJson, {}),
+        providerMetadataJson: undefined,
+      });
+    } catch {
+      // Account visibility is requester-specific and never reveals secrets.
+    }
+  }
+
+  return json({
+    host,
+    sessions: sessions.results ?? [],
+    bindings: bindings.results ?? [],
+    members: members.results ?? [],
+    load: load ?? { activeAssignments: 0 },
+    installedWorkers: installedWorkers.results ?? [],
+    accounts,
+  });
 }
 
 async function handleRevokeHost(
@@ -2551,7 +2683,7 @@ async function handleRevokeHost(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "host.manage");
+  authorize(context, "host.revoke");
   requireWorkspaceContext(context, env, workspaceId);
   await requireRecentStepUp(env, context, SENSITIVE_OPERATIONS.hostRevoke);
 
@@ -2718,7 +2850,7 @@ async function handleSetHostDesiredState(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "worker.install");
+  authorize(context, "worker.manage_on_host");
   requireWorkspaceContext(context, env, workspaceId);
 
   const binding = await env.CONCLAVE_DB.prepare(
@@ -2949,6 +3081,7 @@ async function handleDispatchTaskAssignment(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "runs:control");
+  authorize(context, "host.use");
   requireWorkspaceContext(context, env, workspaceId);
 
   const body = ((await request.json().catch(() => ({}))) || {}) as Record<
@@ -3104,6 +3237,7 @@ async function handleDispatchEnsembleTaskAssignment(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "runs:control");
+  authorize(context, "host.use");
   requireWorkspaceContext(context, env, workspaceId);
 
   const body = ((await request.json().catch(() => ({}))) || {}) as Record<
@@ -5220,6 +5354,7 @@ export {
   handleHostGatewayConnect,
   handleHostProtocolMessage,
   handleEnrollHost,
+  handleBindHostWorkspace,
   handleListHostEnrollments,
   handleCreateHostEnrollment,
   handleRevokeHostEnrollment,

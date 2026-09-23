@@ -25,7 +25,11 @@ export const PERMISSIONS = [
   // V4 canonical Cloud authorization permissions.
   "host.view",
   "host.manage",
+  "host.use",
+  "host.bind_workspace",
+  "host.revoke",
   "worker.install",
+  "worker.manage_on_host",
   "credential.create",
   "credential.share",
   "credential.use",
@@ -68,7 +72,11 @@ export const WORKSPACE_ROLE_PERMISSIONS: Record<
   admin: [
     "host.view",
     "host.manage",
+    "host.use",
+    "host.bind_workspace",
+    "host.revoke",
     "worker.install",
+    "worker.manage_on_host",
     "credential.create",
     "credential.share",
     "credential.use",
@@ -99,6 +107,7 @@ export const WORKSPACE_ROLE_PERMISSIONS: Record<
   ],
   member: [
     "host.view",
+    "host.use",
     "credential.use",
     "run.start",
     "run.control",
@@ -363,6 +372,37 @@ export async function authorizeHostWorkspaceBinding(
     .bind(hostId, workspaceId)
     .first<{ host_id: string }>();
   if (!binding) throw new AuthorizationError("host.view", hostId);
+}
+
+/**
+ * Authorize a Host action through a currently active Workspace binding. The
+ * installer is not an ownership principal: every action is re-evaluated from
+ * the requester's current membership and role on each request.
+ */
+export async function authorizeHostWorkspaceAction(
+  db: DatabaseAdapter,
+  userId: string,
+  hostId: string,
+  permission: Permission,
+): Promise<{ workspaceId: string; role: WorkspaceRole }> {
+  const memberships = await db
+    .prepare(
+      `SELECT b.workspace_id as workspaceId, m.role
+       FROM host_workspace_bindings b
+       JOIN workspace_memberships m
+         ON m.workspace_id = b.workspace_id
+        AND m.user_id = ?2
+        AND m.status = 'active'
+       JOIN hosts h ON h.id = b.host_id AND h.revoked_at IS NULL
+       WHERE b.host_id = ?1 AND b.status = 'active'`,
+    )
+    .bind(hostId, userId)
+    .all<{ workspaceId: string; role: WorkspaceRole }>();
+
+  for (const membership of memberships.results ?? []) {
+    if (permissionsFor([membership.role]).has(permission)) return membership;
+  }
+  throw new AuthorizationError(permission, hostId);
 }
 
 // =========================================================================

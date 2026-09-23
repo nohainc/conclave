@@ -71,6 +71,47 @@ describe("V4 Host connectivity", () => {
     expect(visibleToMissingWorkspace).toEqual([]);
   });
 
+  it("removes a user's access immediately without removing the Host binding", () => {
+    const db = createDb();
+    seedWorkspace(db, "workspace-a", "user-a");
+    db.prepare(
+      "INSERT INTO users (id, email, display_name, created_at, updated_at) VALUES ('user-b', 'user-b@example.com', 'User B', 'now', 'now')",
+    ).run();
+    db.prepare(
+      "INSERT INTO workspace_memberships (id, workspace_id, user_id, role, created_at, updated_at) VALUES ('membership-b', 'workspace-a', 'user-b', 'member', 'now', 'now')",
+    ).run();
+    db.prepare(
+      "INSERT INTO hosts (id, name, hostname, status, version, enrolled_at, created_at, updated_at) VALUES ('host-1', 'Host', 'local', 'online', '4.0.0', 'now', 'now', 'now')",
+    ).run();
+    db.prepare(
+      "INSERT INTO host_workspace_bindings (id, host_id, workspace_id, granted_by_user_id, created_at, updated_at) VALUES ('binding-a', 'host-1', 'workspace-a', 'user-a', 'now', 'now')",
+    ).run();
+
+    const accessQuery = `SELECT h.id FROM hosts h
+      JOIN host_workspace_bindings b ON b.host_id = h.id AND b.status = 'active'
+      JOIN workspace_memberships m ON m.workspace_id = b.workspace_id
+        AND m.user_id = ? AND m.status = 'active'
+      WHERE h.id = ? AND h.revoked_at IS NULL`;
+    const canUseBeforeRemoval = db.prepare(accessQuery).all("user-b", "host-1");
+    db.prepare(
+      "UPDATE workspace_memberships SET status = 'removed' WHERE user_id = 'user-b' AND workspace_id = 'workspace-a'",
+    ).run();
+    const canUseAfterRemoval = db.prepare(accessQuery).all("user-b", "host-1");
+
+    expect(canUseBeforeRemoval).toHaveLength(1);
+    expect(canUseAfterRemoval).toHaveLength(0);
+    expect(
+      db.prepare("SELECT status FROM hosts WHERE id = 'host-1'").get(),
+    ).toEqual({ status: "online" });
+    expect(
+      db
+        .prepare(
+          "SELECT status FROM host_workspace_bindings WHERE id = 'binding-a'",
+        )
+        .get(),
+    ).toEqual({ status: "active" });
+  });
+
   it("revokes a Host credential without deleting its binding history", () => {
     const db = createDb();
     seedWorkspace(db, "workspace-a", "user-a");
