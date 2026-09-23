@@ -206,6 +206,24 @@ sections, buttons, badges, cards, section headers, architecture nodes, terminal
 panels, navigation, and footer. New sections should compose these primitives
 before adding page-specific CSS.
 
+## Regression and anti-drift constraints
+
+CI checks the generated critical routes for required content, metadata, direct
+Conclave AX CTA targets, navigation anchors, accessibility structure, security
+boundaries, responsive rules, and the existing performance budgets. Keep these
+constraints when using AI-assisted implementation:
+
+- Do not add a new visual system per section.
+- Do not introduce a frontend framework for one widget.
+- Do not add JavaScript when semantic HTML and CSS are sufficient.
+- Do not invent unsupported product capabilities or Workers.
+- Prefer existing components and design tokens over one-off markup and styles.
+- Keep important architecture and product claims visible in generated HTML.
+
+The current regression gate is intentionally static and dependency-light. It
+does not replace a manual browser review at release time; future screenshot
+coverage may be added when a stable browser capture environment is available.
+
 The system supports wide, medium, and narrow layouts; visible keyboard focus;
 reduced-motion preferences; and forced-colors/high-contrast mode. Motion is
 limited to short state transitions and must not carry essential meaning.
