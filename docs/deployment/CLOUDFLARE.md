@@ -2,11 +2,25 @@
 
 ## Domain plan
 
-- `conclaveax.com` — public landing page later.
+- `conclaveax.com` — public Astro/static-first website.
+- `www.conclaveax.com` — permanent redirect to `conclaveax.com`.
 - `app.conclaveax.com` — Conclave AX / Conclave Cloud web application.
 - `api.conclaveax.com` — reserved for a separately exposed API when production authentication and API separation are complete.
 - `docs.conclaveax.com` — documentation later.
 - `status.conclaveax.com` — status page later.
+
+The public site is deployed independently from the authenticated application.
+Its production Worker owns only `conclaveax.com` and `www.conclaveax.com`.
+It does not handle `/api/*`, `app.conclaveax.com`, Host Gateway traffic, or
+Better Auth callbacks. PR previews use a separate temporary Workers name with
+no production custom-domain routes; merging to `main` deploys the production
+site through `.github/workflows/deploy-site-production.yml`.
+
+The public site's production config provisions HTTPS custom domains for the
+apex and `www` hostnames. The site Worker returns a permanent 308 redirect
+from `www` to the apex, Astro emits trailing-slash routes, serves a static
+`404.html`, revalidates HTML, and marks fingerprinted `/_astro/` assets as
+immutable for one year. These rules apply only to the public-site Worker.
 
 ## Current deployment
 

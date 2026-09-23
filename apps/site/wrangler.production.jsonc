@@ -8,4 +8,14 @@
     "binding": "ASSETS",
     "not_found_handling": "404-page",
   },
+  "routes": [
+    {
+      "pattern": "conclaveax.com",
+      "custom_domain": true,
+    },
+    {
+      "pattern": "www.conclaveax.com",
+      "custom_domain": true,
+    },
+  ],
 }

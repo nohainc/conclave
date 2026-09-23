@@ -1,16 +1,19 @@
-name: Deploy Conclave AX Public Site Preview
+name: Deploy Conclave AX Public Site
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
   workflow_dispatch:
+
+concurrency:
+  group: conclave-ax-public-site-production
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
-  deploy-preview:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository }}
+  deploy:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -29,10 +32,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - run: ./node_modules/.bin/astro check
       - run: ./node_modules/.bin/astro build
-      - name: Deploy temporary Cloudflare preview
+      - name: Deploy public domains
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: >-
-          ../../node_modules/.bin/wrangler deploy --config wrangler.jsonc
-          --name conclave-ax-site-pr-${{ github.event.pull_request.number || github.run_id }}
+        run: ../../node_modules/.bin/wrangler deploy --config wrangler.production.jsonc
