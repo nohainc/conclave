@@ -481,6 +481,15 @@ A Worker cannot choose another Workspace/Run/Task identity.
 ## Exit criteria
 Worker progress appears in Conclave AX in near real time through Host, with no Worker Cloud credentials.
 
+## Status
+
+Complete. Worker notifications are validated at the Host process boundary,
+bounded and redacted before relay, correlated only with the trusted immutable
+Assignment context, rate-limited for ephemeral traffic, and forwarded over the
+existing Host WebSocket. Terminal result and error notifications are always
+forwarded. Cloud converts Host progress into the existing realtime publication
+pipeline; Workers receive no Cloud credentials.
+
 ---
 
 # PA-8 — Harden Host <-> Cloud WebSocket lifecycle

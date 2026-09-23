@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:conclave_host/assignment_journal.dart';
 import 'package:conclave_host/cloud_connection.dart';
 import 'package:conclave_host/worker_executor.dart';
+import 'package:conclave_host/worker_protocol.dart';
 import 'package:test/test.dart';
 import 'fixture_copy.dart';
 
@@ -251,6 +252,73 @@ void main() {
     )['payload'] as Map<String, dynamic>;
     expect(workerPayload['hostId'], 'host-1');
     expect(workerPayload['workerId'], 'worker-1');
+    await connection.close();
+  });
+
+  test('forwards Worker progress with trusted correlation and redacted output',
+      () async {
+    final socket = FakeSocket();
+    final connection = HostCloudConnection(
+      uri: Uri.parse('wss://cloud.test/host'),
+      hostId: 'host-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      heartbeat: const Duration(hours: 1),
+    );
+    await connection.connect();
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.host-protocol',
+      'protocolVersion': '4.0',
+      'messageId': 'server-1',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'host.hello.ack',
+      'payload': {'sessionId': 'session-1'},
+    }));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    const context = HostAssignmentContext(
+      workspaceId: 'workspace-1',
+      hostId: 'host-1',
+      workerId: 'worker-1',
+      runId: 'run-1',
+      taskId: 'task-1',
+      attemptId: 'attempt-1',
+      assignmentId: 'assignment-1',
+      idempotencyKey: 'idem-1',
+      payload: {},
+    );
+    connection.reportWorkerNotification(
+      context,
+      const WorkerRpcNotification(
+        method: 'output_delta',
+        params: {
+          'assignmentId': 'assignment-1',
+          'delta': '[REDACTED]',
+          'timestamp': '2026-09-23T00:00:00Z',
+        },
+      ),
+    );
+    connection.reportWorkerNotification(
+      context,
+      const WorkerRpcNotification(
+        method: 'progress',
+        params: {
+          'assignmentId': 'forged-assignment',
+          'percentage': 20,
+          'timestamp': '2026-09-23T00:00:00Z',
+        },
+      ),
+    );
+    final messages = socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .where((message) => message['type'] == 'assignment.progress')
+        .toList();
+    expect(messages, hasLength(1));
+    expect(messages.single['assignmentId'], 'assignment-1');
+    expect(
+      (messages.single['payload'] as Map<String, dynamic>)['message'],
+      '[REDACTED]',
+    );
     await connection.close();
   });
 

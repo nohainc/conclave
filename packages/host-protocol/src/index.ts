@@ -586,6 +586,55 @@ export type WorkerUsageNotification = z.infer<
   typeof WorkerUsageNotificationSchema
 >;
 
+export const WorkerStatusNotificationSchema = z
+  .object({
+    assignmentId: nonEmptyStr,
+    status: nonEmptyStr,
+    message: z.string().max(8192).optional(),
+    timestamp: timestampStr,
+  })
+  .strict();
+export type WorkerStatusNotification = z.infer<
+  typeof WorkerStatusNotificationSchema
+>;
+
+export const WorkerOutputDeltaNotificationSchema = z
+  .object({
+    assignmentId: nonEmptyStr,
+    delta: z.string().max(8192),
+    sequence: z.number().int().min(0).optional(),
+    timestamp: timestampStr,
+  })
+  .strict();
+export type WorkerOutputDeltaNotification = z.infer<
+  typeof WorkerOutputDeltaNotificationSchema
+>;
+
+export const WorkerToolStartedNotificationSchema = z
+  .object({
+    assignmentId: nonEmptyStr,
+    toolCallId: nonEmptyStr,
+    tool: nonEmptyStr,
+    timestamp: timestampStr,
+  })
+  .strict();
+export type WorkerToolStartedNotification = z.infer<
+  typeof WorkerToolStartedNotificationSchema
+>;
+
+export const WorkerToolCompletedNotificationSchema = z
+  .object({
+    assignmentId: nonEmptyStr,
+    toolCallId: nonEmptyStr,
+    tool: nonEmptyStr,
+    success: z.boolean(),
+    timestamp: timestampStr,
+  })
+  .strict();
+export type WorkerToolCompletedNotification = z.infer<
+  typeof WorkerToolCompletedNotificationSchema
+>;
+
 export const WorkerArtifactNotificationSchema = z
   .object({
     assignmentId: nonEmptyStr,
@@ -685,6 +734,10 @@ export type JsonRpcNotification = z.infer<typeof JsonRpcNotificationSchema>;
 
 const workerNotificationParamsSchemas = {
   progress: WorkerProgressNotificationSchema,
+  status: WorkerStatusNotificationSchema,
+  output_delta: WorkerOutputDeltaNotificationSchema,
+  "tool.started": WorkerToolStartedNotificationSchema,
+  "tool.completed": WorkerToolCompletedNotificationSchema,
   usage: WorkerUsageNotificationSchema,
   artifact: WorkerArtifactNotificationSchema,
   result: WorkerResultNotificationSchema,
@@ -1061,6 +1114,7 @@ export const LegacyAssignmentProgressPayloadSchema = z
     percentage: z.number().min(0).max(100),
     message: z.string().default(""),
     observedAt: timestampStr,
+    metrics: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();
 export type LegacyAssignmentProgressPayload = z.infer<

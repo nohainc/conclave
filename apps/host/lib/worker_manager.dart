@@ -582,12 +582,14 @@ class WorkerManager {
   WorkerAssignmentHandler assignmentHandler(
     WorkerProcessExecutor executor, {
     Future<String?> Function(String repositoryId)? resolveRepositoryPath,
+    WorkerNotificationRelay? onNotification,
   }) =>
       WorkerAssignmentHandler(
         executor: executor,
         resolve: activeProcessSpec,
         resolveRepositoryPath: resolveRepositoryPath,
         resolvePermissions: activePermissions,
+        onNotification: onNotification,
       );
 
   Future<Set<String>> activePermissions(String workerId) async {

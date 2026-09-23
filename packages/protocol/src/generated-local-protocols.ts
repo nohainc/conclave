@@ -13,6 +13,10 @@ export const WORKER_PROTOCOL_METHODS = [
 ] as const;
 export const WORKER_PROTOCOL_NOTIFICATIONS = [
   "progress",
+  "status",
+  "output_delta",
+  "tool.started",
+  "tool.completed",
   "usage",
   "artifact",
   "result",

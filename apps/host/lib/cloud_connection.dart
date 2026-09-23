@@ -5,6 +5,7 @@ import 'dart:io';
 import 'assignment_journal.dart';
 import 'credential_profiles.dart';
 import 'package:conclave_protocol/conclave_protocol.dart';
+import 'worker_protocol.dart';
 
 abstract interface class HostCloudSocket {
   Stream<Object?> get messages;
@@ -152,6 +153,7 @@ class HostCloudConnection {
   int _messageSequence = 0;
   Map<String, Object?>? syncResponse;
   final _activeAssignments = <String>{};
+  final _lastEphemeralWorkerEvent = <String, DateTime>{};
 
   void reportWorkerStatuses(List<Map<String, Object?>> workers) {
     _sendIfConnected('worker.status', {'workers': workers});
@@ -177,6 +179,91 @@ class HostCloudConnection {
   /// Reports credential metadata only. Raw secrets never cross this boundary.
   void reportCredentialStatus(CredentialProfile profile) {
     _sendIfConnected('credential.status', profile.toCloudMetadata());
+  }
+
+  /// Relays validated Worker facts using the trusted Assignment correlation.
+  /// Workers never provide Workspace, Host, Run, or Task identity.
+  void reportWorkerNotification(
+    HostAssignmentContext context,
+    WorkerRpcNotification notification,
+  ) {
+    final assignmentId = notification.params['assignmentId'];
+    if (assignmentId != context.assignmentId) return;
+    final socket = _socket;
+    if (socket == null || sessionId == null) return;
+    final now = DateTime.now().toUtc();
+    final terminal =
+        notification.method == 'result' || notification.method == 'error';
+    if (!terminal) {
+      final last = _lastEphemeralWorkerEvent[context.assignmentId];
+      if (last != null && now.difference(last).inMilliseconds < 100) return;
+      _lastEphemeralWorkerEvent[context.assignmentId] = now;
+    }
+    final params = Map<String, Object?>.from(notification.params)
+      ..remove('assignmentId');
+    final correlation = {
+      'workspaceId': context.workspaceId,
+      'hostId': context.hostId,
+      'workerId': context.workerId,
+      'runId': context.runId,
+      'taskId': context.taskId,
+      'attemptId': context.attemptId,
+      'assignmentId': context.assignmentId,
+      'idempotencyKey': context.idempotencyKey,
+    };
+    if (notification.method == 'result') {
+      socket.send(jsonEncode(_assignmentEnvelope(
+        'assignment.result',
+        correlation,
+        {
+          'assignmentId': context.assignmentId,
+          'status': params['status'] ?? 'completed',
+          'output': params['output'],
+          'artifactIds': params['artifactIds'] ?? const [],
+          'completedAt': params['completedAt'] ?? now.toIso8601String(),
+        },
+      )));
+      return;
+    }
+    if (notification.method == 'error') {
+      socket.send(jsonEncode(_assignmentEnvelope(
+        'assignment.error',
+        correlation,
+        {
+          'assignmentId': context.assignmentId,
+          'error': {
+            'code': params['code'] ?? 'worker_error',
+            'message': params['message'] ?? 'Worker failed',
+            'retryable': params['retryable'] ?? false,
+            if (params['details'] is Map) 'details': params['details'],
+          },
+          'failedAt': params['timestamp'] ?? now.toIso8601String(),
+        },
+      )));
+      return;
+    }
+    final percentage = params['percentage'] is num
+        ? (params['percentage'] as num).toDouble()
+        : 0.0;
+    final message = params['message'] is String
+        ? params['message'] as String
+        : params['delta'] is String
+            ? params['delta'] as String
+            : notification.method;
+    socket.send(jsonEncode(_assignmentEnvelope(
+      'assignment.progress',
+      correlation,
+      {
+        'assignmentId': context.assignmentId,
+        'percentage': percentage.clamp(0, 100),
+        'message': message,
+        'observedAt': params['timestamp'] ?? now.toIso8601String(),
+        'metrics': {
+          'workerEventType': notification.method,
+          ...params,
+        },
+      },
+    )));
   }
 
   void _sendIfConnected(String type, Map<String, Object?> payload) {

@@ -84,6 +84,10 @@
     ],
     "notifications": [
       "progress",
+      "status",
+      "output_delta",
+      "tool.started",
+      "tool.completed",
       "usage",
       "artifact",
       "result",
@@ -98,6 +102,10 @@
       "cancel": "#/$defs/workerCancelParams",
       "shutdown": "#/$defs/workerShutdownParams",
       "progress": "#/$defs/workerProgressNotification",
+      "status": "#/$defs/workerStatusNotification",
+      "output_delta": "#/$defs/workerOutputDeltaNotification",
+      "tool.started": "#/$defs/workerToolStartedNotification",
+      "tool.completed": "#/$defs/workerToolCompletedNotification",
       "usage": "#/$defs/workerUsageNotification",
       "artifact": "#/$defs/workerArtifactNotification",
       "result": "#/$defs/workerResultNotification",
@@ -837,6 +845,57 @@
         "assignmentId": { "$ref": "#/$defs/nonEmpty" },
         "tokensUsed": { "type": "integer", "minimum": 0 },
         "estimatedCostMicros": { "type": "integer", "minimum": 0 },
+        "timestamp": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "workerStatusNotification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assignmentId", "status", "timestamp"],
+      "properties": {
+        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
+        "status": { "$ref": "#/$defs/nonEmpty" },
+        "message": { "type": "string", "maxLength": 8192 },
+        "timestamp": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "workerOutputDeltaNotification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assignmentId", "delta", "timestamp"],
+      "properties": {
+        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
+        "delta": { "type": "string", "maxLength": 8192 },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "timestamp": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "workerToolStartedNotification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assignmentId", "toolCallId", "tool", "timestamp"],
+      "properties": {
+        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
+        "toolCallId": { "$ref": "#/$defs/nonEmpty" },
+        "tool": { "$ref": "#/$defs/nonEmpty" },
+        "timestamp": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "workerToolCompletedNotification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assignmentId",
+        "toolCallId",
+        "tool",
+        "success",
+        "timestamp"
+      ],
+      "properties": {
+        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
+        "toolCallId": { "$ref": "#/$defs/nonEmpty" },
+        "tool": { "$ref": "#/$defs/nonEmpty" },
+        "success": { "type": "boolean" },
         "timestamp": { "$ref": "#/$defs/timestamp" }
       }
     },

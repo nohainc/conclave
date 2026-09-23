@@ -80,12 +80,50 @@ class WorkerRpcNotification {
       throw const WorkerProtocolViolation(
           'notification params must be an object');
     }
+    final parsedParams = params == null
+        ? <String, Object?>{}
+        : Map<String, Object?>.from(params as Map);
+    _validateNotificationParams(method, parsedParams);
     return WorkerRpcNotification(
       method: method,
-      params: params == null
-          ? <String, Object?>{}
-          : Map<String, Object?>.from(params as Map),
+      params: parsedParams,
     );
+  }
+}
+
+void _validateNotificationParams(String method, Map<String, Object?> params) {
+  if (method == 'log') return;
+  final assignmentId = params['assignmentId'];
+  if (assignmentId is! String || assignmentId.isEmpty) {
+    throw const WorkerProtocolViolation(
+        'worker notification assignmentId is required');
+  }
+  if (method == 'progress') {
+    final percentage = params['percentage'];
+    if (percentage is! num || percentage < 0 || percentage > 100) {
+      throw const WorkerProtocolViolation(
+          'worker progress percentage is invalid');
+    }
+  }
+  if (method == 'output_delta') {
+    final delta = params['delta'];
+    if (delta is! String || delta.length > 8192) {
+      throw const WorkerProtocolViolation('worker output delta is invalid');
+    }
+  }
+  if (method == 'status' && params['status'] is! String) {
+    throw const WorkerProtocolViolation('worker status is required');
+  }
+  if (method == 'tool.started' || method == 'tool.completed') {
+    for (final key in ['toolCallId', 'tool']) {
+      if (params[key] is! String || (params[key] as String).isEmpty) {
+        throw WorkerProtocolViolation('worker tool $key is required');
+      }
+    }
+    if (method == 'tool.completed' && params['success'] is! bool) {
+      throw const WorkerProtocolViolation(
+          'tool completion success is required');
+    }
   }
 }
 

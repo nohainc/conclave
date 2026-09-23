@@ -50,6 +50,9 @@ typedef WorkerProcessTerminator = Future<void> Function(
   Process process, {
   required bool force,
 });
+typedef WorkerNotificationHandler = FutureOr<void> Function(
+  WorkerRpcNotification notification,
+);
 
 class WorkerProcessExecutor {
   WorkerProcessExecutor({
@@ -89,6 +92,7 @@ class WorkerProcessExecutor {
     int maxStdoutBytes = 1024 * 1024,
     int maxStderrBytes = 1024 * 1024,
     String? operationId,
+    WorkerNotificationHandler? onNotification,
   }) async {
     if (maxStdoutBytes <= 0 || maxStderrBytes <= 0) {
       throw ArgumentError('worker output limits must be positive');
@@ -142,12 +146,20 @@ class WorkerProcessExecutor {
     final stdoutSubscription = boundedStdout
         .transform(utf8.decoder)
         .transform(const LineSplitter())
-        .listen((line) {
+        .listen((line) async {
       if (response.isCompleted || line.trim().isEmpty) return;
       try {
         final decoded = jsonDecode(line);
         if (decoded is Map<String, dynamic> && decoded['id'] == null) {
-          WorkerRpcNotification.parse(decoded);
+          final notification = WorkerRpcNotification.parse(decoded);
+          if (onNotification != null) {
+            try {
+              await onNotification(notification);
+            } catch (_) {
+              // Realtime delivery is best effort and must never interrupt the
+              // Worker execution or suppress its terminal response.
+            }
+          }
           return;
         }
         final rpc = WorkerRpcResponse.parse(decoded);
@@ -291,12 +303,14 @@ class WorkerAssignmentHandler {
     required this.resolve,
     this.resolveRepositoryPath,
     this.resolvePermissions,
+    this.onNotification,
   });
 
   final WorkerProcessExecutor executor;
   final WorkerProcessResolver resolve;
   final Future<String?> Function(String repositoryId)? resolveRepositoryPath;
   final Future<Set<String>> Function(String workerId)? resolvePermissions;
+  final WorkerNotificationRelay? onNotification;
 
   Future<HostAssignmentResult> call(HostAssignmentContext context) async {
     final workerId = context.payload['workerId'];
@@ -326,6 +340,12 @@ class WorkerAssignmentHandler {
       spec,
       workerPayload,
       operationId: context.assignmentId,
+      onNotification: onNotification == null
+          ? null
+          : (notification) => onNotification!(
+                context,
+                _redactNotification(notification, spec.secretValues),
+              ),
     );
     final summary = output['summary'];
     final nestedOutput = output['output'];
@@ -341,6 +361,17 @@ class WorkerAssignmentHandler {
           : const [],
     );
   }
+
+  WorkerRpcNotification _redactNotification(
+    WorkerRpcNotification notification,
+    Set<String> secrets,
+  ) =>
+      WorkerRpcNotification(
+        method: notification.method,
+        params: Map<String, Object?>.from(
+          _redactValue(notification.params, secrets) as Map,
+        ),
+      );
 
   Future<bool> cancel(String assignmentId, String reason) =>
       executor.cancel(assignmentId);
@@ -421,3 +452,8 @@ class WorkerAssignmentHandler {
     return null;
   }
 }
+
+typedef WorkerNotificationRelay = FutureOr<void> Function(
+  HostAssignmentContext context,
+  WorkerRpcNotification notification,
+);

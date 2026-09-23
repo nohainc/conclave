@@ -13,6 +13,10 @@ const workerProtocolMethods = <String>{
 };
 const workerProtocolNotifications = <String>{
   'progress',
+  'status',
+  'output_delta',
+  'tool.started',
+  'tool.completed',
   'usage',
   'artifact',
   'result',

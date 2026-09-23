@@ -12,6 +12,10 @@ const workerProtocolMethods = {
 
 const workerProtocolNotifications = {
   'progress',
+  'status',
+  'output_delta',
+  'tool.started',
+  'tool.completed',
   'usage',
   'artifact',
   'result',
@@ -130,6 +134,24 @@ void _validateNotificationParams(String method, Object? params) {
       throw const WorkerRpcException('worker progress percentage is invalid');
     }
   }
+  if (method == 'status') {
+    _required(map, 'status');
+    _required(map, 'timestamp');
+    _maxLength(map['message'], 'status message', 8192);
+  }
+  if (method == 'output_delta') {
+    _required(map, 'delta');
+    _required(map, 'timestamp');
+    _maxLength(map['delta'], 'output delta', 8192);
+  }
+  if (method == 'tool.started' || method == 'tool.completed') {
+    _required(map, 'toolCallId');
+    _required(map, 'tool');
+    _required(map, 'timestamp');
+    if (method == 'tool.completed' && map['success'] is! bool) {
+      throw const WorkerRpcException('tool completion success is required');
+    }
+  }
   if (method == 'result') {
     _required(map, 'status');
     _required(map, 'completedAt');
@@ -141,6 +163,12 @@ void _validateNotificationParams(String method, Object? params) {
     _required(map, 'code');
     _required(map, 'message');
     _required(map, 'timestamp');
+  }
+}
+
+void _maxLength(Object? value, String name, int maximum) {
+  if (value is String && value.length > maximum) {
+    throw WorkerRpcException('$name exceeds $maximum characters');
   }
 }
 

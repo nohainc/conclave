@@ -440,7 +440,7 @@ describe("Conclave Host & Worker Protocol v4", () => {
       expect(parseWorkerRpcMessage(cancelReq).method).toBe("cancel");
     });
 
-    it("parses valid worker notifications (progress, usage, artifact, result, error, log)", () => {
+    it("parses valid worker notifications and streaming events", () => {
       const progressNotif = {
         jsonrpc: "2.0",
         method: "progress",
@@ -452,6 +452,52 @@ describe("Conclave Host & Worker Protocol v4", () => {
         },
       };
       expect(parseWorkerRpcMessage(progressNotif).method).toBe("progress");
+
+      for (const notification of [
+        {
+          method: "status",
+          params: {
+            assignmentId: "asgn-v4-001",
+            status: "running",
+            timestamp: "2026-09-23T10:02:46.000Z",
+          },
+        },
+        {
+          method: "output_delta",
+          params: {
+            assignmentId: "asgn-v4-001",
+            delta: "partial output",
+            sequence: 1,
+            timestamp: "2026-09-23T10:02:47.000Z",
+          },
+        },
+        {
+          method: "tool.started",
+          params: {
+            assignmentId: "asgn-v4-001",
+            toolCallId: "tool-call-1",
+            tool: "shell",
+            timestamp: "2026-09-23T10:02:48.000Z",
+          },
+        },
+        {
+          method: "tool.completed",
+          params: {
+            assignmentId: "asgn-v4-001",
+            toolCallId: "tool-call-1",
+            tool: "shell",
+            success: true,
+            timestamp: "2026-09-23T10:02:49.000Z",
+          },
+        },
+      ]) {
+        expect(
+          parseWorkerRpcMessage({
+            jsonrpc: "2.0",
+            ...notification,
+          }).method,
+        ).toBe(notification.method);
+      }
 
       const usageNotif = {
         jsonrpc: "2.0",
@@ -486,6 +532,18 @@ describe("Conclave Host & Worker Protocol v4", () => {
           jsonrpc: "1.0", // Invalid JSON-RPC
           id: "1",
           method: "initialize",
+        }),
+      ).toThrow(MalformedProtocolMessageError);
+
+      expect(() =>
+        parseWorkerRpcMessage({
+          jsonrpc: "2.0",
+          method: "output_delta",
+          params: {
+            assignmentId: "asgn-v4-001",
+            delta: "x".repeat(8193),
+            timestamp: "2026-09-23T10:02:47.000Z",
+          },
         }),
       ).toThrow(MalformedProtocolMessageError);
 

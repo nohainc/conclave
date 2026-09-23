@@ -22,6 +22,7 @@ import {
   extractBearerToken,
   hashToken,
 } from "../../../packages/security/src/index.js";
+import { createEventPublisher } from "./event-publisher.js";
 
 function parseJsonArray(value: unknown): string[] {
   if (typeof value !== "string") return [];
@@ -52,6 +53,7 @@ function parseJsonObjectKeys(value: unknown): string[] {
 export interface GatewayEnv {
   CONCLAVE_DB: D1Database;
   CONCLAVE_ENVIRONMENT?: string;
+  CONCLAVE_REALTIME_GATEWAY?: DurableObjectNamespace;
 }
 
 export interface AssignmentCorrelation {
@@ -645,7 +647,37 @@ export class HostGateway implements DurableObject {
       }
 
       case "assignment.progress": {
-        // Can be routed to persistent event logs or websocket subscribers
+        const payload = message.payload as Record<string, unknown>;
+        try {
+          await createEventPublisher(this.env).publish({
+            type: "assignment.progress",
+            durable: false,
+            workspaceId: this.workspaceId ?? String(message.workspaceId),
+            hostId: this.hostId ?? String(message.agentId),
+            runId: String(message.runId),
+            taskId: String(message.taskId),
+            attemptId: String(message.attemptId),
+            assignmentId: message.assignmentId,
+            idempotencyKey: `assignment-progress:${message.messageId}`,
+            payload: {
+              entityId: message.assignmentId,
+              workerId: String(message.workerId),
+              percentage:
+                typeof payload.percentage === "number" ? payload.percentage : 0,
+              message:
+                typeof payload.message === "string" ? payload.message : "",
+              ...(typeof payload.metrics === "object" &&
+              payload.metrics !== null &&
+              !Array.isArray(payload.metrics)
+                ? {
+                    summary: JSON.stringify(payload.metrics).slice(0, 32768),
+                  }
+                : {}),
+            },
+          });
+        } catch (err) {
+          console.error("Failed to publish assignment.progress", err);
+        }
         break;
       }
 

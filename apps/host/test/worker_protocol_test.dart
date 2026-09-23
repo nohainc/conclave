@@ -32,9 +32,37 @@ void main() {
     final notification = WorkerRpcNotification.parse({
       'jsonrpc': '2.0',
       'method': 'progress',
-      'params': {'stage': 'running'},
+      'params': {
+        'assignmentId': 'assignment-1',
+        'percentage': 25,
+        'timestamp': '2026-09-23T00:00:00Z',
+      },
     });
     expect(notification.method, 'progress');
+    expect(
+      WorkerRpcNotification.parse({
+        'jsonrpc': '2.0',
+        'method': 'output_delta',
+        'params': {
+          'assignmentId': 'assignment-1',
+          'delta': 'partial output',
+          'timestamp': '2026-09-23T00:00:00Z',
+        },
+      }).method,
+      'output_delta',
+    );
+    expect(
+      () => WorkerRpcNotification.parse({
+        'jsonrpc': '2.0',
+        'method': 'output_delta',
+        'params': {
+          'assignmentId': 'assignment-1',
+          'delta': 'x' * 8193,
+          'timestamp': '2026-09-23T00:00:00Z',
+        },
+      }),
+      throwsA(isA<WorkerProtocolViolation>()),
+    );
     expect(
       () => WorkerRpcNotification.parse({
         'jsonrpc': '2.0',

@@ -112,3 +112,18 @@ resolving active Workspace members. This keeps authorization in Cloud and
 avoids a global broadcast object. The legacy run event repository remains the
 history API for workflow internals; new Cloud-facing realtime facts use the
 PA-6 publisher and `realtime_events` contract.
+
+## Worker progress relay
+
+PA-7 keeps Workers local to Conclave Host. The Host validates Worker JSON-RPC
+notifications, rejects malformed or oversized frames, redacts configured
+secret values, and supplies the Assignment correlation from its trusted
+execution context. A Worker-provided assignment ID is accepted only when it
+matches that context. Ephemeral progress, status, output deltas, tool events,
+usage, artifacts, and logs are rate-limited before crossing the Host WebSocket;
+terminal result and error events are never dropped by that limiter.
+
+Cloud receives only Host-authenticated Assignment envelopes and republishes
+authorized progress through `EventPublisher`. Workers do not receive Cloud
+credentials and cannot select another Workspace, Run, Task, Host, or
+Assignment identity.
