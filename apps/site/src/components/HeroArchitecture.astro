@@ -1,0 +1,31 @@
+---
+import ArchitectureNode from "./ArchitectureNode.astro";
+---
+
+<div class="architecture-card hero-architecture" aria-label="Conclave AX execution architecture">
+  <div class="eyebrow">The execution path</div>
+  <p>One request, coordinated from Conclave AX to the Workers doing the work.</p>
+  <div class="hero-architecture__diagram">
+    <div class="hero-architecture__actor">You</div>
+    <div class="hero-architecture__arrow" aria-hidden="true">↓</div>
+    <ArchitectureNode label="Conclave AX" />
+    <div class="hero-architecture__arrow" aria-hidden="true">↓</div>
+    <ArchitectureNode label="Conclave Cloud" />
+    <div class="hero-architecture__arrow" aria-hidden="true">↙　↘</div>
+    <div class="hero-architecture__hosts">
+      <div class="hero-architecture__host">
+        <strong>MacBook Host</strong>
+        <span>Codex Worker</span>
+        <span>Claude Worker</span>
+      </div>
+      <div class="hero-architecture__host">
+        <strong>Server Host</strong>
+        <span>Claude Worker</span>
+        <span>OpenAI Worker</span>
+      </div>
+    </div>
+  </div>
+  <div class="hero-process" aria-label="Request to verified result">
+    <span>request</span><i aria-hidden="true">→</i><span>research</span><i aria-hidden="true">→</i><span>implement</span><i aria-hidden="true">→</i><span>review</span><i aria-hidden="true">→</i><span>verified</span>
+  </div>
+</div>

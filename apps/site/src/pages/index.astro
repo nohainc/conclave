@@ -1,9 +1,9 @@
 ---
 import SiteLayout from "../layouts/SiteLayout.astro";
-import ArchitectureNode from "../components/ArchitectureNode.astro";
 import Button from "../components/Button.astro";
 import Container from "../components/Container.astro";
 import FeatureCard from "../components/FeatureCard.astro";
+import HeroArchitecture from "../components/HeroArchitecture.astro";
 import Section from "../components/Section.astro";
 import SectionHeader from "../components/SectionHeader.astro";
 ---
@@ -15,28 +15,18 @@ import SectionHeader from "../components/SectionHeader.astro";
   <Container>
     <section class="hero" id="product">
       <div>
-      <div class="eyebrow">A clearer way to direct AI work</div>
-      <h1>Move from an idea to evidence you can trust.</h1>
-      <p class="lede">
-        Conclave AX gives teams one place to ask, direct, review, and understand
-        AI-powered work—while keeping execution close to the machines and accounts
-        that make it possible.
-      </p>
+        <div class="eyebrow">A clearer way to direct AI work</div>
+        <h1>Build with a team of AI Workers.</h1>
+        <p class="lede">
+          Conclave AX coordinates AI models and tools to research, plan, implement,
+          review, test, and verify complex work.
+        </p>
         <div class="actions">
           <Button href="https://app.conclaveax.com" label="Open Conclave AX" />
           <Button href="/how-it-works/" label="See how it works" variant="secondary" />
         </div>
       </div>
-      <div class="architecture-card" aria-label="Conclave AX architecture">
-        <div class="eyebrow">The simple picture</div>
-        <p>Cloud coordinates. Host provides the machine. Workers provide capability.</p>
-        <div class="flow">
-          <ArchitectureNode label="Conclave AX" />
-          <ArchitectureNode label="Conclave Cloud" />
-          <ArchitectureNode label="Conclave Host" />
-          <ArchitectureNode label="Worker" />
-        </div>
-      </div>
+      <HeroArchitecture />
     </section>
   </Container>
 

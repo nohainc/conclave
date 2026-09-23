@@ -154,10 +154,86 @@ h3 {
 .architecture-card p {
   color: #d7d5e4;
 }
-.flow {
+.hero-architecture__diagram {
+  margin-top: var(--space-6);
+  text-align: center;
+}
+.hero-architecture__actor {
+  color: #d7d5e4;
+  font-weight: 750;
+}
+.hero-architecture__arrow {
+  min-height: 27px;
+  color: #aaa6ed;
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  line-height: 1.2;
+}
+.hero-architecture .architecture-node {
+  justify-content: center;
+  background: #353444;
+  font-weight: 750;
+}
+.hero-architecture__hosts {
   display: grid;
-  gap: 10px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+}
+.hero-architecture__host {
+  display: grid;
+  gap: 5px;
+  padding: var(--space-4);
+  text-align: left;
+  background: #353444;
+  border: 1px solid #555463;
+  border-radius: var(--radius-md);
+  color: #d7d5e4;
+  font-size: var(--text-xs);
+}
+.hero-architecture__host strong {
+  color: white;
+  font-size: var(--text-sm);
+}
+.hero-process {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   margin-top: var(--space-8);
+  color: #d7d5e4;
+  font: 700 var(--text-xs) / 1.4 var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.hero-process span {
+  animation: process-pulse 4s ease-in-out infinite;
+}
+.hero-process span:nth-of-type(2) {
+  animation-delay: 0.2s;
+}
+.hero-process span:nth-of-type(3) {
+  animation-delay: 0.4s;
+}
+.hero-process span:nth-of-type(4) {
+  animation-delay: 0.6s;
+}
+.hero-process span:nth-of-type(5) {
+  animation-delay: 0.8s;
+}
+.hero-process i {
+  color: #aaa6ed;
+  font-style: normal;
+}
+@keyframes process-pulse {
+  0%,
+  100% {
+    color: #d7d5e4;
+  }
+  15%,
+  35% {
+    color: #aaa6ed;
+  }
 }
 .section-intro {
   max-width: var(--content-reading);
@@ -221,11 +297,19 @@ h3 {
   .architecture-card {
     margin-top: var(--space-12);
   }
+  .hero-architecture__hosts {
+    grid-template-columns: 1fr;
+  }
   .cards {
     grid-template-columns: 1fr;
   }
   .site-footer {
     flex-direction: column;
     padding: var(--space-6) 20px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-process span {
+    animation: none;
   }
 }
