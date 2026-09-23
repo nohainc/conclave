@@ -1,17 +1,24 @@
 (function () {
-  'use strict';
+  "use strict";
+
+  /* global atob, btoa, fetch, navigator, window */
 
   function base64UrlToBytes(value) {
-    const padded = value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - value.length % 4) % 4);
+    const padded =
+      value.replace(/-/g, "+").replace(/_/g, "/") +
+      "=".repeat((4 - (value.length % 4)) % 4);
     const binary = atob(padded);
     return Uint8Array.from(binary, (character) => character.charCodeAt(0));
   }
 
   function bytesToBase64Url(value) {
     const bytes = new Uint8Array(value);
-    let binary = '';
+    let binary = "";
     for (const byte of bytes) binary += String.fromCharCode(byte);
-    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+    return btoa(binary)
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/g, "");
   }
 
   function publicKeyOptions(options) {
@@ -41,7 +48,9 @@
       response: {
         clientDataJSON: bytesToBase64Url(response.clientDataJSON),
         attestationObject: bytesToBase64Url(response.attestationObject),
-        transports: response.getTransports ? response.getTransports() : undefined,
+        transports: response.getTransports
+          ? response.getTransports()
+          : undefined,
       },
     };
   }
@@ -56,35 +65,67 @@
         clientDataJSON: bytesToBase64Url(response.clientDataJSON),
         authenticatorData: bytesToBase64Url(response.authenticatorData),
         signature: bytesToBase64Url(response.signature),
-        userHandle: response.userHandle ? bytesToBase64Url(response.userHandle) : undefined,
+        userHandle: response.userHandle
+          ? bytesToBase64Url(response.userHandle)
+          : undefined,
       },
     };
   }
 
   async function request(path, options) {
     const response = await fetch(path, {
-      credentials: 'include',
-      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      credentials: "include",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+      },
       ...options,
     });
     const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(body.message || body.error || `Passkey request failed (${response.status})`);
+    if (!response.ok)
+      throw new Error(
+        body.message ||
+          body.error ||
+          `Passkey request failed (${response.status})`,
+      );
     return body;
   }
 
   window.conclavePasskey = {
     async register(baseUrl, name) {
-      const options = await request(`${baseUrl}/auth/passkey/generate-register-options?name=${encodeURIComponent(name)}`, { method: 'GET' });
-      const credential = await navigator.credentials.create({ publicKey: publicKeyOptions(options) });
-      if (!credential) throw new Error('Passkey registration was cancelled');
-      return request(`${baseUrl}/auth/passkey/verify-registration`, { method: 'POST', body: JSON.stringify({ response: registrationResponse(credential), name }) });
+      const options = await request(
+        `${baseUrl}/auth/passkey/generate-register-options?name=${encodeURIComponent(name)}`,
+        { method: "GET" },
+      );
+      const credential = await navigator.credentials.create({
+        publicKey: publicKeyOptions(options),
+      });
+      if (!credential) throw new Error("Passkey registration was cancelled");
+      return request(`${baseUrl}/auth/passkey/verify-registration`, {
+        method: "POST",
+        body: JSON.stringify({
+          response: registrationResponse(credential),
+          name,
+        }),
+      });
     },
     async signIn(baseUrl) {
-      const options = await request(`${baseUrl}/auth/passkey/generate-authenticate-options`, { method: 'GET' });
-      const credential = await navigator.credentials.get({ publicKey: publicKeyOptions(options) });
-      if (!credential) throw new Error('Passkey sign-in was cancelled');
-      await request(`${baseUrl}/auth/passkey/verify-authentication`, { method: 'POST', body: JSON.stringify({ response: authenticationResponse(credential) }) });
-      return request(`${baseUrl}/auth/step-up/passkey/complete`, { method: 'POST', body: '{}' });
+      const options = await request(
+        `${baseUrl}/auth/passkey/generate-authenticate-options`,
+        { method: "GET" },
+      );
+      const credential = await navigator.credentials.get({
+        publicKey: publicKeyOptions(options),
+      });
+      if (!credential) throw new Error("Passkey sign-in was cancelled");
+      await request(`${baseUrl}/auth/passkey/verify-authentication`, {
+        method: "POST",
+        body: JSON.stringify({ response: authenticationResponse(credential) }),
+      });
+      return request(`${baseUrl}/auth/step-up/passkey/complete`, {
+        method: "POST",
+        body: "{}",
+      });
     },
   };
 })();

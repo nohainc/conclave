@@ -790,29 +790,25 @@ async function handleCompleteStepUp(
   const authenticatedAt = now.toISOString();
   const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString();
   await env.CONCLAVE_DB.batch([
-    env.CONCLAVE_DB
-      .prepare(
-        `INSERT INTO auth_step_up_sessions
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO auth_step_up_sessions
            (id, user_id, session_id, method, authenticated_at, expires_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)
          ON CONFLICT(session_id) DO UPDATE SET
            method = excluded.method,
            authenticated_at = excluded.authenticated_at,
            expires_at = excluded.expires_at`,
-      )
-      .bind(
-        crypto.randomUUID(),
-        context.userId,
-        context.sessionId,
-        event.method,
-        authenticatedAt,
-        expiresAt,
-      ),
-    env.CONCLAVE_DB
-      .prepare(
-        "UPDATE auth_step_up_events SET consumed_at = ?1 WHERE id = ?2 AND consumed_at IS NULL",
-      )
-      .bind(authenticatedAt, event.id),
+    ).bind(
+      crypto.randomUUID(),
+      context.userId,
+      context.sessionId,
+      event.method,
+      authenticatedAt,
+      expiresAt,
+    ),
+    env.CONCLAVE_DB.prepare(
+      "UPDATE auth_step_up_events SET consumed_at = ?1 WHERE id = ?2 AND consumed_at IS NULL",
+    ).bind(authenticatedAt, event.id),
   ]);
   await recordAuthAuditEvent(env.CONCLAVE_DB, {
     action: "auth.step_up.completed",
@@ -2267,16 +2263,17 @@ async function handleCreateHostEnrollment(
   authorize(context, "host.manage");
   requireWorkspaceContext(context, env, workspaceId);
 
-  const body = parseJson<{ expiresHours?: number }>(
-    await request.text(),
-    {},
-  );
+  const body = parseJson<{ expiresHours?: number }>(await request.text(), {});
   const enrollmentId = `enr-${crypto.randomUUID().slice(0, 12)}`;
   const token = `conclave_enroll_${crypto.randomUUID().replace(/-/g, "")}`;
   const tokenHash = await hashToken(token);
   const now = new Date();
   const expiresHours = body.expiresHours ?? 24;
-  if (!Number.isInteger(expiresHours) || expiresHours < 1 || expiresHours > 168) {
+  if (
+    !Number.isInteger(expiresHours) ||
+    expiresHours < 1 ||
+    expiresHours > 168
+  ) {
     return json(
       { error: "expiresHours must be an integer between 1 and 168" },
       { status: 400 },
@@ -2352,11 +2349,7 @@ async function handleRevokeHostEnrollment(
   const context = await securityContext(request, env, ctx);
   authorize(context, "host.manage");
   requireWorkspaceContext(context, env, workspaceId);
-  await requireRecentStepUp(
-    env,
-    context,
-    SENSITIVE_OPERATIONS.hostRevoke,
-  );
+  await requireRecentStepUp(env, context, SENSITIVE_OPERATIONS.hostRevoke);
 
   const now = new Date().toISOString();
   await env.CONCLAVE_DB.prepare(
@@ -2529,11 +2522,7 @@ async function handleRevokeHost(
   const context = await securityContext(request, env, ctx);
   authorize(context, "host.manage");
   requireWorkspaceContext(context, env, workspaceId);
-  await requireRecentStepUp(
-    env,
-    context,
-    SENSITIVE_OPERATIONS.hostRevoke,
-  );
+  await requireRecentStepUp(env, context, SENSITIVE_OPERATIONS.hostRevoke);
 
   const now = new Date().toISOString();
   await env.CONCLAVE_DB.prepare(

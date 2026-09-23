@@ -51,8 +51,9 @@ jobs:
       - run: flutter test
       - run: flutter build web --release --dart-define=CONCLAVE_API_URL=/api
 
-  host-dart:
+  host-flutter:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
@@ -61,10 +62,13 @@ jobs:
         working-directory: apps/host
     steps:
       - uses: actions/checkout@v4
-      - uses: dart-lang/setup-dart@v1
-      - run: dart pub get
-      - run: dart analyze
-      - run: dart test
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
       - name: Compile native Host
         shell: bash
         run: |
@@ -76,7 +80,7 @@ jobs:
 
   publish-evidence:
     if: ${{ vars.CONCLAVE_CI_INGEST_URL != '' && vars.CONCLAVE_RUN_ID != '' }}
-    needs: [typescript, studio-flutter, host-dart]
+    needs: [typescript, studio-flutter, host-flutter]
     runs-on: ubuntu-latest
     permissions:
       contents: read

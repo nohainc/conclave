@@ -552,8 +552,9 @@ class HostCloudConnection {
         'timeoutMs',
         'idempotencyKey',
       ]) {
-        if (!rawPayload.containsKey(field))
+        if (!rawPayload.containsKey(field)) {
           return 'Assignment field $field is required';
+        }
       }
       if (rawPayload['config'] is! Map ||
           rawPayload['permissions'] is! List ||

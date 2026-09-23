@@ -40,9 +40,9 @@ describe("sensitive operation step-up policy", () => {
   });
 
   it("rejects missing, expired, stale, and unsupported proofs", () => {
-    expect(
-      isStepUpSatisfied(null, SENSITIVE_OPERATIONS.hostRevoke, now),
-    ).toBe(false);
+    expect(isStepUpSatisfied(null, SENSITIVE_OPERATIONS.hostRevoke, now)).toBe(
+      false,
+    );
     expect(
       isStepUpSatisfied(
         record({ expires_at: "2026-09-23T11:59:59.000Z" }),

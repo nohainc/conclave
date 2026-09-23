@@ -2766,44 +2766,6 @@ class _StudioAppState extends State<StudioApp> {
     return value.replaceFirst('T', ' ').replaceFirst('Z', ' UTC');
   }
 
-  Widget _settingsView() => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Settings',
-              style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 6),
-          const Text('Studio preferences and connection status.',
-              style: TextStyle(color: Color(0xff777683), fontSize: 13)),
-          const SizedBox(height: 24),
-          _panel(
-              title: 'Connection',
-              subtitle: 'Platform services',
-              child: _detailLine(Icons.devices_other_outlined, 'Platform',
-                  widget.services.platformName)),
-          _panel(
-            title: 'Verification defaults',
-            subtitle: 'Applied to new Forge goals',
-            child: const Column(
-              children: [
-                ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text('Standard verification'),
-                    subtitle: Text('Independent review and blocking findings'),
-                    trailing:
-                        Icon(Icons.check_circle, color: Color(0xff43b17f))),
-                ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text('Pause before completion'),
-                    subtitle: Text(
-                        'Ask for approval when all automated evidence is present'),
-                    trailing: Icon(Icons.toggle_off_outlined,
-                        color: Color(0xff96949e))),
-              ],
-            ),
-          ),
-        ],
-      );
-
   Widget _newGoalDialog() => Card(
         margin: const EdgeInsets.only(top: 16),
         child: ConstrainedBox(

@@ -107,7 +107,11 @@ describe("V4 Host connectivity", () => {
     db.prepare("DELETE FROM auth_sessions WHERE id = 'session-1'").run();
 
     expect(
-      db.prepare("SELECT auth_token_hash, status FROM hosts WHERE id = 'host-1'").get(),
+      db
+        .prepare(
+          "SELECT auth_token_hash, status FROM hosts WHERE id = 'host-1'",
+        )
+        .get(),
     ).toEqual({ auth_token_hash: "machine-hash", status: "online" });
   });
 
@@ -120,13 +124,27 @@ describe("V4 Host connectivity", () => {
       "INSERT INTO host_enrollments (id, workspace_id, token_hash, created_by_user_id, expires_at, created_at) VALUES ('enrollment-1', 'workspace-a', 'hash-1', 'user-a', '2026-09-23T13:00:00.000Z', '2026-09-23T12:00:00.000Z')",
     ).run();
 
-    expect(db.prepare(query).all("hash-1", "2026-09-23T12:30:00.000Z")).toHaveLength(1);
-    db.prepare("UPDATE host_enrollments SET used_at = 'later' WHERE id = 'enrollment-1'").run();
-    expect(db.prepare(query).all("hash-1", "2026-09-23T12:30:00.000Z")).toHaveLength(0);
-    db.prepare("UPDATE host_enrollments SET used_at = NULL, revoked_at = 'later' WHERE id = 'enrollment-1'").run();
-    expect(db.prepare(query).all("hash-1", "2026-09-23T12:30:00.000Z")).toHaveLength(0);
-    db.prepare("UPDATE host_enrollments SET revoked_at = NULL, expires_at = '2026-09-23T12:30:00.000Z' WHERE id = 'enrollment-1'").run();
-    expect(db.prepare(query).all("hash-1", "2026-09-23T12:30:00.000Z")).toHaveLength(0);
+    expect(
+      db.prepare(query).all("hash-1", "2026-09-23T12:30:00.000Z"),
+    ).toHaveLength(1);
+    db.prepare(
+      "UPDATE host_enrollments SET used_at = 'later' WHERE id = 'enrollment-1'",
+    ).run();
+    expect(
+      db.prepare(query).all("hash-1", "2026-09-23T12:30:00.000Z"),
+    ).toHaveLength(0);
+    db.prepare(
+      "UPDATE host_enrollments SET used_at = NULL, revoked_at = 'later' WHERE id = 'enrollment-1'",
+    ).run();
+    expect(
+      db.prepare(query).all("hash-1", "2026-09-23T12:30:00.000Z"),
+    ).toHaveLength(0);
+    db.prepare(
+      "UPDATE host_enrollments SET revoked_at = NULL, expires_at = '2026-09-23T12:30:00.000Z' WHERE id = 'enrollment-1'",
+    ).run();
+    expect(
+      db.prepare(query).all("hash-1", "2026-09-23T12:30:00.000Z"),
+    ).toHaveLength(0);
   });
 
   it("treats reconnect as a new live session and ignores stale socket close", () => {

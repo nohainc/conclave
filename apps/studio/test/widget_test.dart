@@ -160,7 +160,7 @@ void main() {
   testWidgets('opens the human Account page with methods and sessions',
       (WidgetTester tester) async {
     await tester.pumpWidget(ConclaveApp(
-        dataSource: StudioFixtureDataSource(),
+        dataSource: const StudioFixtureDataSource(),
         initialUri: Uri(path: '/account')));
     await tester.pumpAndSettle();
 

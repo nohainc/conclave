@@ -132,9 +132,9 @@ describe("Architecture v4 clean D1 schema", () => {
     );
 
     const verificationColumns = (
-      db
-        .prepare("PRAGMA table_info(auth_verifications)")
-        .all() as { name: string }[]
+      db.prepare("PRAGMA table_info(auth_verifications)").all() as {
+        name: string;
+      }[]
     ).map((column) => column.name);
     expect(verificationColumns).toEqual(
       expect.arrayContaining([
