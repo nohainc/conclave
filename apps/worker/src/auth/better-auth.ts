@@ -32,6 +32,10 @@ function providerCredentials(
  * consumes IdentityService instead of importing Better Auth APIs.
  */
 export function createBetterAuth(env: BetterAuthRuntimeEnv) {
+  return betterAuth(buildBetterAuthOptions(env));
+}
+
+export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
   if (!env.BETTER_AUTH_SECRET) {
     throw new Error("BETTER_AUTH_SECRET is required to use Better Auth");
   }
@@ -45,20 +49,62 @@ export function createBetterAuth(env: BetterAuthRuntimeEnv) {
     env.GOOGLE_CLIENT_SECRET,
   );
 
-  return betterAuth({
+  return {
     database: env.CONCLAVE_DB,
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
+    user: {
+      modelName: "users",
+      fields: {
+        name: "display_name",
+        image: "avatar_url",
+        emailVerified: "email_verified",
+        createdAt: "created_at",
+        updatedAt: "updated_at",
+      },
+    },
+    account: {
+      modelName: "auth_accounts",
+      fields: {
+        userId: "user_id",
+        accountId: "account_id",
+        providerId: "provider_id",
+        accessToken: "access_token",
+        refreshToken: "refresh_token",
+        idToken: "id_token",
+        accessTokenExpiresAt: "access_token_expires_at",
+        refreshTokenExpiresAt: "refresh_token_expires_at",
+        createdAt: "created_at",
+        updatedAt: "updated_at",
+      },
+    },
+    verification: {
+      modelName: "auth_verifications",
+      fields: {
+        expiresAt: "expires_at",
+        createdAt: "created_at",
+        updatedAt: "updated_at",
+      },
+    },
     socialProviders: {
       ...(github ? { github } : {}),
       ...(google ? { google } : {}),
     },
     session: {
+      modelName: "auth_sessions",
+      fields: {
+        userId: "user_id",
+        expiresAt: "expires_at",
+        createdAt: "created_at",
+        updatedAt: "updated_at",
+        ipAddress: "ip_address",
+        userAgent: "user_agent",
+      },
       cookieCache: {
         enabled: false,
       },
     },
-  });
+  };
 }
 
 export async function handleBetterAuthRequest(

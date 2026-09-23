@@ -1,4 +1,5 @@
 export {
+  buildBetterAuthOptions,
   createBetterAuth,
   handleBetterAuthRequest,
   type BetterAuthRuntimeEnv,

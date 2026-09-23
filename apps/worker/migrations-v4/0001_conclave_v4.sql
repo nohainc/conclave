@@ -7,38 +7,57 @@ CREATE TABLE users (
   email TEXT NOT NULL UNIQUE,
   display_name TEXT NOT NULL,
   avatar_url TEXT,
+  email_verified INTEGER NOT NULL DEFAULT 0 CHECK (email_verified IN (0, 1)),
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'deactivated')),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
 
-CREATE TABLE auth_identities (
+-- Better Auth account model. Provider identities are authentication records,
+-- not Conclave authorization records.
+CREATE TABLE auth_accounts (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  provider TEXT NOT NULL,
-  subject TEXT NOT NULL,
-  email TEXT,
-  metadata_json TEXT NOT NULL DEFAULT '{}',
+  account_id TEXT NOT NULL,
+  provider_id TEXT NOT NULL,
+  access_token TEXT,
+  refresh_token TEXT,
+  id_token TEXT,
+  access_token_expires_at TEXT,
+  refresh_token_expires_at TEXT,
+  scope TEXT,
+  password TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  UNIQUE (provider, subject),
-  UNIQUE (user_id, provider)
+  UNIQUE (provider_id, account_id)
 );
-CREATE INDEX idx_auth_identities_user ON auth_identities(user_id);
+CREATE INDEX idx_auth_accounts_user ON auth_accounts(user_id);
 
+-- Better Auth session model. The token is managed by Better Auth and is not a
+-- Conclave authorization grant; Workspace and resource authorization remains
+-- in Conclave tables and services.
 CREATE TABLE auth_sessions (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  token_hash TEXT NOT NULL UNIQUE,
-  client_type TEXT NOT NULL CHECK (client_type IN ('web', 'desktop', 'cli', 'api')),
-  ip_address TEXT,
-  user_agent TEXT,
+  token TEXT NOT NULL UNIQUE,
   expires_at TEXT NOT NULL,
-  revoked_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  ip_address TEXT,
+  user_agent TEXT
+);
+CREATE INDEX idx_auth_sessions_user ON auth_sessions(user_id);
+
+CREATE TABLE auth_verifications (
+  id TEXT PRIMARY KEY,
+  identifier TEXT NOT NULL,
+  value TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
-CREATE INDEX idx_auth_sessions_user ON auth_sessions(user_id);
+CREATE INDEX idx_auth_verifications_identifier
+  ON auth_verifications(identifier);
 
 CREATE TABLE workspaces (
   id TEXT PRIMARY KEY,

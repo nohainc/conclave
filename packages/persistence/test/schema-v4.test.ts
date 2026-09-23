@@ -58,6 +58,9 @@ describe("Architecture v4 clean D1 schema", () => {
       "worker_assignments",
       "project_execution_preferences",
       "user_execution_preferences",
+      "auth_accounts",
+      "auth_sessions",
+      "auth_verifications",
     ]) {
       expect(names).toContain(table);
     }
@@ -68,11 +71,101 @@ describe("Architecture v4 clean D1 schema", () => {
       "agent_releases",
       "worker_plugins",
       "worker_plugin_versions",
+      "auth_identities",
       "credentials",
       "extensions",
     ]) {
       expect(names).not.toContain(obsolete);
     }
+  });
+
+  it("uses the Better Auth core models without replacing Conclave user state", () => {
+    const db = createDb();
+    const userColumns = (
+      db.prepare("PRAGMA table_info(users)").all() as { name: string }[]
+    ).map((column) => column.name);
+    expect(userColumns).toEqual(
+      expect.arrayContaining([
+        "id",
+        "email",
+        "display_name",
+        "email_verified",
+        "status",
+        "created_at",
+        "updated_at",
+      ]),
+    );
+
+    const sessionColumns = (
+      db.prepare("PRAGMA table_info(auth_sessions)").all() as { name: string }[]
+    ).map((column) => column.name);
+    expect(sessionColumns).toEqual(
+      expect.arrayContaining([
+        "id",
+        "user_id",
+        "token",
+        "expires_at",
+        "created_at",
+        "updated_at",
+        "ip_address",
+        "user_agent",
+      ]),
+    );
+    expect(sessionColumns).not.toContain("token_hash");
+    expect(sessionColumns).not.toContain("revoked_at");
+
+    const accountColumns = (
+      db.prepare("PRAGMA table_info(auth_accounts)").all() as { name: string }[]
+    ).map((column) => column.name);
+    expect(accountColumns).toEqual(
+      expect.arrayContaining([
+        "account_id",
+        "provider_id",
+        "access_token",
+        "refresh_token",
+        "id_token",
+        "access_token_expires_at",
+        "refresh_token_expires_at",
+        "scope",
+        "password",
+      ]),
+    );
+
+    const verificationColumns = (
+      db
+        .prepare("PRAGMA table_info(auth_verifications)")
+        .all() as { name: string }[]
+    ).map((column) => column.name);
+    expect(verificationColumns).toEqual(
+      expect.arrayContaining([
+        "identifier",
+        "value",
+        "expires_at",
+        "created_at",
+        "updated_at",
+      ]),
+    );
+
+    db.prepare(
+      "INSERT INTO users (id, email, display_name, email_verified, status, created_at, updated_at) VALUES ('user-auth', 'auth@example.com', 'Auth User', 1, 'active', 'now', 'now')",
+    ).run();
+    db.prepare(
+      "INSERT INTO auth_accounts (id, user_id, account_id, provider_id, created_at, updated_at) VALUES ('account-auth', 'user-auth', 'github-1', 'github', 'now', 'now')",
+    ).run();
+    db.prepare(
+      "INSERT INTO auth_sessions (id, user_id, token, expires_at, created_at, updated_at) VALUES ('session-auth', 'user-auth', 'opaque-token', '2099-01-01', 'now', 'now')",
+    ).run();
+    db.prepare(
+      "INSERT INTO auth_verifications (id, identifier, value, expires_at, created_at, updated_at) VALUES ('verification-auth', 'auth@example.com', 'opaque-value', '2099-01-01', 'now', 'now')",
+    ).run();
+
+    expect(
+      (
+        db
+          .prepare("SELECT email_verified FROM users WHERE id = 'user-auth'")
+          .get() as { email_verified: number }
+      ).email_verified,
+    ).toBe(1);
   });
 
   it("enforces foreign keys and allows one Host to bind multiple Workspaces", () => {

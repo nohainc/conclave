@@ -1,10 +1,29 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildBetterAuthOptions,
   IdentityService,
   type AuthenticatedIdentity,
 } from "../src/auth/index.js";
 
 describe("IdentityService", () => {
+  it("configures Better Auth against the clean Conclave core tables", () => {
+    const options = buildBetterAuthOptions({
+      CONCLAVE_DB: {} as D1Database,
+      CONCLAVE_ENVIRONMENT: "development",
+      BETTER_AUTH_SECRET: "a-secure-development-secret-that-is-long-enough",
+    });
+
+    expect(options.user?.modelName).toBe("users");
+    expect(options.user?.fields).toMatchObject({
+      name: "display_name",
+      emailVerified: "email_verified",
+      image: "avatar_url",
+    });
+    expect(options.account?.modelName).toBe("auth_accounts");
+    expect(options.session?.modelName).toBe("auth_sessions");
+    expect(options.verification?.modelName).toBe("auth_verifications");
+  });
+
   it("maps a Better Auth session to the application identity contract", async () => {
     const service = new IdentityService(() => ({
       api: {

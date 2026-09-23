@@ -52,3 +52,9 @@ Workspace, Project, Host, and Credential Profile authorization.
 application-facing `IdentityService`, and mounted at `/api/auth/*`. Existing
 authentication paths remain available until a later migration phase removes
 them.
+
+## AUTH-3 — Replace the authentication schema cleanly
+
+✅ The clean v4 D1 baseline now maps Better Auth’s core models onto `users`,
+`auth_accounts`, `auth_sessions`, and `auth_verifications`. Conclave retains
+`users.status`; no compatibility migration was added.
