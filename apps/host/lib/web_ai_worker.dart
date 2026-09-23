@@ -44,6 +44,8 @@ enum WebWorkerStatus {
   unavailable,
 }
 
+enum WebWorkerSessionMode { fresh, task, chat, project }
+
 class WebWorkerSession {
   WebWorkerSession({
     required this.sessionId,
@@ -51,6 +53,8 @@ class WebWorkerSession {
     required this.credentialProfileId,
     required this.assignmentId,
     required this.leaseExpiresAt,
+    this.mode = WebWorkerSessionMode.fresh,
+    this.projectId,
     this.attemptId,
   }) : status = WebWorkerStatus.connecting;
 
@@ -59,12 +63,18 @@ class WebWorkerSession {
   final String credentialProfileId;
   final String assignmentId;
   final String? attemptId;
+  final String? projectId;
+  final WebWorkerSessionMode mode;
   DateTime leaseExpiresAt;
   WebWorkerStatus status;
 
   bool get leaseValid =>
       DateTime.now().isBefore(leaseExpiresAt) &&
       status != WebWorkerStatus.expired;
+
+  String get namespace =>
+      'conclave.web-ai/$credentialProfileId/${projectId ?? "_workspace"}/'
+      '${mode.name}/$sessionId';
 }
 
 abstract interface class WebWorkerRelay {
@@ -100,6 +110,8 @@ class WebAiWorker {
     String provider, {
     required String credentialProfileId,
     required String assignmentId,
+    String? projectId,
+    WebWorkerSessionMode mode = WebWorkerSessionMode.fresh,
     Iterable<String> fallbackProviders = const [],
   }) async {
     if (credentialProfileId.trim().isEmpty) {
@@ -129,10 +141,13 @@ class WebAiWorker {
           provider: candidate,
           credentialProfileId: credentialProfileId,
           assignmentId: assignmentId,
+          projectId: projectId,
+          mode: mode,
           attemptId: response['attemptId'] as String?,
           leaseExpiresAt:
               DateTime.parse(_requiredString(response, 'leaseExpiresAt')),
         );
+        _validateReturnedNamespace(response, session);
         _claimSession(session);
         session.status =
             _statusFrom(response['status']) ?? WebWorkerStatus.waiting;
@@ -209,13 +224,24 @@ class WebAiWorker {
   }
 
   void _claimSession(WebWorkerSession session) {
-    final previousProfile = _sessionProfiles[session.sessionId];
-    if (previousProfile != null &&
-        previousProfile != session.credentialProfileId) {
+    final previousNamespace = _sessionProfiles[session.sessionId];
+    if (previousNamespace != null && previousNamespace != session.namespace) {
       throw StateError(
-          'web session is already owned by another Credential Profile');
+          'web session is already owned by another session namespace');
     }
-    _sessionProfiles[session.sessionId] = session.credentialProfileId;
+    _sessionProfiles[session.sessionId] = session.namespace;
+  }
+
+  void _validateReturnedNamespace(
+      Map<String, Object?> response, WebWorkerSession session) {
+    final returnedMode = response['sessionMode'];
+    if (returnedMode is String && returnedMode != session.mode.name) {
+      throw StateError('web session mode mismatch');
+    }
+    final returnedProject = response['projectId'];
+    if (returnedProject is String && returnedProject != session.projectId) {
+      throw StateError('web session project namespace mismatch');
+    }
   }
 
   void _requireLease(WebWorkerSession session) {

@@ -100,6 +100,29 @@ void main() {
     expect(first.credentialProfileId, isNot(second.credentialProfileId));
   });
 
+  test('keeps same Worker sessions isolated by project and session mode',
+      () async {
+    final relay = FakeRelay();
+    final worker = WebAiWorker(relay);
+    final first = await worker.start(
+      'chatgpt-web',
+      credentialProfileId: 'shared-profile',
+      assignmentId: 'assignment-a',
+      projectId: 'project-a',
+      mode: WebWorkerSessionMode.chat,
+    );
+    final second = await worker.start(
+      'chatgpt-web',
+      credentialProfileId: 'shared-profile',
+      assignmentId: 'assignment-b',
+      projectId: 'project-b',
+      mode: WebWorkerSessionMode.chat,
+    );
+    expect(first.namespace, isNot(second.namespace));
+    expect(first.projectId, 'project-a');
+    expect(second.projectId, 'project-b');
+  });
+
   test('supports reconnect and waiting-for-user status', () async {
     final relay = FakeRelay();
     relay.waitingForUser = true;

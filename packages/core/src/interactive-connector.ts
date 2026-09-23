@@ -1,4 +1,9 @@
 import type { AssignmentContextItem } from "./assignment-execution.js";
+import {
+  createWorkerSessionNamespace,
+  type SessionMode,
+  type WorkerSessionNamespace,
+} from "./session-isolation.js";
 
 export interface ConnectorAssignment {
   readonly assignmentId: string;
@@ -11,6 +16,8 @@ export interface ConnectorAssignment {
   readonly hostId: string;
   readonly workerId: string;
   readonly credentialProfileId: string;
+  readonly requestedByUserId?: string;
+  readonly sessionMode?: SessionMode;
   readonly objective: string;
   readonly context: readonly AssignmentContextItem[];
   readonly messages: readonly unknown[];
@@ -34,6 +41,9 @@ export interface ConnectorSession {
   readonly projectId: string;
   readonly workerId: string;
   readonly credentialProfileId: string;
+  readonly requestedByUserId?: string;
+  readonly sessionMode: SessionMode;
+  readonly namespace: string;
   readonly leaseExpiresAt: string;
 }
 
@@ -42,6 +52,8 @@ export interface ConnectorSessionRegistration {
   readonly projectId: string;
   readonly workerId: string;
   readonly credentialProfileId: string;
+  readonly requestedByUserId?: string;
+  readonly sessionMode?: SessionMode;
   readonly displayName?: string;
   readonly capabilities: readonly string[];
   readonly leaseMs?: number;
@@ -82,6 +94,7 @@ interface SessionState extends Omit<ConnectorSession, "leaseExpiresAt"> {
   readonly leaseMs: number;
   readonly quotaRemaining?: number;
   assignmentId: string | null;
+  readonly namespaceInput: WorkerSessionNamespace;
 }
 
 interface AssignmentState extends ConnectorAssignment {
@@ -184,8 +197,23 @@ export class InteractiveConnector {
         "Session lease is invalid",
         "invalid_request",
       );
+    const sessionMode = registration.sessionMode ?? "fresh";
+    if (!["fresh", "task", "chat", "project"].includes(sessionMode)) {
+      throw new InteractiveConnectorError(
+        "Session mode is invalid",
+        "invalid_request",
+      );
+    }
+    const sessionId = this.idFactory("session");
+    const namespaceInput: WorkerSessionNamespace = {
+      workerId: registration.workerId,
+      credentialProfileId: registration.credentialProfileId,
+      projectId: registration.projectId,
+      sessionId,
+      mode: sessionMode,
+    };
     const session = {
-      sessionId: this.idFactory("session"),
+      sessionId,
       sessionToken: this.idFactory("token"),
       organizationId: registration.organizationId,
       projectId: registration.projectId,
@@ -194,6 +222,10 @@ export class InteractiveConnector {
       capabilities: registration.capabilities,
       leaseMs,
       quotaRemaining: registration.quotaRemaining,
+      requestedByUserId: registration.requestedByUserId,
+      sessionMode,
+      namespace: createWorkerSessionNamespace(namespaceInput),
+      namespaceInput,
       leaseExpiresAt: new Date(this.now() + leaseMs).toISOString(),
       assignmentId: null,
     } satisfies SessionState;
@@ -231,10 +263,7 @@ export class InteractiveConnector {
         "conflict",
       );
     this.authorizeAssignment(session, assignment);
-    if (
-      session.quotaRemaining !== undefined &&
-      session.quotaRemaining <= 0
-    ) {
+    if (session.quotaRemaining !== undefined && session.quotaRemaining <= 0) {
       assignment.statusReport = { status: "quota_exceeded" };
       throw new InteractiveConnectorError(
         "Credential Profile quota is exhausted",
@@ -394,6 +423,22 @@ export class InteractiveConnector {
         "unauthorized",
       );
     }
+    if (
+      assignment.requestedByUserId !== undefined &&
+      assignment.requestedByUserId !== session.requestedByUserId
+    ) {
+      throw new InteractiveConnectorError(
+        "Assignment belongs to another Conclave user session",
+        "unauthorized",
+      );
+    }
+    const assignmentMode = assignment.sessionMode ?? "fresh";
+    if (assignmentMode !== session.sessionMode) {
+      throw new InteractiveConnectorError(
+        "Assignment session mode is not available to this session",
+        "unauthorized",
+      );
+    }
   }
 
   private matchesAssignment(
@@ -423,6 +468,9 @@ export class InteractiveConnector {
       projectId: session.projectId,
       workerId: session.workerId,
       credentialProfileId: session.credentialProfileId,
+      requestedByUserId: session.requestedByUserId,
+      sessionMode: session.sessionMode,
+      namespace: session.namespace,
       leaseExpiresAt: session.leaseExpiresAt,
     };
   }

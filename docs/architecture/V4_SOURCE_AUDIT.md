@@ -402,6 +402,13 @@ catalog entries. Hosts receive only the resolved package metadata during sync,
 then reconcile idempotently through the existing signed WorkerManager,
 reporting observed status and errors back to Cloud.
 
+V4-20 namespaces provider history by Worker, Credential Profile, optional
+Project, session mode, and session ID. `fresh` sessions never reuse history;
+task, chat, and project sessions can only continue within the same namespace.
+Interactive assignments also carry the requesting Conclave user when known,
+preventing two users on a shared Host/profile from claiming one another's
+provider session.
+
 ## 9. Architectural deletion gate
 
 Architecture v4 cleanup is complete when active source search returns no product/domain usage of:

@@ -1,6 +1,7 @@
 import {
   InteractiveConnector,
   InteractiveConnectorError,
+  type ConnectorAssignmentRegistration,
   type ConnectorSessionRegistration,
   type ConnectorStatus,
 } from "@conclave/core";
@@ -136,6 +137,14 @@ export async function handleConnectorTaskRequest(
       credentialProfileId:
         typeof body.credentialProfileId === "string"
           ? body.credentialProfileId
+          : undefined,
+      requestedByUserId:
+        typeof body.requestedByUserId === "string"
+          ? body.requestedByUserId
+          : undefined,
+      sessionMode:
+        typeof body.sessionMode === "string"
+          ? (body.sessionMode as ConnectorAssignmentRegistration["sessionMode"])
           : undefined,
       objective: typeof body.objective === "string" ? body.objective : "",
       context: [],

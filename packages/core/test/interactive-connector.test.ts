@@ -227,6 +227,77 @@ describe("interactive connector", () => {
     ).toThrow("credential Profile");
   });
 
+  it("isolates simultaneous same-Worker sessions for different users", () => {
+    const connector = new InteractiveConnector({
+      registrationToken: "register-secret",
+      idFactory: (prefix) => `${prefix}-${crypto.randomUUID()}`,
+    });
+    connector.registerAssignment({
+      taskId: "user-a-task",
+      goalId: "goal-1",
+      runId: "run-1",
+      organizationId: "org-1",
+      projectId: "project-1",
+      workerId: "web-worker",
+      credentialProfileId: "shared-profile",
+      requestedByUserId: "user-a",
+      sessionMode: "fresh",
+      objective: "User A private task",
+      context: [],
+      messages: [],
+    });
+    connector.registerAssignment({
+      taskId: "user-b-task",
+      goalId: "goal-1",
+      runId: "run-1",
+      organizationId: "org-1",
+      projectId: "project-1",
+      workerId: "web-worker",
+      credentialProfileId: "shared-profile",
+      requestedByUserId: "user-b",
+      sessionMode: "fresh",
+      objective: "User B private task",
+      context: [],
+      messages: [],
+    });
+    const userA = connector.registerSession("register-secret", {
+      organizationId: "org-1",
+      projectId: "project-1",
+      workerId: "web-worker",
+      credentialProfileId: "shared-profile",
+      requestedByUserId: "user-a",
+      sessionMode: "fresh",
+      capabilities: [],
+    });
+    const userB = connector.registerSession("register-secret", {
+      organizationId: "org-1",
+      projectId: "project-1",
+      workerId: "web-worker",
+      credentialProfileId: "shared-profile",
+      requestedByUserId: "user-b",
+      sessionMode: "fresh",
+      capabilities: [],
+    });
+    expect(
+      connector.claimAssignment(
+        userA.sessionId,
+        userA.sessionToken,
+        "user-a-task",
+      ).requestedByUserId,
+    ).toBe("user-a");
+    expect(
+      connector.claimAssignment(
+        userB.sessionId,
+        userB.sessionToken,
+        "user-b-task",
+      ).requestedByUserId,
+    ).toBe("user-b");
+    expect(userA.namespace).not.toBe(userB.namespace);
+    expect(() =>
+      connector.getContext(userA.sessionId, userA.sessionToken, "user-b-task"),
+    ).toThrow("session");
+  });
+
   it("reports quota exhaustion without executing a web assignment", () => {
     const connector = new InteractiveConnector({
       registrationToken: "register-secret",
@@ -257,7 +328,8 @@ describe("interactive connector", () => {
         "quota-task",
       ),
     ).toThrow("quota");
-    expect(connector.getAssignmentStatus("register-secret", "quota-task"))
-      .toMatchObject({ statusReport: { status: "quota_exceeded" } });
+    expect(
+      connector.getAssignmentStatus("register-secret", "quota-task"),
+    ).toMatchObject({ statusReport: { status: "quota_exceeded" } });
   });
 });
