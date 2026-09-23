@@ -52,12 +52,12 @@ function createD1Mock(db: DatabaseSync) {
   };
 }
 
-describe("Multi-Agent Ensemble Dispatcher (Cloud -> Multi-Agent -> Workers)", () => {
+describe("Multi-Worker Ensemble Dispatcher (Cloud -> Multi-Worker -> Workers)", () => {
   let db: DatabaseSync;
   let d1: D1Database;
   const adminToken = "tok_admin_ensemble_123";
   const dispatchedAssignments: Array<{
-    agentId: string;
+    hostId: string;
     assignmentId: string;
   }> = [];
   let completeAssignments = true;
@@ -67,11 +67,11 @@ describe("Multi-Agent Ensemble Dispatcher (Cloud -> Multi-Agent -> Workers)", ()
       const parsedUrl = new URL(url);
       if (parsedUrl.pathname === "/dispatch-assignment") {
         const body = JSON.parse(String(init?.body || "{}")) as {
-          agentId: string;
+          hostId: string;
           assignmentId: string;
         };
         dispatchedAssignments.push({
-          agentId: body.agentId,
+          hostId: body.hostId,
           assignmentId: body.assignmentId,
         });
         if (completeAssignments) {
@@ -175,22 +175,22 @@ describe("Multi-Agent Ensemble Dispatcher (Cloud -> Multi-Agent -> Workers)", ()
        VALUES ('task-arch', 'ph-1', 'architect', 'Design Architecture', '["architecture"]', 'ready', ?, ?)`,
     ).run(now, now);
 
-    // Seed 3 Agents on distinct machines:
+    // Seed 3 Hosts on distinct machines:
     // Agent 1: MacBook
     db.prepare(
-      `INSERT INTO agents (id, workspace_id, name, hostname, status, version, capabilities_json, enrolled_at, created_at, updated_at)
+      `INSERT INTO hosts (id, workspace_id, name, hostname, status, version, capabilities_json, enrolled_at, created_at, updated_at)
        VALUES ('ag-macbook', 'ws-1', 'MacBook Pro Agent', 'macbook.local', 'online', '2.0.0', '[]', ?, ?, ?)`,
     ).run(now, now, now);
 
     // Agent 2: Linux Server
     db.prepare(
-      `INSERT INTO agents (id, workspace_id, name, hostname, status, version, capabilities_json, enrolled_at, created_at, updated_at)
+      `INSERT INTO hosts (id, workspace_id, name, hostname, status, version, capabilities_json, enrolled_at, created_at, updated_at)
        VALUES ('ag-linux', 'ws-1', 'Linux Server Agent', 'ubuntu-srv.cloud', 'online', '2.0.0', '[]', ?, ?, ?)`,
     ).run(now, now, now);
 
     // Agent 3: Web Worker Client
     db.prepare(
-      `INSERT INTO agents (id, workspace_id, name, hostname, status, version, capabilities_json, enrolled_at, created_at, updated_at)
+      `INSERT INTO hosts (id, workspace_id, name, hostname, status, version, capabilities_json, enrolled_at, created_at, updated_at)
        VALUES ('ag-web', 'ws-1', 'Web Worker Agent', 'browser-client.local', 'online', '2.0.0', '[]', ?, ?, ?)`,
     ).run(now, now, now);
 
@@ -213,37 +213,37 @@ describe("Multi-Agent Ensemble Dispatcher (Cloud -> Multi-Agent -> Workers)", ()
     // Seed Workers on the disparate machines:
     // Worker A: Claude on MacBook
     db.prepare(
-      `INSERT INTO workers (id, workspace_id, agent_id, plugin_id, plugin_version_policy, name, roles_json, capabilities_json, config_json, secret_refs_json, billing_mode, cost_metadata_json, independence_key, concurrency_limit, session_policy, enabled, status, created_at, updated_at)
+      `INSERT INTO workers (id, workspace_id, Host_id, plugin_id, plugin_version_policy, name, roles_json, capabilities_json, config_json, secret_refs_json, billing_mode, cost_metadata_json, independence_key, concurrency_limit, session_policy, enabled, status, created_at, updated_at)
        VALUES ('w-claude-mac', 'ws-1', 'ag-macbook', 'conclave.claude-code', 'latest', 'Claude on MacBook', '["architect"]', '["architecture"]', '{}', '[]', 'local_compute', '{}', 'indep-claude-mac', 1, 'stateless', 1, 'available', ?, ?)`,
     ).run(now, now);
 
     // Worker B: GPT on Linux Server
     db.prepare(
-      `INSERT INTO workers (id, workspace_id, agent_id, plugin_id, plugin_version_policy, name, roles_json, capabilities_json, config_json, secret_refs_json, billing_mode, cost_metadata_json, independence_key, concurrency_limit, session_policy, enabled, status, created_at, updated_at)
+      `INSERT INTO workers (id, workspace_id, Host_id, plugin_id, plugin_version_policy, name, roles_json, capabilities_json, config_json, secret_refs_json, billing_mode, cost_metadata_json, independence_key, concurrency_limit, session_policy, enabled, status, created_at, updated_at)
        VALUES ('w-gpt-linux', 'ws-1', 'ag-linux', 'conclave.openai-api', 'latest', 'GPT on Linux', '["architect"]', '["architecture"]', '{}', '[]', 'local_compute', '{}', 'indep-gpt-linux', 1, 'stateless', 1, 'available', ?, ?)`,
     ).run(now, now);
 
     // Worker C: ChatGPT Web Worker
     db.prepare(
-      `INSERT INTO workers (id, workspace_id, agent_id, plugin_id, plugin_version_policy, name, roles_json, capabilities_json, config_json, secret_refs_json, billing_mode, cost_metadata_json, independence_key, concurrency_limit, session_policy, enabled, status, created_at, updated_at)
+      `INSERT INTO workers (id, workspace_id, Host_id, plugin_id, plugin_version_policy, name, roles_json, capabilities_json, config_json, secret_refs_json, billing_mode, cost_metadata_json, independence_key, concurrency_limit, session_policy, enabled, status, created_at, updated_at)
        VALUES ('w-web-worker', 'ws-1', 'ag-web', 'conclave.echo-worker', 'latest', 'ChatGPT Web Worker', '["architect"]', '["architecture"]', '{}', '[]', 'local_compute', '{}', 'indep-web', 1, 'stateless', 1, 'available', ?, ?)`,
     ).run(now, now);
 
     // Synthesizer Worker
     db.prepare(
-      `INSERT INTO workers (id, workspace_id, agent_id, plugin_id, plugin_version_policy, name, roles_json, capabilities_json, config_json, secret_refs_json, billing_mode, cost_metadata_json, independence_key, concurrency_limit, session_policy, enabled, status, created_at, updated_at)
+      `INSERT INTO workers (id, workspace_id, Host_id, plugin_id, plugin_version_policy, name, roles_json, capabilities_json, config_json, secret_refs_json, billing_mode, cost_metadata_json, independence_key, concurrency_limit, session_policy, enabled, status, created_at, updated_at)
        VALUES ('w-synthesizer', 'ws-1', 'ag-linux', 'conclave.openai-api', 'latest', 'Consensus Synthesizer', '["synthesizer"]', '["synthesis"]', '{}', '[]', 'local_compute', '{}', 'indep-synth', 1, 'stateless', 1, 'available', ?, ?)`,
     ).run(now, now);
 
     // Evaluator / Selector Worker
     db.prepare(
-      `INSERT INTO workers (id, workspace_id, agent_id, plugin_id, plugin_version_policy, name, roles_json, capabilities_json, config_json, secret_refs_json, billing_mode, cost_metadata_json, independence_key, concurrency_limit, session_policy, enabled, status, created_at, updated_at)
+      `INSERT INTO workers (id, workspace_id, Host_id, plugin_id, plugin_version_policy, name, roles_json, capabilities_json, config_json, secret_refs_json, billing_mode, cost_metadata_json, independence_key, concurrency_limit, session_policy, enabled, status, created_at, updated_at)
        VALUES ('w-evaluator', 'ws-1', 'ag-macbook', 'conclave.echo-worker', 'latest', 'Architecture Evaluator', '["evaluator"]', '["evaluation"]', '{}', '[]', 'local_compute', '{}', 'indep-eval', 1, 'stateless', 1, 'available', ?, ?)`,
     ).run(now, now);
   });
 
   describe("selectEnsembleCandidateWorkers", () => {
-    it("selects 3 candidate workers across disparate agents with distinct independence keys", async () => {
+    it("selects 3 candidate workers across disparate hosts with distinct independence keys", async () => {
       const candidates = await selectEnsembleCandidateWorkers(
         d1,
         "ws-1",
@@ -257,18 +257,18 @@ describe("Multi-Agent Ensemble Dispatcher (Cloud -> Multi-Agent -> Workers)", ()
       );
 
       expect(candidates).toHaveLength(3);
-      const agentIds = candidates.map((c) => c.agentId);
-      expect(agentIds).toContain("ag-macbook");
-      expect(agentIds).toContain("ag-linux");
-      expect(agentIds).toContain("ag-web");
+      const hostIds = candidates.map((c) => c.hostId);
+      expect(hostIds).toContain("ag-macbook");
+      expect(hostIds).toContain("ag-linux");
+      expect(hostIds).toContain("ag-web");
 
       const indepKeys = candidates.map((c) => c.independenceKey);
       expect(new Set(indepKeys).size).toBe(3);
     });
 
-    it("excludes offline Agents even when candidate IDs are explicit", async () => {
+    it("excludes offline Hosts even when candidate IDs are explicit", async () => {
       db.prepare(
-        "UPDATE agents SET status = 'offline' WHERE id = 'ag-linux'",
+        "UPDATE hosts SET status = 'offline' WHERE id = 'ag-linux'",
       ).run();
 
       const candidates = await selectEnsembleCandidateWorkers(
@@ -296,7 +296,7 @@ describe("Multi-Agent Ensemble Dispatcher (Cloud -> Multi-Agent -> Workers)", ()
         "INSERT INTO attempts (id, task_id, worker_id, attempt_number, input_snapshot_json, status, started_at) VALUES ('att-busy', 'task-arch', 'w-claude-mac', 1, '{}', 'running', ?)",
       ).run(now);
       db.prepare(
-        `INSERT INTO worker_assignments (id, workspace_id, run_id, task_id, attempt_id, agent_id, worker_id, plugin_id, status, input_json, idempotency_key, timeout_ms, created_at, updated_at)
+        `INSERT INTO worker_assignments (id, workspace_id, run_id, task_id, attempt_id, Host_id, worker_id, plugin_id, status, input_json, idempotency_key, timeout_ms, created_at, updated_at)
          VALUES ('assignment-busy', 'ws-1', 'run-1', 'task-arch', 'att-busy', 'ag-macbook', 'w-claude-mac', 'conclave.claude-code', 'running', '{}', 'idempotency-busy', 60000, ?, ?)`,
       ).run(now, now);
 
@@ -380,10 +380,10 @@ describe("Multi-Agent Ensemble Dispatcher (Cloud -> Multi-Agent -> Workers)", ()
         .prepare("SELECT * FROM worker_assignments WHERE task_id = 'task-arch'")
         .all() as Record<string, unknown>[];
       expect(assignments).toHaveLength(3);
-      const assignedAgents = assignments.map((a) => String(a.agent_id));
-      expect(assignedAgents).toContain("ag-macbook");
-      expect(assignedAgents).toContain("ag-linux");
-      expect(assignedAgents).toContain("ag-web");
+      const assignedHosts = assignments.map((a) => String(a.Host_id));
+      expect(assignedHosts).toContain("ag-macbook");
+      expect(assignedHosts).toContain("ag-linux");
+      expect(assignedHosts).toContain("ag-web");
     });
 
     it("dispatches synthesize ensemble with independent synthesizer worker", async () => {
@@ -455,7 +455,7 @@ describe("Multi-Agent Ensemble Dispatcher (Cloud -> Multi-Agent -> Workers)", ()
   });
 
   describe("REST Endpoint (/api/v2/workspaces/:ws/tasks/:id/ensemble-dispatch)", () => {
-    it("coordinates multi-agent ensemble via REST POST endpoint", async () => {
+    it("coordinates multi-worker ensemble via REST POST endpoint", async () => {
       const res = await worker.fetch(
         new Request(
           "https://conclave.local/api/v2/workspaces/ws-1/tasks/task-arch/ensemble-dispatch",
@@ -478,7 +478,7 @@ describe("Multi-Agent Ensemble Dispatcher (Cloud -> Multi-Agent -> Workers)", ()
       const body = (await res.json()) as {
         ensemble: {
           mode: string;
-          candidates: Array<{ workerId: string; agentId: string }>;
+          candidates: Array<{ workerId: string; hostId: string }>;
         };
       };
       expect(body.ensemble.mode).toBe("parallel");

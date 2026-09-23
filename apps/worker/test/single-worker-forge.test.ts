@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  assertSingleAgentForgeBindings,
+  assertSingleHostForgeBindings,
   resolveForgeExecutionMode,
   type ForgeWorkerBinding,
 } from "../src/forge-execution.js";
@@ -48,28 +48,28 @@ function binding(id: string, agentId = "agent-mac"): ForgeWorkerBinding {
   };
 }
 
-describe("single-agent Forge policy", () => {
+describe("single-worker Forge policy", () => {
   it("does not permit the retired direct cloud execution mode", () => {
     expect(() => resolveForgeExecutionMode("cloud_api")).toThrow(
       "direct cloud model execution has been retired",
     );
   });
-  it("requires three workers on the same Agent", () => {
+  it("requires three workers on the same Host", () => {
     expect(() =>
-      assertSingleAgentForgeBindings([
+      assertSingleHostForgeBindings([
         binding("lead"),
         binding("implementer"),
         binding("reviewer"),
       ]),
     ).not.toThrow();
   });
-  it("rejects workers split across Agents", () => {
+  it("rejects workers split across Hosts", () => {
     expect(() =>
-      assertSingleAgentForgeBindings([
+      assertSingleHostForgeBindings([
         binding("lead"),
         binding("implementer"),
         binding("reviewer", "agent-linux"),
       ]),
-    ).toThrow(/one Agent/);
+    ).toThrow(/one Host/);
   });
 });

@@ -1449,7 +1449,7 @@ class _StudioAppState extends State<StudioApp> {
     if (outputs.isEmpty && decision == null) {
       return _panel(
         title: 'Candidate outputs',
-        subtitle: 'Read-only ensemble and synthesis',
+        subtitle: 'Read-only multi-worker synthesis',
         child: const Text(
             'Candidate outputs will appear when a multi-worker policy runs.'),
       );

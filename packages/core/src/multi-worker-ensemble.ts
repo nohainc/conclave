@@ -1,9 +1,9 @@
 /**
- * Conclave AX Architecture v2 - Multi-Agent & Multi-Worker Ensemble Execution Engine.
+ * Conclave AX Architecture v4 - Multi-Worker Ensemble Execution Engine.
  *
  * Coordinates execution of candidate workers residing on disparate physical machines,
- * agent hosts, and runtimes (e.g. MacBook, Linux server, Web worker) across ensemble modes:
- * - single: 1 worker on 1 agent
+ * Host machines, and runtimes (e.g. MacBook, Linux server, Web worker) across ensemble modes:
+ * - single: 1 worker on 1 Host
  * - parallel: N candidate workers running concurrently across machines
  * - synthesize: N candidate workers across machines + 1 independent synthesizer worker
  * - compare_and_select: N candidate workers across machines + 1 independent selector worker
@@ -16,14 +16,14 @@ import {
   type TaskRequest,
 } from "@conclave/protocol";
 
-export type MultiAgentEnsembleMode =
+export type MultiWorkerEnsembleMode =
   | "single"
   | "parallel"
   | "synthesize"
   | "compare_and_select"
   | "competitive_implementation";
 
-export interface MultiAgentTaskRequest {
+export interface MultiWorkerTaskRequest {
   readonly taskId: string;
   readonly role: string;
   readonly objective: string;
@@ -35,7 +35,7 @@ export interface MultiAgentTaskRequest {
   readonly runId?: string;
 }
 
-export interface MultiAgentCandidateExecutionResult {
+export interface MultiWorkerCandidateExecutionResult {
   readonly status: "succeeded" | "failed" | "timed_out";
   readonly output: Record<string, unknown> | null;
   readonly rawOutput?: string | null;
@@ -54,21 +54,35 @@ export interface MultiAgentCandidateExecutionResult {
   readonly executionTimeMs?: number;
 }
 
-export interface MultiAgentWorkerDescriptor {
+export type MultiWorkerIndependenceLevel =
+  "session" | "credential" | "model" | "provider" | "host";
+
+export interface MultiWorkerCandidateSnapshot {
+  readonly hostId: string;
   readonly workerId: string;
-  readonly agentId: string;
-  readonly pluginId: string;
+  readonly credentialProfileId: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly sessionId: string;
+}
+
+export interface MultiWorkerWorkerDescriptor {
+  readonly workerId: string;
+  readonly hostId: string;
+  readonly workerPackageId: string;
   readonly name: string;
   readonly role: string;
   readonly capabilities: readonly string[];
+  /** Legacy fallback for callers that have not supplied a v4 snapshot. */
   readonly independenceKey: string;
+  readonly snapshot?: MultiWorkerCandidateSnapshot;
   readonly execute: (
-    task: MultiAgentTaskRequest,
-  ) => Promise<MultiAgentCandidateExecutionResult>;
+    task: MultiWorkerTaskRequest,
+  ) => Promise<MultiWorkerCandidateExecutionResult>;
 }
 
-export interface MultiAgentEnsemblePolicy {
-  readonly mode: MultiAgentEnsembleMode;
+export interface MultiWorkerEnsemblePolicy {
+  readonly mode: MultiWorkerEnsembleMode;
   /** Maximum number of candidate workers running concurrently. */
   readonly maxParallel?: number;
   /** Timeout per candidate worker in milliseconds. */
@@ -83,62 +97,65 @@ export interface MultiAgentEnsemblePolicy {
   readonly maxEstimatedCostMicrosPerAttempt?: number;
   /** Billing modes to prefer, in order, when several Workers are eligible. */
   readonly preferredBillingModes?: readonly string[];
+  /** Distinctness is satisfied when at least one selected level differs. */
+  readonly independenceLevels?: readonly MultiWorkerIndependenceLevel[];
 }
 
-export interface MultiAgentCandidateResult {
+export interface MultiWorkerCandidateResult {
   readonly workerId: string;
-  readonly agentId: string;
-  readonly pluginId: string;
+  readonly hostId: string;
+  readonly workerPackageId: string;
   readonly name: string;
   readonly independenceKey: string;
+  readonly snapshot?: MultiWorkerCandidateSnapshot;
   readonly workspaceRepositoryId?: string;
-  readonly result: MultiAgentCandidateExecutionResult;
+  readonly result: MultiWorkerCandidateExecutionResult;
 }
 
-export interface MultiAgentVerificationResult {
+export interface MultiWorkerVerificationResult {
   readonly candidateWorkerId: string;
   readonly reviewerWorkerId: string;
-  readonly reviewerAgentId: string;
+  readonly reviewerHostId: string;
   readonly passed: boolean;
   readonly score: number;
   readonly feedback: string;
 }
 
-export interface MultiAgentEnsembleResult {
-  readonly mode: MultiAgentEnsembleMode;
-  readonly candidates: readonly MultiAgentCandidateResult[];
+export interface MultiWorkerEnsembleResult {
+  readonly mode: MultiWorkerEnsembleMode;
+  readonly candidates: readonly MultiWorkerCandidateResult[];
   /** The consolidated decision or synthesis output, if applicable. */
-  readonly decisionResult: MultiAgentCandidateExecutionResult | null;
+  readonly decisionResult: MultiWorkerCandidateExecutionResult | null;
   readonly decision: DecisionResult | null;
   readonly decisionTask: TaskRequest | null;
   /** For selection policies: winning candidate index and identifiers. */
   readonly selectedCandidateIndex?: number | null;
   readonly selectedWorkerId?: string | null;
-  readonly selectedAgentId?: string | null;
+  readonly selectedHostId?: string | null;
   /** Verification outcomes for competitive_implementation mode. */
-  readonly verifications?: readonly MultiAgentVerificationResult[];
+  readonly verifications?: readonly MultiWorkerVerificationResult[];
   readonly totalInputTokens: number;
   readonly totalOutputTokens: number;
   readonly summary: string;
 }
 
-export class MultiAgentEnsembleError extends Error {
+export class MultiWorkerEnsembleError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "MultiAgentEnsembleError";
+    this.name = "MultiWorkerEnsembleError";
   }
 }
 
-export interface MultiAgentEnsembleInput {
-  readonly policy: MultiAgentEnsemblePolicy;
-  readonly task: MultiAgentTaskRequest;
-  readonly candidates: readonly MultiAgentWorkerDescriptor[];
+export interface MultiWorkerEnsembleInput {
+  readonly policy: MultiWorkerEnsemblePolicy;
+  readonly task: MultiWorkerTaskRequest;
+  readonly candidates: readonly MultiWorkerWorkerDescriptor[];
   /** Required by `synthesize`. Must have independenceKey distinct from all candidates. */
-  readonly synthesizer?: MultiAgentWorkerDescriptor;
+  readonly synthesizer?: MultiWorkerWorkerDescriptor;
   /** Required by `compare_and_select`. Must have independenceKey distinct from all candidates. */
-  readonly selector?: MultiAgentWorkerDescriptor;
+  readonly selector?: MultiWorkerWorkerDescriptor;
   /** Reviewers used to independently verify candidates in `competitive_implementation`. */
-  readonly reviewers?: readonly MultiAgentWorkerDescriptor[];
+  readonly reviewers?: readonly MultiWorkerWorkerDescriptor[];
   /** Workspaces / worktrees per candidate for competitive implementation. */
   readonly candidateWorkspaces?: readonly string[];
 }
@@ -146,27 +163,35 @@ export interface MultiAgentEnsembleInput {
 /**
  * Validates anti-collusion and independence constraints across candidate workers and decision makers.
  */
-function validateIndependence(input: MultiAgentEnsembleInput): void {
+function validateIndependence(input: MultiWorkerEnsembleInput): void {
   const { policy, candidates, synthesizer, selector, reviewers } = input;
+  const levels = policy.independenceLevels ?? [
+    "session",
+    "credential",
+    "model",
+    "provider",
+  ];
 
   if (
     policy.maxParallel !== undefined &&
     (!Number.isInteger(policy.maxParallel) || policy.maxParallel < 1)
   ) {
-    throw new MultiAgentEnsembleError("maxParallel must be a positive integer");
+    throw new MultiWorkerEnsembleError(
+      "maxParallel must be a positive integer",
+    );
   }
   if (
     policy.timeoutMs !== undefined &&
     (!Number.isFinite(policy.timeoutMs) || policy.timeoutMs <= 0)
   ) {
-    throw new MultiAgentEnsembleError("timeoutMs must be positive");
+    throw new MultiWorkerEnsembleError("timeoutMs must be positive");
   }
   if (
     policy.minSuccessfulCandidates !== undefined &&
     (!Number.isInteger(policy.minSuccessfulCandidates) ||
       policy.minSuccessfulCandidates < 1)
   ) {
-    throw new MultiAgentEnsembleError(
+    throw new MultiWorkerEnsembleError(
       "minSuccessfulCandidates must be a positive integer",
     );
   }
@@ -175,7 +200,7 @@ function validateIndependence(input: MultiAgentEnsembleInput): void {
     (!Number.isFinite(policy.maxEstimatedCostMicrosPerAttempt) ||
       policy.maxEstimatedCostMicrosPerAttempt < 0)
   ) {
-    throw new MultiAgentEnsembleError(
+    throw new MultiWorkerEnsembleError(
       "maxEstimatedCostMicrosPerAttempt must be non-negative",
     );
   }
@@ -184,57 +209,74 @@ function validateIndependence(input: MultiAgentEnsembleInput): void {
       (mode) => typeof mode !== "string" || mode.trim().length === 0,
     )
   ) {
-    throw new MultiAgentEnsembleError(
+    throw new MultiWorkerEnsembleError(
       "preferredBillingModes must contain non-empty strings",
     );
   }
 
   if (candidates.length === 0) {
-    throw new MultiAgentEnsembleError(
+    throw new MultiWorkerEnsembleError(
       "At least one candidate worker is required",
     );
   }
 
   if (policy.mode === "single" && candidates.length !== 1) {
-    throw new MultiAgentEnsembleError(
+    throw new MultiWorkerEnsembleError(
       "Single mode requires exactly one candidate worker",
     );
   }
 
   if (policy.mode !== "single" && candidates.length < 2) {
-    throw new MultiAgentEnsembleError(
+    throw new MultiWorkerEnsembleError(
       `${policy.mode} mode requires at least two candidate workers`,
     );
   }
 
-  // Verify all candidates have unique worker IDs and independence keys
-  const workerIds = new Set<string>();
-  const independenceKeys = new Set<string>();
+  const isIndependent = (
+    left: MultiWorkerWorkerDescriptor,
+    right: MultiWorkerWorkerDescriptor,
+  ) => {
+    if (!left.snapshot || !right.snapshot) {
+      return left.independenceKey !== right.independenceKey;
+    }
+    return levels.some((level) => {
+      if (level === "session")
+        return left.snapshot!.sessionId !== right.snapshot!.sessionId;
+      if (level === "credential")
+        return (
+          left.snapshot!.credentialProfileId !==
+          right.snapshot!.credentialProfileId
+        );
+      if (level === "model")
+        return left.snapshot!.model !== right.snapshot!.model;
+      if (level === "provider")
+        return left.snapshot!.provider !== right.snapshot!.provider;
+      // Host diversity is opt-in and is operational, not intellectual, independence.
+      return left.snapshot!.hostId !== right.snapshot!.hostId;
+    });
+  };
 
-  for (const candidate of candidates) {
-    if (workerIds.has(candidate.workerId)) {
-      throw new MultiAgentEnsembleError(
-        `Duplicate candidate worker ID '${candidate.workerId}'`,
-      );
+  for (let index = 0; index < candidates.length; index += 1) {
+    for (let other = index + 1; other < candidates.length; other += 1) {
+      if (!isIndependent(candidates[index]!, candidates[other]!)) {
+        throw new MultiWorkerEnsembleError(
+          "Collusion risk: candidate snapshots do not meet the requested independence levels",
+        );
+      }
     }
-    if (independenceKeys.has(candidate.independenceKey)) {
-      throw new MultiAgentEnsembleError(
-        `Collusion risk: candidate workers share independence key '${candidate.independenceKey}'`,
-      );
-    }
-    workerIds.add(candidate.workerId);
-    independenceKeys.add(candidate.independenceKey);
   }
 
   // Validate synthesizer independence
   if (policy.mode === "synthesize") {
     if (!synthesizer) {
-      throw new MultiAgentEnsembleError(
+      throw new MultiWorkerEnsembleError(
         "Synthesizer worker is required for synthesize mode",
       );
     }
-    if (independenceKeys.has(synthesizer.independenceKey)) {
-      throw new MultiAgentEnsembleError(
+    if (
+      candidates.some((candidate) => !isIndependent(synthesizer, candidate))
+    ) {
+      throw new MultiWorkerEnsembleError(
         `Collusion risk: synthesizer shares independence key '${synthesizer.independenceKey}' with a candidate`,
       );
     }
@@ -243,12 +285,12 @@ function validateIndependence(input: MultiAgentEnsembleInput): void {
   // Validate selector independence
   if (policy.mode === "compare_and_select") {
     if (!selector) {
-      throw new MultiAgentEnsembleError(
+      throw new MultiWorkerEnsembleError(
         "Selector worker is required for compare_and_select mode",
       );
     }
-    if (independenceKeys.has(selector.independenceKey)) {
-      throw new MultiAgentEnsembleError(
+    if (candidates.some((candidate) => !isIndependent(selector, candidate))) {
+      throw new MultiWorkerEnsembleError(
         `Collusion risk: selector shares independence key '${selector.independenceKey}' with a candidate`,
       );
     }
@@ -257,13 +299,13 @@ function validateIndependence(input: MultiAgentEnsembleInput): void {
   // Validate competitive implementation reviewers
   if (policy.mode === "competitive_implementation") {
     if (!reviewers || reviewers.length === 0) {
-      throw new MultiAgentEnsembleError(
+      throw new MultiWorkerEnsembleError(
         "At least one independent reviewer is required for competitive_implementation mode",
       );
     }
     for (const reviewer of reviewers) {
-      if (independenceKeys.has(reviewer.independenceKey)) {
-        throw new MultiAgentEnsembleError(
+      if (candidates.some((candidate) => !isIndependent(reviewer, candidate))) {
+        throw new MultiWorkerEnsembleError(
           `Collusion risk: reviewer shares independence key '${reviewer.independenceKey}' with a candidate`,
         );
       }
@@ -272,15 +314,15 @@ function validateIndependence(input: MultiAgentEnsembleInput): void {
 }
 
 /**
- * Runs candidate tasks in parallel across disparate machines/agents, bounded by maxParallel.
+ * Runs candidate tasks in parallel across disparate machines/hosts, bounded by maxParallel.
  */
-async function runMultiAgentCandidates(
-  candidates: readonly MultiAgentWorkerDescriptor[],
-  task: MultiAgentTaskRequest,
+async function runMultiWorkerCandidates(
+  candidates: readonly MultiWorkerWorkerDescriptor[],
+  task: MultiWorkerTaskRequest,
   maxParallel?: number,
   candidateWorkspaces?: readonly string[],
-): Promise<MultiAgentCandidateResult[]> {
-  const results: MultiAgentCandidateResult[] = [];
+): Promise<MultiWorkerCandidateResult[]> {
+  const results: MultiWorkerCandidateResult[] = [];
   const limit =
     maxParallel && maxParallel > 0 ? maxParallel : candidates.length;
 
@@ -290,19 +332,19 @@ async function runMultiAgentCandidates(
       batch.map(async (candidate, batchIdx) => {
         const globalIdx = offset + batchIdx;
         const workspaceId = candidateWorkspaces?.[globalIdx];
-        const candidateTask: MultiAgentTaskRequest = {
+        const candidateTask: MultiWorkerTaskRequest = {
           ...task,
           taskId: `${task.taskId}:candidate:${candidate.workerId}`,
           input: {
             ...(task.input || {}),
             ...(workspaceId ? { workspaceRepositoryId: workspaceId } : {}),
             candidateWorkerId: candidate.workerId,
-            candidateAgentId: candidate.agentId,
+            candidateHostId: candidate.hostId,
           },
         };
 
         const startTime = Date.now();
-        let execResult: MultiAgentCandidateExecutionResult;
+        let execResult: MultiWorkerCandidateExecutionResult;
         try {
           execResult = await candidate.execute(candidateTask);
         } catch (err) {
@@ -320,10 +362,11 @@ async function runMultiAgentCandidates(
 
         return {
           workerId: candidate.workerId,
-          agentId: candidate.agentId,
-          pluginId: candidate.pluginId,
+          hostId: candidate.hostId,
+          workerPackageId: candidate.workerPackageId,
           name: candidate.name,
           independenceKey: candidate.independenceKey,
+          snapshot: candidate.snapshot,
           workspaceRepositoryId: workspaceId,
           result: {
             ...execResult,
@@ -340,15 +383,15 @@ async function runMultiAgentCandidates(
 }
 
 /**
- * Executes a multi-agent / multi-worker ensemble across heterogeneous machines.
+ * Executes a multi-worker ensemble across heterogeneous machines.
  */
-export async function executeMultiAgentEnsemble(
-  input: MultiAgentEnsembleInput,
-): Promise<MultiAgentEnsembleResult> {
+export async function executeMultiWorkerEnsemble(
+  input: MultiWorkerEnsembleInput,
+): Promise<MultiWorkerEnsembleResult> {
   validateIndependence(input);
 
   const { policy, task, candidates } = input;
-  const candidateResults = await runMultiAgentCandidates(
+  const candidateResults = await runMultiWorkerCandidates(
     candidates,
     task,
     policy.maxParallel,
@@ -379,13 +422,13 @@ export async function executeMultiAgentEnsemble(
       decisionTask: null,
       selectedCandidateIndex: 0,
       selectedWorkerId: primary.workerId,
-      selectedAgentId: primary.agentId,
+      selectedHostId: primary.hostId,
       totalInputTokens,
       totalOutputTokens,
       summary:
         primary.result.status === "succeeded"
-          ? `Task executed successfully by worker '${primary.name}' on agent '${primary.agentId}'`
-          : `Task failed on worker '${primary.name}' on agent '${primary.agentId}'`,
+          ? `Task executed successfully by worker '${primary.name}' on Host '${primary.hostId}'`
+          : `Task failed on worker '${primary.name}' on Host '${primary.hostId}'`,
     };
   }
 
@@ -400,14 +443,14 @@ export async function executeMultiAgentEnsemble(
       totalInputTokens,
       totalOutputTokens,
       summary: `Completed parallel execution of ${candidateResults.length} candidates across ${
-        new Set(candidateResults.map((c) => c.agentId)).size
-      } agents (${successfulCandidates.length} succeeded)`,
+        new Set(candidateResults.map((c) => c.hostId)).size
+      } hosts (${successfulCandidates.length} succeeded)`,
     };
   }
 
   // Check minimum successful candidates threshold for synthesis and selection
   if (successfulCandidates.length < minRequired) {
-    throw new MultiAgentEnsembleError(
+    throw new MultiWorkerEnsembleError(
       `Ensemble mode '${policy.mode}' requires at least ${minRequired} successful candidate(s), but only ${successfulCandidates.length} succeeded`,
     );
   }
@@ -417,7 +460,7 @@ export async function executeMultiAgentEnsemble(
     const synthesizer = input.synthesizer!;
     const synthesisTaskId = `${task.taskId}:synthesis`;
 
-    const synthesisTaskRequest: MultiAgentTaskRequest = {
+    const synthesisTaskRequest: MultiWorkerTaskRequest = {
       taskId: synthesisTaskId,
       role: "synthesizer",
       objective:
@@ -430,8 +473,8 @@ export async function executeMultiAgentEnsemble(
         candidates: candidateResults.map((c, idx) => ({
           index: idx,
           workerId: c.workerId,
-          agentId: c.agentId,
-          pluginId: c.pluginId,
+          hostId: c.hostId,
+          workerPackageId: c.workerPackageId,
           name: c.name,
           status: c.result.status,
           output: c.result.output,
@@ -465,8 +508,8 @@ export async function executeMultiAgentEnsemble(
       totalInputTokens,
       totalOutputTokens,
       summary: `Synthesized consensus from ${candidateResults.length} candidates across ${
-        new Set(candidateResults.map((c) => c.agentId)).size
-      } agents via synthesizer '${synthesizer.name}' on agent '${synthesizer.agentId}'`,
+        new Set(candidateResults.map((c) => c.hostId)).size
+      } hosts via synthesizer '${synthesizer.name}' on Host '${synthesizer.hostId}'`,
     };
   }
 
@@ -475,7 +518,7 @@ export async function executeMultiAgentEnsemble(
     const selector = input.selector!;
     const selectionTaskId = `${task.taskId}:compare_and_select`;
 
-    const selectionTaskRequest: MultiAgentTaskRequest = {
+    const selectionTaskRequest: MultiWorkerTaskRequest = {
       taskId: selectionTaskId,
       role: "evaluator",
       objective:
@@ -492,8 +535,8 @@ export async function executeMultiAgentEnsemble(
         candidates: candidateResults.map((c, idx) => ({
           index: idx,
           workerId: c.workerId,
-          agentId: c.agentId,
-          pluginId: c.pluginId,
+          hostId: c.hostId,
+          workerPackageId: c.workerPackageId,
           name: c.name,
           status: c.result.status,
           output: c.result.output,
@@ -547,19 +590,19 @@ export async function executeMultiAgentEnsemble(
       decisionTask: null,
       selectedCandidateIndex: selectedIdx,
       selectedWorkerId: winner.workerId,
-      selectedAgentId: winner.agentId,
+      selectedHostId: winner.hostId,
       totalInputTokens,
       totalOutputTokens,
       summary: `Evaluated ${candidateResults.length} candidates across ${
-        new Set(candidateResults.map((c) => c.agentId)).size
-      } agents. Winner: '${winner.name}' on agent '${winner.agentId}' (index ${selectedIdx})`,
+        new Set(candidateResults.map((c) => c.hostId)).size
+      } hosts. Winner: '${winner.name}' on Host '${winner.hostId}' (index ${selectedIdx})`,
     };
   }
 
   // Competitive Implementation mode
   if (policy.mode === "competitive_implementation") {
     const reviewers = input.reviewers || [];
-    const verifications: MultiAgentVerificationResult[] = [];
+    const verifications: MultiWorkerVerificationResult[] = [];
 
     // Verify each candidate implementation using independent reviewers
     for (const candidate of candidateResults) {
@@ -567,7 +610,7 @@ export async function executeMultiAgentEnsemble(
         verifications.push({
           candidateWorkerId: candidate.workerId,
           reviewerWorkerId: "none",
-          reviewerAgentId: "none",
+          reviewerHostId: "none",
           passed: false,
           score: 0,
           feedback: "Candidate execution failed prior to verification",
@@ -581,19 +624,19 @@ export async function executeMultiAgentEnsemble(
       );
 
       if (!eligibleReviewer) {
-        throw new MultiAgentEnsembleError(
+        throw new MultiWorkerEnsembleError(
           `No independent reviewer found for candidate '${candidate.workerId}'`,
         );
       }
 
-      const reviewTask: MultiAgentTaskRequest = {
+      const reviewTask: MultiWorkerTaskRequest = {
         taskId: `${task.taskId}:verify:${candidate.workerId}`,
         role: "reviewer",
         objective: `Independently verify implementation from candidate '${candidate.name}'`,
         requiredCapabilities: ["code_review", "testing"],
         input: {
           candidateWorkerId: candidate.workerId,
-          candidateAgentId: candidate.agentId,
+          candidateHostId: candidate.hostId,
           workspaceRepositoryId: candidate.workspaceRepositoryId,
           output: candidate.result.output,
           artifacts: candidate.result.artifactIds,
@@ -616,7 +659,7 @@ export async function executeMultiAgentEnsemble(
       verifications.push({
         candidateWorkerId: candidate.workerId,
         reviewerWorkerId: eligibleReviewer.workerId,
-        reviewerAgentId: eligibleReviewer.agentId,
+        reviewerHostId: eligibleReviewer.hostId,
         passed,
         score,
         feedback,
@@ -653,15 +696,15 @@ export async function executeMultiAgentEnsemble(
       decisionTask: null,
       selectedCandidateIndex: bestIdx,
       selectedWorkerId: winningCandidate.workerId,
-      selectedAgentId: winningCandidate.agentId,
+      selectedHostId: winningCandidate.hostId,
       verifications,
       totalInputTokens,
       totalOutputTokens,
-      summary: `Competitive implementation across ${candidateResults.length} candidates completed. Winner: '${winningCandidate.name}' on agent '${winningCandidate.agentId}' (score: ${highestScore})`,
+      summary: `Competitive implementation across ${candidateResults.length} candidates completed. Winner: '${winningCandidate.name}' on Host '${winningCandidate.hostId}' (score: ${highestScore})`,
     };
   }
 
-  throw new MultiAgentEnsembleError(
+  throw new MultiWorkerEnsembleError(
     `Unsupported ensemble mode '${policy.mode}'`,
   );
 }

@@ -81,34 +81,34 @@ function forgeExecutionRecord(
   };
 }
 
-export function assertSingleAgentForgeBindings(
+export function assertSingleHostForgeBindings(
   bindings: readonly ForgeWorkerBinding[],
 ): void {
   if (bindings.length !== 3) {
     throw new Error(
-      "Single-agent Forge requires lead, implementation, and review workers",
+      "Single-worker Forge requires lead, implementation, and review workers",
     );
   }
-  const resolvedAgentIds = new Set(bindings.map(({ agent }) => agent.id));
-  const uniqueAgentCount = [...resolvedAgentIds].length;
-  if (uniqueAgentCount !== 1) {
+  const resolvedHostIds = new Set(bindings.map(({ agent }) => agent.id));
+  const uniqueHostCount = [...resolvedHostIds].length;
+  if (uniqueHostCount !== 1) {
     throw new Error(
-      "Single-agent Forge requires all workers to run on one Agent",
+      "Single-worker Forge requires all workers to run on one Host",
     );
   }
 }
 
-export function assertMultiAgentForgeBindings(
+export function assertMultiWorkerForgeBindings(
   bindings: readonly ForgeWorkerBinding[],
 ): void {
   if (bindings.length < 3) {
     throw new Error(
-      "Multi-agent Forge requires lead, implementation, and review workers",
+      "Multi-worker Forge requires lead, implementation, and review workers",
     );
   }
   if (new Set(bindings.map(({ agent }) => agent.id)).size < 2) {
     throw new Error(
-      "Multi-agent Forge requires workers on at least two Agents",
+      "Multi-worker Forge requires workers on at least two Hosts",
     );
   }
 }
@@ -203,7 +203,7 @@ function parseJsonRecord(value: unknown): Record<string, unknown> {
   }
 }
 
-function agentEntity(row: Record<string, unknown>): ConclaveAgent {
+function hostEntity(row: Record<string, unknown>): ConclaveAgent {
   const capabilities = parseJsonRecord(row.agent_capabilities_json);
   return {
     id: String(row.agent_id),
@@ -369,13 +369,13 @@ class DurableForgePersistence implements ForgePersistence {
 }
 
 /**
- * Executes repository operations through an Agent Worker assignment.
+ * Executes repository operations through an Host Worker assignment.
  *
- * Cloud owns orchestration and evidence persistence, while the Agent/Plugin
+ * Cloud owns orchestration and evidence persistence, while the Host/Plugin
  * owns filesystem and process access. Keeping this adapter on the Worker
  * assignment interface keeps Forge independent from plugin/provider details.
  */
-class AgentWorkerRuntime implements ForgeRuntimeAdapter {
+class HostWorkerRuntime implements ForgeRuntimeAdapter {
   constructor(
     private readonly env: ForgeExecutionEnv,
     private readonly context: ForgeExecutionContext,
@@ -618,7 +618,7 @@ class HostGatewayForgeWorker implements ForgeWorker {
     };
     const dispatched = await this.dispatch(request, task);
     if (!dispatched.accepted) {
-      return this.failed(dispatched.error ?? "Agent assignment was rejected");
+      return this.failed(dispatched.error ?? "Host assignment was rejected");
     }
 
     const deadline = Date.now() + this.deadline(request);
@@ -664,12 +664,12 @@ class HostGatewayForgeWorker implements ForgeWorker {
       if (row?.status === "failed" || row?.status === "cancelled") {
         return this.failed(
           this.assignmentError(row.error_json) ??
-            `Agent assignment ended with status ${row.status}`,
+            `Host assignment ended with status ${row.status}`,
         );
       }
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
-    return this.failed("Timed out waiting for Agent assignment result", true);
+    return this.failed("Timed out waiting for Host assignment result", true);
   }
 
   private async dispatch(
@@ -819,15 +819,15 @@ function modelFor(
   );
 }
 
-export type ForgeExecutionMode = "single_agent" | "multi_agent";
+export type ForgeExecutionMode = "single_worker" | "multi_worker";
 
 export function resolveForgeExecutionMode(value: unknown): ForgeExecutionMode {
   if (value === "cloud_api") {
     throw new Error(
-      "Forge direct cloud model execution has been retired; use Dart Agent workers",
+      "Forge direct cloud model execution has been retired; use Dart Host workers",
     );
   }
-  return value === "multi_agent" ? "multi_agent" : "single_agent";
+  return value === "multi_worker" ? "multi_worker" : "single_worker";
 }
 
 export async function readExecutionContext(
@@ -942,7 +942,7 @@ export async function executeForgeService(
   const registry = new D1ForgeWorkerRegistry(
     (workers.results ?? []).map((row) => ({
       worker: workerEntity(row),
-      agent: agentEntity(row),
+      agent: hostEntity(row),
     })),
   );
   const leadResource =
@@ -972,14 +972,14 @@ export async function executeForgeService(
     implementerResource,
     reviewerResource,
   ];
-  if (executionMode === "single_agent") {
-    assertSingleAgentForgeBindings(selectedBindings);
+  if (executionMode === "single_worker") {
+    assertSingleHostForgeBindings(selectedBindings);
   }
-  if (executionMode === "multi_agent") {
-    assertMultiAgentForgeBindings(selectedBindings);
+  if (executionMode === "multi_worker") {
+    assertMultiWorkerForgeBindings(selectedBindings);
   }
   const secondaryResearchResource =
-    executionMode === "multi_agent"
+    executionMode === "multi_worker"
       ? registry
           .list()
           .find(
@@ -988,9 +988,9 @@ export async function executeForgeService(
               agent.id !== leadResource.agent.id,
           )
       : undefined;
-  if (executionMode === "multi_agent" && !secondaryResearchResource) {
+  if (executionMode === "multi_worker" && !secondaryResearchResource) {
     throw new Error(
-      "Multi-agent Forge requires a repository research worker on the second Agent",
+      "Multi-worker Forge requires a repository research worker on the second Host",
     );
   }
   const persistence = new DurableForgePersistence(
@@ -1018,8 +1018,8 @@ export async function executeForgeService(
             ),
           }
         : {}),
-      requireSecondaryResearch: executionMode === "multi_agent",
-      runtime: new AgentWorkerRuntime(
+      requireSecondaryResearch: executionMode === "multi_worker",
+      runtime: new HostWorkerRuntime(
         env,
         context,
         new HostGatewayForgeWorker(

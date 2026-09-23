@@ -256,6 +256,13 @@ This is materially simpler than preserving:
 - derive runtime Worker availability from Host state rather than persisting too many mutable flags;
 - use explicit state transition functions instead of scattered SQL updates;
 - replace "multi-agent" naming with "multi-worker";
+
+V4-12 completes the active orchestration rename. Candidate snapshots carry
+Host, Worker, Credential Profile, provider/model, and session identity. The
+default independence dimensions are session, credential, model, and provider;
+Host diversity is operational only and must be explicitly requested, so two
+Hosts running the same model and session are not treated as intellectually
+independent.
 - make Studio read models purpose-built instead of one large snapshot response over time.
 
 ## 8. Suggested source organization

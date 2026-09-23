@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  assertMultiAgentForgeBindings,
+  assertMultiWorkerForgeBindings,
   type ForgeWorkerBinding,
 } from "../src/forge-execution.js";
 
@@ -47,23 +47,23 @@ function binding(id: string, agentId: string): ForgeWorkerBinding {
   };
 }
 
-describe("multi-agent Forge policy", () => {
+describe("multi-worker Forge policy", () => {
   it("accepts distributed workers", () => {
     expect(() =>
-      assertMultiAgentForgeBindings([
+      assertMultiWorkerForgeBindings([
         binding("lead", "agent-macbook"),
         binding("implementer", "agent-macbook"),
         binding("reviewer", "agent-linux"),
       ]),
     ).not.toThrow();
   });
-  it("rejects a single Agent topology", () => {
+  it("rejects a single Host topology", () => {
     expect(() =>
-      assertMultiAgentForgeBindings([
+      assertMultiWorkerForgeBindings([
         binding("lead", "agent-macbook"),
         binding("implementer", "agent-macbook"),
         binding("reviewer", "agent-macbook"),
       ]),
-    ).toThrow(/at least two Agents/);
+    ).toThrow(/at least two Hosts/);
   });
 });

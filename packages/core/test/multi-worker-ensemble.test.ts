@@ -1,18 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
-  executeMultiAgentEnsemble,
-  MultiAgentEnsembleError,
-  type MultiAgentWorkerDescriptor,
-  type MultiAgentTaskRequest,
+  executeMultiWorkerEnsemble,
+  MultiWorkerEnsembleError,
+  type MultiWorkerWorkerDescriptor,
+  type MultiWorkerTaskRequest,
 } from "../src/index.js";
 
-describe("Multi-Agent & Multi-Worker Ensemble Engine (V2-17)", () => {
-  // Setup 3 candidate workers across disparate physical machines/agents:
+describe("Multi-Worker Ensemble Engine (V4-12)", () => {
+  // Setup 3 candidate workers across disparate physical machines/hosts:
   // 1. Worker A: Claude on MacBook
-  const macbookClaudeWorker: MultiAgentWorkerDescriptor = {
+  const macbookClaudeWorker: MultiWorkerWorkerDescriptor = {
     workerId: "worker-claude-macbook",
-    agentId: "agent-macbook-pro",
-    pluginId: "conclave.claude-code",
+    hostId: "Host-macbook-pro",
+    workerPackageId: "conclave.claude-code",
     name: "Claude on MacBook",
     role: "architect",
     capabilities: ["architecture", "code_review"],
@@ -30,10 +30,10 @@ describe("Multi-Agent & Multi-Worker Ensemble Engine (V2-17)", () => {
   };
 
   // 2. Worker B: GPT on Linux server
-  const linuxGptWorker: MultiAgentWorkerDescriptor = {
+  const linuxGptWorker: MultiWorkerWorkerDescriptor = {
     workerId: "worker-gpt-linux",
-    agentId: "agent-linux-server-prod",
-    pluginId: "conclave.openai-api",
+    hostId: "Host-linux-server-prod",
+    workerPackageId: "conclave.openai-api",
     name: "GPT on Linux Server",
     role: "architect",
     capabilities: ["architecture", "code_review"],
@@ -51,10 +51,10 @@ describe("Multi-Agent & Multi-Worker Ensemble Engine (V2-17)", () => {
   };
 
   // 3. Worker C: Web Worker (remote browser client)
-  const webWorker: MultiAgentWorkerDescriptor = {
+  const webWorker: MultiWorkerWorkerDescriptor = {
     workerId: "worker-chatgpt-web",
-    agentId: "agent-web-client-1",
-    pluginId: "conclave.echo-worker",
+    hostId: "Host-web-client-1",
+    workerPackageId: "conclave.echo-worker",
     name: "ChatGPT Web Worker",
     role: "architect",
     capabilities: ["architecture"],
@@ -71,11 +71,11 @@ describe("Multi-Agent & Multi-Worker Ensemble Engine (V2-17)", () => {
     }),
   };
 
-  // Synthesizer worker on host agent
-  const synthesizerWorker: MultiAgentWorkerDescriptor = {
+  // Synthesizer worker on host Host
+  const synthesizerWorker: MultiWorkerWorkerDescriptor = {
     workerId: "worker-synthesizer-cloud",
-    agentId: "agent-cloud-host",
-    pluginId: "conclave.openai-api",
+    hostId: "Host-cloud-host",
+    workerPackageId: "conclave.openai-api",
     name: "Consensus Synthesizer",
     role: "synthesizer",
     capabilities: ["synthesis"],
@@ -94,10 +94,10 @@ describe("Multi-Agent & Multi-Worker Ensemble Engine (V2-17)", () => {
   };
 
   // Selector / Evaluator worker
-  const evaluatorWorker: MultiAgentWorkerDescriptor = {
+  const evaluatorWorker: MultiWorkerWorkerDescriptor = {
     workerId: "worker-evaluator-cloud",
-    agentId: "agent-cloud-host",
-    pluginId: "conclave.anthropic-api",
+    hostId: "Host-cloud-host",
+    workerPackageId: "conclave.anthropic-api",
     name: "Lead Architecture Evaluator",
     role: "evaluator",
     capabilities: ["evaluation"],
@@ -115,15 +115,15 @@ describe("Multi-Agent & Multi-Worker Ensemble Engine (V2-17)", () => {
   };
 
   // Independent reviewer for competitive implementation
-  const independentReviewer: MultiAgentWorkerDescriptor = {
+  const independentReviewer: MultiWorkerWorkerDescriptor = {
     workerId: "worker-qa-reviewer",
-    agentId: "agent-qa-ci-runner",
-    pluginId: "conclave.claude-code",
+    hostId: "Host-qa-ci-runner",
+    workerPackageId: "conclave.claude-code",
     name: "QA CI Reviewer",
     role: "reviewer",
     capabilities: ["code_review", "testing"],
     independenceKey: "indep-qa-reviewer",
-    execute: async (task: MultiAgentTaskRequest) => {
+    execute: async (task: MultiWorkerTaskRequest) => {
       const candidateWorkerId = task.input?.candidateWorkerId;
       if (candidateWorkerId === "worker-claude-macbook") {
         return {
@@ -148,7 +148,7 @@ describe("Multi-Agent & Multi-Worker Ensemble Engine (V2-17)", () => {
     },
   };
 
-  const sampleTask: MultiAgentTaskRequest = {
+  const sampleTask: MultiWorkerTaskRequest = {
     taskId: "task-arch-design",
     role: "architect",
     objective: "Design distributed messaging layer for Conclave AX",
@@ -158,7 +158,7 @@ describe("Multi-Agent & Multi-Worker Ensemble Engine (V2-17)", () => {
 
   it("rejects invalid execution limits before dispatching workers", async () => {
     await expect(
-      executeMultiAgentEnsemble({
+      executeMultiWorkerEnsemble({
         policy: { mode: "parallel", maxParallel: 0 },
         task: sampleTask,
         candidates: [macbookClaudeWorker, linuxGptWorker],
@@ -166,7 +166,7 @@ describe("Multi-Agent & Multi-Worker Ensemble Engine (V2-17)", () => {
     ).rejects.toThrow("maxParallel must be a positive integer");
 
     await expect(
-      executeMultiAgentEnsemble({
+      executeMultiWorkerEnsemble({
         policy: {
           mode: "parallel",
           timeoutMs: -1,
@@ -178,7 +178,7 @@ describe("Multi-Agent & Multi-Worker Ensemble Engine (V2-17)", () => {
     ).rejects.toThrow("timeoutMs must be positive");
 
     await expect(
-      executeMultiAgentEnsemble({
+      executeMultiWorkerEnsemble({
         policy: {
           mode: "parallel",
           minSuccessfulCandidates: 0,
@@ -190,7 +190,7 @@ describe("Multi-Agent & Multi-Worker Ensemble Engine (V2-17)", () => {
   });
 
   it("coordinates parallel execution across 3 disparate machines (MacBook, Linux, Web)", async () => {
-    const result = await executeMultiAgentEnsemble({
+    const result = await executeMultiWorkerEnsemble({
       policy: { mode: "parallel" },
       task: sampleTask,
       candidates: [macbookClaudeWorker, linuxGptWorker, webWorker],
@@ -199,21 +199,21 @@ describe("Multi-Agent & Multi-Worker Ensemble Engine (V2-17)", () => {
     expect(result.mode).toBe("parallel");
     expect(result.candidates).toHaveLength(3);
 
-    // Verify candidates are on 3 distinct physical agents
-    const agentIds = result.candidates.map((c) => c.agentId);
-    expect(new Set(agentIds).size).toBe(3);
-    expect(agentIds).toContain("agent-macbook-pro");
-    expect(agentIds).toContain("agent-linux-server-prod");
-    expect(agentIds).toContain("agent-web-client-1");
+    // Verify candidates are on 3 distinct physical hosts
+    const hostIds = result.candidates.map((c) => c.hostId);
+    expect(new Set(hostIds).size).toBe(3);
+    expect(hostIds).toContain("Host-macbook-pro");
+    expect(hostIds).toContain("Host-linux-server-prod");
+    expect(hostIds).toContain("Host-web-client-1");
 
     // Verify total token telemetry
     expect(result.totalInputTokens).toBe(1500); // 500 + 600 + 400
     expect(result.totalOutputTokens).toBe(600); // 200 + 250 + 150
-    expect(result.summary).toContain("3 candidates across 3 agents");
+    expect(result.summary).toContain("3 candidates across 3 hosts");
   });
 
   it("coordinates synthesize mode across 3 machines with independent synthesizer", async () => {
-    const result = await executeMultiAgentEnsemble({
+    const result = await executeMultiWorkerEnsemble({
       policy: {
         mode: "synthesize",
         synthesisPrompt: "Create unified hybrid design from all 3 proposals",
@@ -234,7 +234,7 @@ describe("Multi-Agent & Multi-Worker Ensemble Engine (V2-17)", () => {
   });
 
   it("coordinates compare_and_select mode picking winner across machines", async () => {
-    const result = await executeMultiAgentEnsemble({
+    const result = await executeMultiWorkerEnsemble({
       policy: { mode: "compare_and_select" },
       task: sampleTask,
       candidates: [macbookClaudeWorker, linuxGptWorker, webWorker],
@@ -244,14 +244,14 @@ describe("Multi-Agent & Multi-Worker Ensemble Engine (V2-17)", () => {
     expect(result.mode).toBe("compare_and_select");
     expect(result.selectedCandidateIndex).toBe(0);
     expect(result.selectedWorkerId).toBe("worker-claude-macbook");
-    expect(result.selectedAgentId).toBe("agent-macbook-pro");
+    expect(result.selectedHostId).toBe("Host-macbook-pro");
     expect(result.summary).toContain(
-      "Winner: 'Claude on MacBook' on agent 'agent-macbook-pro'",
+      "Winner: 'Claude on MacBook' on Host 'Host-macbook-pro'",
     );
   });
 
   it("coordinates competitive_implementation mode with independent reviewer verification", async () => {
-    const result = await executeMultiAgentEnsemble({
+    const result = await executeMultiWorkerEnsemble({
       policy: { mode: "competitive_implementation" },
       task: sampleTask,
       candidates: [macbookClaudeWorker, linuxGptWorker],
@@ -267,23 +267,104 @@ describe("Multi-Agent & Multi-Worker Ensemble Engine (V2-17)", () => {
     // Highest score candidate (index 0) is selected
     expect(result.selectedCandidateIndex).toBe(0);
     expect(result.selectedWorkerId).toBe("worker-claude-macbook");
-    expect(result.selectedAgentId).toBe("agent-macbook-pro");
+    expect(result.selectedHostId).toBe("Host-macbook-pro");
   });
 
   it("strictly prevents collusion when workers share independence keys", async () => {
     // Colluding worker with same independence key as candidate
-    const colludingSynthesizer: MultiAgentWorkerDescriptor = {
+    const colludingSynthesizer: MultiWorkerWorkerDescriptor = {
       ...synthesizerWorker,
       independenceKey: "indep-claude-mac", // same as macbookClaudeWorker!
     };
 
     await expect(
-      executeMultiAgentEnsemble({
+      executeMultiWorkerEnsemble({
         policy: { mode: "synthesize" },
         task: sampleTask,
         candidates: [macbookClaudeWorker, linuxGptWorker],
         synthesizer: colludingSynthesizer,
       }),
-    ).rejects.toThrowError(MultiAgentEnsembleError);
+    ).rejects.toThrowError(MultiWorkerEnsembleError);
+  });
+
+  it("accepts the same model in fresh sessions", async () => {
+    const first = {
+      ...macbookClaudeWorker,
+      workerId: "same-worker",
+      snapshot: {
+        hostId: "host-1",
+        workerId: "same-worker",
+        credentialProfileId: "cred-1",
+        provider: "anthropic",
+        model: "claude-sonnet",
+        sessionId: "session-1",
+      },
+    };
+    const second = {
+      ...first,
+      hostId: "host-2",
+      snapshot: { ...first.snapshot, hostId: "host-2", sessionId: "session-2" },
+    };
+    const result = await executeMultiWorkerEnsemble({
+      policy: { mode: "parallel", independenceLevels: ["session"] },
+      task: sampleTask,
+      candidates: [first, second],
+    });
+    expect(result.candidates[0]?.snapshot?.sessionId).toBe("session-1");
+  });
+
+  it("accepts same provider with different models and different providers", async () => {
+    const make = (workerId: string, provider: string, model: string) => ({
+      ...macbookClaudeWorker,
+      workerId,
+      hostId: `host-${workerId}`,
+      snapshot: {
+        hostId: `host-${workerId}`,
+        workerId,
+        credentialProfileId: `cred-${workerId}`,
+        provider,
+        model,
+        sessionId: `session-${workerId}`,
+      },
+    });
+    const result = await executeMultiWorkerEnsemble({
+      policy: { mode: "parallel", independenceLevels: ["model", "provider"] },
+      task: sampleTask,
+      candidates: [
+        make("model-a", "openai", "gpt-5"),
+        make("model-b", "openai", "gpt-4.1"),
+        make("provider-b", "anthropic", "claude-sonnet"),
+      ],
+    });
+    expect(result.candidates).toHaveLength(3);
+  });
+
+  it("does not treat different Hosts as intellectual independence by default", async () => {
+    const sameModel = (hostId: string) => ({
+      ...macbookClaudeWorker,
+      workerId: `worker-${hostId}`,
+      hostId,
+      snapshot: {
+        hostId,
+        workerId: `worker-${hostId}`,
+        credentialProfileId: "same-credential",
+        provider: "openai",
+        model: "gpt-5",
+        sessionId: "same-session",
+      },
+    });
+    await expect(
+      executeMultiWorkerEnsemble({
+        policy: { mode: "parallel" },
+        task: sampleTask,
+        candidates: [sameModel("host-a"), sameModel("host-b")],
+      }),
+    ).rejects.toThrowError(MultiWorkerEnsembleError);
+    const result = await executeMultiWorkerEnsemble({
+      policy: { mode: "parallel", independenceLevels: ["host"] },
+      task: sampleTask,
+      candidates: [sameModel("host-a"), sameModel("host-b")],
+    });
+    expect(result.candidates).toHaveLength(2);
   });
 });

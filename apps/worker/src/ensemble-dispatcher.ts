@@ -1,16 +1,16 @@
 /**
- * Conclave AX Architecture v2 - Cloud Multi-Agent Ensemble Dispatcher.
+ * Conclave AX Architecture v2 - Cloud Multi-Worker Ensemble Dispatcher.
  *
- * Coordinates multi-agent and multi-worker execution across heterogeneous agents and machines
+ * Coordinates multi-worker and multi-worker execution across heterogeneous hosts and machines
  * (e.g. MacBook, Linux server, Web worker) backed by Cloud D1 persistence and HostGateway Durable Objects.
  */
 
 import {
-  executeMultiAgentEnsemble,
-  type MultiAgentEnsemblePolicy,
-  type MultiAgentEnsembleResult,
-  type MultiAgentWorkerDescriptor,
-  type MultiAgentTaskRequest,
+  executeMultiWorkerEnsemble,
+  type MultiWorkerEnsemblePolicy,
+  type MultiWorkerEnsembleResult,
+  type MultiWorkerWorkerDescriptor,
+  type MultiWorkerTaskRequest,
 } from "@conclave/core";
 import {
   cancelTaskAssignment,
@@ -24,7 +24,7 @@ export interface EnsembleDispatchParams {
   readonly runId: string;
   readonly taskId: string;
   readonly task: TaskToDispatch;
-  readonly policy: MultiAgentEnsemblePolicy;
+  readonly policy: MultiWorkerEnsemblePolicy;
   readonly explicitCandidateWorkerIds?: readonly string[];
   readonly synthesizerWorkerId?: string;
   readonly selectorWorkerId?: string;
@@ -34,8 +34,8 @@ export interface EnsembleDispatchParams {
 
 export interface SelectedEnsembleWorker {
   readonly id: string;
-  readonly agentId: string;
-  readonly pluginId: string;
+  readonly hostId: string;
+  readonly workerPackageId: string;
   readonly name: string;
   readonly role: string;
   readonly capabilities: readonly string[];
@@ -118,8 +118,8 @@ function toSelectedWorker(
 ): SelectedEnsembleWorker {
   return {
     id: String(row.id),
-    agentId: String(row.agent_id),
-    pluginId: String(row.plugin_id),
+    hostId: String(row.Host_id),
+    workerPackageId: String(row.plugin_id),
     name: String(row.name),
     role: task.role,
     capabilities: jsonStrings(row.capabilities_json),
@@ -162,7 +162,7 @@ async function waitForAssignmentResult(
       } catch {
         // Fall through as a malformed terminal result.
       }
-      return { status: "failed", error: "Agent returned malformed output" };
+      return { status: "failed", error: "Worker returned malformed output" };
     }
     if (row?.status === "failed" || row?.status === "cancelled") {
       return {
@@ -172,11 +172,11 @@ async function waitForAssignmentResult(
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  return { status: "timed_out", error: "Timed out waiting for Agent result" };
+  return { status: "timed_out", error: "Timed out waiting for Worker result" };
 }
 
 /**
- * Selects N candidate workers matching role and capabilities across online agents with distinct independence keys.
+ * Selects N candidate workers matching role and capabilities across online hosts with distinct independence keys.
  */
 export async function selectEnsembleCandidateWorkers(
   db: D1Database,
@@ -190,15 +190,15 @@ export async function selectEnsembleCandidateWorkers(
     const placeholders = explicitWorkerIds.map((_, i) => `?${i + 2}`).join(",");
     const rows = await db
       .prepare(
-        `SELECT w.id, w.agent_id, w.plugin_id, w.name, w.independence_key,
+        `SELECT w.id, w.Host_id, w.plugin_id, w.name, w.independence_key,
                 w.roles_json, w.capabilities_json, w.concurrency_limit,
                 w.billing_mode, w.cost_metadata_json,
                 (SELECT COUNT(*) FROM worker_assignments wa
                  WHERE wa.worker_id = w.id
                    AND wa.status IN ('created', 'dispatched', 'acknowledged', 'running')) AS active_assignments,
-                a.status as agent_status
+                a.status as Host_status
          FROM workers w
-         JOIN agents a ON a.id = w.agent_id
+         JOIN hosts a ON a.id = w.Host_id
          WHERE w.workspace_id = ?1 AND w.id IN (${placeholders}) AND w.enabled = 1
            AND w.status != 'disabled' AND a.status = 'online'
            AND a.revoked_at IS NULL`,
@@ -229,15 +229,15 @@ export async function selectEnsembleCandidateWorkers(
 
   const rows = await db
     .prepare(
-      `SELECT w.id, w.agent_id, w.plugin_id, w.name, w.independence_key,
+      `SELECT w.id, w.Host_id, w.plugin_id, w.name, w.independence_key,
               w.roles_json, w.capabilities_json, w.concurrency_limit,
               w.billing_mode, w.cost_metadata_json,
               (SELECT COUNT(*) FROM worker_assignments wa
                WHERE wa.worker_id = w.id
                  AND wa.status IN ('created', 'dispatched', 'acknowledged', 'running')) AS active_assignments,
-              w.status as worker_status, a.status as agent_status
+              w.status as worker_status, a.status as Host_status
        FROM workers w
-       JOIN agents a ON a.id = w.agent_id
+       JOIN hosts a ON a.id = w.Host_id
        WHERE w.workspace_id = ?1 AND w.enabled = 1 AND w.status != 'disabled'
          AND a.status = 'online' AND a.revoked_at IS NULL`,
     )
@@ -297,16 +297,16 @@ function createWorkerDescriptor(
   taskId: string,
   worker: SelectedEnsembleWorker,
   attemptNumber?: number,
-): MultiAgentWorkerDescriptor {
+): MultiWorkerWorkerDescriptor {
   return {
     workerId: worker.id,
-    agentId: worker.agentId,
-    pluginId: worker.pluginId,
+    hostId: worker.hostId,
+    workerPackageId: worker.workerPackageId,
     name: worker.name,
     role: worker.role,
     capabilities: worker.capabilities,
     independenceKey: worker.independenceKey,
-    execute: async (taskReq: MultiAgentTaskRequest) => {
+    execute: async (taskReq: MultiWorkerTaskRequest) => {
       const dispatchRes = await dispatchTaskAssignment(env, {
         workspaceId,
         runId,
@@ -330,7 +330,7 @@ function createWorkerDescriptor(
           output: null,
           error: {
             code: "DISPATCH_REJECTED",
-            message: dispatchRes.error || "Agent rejected assignment",
+            message: dispatchRes.error || "Worker rejected assignment",
             retryable: true,
           },
         };
@@ -367,7 +367,9 @@ function createWorkerDescriptor(
       const output =
         typeof result.output === "object" && result.output !== null
           ? (result.output as Record<string, unknown>)
-          : { summary: String(result.summary ?? "Agent assignment completed") };
+          : {
+              summary: String(result.summary ?? "Worker assignment completed"),
+            };
       return {
         status: "succeeded",
         output: {
@@ -388,12 +390,12 @@ function createWorkerDescriptor(
 }
 
 /**
- * Dispatches and coordinates a multi-agent ensemble across disparate machines.
+ * Dispatches and coordinates a multi-worker ensemble across disparate machines.
  */
 export async function dispatchEnsembleTaskAssignment(
   env: AssignmentDispatcherEnv,
   params: EnsembleDispatchParams,
-): Promise<MultiAgentEnsembleResult> {
+): Promise<MultiWorkerEnsembleResult> {
   const { workspaceId, runId, taskId, task, policy } = params;
 
   const targetCount =
@@ -425,7 +427,7 @@ export async function dispatchEnsembleTaskAssignment(
     createWorkerDescriptor(env, workspaceId, runId, taskId, w, index + 1),
   );
 
-  let synthesizerDescriptor: MultiAgentWorkerDescriptor | undefined;
+  let synthesizerDescriptor: MultiWorkerWorkerDescriptor | undefined;
   if (params.synthesizerWorkerId) {
     const synthWorker = (
       await selectEnsembleCandidateWorkers(
@@ -453,7 +455,7 @@ export async function dispatchEnsembleTaskAssignment(
     }
   }
 
-  let selectorDescriptor: MultiAgentWorkerDescriptor | undefined;
+  let selectorDescriptor: MultiWorkerWorkerDescriptor | undefined;
   if (params.selectorWorkerId) {
     const selWorker = (
       await selectEnsembleCandidateWorkers(
@@ -481,7 +483,7 @@ export async function dispatchEnsembleTaskAssignment(
     }
   }
 
-  let reviewerDescriptors: MultiAgentWorkerDescriptor[] | undefined;
+  let reviewerDescriptors: MultiWorkerWorkerDescriptor[] | undefined;
   if (params.reviewerWorkerIds && params.reviewerWorkerIds.length > 0) {
     const revWorkers = await selectEnsembleCandidateWorkers(
       env.CONCLAVE_DB,
@@ -507,7 +509,7 @@ export async function dispatchEnsembleTaskAssignment(
     );
   }
 
-  const ensembleResult = await executeMultiAgentEnsemble({
+  const ensembleResult = await executeMultiWorkerEnsemble({
     policy,
     task: {
       taskId,

@@ -13,7 +13,7 @@ export * from "./completion.js";
 export * from "./entities.js";
 export * from "./v4-entities.js";
 export * from "./v4-scheduler.js";
-export * from "./multi-agent-ensemble.js";
+export * from "./multi-worker-ensemble.js";
 export * from "./chat-lifecycle.js";
 
 export const CORE_PROTOCOL_VERSION = "0.1";
