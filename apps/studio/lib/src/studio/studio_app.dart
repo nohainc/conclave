@@ -204,6 +204,35 @@ class _StudioAppState extends State<StudioApp> {
     }
   }
 
+  Future<void> _registerPasskey() async {
+    try {
+      await widget.dataSource.registerPasskey('Studio browser passkey');
+      await _loadAccountSecurity();
+      if (mounted) _showSnackBar('Passkey added.');
+    } catch (error) {
+      if (mounted) _showSnackBar(error.toString());
+    }
+  }
+
+  Future<void> _deletePasskey(StudioPasskey passkey) async {
+    try {
+      await widget.dataSource.deletePasskey(passkey.id);
+      await _loadAccountSecurity();
+      if (mounted) _showSnackBar('Passkey removed.');
+    } catch (error) {
+      if (mounted) _showSnackBar(error.toString());
+    }
+  }
+
+  Future<void> _signInWithPasskey(Uri returnTo) async {
+    try {
+      await widget.dataSource.signInWithPasskey();
+      browserNavigation.replace(returnTo);
+    } catch (error) {
+      if (mounted) _showSnackBar(error.toString());
+    }
+  }
+
   Future<void> _loadSnapshot(
       {String? projectId, String? workspaceId, bool showSpinner = true}) async {
     if (store.auth.session?.authenticated == false) return;
@@ -826,6 +855,15 @@ class _StudioAppState extends State<StudioApp> {
                           'google', returnTo),
                       icon: const Icon(Icons.account_circle_outlined),
                       label: const Text('Continue with Google'),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton.icon(
+                      onPressed: () => _signInWithPasskey(returnTo),
+                      icon: const Icon(Icons.fingerprint),
+                      label: const Text('Continue with Passkey'),
                     ),
                   ),
                 ],
@@ -2673,6 +2711,43 @@ class _StudioAppState extends State<StudioApp> {
                             child: const Text('Revoke'),
                           ),
                         )),
+                  ],
+                ),
+        ),
+        const SizedBox(height: 16),
+        _panel(
+          title: 'Passkeys',
+          subtitle:
+              'Use a device or security key to sign in without a password.',
+          child: accountSecurityLoading
+              ? const Center(child: CircularProgressIndicator())
+              : Column(
+                  children: [
+                    if (security?.passkeys.isEmpty ?? true)
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text('No passkeys enrolled.'),
+                      ),
+                    ...?security?.passkeys.map((passkey) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.fingerprint),
+                          title: Text(passkey.name),
+                          subtitle: Text(passkey.createdAt.isEmpty
+                              ? 'WebAuthn credential'
+                              : 'Added ${_formatAccountDate(passkey.createdAt)}'),
+                          trailing: TextButton(
+                            onPressed: () => _deletePasskey(passkey),
+                            child: const Text('Remove'),
+                          ),
+                        )),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: OutlinedButton.icon(
+                        onPressed: _registerPasskey,
+                        icon: const Icon(Icons.add_circle_outline),
+                        label: const Text('Add passkey'),
+                      ),
+                    ),
                   ],
                 ),
         ),

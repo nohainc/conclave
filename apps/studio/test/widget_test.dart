@@ -169,6 +169,9 @@ void main() {
     expect(find.text('GitHub'), findsOneWidget);
     expect(find.text('Active sessions'), findsOneWidget);
     expect(find.text('Revoke'), findsOneWidget);
+    expect(find.text('Passkeys'), findsOneWidget);
+    expect(find.text('MacBook Touch ID'), findsOneWidget);
+    expect(find.text('Add passkey'), findsOneWidget);
   });
 
   testWidgets('auth redirects to sign-in without loading workspace data',
@@ -180,6 +183,7 @@ void main() {
     expect(find.text('Sign in to Conclave'), findsOneWidget);
     expect(find.text('Continue with GitHub'), findsOneWidget);
     expect(find.text('Continue with Google'), findsOneWidget);
+    expect(find.text('Continue with Passkey'), findsOneWidget);
     expect(find.text('Improve authentication architecture'), findsNothing);
   });
 

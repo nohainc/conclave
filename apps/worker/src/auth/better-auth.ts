@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { passkey } from "@better-auth/passkey";
 
 type SocialProviderCredentials = {
   clientId: string;
@@ -11,6 +12,8 @@ export type BetterAuthRuntimeEnv = Pick<Env, "CONCLAVE_DB"> & {
   BETTER_AUTH_SECRET?: string;
   BETTER_AUTH_URL?: string;
   BETTER_AUTH_TRUSTED_ORIGINS?: string;
+  BETTER_AUTH_RP_ID?: string;
+  BETTER_AUTH_ORIGIN?: string;
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;
   GOOGLE_CLIENT_ID?: string;
@@ -68,6 +71,25 @@ export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
         origin.length > 0 && origins.indexOf(origin) === index,
     );
 
+  const passkeyOptions = {
+    rpID: env.BETTER_AUTH_RP_ID,
+    rpName: "Conclave",
+    origin: env.BETTER_AUTH_ORIGIN,
+    schema: {
+      passkey: {
+        modelName: "passkeys",
+        fields: {
+          publicKey: "public_key",
+          userId: "user_id",
+          credentialID: "credential_id",
+          deviceType: "device_type",
+          backedUp: "backed_up",
+          createdAt: "created_at",
+        },
+      },
+    },
+  };
+
   return {
     database: env.CONCLAVE_DB,
     secret: env.BETTER_AUTH_SECRET,
@@ -116,6 +138,7 @@ export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
       ...(github ? { github } : {}),
       ...(google ? { google } : {}),
     },
+    plugins: [passkey(passkeyOptions)],
     session: {
       modelName: "auth_sessions",
       fields: {

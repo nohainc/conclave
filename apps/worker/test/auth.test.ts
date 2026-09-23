@@ -48,6 +48,8 @@ describe("IdentityService", () => {
     });
     expect(options.session?.modelName).toBe("auth_sessions");
     expect(options.verification?.modelName).toBe("auth_verifications");
+    expect(options.plugins).toHaveLength(1);
+    expect(options.plugins?.[0]).toMatchObject({ id: "passkey" });
     expect(options.session).toMatchObject({
       expiresIn: 60 * 60 * 24 * 14,
       updateAge: 60 * 60 * 24,

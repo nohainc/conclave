@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../auth/passkey_browser_stub.dart'
+    if (dart.library.html) '../auth/passkey_browser_web.dart' as passkeys;
 import '../platform/http_client_stub.dart'
     if (dart.library.html) '../platform/http_client_web.dart' as platform;
 import 'studio_models.dart';
@@ -13,6 +15,9 @@ abstract interface class StudioDataSource {
   Future<StudioAccountSecurity> loadAccountSecurity();
   Future<void> revokeAccountSession(String token);
   Future<Uri> beginAccountLink(String provider, Uri returnTo);
+  Future<void> registerPasskey(String name);
+  Future<void> deletePasskey(String id);
+  Future<void> signInWithPasskey();
   Future<List<StudioWorkspace>> loadWorkspaces();
   Future<StudioSnapshot> loadSnapshot({String? projectId, String? workspaceId});
   Future<void> controlRun(String runId, String command);
@@ -115,6 +120,7 @@ class StudioApiClient implements StudioDataSource {
 
   final String baseUrl;
   final http.Client client;
+  final passkeyBrowser = passkeys.createStudioPasskeyBrowser();
   String? activeWorkspaceId;
 
   @override
@@ -159,6 +165,8 @@ class StudioApiClient implements StudioDataSource {
     final responses = await Future.wait([
       client.get(Uri.parse('$baseUrl/auth/list-accounts'), headers: _headers()),
       client.get(Uri.parse('$baseUrl/auth/list-sessions'), headers: _headers()),
+      client.get(Uri.parse('$baseUrl/auth/passkey/list-user-passkeys'),
+          headers: _headers()),
     ]);
     for (final response in responses) {
       if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -169,6 +177,7 @@ class StudioApiClient implements StudioDataSource {
     }
     final accountsBody = jsonDecode(responses[0].body);
     final sessionsBody = jsonDecode(responses[1].body);
+    final passkeysBody = jsonDecode(responses[2].body);
     final accounts = accountsBody is List
         ? accountsBody
         : accountsBody is Map && accountsBody['accounts'] is List
@@ -179,6 +188,11 @@ class StudioApiClient implements StudioDataSource {
         : sessionsBody is Map && sessionsBody['sessions'] is List
             ? sessionsBody['sessions'] as List
             : const [];
+    final passkeys = passkeysBody is List
+        ? passkeysBody
+        : passkeysBody is Map && passkeysBody['passkeys'] is List
+            ? passkeysBody['passkeys'] as List
+            : const [];
     return StudioAccountSecurity.fromJson(
       accounts
           .whereType<Map>()
@@ -188,7 +202,34 @@ class StudioApiClient implements StudioDataSource {
           .whereType<Map>()
           .map((value) => Map<String, dynamic>.from(value))
           .toList(growable: false),
+      passkeys
+          .whereType<Map>()
+          .map((value) => Map<String, dynamic>.from(value))
+          .toList(growable: false),
     );
+  }
+
+  @override
+  Future<void> registerPasskey(String name) async {
+    await passkeyBrowser.register(baseUrl, name);
+  }
+
+  @override
+  Future<void> deletePasskey(String id) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/auth/passkey/delete-passkey'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({'id': id}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException('Passkey removal failed',
+          statusCode: response.statusCode);
+    }
+  }
+
+  @override
+  Future<void> signInWithPasskey() async {
+    await passkeyBrowser.signIn(baseUrl);
   }
 
   @override

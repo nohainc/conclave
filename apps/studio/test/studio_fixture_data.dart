@@ -34,7 +34,20 @@ class StudioFixtureDataSource implements StudioDataSource {
             userAgent: 'Fixture browser',
           ),
         ],
+        passkeys: [
+          StudioPasskey(
+              id: 'passkey-1', name: 'MacBook Touch ID', createdAt: 'today'),
+        ],
       );
+
+  @override
+  Future<void> registerPasskey(String name) async {}
+
+  @override
+  Future<void> deletePasskey(String id) async {}
+
+  @override
+  Future<void> signInWithPasskey() async {}
 
   @override
   Future<void> revokeAccountSession(String token) async {}

@@ -833,20 +833,46 @@ class StudioAuthSession {
 }
 
 class StudioAccountSecurity {
-  const StudioAccountSecurity({required this.accounts, required this.sessions});
+  const StudioAccountSecurity({
+    required this.accounts,
+    required this.sessions,
+    this.passkeys = const [],
+  });
 
   final List<StudioAuthAccount> accounts;
   final List<StudioAuthSession> sessions;
+  final List<StudioPasskey> passkeys;
 
-  factory StudioAccountSecurity.fromJson(
-    List<Map<String, dynamic>> accounts,
-    List<Map<String, dynamic>> sessions,
-  ) =>
+  factory StudioAccountSecurity.fromJson(List<Map<String, dynamic>> accounts,
+          List<Map<String, dynamic>> sessions,
+          [List<Map<String, dynamic>> passkeys = const []]) =>
       StudioAccountSecurity(
         accounts:
             accounts.map(StudioAuthAccount.fromJson).toList(growable: false),
         sessions:
             sessions.map(StudioAuthSession.fromJson).toList(growable: false),
+        passkeys: passkeys.map(StudioPasskey.fromJson).toList(growable: false),
+      );
+}
+
+class StudioPasskey {
+  const StudioPasskey({
+    required this.id,
+    required this.name,
+    required this.createdAt,
+    this.aaguid,
+  });
+
+  final String id;
+  final String name;
+  final String createdAt;
+  final String? aaguid;
+
+  factory StudioPasskey.fromJson(Map<String, dynamic> json) => StudioPasskey(
+        id: _string(json, 'id'),
+        name: _string(json, 'name', 'Passkey'),
+        createdAt: _string(json, 'createdAt', _string(json, 'created_at')),
+        aaguid: json['aaguid'] as String?,
       );
 }
 

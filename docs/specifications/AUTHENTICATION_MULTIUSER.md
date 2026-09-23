@@ -89,6 +89,14 @@ sessionId
 
 Cloud APIs derive tenant scope from the authenticated identity instead of accepting arbitrary workspace ownership claims from clients.
 
+Better Auth is the sole human authentication implementation. GitHub and Google
+are the initial social methods, and passkeys are an additional passwordless
+method. Studio Web uses same-origin, HttpOnly cookie sessions; it does not
+receive or store human authentication tokens in Dart code. Passkey private keys
+remain on the device or security key. Conclave stores only the public WebAuthn
+credential, counter, and authenticator metadata, and users can remove an
+enrolled passkey from the Account page.
+
 ## 6. Conclave Agent identity
 
 A Conclave Agent is not a User. It is a registered machine/service identity belonging to one Workspace.

@@ -10,6 +10,7 @@
     "check:startup": "wrangler check startup"
   },
   "dependencies": {
+    "@better-auth/passkey": "^1.7.5",
     "@conclave/agent-protocol": "workspace:*",
     "@conclave/core": "workspace:*",
     "@conclave/orchestration": "workspace:*",

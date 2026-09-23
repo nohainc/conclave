@@ -59,6 +59,23 @@ CREATE TABLE auth_verifications (
 CREATE INDEX idx_auth_verifications_identifier
   ON auth_verifications(identifier);
 
+-- Better Auth passkey plugin model. Private keys remain on the authenticator;
+-- Conclave stores only the public credential and its WebAuthn counter.
+CREATE TABLE passkeys (
+  id TEXT PRIMARY KEY,
+  name TEXT,
+  public_key TEXT NOT NULL,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  credential_id TEXT NOT NULL UNIQUE,
+  counter INTEGER NOT NULL DEFAULT 0,
+  device_type TEXT NOT NULL,
+  backed_up INTEGER NOT NULL DEFAULT 0 CHECK (backed_up IN (0, 1)),
+  transports TEXT,
+  created_at TEXT,
+  aaguid TEXT
+);
+CREATE INDEX idx_passkeys_user ON passkeys(user_id);
+
 CREATE TABLE workspaces (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,

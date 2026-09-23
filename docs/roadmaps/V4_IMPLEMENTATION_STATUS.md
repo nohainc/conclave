@@ -129,3 +129,11 @@ linked GitHub/Google methods, active Better Auth sessions, and per-session
 revocation. Explicit provider linking keeps the Conclave User ID unchanged;
 implicit same-email linking remains disabled and different-email linking is
 rejected.
+
+## AUTH-14 — Passkeys
+
+✅ Better Auth's official passkey plugin is enabled in the Cloud auth boundary.
+Studio Web supports browser-native passkey enrollment, passkey sign-in, and
+credential removal. D1 stores only public WebAuthn credential material in the
+`passkeys` table; private keys remain on the user's authenticator. Password
+authentication is intentionally out of scope.
