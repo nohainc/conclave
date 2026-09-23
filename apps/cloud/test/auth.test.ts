@@ -76,6 +76,18 @@ describe("IdentityService", () => {
       trustedProviders: ["github", "google"],
       allowDifferentEmails: false,
     });
+    expect(options.emailAndPassword).toMatchObject({
+      enabled: true,
+      disableSignUp: false,
+      minPasswordLength: 8,
+      maxPasswordLength: 128,
+      autoSignIn: true,
+      revokeSessionsOnPasswordReset: true,
+      resetPasswordTokenExpiresIn: 3600,
+    });
+    expect(options.emailVerification).toMatchObject({
+      expiresIn: 3600,
+    });
     expect(options.session?.modelName).toBe("auth_sessions");
     expect(options.verification?.modelName).toBe("auth_verifications");
     expect(options.plugins).toHaveLength(1);

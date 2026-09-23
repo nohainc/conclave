@@ -194,6 +194,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+    expect(find.text('Email'), findsOneWidget);
+    expect(find.text('Password'), findsOneWidget);
+    expect(find.text('Sign in with email'), findsOneWidget);
+    expect(find.text('Forgot password?'), findsOneWidget);
+    expect(find.text('New here? Create an account'), findsOneWidget);
     expect(find.text('Continue with GitHub'), findsOneWidget);
     expect(find.text('Continue with Google'), findsOneWidget);
     expect(find.text('Continue with Passkey'), findsOneWidget);

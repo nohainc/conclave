@@ -27,8 +27,10 @@ Use Better Auth as Conclave's long-term human authentication engine. Mount it
 in Conclave Cloud at `/api/auth/*` and persist its authentication records in
 Cloudflare D1 using Better Auth's supported D1 integration.
 
-The initial social identity providers are:
+The initial sign-in methods are email/password plus these social identity
+providers:
 
+- email/password;
 - GitHub;
 - Google.
 

@@ -12,6 +12,20 @@ abstract interface class StudioDataSource {
   void setActiveWorkspace(String? workspaceId);
   Future<StudioSession> loadSession();
   Future<void> logout();
+  Future<void> signInWithEmail({
+    required String email,
+    required String password,
+  });
+  Future<void> signUpWithEmail({
+    required String name,
+    required String email,
+    required String password,
+  });
+  Future<void> requestPasswordReset({required String email});
+  Future<void> resetPassword({
+    required String token,
+    required String password,
+  });
   Future<StudioAccountSecurity> loadAccountSecurity();
   Future<void> revokeAccountSession(String token);
   Future<Uri> beginAccountLink(String provider, Uri returnTo);
@@ -174,6 +188,69 @@ class StudioApiClient implements StudioDataSource {
           statusCode: response.statusCode);
     }
   }
+
+  Future<void> _postAuth(String path, Map<String, dynamic> body) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl$path'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode(body),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      String message = 'Authentication request failed (${response.statusCode})';
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map && decoded['message'] is String) {
+          message = decoded['message'] as String;
+        } else if (decoded is Map && decoded['error'] is String) {
+          message = decoded['error'] as String;
+        }
+      } catch (_) {
+        // Keep the status-based message for non-JSON responses.
+      }
+      throw StudioApiException(message, statusCode: response.statusCode);
+    }
+  }
+
+  @override
+  Future<void> signInWithEmail({
+    required String email,
+    required String password,
+  }) =>
+      _postAuth('/auth/sign-in/email', {
+        'email': email,
+        'password': password,
+      });
+
+  @override
+  Future<void> signUpWithEmail({
+    required String name,
+    required String email,
+    required String password,
+  }) =>
+      _postAuth('/auth/sign-up/email', {
+        'name': name,
+        'email': email,
+        'password': password,
+      });
+
+  @override
+  Future<void> requestPasswordReset({required String email}) => _postAuth(
+        '/auth/request-password-reset',
+        {
+          'email': email,
+          'redirectTo': '${Uri.base.origin}/login',
+        },
+      );
+
+  @override
+  Future<void> resetPassword({
+    required String token,
+    required String password,
+  }) =>
+      _postAuth('/auth/reset-password', {
+        'token': token,
+        'newPassword': password,
+      });
 
   @override
   Future<StudioAccountSecurity> loadAccountSecurity() async {

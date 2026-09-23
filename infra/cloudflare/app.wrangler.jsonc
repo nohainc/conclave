@@ -14,10 +14,16 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*", "/health"],
   },
+  "send_email": [
+    {
+      "name": "CONCLAVE_EMAIL",
+    },
+  ],
   "vars": {
     "CONCLAVE_ENVIRONMENT": "production",
     "CONCLAVE_PLUGIN_PUBLISHER_EMAIL": "vitalii@nohainc.com",
     "BETTER_AUTH_URL": "https://app.conclaveax.com",
+    "CONCLAVE_EMAIL_FROM": "auth@auth.earthuc.com",
   },
   "d1_databases": [
     {

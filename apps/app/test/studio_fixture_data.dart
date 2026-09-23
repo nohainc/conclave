@@ -20,6 +20,28 @@ class StudioFixtureDataSource implements StudioDataSource {
   Future<void> logout() async {}
 
   @override
+  Future<void> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {}
+
+  @override
+  Future<void> signUpWithEmail({
+    required String name,
+    required String email,
+    required String password,
+  }) async {}
+
+  @override
+  Future<void> requestPasswordReset({required String email}) async {}
+
+  @override
+  Future<void> resetPassword({
+    required String token,
+    required String password,
+  }) async {}
+
+  @override
   Future<StudioAccountSecurity> loadAccountSecurity() async =>
       const StudioAccountSecurity(
         accounts: [

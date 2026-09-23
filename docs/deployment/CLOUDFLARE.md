@@ -66,6 +66,13 @@ Set these values in the Worker environment:
 - `BETTER_AUTH_TRUSTED_ORIGINS` — optional comma-separated additional Conclave AX
   origins for local or controlled preview environments.
 
+The production Worker also uses Cloudflare Email Service for email verification
+and password reset. The current configured sender is
+`auth@auth.earthuc.com`, under the enabled `auth.earthuc.com` sending domain.
+If Conclave later enables Email Sending directly for `conclaveax.com`, update
+`CONCLAVE_EMAIL_FROM` in the production Wrangler configuration. Local
+development logs the generated link instead of sending mail.
+
 Store `GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_SECRET`, and
 `BETTER_AUTH_SECRET` only with Cloudflare Worker secrets (for example,
 `wrangler secret put`). Do not commit values to source, Wrangler configuration,

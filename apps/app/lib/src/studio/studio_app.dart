@@ -56,6 +56,10 @@ class _StudioAppState extends State<StudioApp> {
   final objectiveController = TextEditingController();
   final revisionController = TextEditingController();
   final chatController = TextEditingController();
+  final authNameController = TextEditingController();
+  final authEmailController = TextEditingController();
+  final authPasswordController = TextEditingController();
+  final authConfirmPasswordController = TextEditingController();
   final List<StudioChatMessage> localChatMessages = [];
   final List<StudioNotification> notifications = [];
   late final StudioStore store;
@@ -72,6 +76,11 @@ class _StudioAppState extends State<StudioApp> {
   bool isReconnecting = false;
   bool realtimeStale = false;
   String? realtimeNotice;
+  bool authSignUp = false;
+  bool authResetRequest = false;
+  bool authBusy = false;
+  String? authNotice;
+  String? authError;
   String? pendingRunPrompt;
   final promptResponseController = TextEditingController();
   DateTime? _lastRealtimeAnnouncement;
@@ -167,6 +176,85 @@ class _StudioAppState extends State<StudioApp> {
       browserNavigation.replaceWithLogin(navigation.toUri());
     } catch (error) {
       if (mounted) setState(() => loadError = error.toString());
+    }
+  }
+
+  Future<void> _submitEmailAuth() async {
+    final email = authEmailController.text.trim();
+    final password = authPasswordController.text;
+    final confirmPassword = authConfirmPasswordController.text;
+    final resetToken = browserNavigation.current.queryParameters['token'];
+    if ((resetToken == null && email.isEmpty) ||
+        (password.isEmpty && (!authResetRequest || resetToken != null))) {
+      setState(() => authError = 'Enter your email and password.');
+      return;
+    }
+    if (authSignUp && authNameController.text.trim().isEmpty) {
+      setState(() => authError = 'Enter your name.');
+      return;
+    }
+    if ((authSignUp || resetToken != null) && password != confirmPassword) {
+      setState(() => authError = 'The passwords do not match.');
+      return;
+    }
+    setState(() {
+      authBusy = true;
+      authError = null;
+      authNotice = null;
+    });
+    try {
+      if (resetToken != null) {
+        await widget.dataSource.resetPassword(
+          token: resetToken,
+          password: password,
+        );
+        browserNavigation.replace(Uri(path: '/login'));
+        if (mounted) {
+          setState(() {
+            authBusy = false;
+            authNotice = 'Password changed. You can sign in now.';
+            authPasswordController.clear();
+            authConfirmPasswordController.clear();
+          });
+        }
+        return;
+      }
+      if (authResetRequest) {
+        await widget.dataSource.requestPasswordReset(email: email);
+        if (mounted) {
+          setState(() {
+            authBusy = false;
+            authNotice =
+                'If an account exists for that email, a password reset link is on its way.';
+          });
+        }
+        return;
+      }
+      if (authSignUp) {
+        await widget.dataSource.signUpWithEmail(
+          name: authNameController.text.trim(),
+          email: email,
+          password: password,
+        );
+      } else {
+        await widget.dataSource.signInWithEmail(
+          email: email,
+          password: password,
+        );
+      }
+      if (!mounted) return;
+      setState(() {
+        authBusy = false;
+        authRequired = false;
+        isLoading = true;
+      });
+      await _loadSession();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        authBusy = false;
+        authError = error.toString();
+      });
     }
   }
 
@@ -1026,6 +1114,10 @@ class _StudioAppState extends State<StudioApp> {
     revisionController.dispose();
     chatController.dispose();
     promptResponseController.dispose();
+    authNameController.dispose();
+    authEmailController.dispose();
+    authPasswordController.dispose();
+    authConfirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -1116,65 +1208,187 @@ class _StudioAppState extends State<StudioApp> {
     final returnTo = navigation.loginReturnTo == null
         ? Uri(path: '/')
         : Uri.parse(navigation.loginReturnTo!);
+    final resetToken = browserNavigation.current.queryParameters['token'];
+    final resetPassword = resetToken != null;
+    final title = resetPassword
+        ? 'Choose a new password'
+        : authResetRequest
+            ? 'Restore your password'
+            : authSignUp
+                ? 'Create your Conclave AX account'
+                : 'Welcome to Conclave AX';
     return Scaffold(
       body: Center(
         child: Card(
           child: Padding(
             padding: const EdgeInsets.all(32),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 52,
-                    height: 52,
-                    decoration: ConclaveBrand.brandMark,
-                    alignment: Alignment.center,
-                    child: const Text('C',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 26,
-                            fontWeight: FontWeight.w800)),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('Welcome to Conclave AX',
-                      style:
-                          TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 8),
-                  const Text(
-                      'Sign in securely to access your Projects, Hosts, Workers, and Accounts.',
-                      textAlign: TextAlign.center),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: () => browserNavigation.startSocialLogin(
-                          'github', returnTo),
-                      icon: const Icon(Icons.code),
-                      label: const Text('Continue with GitHub'),
+            child: SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: ConclaveBrand.brandMark,
+                      alignment: Alignment.center,
+                      child: const Text('C',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 26,
+                              fontWeight: FontWeight.w800)),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () => browserNavigation.startSocialLogin(
-                          'google', returnTo),
-                      icon: const Icon(Icons.account_circle_outlined),
-                      label: const Text('Continue with Google'),
+                    const SizedBox(height: 16),
+                    Text(title,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            fontSize: 24, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 8),
+                    Text(
+                        resetPassword
+                            ? 'Choose a strong password for your account.'
+                            : authResetRequest
+                                ? 'Enter your email and we will send a reset link if an account exists.'
+                                : authSignUp
+                                    ? 'Create an account to start using Conclave AX.'
+                                    : 'Sign in securely to access your Projects, Hosts, Workers, and Accounts.',
+                        textAlign: TextAlign.center),
+                    const SizedBox(height: 20),
+                    if (!resetPassword && authSignUp) ...[
+                      TextField(
+                        controller: authNameController,
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(labelText: 'Name'),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                    if (!resetPassword) ...[
+                      TextField(
+                        controller: authEmailController,
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(labelText: 'Email'),
+                      ),
+                      if (!authResetRequest) const SizedBox(height: 10),
+                    ],
+                    if (resetPassword || !authResetRequest) ...[
+                      TextField(
+                        controller: authPasswordController,
+                        obscureText: true,
+                        textInputAction: TextInputAction.next,
+                        decoration:
+                            const InputDecoration(labelText: 'Password'),
+                      ),
+                      if (authSignUp || resetPassword) ...[
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: authConfirmPasswordController,
+                          obscureText: true,
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) => _submitEmailAuth(),
+                          decoration: const InputDecoration(
+                              labelText: 'Confirm password'),
+                        ),
+                      ],
+                    ],
+                    if (authError != null) ...[
+                      const SizedBox(height: 12),
+                      Text(authError!,
+                          style: TextStyle(color: Colors.red.shade700)),
+                    ],
+                    if (authNotice != null) ...[
+                      const SizedBox(height: 12),
+                      Text(authNotice!, textAlign: TextAlign.center),
+                    ],
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: authBusy ? null : _submitEmailAuth,
+                        child: Text(authBusy
+                            ? 'Please wait…'
+                            : resetPassword
+                                ? 'Save new password'
+                                : authResetRequest
+                                    ? 'Email reset link'
+                                    : authSignUp
+                                        ? 'Create account'
+                                        : 'Sign in with email'),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: TextButton.icon(
-                      onPressed: () => _signInWithPasskey(returnTo),
-                      icon: const Icon(Icons.fingerprint),
-                      label: const Text('Continue with Passkey'),
-                    ),
-                  ),
-                ],
+                    if (!resetPassword && !authSignUp && !authResetRequest)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: authBusy
+                              ? null
+                              : () => setState(() {
+                                    authResetRequest = true;
+                                    authError = null;
+                                    authNotice = null;
+                                  }),
+                          child: const Text('Forgot password?'),
+                        ),
+                      ),
+                    if (!resetPassword && !authResetRequest)
+                      TextButton(
+                        onPressed: authBusy
+                            ? null
+                            : () => setState(() {
+                                  authSignUp = !authSignUp;
+                                  authError = null;
+                                  authNotice = null;
+                                }),
+                        child: Text(authSignUp
+                            ? 'Already have an account? Sign in'
+                            : 'New here? Create an account'),
+                      ),
+                    if (!resetPassword && (authSignUp || authResetRequest))
+                      TextButton(
+                        onPressed: authBusy
+                            ? null
+                            : () => setState(() {
+                                  authSignUp = false;
+                                  authResetRequest = false;
+                                  authError = null;
+                                  authNotice = null;
+                                }),
+                        child: const Text('Back to sign in'),
+                      ),
+                    if (!resetPassword && !authSignUp && !authResetRequest) ...[
+                      const Divider(height: 28),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: () => browserNavigation.startSocialLogin(
+                              'github', returnTo),
+                          icon: const Icon(Icons.code),
+                          label: const Text('Continue with GitHub'),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () => browserNavigation.startSocialLogin(
+                              'google', returnTo),
+                          icon: const Icon(Icons.account_circle_outlined),
+                          label: const Text('Continue with Google'),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: TextButton.icon(
+                          onPressed: () => _signInWithPasskey(returnTo),
+                          icon: const Icon(Icons.fingerprint),
+                          label: const Text('Continue with Passkey'),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
           ),

@@ -19,6 +19,8 @@ export type BetterAuthRuntimeEnv = Pick<Env, "CONCLAVE_DB"> & {
   BETTER_AUTH_TRUSTED_ORIGINS?: string;
   BETTER_AUTH_RP_ID?: string;
   BETTER_AUTH_ORIGIN?: string;
+  CONCLAVE_EMAIL?: SendEmail;
+  CONCLAVE_EMAIL_FROM?: string;
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;
   GOOGLE_CLIENT_ID?: string;
@@ -32,6 +34,53 @@ function providerCredentials(
 ): SocialProviderCredentials | undefined {
   if (!clientId || !clientSecret) return undefined;
   return { clientId, clientSecret, scope };
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(
+    /[&<>"']/g,
+    (character) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      })[character] ?? character,
+  );
+}
+
+async function sendAuthEmail(
+  env: BetterAuthRuntimeEnv,
+  user: { email: string; name?: string | null },
+  url: string,
+  subject: string,
+  action: string,
+): Promise<void> {
+  if (!env.CONCLAVE_EMAIL) {
+    if (env.CONCLAVE_ENVIRONMENT === "development") {
+      console.info("auth.email.development", {
+        action,
+        email: user.email,
+        url,
+      });
+      return;
+    }
+    throw new Error("CONCLAVE_EMAIL is required for authentication emails");
+  }
+
+  const safeUrl = escapeHtml(url);
+  const safeName = escapeHtml(user.name?.trim() || "there");
+  await env.CONCLAVE_EMAIL.send({
+    to: user.email,
+    from: {
+      email: env.CONCLAVE_EMAIL_FROM ?? "auth@auth.earthuc.com",
+      name: "Conclave AX",
+    },
+    subject,
+    text: `Hi ${user.name?.trim() || "there"},\n\n${action}: ${url}\n\nIf you did not request this, you can ignore this email.`,
+    html: `<p>Hi ${safeName},</p><p>${action}:</p><p><a href="${safeUrl}">${safeUrl}</a></p><p>If you did not request this, you can ignore this email.</p>`,
+  });
 }
 
 /**
@@ -171,6 +220,46 @@ export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
         createdAt: "created_at",
         updatedAt: "updated_at",
       },
+    },
+    emailVerification: {
+      sendVerificationEmail: async ({
+        user,
+        url,
+      }: {
+        user: { email: string; name?: string | null };
+        url: string;
+      }) =>
+        sendAuthEmail(
+          env,
+          user,
+          url,
+          "Verify your Conclave AX email address",
+          "Verify your email address",
+        ),
+      expiresIn: 60 * 60,
+    },
+    emailAndPassword: {
+      enabled: true,
+      disableSignUp: false,
+      minPasswordLength: 8,
+      maxPasswordLength: 128,
+      autoSignIn: true,
+      revokeSessionsOnPasswordReset: true,
+      resetPasswordTokenExpiresIn: 60 * 60,
+      sendResetPassword: async ({
+        user,
+        url,
+      }: {
+        user: { email: string; name?: string | null };
+        url: string;
+      }) =>
+        sendAuthEmail(
+          env,
+          user,
+          url,
+          "Reset your Conclave AX password",
+          "Reset your password",
+        ),
     },
     socialProviders: {
       ...(github ? { github } : {}),
