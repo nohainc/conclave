@@ -31,4 +31,4 @@ Track progress of the [v4 implementation roadmap](ARCHITECTURE_V4_IMPLEMENTATION
 | V4-24 | Aggressive v3 cleanup | 🚧 In progress |
 | V4-25 | Clean-room rebuild and recovery | 🚧 In progress |
 | V4-26 | High-quality UI/UX acceptance pass | ✅ Complete |
-| V4-27 | Architecture v4 release gate | ⬜ Not started |
+| V4-27 | Architecture v4 release gate | 🚧 In progress |

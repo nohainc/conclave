@@ -451,6 +451,16 @@ confirms quit, exposes actionable connection/update recovery, and keeps local
 machine status, account setup, permissions, diagnostics, logs, and updates
 visible without exposing orchestration controls.
 
+V4-27 release-gate audit is in progress. Protocol generation/binding checks,
+Cloud execution-boundary and production-security preflights, documentation
+links, and the 271-test TypeScript suite pass. The release gate remains open
+because the architecture guard still finds active v3 Agent/Plugin routing in
+Cloud, persistence, protocol, and Studio code; the Worker app has lint and
+typecheck errors in those same compatibility paths; formatting has one
+generated macOS asset mismatch; and the full Host suite still contains stale
+v2 Cloud protocol expectations. Windows/Linux compilation and the deployed
+end-to-end acceptance flow also remain unverified.
+
 ## 9. Architectural deletion gate
 
 Architecture v4 cleanup is complete when active source search returns no product/domain usage of:
