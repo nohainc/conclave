@@ -390,8 +390,18 @@ class StudioApiClient implements StudioDataSource {
     Future<Map<String, dynamic>> getJson(Uri uri) async {
       final response = await client.get(uri, headers: _headers());
       if (response.statusCode < 200 || response.statusCode >= 300) {
+        var detail = '';
+        try {
+          final body = jsonDecode(response.body);
+          if (body is Map && body['error'] is String) {
+            detail = ': ${body['error']}';
+          }
+        } on Object {
+          // Keep the route and status useful even when the server response is
+          // not JSON.
+        }
         throw StudioApiException(
-          'Read model failed (${response.statusCode})',
+          'Read model failed for ${uri.path} (${response.statusCode})$detail',
           statusCode: response.statusCode,
         );
       }
