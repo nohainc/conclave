@@ -399,6 +399,75 @@ h3 {
   color: var(--color-accent-dark);
   font-style: normal;
 }
+.host-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.9fr);
+  gap: var(--space-16);
+  align-items: center;
+}
+.host-section__copy {
+  max-width: var(--content-reading);
+  color: var(--color-muted);
+}
+.host-platforms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: var(--space-6);
+  color: var(--color-ink-soft);
+  font: 700 var(--text-xs) / 1.3 var(--font-mono);
+  text-transform: uppercase;
+}
+.host-platforms span {
+  padding: 7px 9px;
+  background: var(--color-accent-wash);
+  border-radius: var(--radius-sm);
+}
+.host-topology {
+  padding: var(--space-8);
+  color: white;
+  background: var(--color-ink);
+  border-radius: var(--radius-xl);
+  box-shadow: 16px 16px 0 var(--color-accent-wash);
+  text-align: center;
+}
+.host-topology__node {
+  padding: 12px 14px;
+  background: var(--color-ink-soft);
+  border: 1px solid #555463;
+  border-radius: var(--radius-md);
+  font-weight: 750;
+}
+.host-topology__line,
+.host-topology__branch {
+  color: #aaa6ed;
+  font: var(--text-lg) / 1.1 var(--font-mono);
+  white-space: pre;
+}
+.host-topology__branch {
+  display: grid;
+  gap: 0;
+  margin: 6px 0;
+}
+.host-topology__hosts {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+}
+.host-topology__host {
+  display: grid;
+  gap: 5px;
+  padding: var(--space-4);
+  color: #d7d5e4;
+  background: #353444;
+  border: 1px solid #555463;
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+}
+.host-topology__host strong {
+  color: white;
+  font-size: var(--text-sm);
+}
 .site-footer {
   display: flex;
   justify-content: space-between;
@@ -420,6 +489,9 @@ h3 {
   }
   .workflow-layout {
     gap: var(--space-8);
+  }
+  .host-section {
+    gap: var(--space-10);
   }
 }
 @media (max-width: 760px) {
@@ -454,6 +526,15 @@ h3 {
     min-height: auto;
   }
   .workflow-layout {
+    grid-template-columns: 1fr;
+  }
+  .host-section {
+    grid-template-columns: 1fr;
+  }
+  .host-topology {
+    margin-top: var(--space-6);
+  }
+  .host-topology__hosts {
     grid-template-columns: 1fr;
   }
   .architecture-card {

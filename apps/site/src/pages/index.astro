@@ -4,6 +4,7 @@ import Button from "../components/Button.astro";
 import Container from "../components/Container.astro";
 import FeatureCard from "../components/FeatureCard.astro";
 import HeroArchitecture from "../components/HeroArchitecture.astro";
+import HostTopology from "../components/HostTopology.astro";
 import PrincipleCard from "../components/PrincipleCard.astro";
 import Section from "../components/Section.astro";
 import SectionHeader from "../components/SectionHeader.astro";
@@ -55,6 +56,24 @@ import SectionHeader from "../components/SectionHeader.astro";
           <p>Turn findings into corrections and check again.</p>
           <div class="principle-iterate"><span>Finding</span><i aria-hidden="true">↓</i><span>Correction</span><i aria-hidden="true">↓</i><span>Reverification</span></div>
         </PrincipleCard>
+      </div>
+    </Container>
+  </Section>
+
+  <Section>
+    <Container>
+      <div class="host-section">
+        <div>
+          <SectionHeader
+            eyebrow="Conclave Host"
+            title="Use the machines you already have."
+            description="Install Conclave Host once. Conclave AX can then run Workers on that machine while Cloud coordinates the workflow."
+          />
+          <p class="host-section__copy">One Host represents one machine. People in an authorized Workspace can use it, while Workers are managed automatically in the background.</p>
+          <div class="host-platforms"><span>macOS first</span><span>Windows</span><span>Linux</span></div>
+          <div class="actions"><Button href="https://app.conclaveax.com" label="Open Conclave AX to add a Host →" /></div>
+        </div>
+        <HostTopology />
       </div>
     </Container>
   </Section>
