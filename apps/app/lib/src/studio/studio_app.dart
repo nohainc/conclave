@@ -1983,7 +1983,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
             if (compact)
               _navItem(Icons.close_rounded, 'Close menu', null,
                   compact: compact, navigationContext: sidebarContext),
-            _navItem(Icons.person_outline_rounded, 'Profile & security',
+            _navItem(Icons.person_outline_rounded, 'Profile & Security',
                 const StudioNavigation.profileSecurity(),
                 compact: compact, navigationContext: sidebarContext),
             const SizedBox(height: 6),
@@ -2332,7 +2332,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
               Flexible(
                 child: Text(
                   navigation.kind == StudioRouteKind.profileSecurity
-                      ? 'Profile & security'
+                      ? 'Profile & Security'
                       : (showRunDetails ? 'Workspace' : 'Conclave AX'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -2521,7 +2521,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
       case StudioRouteKind.usage:
         return _usageView();
       case StudioRouteKind.profileSecurity:
-        return _accountView();
+        return _profileSecurityView();
       case StudioRouteKind.workspaceSettings:
         return _workspaceSettingsView();
       case StudioRouteKind.projects:
@@ -4559,16 +4559,17 @@ class _StudioAppState extends State<ConclaveAppShell> {
     ]);
   }
 
-  Widget _accountView() {
+  Widget _profileSecurityView() {
     final viewer = store.auth.viewer ?? snapshot.viewer;
     final security = accountSecurity;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Account',
+        const Text('Profile & Security',
             style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
         const SizedBox(height: 6),
-        const Text('Manage your Conclave profile, login methods, and sessions.',
+        const Text(
+            'Manage your Conclave identity, login methods, sessions, and passkeys.',
             style: TextStyle(color: Color(0xff777683), fontSize: 13)),
         const SizedBox(height: 24),
         _panel(
