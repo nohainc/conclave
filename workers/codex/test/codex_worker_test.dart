@@ -1,9 +1,9 @@
 import 'dart:io';
-import 'package:conclave_codex_plugin/codex_worker.dart';
+import 'package:conclave_codex_worker/codex_worker.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('uses the generic Worker Plugin command boundary', () async {
+  test('uses the generic Worker command boundary', () async {
     final worker = CodexWorker(invoke: (executable, args) async {
       expect(executable, 'codex');
       expect(args.first, 'exec');

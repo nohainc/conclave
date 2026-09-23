@@ -190,11 +190,9 @@ class WorkerProcessExecutor {
       String method,
       Map<String, Object?> params,
     ) async {
-      final id =
-          method == 'start_assignment' ? requestId : '$requestId-$method';
-      final pendingResponse = method == 'start_assignment'
-          ? response
-          : Completer<Map<String, Object?>>();
+      final id = method == 'execute' ? requestId : '$requestId-$method';
+      final pendingResponse =
+          method == 'execute' ? response : Completer<Map<String, Object?>>();
       pending[id] = pendingResponse;
       process.stdin.writeln(jsonEncode({
         'jsonrpc': '2.0',
@@ -221,7 +219,7 @@ class WorkerProcessExecutor {
         if (health['status'] != 'healthy') {
           throw StateError('worker health check failed');
         }
-        return await request('start_assignment', params);
+        return await request('execute', params);
       }();
       final result = await execution.timeout(
         timeout,

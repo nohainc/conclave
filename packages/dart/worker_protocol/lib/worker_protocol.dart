@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 const workerProtocolVersion = '4.0';
-const workerMethods = {
+const workerProtocolMethods = {
   'initialize',
   'health',
   'describe',
@@ -10,7 +10,7 @@ const workerMethods = {
   'shutdown',
 };
 
-const workerNotifications = {
+const workerProtocolNotifications = {
   'progress',
   'usage',
   'artifact',
@@ -19,19 +19,17 @@ const workerNotifications = {
   'log',
 };
 
-const pluginProtocolVersion = workerProtocolVersion;
-
-class JsonRpcException implements Exception {
-  const JsonRpcException(this.message, {this.code = -32600});
+class WorkerRpcException implements Exception {
+  const WorkerRpcException(this.message, {this.code = -32600});
   final String message;
   final int code;
 
   @override
-  String toString() => 'JsonRpcException($code): $message';
+  String toString() => 'WorkerRpcException($code): $message';
 }
 
-class JsonRpcRequest {
-  const JsonRpcRequest(
+class WorkerRpcRequest {
+  const WorkerRpcRequest(
       {required this.id, required this.method, this.params = const {}});
   final String id;
   final String method;
@@ -47,8 +45,8 @@ class JsonRpcRequest {
   String encode() => jsonEncode(toJson());
 }
 
-class JsonRpcNotification {
-  const JsonRpcNotification({required this.method, this.params = const {}});
+class WorkerRpcNotification {
+  const WorkerRpcNotification({required this.method, this.params = const {}});
   final String method;
   final Map<String, Object?> params;
 
@@ -61,11 +59,11 @@ class JsonRpcNotification {
   String encode() => jsonEncode(toJson());
 }
 
-class JsonRpcResponse {
-  const JsonRpcResponse({required this.id, this.result, this.error});
+class WorkerRpcResponse {
+  const WorkerRpcResponse({required this.id, this.result, this.error});
   final String id;
   final Object? result;
-  final JsonRpcException? error;
+  final WorkerRpcException? error;
 
   Map<String, Object?> toJson() => {
         'jsonrpc': '2.0',
@@ -76,38 +74,38 @@ class JsonRpcResponse {
       };
 }
 
-JsonRpcRequest parseRequest(Object? input) {
+WorkerRpcRequest parseWorkerRequest(Object? input) {
   if (input is String) input = jsonDecode(input);
   if (input is! Map || input['jsonrpc'] != '2.0') {
-    throw const JsonRpcException('invalid JSON-RPC request');
+    throw const WorkerRpcException('invalid JSON-RPC request');
   }
   final id = input['id'];
   final method = input['method'];
   if ((id is! String && id is! num) ||
       method is! String ||
-      !workerMethods.contains(method)) {
-    throw const JsonRpcException('unsupported worker method');
+      !workerProtocolMethods.contains(method)) {
+    throw const WorkerRpcException('unsupported worker method');
   }
   final params = input['params'];
-  return JsonRpcRequest(
+  return WorkerRpcRequest(
     id: id.toString(),
     method: method,
     params: params is Map ? Map<String, Object?>.from(params) : const {},
   );
 }
 
-JsonRpcNotification parseNotification(Object? input) {
+WorkerRpcNotification parseWorkerNotification(Object? input) {
   if (input is String) input = jsonDecode(input);
   if (input is! Map || input['jsonrpc'] != '2.0') {
-    throw const JsonRpcException('invalid JSON-RPC notification');
+    throw const WorkerRpcException('invalid JSON-RPC notification');
   }
   final method = input['method'];
-  if (method is! String || !workerNotifications.contains(method)) {
-    throw const JsonRpcException('unsupported worker notification');
+  if (method is! String || !workerProtocolNotifications.contains(method)) {
+    throw const WorkerRpcException('unsupported worker notification');
   }
   final params = input['params'];
   _validateNotificationParams(method, params);
-  return JsonRpcNotification(
+  return WorkerRpcNotification(
     method: method,
     params: params is Map ? Map<String, Object?>.from(params) : const {},
   );
@@ -115,7 +113,7 @@ JsonRpcNotification parseNotification(Object? input) {
 
 void _validateNotificationParams(String method, Object? params) {
   if (params is! Map) {
-    throw const JsonRpcException(
+    throw const WorkerRpcException(
         'worker notification params must be an object');
   }
   final map = Map<String, Object?>.from(params);
@@ -129,14 +127,14 @@ void _validateNotificationParams(String method, Object? params) {
   if (method == 'progress') {
     final percentage = map['percentage'];
     if (percentage is! num || percentage < 0 || percentage > 100) {
-      throw const JsonRpcException('worker progress percentage is invalid');
+      throw const WorkerRpcException('worker progress percentage is invalid');
     }
   }
   if (method == 'result') {
     _required(map, 'status');
     _required(map, 'completedAt');
     if (!map.containsKey('output')) {
-      throw const JsonRpcException('worker result output is required');
+      throw const WorkerRpcException('worker result output is required');
     }
   }
   if (method == 'error') {
@@ -149,6 +147,6 @@ void _validateNotificationParams(String method, Object? params) {
 void _required(Map<String, Object?> map, String key) {
   final value = map[key];
   if (value is! String || value.trim().isEmpty) {
-    throw JsonRpcException('worker notification $key is required');
+    throw WorkerRpcException('worker notification $key is required');
   }
 }

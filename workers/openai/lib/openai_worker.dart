@@ -122,7 +122,8 @@ String buildOpenAiPrompt(
 }) {
   if (maxBytes <= 0) throw ArgumentError.value(maxBytes, 'maxBytes');
   if (input.isEmpty) return objective;
-  final prompt = '$objective\n\nConclave task context (JSON):\n${jsonEncode(input)}';
+  final prompt =
+      '$objective\n\nConclave task context (JSON):\n${jsonEncode(input)}';
   final bytes = utf8.encode(prompt);
   if (bytes.length <= maxBytes) return prompt;
   return '${utf8.decode(bytes.take(maxBytes).toList(), allowMalformed: true)}\n[context truncated]';

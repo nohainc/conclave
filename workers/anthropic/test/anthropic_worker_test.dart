@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:conclave_anthropic_plugin/anthropic_worker.dart';
+import 'package:conclave_anthropic_worker/anthropic_worker.dart';
 import 'package:test/test.dart';
 
 void main() {

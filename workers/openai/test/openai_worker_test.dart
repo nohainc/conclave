@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:conclave_openai_plugin/openai_worker.dart';
+import 'package:conclave_openai_worker/openai_worker.dart';
 import 'package:test/test.dart';
 
 void main() {

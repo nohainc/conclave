@@ -52,7 +52,7 @@ Assignment
 | `workers/*` | Keep Worker package implementations |
 | `packages/agent-protocol` | Replace/merge into Host protocol |
 | `packages/plugin-manifest` | Rename to `packages/worker-manifest` |
-| `packages/dart/plugin_protocol` | Rename to Worker protocol |
+| `packages/dart/worker_protocol` | Canonical Worker JSON-RPC protocol |
 | Agent Gateway | Rename/refactor to Host Gateway |
 | Agent entities/tables | Replace with Host entities/tables |
 | WorkerPlugin entities/tables | Replace with Worker catalog/version |
@@ -263,6 +263,13 @@ default independence dimensions are session, credential, model, and provider;
 Host diversity is operational only and must be explicitly requested, so two
 Hosts running the same model and session are not treated as intellectually
 independent.
+
+V4-13 migrates the first-party Echo, Codex, Claude Code, Anthropic, OpenAI, and
+Forge packages to v4 Worker manifests and the canonical Worker JSON-RPC
+surface. Their manifests declare Host compatibility, credential-profile policy,
+session/concurrency behavior, permissions, usage/billing metadata, digest, and
+signature. Provider Workers receive assignment configuration and opaque
+credential-profile references; raw credentials remain outside assignment data.
 - make Studio read models purpose-built instead of one large snapshot response over time.
 
 ## 8. Suggested source organization

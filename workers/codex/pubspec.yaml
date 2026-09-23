@@ -1,5 +1,5 @@
-name: conclave_codex_plugin
-description: Codex CLI Worker Plugin adapter for Conclave Agent Engine.
+name: conclave_codex_worker
+description: Codex CLI Worker adapter for Conclave Host.
 publish_to: none
 version: 0.1.0
 

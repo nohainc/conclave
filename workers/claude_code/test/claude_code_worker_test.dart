@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:conclave_claude_code_plugin/claude_code_worker.dart';
+import 'package:conclave_claude_code_worker/claude_code_worker.dart';
 import 'package:test/test.dart';
 
 void main() {

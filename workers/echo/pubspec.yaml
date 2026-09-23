@@ -1,5 +1,5 @@
-name: conclave_echo_plugin
-description: Deterministic Conclave Worker Plugin used for protocol and pipeline acceptance tests.
+name: conclave_echo_worker
+description: Deterministic Conclave Worker used for protocol and pipeline acceptance tests.
 publish_to: none
 version: 0.1.0
 

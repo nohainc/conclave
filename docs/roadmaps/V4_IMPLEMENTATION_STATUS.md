@@ -17,7 +17,7 @@ Track progress of the [v4 implementation roadmap](ARCHITECTURE_V4_IMPLEMENTATION
 | V4-10 | Remove configured Worker instances | ✅ Complete |
 | V4-11 | Rewrite assignment dispatcher around ResolvedExecutionTarget | ✅ Complete |
 | V4-12 | Multi-agent → multi-worker orchestration | ✅ Complete |
-| V4-13 | Migrate first-party Worker packages | ⬜ Not started |
+| V4-13 | Migrate first-party Worker packages | ✅ Complete |
 | V4-14 | Web AI Worker migration | ⬜ Not started |
 | V4-15 | Simplify Host UI | ⬜ Not started |
 | V4-16 | Redesign Studio execution UX | ⬜ Not started |

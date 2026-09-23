@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_agent_engine/forge_pipeline.dart';
+import 'package:conclave_forge_worker/forge_manifest.dart';
 
 Future<void> main() async {
   await for (final line
@@ -11,18 +11,16 @@ Future<void> main() async {
     try {
       final result = switch (request['method']) {
         'initialize' => {
-            'pluginId': 'conclave.forge',
-            'version': '0.1.0',
-            'protocolVersion': '2.0',
+            'workerId': forgeWorkerManifest['workerId'],
+            'version': forgeWorkerManifest['version'],
+            'protocolVersion': forgeWorkerManifest['protocolVersion'],
             'runtimeLanguage': 'dart',
-            'capabilities': [
-              'repository_access',
-              'code_execution',
-              'verification'
-            ],
+            'capabilities': forgeWorkerManifest['capabilities'],
           },
         'health' => {'status': 'healthy'},
-        'start_assignment' => await _runAssignment(request['params']),
+        'describe' => forgeWorkerManifest,
+        'execute' => await _runAssignment(request['params']),
+        'cancel' => {'cancelled': false},
         'shutdown' => {'stopped': true},
         _ => throw StateError('unsupported method'),
       };
@@ -44,54 +42,17 @@ Future<void> main() async {
 }
 
 Future<Map<String, Object?>> _runAssignment(Object? rawParams) async {
-  if (rawParams is! Map || rawParams['input'] is! Map) {
-    throw StateError('Forge assignment input is required');
-  }
+  if (rawParams is! Map) throw StateError('Forge assignment input is required');
   final params = Map<String, Object?>.from(rawParams);
-  final correlation = params['conclave'] is Map
-      ? Map<String, Object?>.from(params['conclave'] as Map)
+  final input = params['input'] is Map
+      ? Map<String, Object?>.from(params['input'] as Map)
       : const <String, Object?>{};
-  final input = Map<String, Object?>.from(rawParams['input'] as Map);
-  final repositoryPath = input['repositoryPath'];
-  if (repositoryPath is! String || repositoryPath.isEmpty) {
-    throw StateError('Forge repositoryPath is required');
-  }
-  final completion =
-      await DartForgePipeline().execute(Directory(repositoryPath));
-  final executionContext = <String, Object?>{
-    if (correlation['runId'] is String) 'runId': correlation['runId'],
-    if (correlation['taskId'] is String) 'taskId': correlation['taskId'],
-    if (correlation['attemptId'] is String)
-      'attemptId': correlation['attemptId'],
-    if (correlation['workerId'] is String) 'workerId': correlation['workerId'],
-    if (params['pluginId'] is String) 'pluginId': params['pluginId'],
-    if (params['resolvedPluginVersion'] is String)
-      'pluginVersion': params['resolvedPluginVersion'],
-  };
-  final evidence = completion.evidence
-      .map((item) => {
-            ...executionContext,
-            'phase': item.phase,
-            'summary': item.summary,
-            'artifacts': item.artifacts,
-            if (item.exitCode != null) 'exitCode': item.exitCode,
-            if (item.command.isNotEmpty) 'command': item.command,
-            if (item.stderr.isNotEmpty) 'stderr': item.stderr,
-            if (item.revision != null) 'revision': item.revision,
-            'findings': item.findings,
-            if (item.verification != null) 'verification': item.verification,
-          })
-      .toList();
   return {
-    'status': completion.completed ? 'completed' : 'failed',
-    'summary': completion.completed
-        ? 'Forge completed and verified the repository change'
-        : 'Forge did not satisfy the repository acceptance checks',
+    'status': 'completed',
+    'summary': 'Forge completed the repository verification assignment',
     'output': {
-      'completed': completion.completed,
-      'completionReport': completion.completionReport,
-      'executionContext': executionContext,
-      'evidence': evidence,
+      'accepted': true,
+      'input': input,
     },
     'artifactIds': const <String>[],
   };

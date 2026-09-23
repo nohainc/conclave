@@ -1,5 +1,5 @@
-name: conclave_anthropic_plugin
-description: Agent-hosted Anthropic API Worker Plugin.
+name: conclave_anthropic_worker
+description: Host-managed Anthropic API Worker.
 publish_to: none
 version: 0.1.0
 

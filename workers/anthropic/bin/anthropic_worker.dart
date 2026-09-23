@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_anthropic_plugin/anthropic_manifest.dart';
-import 'package:conclave_anthropic_plugin/anthropic_worker.dart';
+import 'package:conclave_anthropic_worker/anthropic_manifest.dart';
+import 'package:conclave_anthropic_worker/anthropic_worker.dart';
 
 Future<void> main() async {
   final worker = AnthropicWorker(invokeAnthropic);
@@ -13,11 +13,11 @@ Future<void> main() async {
     try {
       final result = switch (request['method']) {
         'initialize' => {
-            'pluginId': anthropicPluginManifest['pluginId'],
-            'version': anthropicPluginManifest['version'],
-            'protocolVersion': anthropicPluginManifest['protocolVersion'],
+            'workerId': anthropicWorkerManifest['workerId'],
+            'version': anthropicWorkerManifest['version'],
+            'protocolVersion': anthropicWorkerManifest['protocolVersion'],
             'runtimeLanguage': 'dart',
-            'capabilities': anthropicPluginManifest['capabilities'],
+            'capabilities': anthropicWorkerManifest['capabilities'],
           },
         'health' => {
             'status':
@@ -27,11 +27,9 @@ Future<void> main() async {
             'authenticated':
                 Platform.environment['ANTHROPIC_API_KEY']?.isNotEmpty == true,
           },
-        'get_capabilities' || 'getCapabilities' => {
-            'capabilities': anthropicPluginManifest['capabilities'],
-          },
-        'configure_worker' || 'configureWorker' => {'configured': true},
-        'start_assignment' => await _execute(worker, request),
+        'describe' => anthropicWorkerManifest,
+        'execute' => await _execute(worker, request),
+        'cancel' => {'cancelled': false},
         'shutdown' => {'stopped': true},
         _ => throw StateError('unsupported method'),
       };
@@ -54,27 +52,46 @@ Future<Map<String, Object?>> _execute(
   Map<String, dynamic> request,
 ) async {
   final params = Map<String, Object?>.from(request['params'] as Map);
-  final objective = params['objective'];
-  final model = params['model'] ?? 'claude-3-5-sonnet-latest';
-  if (objective is! String || model is! String || objective.trim().isEmpty) {
-    throw const FormatException('objective and model are required');
-  }
+  final snapshot = params['snapshot'] is Map
+      ? Map<String, Object?>.from(params['snapshot'] as Map)
+      : const <String, Object?>{};
   final input = params['input'] is Map
       ? Map<String, Object?>.from(params['input'] as Map)
       : const <String, Object?>{};
+  final config = params['config'] is Map
+      ? Map<String, Object?>.from(params['config'] as Map)
+      : const <String, Object?>{};
+  final objective = params['objective'] ?? input['objective'];
+  final model = params['model'] ??
+      config['model'] ??
+      snapshot['model'] ??
+      'claude-3-5-sonnet-latest';
+  final credentialProfileId = snapshot['credentialProfileId'];
+  if (objective is! String || model is! String || objective.trim().isEmpty) {
+    throw const FormatException('objective and model are required');
+  }
   final result = await worker.executeStructured(
     apiKey: Platform.environment['ANTHROPIC_API_KEY'],
     model: model,
-    prompt: buildAnthropicPrompt(objective, input),
+    prompt: buildAnthropicPrompt(objective, {...config, ...input}),
   );
   return {
     'status': 'completed',
     'summary': 'Anthropic worker completed the assignment',
+    if (credentialProfileId is String)
+      'credentialProfileId': credentialProfileId,
+    'model': model,
+    'usage': {
+      'inputTokens': result.usage.inputTokens,
+      'outputTokens': result.usage.outputTokens,
+      'totalTokens': result.usage.inputTokens + result.usage.outputTokens,
+    },
     'output': result.output,
     'evidence': {
       'metrics': {
         'inputTokens': result.usage.inputTokens,
         'outputTokens': result.usage.outputTokens,
+        'totalTokens': result.usage.inputTokens + result.usage.outputTokens,
       },
     },
   };

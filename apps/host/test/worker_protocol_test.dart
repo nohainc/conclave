@@ -48,7 +48,7 @@ void main() {
     final identity = WorkerIdentity.parse({
       'workerId': 'conclave.echo',
       'version': '1.0.0',
-      'protocolVersion': '2.0',
+      'protocolVersion': '4.0',
       'runtimeLanguage': 'dart',
       'capabilities': ['deterministic_echo'],
     });

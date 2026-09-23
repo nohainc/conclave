@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 void main() {
-  test('Forge plugin exposes the Worker Plugin protocol', () async {
+  test('Forge worker exposes the Worker protocol', () async {
     final process = await Process.start(
       'dart',
       ['--disable-analytics', 'run', 'bin/forge_worker.dart'],
@@ -19,7 +19,7 @@ void main() {
       'params': {},
     }));
     final response = await lines.first.timeout(const Duration(seconds: 30));
-    expect(jsonDecode(response)['result']['pluginId'], 'conclave.forge');
+    expect(jsonDecode(response)['result']['workerId'], 'conclave.forge');
     await process.stdin.close();
     process.kill(ProcessSignal.sigterm);
   });

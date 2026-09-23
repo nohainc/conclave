@@ -1,5 +1,5 @@
-name: conclave_forge_worker
-description: Forge Worker for the Dart Host acceptance path.
+name: conclave_worker_protocol
+description: JSON-RPC protocol shared by Conclave Host and Workers.
 publish_to: none
 version: 0.1.0
 

@@ -12,10 +12,10 @@ void main() {
       final response = jsonDecode(line) as Map<String, dynamic>;
       if (response['id'] == id) return response;
     }
-    throw StateError('plugin exited before response $id');
+    throw StateError('worker exited before response $id');
   }
 
-  test('executes the real echo plugin over stdin/stdout', () async {
+  test('executes the real echo worker over stdin/stdout', () async {
     final process =
         await Process.start('dart', ['run', 'bin/echo_worker.dart']);
     final output = process.stdout
@@ -25,7 +25,7 @@ void main() {
     process.stdin.writeln(jsonEncode({
       'jsonrpc': '2.0',
       'id': 'assignment-1',
-      'method': 'start_assignment',
+      'method': 'execute',
       'params': {'objective': 'echo'},
     }));
     final response = await responseFor(output, 'assignment-1');
@@ -41,12 +41,14 @@ void main() {
   test('emits deterministic artifacts and evidence', () async {
     final process =
         await Process.start('dart', ['run', 'bin/echo_worker.dart']);
-    final output =
-        process.stdout.transform(utf8.decoder).transform(const LineSplitter()).asBroadcastStream();
+    final output = process.stdout
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .asBroadcastStream();
     process.stdin.writeln(jsonEncode({
       'jsonrpc': '2.0',
       'id': 'assignment-2',
-      'method': 'start_assignment',
+      'method': 'execute',
       'params': {
         'input': {
           'artifactIds': ['artifact-1'],
@@ -68,7 +70,7 @@ void main() {
     process.stdin.writeln(jsonEncode({
       'jsonrpc': '2.0',
       'id': 'assignment-3',
-      'method': 'start_assignment',
+      'method': 'execute',
       'params': {
         'input': {'fail': true},
       },
@@ -88,14 +90,16 @@ void main() {
     process.stdin.writeln(jsonEncode({
       'jsonrpc': '2.0',
       'id': 'assignment-cancelled',
-      'method': 'start_assignment',
-      'params': {'input': {'delayMs': 200}},
+      'method': 'execute',
+      'params': {
+        'input': {'delayMs': 200}
+      },
     }));
     await Future<void>.delayed(const Duration(milliseconds: 25));
     process.stdin.writeln(jsonEncode({
       'jsonrpc': '2.0',
       'id': 'cancel-1',
-      'method': 'cancel_assignment',
+      'method': 'cancel',
       'params': {'assignmentId': 'assignment-cancelled'},
     }));
     final cancel = await responseFor(output, 'cancel-1');

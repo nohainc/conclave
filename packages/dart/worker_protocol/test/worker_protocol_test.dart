@@ -1,20 +1,20 @@
-import 'package:conclave_plugin_protocol/plugin_protocol.dart';
+import 'package:conclave_worker_protocol/worker_protocol.dart';
 import 'package:test/test.dart';
 
 void main() {
   test('round trips an execute request', () {
-    final request = JsonRpcRequest(
+    final request = WorkerRpcRequest(
       id: 'request-1',
       method: 'execute',
       params: {'assignmentId': 'assignment-1'},
     );
-    final parsed = parseRequest(request.toJson());
+    final parsed = parseWorkerRequest(request.toJson());
     expect(parsed.method, 'execute');
     expect(parsed.params['assignmentId'], 'assignment-1');
   });
 
   test('round trips a progress notification', () {
-    final notif = JsonRpcNotification(
+    final notif = WorkerRpcNotification(
       method: 'progress',
       params: {
         'assignmentId': 'assignment-1',
@@ -22,15 +22,15 @@ void main() {
         'timestamp': '2026-09-23T00:00:00Z',
       },
     );
-    final parsed = parseNotification(notif.toJson());
+    final parsed = parseWorkerNotification(notif.toJson());
     expect(parsed.method, 'progress');
     expect(parsed.params['percentage'], 50);
   });
 
   test('rejects methods outside the worker contract', () {
     expect(
-      () => parseRequest({'jsonrpc': '2.0', 'id': '1', 'method': 'eval'}),
-      throwsA(isA<JsonRpcException>()),
+      () => parseWorkerRequest({'jsonrpc': '2.0', 'id': '1', 'method': 'eval'}),
+      throwsA(isA<WorkerRpcException>()),
     );
   });
 }

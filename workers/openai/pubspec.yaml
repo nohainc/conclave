@@ -1,5 +1,5 @@
-name: conclave_openai_plugin
-description: Agent-hosted OpenAI API Worker Plugin.
+name: conclave_openai_worker
+description: Host-managed OpenAI API Worker.
 publish_to: none
 version: 0.1.0
 
