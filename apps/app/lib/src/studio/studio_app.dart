@@ -113,6 +113,14 @@ class _StudioAppState extends State<ConclaveAppShell> {
   bool accountSecurityLoading = false;
   ThemeMode _themeMode = ThemeMode.system;
   final List<ToastMessage> activeToasts = [];
+  String usageRange = '30d';
+  String usageProjectFilter = 'all';
+  String usageUserFilter = 'all';
+  String usageAccountFilter = 'all';
+  String usageWorkerFilter = 'all';
+  String usageProviderFilter = 'all';
+  String usageModelFilter = 'all';
+  DateTimeRange? usageCustomRange;
 
   bool get showRunDetails => switch (navigation.kind) {
         StudioRouteKind.home || StudioRouteKind.chat => false,
@@ -4426,28 +4434,130 @@ class _StudioAppState extends State<ConclaveAppShell> {
         ],
       );
 
-  Widget _usageView() => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Usage',
-              style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 6),
-          const Text('Token and cost accounting for the selected run.',
-              style: TextStyle(color: Color(0xff777683), fontSize: 13)),
-          const SizedBox(height: 24),
-          _panel(
-            title: snapshot.run == null
-                ? 'No run selected'
-                : 'Run ${snapshot.run!.id}',
-            subtitle: 'Usage is read from the Cloud run aggregate.',
-            child: Row(children: [
-              _metric('Tokens', _formatNumber(snapshot.run?.tokens ?? 0)),
-              _metric('Cost', _formatCost(snapshot.run?.costMicros ?? 0)),
-              _metric('Model calls', '${snapshot.modelCalls.length}'),
-            ]),
+  Widget _usageView() {
+    final report = snapshot.usageReport;
+    final rows = report.rows.where((row) {
+      final inRange = usageCustomRange == null ||
+          (() {
+            final date = DateTime.tryParse(row.recordedAt);
+            return date == null ||
+                (!date.isBefore(usageCustomRange!.start) &&
+                    !date.isAfter(usageCustomRange!.end));
+          })();
+      return inRange &&
+          (usageProjectFilter == 'all' ||
+              row.projectName == usageProjectFilter) &&
+          (usageUserFilter == 'all' || row.requesterName == usageUserFilter) &&
+          (usageAccountFilter == 'all' ||
+              row.accountName == usageAccountFilter) &&
+          (usageWorkerFilter == 'all' || row.workerName == usageWorkerFilter) &&
+          (usageProviderFilter == 'all' ||
+              row.provider == usageProviderFilter) &&
+          (usageModelFilter == 'all' || row.model == usageModelFilter);
+    }).toList();
+    final tokens = rows.fold<int>(0, (sum, row) => sum + row.tokens);
+    final duration = rows.fold<int>(0, (sum, row) => sum + row.durationMs);
+    final apiCost = rows
+        .where((row) => row.billingCategory == 'api' && row.costMicros != null)
+        .fold<int>(0, (sum, row) => sum + row.costMicros!);
+    final subscriptionUses =
+        rows.where((row) => row.billingCategory == 'subscription').length;
+    final runIds =
+        rows.map((row) => row.runId).where((id) => id.isNotEmpty).toSet();
+    List<String> options(String Function(StudioUsageRow) selector) => [
+          'all',
+          ...rows.map(selector).where((value) => value.isNotEmpty).toSet()
+        ];
+    Widget filter(String label, String value, List<String> values,
+            ValueChanged<String?> onChanged) =>
+        SizedBox(
+          width: 150,
+          child: DropdownButtonFormField<String>(
+            initialValue: values.contains(value) ? value : 'all',
+            decoration: InputDecoration(labelText: label, isDense: true),
+            items: values
+                .map((item) => DropdownMenuItem(
+                    value: item, child: Text(item == 'all' ? 'All' : item)))
+                .toList(),
+            onChanged: onChanged,
           ),
-        ],
-      );
+        );
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('Usage',
+          style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
+      const SizedBox(height: 6),
+      const Text(
+          'Workspace usage across Projects, Accounts, Workers and people.',
+          style: TextStyle(color: Color(0xff777683), fontSize: 13)),
+      const SizedBox(height: 20),
+      Wrap(spacing: 12, runSpacing: 12, children: [
+        filter('Period', usageRange, const ['7d', '30d', 'custom'],
+            (value) async {
+          if (value == null) return;
+          if (value == 'custom') {
+            final range = await showDateRangePicker(
+                context: context,
+                firstDate: DateTime(2020),
+                lastDate: DateTime.now(),
+                initialDateRange: usageCustomRange);
+            if (range == null) return;
+            setState(() {
+              usageRange = value;
+              usageCustomRange = range;
+            });
+          } else {
+            setState(() {
+              usageRange = value;
+              usageCustomRange = null;
+            });
+          }
+        }),
+        filter('Project', usageProjectFilter, options((row) => row.projectName),
+            (value) => setState(() => usageProjectFilter = value ?? 'all')),
+        filter('User', usageUserFilter, options((row) => row.requesterName),
+            (value) => setState(() => usageUserFilter = value ?? 'all')),
+        filter(
+            'AI Account',
+            usageAccountFilter,
+            options((row) => row.accountName),
+            (value) => setState(() => usageAccountFilter = value ?? 'all')),
+        filter('Worker', usageWorkerFilter, options((row) => row.workerName),
+            (value) => setState(() => usageWorkerFilter = value ?? 'all')),
+        filter('Provider', usageProviderFilter, options((row) => row.provider),
+            (value) => setState(() => usageProviderFilter = value ?? 'all')),
+        filter('Model', usageModelFilter, options((row) => row.model),
+            (value) => setState(() => usageModelFilter = value ?? 'all')),
+      ]),
+      const SizedBox(height: 20),
+      Wrap(spacing: 12, runSpacing: 12, children: [
+        _metric('Tokens', _formatNumber(tokens)),
+        _metric('Known API cost', _formatCost(apiCost)),
+        _metric('Subscription usage', '$subscriptionUses uses'),
+        _metric('Runs', '${runIds.length}'),
+        _metric('Duration', '${(duration / 1000).round()} s'),
+      ]),
+      const SizedBox(height: 20),
+      _panel(
+        title: 'Usage details',
+        subtitle: 'Subscription usage has no invented monetary cost.',
+        child: rows.isEmpty
+            ? const Text('No usage matches these filters.')
+            : Column(
+                children: rows
+                    .take(100)
+                    .map((row) => ListTile(
+                          dense: true,
+                          title: Text('${row.workerName} · ${row.model}'),
+                          subtitle: Text(
+                              '${row.projectName} · Requester: ${row.requesterName} · Account owner: ${row.accountOwnerName}'),
+                          trailing: Text(row.billingCategory == 'subscription'
+                              ? 'Subscription · ${_formatNumber(row.tokens)} tokens'
+                              : '${_formatCost(row.costMicros ?? 0)} · ${_formatNumber(row.tokens)} tokens'),
+                        ))
+                    .toList()),
+      ),
+    ]);
+  }
 
   Widget _accountView() {
     final viewer = store.auth.viewer ?? snapshot.viewer;

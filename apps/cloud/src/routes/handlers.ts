@@ -5395,23 +5395,112 @@ async function handleWorkspaceUsage(
   const context = await securityContext(request, env, accessContext);
   authorize(context, "project:read");
   requireWorkspaceContext(context, env, workspaceId);
+  const search = new URL(request.url).searchParams;
+  const urlSearch = (name: string) => search.get(name) ?? "";
+  const allowedRanges = new Set(["7d", "30d"]);
+  const range = allowedRanges.has(urlSearch("range"))
+    ? urlSearch("range")
+    : "30d";
+  const projectId = urlSearch("projectId");
+  const requesterUserId = urlSearch("requesterUserId");
+  const credentialProfileId = urlSearch("credentialProfileId");
+  const workerId = urlSearch("workerId");
+  const provider = urlSearch("provider");
+  const model = urlSearch("model");
+  const from = urlSearch("from");
+  const to = urlSearch("to");
+  const conditions = ["u.workspace_id = ?"];
+  const bindings: unknown[] = [workspaceId];
+  if (from) {
+    conditions.push("u.recorded_at >= ?");
+    bindings.push(from);
+  } else {
+    conditions.push("u.recorded_at >= datetime('now', ?)");
+    bindings.push(range === "7d" ? "-7 days" : "-30 days");
+  }
+  if (to) {
+    conditions.push("u.recorded_at <= ?");
+    bindings.push(to);
+  }
+  for (const [value, sql] of [
+    [projectId, "u.project_id = ?"],
+    [requesterUserId, "u.requester_user_id = ?"],
+    [credentialProfileId, "u.credential_profile_id = ?"],
+    [workerId, "u.worker_id = ?"],
+    [provider, "u.provider = ?"],
+    [model, "u.model = ?"],
+  ] as const) {
+    if (value) {
+      conditions.push(sql);
+      bindings.push(value);
+    }
+  }
   const rows = await env.CONCLAVE_DB.prepare(
-    `SELECT u.id, u.project_id AS projectId, u.run_id AS runId,
-            u.requester_user_id AS requesterUserId,
+    `SELECT u.id, u.project_id AS projectId, p.name AS projectName,
+            u.run_id AS runId, u.requester_user_id AS requesterUserId,
+            requester.display_name AS requesterName,
             u.credential_profile_id AS credentialProfileId,
-            u.worker_id AS workerId, u.provider, u.model,
+            cp.display_name AS accountName,
+            cp.owner_type AS accountOwnerType,
+            cp.owner_id AS accountOwnerId,
+            CASE WHEN cp.owner_type = 'user' THEN owner.display_name
+                 WHEN cp.owner_type = 'workspace' THEN w.name ELSE NULL END
+              AS accountOwnerName,
+            u.worker_id AS workerId, worker.display_name AS workerName,
+            u.host_id AS hostId, u.provider, u.model,
+            u.billing_category AS billingCategory,
             u.input_tokens AS inputTokens, u.output_tokens AS outputTokens,
             (u.input_tokens + u.output_tokens) AS tokens,
             u.cost_micros AS costMicros, u.duration_ms AS durationMs,
             u.recorded_at AS recordedAt
        FROM usage u
-      WHERE u.workspace_id = ?1
+       JOIN projects p ON p.id = u.project_id
+       JOIN workers worker ON worker.id = u.worker_id
+       LEFT JOIN users requester ON requester.id = u.requester_user_id
+       LEFT JOIN credential_profiles cp ON cp.id = u.credential_profile_id
+       LEFT JOIN users owner ON cp.owner_type = 'user' AND owner.id = cp.owner_id
+       LEFT JOIN workspaces w ON cp.owner_type = 'workspace' AND w.id = cp.owner_id
+      WHERE ${conditions.join(" AND ")}
       ORDER BY u.recorded_at DESC
-      LIMIT 500`,
+      LIMIT 1000`,
   )
-    .bind(workspaceId)
+    .bind(...bindings)
     .all();
-  return json({ usage: rows.results ?? [] });
+  const usage = rows.results ?? [];
+  const number = (value: unknown) =>
+    typeof value === "number" ? value : Number(value ?? 0);
+  const summary = usage.reduce(
+    (result, row) => {
+      const item = row as Record<string, unknown>;
+      result.tokens += number(item.tokens);
+      result.durationMs += number(item.durationMs);
+      result.runs.add(String(item.runId));
+      if (item.billingCategory === "api" && item.costMicros != null) {
+        result.knownApiCostMicros += number(item.costMicros);
+      }
+      if (item.billingCategory === "subscription") result.subscriptionUsage++;
+      return result;
+    },
+    {
+      tokens: 0,
+      knownApiCostMicros: 0,
+      subscriptionUsage: 0,
+      durationMs: 0,
+      runs: new Set<string>(),
+    },
+  );
+  return json({
+    range,
+    filters: { projectId, requesterUserId, credentialProfileId, workerId, provider, model, from, to },
+    summary: {
+      tokens: summary.tokens,
+      knownApiCostMicros: summary.knownApiCostMicros,
+      subscriptionUsage: summary.subscriptionUsage,
+      runs: summary.runs.size,
+      durationMs: summary.durationMs,
+    },
+    usage,
+  });
 }
 
 async function validateAndClaimCiEvidence(

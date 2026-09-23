@@ -786,6 +786,7 @@ class StudioApiClient implements StudioDataSource {
         };
       }).toList(),
       'accounts': responses[3]['accounts'] ?? const [],
+      'usageReport': responses[4],
       'run': detail['run'],
       'activeRunId': detail['activeRunId'],
       'tasks': detail['tasks'] ?? const [],

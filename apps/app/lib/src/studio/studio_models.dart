@@ -166,6 +166,11 @@ String _string(Map<String, dynamic> json, String key, [String fallback = '—'])
   return value == null ? fallback : value.toString();
 }
 
+int _int(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  return value is num ? value.toInt() : int.tryParse('$value') ?? 0;
+}
+
 List<String> _strings(Map<String, dynamic> json, String key) =>
     List<String>.from(json[key] as List? ?? const []);
 
@@ -839,6 +844,107 @@ class StudioModelCall {
           host: _string(json, 'hostId'));
 }
 
+class StudioUsageSummary {
+  const StudioUsageSummary({
+    this.tokens = 0,
+    this.knownApiCostMicros = 0,
+    this.subscriptionUsage = 0,
+    this.runs = 0,
+    this.durationMs = 0,
+  });
+
+  final int tokens;
+  final int knownApiCostMicros;
+  final int subscriptionUsage;
+  final int runs;
+  final int durationMs;
+
+  factory StudioUsageSummary.fromJson(Map<String, dynamic> json) =>
+      StudioUsageSummary(
+        tokens: _int(json, 'tokens'),
+        knownApiCostMicros: _int(json, 'knownApiCostMicros'),
+        subscriptionUsage: _int(json, 'subscriptionUsage'),
+        runs: _int(json, 'runs'),
+        durationMs: _int(json, 'durationMs'),
+      );
+}
+
+class StudioUsageRow {
+  const StudioUsageRow({
+    required this.runId,
+    required this.projectName,
+    required this.requesterName,
+    required this.accountName,
+    required this.accountOwnerName,
+    required this.workerName,
+    required this.provider,
+    required this.model,
+    required this.billingCategory,
+    required this.tokens,
+    required this.costMicros,
+    required this.durationMs,
+    required this.recordedAt,
+  });
+
+  final String projectName;
+  final String runId;
+  final String requesterName;
+  final String accountName;
+  final String accountOwnerName;
+  final String workerName;
+  final String provider;
+  final String model;
+  final String billingCategory;
+  final int tokens;
+  final int? costMicros;
+  final int durationMs;
+  final String recordedAt;
+
+  factory StudioUsageRow.fromJson(Map<String, dynamic> json) => StudioUsageRow(
+        runId: _string(json, 'runId'),
+        projectName: _string(json, 'projectName', 'Unknown project'),
+        requesterName: _string(json, 'requesterName', 'Unknown user'),
+        accountName: _string(json, 'accountName', 'No account'),
+        accountOwnerName: _string(json, 'accountOwnerName', 'Unknown owner'),
+        workerName: _string(json, 'workerName', _string(json, 'workerId')),
+        provider: _string(json, 'provider', 'Unknown provider'),
+        model: _string(json, 'model', 'Unknown model'),
+        billingCategory: _string(json, 'billingCategory', 'unknown'),
+        tokens: _int(json, 'tokens'),
+        costMicros: json['costMicros'] is num
+            ? (json['costMicros'] as num).toInt()
+            : null,
+        durationMs: _int(json, 'durationMs'),
+        recordedAt: _string(json, 'recordedAt'),
+      );
+}
+
+class StudioUsageReport {
+  const StudioUsageReport({
+    this.range = '30d',
+    this.summary = const StudioUsageSummary(),
+    this.rows = const [],
+  });
+
+  final String range;
+  final StudioUsageSummary summary;
+  final List<StudioUsageRow> rows;
+
+  factory StudioUsageReport.fromJson(Map<String, dynamic> json) =>
+      StudioUsageReport(
+        range: _string(json, 'range', '30d'),
+        summary: json['summary'] is Map
+            ? StudioUsageSummary.fromJson(
+                Map<String, dynamic>.from(json['summary'] as Map))
+            : const StudioUsageSummary(),
+        rows: (json['usage'] as List? ?? const [])
+            .whereType<Map>()
+            .map((item) =>
+                StudioUsageRow.fromJson(Map<String, dynamic>.from(item)))
+            .toList(),
+      );
+}
+
 class StudioRun {
   const StudioRun({
     required this.id,
@@ -1168,6 +1274,7 @@ class StudioSnapshot {
     this.candidateOutputs = const [],
     this.synthesisDecision,
     this.accounts = const [],
+    this.usageReport = const StudioUsageReport(),
   });
 
   final String? workspaceId;
@@ -1185,6 +1292,7 @@ class StudioSnapshot {
   final List<StudioArtifact> artifacts;
   final List<StudioModelCall> modelCalls;
   final List<StudioCredentialProfile> accounts;
+  final StudioUsageReport usageReport;
   final StudioPolicy? policy;
   final List<StudioCandidateOutput> candidateOutputs;
   final StudioSynthesisDecision? synthesisDecision;
@@ -1212,6 +1320,7 @@ class StudioSnapshot {
         candidateOutputs: candidateOutputs,
         synthesisDecision: synthesisDecision,
         accounts: accounts,
+        usageReport: usageReport,
       );
 
   List<StudioChat> get allChats =>
@@ -1289,6 +1398,10 @@ class StudioSnapshot {
             .map((item) => StudioCredentialProfile.fromJson(
                 Map<String, dynamic>.from(item as Map)))
             .toList(),
+        usageReport: json['usageReport'] is Map
+            ? StudioUsageReport.fromJson(
+                Map<String, dynamic>.from(json['usageReport'] as Map))
+            : const StudioUsageReport(),
         policy: json['policy'] == null
             ? null
             : StudioPolicy.fromJson(
