@@ -89,6 +89,13 @@ sessionId
 
 Cloud APIs derive tenant scope from the authenticated identity instead of accepting arbitrary workspace ownership claims from clients.
 
+The application-facing identity contract is provider-neutral. A future
+enterprise OIDC, OAuth2, or SAML connection will produce the same
+`AuthenticatedIdentity` and then use ordinary Conclave User, Workspace
+membership, Project access, Host permissions, and Credential Profile grants.
+Better Auth Organizations and enterprise directory groups are integration
+metadata, not Conclave Workspaces or authorization claims.
+
 Better Auth is the sole human authentication implementation. GitHub and Google
 are the initial social methods, and passkeys are an additional passwordless
 method. Studio Web uses same-origin, HttpOnly cookie sessions; it does not
@@ -96,6 +103,12 @@ receive or store human authentication tokens in Dart code. Passkey private keys
 remain on the device or security key. Conclave stores only the public WebAuthn
 credential, counter, and authenticator metadata, and users can remove an
 enrolled passkey from the Account page.
+
+Enterprise federation is deferred until a concrete company requirement exists.
+When enabled, a Workspace may require its configured corporate identity
+provider, but the resulting session will not alter Project, Run, Task, Worker,
+Host, or Credential Profile schemas. Better Auth SSO is the planned integration
+point; Conclave will not add a parallel SAML/OIDC authentication stack.
 
 ## 6. Conclave Agent identity
 

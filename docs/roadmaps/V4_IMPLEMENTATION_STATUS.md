@@ -148,3 +148,11 @@ short-lived proof bound to the Better Auth session; mutations fail closed with
 HTTP 428 when that proof is missing or stale. TOTP and backup-code support are
 reserved for a deliberate follow-up and are not implied by ordinary social or
 passkey login.
+
+## AUTH-16 — Enterprise SSO preparation
+
+✅ The identity boundary remains provider-neutral and is documented in
+[ADR-006](../decisions/ADR-006-enterprise-federation-preparation.md). Future
+OIDC, OAuth2, or SAML support will use Better Auth SSO and resolve to the same
+`AuthenticatedIdentity`, Conclave User, and Workspace membership flow. No SSO
+plugin or Better Auth Organization authorization was enabled in this phase.
