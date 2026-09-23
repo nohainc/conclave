@@ -42,6 +42,10 @@ class StudioFixtureDataSource implements StudioDataSource {
   }) async {}
 
   @override
+  Future<void> createProject(
+      {required String name, String? description}) async {}
+
+  @override
   Future<StudioAccountSecurity> loadAccountSecurity() async =>
       const StudioAccountSecurity(
         accounts: [

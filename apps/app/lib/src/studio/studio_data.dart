@@ -26,6 +26,10 @@ abstract interface class StudioDataSource {
     required String token,
     required String password,
   });
+  Future<void> createProject({
+    required String name,
+    String? description,
+  });
   Future<StudioAccountSecurity> loadAccountSecurity();
   Future<void> revokeAccountSession(String token);
   Future<Uri> beginAccountLink(String provider, Uri returnTo);
@@ -377,6 +381,35 @@ class StudioApiClient implements StudioDataSource {
         .map((workspace) =>
             StudioWorkspace.fromJson(Map<String, dynamic>.from(workspace)))
         .toList();
+  }
+
+  @override
+  Future<void> createProject(
+      {required String name, String? description}) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/projects'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({
+        'name': name,
+        if (description != null && description.trim().isNotEmpty)
+          'description': description.trim(),
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      var detail = '';
+      try {
+        final body = jsonDecode(response.body);
+        if (body is Map && body['error'] is String) {
+          detail = ': ${body['error']}';
+        }
+      } on Object {
+        // Keep the status useful even when the server response is not JSON.
+      }
+      throw StudioApiException(
+        'Project creation failed (${response.statusCode})$detail',
+        statusCode: response.statusCode,
+      );
+    }
   }
 
   @override

@@ -1426,14 +1426,19 @@ class _StudioAppState extends State<StudioApp> {
               const Text('No projects yet',
                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
-              const Text('Create a project before starting a Conclave goal.',
+              const Text('Create a project to start your first Conclave goal.',
                   textAlign: TextAlign.center),
               const SizedBox(height: 6),
               const Text(
-                  'You can return here after creating one in your Workspace.',
+                  'Projects keep your chats, runs and evidence organized.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Color(0xff777683))),
               const SizedBox(height: 18),
+              FilledButton.icon(
+                  onPressed: _createProject,
+                  icon: const Icon(Icons.create_new_folder_outlined),
+                  label: const Text('Create project')),
+              const SizedBox(height: 10),
               OutlinedButton.icon(
                   onPressed: _loadSnapshot,
                   icon: const Icon(Icons.refresh),
@@ -1442,6 +1447,67 @@ class _StudioAppState extends State<StudioApp> {
           ),
         ),
       );
+
+  Future<void> _createProject() async {
+    final nameController = TextEditingController();
+    final descriptionController = TextEditingController();
+    final values = await showDialog<(String, String?)>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Create project'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                autofocus: true,
+                decoration: const InputDecoration(labelText: 'Project name'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: descriptionController,
+                decoration: const InputDecoration(
+                  labelText: 'Description (optional)',
+                ),
+                maxLines: 2,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final name = nameController.text.trim();
+              if (name.isEmpty) return;
+              Navigator.pop(
+                dialogContext,
+                (name, descriptionController.text.trim()),
+              );
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+    nameController.dispose();
+    descriptionController.dispose();
+    if (values == null) return;
+    try {
+      await widget.dataSource.createProject(
+        name: values.$1,
+        description: values.$2,
+      );
+      await _loadSnapshot(showSpinner: false);
+    } catch (error) {
+      if (mounted) _showSnackBar(error.toString());
+    }
+  }
 
   Widget _pendingInvitationBanner() => Card(
         color: const Color(0xfff4f1ff),
