@@ -2,6 +2,7 @@ export {
   buildBetterAuthOptions,
   createBetterAuth,
   handleBetterAuthRequest,
+  safeAuthReturnTo,
   type BetterAuthRuntimeEnv,
 } from "./better-auth.js";
 export {

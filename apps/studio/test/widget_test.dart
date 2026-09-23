@@ -164,7 +164,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Sign in to Conclave'), findsOneWidget);
-    expect(find.text('Continue to sign in'), findsOneWidget);
+    expect(find.text('Continue with GitHub'), findsOneWidget);
+    expect(find.text('Continue with Google'), findsOneWidget);
     expect(find.text('Improve authentication architecture'), findsNothing);
   });
 

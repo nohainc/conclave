@@ -65,8 +65,9 @@ abstract interface class StudioDataSource {
 }
 
 class StudioApiException implements Exception {
-  const StudioApiException(this.message);
+  const StudioApiException(this.message, {this.statusCode});
   final String message;
+  final int? statusCode;
   @override
   String toString() => message;
 }
@@ -115,9 +116,12 @@ class StudioApiClient implements StudioDataSource {
   Future<StudioSession> loadSession() async {
     final response = await client.get(Uri.parse('$baseUrl/session'),
         headers: {'accept': 'application/json'});
+    if (response.statusCode == 401) {
+      return const StudioSession(authenticated: false);
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StudioApiException(
-          'Session lookup failed (${response.statusCode})');
+      throw StudioApiException('Session lookup failed (${response.statusCode})',
+          statusCode: response.statusCode);
     }
     return StudioSession.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>);
@@ -125,9 +129,11 @@ class StudioApiClient implements StudioDataSource {
 
   @override
   Future<void> logout() async {
-    final response = await client.post(Uri.parse('$baseUrl/session/logout'));
+    final response = await client.post(Uri.parse('$baseUrl/auth/sign-out'),
+        headers: {'accept': 'application/json'});
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StudioApiException('Logout failed (${response.statusCode})');
+      throw StudioApiException('Logout failed (${response.statusCode})',
+          statusCode: response.statusCode);
     }
   }
 
@@ -173,7 +179,8 @@ class StudioApiClient implements StudioDataSource {
         // Preserve the HTTP status when the server response is not JSON.
       }
       throw StudioApiException(
-          'Studio snapshot failed (${response.statusCode})$detail');
+          'Studio snapshot failed (${response.statusCode})$detail',
+          statusCode: response.statusCode);
     }
     return StudioSnapshot.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>);

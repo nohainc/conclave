@@ -26,4 +26,14 @@ void main() {
     expect(firstTab, isNot(secondTab));
     expect(firstTab.chatId, isNot(secondTab.chatId));
   });
+
+  test('preserves a deep link through the signed-out route', () {
+    final login = StudioNavigation.fromUri(
+        Uri.parse('/login?returnTo=%2Fprojects%2Fproject-1%2Fchats%2Fchat-2'));
+
+    expect(login.kind, StudioRouteKind.login);
+    expect(login.loginReturnTo, '/projects/project-1/chats/chat-2');
+    expect(login.toUri().queryParameters['returnTo'],
+        '/projects/project-1/chats/chat-2');
+  });
 }

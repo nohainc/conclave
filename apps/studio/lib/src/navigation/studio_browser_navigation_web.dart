@@ -20,6 +20,10 @@ final class _WebStudioBrowserNavigation implements StudioBrowserNavigation {
   Stream<Uri> get changes => html.window.onPopState.map((_) => _current());
 
   @override
+  Stream<void> get lifecycleChanges =>
+      html.document.onVisibilityChange.map((_) {});
+
+  @override
   void push(Uri uri) => html.window.history.pushState(null, '', uri.toString());
 
   @override
@@ -33,6 +37,15 @@ final class _WebStudioBrowserNavigation implements StudioBrowserNavigation {
       queryParameters: {'returnTo': returnTo.toString()},
     );
     replace(uri);
+  }
+
+  @override
+  void startSocialLogin(String provider, Uri returnTo) {
+    final uri = Uri(
+      path: '/api/auth/sign-in/$provider',
+      queryParameters: {'returnTo': returnTo.toString()},
+    );
+    html.window.location.assign(uri.toString());
   }
 
   @override

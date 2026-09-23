@@ -53,7 +53,7 @@ void main() {
 
     await api.logout();
     expect(client.lastRequest?.method, 'POST');
-    expect(client.lastRequest?.url.path, '/api/session/logout');
+    expect(client.lastRequest?.url.path, '/api/auth/sign-out');
   });
 
   test('populates focused stores from the Cloud read model', () async {

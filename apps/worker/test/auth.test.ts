@@ -2,10 +2,22 @@ import { describe, expect, it } from "vitest";
 import {
   buildBetterAuthOptions,
   IdentityService,
+  safeAuthReturnTo,
   type AuthenticatedIdentity,
 } from "../src/auth/index.js";
 
 describe("IdentityService", () => {
+  it("keeps social login return paths same-origin", () => {
+    const request = new Request(
+      "https://app.conclave.test/api/auth/sign-in/github",
+    );
+    expect(safeAuthReturnTo(request, "/projects/p-1/chats/c-1")).toBe(
+      "/projects/p-1/chats/c-1",
+    );
+    expect(safeAuthReturnTo(request, "https://evil.example/steal")).toBe("/");
+    expect(safeAuthReturnTo(request, "/api/auth/sign-out")).toBe("/");
+  });
+
   it("configures Better Auth against the clean Conclave core tables", () => {
     const options = buildBetterAuthOptions({
       CONCLAVE_DB: {} as D1Database,

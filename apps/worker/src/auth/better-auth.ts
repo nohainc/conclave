@@ -122,5 +122,69 @@ export async function handleBetterAuthRequest(
   request: Request,
   env: BetterAuthRuntimeEnv,
 ): Promise<Response> {
+  const url = new URL(request.url);
+  const socialSignIn = url.pathname.match(
+    /^\/api\/auth\/sign-in\/(github|google)$/,
+  );
+
+  if (request.method === "GET" && socialSignIn?.[1]) {
+    const callbackURL = safeAuthReturnTo(
+      request,
+      url.searchParams.get("returnTo"),
+    );
+    const errorCallbackURL = new URL("/login", request.url);
+    errorCallbackURL.searchParams.set("returnTo", callbackURL);
+    const authRequest = new Request(
+      new URL("/api/auth/sign-in/social", request.url),
+      {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          origin: request.headers.get("origin") ?? url.origin,
+          ...(request.headers.get("cookie")
+            ? { cookie: request.headers.get("cookie") as string }
+            : {}),
+        },
+        body: JSON.stringify({
+          provider: socialSignIn[1],
+          callbackURL,
+          errorCallbackURL: errorCallbackURL.toString(),
+        }),
+      },
+    );
+    const response = await createBetterAuth(env).handler(authRequest);
+    if (!response.ok) return response;
+    const body = (await response.json()) as { url?: unknown };
+    if (typeof body.url !== "string") {
+      return new Response("Authentication provider did not return a redirect", {
+        status: 502,
+      });
+    }
+    return Response.redirect(body.url, 302);
+  }
+
   return createBetterAuth(env).handler(request);
+}
+
+/** Keep OAuth callbacks on this Studio origin and prevent open redirects. */
+export function safeAuthReturnTo(
+  request: Request,
+  value: string | null,
+): string {
+  if (!value) return "/";
+  try {
+    const candidate = new URL(value, request.url);
+    const requestOrigin = new URL(request.url).origin;
+    if (
+      candidate.origin !== requestOrigin ||
+      !candidate.pathname.startsWith("/") ||
+      candidate.pathname.startsWith("/api/auth")
+    ) {
+      return "/";
+    }
+    return `${candidate.pathname}${candidate.search}${candidate.hash}`;
+  } catch {
+    return "/";
+  }
 }

@@ -73,3 +73,10 @@ Cloud authentication boundary, then convert that identity into the existing
 Conclave Workspace, membership, role, Project, and grant authorization
 context. Machine and transitional development paths remain separate; the
 legacy human fallback is used only when Better Auth is not configured.
+
+## AUTH-6 — Build the Studio login/logout UX
+
+✅ Studio Web now offers GitHub and Google sign-in through browser redirects to
+the Cloud Better Auth boundary, preserves safe deep-link return paths, uses
+Better Auth sign-out instead of the legacy Conclave session cookie, and
+rechecks the shared browser session when a tab becomes visible again.

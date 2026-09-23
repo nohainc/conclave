@@ -59,6 +59,7 @@ class _StudioAppState extends State<StudioApp> {
   late final StudioBrowserNavigation browserNavigation;
   late StudioNavigation navigation;
   StreamSubscription<Uri>? navigationSubscription;
+  StreamSubscription<void>? lifecycleSubscription;
   bool authRequired = false;
   bool isReconnecting = false;
 
@@ -94,6 +95,8 @@ class _StudioAppState extends State<StudioApp> {
         widget.initialUri ?? browserNavigation.current);
     navigationSubscription =
         browserNavigation.changes.listen(_onBrowserNavigation);
+    lifecycleSubscription = browserNavigation.lifecycleChanges
+        .listen((_) => unawaited(_syncSession()));
     store = StudioStore(widget.dataSource);
     snapshot = StudioSnapshot.empty();
     unawaited(_loadSession());
@@ -188,11 +191,46 @@ class _StudioAppState extends State<StudioApp> {
       _scheduleRefresh(loaded);
     } catch (error) {
       if (!mounted) return;
+      if (error is StudioApiException && error.statusCode == 401) {
+        setState(() => authRequired = true);
+        browserNavigation.replaceWithLogin(navigation.toUri());
+        return;
+      }
       setState(() {
         isLoading = false;
         isReconnecting = false;
         loadError = error.toString();
       });
+    }
+  }
+
+  Future<void> _syncSession() async {
+    try {
+      final session = await store.auth.load();
+      if (!mounted) return;
+      if (!session.authenticated && !authRequired) {
+        setState(() => authRequired = true);
+        browserNavigation.replaceWithLogin(navigation.toUri());
+        return;
+      }
+      if (session.authenticated && authRequired) {
+        final target = navigation.loginReturnTo == null
+            ? const StudioNavigation.home()
+            : StudioNavigation.fromUri(
+                Uri.parse(navigation.loginReturnTo!),
+              );
+        setState(() {
+          navigation = target;
+          authRequired = false;
+          isLoading = true;
+          loadError = null;
+        });
+        browserNavigation.replace(target.toUri());
+        await _loadWorkspaces();
+        await _loadSnapshot();
+      }
+    } catch (_) {
+      // The normal load/error path will explain an unavailable auth service.
     }
   }
 
@@ -415,7 +453,8 @@ class _StudioAppState extends State<StudioApp> {
                       .map((plugin) => DropdownMenuItem(
                           value: plugin.id, child: Text(plugin.name)))
                       .toList(),
-                  onChanged: (value) => setDialogState(() => workerCatalogId = value),
+                  onChanged: (value) =>
+                      setDialogState(() => workerCatalogId = value),
                 ),
                 const SizedBox(height: 10),
                 TextField(
@@ -600,6 +639,7 @@ class _StudioAppState extends State<StudioApp> {
   void dispose() {
     refreshTimer?.cancel();
     navigationSubscription?.cancel();
+    lifecycleSubscription?.cancel();
     browserNavigation.dispose();
     objectiveController.dispose();
     revisionController.dispose();
@@ -690,39 +730,57 @@ class _StudioAppState extends State<StudioApp> {
         ),
       );
 
-  Widget _authScaffold() => Scaffold(
-        body: Center(
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.lock_outline, size: 42),
-                    const SizedBox(height: 16),
-                    const Text('Sign in to Conclave',
-                        style: TextStyle(
-                            fontSize: 24, fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 8),
-                    const Text(
-                        'Use your organization identity to access Projects, Hosts, Workers, and Accounts.',
-                        textAlign: TextAlign.center),
-                    const SizedBox(height: 20),
-                    FilledButton.icon(
-                      onPressed: () => browserNavigation
-                          .replaceWithLogin(navigation.toUri()),
-                      icon: const Icon(Icons.login),
-                      label: const Text('Continue to sign in'),
+  Widget _authScaffold() {
+    final returnTo = navigation.loginReturnTo == null
+        ? Uri(path: '/')
+        : Uri.parse(navigation.loginReturnTo!);
+    return Scaffold(
+      body: Center(
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.lock_outline, size: 42),
+                  const SizedBox(height: 16),
+                  const Text('Sign in to Conclave',
+                      style:
+                          TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  const Text(
+                      'Sign in securely to access your Projects, Hosts, Workers, and Accounts.',
+                      textAlign: TextAlign.center),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () => browserNavigation.startSocialLogin(
+                          'github', returnTo),
+                      icon: const Icon(Icons.code),
+                      label: const Text('Continue with GitHub'),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => browserNavigation.startSocialLogin(
+                          'google', returnTo),
+                      icon: const Icon(Icons.account_circle_outlined),
+                      label: const Text('Continue with Google'),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
         ),
-      );
+      ),
+    );
+  }
 
   Widget _errorScaffold() => Scaffold(
         body: Center(

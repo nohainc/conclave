@@ -6,6 +6,7 @@ class StudioNavigation {
     this.projectId,
     this.chatId,
     this.runId,
+    this.loginReturnTo,
   });
 
   const StudioNavigation.home() : this._(kind: StudioRouteKind.home);
@@ -20,16 +21,20 @@ class StudioNavigation {
   const StudioNavigation.run(String projectId, String runId)
       : this._(kind: StudioRouteKind.run, projectId: projectId, runId: runId);
 
+  const StudioNavigation.login({String? returnTo})
+      : this._(kind: StudioRouteKind.login, loginReturnTo: returnTo);
+
   final StudioRouteKind kind;
   final String? projectId;
   final String? chatId;
   final String? runId;
+  final String? loginReturnTo;
 
   factory StudioNavigation.fromUri(Uri uri) {
     final segments = uri.pathSegments.where((segment) => segment.isNotEmpty);
     final parts = segments.toList(growable: false);
     if (parts case ['login']) {
-      return const StudioNavigation._(kind: StudioRouteKind.login);
+      return StudioNavigation.login(returnTo: uri.queryParameters['returnTo']);
     }
     if (parts.length >= 4 && parts[0] == 'projects') {
       if (parts[2] == 'chats') {
@@ -51,7 +56,10 @@ class StudioNavigation {
       StudioRouteKind.project => Uri(path: '/projects/$projectId'),
       StudioRouteKind.chat => Uri(path: '/projects/$projectId/chats/$chatId'),
       StudioRouteKind.run => Uri(path: '/projects/$projectId/runs/$runId'),
-      StudioRouteKind.login => Uri(path: '/login'),
+      StudioRouteKind.login => Uri(
+          path: '/login',
+          queryParameters:
+              loginReturnTo == null ? null : {'returnTo': loginReturnTo}),
     };
   }
 
@@ -61,8 +69,10 @@ class StudioNavigation {
       other.kind == kind &&
       other.projectId == projectId &&
       other.chatId == chatId &&
-      other.runId == runId;
+      other.runId == runId &&
+      other.loginReturnTo == loginReturnTo;
 
   @override
-  int get hashCode => Object.hash(kind, projectId, chatId, runId);
+  int get hashCode =>
+      Object.hash(kind, projectId, chatId, runId, loginReturnTo);
 }
