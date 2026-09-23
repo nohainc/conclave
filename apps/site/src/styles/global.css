@@ -501,6 +501,59 @@ h3 {
   color: white;
   font-size: var(--text-sm);
 }
+.account-privacy-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.85fr);
+  gap: var(--space-16);
+  align-items: center;
+}
+.privacy-points {
+  display: grid;
+  gap: 9px;
+  margin: var(--space-8) 0 0;
+  padding: 0;
+  color: var(--color-muted);
+  list-style: none;
+}
+.privacy-points li {
+  position: relative;
+  padding-left: 20px;
+}
+.privacy-points li::before {
+  position: absolute;
+  left: 0;
+  color: var(--color-accent-dark);
+  content: "✓";
+  font-weight: 800;
+}
+.account-privacy-diagram {
+  display: grid;
+  gap: 8px;
+  padding: var(--space-8);
+  color: #d7d5e4;
+  background: var(--color-ink);
+  border-radius: var(--radius-xl);
+  box-shadow: 16px 16px 0 var(--color-accent-wash);
+  font: var(--text-sm) / 1.5 var(--font-mono);
+}
+.account-privacy-diagram__node {
+  padding: 12px 14px;
+  color: white;
+  background: var(--color-ink-soft);
+  border: 1px solid #555463;
+  border-radius: var(--radius-md);
+  font-weight: 750;
+}
+.account-privacy-diagram__line {
+  padding-left: 18px;
+  color: #aaa6ed;
+}
+.account-privacy-diagram__accounts {
+  display: grid;
+  gap: 7px;
+  padding-left: 24px;
+  color: #d7d5e4;
+}
 .site-footer {
   display: flex;
   justify-content: space-between;
@@ -527,6 +580,9 @@ h3 {
     gap: var(--space-8);
   }
   .host-section {
+    gap: var(--space-10);
+  }
+  .account-privacy-section {
     gap: var(--space-10);
   }
   .worker-account-model {
@@ -571,6 +627,12 @@ h3 {
     grid-template-columns: 1fr;
   }
   .host-topology {
+    margin-top: var(--space-6);
+  }
+  .account-privacy-section {
+    grid-template-columns: 1fr;
+  }
+  .account-privacy-diagram {
     margin-top: var(--space-6);
   }
   .host-topology__hosts {

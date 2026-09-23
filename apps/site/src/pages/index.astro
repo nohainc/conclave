@@ -1,6 +1,7 @@
 ---
 import SiteLayout from "../layouts/SiteLayout.astro";
 import Button from "../components/Button.astro";
+import AccountPrivacyDiagram from "../components/AccountPrivacyDiagram.astro";
 import Container from "../components/Container.astro";
 import FeatureCard from "../components/FeatureCard.astro";
 import HeroArchitecture from "../components/HeroArchitecture.astro";
@@ -56,6 +57,28 @@ import SectionHeader from "../components/SectionHeader.astro";
           <p>Turn findings into corrections and check again.</p>
           <div class="principle-iterate"><span>Finding</span><i aria-hidden="true">↓</i><span>Correction</span><i aria-hidden="true">↓</i><span>Reverification</span></div>
         </PrincipleCard>
+      </div>
+    </Container>
+  </Section>
+
+  <Section>
+    <Container>
+      <div class="account-privacy-section">
+        <div>
+          <SectionHeader
+            eyebrow="Accounts and privacy"
+            title="Shared machines. Separate AI Accounts."
+            description="Worker software is installed once, while each person connects the Account they are authorized to use."
+          />
+          <ul class="privacy-points">
+            <li>Accounts are private by default.</li>
+            <li>Sharing is explicit and can be revoked.</li>
+            <li>Sharing allows use, never secret visibility.</li>
+            <li>Usage stays attributable to the requester and Account owner.</li>
+          </ul>
+          <div class="actions"><Button href="https://app.conclaveax.com" label="Connect an Account in Conclave AX →" /></div>
+        </div>
+        <AccountPrivacyDiagram />
       </div>
     </Container>
   </Section>
