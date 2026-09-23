@@ -26,6 +26,7 @@ abstract interface class StudioDataSource {
       {String? projectId, String? workspaceId});
   Future<StudioSnapshot> loadSnapshot({String? projectId, String? workspaceId});
   Future<void> controlRun(String runId, String command);
+  Future<void> respondToRunPrompt(String runId, String response);
   Future<void> createGoal({
     required String projectId,
     required String objective,
@@ -351,6 +352,15 @@ class StudioApiClient implements StudioDataSource {
         .whereType<Map>()
         .map((value) => Map<String, dynamic>.from(value))
         .toList();
+    final modelCalls = usage
+        .map((value) => {
+              ...value,
+              'worker': value['worker'] ?? value['workerId'],
+              'task': value['task'] ?? value['runId'],
+              'cost': value['cost'] ?? value['costMicros'],
+              'duration': value['duration'] ?? value['durationMs'],
+            })
+        .toList();
     return StudioSnapshot.fromJson({
       'workspaceId': selectedWorkspaceId,
       'projects': mergedProjects,
@@ -373,8 +383,9 @@ class StudioApiClient implements StudioDataSource {
       'findings': detail['findings'] ?? const [],
       'events': detail['events'] ?? const [],
       'artifacts': detail['artifacts'] ?? const [],
-      'modelCalls':
-          usage.isNotEmpty ? usage : (detail['modelCalls'] ?? const []),
+      'modelCalls': modelCalls.isNotEmpty
+          ? modelCalls
+          : (detail['modelCalls'] ?? const []),
     });
   }
 
@@ -412,6 +423,22 @@ class StudioApiClient implements StudioDataSource {
         .post(Uri.parse('$baseUrl/runs/$runId/$command'), headers: _headers());
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StudioApiException('Run control failed (${response.statusCode})');
+    }
+  }
+
+  @override
+  Future<void> respondToRunPrompt(String runId, String response) async {
+    final result = await client.post(
+      Uri.parse('$baseUrl/runs/$runId/events'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({
+        'type': 'run-approval',
+        'payload': {'response': response},
+      }),
+    );
+    if (result.statusCode < 200 || result.statusCode >= 300) {
+      throw StudioApiException('Run response failed',
+          statusCode: result.statusCode);
     }
   }
 

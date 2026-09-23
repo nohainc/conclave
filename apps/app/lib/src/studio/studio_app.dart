@@ -66,6 +66,11 @@ class _StudioAppState extends State<StudioApp> {
   bool realtimeStarted = false;
   bool authRequired = false;
   bool isReconnecting = false;
+  bool realtimeStale = false;
+  String? realtimeNotice;
+  String? pendingRunPrompt;
+  final promptResponseController = TextEditingController();
+  DateTime? _lastRealtimeAnnouncement;
   List<StudioPendingInvitation> pendingInvitations = const [];
   StudioAccountSecurity? accountSecurity;
   bool accountSecurityLoading = false;
@@ -175,8 +180,26 @@ class _StudioAppState extends State<StudioApp> {
   void _onRealtimeEvent(Map<String, dynamic> event) {
     final type = event['type'];
     if (!mounted) return;
+    if (type == 'realtime.connection') {
+      final status = event['status'];
+      setState(() {
+        realtimeStale = status == 'reconnecting';
+        realtimeNotice = realtimeStale
+            ? 'Live updates paused. Conclave AX is reconnecting.'
+            : 'Live updates connected.';
+      });
+      return;
+    }
+    if (type == 'realtime.ready') {
+      setState(() => realtimeStale = false);
+      return;
+    }
     if (type == 'reconnect.required') {
       // A cursor gap invalidates only the active project read model.
+      setState(() {
+        realtimeStale = true;
+        realtimeNotice = 'Some live updates were missed. Refreshing this Run.';
+      });
       unawaited(
           _loadSnapshot(projectId: selectedProjectId, showSpinner: false));
       return;
@@ -187,9 +210,50 @@ class _StudioAppState extends State<StudioApp> {
         (type.startsWith('assignment.progress') ||
             type.startsWith('worker.status') ||
             type.startsWith('heartbeat'))) {
+      _announceRealtimeProgress(event);
       return;
     }
+    if (type == 'run.input_required' || type == 'run.approval_required') {
+      final payload = event['payload'];
+      final prompt = payload is Map ? payload['prompt'] : null;
+      if (prompt is String && prompt.trim().isNotEmpty) {
+        setState(() => pendingRunPrompt = prompt.trim());
+      }
+    }
+    _announceRealtimeProgress(event);
     unawaited(_loadSnapshot(projectId: selectedProjectId, showSpinner: false));
+  }
+
+  void _announceRealtimeProgress(Map<String, dynamic> event) {
+    final now = DateTime.now();
+    if (_lastRealtimeAnnouncement != null &&
+        now.difference(_lastRealtimeAnnouncement!).inMilliseconds < 750) {
+      return;
+    }
+    final payload = event['payload'];
+    final summary = payload is Map
+        ? (payload['summary'] ?? payload['status'] ?? payload['phase'])
+        : null;
+    if (summary is String && summary.trim().isNotEmpty) {
+      _lastRealtimeAnnouncement = now;
+      setState(() => realtimeNotice = summary.trim());
+    }
+  }
+
+  Future<void> _respondToRunPrompt() async {
+    final runId = snapshot.run?.id ?? snapshot.activeRunId;
+    final response = promptResponseController.text.trim();
+    if (runId == null || response.isEmpty) return;
+    try {
+      await widget.dataSource.respondToRunPrompt(runId, response);
+      if (!mounted) return;
+      promptResponseController.clear();
+      setState(() => pendingRunPrompt = null);
+      _showSnackBar(
+          'Response sent. The Run will continue when Cloud confirms it.');
+    } catch (error) {
+      if (mounted) _showSnackBar(error.toString());
+    }
   }
 
   void _startRealtime() {
@@ -806,6 +870,7 @@ class _StudioAppState extends State<StudioApp> {
     objectiveController.dispose();
     revisionController.dispose();
     chatController.dispose();
+    promptResponseController.dispose();
     super.dispose();
   }
 
@@ -1356,6 +1421,13 @@ class _StudioAppState extends State<StudioApp> {
   Widget _content(bool compact) {
     return Column(children: [
       _topbar(compact),
+      if (realtimeStale) _realtimeStatusBanner(),
+      if (realtimeNotice != null)
+        Semantics(
+          liveRegion: true,
+          label: realtimeNotice!,
+          child: const SizedBox(width: 1, height: 1),
+        ),
       if (pendingInvitations.isNotEmpty) _pendingInvitationBanner(),
       Expanded(
           child: SingleChildScrollView(
@@ -1366,6 +1438,28 @@ class _StudioAppState extends State<StudioApp> {
                   : _chatView(compact))),
     ]);
   }
+
+  Widget _realtimeStatusBanner() => Container(
+        width: double.infinity,
+        color: const Color(0xfffff6df),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+        child: Row(children: [
+          const Icon(Icons.cloud_off_outlined,
+              size: 17, color: Color(0xff8a6518)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              realtimeNotice ?? 'Live updates are reconnecting.',
+              style: const TextStyle(color: Color(0xff765817), fontSize: 12),
+            ),
+          ),
+          const SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ]),
+      );
 
   Widget _topbar(bool compact) {
     return Container(
@@ -1458,6 +1552,8 @@ class _StudioAppState extends State<StudioApp> {
       ]),
       const SizedBox(height: 25),
       _runHeader(compact),
+      const SizedBox(height: 16),
+      _runContextCard(),
       const SizedBox(height: 16),
       _policyCard(),
       const SizedBox(height: 16),
@@ -1599,6 +1695,14 @@ class _StudioAppState extends State<StudioApp> {
         ),
       ]),
       const SizedBox(height: 22),
+      if (pendingRunPrompt != null) ...[
+        _approvalPromptCard(),
+        const SizedBox(height: 14),
+      ],
+      if (snapshot.run != null && snapshot.tasks.isNotEmpty) ...[
+        _chatExecutionProgress(),
+        const SizedBox(height: 14),
+      ],
       _panel(
         title: 'Conversation',
         subtitle:
@@ -1637,6 +1741,85 @@ class _StudioAppState extends State<StudioApp> {
       ),
     ]);
   }
+
+  Widget _chatExecutionProgress() {
+    final tasks = snapshot.tasks;
+    final completed =
+        tasks.where((task) => task.status == TaskStatus.completed).length;
+    final active = tasks.where((task) => task.status == TaskStatus.running);
+    final headline = active.isNotEmpty
+        ? '${active.first.title} running'
+        : completed == tasks.length
+            ? 'Verification complete'
+            : 'Execution in progress';
+    final progress = tasks.isEmpty ? 0.0 : completed / tasks.length;
+    return Semantics(
+      liveRegion: true,
+      label: '$headline. $completed of ${tasks.length} steps complete.',
+      child: _panel(
+        title: 'Live execution',
+        subtitle: headline,
+        trailing: _statusChip(
+            '$completed / ${tasks.length}', const Color(0xff6254d9)),
+        child: Column(children: [
+          LinearProgressIndicator(
+            value: progress,
+            minHeight: 6,
+            borderRadius: BorderRadius.circular(4),
+            color: const Color(0xff6254d9),
+            backgroundColor: const Color(0xffe8e5fb),
+          ),
+          const SizedBox(height: 12),
+          ...tasks.map((task) => Row(children: [
+                Icon(
+                  task.status == TaskStatus.completed
+                      ? Icons.check_circle_rounded
+                      : task.status == TaskStatus.running
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_unchecked,
+                  size: 15,
+                  color: task.status == TaskStatus.completed
+                      ? const Color(0xff43b17f)
+                      : task.status == TaskStatus.running
+                          ? const Color(0xff6254d9)
+                          : const Color(0xffaaa8b1),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(task.title,
+                      style: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w600)),
+                ),
+                Text(task.status.name,
+                    style: const TextStyle(
+                        color: Color(0xff898792), fontSize: 11)),
+              ])),
+        ]),
+      ),
+    );
+  }
+
+  Widget _approvalPromptCard() => _panel(
+        title: 'Conclave needs your input',
+        subtitle: 'The Run is waiting safely for a response.',
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(pendingRunPrompt!,
+              style: const TextStyle(fontSize: 13, height: 1.4)),
+          const SizedBox(height: 12),
+          Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Expanded(
+              child: TextField(
+                controller: promptResponseController,
+                maxLines: 3,
+                decoration: const InputDecoration(labelText: 'Your response'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            FilledButton(
+                onPressed: _respondToRunPrompt, child: const Text('Continue')),
+          ]),
+        ]),
+      );
 
   Widget _composerExecutionControls() {
     final workerOptions = {
@@ -2007,6 +2190,58 @@ class _StudioAppState extends State<StudioApp> {
             const Color(0xff6254d9)),
         child: Column(children: snapshot.tasks.map(_taskRow).toList()));
   }
+
+  Widget _runContextCard() {
+    final call = snapshot.modelCalls.firstOrNull;
+    final task = selectedTask ?? snapshot.tasks.firstOrNull;
+    final worker =
+        call?.worker.isNotEmpty == true ? call!.worker : task?.worker ?? 'Auto';
+    final model = call?.model.isNotEmpty == true ? call!.model : 'Auto';
+    final account = snapshot.accounts
+        .where((value) => value.id == call?.account)
+        .map((value) => value.displayName)
+        .firstOrNull;
+    final host = snapshot.agents
+        .where((value) => value.id == call?.host)
+        .map((value) => value.name)
+        .firstOrNull;
+    return _panel(
+      title: 'Execution context',
+      subtitle: 'Trusted assignment details',
+      child: Wrap(
+        spacing: 24,
+        runSpacing: 12,
+        children: [
+          _contextLine(Icons.extension_outlined, 'Worker', worker),
+          _contextLine(
+              Icons.account_circle_outlined, 'Account', account ?? 'Auto'),
+          _contextLine(Icons.computer_outlined, 'Host', host ?? 'Auto'),
+          _contextLine(Icons.smart_toy_outlined, 'Model', model),
+        ],
+      ),
+    );
+  }
+
+  Widget _contextLine(IconData icon, String label, String value) => SizedBox(
+        width: 190,
+        child: Row(children: [
+          Icon(icon, size: 16, color: const Color(0xff9997a3)),
+          const SizedBox(width: 8),
+          Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(label,
+                  style:
+                      const TextStyle(color: Color(0xff9997a3), fontSize: 10)),
+              Text(value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w600)),
+            ]),
+          ),
+        ]),
+      );
 
   String _qualityLabel(StudioQualityPreset preset) => switch (preset) {
         StudioQualityPreset.highAssurance => 'High Assurance',

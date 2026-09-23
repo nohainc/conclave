@@ -51,6 +51,7 @@ class _BrowserRealtimeClient implements RealtimeClient {
     _socket = socket;
     socket.onOpen.listen((_) {
       _attempt = 0;
+      _events.add({'type': 'realtime.connection', 'status': 'connected'});
       _send({
         'type': 'realtime.hello',
         if (_lastDurableSequence != null)
@@ -88,6 +89,7 @@ class _BrowserRealtimeClient implements RealtimeClient {
 
   void _scheduleReconnect() {
     if (_closed || _reconnectTimer?.isActive == true) return;
+    _events.add({'type': 'realtime.connection', 'status': 'reconnecting'});
     final cappedAttempt = math.min(_attempt++, 8);
     final jitter = 0.75 + math.Random().nextDouble() * 0.5;
     final delay = Duration(

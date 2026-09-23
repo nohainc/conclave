@@ -81,6 +81,9 @@ class StudioFixtureDataSource implements StudioDataSource {
   Future<void> controlRun(String runId, String command) async {}
 
   @override
+  Future<void> respondToRunPrompt(String runId, String response) async {}
+
+  @override
   Future<void> createGoal({
     required String projectId,
     required String objective,

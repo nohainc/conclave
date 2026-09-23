@@ -1153,6 +1153,10 @@ Architecture v4 is not only implemented but consistent in code, naming, connecti
 
 The App now loads Workspace catalogs, Hosts, Workers, Accounts, and Usage through focused HTTPS read models in parallel. The active Project uses a project-scoped read model for Chats, Run details, Tasks, Findings, Events, Artifacts, and model activity. The legacy `/api/studio/snapshot` endpoint remains as a compatibility path for fixtures and migration tooling, but normal authenticated App reloads and realtime gap recovery no longer request it.
 
+## PA-13 — Conclave AX chat/run realtime UX
+
+The App now exposes concise live execution progress in Chat, a reconnect/stale-state banner, throttled accessible live-region announcements, and a safe Run input prompt. Selective progress summaries are shown while raw Worker/model chatter remains hidden by default. Run details include the resolved Worker, Account, Host, model, evidence, findings, artifacts, and ordered events. User responses to workflow prompts continue through HTTPS run events; terminal state remains Cloud-authoritative.
+
 # Delegation guidance
 
 For each phase, give the implementation AI this structure:

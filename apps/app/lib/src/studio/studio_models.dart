@@ -660,6 +660,8 @@ class StudioModelCall {
     required this.cost,
     required this.duration,
     required this.status,
+    this.account = '',
+    this.host = '',
   });
 
   final String worker;
@@ -669,6 +671,8 @@ class StudioModelCall {
   final String cost;
   final String duration;
   final String status;
+  final String account;
+  final String host;
 
   factory StudioModelCall.fromJson(Map<String, dynamic> json) =>
       StudioModelCall(
@@ -678,7 +682,9 @@ class StudioModelCall {
           tokens: _string(json, 'tokens'),
           cost: _string(json, 'cost'),
           duration: _string(json, 'duration'),
-          status: _string(json, 'status'));
+          status: _string(json, 'status'),
+          account: _string(json, 'credentialProfileId'),
+          host: _string(json, 'hostId'));
 }
 
 class StudioRun {
