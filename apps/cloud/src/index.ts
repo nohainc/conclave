@@ -39,7 +39,12 @@ import {
   type WorkerRouteDependencies,
   type WorkerRouteHandlers,
 } from "./routes/router.js";
-import { logStructured, requestIdFor, withRequestId } from "./observability.js";
+import {
+  isTrustedRealtimeOrigin,
+  logStructured,
+  requestIdFor,
+  withRequestId,
+} from "./observability.js";
 
 const routeHandlers = {
   handleSession: handlers.handleSession,
@@ -184,6 +189,20 @@ export default {
       );
     }
     if (url.pathname === "/api/realtime") {
+      const configuredOrigins = (
+        env as unknown as { BETTER_AUTH_TRUSTED_ORIGINS?: string }
+      ).BETTER_AUTH_TRUSTED_ORIGINS?.split(",")
+        .map((origin) => origin.trim().replace(/\/$/, ""))
+        .filter(Boolean);
+      if (!isTrustedRealtimeOrigin(request, configuredOrigins)) {
+        return withRequestId(
+          handlers.json(
+            { error: "Trusted realtime Origin required" },
+            { status: 403 },
+          ),
+          requestId,
+        );
+      }
       const identity = await identityService.resolve(request, env);
       if (!identity) {
         return withRequestId(

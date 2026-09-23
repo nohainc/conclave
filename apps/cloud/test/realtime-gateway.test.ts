@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   authorizeRealtimeScope,
   eventMatchesScope,
+  isRealtimeIdentityAuthorized,
   parseRealtimeClientMessage,
   realtimeAuthenticationError,
   reconnectDelayMs,
@@ -164,5 +165,28 @@ describe("realtime gateway contract", () => {
     expect(
       queries.some((query) => query.includes("workspace_memberships")),
     ).toBe(true);
+  });
+
+  it("revalidates suspended users and removed subscriptions", async () => {
+    const db = {
+      prepare(query: string) {
+        return {
+          bind() {
+            return {
+              first: async () => {
+                if (query.includes("FROM users")) return { status: "active" };
+                if (query.includes("workspace_memberships")) return null;
+                return null;
+              },
+            };
+          },
+        };
+      },
+    } as never;
+    await expect(
+      isRealtimeIdentityAuthorized(db, "user-1", [
+        { workspaceId: "workspace-removed" },
+      ]),
+    ).resolves.toBe(false);
   });
 });

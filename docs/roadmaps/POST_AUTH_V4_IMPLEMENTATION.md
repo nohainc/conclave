@@ -1173,6 +1173,10 @@ Conclave AX now keeps an in-app notification center for important Run completion
 
 Cloud requests receive bounded `x-request-id` correlation and structured JSON logs. Durable Run events expose event and persistence correlation IDs to Conclave AX, where Run diagnostics can be exported without secrets. Conclave Host writes bounded, redacted structured logs and can export a sanitized diagnostics bundle containing machine-safe connection state, assignment identity/status fields, and recent logs. Correlation fields remain workspace, Run, Task, Attempt, Assignment, Host, Worker, Account, request, and event identifiers; raw credentials and session tokens are excluded.
 
+## PA-18 — Security review of the final connection model
+
+The final App, Cloud, Host, Worker, and Account trust boundaries were reviewed and documented in `docs/security/PA-18-CONNECTION-MODEL-REVIEW.md`. Realtime now enforces trusted WebSocket Origins and revalidates connected user authorization before client handling and fanout. Host messages revalidate current Host revocation and Workspace bindings. Negative tests cover foreign subscriptions, revoked users and Hosts, forged Worker correlation, replay, protocol downgrade, and grant enforcement. No high-severity unresolved issue remains in the reviewed topology.
+
 # Delegation guidance
 
 For each phase, give the implementation AI this structure:

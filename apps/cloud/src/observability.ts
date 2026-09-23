@@ -22,6 +22,16 @@ export function requestIdFor(request: Request): string {
   return supplied && supplied.length <= 128 ? supplied : crypto.randomUUID();
 }
 
+export function isTrustedRealtimeOrigin(
+  request: Request,
+  configuredOrigins: readonly string[] = [],
+): boolean {
+  const origin = request.headers.get("origin")?.replace(/\/$/, "");
+  if (!origin) return false;
+  const requestOrigin = new URL(request.url).origin;
+  return new Set([requestOrigin, ...configuredOrigins]).has(origin);
+}
+
 export function sanitizeDiagnostics(value: unknown, depth = 0): unknown {
   if (depth > 5) return "[depth limited]";
   if (typeof value === "string") {

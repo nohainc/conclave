@@ -116,6 +116,27 @@ export function isWorkspaceAuthorized(
   return authorizedWorkspaceIds.has(workspaceId);
 }
 
+export async function isHostAuthorizationActive(
+  db: Pick<D1Database, "prepare">,
+  hostId: string,
+  workspaceId?: string,
+): Promise<boolean> {
+  const host = await db
+    .prepare("SELECT status, revoked_at AS revokedAt FROM hosts WHERE id = ?1")
+    .bind(hostId)
+    .first<{ status: string; revokedAt: string | null }>();
+  if (!host || host.revokedAt || host.status === "revoked") return false;
+  if (!workspaceId) return true;
+  const binding = await db
+    .prepare(
+      `SELECT 1 AS active FROM host_workspace_bindings
+       WHERE host_id = ?1 AND workspace_id = ?2 AND status = 'active'`,
+    )
+    .bind(hostId, workspaceId)
+    .first<{ active: number }>();
+  return Boolean(binding);
+}
+
 export class HostGateway implements DurableObject {
   private socket: WebSocket | null = null;
   private hostId: string | null = null;
@@ -351,6 +372,39 @@ export class HostGateway implements DurableObject {
         err instanceof Error ? err.message : "Invalid host protocol message",
       );
       return;
+    }
+
+    const connectedHostId = this.hostId;
+    if (
+      !connectedHostId ||
+      !(await isHostAuthorizationActive(this.env.CONCLAVE_DB, connectedHostId))
+    ) {
+      this.socket?.close(1008, "Host authorization revoked");
+      return;
+    }
+
+    const messageRecord = message as unknown as Record<string, unknown>;
+    const payloadRecord =
+      messageRecord.payload && typeof messageRecord.payload === "object"
+        ? (messageRecord.payload as Record<string, unknown>)
+        : undefined;
+    const messageWorkspaceId =
+      typeof messageRecord.workspaceId === "string"
+        ? messageRecord.workspaceId
+        : typeof payloadRecord?.workspaceId === "string"
+          ? payloadRecord.workspaceId
+          : null;
+    if (messageWorkspaceId) {
+      if (
+        !(await isHostAuthorizationActive(
+          this.env.CONCLAVE_DB,
+          connectedHostId,
+          messageWorkspaceId,
+        ))
+      ) {
+        this.socket?.close(1008, "Host Workspace binding revoked");
+        return;
+      }
     }
 
     const now = new Date().toISOString();

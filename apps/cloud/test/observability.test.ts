@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isTrustedRealtimeOrigin,
   sanitizeDiagnostics,
   structuredLogRecord,
 } from "../src/observability.js";
@@ -41,5 +42,23 @@ describe("observability", () => {
       assignmentId: "assignment-1",
       credentialProfileId: "profile-1",
     });
+  });
+
+  it("requires a trusted Origin for browser realtime upgrades", () => {
+    expect(
+      isTrustedRealtimeOrigin(
+        new Request("https://app.conclave.test/api/realtime", {
+          headers: { origin: "https://evil.example" },
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      isTrustedRealtimeOrigin(
+        new Request("https://api.conclave.test/api/realtime", {
+          headers: { origin: "https://app.conclave.test" },
+        }),
+        ["https://app.conclave.test"],
+      ),
+    ).toBe(true);
   });
 });

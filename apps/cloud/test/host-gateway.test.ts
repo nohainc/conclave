@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   assignmentContextMatches,
+  isHostAuthorizationActive,
   isCurrentSocketSession,
   isWorkspaceAuthorized,
 } from "../src/host-gateway.js";
@@ -141,6 +142,28 @@ describe("V4 Host connectivity", () => {
           .get() as { count: number }
       ).count,
     ).toBe(1);
+  });
+
+  it("rejects an already-open Host after revocation or binding removal", async () => {
+    const db = {
+      prepare(query: string) {
+        return {
+          bind() {
+            return {
+              first: async () => {
+                if (query.includes("FROM hosts")) {
+                  return { status: "revoked", revokedAt: "later" };
+                }
+                return { active: 1 };
+              },
+            };
+          },
+        };
+      },
+    } as never;
+    await expect(
+      isHostAuthorizationActive(db, "host-1", "workspace-a"),
+    ).resolves.toBe(false);
   });
 
   it("keeps human sessions independent from Host machine credentials", () => {

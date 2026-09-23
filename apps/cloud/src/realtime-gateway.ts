@@ -207,6 +207,23 @@ export async function authorizeRealtimeScope(
   return { allowed: true };
 }
 
+export async function isRealtimeIdentityAuthorized(
+  db: Pick<D1Database, "prepare">,
+  userId: string,
+  scopes: readonly RealtimeScope[],
+): Promise<boolean> {
+  const user = await db
+    .prepare("SELECT status FROM users WHERE id = ?1")
+    .bind(userId)
+    .first<{ status: string }>();
+  if (!user || user.status !== "active") return false;
+  for (const scope of scopes) {
+    const result = await authorizeRealtimeScope(db, userId, scope);
+    if (!result.allowed) return false;
+  }
+  return true;
+}
+
 export class RealtimeGateway implements DurableObject {
   private readonly clients = new Map<string, ConnectedClient>();
   private readonly metrics: RealtimeGatewayMetrics = {
@@ -305,6 +322,18 @@ export class RealtimeGateway implements DurableObject {
     const connected = this.clients.get(connectionId);
     if (!connected) return;
     try {
+      if (
+        !(await isRealtimeIdentityAuthorized(
+          this.env.CONCLAVE_DB,
+          connected.identity.userId,
+          [...connected.subscriptions.values()],
+        ))
+      ) {
+        connected.socket.close(1008, "Realtime authorization revoked");
+        this.clients.delete(connectionId);
+        this.metrics.activeAppSockets = this.clients.size;
+        return;
+      }
       const input = JSON.parse(
         typeof data === "string"
           ? data
@@ -369,6 +398,23 @@ export class RealtimeGateway implements DurableObject {
       const event = parseRealtimeEvent(await request.json());
       this.metrics.publishedEvents += 1;
       for (const connected of this.clients.values()) {
+        if (
+          !(await isRealtimeIdentityAuthorized(
+            this.env.CONCLAVE_DB,
+            connected.identity.userId,
+            [...connected.subscriptions.values()],
+          ))
+        ) {
+          connected.socket.close(1008, "Realtime authorization revoked");
+          for (const [connectionId, candidate] of this.clients.entries()) {
+            if (candidate === connected) {
+              this.clients.delete(connectionId);
+              break;
+            }
+          }
+          this.metrics.activeAppSockets = this.clients.size;
+          continue;
+        }
         const matches = [...connected.subscriptions.values()].some((scope) =>
           eventMatchesScope(event, scope),
         );
