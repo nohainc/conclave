@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../brand.dart';
+import '../../navigation/studio_navigation.dart';
 import '../../studio/studio_models.dart';
 
 /// Item in the command palette search results
@@ -34,7 +35,7 @@ class CommandPaletteDialog extends StatefulWidget {
   final StudioSnapshot snapshot;
   final ValueChanged<String> onSelectProject;
   final void Function(String projectId, String chatId) onSelectChat;
-  final ValueChanged<int> onNavigateTo;
+  final ValueChanged<StudioNavigation> onNavigateTo;
   final VoidCallback onToggleTheme;
   final VoidCallback onNewGoal;
 
@@ -70,7 +71,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
         category: 'Navigation',
         onSelect: () {
           Navigator.of(context).pop();
-          widget.onNavigateTo(1);
+          widget.onNavigateTo(const StudioNavigation.hosts());
         },
       ),
       CommandPaletteAction(
@@ -80,7 +81,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
         category: 'Navigation',
         onSelect: () {
           Navigator.of(context).pop();
-          widget.onNavigateTo(2);
+          widget.onNavigateTo(const StudioNavigation.workers());
         },
       ),
       CommandPaletteAction(
@@ -90,7 +91,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
         category: 'Navigation',
         onSelect: () {
           Navigator.of(context).pop();
-          widget.onNavigateTo(3);
+          widget.onNavigateTo(const StudioNavigation.accounts());
         },
       ),
       CommandPaletteAction(
@@ -100,7 +101,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
         category: 'Navigation',
         onSelect: () {
           Navigator.of(context).pop();
-          widget.onNavigateTo(5);
+          widget.onNavigateTo(const StudioNavigation.profileSecurity());
         },
       ),
       // Quick Actions
@@ -130,7 +131,8 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
     for (final project in widget.snapshot.projects) {
       actions.add(CommandPaletteAction(
         title: 'Project: ${project.name}',
-        subtitle: project.repository.isNotEmpty ? project.repository : project.branch,
+        subtitle:
+            project.repository.isNotEmpty ? project.repository : project.branch,
         icon: Icons.folder_outlined,
         category: 'Projects',
         onSelect: () {
@@ -158,7 +160,8 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
 
     return actions.where((action) {
       final matchesTitle = action.title.toLowerCase().contains(_query);
-      final matchesSubtitle = action.subtitle?.toLowerCase().contains(_query) ?? false;
+      final matchesSubtitle =
+          action.subtitle?.toLowerCase().contains(_query) ?? false;
       final matchesCategory = action.category.toLowerCase().contains(_query);
       return matchesTitle || matchesSubtitle || matchesCategory;
     }).toList();
@@ -170,10 +173,12 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
     final actions = _buildActions();
 
     return Dialog(
-      backgroundColor: isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface,
+      backgroundColor:
+          isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine),
+        side: BorderSide(
+            color: isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine),
       ),
       child: Container(
         width: 580,
@@ -189,16 +194,20 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                 autofocus: true,
                 style: TextStyle(
                   fontSize: 14,
-                  color: isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk,
+                  color:
+                      isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk,
                 ),
                 decoration: InputDecoration(
                   hintText: 'Type a command, project, or chat...',
                   prefixIcon: const Icon(Icons.search_rounded, size: 20),
                   suffixIcon: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     margin: const EdgeInsets.only(right: 8),
                     decoration: BoxDecoration(
-                      color: isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine,
+                      color: isDark
+                          ? ConclaveBrand.darkLine
+                          : ConclaveBrand.lightLine,
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
@@ -206,21 +215,29 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
-                        color: isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted,
+                        color: isDark
+                            ? ConclaveBrand.darkInkMuted
+                            : ConclaveBrand.lightInkMuted,
                       ),
                     ),
                   ),
                   filled: true,
-                  fillColor: isDark ? ConclaveBrand.darkPaper : ConclaveBrand.lightPaper,
+                  fillColor: isDark
+                      ? ConclaveBrand.darkPaper
+                      : ConclaveBrand.lightPaper,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide.none,
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 ),
               ),
             ),
-            Divider(height: 1, color: isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine),
+            Divider(
+                height: 1,
+                color:
+                    isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine),
             // Results List
             Flexible(
               child: actions.isEmpty
@@ -230,7 +247,9 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                         'No results found for "$_query"',
                         style: TextStyle(
                           fontSize: 13,
-                          color: isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted,
+                          color: isDark
+                              ? ConclaveBrand.darkInkMuted
+                              : ConclaveBrand.lightInkMuted,
                         ),
                       ),
                     )
@@ -242,13 +261,16 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                         final action = actions[index];
                         return ListTile(
                           dense: true,
-                          leading: Icon(action.icon, size: 18, color: ConclaveBrand.accent),
+                          leading: Icon(action.icon,
+                              size: 18, color: ConclaveBrand.accent),
                           title: Text(
                             action.title,
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
-                              color: isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk,
+                              color: isDark
+                                  ? ConclaveBrand.darkInk
+                                  : ConclaveBrand.lightInk,
                             ),
                           ),
                           subtitle: action.subtitle != null
@@ -256,7 +278,9 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                                   action.subtitle!,
                                   style: TextStyle(
                                     fontSize: 11,
-                                    color: isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted,
+                                    color: isDark
+                                        ? ConclaveBrand.darkInkMuted
+                                        : ConclaveBrand.lightInkMuted,
                                   ),
                                 )
                               : null,
@@ -264,7 +288,9 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                             action.category,
                             style: TextStyle(
                               fontSize: 10.5,
-                              color: isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted,
+                              color: isDark
+                                  ? ConclaveBrand.darkInkMuted
+                                  : ConclaveBrand.lightInkMuted,
                             ),
                           ),
                           onTap: action.onSelect,

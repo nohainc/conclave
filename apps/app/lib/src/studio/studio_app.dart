@@ -45,8 +45,6 @@ class _StudioAppState extends State<StudioApp> {
   String? loadError;
   String? selectedTaskId = 'implement';
   String? selectedChatId;
-  int navigationIndex = 0;
-  bool showRunDetails = false;
   final Set<String> expandedProjectIds = {'forge'};
   bool showNewGoal = false;
   bool showWorkerDrawer = false;
@@ -96,6 +94,11 @@ class _StudioAppState extends State<StudioApp> {
   ThemeMode _themeMode = ThemeMode.system;
   final List<ToastMessage> activeToasts = [];
 
+  bool get showRunDetails => switch (navigation.kind) {
+        StudioRouteKind.home || StudioRouteKind.chat => false,
+        _ => true,
+      };
+
   void _showSnackBar(String message, {ToastType type = ToastType.info}) {
     _showToast(message, type: type);
     messengerKey.currentState?.showSnackBar(SnackBar(content: Text(message)));
@@ -122,8 +125,6 @@ class _StudioAppState extends State<StudioApp> {
         onSelectProject: (projectId) {
           setState(() {
             selectedProjectId = projectId;
-            showRunDetails = false;
-            navigationIndex = 0;
           });
           unawaited(_loadSnapshot(projectId: projectId));
         },
@@ -131,17 +132,10 @@ class _StudioAppState extends State<StudioApp> {
           setState(() {
             selectedProjectId = projectId;
             selectedChatId = chatId;
-            showRunDetails = false;
-            navigationIndex = 0;
           });
           unawaited(_loadSnapshot(projectId: projectId));
         },
-        onNavigateTo: (index) {
-          setState(() {
-            navigationIndex = index;
-            showRunDetails = (index != 0);
-          });
-        },
+        onNavigateTo: (target) => _navigateTo(target, replace: true),
         onToggleTheme: () {
           setState(() {
             _themeMode =
@@ -151,8 +145,6 @@ class _StudioAppState extends State<StudioApp> {
         onNewGoal: () {
           setState(() {
             showNewGoal = true;
-            showRunDetails = false;
-            navigationIndex = 0;
           });
         },
       ),
@@ -188,8 +180,6 @@ class _StudioAppState extends State<StudioApp> {
     browserNavigation = createStudioBrowserNavigation();
     navigation = StudioNavigation.fromUri(
         widget.initialUri ?? browserNavigation.current);
-    navigationIndex = navigation.kind == StudioRouteKind.account ? 5 : 0;
-    showRunDetails = navigation.kind == StudioRouteKind.account;
     navigationSubscription =
         browserNavigation.changes.listen(_onBrowserNavigation);
     lifecycleSubscription = browserNavigation.lifecycleChanges
@@ -216,7 +206,7 @@ class _StudioAppState extends State<StudioApp> {
       }
       await _loadWorkspaces();
       await _loadSnapshot();
-      if (navigation.kind == StudioRouteKind.account) {
+      if (navigation.kind == StudioRouteKind.profileSecurity) {
         await _loadAccountSecurity();
       }
     } catch (_) {
@@ -777,7 +767,6 @@ class _StudioAppState extends State<StudioApp> {
         project?.chats.any((chat) => chat.id == navigation.chatId) == true) {
       selectedChatId = navigation.chatId;
     }
-    if (navigation.runId != null) showRunDetails = true;
   }
 
   void _onBrowserNavigation(Uri uri) {
@@ -789,11 +778,8 @@ class _StudioAppState extends State<StudioApp> {
       navigation = next;
       selectedProjectId = next.projectId ?? selectedProjectId;
       selectedChatId = next.chatId ?? selectedChatId;
-      showRunDetails = next.kind == StudioRouteKind.run ||
-          next.kind == StudioRouteKind.account;
-      navigationIndex = next.kind == StudioRouteKind.account ? 5 : 0;
     });
-    if (next.kind == StudioRouteKind.account) {
+    if (next.kind == StudioRouteKind.profileSecurity) {
       unawaited(_loadAccountSecurity());
     }
     if (projectChanged) {
@@ -801,13 +787,11 @@ class _StudioAppState extends State<StudioApp> {
     }
   }
 
-  void _navigateTo(StudioNavigation next,
-      {bool replace = false, bool? showDetails}) {
+  void _navigateTo(StudioNavigation next, {bool replace = false}) {
     setState(() {
       navigation = next;
       selectedProjectId = next.projectId ?? selectedProjectId;
       selectedChatId = next.chatId ?? selectedChatId;
-      showRunDetails = showDetails ?? next.kind == StudioRouteKind.run;
     });
     if (replace) {
       browserNavigation.replace(next.toUri());
@@ -1637,15 +1621,22 @@ class _StudioAppState extends State<StudioApp> {
               const SizedBox(height: 20),
             ],
             _sidebarLabel('WORKSPACE'),
-            _navItem(Icons.chat_bubble_outline, 'Chats', 0,
+            _navItem(Icons.home_outlined, 'Home', const StudioNavigation.home(),
                 compact: compact, navigationContext: sidebarContext),
-            _navItem(Icons.computer_outlined, 'Hosts', 1,
+            _navItem(Icons.folder_outlined, 'Projects',
+                const StudioNavigation.projects(),
                 compact: compact, navigationContext: sidebarContext),
-            _navItem(Icons.extension_outlined, 'Workers', 2,
+            _navItem(Icons.computer_outlined, 'Hosts',
+                const StudioNavigation.hosts(),
                 compact: compact, navigationContext: sidebarContext),
-            _navItem(Icons.account_circle_outlined, 'Accounts', 3,
+            _navItem(Icons.extension_outlined, 'Workers',
+                const StudioNavigation.workers(),
                 compact: compact, navigationContext: sidebarContext),
-            _navItem(Icons.analytics_outlined, 'Usage', 4,
+            _navItem(Icons.account_circle_outlined, 'Accounts',
+                const StudioNavigation.accounts(),
+                compact: compact, navigationContext: sidebarContext),
+            _navItem(Icons.analytics_outlined, 'Usage',
+                const StudioNavigation.usage(),
                 compact: compact, navigationContext: sidebarContext),
             const SizedBox(height: 26),
             Expanded(
@@ -1671,9 +1662,10 @@ class _StudioAppState extends State<StudioApp> {
               ),
             ),
             if (compact)
-              _navItem(Icons.close_rounded, 'Close menu', -1,
+              _navItem(Icons.close_rounded, 'Close menu', null,
                   compact: compact, navigationContext: sidebarContext),
-            _navItem(Icons.person_outline_rounded, 'Account', 5,
+            _navItem(Icons.person_outline_rounded, 'Profile & security',
+                const StudioNavigation.profileSecurity(),
                 compact: compact, navigationContext: sidebarContext),
             const SizedBox(height: 6),
             Row(children: [
@@ -1773,33 +1765,34 @@ class _StudioAppState extends State<StudioApp> {
         ),
       );
 
-  Widget _navItem(IconData icon, String label, int index,
+  Widget _navItem(IconData icon, String label, StudioNavigation? target,
       {String? badge, bool compact = false, BuildContext? navigationContext}) {
-    final active = navigationIndex == index;
+    final active = target != null &&
+        (navigation.kind == target.kind ||
+            (target.kind == StudioRouteKind.home &&
+                {
+                  StudioRouteKind.home,
+                  StudioRouteKind.projects,
+                  StudioRouteKind.project,
+                  StudioRouteKind.chat,
+                }.contains(navigation.kind)));
     return InkWell(
       onTap: () {
-        if (index >= 0) {
-          setState(() {
-            navigationIndex = index;
-            showRunDetails = index != 0;
-          });
-          if (index == 0) {
+        if (target != null) {
+          if (target.kind == StudioRouteKind.home) {
             final project = selectedProject;
             final chat = selectedChat;
             if (project != null && chat != null) {
               _navigateTo(StudioNavigation.chat(project.id, chat.id),
                   replace: true);
             } else {
-              _navigateTo(const StudioNavigation.home(),
-                  replace: true, showDetails: false);
+              _navigateTo(const StudioNavigation.home(), replace: true);
             }
-          } else if (index == 5) {
-            _navigateTo(const StudioNavigation.account(),
-                replace: true, showDetails: true);
+          } else if (target.kind == StudioRouteKind.profileSecurity) {
+            _navigateTo(target, replace: true);
             unawaited(_loadAccountSecurity());
           } else {
-            _navigateTo(const StudioNavigation.home(),
-                replace: true, showDetails: true);
+            _navigateTo(target, replace: true);
           }
           Scaffold.maybeOf(navigationContext ?? context)?.closeDrawer();
         }
@@ -1896,8 +1889,6 @@ class _StudioAppState extends State<StudioApp> {
               setState(() {
                 selectedProjectId = project.id;
                 selectedChatId = chat.id;
-                showRunDetails = false;
-                navigationIndex = 0;
               });
               _navigateTo(StudioNavigation.chat(project.id, chat.id));
             },
@@ -2017,14 +2008,18 @@ class _StudioAppState extends State<StudioApp> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                navigationIndex == 5
-                    ? 'Account'
-                    : (showRunDetails ? 'Run details' : 'Conclave AX'),
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: inkColor,
+              Flexible(
+                child: Text(
+                  navigation.kind == StudioRouteKind.profileSecurity
+                      ? 'Profile & security'
+                      : (showRunDetails ? 'Workspace' : 'Conclave AX'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: inkColor,
+                  ),
                 ),
               ),
               if (selectedProject != null) ...[
@@ -2136,12 +2131,130 @@ class _StudioAppState extends State<StudioApp> {
     );
   }
 
+  Widget _projectsView() => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Projects',
+              style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          const Text('Projects organize Chats, Runs, artifacts, and evidence.',
+              style: TextStyle(color: Color(0xff777683), fontSize: 13)),
+          const SizedBox(height: 24),
+          if (snapshot.projects.isEmpty)
+            _panel(
+              title: 'No projects yet',
+              subtitle: 'Create a Project to start your first Chat.',
+              child: FilledButton.icon(
+                onPressed: _createProject,
+                icon: const Icon(Icons.create_new_folder_outlined),
+                label: const Text('Create project'),
+              ),
+            )
+          else
+            ...snapshot.projects.map((project) => _panel(
+                  title: project.name,
+                  subtitle: project.repository.isEmpty
+                      ? 'No repository connected'
+                      : project.repository,
+                  child: Row(
+                    children: [
+                      Text('${project.chats.length} chats'),
+                      const Spacer(),
+                      OutlinedButton(
+                        onPressed: () =>
+                            _navigateTo(StudioNavigation.project(project.id)),
+                        child: const Text('Open project'),
+                      ),
+                    ],
+                  ),
+                )),
+        ],
+      );
+
+  Widget _projectOverviewView() {
+    final project = selectedProject;
+    if (project == null) return _projectsView();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(project.name,
+            style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        const Text('Project overview',
+            style: TextStyle(color: Color(0xff777683), fontSize: 13)),
+        const SizedBox(height: 24),
+        _panel(
+          title: 'Chats',
+          subtitle: 'Continue a conversation or start a new one.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (project.chats.isEmpty) const Text('No chats yet.'),
+              ...project.chats.map((chat) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(chat.title),
+                    subtitle: Text(chat.lastActivity),
+                    onTap: () =>
+                        _navigateTo(StudioNavigation.chat(project.id, chat.id)),
+                  )),
+              FilledButton.icon(
+                onPressed: _createChat,
+                icon: const Icon(Icons.add),
+                label: const Text('New chat'),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _workspaceSettingsView() => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Workspace settings',
+              style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          const Text('Manage the active Workspace and its access.',
+              style: TextStyle(color: Color(0xff777683), fontSize: 13)),
+          const SizedBox(height: 24),
+          _panel(
+            title: 'Active Workspace',
+            subtitle:
+                'Workspace membership and permissions are managed in Conclave Cloud.',
+            child: Text(workspaces
+                    .where((workspace) => workspace.id == activeWorkspaceId)
+                    .firstOrNull
+                    ?.name ??
+                'Workspace unavailable'),
+          ),
+        ],
+      );
+
   Widget _runDetailsView(bool compact) {
-    if (navigationIndex == 1) return _hostsView();
-    if (navigationIndex == 2) return _catalogView();
-    if (navigationIndex == 3) return _accountsView();
-    if (navigationIndex == 4) return _usageView();
-    if (navigationIndex == 5) return _accountView();
+    switch (navigation.kind) {
+      case StudioRouteKind.hosts:
+        return _hostsView();
+      case StudioRouteKind.workers:
+        return _catalogView();
+      case StudioRouteKind.accounts:
+        return _accountsView();
+      case StudioRouteKind.usage:
+        return _usageView();
+      case StudioRouteKind.profileSecurity:
+        return _accountView();
+      case StudioRouteKind.workspaceSettings:
+        return _workspaceSettingsView();
+      case StudioRouteKind.projects:
+        return _projectsView();
+      case StudioRouteKind.project:
+        return _projectOverviewView();
+      case StudioRouteKind.run:
+      case StudioRouteKind.home:
+      case StudioRouteKind.chat:
+      case StudioRouteKind.login:
+        break;
+    }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Expanded(
@@ -2254,8 +2367,6 @@ class _StudioAppState extends State<StudioApp> {
       if (!mounted) return;
       setState(() {
         selectedChatId = chat.id;
-        showRunDetails = false;
-        navigationIndex = 0;
       });
       await _loadSnapshot(projectId: projectId, showSpinner: false);
     } catch (error) {

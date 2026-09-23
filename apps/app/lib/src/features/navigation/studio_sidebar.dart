@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../brand.dart';
+import '../../navigation/studio_navigation.dart';
 import '../../studio/studio_models.dart';
 
 /// Navigation Sidebar and Drawer for Conclave AX
@@ -11,7 +12,7 @@ class StudioSidebar extends StatelessWidget {
     required this.selectedChatId,
     required this.onSelectProject,
     required this.onSelectChat,
-    required this.navigationIndex,
+    required this.routeKind,
     required this.onNavigateTo,
     required this.expandedProjectIds,
     required this.onToggleProjectExpanded,
@@ -23,8 +24,8 @@ class StudioSidebar extends StatelessWidget {
   final String? selectedChatId;
   final ValueChanged<String> onSelectProject;
   final void Function(String projectId, String chatId) onSelectChat;
-  final int navigationIndex;
-  final ValueChanged<int> onNavigateTo;
+  final StudioRouteKind routeKind;
+  final ValueChanged<StudioNavigation> onNavigateTo;
   final Set<String> expandedProjectIds;
   final ValueChanged<String> onToggleProjectExpanded;
   final VoidCallback onNewGoal;
@@ -32,8 +33,10 @@ class StudioSidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface;
-    final borderColor = isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine;
+    final bgColor =
+        isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface;
+    final borderColor =
+        isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine;
 
     return Container(
       width: 260,
@@ -49,13 +52,15 @@ class StudioSidebar extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             child: ElevatedButton.icon(
               icon: const Icon(Icons.add_rounded, size: 18),
-              label: const Text('New goal', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              label: const Text('New goal',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: ConclaveBrand.accent,
                 foregroundColor: Colors.white,
                 elevation: 0,
                 padding: const EdgeInsets.symmetric(vertical: 10),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
               ),
               onPressed: onNewGoal,
             ),
@@ -69,40 +74,48 @@ class StudioSidebar extends StatelessWidget {
                 _NavItem(
                   icon: Icons.chat_bubble_outline_rounded,
                   label: 'Conversation',
-                  isSelected: navigationIndex == 0,
-                  onTap: () => onNavigateTo(0),
+                  isSelected: {
+                    StudioRouteKind.home,
+                    StudioRouteKind.projects,
+                    StudioRouteKind.project,
+                    StudioRouteKind.chat,
+                  }.contains(routeKind),
+                  onTap: () => onNavigateTo(const StudioNavigation.home()),
                 ),
                 _NavItem(
                   icon: Icons.dns_outlined,
                   label: 'Hosts',
-                  isSelected: navigationIndex == 1,
+                  isSelected: routeKind == StudioRouteKind.hosts,
                   badge: '${snapshot.hosts.length}',
-                  onTap: () => onNavigateTo(1),
+                  onTap: () => onNavigateTo(const StudioNavigation.hosts()),
                 ),
                 _NavItem(
                   icon: Icons.extension_outlined,
                   label: 'Workers',
-                  isSelected: navigationIndex == 2,
+                  isSelected: routeKind == StudioRouteKind.workers,
                   badge: '${snapshot.workers.length}',
-                  onTap: () => onNavigateTo(2),
+                  onTap: () => onNavigateTo(const StudioNavigation.workers()),
                 ),
                 _NavItem(
                   icon: Icons.key_outlined,
                   label: 'Accounts',
-                  isSelected: navigationIndex == 3,
+                  isSelected: routeKind == StudioRouteKind.accounts,
                   badge: '${snapshot.accounts.length}',
-                  onTap: () => onNavigateTo(3),
+                  onTap: () => onNavigateTo(const StudioNavigation.accounts()),
                 ),
                 const SizedBox(height: 16),
                 const _NavSectionHeader(title: 'PROJECTS & CHATS'),
                 if (snapshot.projects.isEmpty)
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     child: Text(
                       'No projects yet',
                       style: TextStyle(
                         fontSize: 12,
-                        color: isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted,
+                        color: isDark
+                            ? ConclaveBrand.darkInkMuted
+                            : ConclaveBrand.lightInkMuted,
                       ),
                     ),
                   ),
@@ -121,19 +134,34 @@ class StudioSidebar extends StatelessWidget {
                         },
                         borderRadius: BorderRadius.circular(6),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 7),
                           decoration: BoxDecoration(
-                            color: isProjectSelected && navigationIndex == 0
-                                ? (isDark ? ConclaveBrand.darkSurfaceHover : ConclaveBrand.lightSurfaceHover)
+                            color: isProjectSelected &&
+                                    {
+                                      StudioRouteKind.home,
+                                      StudioRouteKind.projects,
+                                      StudioRouteKind.project,
+                                      StudioRouteKind.chat,
+                                    }.contains(routeKind)
+                                ? (isDark
+                                    ? ConclaveBrand.darkSurfaceHover
+                                    : ConclaveBrand.lightSurfaceHover)
                                 : Colors.transparent,
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Row(
                             children: [
                               Icon(
-                                isExpanded ? Icons.folder_open_rounded : Icons.folder_rounded,
+                                isExpanded
+                                    ? Icons.folder_open_rounded
+                                    : Icons.folder_rounded,
                                 size: 16,
-                                color: isProjectSelected ? ConclaveBrand.accent : (isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted),
+                                color: isProjectSelected
+                                    ? ConclaveBrand.accent
+                                    : (isDark
+                                        ? ConclaveBrand.darkInkMuted
+                                        : ConclaveBrand.lightInkMuted),
                               ),
                               const SizedBox(width: 8),
                               Expanded(
@@ -143,15 +171,23 @@ class StudioSidebar extends StatelessWidget {
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     fontSize: 12.5,
-                                    fontWeight: isProjectSelected ? FontWeight.w700 : FontWeight.w500,
-                                    color: isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk,
+                                    fontWeight: isProjectSelected
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                    color: isDark
+                                        ? ConclaveBrand.darkInk
+                                        : ConclaveBrand.lightInk,
                                   ),
                                 ),
                               ),
                               Icon(
-                                isExpanded ? Icons.expand_more_rounded : Icons.chevron_right_rounded,
+                                isExpanded
+                                    ? Icons.expand_more_rounded
+                                    : Icons.chevron_right_rounded,
                                 size: 16,
-                                color: isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted,
+                                color: isDark
+                                    ? ConclaveBrand.darkInkMuted
+                                    : ConclaveBrand.lightInkMuted,
                               ),
                             ],
                           ),
@@ -160,21 +196,31 @@ class StudioSidebar extends StatelessWidget {
                       // Project Chats
                       if (isExpanded)
                         Padding(
-                          padding: const EdgeInsets.only(left: 20, top: 2, bottom: 4),
+                          padding: const EdgeInsets.only(
+                              left: 20, top: 2, bottom: 4),
                           child: Column(
                             children: project.chats.map((chat) {
                               final isChatSelected = chat.id == selectedChatId;
                               return InkWell(
                                 onTap: () {
                                   onSelectChat(project.id, chat.id);
-                                  onNavigateTo(0);
+                                  onNavigateTo(const StudioNavigation.home());
                                 },
                                 borderRadius: BorderRadius.circular(6),
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 6),
                                   decoration: BoxDecoration(
-                                    color: isChatSelected && navigationIndex == 0
-                                        ? (isDark ? ConclaveBrand.accentWashDark : ConclaveBrand.accentWash)
+                                    color: isChatSelected &&
+                                            {
+                                              StudioRouteKind.home,
+                                              StudioRouteKind.projects,
+                                              StudioRouteKind.project,
+                                              StudioRouteKind.chat,
+                                            }.contains(routeKind)
+                                        ? (isDark
+                                            ? ConclaveBrand.accentWashDark
+                                            : ConclaveBrand.accentWash)
                                         : Colors.transparent,
                                     borderRadius: BorderRadius.circular(6),
                                   ),
@@ -183,7 +229,11 @@ class StudioSidebar extends StatelessWidget {
                                       Icon(
                                         Icons.chat_bubble_outline_rounded,
                                         size: 13,
-                                        color: isChatSelected ? ConclaveBrand.accent : (isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted),
+                                        color: isChatSelected
+                                            ? ConclaveBrand.accent
+                                            : (isDark
+                                                ? ConclaveBrand.darkInkMuted
+                                                : ConclaveBrand.lightInkMuted),
                                       ),
                                       const SizedBox(width: 6),
                                       Expanded(
@@ -193,8 +243,14 @@ class StudioSidebar extends StatelessWidget {
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
                                             fontSize: 11.5,
-                                            fontWeight: isChatSelected ? FontWeight.w600 : FontWeight.normal,
-                                            color: isChatSelected ? ConclaveBrand.accent : (isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk),
+                                            fontWeight: isChatSelected
+                                                ? FontWeight.w600
+                                                : FontWeight.normal,
+                                            color: isChatSelected
+                                                ? ConclaveBrand.accent
+                                                : (isDark
+                                                    ? ConclaveBrand.darkInk
+                                                    : ConclaveBrand.lightInk),
                                           ),
                                         ),
                                       ),
@@ -233,7 +289,8 @@ class _NavSectionHeader extends StatelessWidget {
           fontSize: 10,
           fontWeight: FontWeight.w700,
           letterSpacing: 0.8,
-          color: isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted,
+          color:
+              isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted,
         ),
       ),
     );
@@ -267,7 +324,9 @@ class _NavItem extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
           color: isSelected
-              ? (isDark ? ConclaveBrand.accentWashDark : ConclaveBrand.accentWash)
+              ? (isDark
+                  ? ConclaveBrand.accentWashDark
+                  : ConclaveBrand.accentWash)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
         ),
@@ -276,7 +335,9 @@ class _NavItem extends StatelessWidget {
             Icon(
               icon,
               size: 17,
-              color: isSelected ? ConclaveBrand.accent : (isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk),
+              color: isSelected
+                  ? ConclaveBrand.accent
+                  : (isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -285,17 +346,24 @@ class _NavItem extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                  color: isSelected ? ConclaveBrand.accent : (isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk),
+                  color: isSelected
+                      ? ConclaveBrand.accent
+                      : (isDark
+                          ? ConclaveBrand.darkInk
+                          : ConclaveBrand.lightInk),
                 ),
               ),
             ),
             if (badge != null)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                 decoration: BoxDecoration(
                   color: isSelected
                       ? ConclaveBrand.accent
-                      : (isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine),
+                      : (isDark
+                          ? ConclaveBrand.darkLine
+                          : ConclaveBrand.lightLine),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
@@ -303,7 +371,11 @@ class _NavItem extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    color: isSelected ? Colors.white : (isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted),
+                    color: isSelected
+                        ? Colors.white
+                        : (isDark
+                            ? ConclaveBrand.darkInkMuted
+                            : ConclaveBrand.lightInkMuted),
                   ),
                 ),
               ),

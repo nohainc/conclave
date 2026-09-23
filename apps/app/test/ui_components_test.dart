@@ -6,6 +6,7 @@ import 'package:conclave_app/src/features/common/code_block_view.dart';
 import 'package:conclave_app/src/features/common/command_palette.dart';
 import 'package:conclave_app/src/features/common/toast_overlay.dart';
 import 'package:conclave_app/src/features/execution/task_pipeline_dag.dart';
+import 'package:conclave_app/src/navigation/studio_navigation.dart';
 import 'package:conclave_app/src/studio/studio_models.dart';
 import 'studio_fixture_snapshot.dart';
 
@@ -121,7 +122,7 @@ void main() {
 
     testWidgets('renders CommandPaletteDialog and filters actions',
         (WidgetTester tester) async {
-      int? navigatedIndex;
+      StudioNavigation? navigatedTo;
       final snapshot = studioFixtureSnapshot();
 
       await tester.pumpWidget(
@@ -132,7 +133,7 @@ void main() {
               snapshot: snapshot,
               onSelectProject: (_) {},
               onSelectChat: (_, __) {},
-              onNavigateTo: (index) => navigatedIndex = index,
+              onNavigateTo: (route) => navigatedTo = route,
               onToggleTheme: () {},
               onNewGoal: () {},
             ),
@@ -152,7 +153,7 @@ void main() {
       expect(find.text('Open Workers'), findsNothing);
 
       await tester.tap(find.text('Open Hosts'));
-      expect(navigatedIndex, 1);
+      expect(navigatedTo?.kind, StudioRouteKind.hosts);
     });
   });
 }

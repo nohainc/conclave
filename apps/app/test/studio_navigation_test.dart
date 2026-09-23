@@ -16,9 +16,26 @@ void main() {
     expect(run.kind, StudioRouteKind.run);
     expect(run.toUri().path, '/projects/project-1/runs/run-3');
 
-    final account = StudioNavigation.fromUri(Uri.parse('/account'));
-    expect(account.kind, StudioRouteKind.account);
-    expect(account.toUri().path, '/account');
+    final profile = StudioNavigation.fromUri(Uri.parse('/settings/profile'));
+    expect(profile.kind, StudioRouteKind.profileSecurity);
+    expect(profile.toUri().path, '/settings/profile');
+  });
+
+  test('has stable routes for every major application section', () {
+    final routes = <StudioNavigation>[
+      const StudioNavigation.home(),
+      const StudioNavigation.projects(),
+      const StudioNavigation.hosts(),
+      const StudioNavigation.workers(),
+      const StudioNavigation.accounts(),
+      const StudioNavigation.usage(),
+      const StudioNavigation.workspaceSettings(),
+      const StudioNavigation.profileSecurity(),
+    ];
+
+    for (final route in routes) {
+      expect(StudioNavigation.fromUri(route.toUri()), route);
+    }
   });
 
   test('each browser tab can own an independent navigation state', () {
