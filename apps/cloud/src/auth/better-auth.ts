@@ -14,6 +14,7 @@ type SocialProviderCredentials = {
 
 export type BetterAuthRuntimeEnv = Pick<Env, "CONCLAVE_DB"> & {
   CONCLAVE_ENVIRONMENT: string;
+  CONCLAVE_E2E?: string;
   BETTER_AUTH_SECRET?: string;
   BETTER_AUTH_URL?: string;
   BETTER_AUTH_TRUSTED_ORIGINS?: string;
@@ -322,6 +323,10 @@ export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
     },
     trustedOrigins,
     advanced: {
+      ...(env.CONCLAVE_ENVIRONMENT === "development" &&
+      env.CONCLAVE_E2E === "true"
+        ? { database: { validateSchema: false } }
+        : {}),
       useSecureCookies: env.CONCLAVE_ENVIRONMENT === "production",
       defaultCookieAttributes: {
         httpOnly: true,

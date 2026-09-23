@@ -5363,26 +5363,104 @@ async function handleProjectReadModel(
   projectId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  const response = await handleStudioSnapshot(
-    env,
+  const securityEnv = env as SecurityEnv;
+  const context = await authorizeRequest(
     request,
+    securityEnv,
+    "project:read",
     projectId,
     accessContext,
   );
-  if (!response.ok) return response;
-  const body = (await response.json()) as Record<string, unknown>;
-  const projects = Array.isArray(body.projects) ? body.projects : [];
-  const project = projects[0] ?? null;
+  const projectRow = await env.CONCLAVE_DB.prepare(
+    `SELECT p.id, p.workspace_id AS workspaceId, p.name,
+            COALESCE(p.repository_id, '') AS repository,
+            p.description, p.settings_json AS settings,
+            p.created_at AS createdAt, p.updated_at AS updatedAt
+     FROM projects p
+     WHERE p.id = ?1 AND p.workspace_id = ?2`,
+  )
+    .bind(projectId, context.workspaceId)
+    .first<{
+      id: string;
+      workspaceId: string;
+      name: string;
+      repository: string;
+      description: string | null;
+      settings: string;
+      createdAt: string;
+      updatedAt: string;
+    }>();
+  if (!projectRow) throw new HttpError(404, "Project not found");
+
+  const chats = await env.CONCLAVE_DB.prepare(
+    `SELECT c.id, c.project_id AS projectId, c.workspace_id AS workspaceId,
+            c.created_by_user_id AS createdByUserId, c.title, c.status,
+            c.created_at AS createdAt, c.updated_at AS updatedAt
+     FROM chats c WHERE c.project_id = ?1 AND c.workspace_id = ?2
+     ORDER BY c.updated_at DESC`,
+  )
+    .bind(projectId, context.workspaceId)
+    .all<Record<string, unknown>>();
+  const messages = await env.CONCLAVE_DB.prepare(
+    `SELECT m.id, m.chat_id AS chatId, m.sender_type AS senderType,
+            m.content, m.kind, m.goal_id AS goalId,
+            m.metadata_json AS metadata, m.created_at AS createdAt
+     FROM chat_messages m JOIN chats c ON c.id = m.chat_id
+     WHERE c.project_id = ?1 AND c.workspace_id = ?2
+     ORDER BY m.created_at ASC`,
+  )
+    .bind(projectId, context.workspaceId)
+    .all<Record<string, unknown>>();
+  const messagesByChat = new Map<string, Record<string, unknown>[]>();
+  for (const row of messages.results ?? []) {
+    const metadata = parseJson<Record<string, unknown>>(row.metadata);
+    const chatMessages = messagesByChat.get(String(row.chatId)) ?? [];
+    chatMessages.push({
+      id: row.id,
+      sender:
+        row.senderType === "user"
+          ? "user"
+          : row.senderType === "system"
+            ? "system"
+            : "conclave",
+      text: row.content,
+      timestamp: row.createdAt,
+      ...(metadata.runPreview ? { runPreview: metadata.runPreview } : {}),
+    });
+    messagesByChat.set(String(row.chatId), chatMessages);
+  }
+  const project = {
+    ...projectRow,
+    settings: parseJson(projectRow.settings),
+    chats: (chats.results ?? []).map((chat) => ({
+      ...chat,
+      lastActivity: chat.updatedAt,
+      messages: messagesByChat.get(String(chat.id)) ?? [],
+    })),
+  };
+  const latestRun = await env.CONCLAVE_DB.prepare(
+    `SELECT r.id, r.status, g.objective, r.created_at AS createdAt,
+            r.started_at AS startedAt, r.finished_at AS finishedAt
+     FROM runs r JOIN goals g ON g.id = r.goal_id
+     WHERE r.project_id = ?1 AND r.workspace_id = ?2
+     ORDER BY r.created_at DESC LIMIT 1`,
+  )
+    .bind(projectId, context.workspaceId)
+    .first<Record<string, unknown>>();
   return json({
-    workspaceId: body.workspaceId,
+    workspaceId: context.workspaceId,
     project,
-    run: body.run ?? null,
-    activeRunId: body.activeRunId ?? null,
-    tasks: body.tasks ?? [],
-    findings: body.findings ?? [],
-    events: body.events ?? [],
-    artifacts: body.artifacts ?? [],
-    modelCalls: body.modelCalls ?? [],
+    run: latestRun ?? null,
+    activeRunId:
+      latestRun &&
+      ["created", "running", "paused"].includes(String(latestRun.status))
+        ? latestRun.id
+        : null,
+    tasks: [],
+    findings: [],
+    events: [],
+    artifacts: [],
+    modelCalls: [],
   });
 }
 
@@ -5469,7 +5547,13 @@ async function handleWorkspaceUsage(
   const usage = rows.results ?? [];
   const number = (value: unknown) =>
     typeof value === "number" ? value : Number(value ?? 0);
-  const summary = usage.reduce(
+  const summary = usage.reduce<{
+    tokens: number;
+    knownApiCostMicros: number;
+    subscriptionUsage: number;
+    durationMs: number;
+    runs: Set<string>;
+  }>(
     (result, row) => {
       const item = row as Record<string, unknown>;
       result.tokens += number(item.tokens);
@@ -5491,7 +5575,16 @@ async function handleWorkspaceUsage(
   );
   return json({
     range,
-    filters: { projectId, requesterUserId, credentialProfileId, workerId, provider, model, from, to },
+    filters: {
+      projectId,
+      requesterUserId,
+      credentialProfileId,
+      workerId,
+      provider,
+      model,
+      from,
+      to,
+    },
     summary: {
       tokens: summary.tokens,
       knownApiCostMicros: summary.knownApiCostMicros,

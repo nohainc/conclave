@@ -8,6 +8,7 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "test": "vitest run packages/protocol/test packages/host-protocol/test packages/worker-manifest/test packages/persistence/test packages/security/test packages/sdk/test packages/core/test packages/orchestration/test apps/cloud/test",
+    "app:e2e": "vitest run apps/cloud/test/application-e2e.test.ts",
     "host:architecture-check": "node scripts/verify-host-architecture.mjs",
     "docs:check": "node scripts/verify-doc-links.mjs",
     "cloud:execution-boundary-check": "node scripts/verify-cloud-execution-boundary.mjs",
