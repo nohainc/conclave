@@ -17,11 +17,17 @@ export {
 } from "./ensemble-dispatcher.js";
 export { handleConnectorRequest } from "./interactive-connector.js";
 export {
+  IdentityService,
+  identityService,
+  type AuthenticatedIdentity,
+} from "./auth/index.js";
+export {
   accessServiceTokenId,
   requireSameOriginForCookieMutation,
 } from "./routes/handlers.js";
 
 import * as handlers from "./routes/handlers.js";
+import { handleBetterAuthRequest } from "./auth/index.js";
 import {
   routeWorkerRequest,
   type WorkerRouteDependencies,
@@ -116,6 +122,9 @@ export default {
         ok: true,
         environment: env.CONCLAVE_ENVIRONMENT,
       });
+    }
+    if (url.pathname === "/api/auth" || url.pathname.startsWith("/api/auth/")) {
+      return handleBetterAuthRequest(request, env);
     }
     return routeWorkerRequest(
       request,

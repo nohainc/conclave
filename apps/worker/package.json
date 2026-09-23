@@ -14,8 +14,9 @@
     "@conclave/core": "workspace:*",
     "@conclave/orchestration": "workspace:*",
     "@conclave/persistence": "workspace:*",
-    "@conclave/worker-manifest": "workspace:*",
     "@conclave/protocol": "workspace:*",
-    "@conclave/security": "workspace:*"
+    "@conclave/security": "workspace:*",
+    "@conclave/worker-manifest": "workspace:*",
+    "better-auth": "^1.7.5"
   }
 }

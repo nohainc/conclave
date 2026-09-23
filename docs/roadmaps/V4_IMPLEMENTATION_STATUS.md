@@ -45,3 +45,10 @@ authentication migration is intentionally not included in this baseline.
 ✅ Accepted in [ADR-005](../decisions/ADR-005-authentication-architecture.md).
 Better Auth owns human authentication and D1 persistence; Conclave owns all
 Workspace, Project, Host, and Credential Profile authorization.
+
+## AUTH-2 — Dedicated Cloud authentication boundary
+
+✅ Better Auth is isolated under `apps/worker/src/auth/`, exposed through an
+application-facing `IdentityService`, and mounted at `/api/auth/*`. Existing
+authentication paths remain available until a later migration phase removes
+them.
