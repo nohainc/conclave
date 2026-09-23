@@ -1121,6 +1121,19 @@ All scenarios pass from a fresh database/install with no manual backend interven
 
 # PA-21 — Final product UX and release gate
 
+The automated release audit is green for the App/Cloud/Host behavior covered
+by this repository: rendered App tests use Conclave AX, Hosts, Workers, and
+Accounts; App and Host analysis/tests pass; Better Auth, Access, execution
+boundary, protocol, desired-state, realtime, artifact, security, clean-room,
+and documentation checks pass; and the Cloud artifact test no longer contains
+an untyped authentication fixture. The final deployed OAuth, physical Host,
+provider Account, cross-device timing, and accessibility review still require
+the external acceptance environment. The repository also retains legacy
+compatibility identifiers in internal App/API models (for example `Studio*`,
+`agentId`, and plugin catalog compatibility fields); these do not appear in
+normal rendered UI but prevent claiming complete repository-wide terminology
+cleanup until the compatibility layer is removed.
+
 ## Goal
 Treat the architecture as complete and judge the product experience.
 

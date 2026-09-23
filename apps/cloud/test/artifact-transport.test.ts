@@ -214,7 +214,11 @@ describe("artifact transport", () => {
       {
         ...env,
         TEST_AUTHENTICATION: async () => ({
-          ...(await (env as any).TEST_AUTHENTICATION()),
+          ...(await (
+            env as unknown as {
+              TEST_AUTHENTICATION: () => Promise<Record<string, unknown>>;
+            }
+          ).TEST_AUTHENTICATION()),
           workspaceId: "workspace-2",
         }),
       } as unknown as Env,

@@ -70,7 +70,8 @@ const GUARD_PATTERNS = [
   },
   {
     id: "worker_direct_cloud_networking",
-    regex: /(?:worker|workers)[^\n]*(?:fetch\(|WebSocket\(|Cloudflare|apps\/cloud|cloud\/src)/gi,
+    regex:
+      /(?:worker|workers)[^\n]*(?:fetch\(|WebSocket\(|Cloudflare|apps\/cloud|cloud\/src)/gi,
     description: "Workers must communicate through the Host",
   },
 ];
