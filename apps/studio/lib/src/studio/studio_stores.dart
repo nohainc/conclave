@@ -98,8 +98,8 @@ class AgentStore {
   final StudioDataSource source;
   List<StudioAgent> items = const [];
 
-  Future<StudioAgentEnrollment> createEnrollment(String workspaceId) =>
-      source.createAgentEnrollment(workspaceId: workspaceId);
+  Future<StudioHostEnrollment> createEnrollment(String workspaceId) =>
+      source.createHostEnrollment(workspaceId: workspaceId);
 
   void replace(List<StudioAgent> value) => items = List.unmodifiable(value);
 
@@ -131,11 +131,11 @@ class WorkerStore {
     String? workerId,
     required String name,
     required String agentId,
-    required String pluginId,
+    required String workerCatalogId,
     required List<String> roles,
     required List<String> capabilities,
     required bool enabled,
-    String pluginVersionPolicy = 'latest',
+    String workerVersionPolicy = 'latest',
     Map<String, dynamic> config = const {},
     String sessionPolicy = 'stateless',
     int concurrencyLimit = 1,
@@ -148,11 +148,11 @@ class WorkerStore {
           workerId: workerId,
           name: name,
           agentId: agentId,
-          pluginId: pluginId,
+          workerCatalogId: workerCatalogId,
           roles: roles,
           capabilities: capabilities,
           enabled: enabled,
-          pluginVersionPolicy: pluginVersionPolicy,
+          workerVersionPolicy: workerVersionPolicy,
           config: config,
           sessionPolicy: sessionPolicy,
           concurrencyLimit: concurrencyLimit,

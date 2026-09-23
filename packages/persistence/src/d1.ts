@@ -396,9 +396,9 @@ export class D1WorkerRepository {
   }
 
   async save(worker: WorkerRecord): Promise<void> {
-    if (!worker.workspaceId || !worker.agentId || !worker.pluginId) {
+    if (!worker.workspaceId || !worker.agentId || !worker.workerCatalogId) {
       throw new Error(
-        `D1 worker requires workspaceId, agentId, and pluginId: ${worker.id}`,
+        `D1 worker requires workspaceId, agentId, and workerCatalogId: ${worker.id}`,
       );
     }
     const config = {
@@ -425,8 +425,8 @@ export class D1WorkerRepository {
         worker.id,
         worker.workspaceId,
         worker.agentId,
-        worker.pluginId,
-        worker.pluginVersionPolicy ?? "latest",
+        worker.workerCatalogId,
+        worker.workerVersionPolicy ?? "latest",
         worker.name,
         json(worker.roles),
         json(worker.capabilities),
@@ -734,8 +734,8 @@ function toWorker(row: Record<string, unknown>): WorkerRecord {
     id: String(row.id),
     workspaceId: String(row.workspace_id),
     agentId: String(row.agent_id),
-    pluginId: String(row.plugin_id),
-    pluginVersionPolicy: String(row.plugin_version_policy),
+    workerCatalogId: String(row.plugin_id),
+    workerVersionPolicy: String(row.plugin_version_policy),
     name: String(row.name),
     kind,
     roles: parse(row.roles_json, [] as string[]),

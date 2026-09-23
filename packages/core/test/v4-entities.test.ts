@@ -154,7 +154,7 @@ describe("Architecture v4 Core Domain Entities and Invariants", () => {
 
     it("Host has no workspaceId field — machine identity is workspace-independent", () => {
       // TypeScript enforces this at compile time. This test documents the design
-      // decision: a Host is NOT workspace-scoped unlike the v3 ConclaveAgent.
+      // decision: a Host is NOT workspace-scoped unlike the v3 Host.
       const hostKeys = Object.keys(sampleHost);
       expect(hostKeys).not.toContain("workspaceId");
     });

@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: apps/flutter_app
+        working-directory: apps/studio
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -25,7 +25,7 @@ jobs:
         run: flutter build web --release --dart-define=CONCLAVE_API_URL=/api
       - name: Verify browser bundle contains no server secrets
         working-directory: .
-        run: node scripts/assert-no-browser-secrets.mjs apps/flutter_app/build/web
+        run: node scripts/assert-no-browser-secrets.mjs apps/studio/build/web
       - name: Verify production security configuration
         working-directory: .
         run: node scripts/verify-production-security.mjs

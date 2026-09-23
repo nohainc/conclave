@@ -21,7 +21,7 @@ import {
   type Finding,
 } from "@conclave/core";
 import type {
-  ConclaveAgent,
+  ExecutionHost,
   Worker,
   WorkerAssignmentResult,
 } from "@conclave/core";
@@ -89,7 +89,7 @@ export interface ForgeWorkerRequest {
 
 export interface ForgeWorker {
   readonly worker: Worker;
-  readonly agent: ConclaveAgent;
+  readonly agent: ExecutionHost;
   execute(request: ForgeWorkerRequest): Promise<WorkerAssignmentResult>;
 }
 
@@ -517,7 +517,7 @@ export async function executeForgeGoal(
         attemptId,
         workerId: worker.worker.id,
         connectionId: worker.agent.id,
-        provider: worker.worker.pluginId,
+        provider: worker.worker.workerCatalogId,
         model: worker.worker.name,
         requestArtifactId,
         responseArtifactId: null,
@@ -559,7 +559,7 @@ export async function executeForgeGoal(
       attemptId,
       workerId: worker.worker.id,
       connectionId: worker.agent.id,
-      provider: worker.worker.pluginId,
+      provider: worker.worker.workerCatalogId,
       model: worker.worker.name,
       requestArtifactId,
       responseArtifactId,

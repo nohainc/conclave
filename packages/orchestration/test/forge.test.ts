@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { GoalRecord, RunRecord } from "@conclave/persistence";
 import type {
-  ConclaveAgent,
+  ExecutionHost,
   Worker,
   WorkerAssignmentResult,
 } from "@conclave/core";
@@ -74,8 +74,8 @@ function resource(
     id,
     workspaceId: "workspace-1",
     agentId: "agent-test",
-    pluginId: "plugin-test",
-    pluginVersionPolicy: "latest",
+    workerCatalogId: "plugin-test",
+    workerVersionPolicy: "latest",
     name: `${id}-model`,
     capabilities,
     roles,
@@ -92,7 +92,7 @@ function resource(
   };
 }
 
-const agent: ConclaveAgent = {
+const agent: ExecutionHost = {
   id: "agent-test",
   workspaceId: "workspace-1",
   name: "Test Agent",

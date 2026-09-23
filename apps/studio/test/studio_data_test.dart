@@ -180,7 +180,7 @@ void main() {
     expect(chat.lastActivity, '2026-09-22T00:00:00Z');
   });
 
-  test('creates a Worker with explicit Agent and Plugin bindings', () async {
+  test('creates a Worker with explicit Host and catalog bindings', () async {
     final client = _JsonClient({}, statusCode: 201);
     final api = StudioApiClient(
       baseUrl: 'https://conclave.test/api',
@@ -191,11 +191,11 @@ void main() {
       workspaceId: 'workspace-1',
       name: 'Codex Main',
       agentId: 'agent-1',
-      pluginId: 'plugin-codex',
+      workerCatalogId: 'worker-codex',
       roles: const ['implementation'],
       capabilities: const ['repository_write'],
       enabled: true,
-      pluginVersionPolicy: 'compatible',
+      workerVersionPolicy: 'compatible',
       config: const {'model': 'codex', 'temperature': 0.1},
       sessionPolicy: 'persistent',
       concurrencyLimit: 3,
@@ -206,8 +206,8 @@ void main() {
     expect(client.lastRequest?.method, 'POST');
     expect(client.lastRequest?.url.path, '/api/workspaces/workspace-1/workers');
     expect(jsonDecode(client.lastBody!)['agentId'], 'agent-1');
-    expect(jsonDecode(client.lastBody!)['pluginId'], 'plugin-codex');
-    expect(jsonDecode(client.lastBody!)['pluginVersionPolicy'], 'compatible');
+    expect(jsonDecode(client.lastBody!)['workerCatalogId'], 'worker-codex');
+    expect(jsonDecode(client.lastBody!)['workerVersionPolicy'], 'compatible');
     expect(jsonDecode(client.lastBody!)['config']['model'], 'codex');
     expect(jsonDecode(client.lastBody!)['sessionPolicy'], 'persistent');
     expect(jsonDecode(client.lastBody!)['concurrencyLimit'], 3);
@@ -227,7 +227,7 @@ void main() {
       workerId: 'worker-1',
       name: 'Codex Main',
       agentId: 'agent-1',
-      pluginId: 'plugin-codex',
+      workerCatalogId: 'worker-codex',
       roles: const ['reviewer'],
       capabilities: const ['code_review'],
       enabled: false,
@@ -240,7 +240,7 @@ void main() {
     expect(jsonDecode(client.lastBody!)['enabled'], false);
     expect(jsonDecode(client.lastBody!)['roles'], ['reviewer']);
     expect(jsonDecode(client.lastBody!)['agentId'], 'agent-1');
-    expect(jsonDecode(client.lastBody!)['pluginId'], 'plugin-codex');
+    expect(jsonDecode(client.lastBody!)['workerCatalogId'], 'worker-codex');
     expect(jsonDecode(client.lastBody!)['config']['model'], 'claude');
   });
 
@@ -248,7 +248,7 @@ void main() {
     final worker = StudioWorker.fromJson({
       'id': 'worker-1',
       'name': 'Codex Main',
-      'pluginVersionPolicy': 'compatible',
+      'workerVersionPolicy': 'compatible',
       'config': {'model': 'codex'},
       'sessionPolicy': 'persistent',
       'concurrencyLimit': 4,
@@ -257,7 +257,7 @@ void main() {
       'costMetadata': {'estimatedCostMicrosPerAttempt': null},
     });
 
-    expect(worker.pluginVersionPolicy, 'compatible');
+    expect(worker.workerVersionPolicy, 'compatible');
     expect(worker.config['model'], 'codex');
     expect(worker.sessionPolicy, 'persistent');
     expect(worker.concurrencyLimit, 4);

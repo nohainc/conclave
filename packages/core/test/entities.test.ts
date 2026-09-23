@@ -4,22 +4,22 @@ import {
   type Project,
   type Chat,
   type ChatMessage,
-  type ConclaveAgent,
-  type WorkerPlugin,
-  type WorkerPluginChannel,
+  type ExecutionHost,
+  type WorkerCatalog,
+  type WorkerChannel,
   type Worker,
   type WorkerAssignment,
   type WorkerAssignmentResult,
-  type AgentRelease,
+  type ExecutionHostRelease,
   DomainInvariantError,
   validateWorkspace,
   validateProject,
   validateChat,
   validateChatMessage,
-  validateAgent,
-  validateAgentRelease,
-  validateWorkerPlugin,
-  validateWorkerPluginVersion,
+  validateExecutionHost,
+  validateExecutionHostRelease,
+  validateWorkerCatalog,
+  validateWorkerVersion,
   validateWorker,
   validateAssignment,
   validateAssignmentResult,
@@ -34,7 +34,7 @@ describe("Architecture v2 Core Domain Entities and Invariants", () => {
     updatedAt: "2026-09-21T10:00:00Z",
   };
 
-  const sampleAgent: ConclaveAgent = {
+  const sampleAgent: ExecutionHost = {
     id: "agent-macbook-pro",
     workspaceId: "ws-primary",
     name: "Dev MacBook Pro",
@@ -53,7 +53,7 @@ describe("Architecture v2 Core Domain Entities and Invariants", () => {
     revokedAt: null,
   };
 
-  const samplePlugin: WorkerPlugin = {
+  const samplePlugin: WorkerCatalog = {
     id: "codex",
     displayName: "Codex Worker Plugin",
     description: "Executes code changes using Codex CLI agent",
@@ -67,8 +67,8 @@ describe("Architecture v2 Core Domain Entities and Invariants", () => {
     id: "worker-codex-main",
     workspaceId: "ws-primary",
     agentId: "agent-macbook-pro",
-    pluginId: "codex",
-    pluginVersionPolicy: "latest",
+    workerCatalogId: "codex",
+    workerVersionPolicy: "latest",
     name: "Codex Main Implementer",
     roles: ["implementer"],
     capabilities: ["code_editing"],
@@ -94,8 +94,8 @@ describe("Architecture v2 Core Domain Entities and Invariants", () => {
     attemptId: "att-001-a",
     agentId: "agent-macbook-pro",
     workerId: "worker-codex-main",
-    pluginId: "codex",
-    resolvedPluginVersion: "1.0.0",
+    workerCatalogId: "codex",
+    resolvedWorkerVersion: "1.0.0",
     status: "dispatched",
     input: { objective: "Implement login view" },
     idempotencyKey: "idemp-run100-task01-att01",
@@ -136,15 +136,15 @@ describe("Architecture v2 Core Domain Entities and Invariants", () => {
 
   describe("Agent invariants", () => {
     it("validates a valid agent", () => {
-      expect(() => validateAgent(sampleAgent)).not.toThrow();
+      expect(() => validateExecutionHost(sampleAgent)).not.toThrow();
     });
 
     it("rejects invalid agent capabilities or missing workspace", () => {
-      expect(() => validateAgent({ ...sampleAgent, workspaceId: "" })).toThrow(
-        DomainInvariantError,
-      );
       expect(() =>
-        validateAgent({
+        validateExecutionHost({ ...sampleAgent, workspaceId: "" }),
+      ).toThrow(DomainInvariantError);
+      expect(() =>
+        validateExecutionHost({
           ...sampleAgent,
           capabilities: {
             ...sampleAgent.capabilities,
@@ -166,7 +166,7 @@ describe("Architecture v2 Core Domain Entities and Invariants", () => {
     });
 
     it("enforces: Worker belongs to one Workspace (rejects cross-workspace reference)", () => {
-      const otherWorkspaceAgent: ConclaveAgent = {
+      const otherWorkspaceAgent: ExecutionHost = {
         ...sampleAgent,
         id: "agent-other",
         workspaceId: "ws-secondary",
@@ -192,14 +192,14 @@ describe("Architecture v2 Core Domain Entities and Invariants", () => {
     it("enforces: Worker references one Plugin (rejects plugin id mismatch)", () => {
       expect(() =>
         validateWorker(
-          { ...sampleWorker, pluginId: "anthropic" },
+          { ...sampleWorker, workerCatalogId: "anthropic" },
           { agent: sampleAgent, plugin: samplePlugin },
         ),
       ).toThrow(/does not match Plugin id/);
     });
 
     it("rejects Worker assigned to revoked Agent", () => {
-      const revokedAgent: ConclaveAgent = {
+      const revokedAgent: ExecutionHost = {
         ...sampleAgent,
         status: "revoked",
         revokedAt: "2026-09-21T11:00:00Z",
@@ -214,7 +214,7 @@ describe("Architecture v2 Core Domain Entities and Invariants", () => {
     });
 
     it("rejects Worker referencing revoked Plugin", () => {
-      const revokedPlugin: WorkerPlugin = {
+      const revokedPlugin: WorkerCatalog = {
         ...samplePlugin,
         status: "revoked",
       };
@@ -401,12 +401,12 @@ describe("Architecture v2 Core Domain Entities and Invariants", () => {
       ).toThrow(/does not match target Chat/);
     });
 
-    it("validates valid WorkerPlugin and WorkerPluginVersion with release channel", () => {
-      expect(() => validateWorkerPlugin(samplePlugin)).not.toThrow();
+    it("validates valid WorkerCatalog and WorkerVersion with release channel", () => {
+      expect(() => validateWorkerCatalog(samplePlugin)).not.toThrow();
 
       const version = {
         id: "ver-1",
-        pluginId: "codex",
+        workerCatalogId: "codex",
         version: "1.0.0",
         channel: "stable" as const,
         protocolVersion: "2.0",
@@ -422,17 +422,15 @@ describe("Architecture v2 Core Domain Entities and Invariants", () => {
         createdAt: "2026-09-21T10:00:00Z",
       };
 
-      expect(() =>
-        validateWorkerPluginVersion(version, samplePlugin),
-      ).not.toThrow();
+      expect(() => validateWorkerVersion(version, samplePlugin)).not.toThrow();
     });
 
-    it("rejects WorkerPluginVersion with invalid release channel or mismatched parent plugin", () => {
+    it("rejects WorkerVersion with invalid release channel or mismatched parent plugin", () => {
       const version = {
         id: "ver-1",
-        pluginId: "codex",
+        workerCatalogId: "codex",
         version: "1.0.0",
-        channel: "invalid_chan" as unknown as WorkerPluginChannel,
+        channel: "invalid_chan" as unknown as WorkerChannel,
         protocolVersion: "2.0",
         minAgentVersion: "0.2.0",
         supportedOs: ["macos" as const],
@@ -446,22 +444,22 @@ describe("Architecture v2 Core Domain Entities and Invariants", () => {
         createdAt: "2026-09-21T10:00:00Z",
       };
 
-      expect(() => validateWorkerPluginVersion(version, samplePlugin)).toThrow(
-        /Invalid WorkerPluginVersion channel/,
+      expect(() => validateWorkerVersion(version, samplePlugin)).toThrow(
+        /Invalid WorkerVersion channel/,
       );
 
       const mismatchedVersion = {
         ...version,
         channel: "beta" as const,
-        pluginId: "other-plugin",
+        workerCatalogId: "other-plugin",
       };
       expect(() =>
-        validateWorkerPluginVersion(mismatchedVersion, samplePlugin),
+        validateWorkerVersion(mismatchedVersion, samplePlugin),
       ).toThrow(/does not match parent plugin/);
     });
 
-    it("validates valid AgentRelease and rejects invalid ones", () => {
-      const release: AgentRelease = {
+    it("validates valid ExecutionHostRelease and rejects invalid ones", () => {
+      const release: ExecutionHostRelease = {
         version: "1.3.0",
         channel: "stable",
         minSupportedAgentVersion: "1.0.0",
@@ -475,28 +473,28 @@ describe("Architecture v2 Core Domain Entities and Invariants", () => {
         createdAt: "2026-09-21T12:00:00Z",
       };
 
-      expect(() => validateAgentRelease(release)).not.toThrow();
+      expect(() => validateExecutionHostRelease(release)).not.toThrow();
 
       expect(() =>
-        validateAgentRelease({
+        validateExecutionHostRelease({
           ...release,
-          channel: "unknown" as unknown as AgentRelease["channel"],
+          channel: "unknown" as unknown as ExecutionHostRelease["channel"],
         }),
-      ).toThrow(/Invalid AgentRelease channel/);
+      ).toThrow(/Invalid ExecutionHostRelease channel/);
 
       expect(() =>
-        validateAgentRelease({
+        validateExecutionHostRelease({
           ...release,
           supportedOS: [],
         }),
-      ).toThrow(/AgentRelease must support at least one OS/);
+      ).toThrow(/ExecutionHostRelease must support at least one OS/);
 
       expect(() =>
-        validateAgentRelease({
+        validateExecutionHostRelease({
           ...release,
           signature: "",
         }),
-      ).toThrow(/AgentRelease signature is required/);
+      ).toThrow(/ExecutionHostRelease signature is required/);
     });
   });
 });

@@ -14,6 +14,9 @@ export interface TaskToDispatch {
   readonly input?: Record<string, unknown>;
   readonly contextArtifactIds?: readonly string[];
   readonly timeoutMs?: number;
+  readonly projectId?: string;
+  readonly requestedByUserId?: string;
+  readonly credentialProfileId?: string;
   readonly requiresIndependentVerification?: boolean;
   readonly repository?: {
     readonly repositoryId: string;
@@ -25,8 +28,8 @@ export interface TaskToDispatch {
 export interface SelectedWorkerInfo {
   readonly id: string;
   readonly agentId: string;
-  readonly pluginId: string;
-  readonly pluginVersionPolicy: string;
+  readonly workerCatalogId: string;
+  readonly workerVersionPolicy: string;
   readonly name: string;
   readonly independenceKey: string;
   readonly concurrencyLimit: number;
@@ -47,7 +50,7 @@ export interface DispatchAssignmentResult {
   readonly attemptId: string;
   readonly workerId: string;
   readonly agentId: string;
-  readonly pluginId: string;
+  readonly workerCatalogId: string;
   readonly status: "dispatched" | "failed";
   readonly accepted: boolean;
   readonly error?: string;
@@ -97,8 +100,8 @@ export async function selectWorkerForTask(
     return {
       id: String(row.id),
       agentId: String(row.agent_id),
-      pluginId: String(row.plugin_id),
-      pluginVersionPolicy: String(row.plugin_version_policy || "latest"),
+      workerCatalogId: String(row.plugin_id),
+      workerVersionPolicy: String(row.plugin_version_policy || "latest"),
       name: String(row.name),
       independenceKey: String(row.independence_key),
       concurrencyLimit: Number(row.concurrency_limit || 1),
@@ -160,8 +163,8 @@ export async function selectWorkerForTask(
     return {
       id: String(row.id),
       agentId: String(row.agent_id),
-      pluginId: String(row.plugin_id),
-      pluginVersionPolicy: String(row.plugin_version_policy || "latest"),
+      workerCatalogId: String(row.plugin_id),
+      workerVersionPolicy: String(row.plugin_version_policy || "latest"),
       name: String(row.name),
       independenceKey: indepKey,
       concurrencyLimit: Number(row.concurrency_limit || 1),
@@ -198,7 +201,7 @@ export async function dispatchTaskAssignment(
       attemptId: "",
       workerId: "",
       agentId: "",
-      pluginId: "",
+      workerCatalogId: "",
       status: "failed",
       accepted: false,
       error: `No eligible online worker found for role '${task.role}' with required capabilities`,
@@ -253,8 +256,8 @@ export async function dispatchTaskAssignment(
       attemptId,
       selectedWorker.agentId,
       selectedWorker.id,
-      selectedWorker.pluginId,
-      selectedWorker.pluginVersionPolicy,
+      selectedWorker.workerCatalogId,
+      selectedWorker.workerVersionPolicy,
       JSON.stringify(task.input || {}),
       idempotencyKey,
       timeoutMs,
@@ -271,14 +274,28 @@ export async function dispatchTaskAssignment(
 
   // 6. Deliver to HostGateway Durable Object if namespace is available
   const payload: AssignmentStartPayload = {
-    pluginId: selectedWorker.pluginId,
-    resolvedPluginVersion: selectedWorker.pluginVersionPolicy,
-    role: task.role,
-    objective: task.objective,
+    snapshot: {
+      assignmentId,
+      workspaceId,
+      projectId: task.projectId ?? `project-for-${taskId}`,
+      runId,
+      taskId,
+      attemptId,
+      requestedByUserId: task.requestedByUserId ?? "system",
+      hostId: selectedWorker.agentId,
+      workerId: selectedWorker.id,
+      resolvedWorkerVersion: selectedWorker.workerVersionPolicy,
+      credentialProfileId: task.credentialProfileId ?? "unresolved",
+      config: task.input || {},
+      sessionPolicy: "stateless",
+      permissions: [],
+      contextRefs: [...(task.contextArtifactIds || [])].map((artifactId) => ({
+        artifactId,
+      })),
+      timeoutMs,
+      idempotencyKey,
+    },
     input: task.input || {},
-    contextArtifactIds: [...(task.contextArtifactIds || [])],
-    timeoutMs,
-    ...(task.repository ? { repository: task.repository } : {}),
   };
 
   const gatewayNamespace = env.CONCLAVE_HOST_GATEWAY;
@@ -286,19 +303,19 @@ export async function dispatchTaskAssignment(
     const error =
       "Host Gateway is not configured; assignment was not dispatched";
     await recordAssignmentError(env.CONCLAVE_DB, assignmentId, {
-      status: "failed",
       error: {
         code: "HOST_GATEWAY_NOT_CONFIGURED",
         message: error,
         retryable: true,
       },
+      failedAt: now,
     });
     return {
       assignmentId,
       attemptId,
       workerId: selectedWorker.id,
       agentId: selectedWorker.agentId,
-      pluginId: selectedWorker.pluginId,
+      workerCatalogId: selectedWorker.workerCatalogId,
       status: "failed",
       accepted: false,
       error,
@@ -328,19 +345,19 @@ export async function dispatchTaskAssignment(
       if (!response.ok) {
         const errorText = await response.text();
         await recordAssignmentError(env.CONCLAVE_DB, assignmentId, {
-          status: "failed",
           error: {
             code: "GATEWAY_DISPATCH_FAILED",
             message: errorText || `Gateway returned HTTP ${response.status}`,
             retryable: true,
           },
+          failedAt: now,
         });
         return {
           assignmentId,
           attemptId,
           workerId: selectedWorker.id,
           agentId: selectedWorker.agentId,
-          pluginId: selectedWorker.pluginId,
+          workerCatalogId: selectedWorker.workerCatalogId,
           status: "failed",
           accepted: false,
           error: errorText,
@@ -353,19 +370,19 @@ export async function dispatchTaskAssignment(
       };
       if (ackData.accepted === false) {
         await recordAssignmentError(env.CONCLAVE_DB, assignmentId, {
-          status: "failed",
           error: {
             code: "ASSIGNMENT_REJECTED_BY_AGENT",
             message: ackData.reason || "Agent rejected assignment",
             retryable: true,
           },
+          failedAt: now,
         });
         return {
           assignmentId,
           attemptId,
           workerId: selectedWorker.id,
           agentId: selectedWorker.agentId,
-          pluginId: selectedWorker.pluginId,
+          workerCatalogId: selectedWorker.workerCatalogId,
           status: "failed",
           accepted: false,
           error: ackData.reason,
@@ -374,19 +391,19 @@ export async function dispatchTaskAssignment(
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await recordAssignmentError(env.CONCLAVE_DB, assignmentId, {
-        status: "failed",
         error: {
           code: "GATEWAY_RPC_ERROR",
           message: msg,
           retryable: true,
         },
+        failedAt: now,
       });
       return {
         assignmentId,
         attemptId,
         workerId: selectedWorker.id,
         agentId: selectedWorker.agentId,
-        pluginId: selectedWorker.pluginId,
+        workerCatalogId: selectedWorker.workerCatalogId,
         status: "failed",
         accepted: false,
         error: msg,
@@ -399,7 +416,7 @@ export async function dispatchTaskAssignment(
     attemptId,
     workerId: selectedWorker.id,
     agentId: selectedWorker.agentId,
-    pluginId: selectedWorker.pluginId,
+    workerCatalogId: selectedWorker.workerCatalogId,
     status: "dispatched",
     accepted: true,
   };
@@ -584,8 +601,9 @@ export async function cancelTaskAssignment(
       const doId = gatewayNamespace.idFromName(String(row.agent_id));
       const stub = gatewayNamespace.get(doId);
       const cancelPayload: AssignmentCancelPayload = {
+        assignmentId,
         reason,
-        gracePeriodMs: 5000,
+        deadlineMs: Date.now() + 5000,
       };
       await stub.fetch("http://gateway/cancel-assignment", {
         method: "POST",

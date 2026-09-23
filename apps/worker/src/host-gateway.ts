@@ -4,9 +4,6 @@ import {
   parseAgentMessage,
   serializeAgentMessage,
   type AgentProtocolMessage,
-  type AgentHelloPayload,
-  type AgentHeartbeatPayload,
-  type AgentSyncRequestPayload,
   type AssignmentStartPayload,
   type AssignmentCancelPayload,
   type AssignmentResultPayload,
@@ -325,7 +322,7 @@ export class HostGateway implements DurableObject {
       return;
     }
 
-    let message: any;
+    let message: AgentProtocolMessage;
     try {
       message = parseAgentMessage(parsedJson);
     } catch (err) {
@@ -357,7 +354,7 @@ export class HostGateway implements DurableObject {
 
     switch (message.type) {
       case "agent.hello": {
-        const payload = message.payload as any;
+        const payload = message.payload as Record<string, unknown>;
         if (
           payload.agentId !== this.hostId ||
           payload.workspaceId !== this.workspaceId
@@ -403,7 +400,7 @@ export class HostGateway implements DurableObject {
       }
 
       case "agent.heartbeat": {
-        const payload = message.payload as any;
+        const payload = message.payload as Record<string, unknown>;
         if (
           payload.agentId !== this.hostId ||
           payload.workspaceId !== this.workspaceId ||
@@ -449,7 +446,7 @@ export class HostGateway implements DurableObject {
       }
 
       case "agent.sync.request": {
-        const payload = message.payload as any;
+        const payload = message.payload as Record<string, unknown>;
         // Fetch desired workers from D1
         let desiredWorkers: DesiredWorker[] = [];
         let desiredPlugins: DesiredPlugin[] = [];
@@ -504,7 +501,11 @@ export class HostGateway implements DurableObject {
           // removed v3 plugin packages.
           desiredPlugins = [];
 
-          const assignmentIds = payload.unreconciledAssignmentIds ?? [];
+          const assignmentIds = Array.isArray(payload.unreconciledAssignmentIds)
+            ? payload.unreconciledAssignmentIds.filter(
+                (value): value is string => typeof value === "string",
+              )
+            : [];
           if (assignmentIds.length > 0) {
             const placeholders = assignmentIds
               .map((_: unknown, index: number) => `?${index + 3}`)
@@ -545,14 +546,14 @@ export class HostGateway implements DurableObject {
       }
 
       case "worker.status": {
-        const payload = message.payload as any;
+        const payload = message.payload as Record<string, unknown>;
         try {
           const statuses = Array.isArray(payload.workers)
             ? payload.workers
             : [payload];
           if (
             statuses.some(
-              (status: any) =>
+              (status: Record<string, unknown>) =>
                 status.hostId !== undefined && status.hostId !== this.hostId,
             )
           ) {
@@ -625,7 +626,12 @@ export class HostGateway implements DurableObject {
         }
 
         try {
-          const accepted = (message.payload as { accepted: boolean }).accepted;
+          const ackPayload = message.payload as unknown as {
+            accepted?: boolean;
+            status?: string;
+          };
+          const accepted =
+            ackPayload.accepted ?? ackPayload.status === "accepted";
           const status = accepted ? "acknowledged" : "failed";
           await this.env.CONCLAVE_DB.prepare(
             `UPDATE worker_assignments SET status = ?1, updated_at = ?2 WHERE id = ?3`,
@@ -648,7 +654,7 @@ export class HostGateway implements DurableObject {
           await recordAssignmentResult(
             this.env.CONCLAVE_DB,
             message.assignmentId,
-            message.payload as AssignmentResultPayload,
+            message.payload as unknown as AssignmentResultPayload,
           );
         } catch (err) {
           console.error("Failed to record assignment result in D1", err);
@@ -674,7 +680,13 @@ export class HostGateway implements DurableObject {
           await recordAssignmentCancelled(
             this.env.CONCLAVE_DB,
             message.assignmentId,
-            message.payload as unknown as AssignmentCancelledPayload,
+            {
+              status: "cancelled",
+              reason: String(
+                (message.payload as AssignmentCancelledPayload).reason ??
+                  "Cancelled by Host",
+              ),
+            },
           );
         } catch (err) {
           console.error("Failed to record assignment cancellation in D1", err);
@@ -723,7 +735,7 @@ export class HostGateway implements DurableObject {
     const validation = await this.validateInternalAssignment(body);
     if (validation) return validation;
 
-    const envelope: any = {
+    const envelope: Record<string, unknown> = {
       protocol: AGENT_PROTOCOL_NAME,
       protocolVersion: AGENT_PROTOCOL_VERSION,
       messageId: `msg-${Date.now()}`,
@@ -797,7 +809,7 @@ export class HostGateway implements DurableObject {
     const validation = await this.validateInternalAssignment(body);
     if (validation) return validation;
 
-    const envelope: any = {
+    const envelope: Record<string, unknown> = {
       protocol: AGENT_PROTOCOL_NAME,
       protocolVersion: AGENT_PROTOCOL_VERSION,
       messageId: `msg-${Date.now()}`,

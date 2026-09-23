@@ -443,9 +443,9 @@ describe("WorkerManifest (v4 Package Contract)", () => {
   });
 
   describe("Backward Compatibility Translation", () => {
-    it("translates legacy pluginId and minimumAgentVersion seamlessly", () => {
+    it("translates legacy workerCatalogId and minimumAgentVersion seamlessly", () => {
       const legacyRaw = {
-        pluginId: "legacy-worker",
+        workerCatalogId: "legacy-worker",
         version: "1.0.0",
         displayName: "Legacy Worker",
         publisher: "test",

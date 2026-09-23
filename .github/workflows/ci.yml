@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: apps/flutter_app
+        working-directory: apps/studio
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -51,47 +51,32 @@ jobs:
       - run: flutter test
       - run: flutter build web --release --dart-define=CONCLAVE_API_URL=/api
 
-  agent-flutter:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/agent_app
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-      - run: flutter pub get
-      - run: flutter analyze
-      - run: flutter test
-
-  agent-engine-dart:
+  host-dart:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
-        working-directory: apps/agent_engine
+        working-directory: apps/host
     steps:
       - uses: actions/checkout@v4
       - uses: dart-lang/setup-dart@v1
       - run: dart pub get
       - run: dart analyze
       - run: dart test
-      - name: Compile native Agent Engine
+      - name: Compile native Host
         shell: bash
         run: |
-          output_path="$RUNNER_TEMP/conclave-agent-engine"
+          output_path="$RUNNER_TEMP/conclave-host"
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            output_path="$RUNNER_TEMP/conclave-agent-engine.exe"
+            output_path="$RUNNER_TEMP/conclave-host.exe"
           fi
-          dart compile exe bin/conclave_agent_engine.dart -o "$output_path"
+          dart compile exe bin/conclave_host.dart -o "$output_path"
 
   publish-evidence:
     if: ${{ vars.CONCLAVE_CI_INGEST_URL != '' && vars.CONCLAVE_RUN_ID != '' }}
-    needs: [typescript, studio-flutter, agent-flutter, agent-engine-dart]
+    needs: [typescript, studio-flutter, host-dart]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -122,8 +107,7 @@ jobs:
                 {name: "TypeScript checks", status: "passed", command: "pnpm check", exitCode: 0, artifactIds: []},
                 {name: "Cloudflare startup", status: "passed", command: "wrangler check startup", exitCode: 0, artifactIds: []},
                 {name: "Studio Flutter", status: "passed", command: "flutter analyze && flutter test", exitCode: 0, artifactIds: []},
-                {name: "Agent App Flutter", status: "passed", command: "flutter analyze && flutter test", exitCode: 0, artifactIds: []},
-                {name: "Agent Engine Dart", status: "passed", command: "dart analyze", exitCode: 0, artifactIds: []}
+                {name: "Host Dart", status: "passed", command: "dart analyze && dart test", exitCode: 0, artifactIds: []}
               ],
               smokeTests: ["Cloud startup analysis passed"],
               healthChecks: ["Architecture v4 CI checks passed"],

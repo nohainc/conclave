@@ -56,15 +56,12 @@ import {
   validateProject,
   validateChat,
   validateChatMessage,
-  validateWorker,
   type Workspace,
   type Project,
   type Chat,
   type ChatMessage,
   type ChatMessageSenderType,
   type ChatMessageKind,
-  type Worker,
-  type WorkerCostMetadata,
   assembleChatContext,
   decideChatIntent,
   parseChatIntentProposal,
@@ -2983,486 +2980,6 @@ export async function handleGetWorkerCatalog(
   });
 }
 
-async function handleListWorkers(
-  request: Request,
-  env: SecurityEnv,
-  workspaceId: string,
-  ctx?: ExecutionContext,
-): Promise<Response> {
-  const context = await securityContext(request, env, ctx);
-  authorize(context, "host.view");
-  requireWorkspaceContext(context, env, workspaceId);
-
-  const rows = await env.CONCLAVE_DB.prepare(
-    `SELECT id, workspace_id as workspaceId, host_id as hostId, plugin_id as pluginId,
-            plugin_version_policy as pluginVersionPolicy, name, roles_json as rolesJson,
-            capabilities_json as capabilitiesJson, config_json as configJson,
-            secret_refs_json as secretRefsJson, billing_mode as billingMode,
-            cost_metadata_json as costMetadataJson, independence_key as independenceKey,
-            concurrency_limit as concurrencyLimit, session_policy as sessionPolicy,
-            enabled, status, created_at as createdAt, updated_at as updatedAt
-     FROM workers WHERE workspace_id = ?1 ORDER BY created_at DESC`,
-  )
-    .bind(workspaceId)
-    .all<Record<string, unknown>>();
-
-  const workers = (rows.results ?? []).map((row) => ({
-    id: String(row.id),
-    workspaceId: String(row.workspaceId),
-    agentId: String(row.agentId),
-    pluginId: String(row.pluginId),
-    pluginVersionPolicy: String(row.pluginVersionPolicy),
-    name: String(row.name),
-    roles: parseJson(row.rolesJson, []),
-    capabilities: parseJson(row.capabilitiesJson, []),
-    config: parseJson(row.configJson, {}),
-    secretRefs: parseJson(row.secretRefsJson, []),
-    billingMode: String(row.billingMode),
-    costMetadata: parseJson(row.costMetadataJson, {}),
-    independenceKey: String(row.independenceKey),
-    concurrencyLimit: Number(row.concurrencyLimit),
-    sessionPolicy: String(row.sessionPolicy || "stateless"),
-    enabled: Number(row.enabled) === 1,
-    availability: String(row.status || "available"),
-    createdAt: String(row.createdAt),
-    updatedAt: String(row.updatedAt),
-  }));
-
-  return json({ workers });
-}
-
-async function handleCreateWorker(
-  request: Request,
-  env: SecurityEnv,
-  workspaceId: string,
-  ctx?: ExecutionContext,
-): Promise<Response> {
-  const context = await securityContext(request, env, ctx);
-  authorize(context, "worker.install");
-  requireWorkspaceContext(context, env, workspaceId);
-
-  const body = (await request.json()) as Record<string, unknown>;
-  const now = new Date().toISOString();
-
-  const id =
-    typeof body.id === "string" && body.id.trim().length > 0
-      ? body.id.trim()
-      : `worker-${crypto.randomUUID()}`;
-  const agentId = requiredString(body.agentId, "agentId");
-  const pluginId = requiredString(body.pluginId, "pluginId");
-  const pluginVersionPolicy =
-    typeof body.pluginVersionPolicy === "string" &&
-    body.pluginVersionPolicy.length > 0
-      ? body.pluginVersionPolicy
-      : "latest";
-  const name = requiredString(body.name, "name");
-  const roles =
-    Array.isArray(body.roles) && body.roles.length > 0
-      ? (body.roles as string[])
-      : ["implementer"];
-  const capabilities =
-    Array.isArray(body.capabilities) && body.capabilities.length > 0
-      ? (body.capabilities as string[])
-      : ["code_execution"];
-  const config = (
-    typeof body.config === "object" && body.config !== null ? body.config : {}
-  ) as Record<string, unknown>;
-  const secretRefs = Array.isArray(body.secretRefs)
-    ? (body.secretRefs as string[])
-    : [];
-  const billingMode = (
-    typeof body.billingMode === "string" ? body.billingMode : "local_compute"
-  ) as Worker["billingMode"];
-  const costMetadata =
-    typeof body.costMetadata === "object" && body.costMetadata !== null
-      ? (body.costMetadata as WorkerCostMetadata)
-      : undefined;
-  const independenceKey =
-    typeof body.independenceKey === "string" && body.independenceKey.length > 0
-      ? body.independenceKey
-      : id;
-  const concurrencyLimit =
-    typeof body.concurrencyLimit === "number" && body.concurrencyLimit >= 1
-      ? Math.floor(body.concurrencyLimit)
-      : 1;
-  const sessionPolicy = (
-    typeof body.sessionPolicy === "string" ? body.sessionPolicy : "stateless"
-  ) as Worker["sessionPolicy"];
-  const enabled = body.enabled !== false;
-  const availability = (
-    typeof body.availability === "string" ? body.availability : "available"
-  ) as Worker["availability"];
-
-  const worker: Worker = {
-    id,
-    workspaceId,
-    agentId,
-    pluginId,
-    pluginVersionPolicy,
-    name,
-    roles,
-    capabilities,
-    config,
-    secretRefs,
-    enabled,
-    availability,
-    billingMode,
-    costMetadata,
-    independenceKey,
-    concurrencyLimit,
-    sessionPolicy,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  // Validate agent and plugin references
-  const agentRow = await env.CONCLAVE_DB.prepare(
-    `SELECT id, workspace_id as workspaceId, status
-     FROM hosts WHERE id = ?1 AND workspace_id = ?2`,
-  )
-    .bind(agentId, workspaceId)
-    .first<{ id: string; workspaceId: string; status: string }>();
-
-  if (!agentRow) {
-    return json({ error: `Agent '${agentId}' not found` }, { status: 404 });
-  }
-
-  const pluginRow = await env.CONCLAVE_DB.prepare(
-    `SELECT id, status FROM worker_plugins WHERE id = ?1`,
-  )
-    .bind(pluginId)
-    .first<{ id: string; status: string }>();
-
-  if (!pluginRow) {
-    return json({ error: `Plugin '${pluginId}' not found` }, { status: 404 });
-  }
-
-  try {
-    validateWorker(worker, {
-      agent: {
-        id: agentRow.id,
-        workspaceId: agentRow.workspaceId,
-        name: "agent",
-        hostname: "agent.local",
-        version: "2.0.0",
-        status: agentRow.status as "online" | "offline" | "revoked",
-        capabilities: {
-          version: "2.0.0",
-          os: "macos",
-          arch: "arm64",
-          supportedRuntimes: ["node"],
-          maxConcurrentWorkers: 10,
-        },
-        enrolledAt: now,
-        lastHeartbeatAt: now,
-        revokedAt: null,
-      },
-      plugin: {
-        id: pluginRow.id,
-        displayName: pluginRow.id,
-        description: "",
-        publisher: "conclave",
-        supportedRoles: roles,
-        supportedCapabilities: capabilities,
-        status: pluginRow.status as "active" | "deprecated" | "revoked",
-      },
-    });
-  } catch (err) {
-    return json(
-      { error: err instanceof Error ? err.message : String(err) },
-      { status: 400 },
-    );
-  }
-
-  await env.CONCLAVE_DB.prepare(
-    `INSERT INTO workers (
-       id, workspace_id, host_id, plugin_id, plugin_version_policy,
-       name, roles_json, capabilities_json, config_json, secret_refs_json,
-       billing_mode, cost_metadata_json, independence_key, concurrency_limit,
-       session_policy, enabled, status, created_at, updated_at
-     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)`,
-  )
-    .bind(
-      id,
-      workspaceId,
-      agentId,
-      pluginId,
-      pluginVersionPolicy,
-      name,
-      JSON.stringify(roles),
-      JSON.stringify(capabilities),
-      JSON.stringify(config),
-      JSON.stringify(secretRefs),
-      billingMode,
-      JSON.stringify(costMetadata ?? {}),
-      independenceKey,
-      concurrencyLimit,
-      sessionPolicy,
-      enabled ? 1 : 0,
-      availability,
-      now,
-      now,
-    )
-    .run();
-
-  await recordAudit(env, context, "worker.created", "worker", id, {
-    agentId,
-    pluginId,
-    enabled,
-  });
-
-  return json({ worker }, { status: 201 });
-}
-
-async function handleGetWorker(
-  request: Request,
-  env: SecurityEnv,
-  workspaceId: string,
-  workerId: string,
-  ctx?: ExecutionContext,
-): Promise<Response> {
-  const context = await securityContext(request, env, ctx);
-  authorize(context, "host.view");
-  requireWorkspaceContext(context, env, workspaceId);
-
-  const row = await env.CONCLAVE_DB.prepare(
-    `SELECT id, workspace_id as workspaceId, host_id as agentId, plugin_id as pluginId,
-            plugin_version_policy as pluginVersionPolicy, name, roles_json as rolesJson,
-            capabilities_json as capabilitiesJson, config_json as configJson,
-            secret_refs_json as secretRefsJson, billing_mode as billingMode,
-            cost_metadata_json as costMetadataJson, independence_key as independenceKey,
-            concurrency_limit as concurrencyLimit, session_policy as sessionPolicy,
-            enabled, status, created_at as createdAt, updated_at as updatedAt
-     FROM workers WHERE workspace_id = ?1 AND id = ?2`,
-  )
-    .bind(workspaceId, workerId)
-    .first<Record<string, unknown>>();
-
-  if (!row) {
-    return json({ error: "Worker not found" }, { status: 404 });
-  }
-
-  const worker = {
-    id: String(row.id),
-    workspaceId: String(row.workspaceId),
-    agentId: String(row.agentId),
-    pluginId: String(row.pluginId),
-    pluginVersionPolicy: String(row.pluginVersionPolicy),
-    name: String(row.name),
-    roles: parseJson(row.rolesJson, []),
-    capabilities: parseJson(row.capabilitiesJson, []),
-    config: parseJson(row.configJson, {}),
-    secretRefs: parseJson(row.secretRefsJson, []),
-    billingMode: String(row.billingMode),
-    costMetadata: parseJson(row.costMetadataJson, {}),
-    independenceKey: String(row.independenceKey),
-    concurrencyLimit: Number(row.concurrencyLimit),
-    sessionPolicy: String(row.sessionPolicy || "stateless"),
-    enabled: Number(row.enabled) === 1,
-    availability: String(row.status || "available"),
-    createdAt: String(row.createdAt),
-    updatedAt: String(row.updatedAt),
-  };
-
-  return json({ worker });
-}
-
-async function handleUpdateWorker(
-  request: Request,
-  env: SecurityEnv,
-  workspaceId: string,
-  workerId: string,
-  ctx?: ExecutionContext,
-): Promise<Response> {
-  const context = await securityContext(request, env, ctx);
-  authorize(context, "worker.install");
-  requireWorkspaceContext(context, env, workspaceId);
-
-  const existing = await env.CONCLAVE_DB.prepare(
-    `SELECT * FROM workers WHERE workspace_id = ?1 AND id = ?2`,
-  )
-    .bind(workspaceId, workerId)
-    .first<Record<string, unknown>>();
-
-  if (!existing) {
-    return json({ error: "Worker not found" }, { status: 404 });
-  }
-
-  const body = (await request.json()) as Record<string, unknown>;
-  const now = new Date().toISOString();
-
-  const agentId =
-    typeof body.agentId === "string" && body.agentId.length > 0
-      ? body.agentId
-      : String(existing.host_id);
-  const pluginId =
-    typeof body.pluginId === "string" && body.pluginId.length > 0
-      ? body.pluginId
-      : String(existing.plugin_id);
-
-  const agent = await env.CONCLAVE_DB.prepare(
-    `SELECT id, workspace_id as workspaceId, status
-     FROM hosts WHERE id = ?1 AND workspace_id = ?2`,
-  )
-    .bind(agentId, workspaceId)
-    .first<{ id: string; workspaceId: string; status: string }>();
-  if (!agent) {
-    return json({ error: `Agent '${agentId}' not found` }, { status: 404 });
-  }
-  const plugin = await env.CONCLAVE_DB.prepare(
-    `SELECT id FROM worker_plugins WHERE id = ?1`,
-  )
-    .bind(pluginId)
-    .first<{ id: string }>();
-  if (!plugin) {
-    return json({ error: `Plugin '${pluginId}' not found` }, { status: 404 });
-  }
-
-  const name =
-    typeof body.name === "string" ? body.name : String(existing.name);
-  const pluginVersionPolicy =
-    typeof body.pluginVersionPolicy === "string"
-      ? body.pluginVersionPolicy
-      : String(existing.plugin_version_policy || "latest");
-  const roles = Array.isArray(body.roles)
-    ? (body.roles as string[])
-    : parseJson(existing.roles_json, ["implementer"]);
-  const capabilities = Array.isArray(body.capabilities)
-    ? (body.capabilities as string[])
-    : parseJson(existing.capabilities_json, ["code_execution"]);
-  const config = (
-    typeof body.config === "object" && body.config !== null
-      ? body.config
-      : parseJson(existing.config_json, {})
-  ) as Record<string, unknown>;
-  const secretRefs = Array.isArray(body.secretRefs)
-    ? (body.secretRefs as string[])
-    : parseJson(existing.secret_refs_json, []);
-  const billingMode = (
-    typeof body.billingMode === "string"
-      ? body.billingMode
-      : String(existing.billing_mode)
-  ) as Worker["billingMode"];
-  const costMetadata =
-    typeof body.costMetadata === "object" && body.costMetadata !== null
-      ? (body.costMetadata as WorkerCostMetadata)
-      : (parseJson(existing.cost_metadata_json, undefined) as
-          WorkerCostMetadata | undefined);
-  const independenceKey =
-    typeof body.independenceKey === "string"
-      ? body.independenceKey
-      : String(existing.independence_key);
-  const concurrencyLimit =
-    typeof body.concurrencyLimit === "number" && body.concurrencyLimit >= 1
-      ? Math.floor(body.concurrencyLimit)
-      : Number(existing.concurrency_limit || 1);
-  const sessionPolicy = (
-    typeof body.sessionPolicy === "string"
-      ? body.sessionPolicy
-      : String(existing.session_policy || "stateless")
-  ) as Worker["sessionPolicy"];
-  const enabled =
-    typeof body.enabled === "boolean"
-      ? body.enabled
-      : Number(existing.enabled) === 1;
-  const availability = (
-    typeof body.availability === "string"
-      ? body.availability
-      : String(existing.status || "available")
-  ) as Worker["availability"];
-
-  const worker: Worker = {
-    id: workerId,
-    workspaceId,
-    agentId,
-    pluginId,
-    pluginVersionPolicy,
-    name,
-    roles,
-    capabilities,
-    config,
-    secretRefs,
-    enabled,
-    availability,
-    billingMode,
-    costMetadata,
-    independenceKey,
-    concurrencyLimit,
-    sessionPolicy,
-    createdAt: String(existing.created_at),
-    updatedAt: now,
-  };
-
-  try {
-    validateWorker(worker);
-  } catch (err) {
-    return json(
-      { error: err instanceof Error ? err.message : String(err) },
-      { status: 400 },
-    );
-  }
-
-  await env.CONCLAVE_DB.prepare(
-    `UPDATE workers SET
-       host_id = ?1, plugin_id = ?2, name = ?3, plugin_version_policy = ?4,
-       roles_json = ?5, capabilities_json = ?6, config_json = ?7,
-       secret_refs_json = ?8, billing_mode = ?9, cost_metadata_json = ?10,
-       independence_key = ?11, concurrency_limit = ?12, session_policy = ?13,
-       enabled = ?14, status = ?15, updated_at = ?16
-     WHERE workspace_id = ?17 AND id = ?18`,
-  )
-    .bind(
-      agentId,
-      pluginId,
-      name,
-      pluginVersionPolicy,
-      JSON.stringify(roles),
-      JSON.stringify(capabilities),
-      JSON.stringify(config),
-      JSON.stringify(secretRefs),
-      billingMode,
-      JSON.stringify(costMetadata ?? {}),
-      independenceKey,
-      concurrencyLimit,
-      sessionPolicy,
-      enabled ? 1 : 0,
-      availability,
-      now,
-      workspaceId,
-      workerId,
-    )
-    .run();
-
-  await recordAudit(env, context, "worker.updated", "worker", workerId, {
-    enabled,
-    availability,
-  });
-
-  return json({ worker });
-}
-
-async function handleDeleteWorker(
-  request: Request,
-  env: SecurityEnv,
-  workspaceId: string,
-  workerId: string,
-  ctx?: ExecutionContext,
-): Promise<Response> {
-  const context = await securityContext(request, env, ctx);
-  authorize(context, "worker.install");
-  requireWorkspaceContext(context, env, workspaceId);
-
-  await env.CONCLAVE_DB.prepare(
-    `DELETE FROM workers WHERE workspace_id = ?1 AND id = ?2`,
-  )
-    .bind(workspaceId, workerId)
-    .run();
-
-  await recordAudit(env, context, "worker.deleted", "worker", workerId);
-
-  return json({ ok: true });
-}
-
 async function handleDispatchTaskAssignment(
   request: Request,
   env: SecurityEnv,
@@ -3767,7 +3284,7 @@ async function handleHostProtocolMessage(
     return json({ error: "Malformed JSON" }, { status: 400 });
   }
 
-  let message: any;
+  let message: AgentProtocolMessage;
   try {
     message = parseAgentMessage(parsedJson);
   } catch (err) {
@@ -3784,11 +3301,15 @@ async function handleHostProtocolMessage(
   let authenticatedHost: { id: string; workspace_id: string } | null = null;
   if (token) {
     const tokenHash = await hashToken(token);
+    const messageEnvelope = message as unknown as {
+      workspaceId?: unknown;
+      payload?: Record<string, unknown>;
+    };
     const messageWorkspaceId =
-      typeof message.workspaceId === "string"
-        ? message.workspaceId
-        : typeof message.payload?.workspaceId === "string"
-          ? message.payload.workspaceId
+      typeof messageEnvelope.workspaceId === "string"
+        ? messageEnvelope.workspaceId
+        : typeof messageEnvelope.payload?.workspaceId === "string"
+          ? messageEnvelope.payload.workspaceId
           : null;
     if (!messageWorkspaceId) {
       return json(
@@ -3862,7 +3383,12 @@ async function handleHostProtocolMessage(
       idempotencyKey: string;
       status: string;
     }> = [];
-    const assignmentIds = message.payload.unreconciledAssignmentIds ?? [];
+    const syncPayload = message.payload as unknown as Record<string, unknown>;
+    const assignmentIds = Array.isArray(syncPayload.unreconciledAssignmentIds)
+      ? syncPayload.unreconciledAssignmentIds.filter(
+          (value): value is string => typeof value === "string",
+        )
+      : [];
     if (assignmentIds.length > 0) {
       const placeholders = assignmentIds
         .map((_: unknown, index: number) => `?${index + 3}`)
@@ -3931,8 +3457,8 @@ async function handleHostProtocolMessage(
       workerId: row.id,
       workspaceId: row.workspace_id,
       agentId: row.host_id,
-      pluginId: row.plugin_id,
-      pluginVersionPolicy: row.plugin_version_policy,
+      workerCatalogId: row.plugin_id,
+      workerVersionPolicy: row.plugin_version_policy,
       name: row.name,
       roles: parseJson(row.roles_json, []),
       capabilities: parseJson(row.capabilities_json, []),
@@ -3991,7 +3517,7 @@ async function handleHostProtocolMessage(
           ? Object.keys(secretSchema)
           : [];
       return {
-        pluginId: row.plugin_id,
+        workerCatalogId: row.plugin_id,
         publisher: row.publisher,
         version: row.version,
         protocolVersion: row.protocol_version,
@@ -4197,8 +3723,8 @@ async function handleStudioSnapshot(
       .bind(...projectListBind)
       .all(),
     env.CONCLAVE_DB.prepare(
-      `SELECT w.id, w.name, w.host_id AS agentId, w.plugin_id AS pluginId,
-              w.plugin_version_policy AS pluginVersionPolicy,
+      `SELECT w.id, w.name, w.host_id AS agentId, w.plugin_id AS workerCatalogId,
+              w.plugin_version_policy AS workerVersionPolicy,
               w.roles_json, w.capabilities_json, w.config_json AS config,
               w.billing_mode AS billingMode, w.cost_metadata_json AS costMetadata,
               w.independence_key AS independenceKey, w.concurrency_limit AS concurrencyLimit,
@@ -4218,7 +3744,7 @@ async function handleStudioSnapshot(
               COALESCE(json_extract(a.capabilities_json, '$.arch'), '—') AS architecture,
               a.version AS appVersion, 'stable' AS updateChannel,
               COALESCE(a.last_heartbeat_at, a.updated_at) AS lastSeen,
-              (SELECT COUNT(*) FROM agent_plugin_installs i WHERE i.host_id = a.id) AS pluginCount,
+              (SELECT COUNT(*) FROM host_worker_installations i WHERE i.host_id = a.id) AS pluginCount,
               (SELECT COUNT(*) FROM workers w WHERE w.host_id = a.id) AS workerCount,
               (SELECT COUNT(*) FROM worker_assignments wa JOIN workers w ON w.id = wa.worker_id
                WHERE w.host_id = a.id AND wa.status IN ('assigned', 'running')) AS activeTaskCount
@@ -4233,7 +3759,7 @@ async function handleStudioSnapshot(
               COALESCE((SELECT v.permissions_json FROM worker_plugin_versions v WHERE v.plugin_id = p.id AND v.is_revoked = 0 ORDER BY v.created_at DESC LIMIT 1), '[]') AS permissions,
               COALESCE((SELECT v.supported_os_json FROM worker_plugin_versions v WHERE v.plugin_id = p.id AND v.is_revoked = 0 ORDER BY v.created_at DESC LIMIT 1), '[]') AS supportedOS,
               COALESCE((SELECT v.supported_arch_json FROM worker_plugin_versions v WHERE v.plugin_id = p.id AND v.is_revoked = 0 ORDER BY v.created_at DESC LIMIT 1), '[]') AS supportedArchitecture,
-              (SELECT COUNT(DISTINCT i.host_id) FROM agent_plugin_installs i WHERE i.plugin_id = p.id AND i.status IN ('installed', 'active')) AS installedAgentCount,
+              (SELECT COUNT(DISTINCT i.host_id) FROM host_worker_installations i WHERE i.plugin_id = p.id AND i.status IN ('installed', 'active')) AS installedAgentCount,
               p.status, p.supported_roles_json AS roles, p.supported_capabilities_json AS capabilities
        FROM worker_plugins p
        WHERE p.status <> 'deprecated'
@@ -4768,12 +4294,12 @@ async function handleListPlugins(
 
 async function handleGetPlugin(
   env: SecurityEnv,
-  pluginId: string,
+  workerCatalogId: string,
 ): Promise<Response> {
   const plugin = await env.CONCLAVE_DB.prepare(
     "SELECT * FROM worker_plugins WHERE id = ?1",
   )
-    .bind(pluginId)
+    .bind(workerCatalogId)
     .first<{
       id: string;
       display_name: string;
@@ -4787,13 +4313,16 @@ async function handleGetPlugin(
     }>();
 
   if (!plugin) {
-    return json({ error: `Plugin '${pluginId}' not found` }, { status: 404 });
+    return json(
+      { error: `Plugin '${workerCatalogId}' not found` },
+      { status: 404 },
+    );
   }
 
   const versionsResult = await env.CONCLAVE_DB.prepare(
     "SELECT * FROM worker_plugin_versions WHERE plugin_id = ?1 ORDER BY created_at DESC",
   )
-    .bind(pluginId)
+    .bind(workerCatalogId)
     .all<{
       id: string;
       plugin_id: string;
@@ -4866,13 +4395,13 @@ async function handleGetPlugin(
 
 async function handleGetPluginVersion(
   env: SecurityEnv,
-  pluginId: string,
+  workerCatalogId: string,
   version: string,
 ): Promise<Response> {
   const row = await env.CONCLAVE_DB.prepare(
     "SELECT * FROM worker_plugin_versions WHERE plugin_id = ?1 AND version = ?2",
   )
-    .bind(pluginId, version)
+    .bind(workerCatalogId, version)
     .first<{
       id: string;
       plugin_id: string;
@@ -4898,14 +4427,14 @@ async function handleGetPluginVersion(
 
   if (!row) {
     return json(
-      { error: `Plugin version '${pluginId}@${version}' not found` },
+      { error: `Plugin version '${workerCatalogId}@${version}' not found` },
       { status: 404 },
     );
   }
 
   return json({
     id: row.id,
-    pluginId: row.plugin_id,
+    workerCatalogId: row.plugin_id,
     version: row.version,
     channel: row.channel,
     protocolVersion: row.protocol_version,
@@ -4936,7 +4465,7 @@ async function handleGetPluginVersion(
 async function handleDownloadPluginVersion(
   request: Request,
   env: SecurityEnv,
-  pluginId: string,
+  workerCatalogId: string,
   version: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
@@ -4954,7 +4483,7 @@ async function handleDownloadPluginVersion(
            AND w.enabled = 1
          LIMIT 1`,
       )
-        .bind(tokenHash, pluginId)
+        .bind(tokenHash, workerCatalogId)
         .first<{ id: string; workspace_id: string }>();
       if (!agent) {
         return json(
@@ -4969,7 +4498,7 @@ async function handleDownloadPluginVersion(
   const row = await env.CONCLAVE_DB.prepare(
     "SELECT package_r2_key, package_digest, is_revoked FROM worker_plugin_versions WHERE plugin_id = ?1 AND version = ?2",
   )
-    .bind(pluginId, version)
+    .bind(workerCatalogId, version)
     .first<{
       package_r2_key: string;
       package_digest: string;
@@ -4978,7 +4507,7 @@ async function handleDownloadPluginVersion(
 
   if (!row) {
     return json(
-      { error: `Plugin version '${pluginId}@${version}' not found` },
+      { error: `Plugin version '${workerCatalogId}@${version}' not found` },
       { status: 404 },
     );
   }
@@ -4986,7 +4515,7 @@ async function handleDownloadPluginVersion(
   if (row.is_revoked === 1) {
     return json(
       {
-        error: `Plugin version '${pluginId}@${version}' is revoked and cannot be downloaded`,
+        error: `Plugin version '${workerCatalogId}@${version}' is revoked and cannot be downloaded`,
       },
       { status: 410 },
     );
@@ -5013,7 +4542,7 @@ async function handleDownloadPluginVersion(
   headers.set("content-digest", row.package_digest);
   headers.set(
     "content-disposition",
-    `attachment; filename="${pluginId}-${version}.tgz"`,
+    `attachment; filename="${workerCatalogId}-${version}.tgz"`,
   );
 
   return new Response(object.body, { headers });
@@ -5094,7 +4623,7 @@ async function handlePublishPlugin(
     await bucket.put(r2Key, packageBytes, {
       httpMetadata: { contentType: "application/gzip" },
       customMetadata: {
-        pluginId: workerIdentifier,
+        workerCatalogId: workerIdentifier,
         version: manifest.version,
         digest,
         signature,
@@ -5171,7 +4700,7 @@ async function handlePublishPlugin(
     .run();
 
   return json({
-    pluginId: workerIdentifier,
+    workerCatalogId: workerIdentifier,
     workerId: workerIdentifier,
     version: manifest.version,
     channel,
@@ -5186,7 +4715,7 @@ async function handlePublishPlugin(
 async function handleRevokePluginVersion(
   request: Request,
   env: SecurityEnv,
-  pluginId: string,
+  workerCatalogId: string,
   version: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
@@ -5201,11 +4730,11 @@ async function handleRevokePluginVersion(
      SET is_revoked = 1, revoked_at = ?1, revocation_reason = ?2
      WHERE plugin_id = ?3 AND version = ?4`,
   )
-    .bind(now, reason, pluginId, version)
+    .bind(now, reason, workerCatalogId, version)
     .run();
 
   return json({
-    pluginId,
+    workerCatalogId,
     version,
     isRevoked: true,
     revokedAt: now,
@@ -5216,7 +4745,7 @@ async function handleRevokePluginVersion(
 async function handleDeprecatePlugin(
   request: Request,
   env: SecurityEnv,
-  pluginId: string,
+  workerCatalogId: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
   await authorizeRequest(request, env, "workspace:manage", undefined, ctx);
@@ -5225,11 +4754,11 @@ async function handleDeprecatePlugin(
   await env.CONCLAVE_DB.prepare(
     `UPDATE worker_plugins SET status = 'deprecated', updated_at = ?1 WHERE id = ?2`,
   )
-    .bind(now, pluginId)
+    .bind(now, workerCatalogId)
     .run();
 
   return json({
-    pluginId,
+    workerCatalogId,
     status: "deprecated",
     updatedAt: now,
   });

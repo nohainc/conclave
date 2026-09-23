@@ -319,8 +319,8 @@ class StudioWorker {
     this.pluginName = '—',
     this.roles = const [],
     this.agentId = '',
-    this.pluginId = '',
-    this.pluginVersionPolicy = 'latest',
+    this.workerCatalogId = '',
+    this.workerVersionPolicy = 'latest',
     this.config = const {},
     this.sessionPolicy = 'stateless',
     this.concurrencyLimit = 1,
@@ -340,8 +340,8 @@ class StudioWorker {
   final String pluginName;
   final List<String> roles;
   final String agentId;
-  final String pluginId;
-  final String pluginVersionPolicy;
+  final String workerCatalogId;
+  final String workerVersionPolicy;
   final Map<String, dynamic> config;
   final String sessionPolicy;
   final int concurrencyLimit;
@@ -361,8 +361,8 @@ class StudioWorker {
       pluginName: _string(json, 'pluginName'),
       roles: _strings(json, 'roles'),
       agentId: _string(json, 'agentId'),
-      pluginId: _string(json, 'pluginId'),
-      pluginVersionPolicy: _string(json, 'pluginVersionPolicy', 'latest'),
+      workerCatalogId: _string(json, 'workerCatalogId'),
+      workerVersionPolicy: _string(json, 'workerVersionPolicy', 'latest'),
       config: _map(json, 'config'),
       sessionPolicy: _string(json, 'sessionPolicy', 'stateless'),
       concurrencyLimit: json['concurrencyLimit'] as int? ?? 1,
@@ -422,8 +422,8 @@ class StudioAgent {
       );
 }
 
-class StudioAgentEnrollment {
-  const StudioAgentEnrollment({
+class StudioHostEnrollment {
+  const StudioHostEnrollment({
     required this.id,
     required this.token,
     required this.workspaceId,
@@ -435,8 +435,8 @@ class StudioAgentEnrollment {
   final String workspaceId;
   final String expiresAt;
 
-  factory StudioAgentEnrollment.fromJson(Map<String, dynamic> json) =>
-      StudioAgentEnrollment(
+  factory StudioHostEnrollment.fromJson(Map<String, dynamic> json) =>
+      StudioHostEnrollment(
         id: _string(json, 'id'),
         token: _string(json, 'token'),
         workspaceId: _string(json, 'workspaceId'),

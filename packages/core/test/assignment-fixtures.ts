@@ -31,8 +31,8 @@ export function worker(
     id,
     workspaceId: "workspace-1",
     agentId: `agent-${id}`,
-    pluginId: `plugin-${id}`,
-    pluginVersionPolicy: "latest",
+    workerCatalogId: `plugin-${id}`,
+    workerVersionPolicy: "latest",
     name: id,
     roles: options.roles ?? [
       "planner",

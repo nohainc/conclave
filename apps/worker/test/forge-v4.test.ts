@@ -8,7 +8,10 @@ import {
 class BudgetDb {
   prepare(query: string) {
     const statement = {
-      bind: (..._values: unknown[]) => statement,
+      bind: (...values: unknown[]) => {
+        void values;
+        return statement;
+      },
       all: async <T>() => ({
         results: (query.includes("SELECT id, project_id")
           ? [

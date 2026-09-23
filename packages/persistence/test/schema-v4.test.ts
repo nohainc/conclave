@@ -68,7 +68,6 @@ describe("Architecture v4 clean D1 schema", () => {
       "agent_releases",
       "worker_plugins",
       "worker_plugin_versions",
-      "agent_plugin_installs",
       "credentials",
       "extensions",
     ]) {

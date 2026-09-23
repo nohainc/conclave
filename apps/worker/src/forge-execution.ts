@@ -10,7 +10,7 @@ import {
   type D1DatabaseLike,
 } from "@conclave/persistence";
 import type {
-  ConclaveAgent,
+  ExecutionHost,
   Worker,
   WorkerAssignmentResult,
   WorkerAvailability,
@@ -123,7 +123,7 @@ export function assertV4ForgeBindings(
     bindings.some((binding) => !binding.executionTarget)
   ) {
     throw new Error(
-      "Forge requires Host + Worker + Credential Profile execution targets",
+      "Forge requires ExecutionHost + Worker + Credential Profile execution targets",
     );
   }
   const targets = bindings.map((binding) => binding.executionTarget!);
@@ -256,7 +256,7 @@ export async function assertV4BudgetAvailable(input: {
 
 export interface ForgeWorkerBinding {
   readonly worker: Worker;
-  readonly agent: ConclaveAgent;
+  readonly agent: ExecutionHost;
   /** v4 immutable target snapshot used by Forge dispatch. */
   readonly executionTarget?: ResolvedExecutionTarget;
 }
@@ -271,8 +271,8 @@ function workerEntity(row: Record<string, unknown>): Worker {
     name: String(row.name),
     workspaceId: String(row.workspace_id),
     agentId: String(row.agent_id),
-    pluginId: String(row.plugin_id),
-    pluginVersionPolicy: String(row.plugin_version_policy ?? "latest"),
+    workerCatalogId: String(row.plugin_id),
+    workerVersionPolicy: String(row.plugin_version_policy ?? "latest"),
     capabilities: parseJsonArray(row.capabilities_json),
     roles: parseJsonArray(row.roles_json),
     independenceKey: String(row.independence_key),
@@ -307,22 +307,22 @@ function parseJsonRecord(value: unknown): Record<string, unknown> {
   }
 }
 
-function hostEntity(row: Record<string, unknown>): ConclaveAgent {
+function hostEntity(row: Record<string, unknown>): ExecutionHost {
   const capabilities = parseJsonRecord(row.agent_capabilities_json);
   return {
     id: String(row.agent_id),
     workspaceId: String(row.workspace_id),
     name: String(row.agent_name ?? row.agent_id),
     hostname: String(row.agent_hostname ?? "unknown"),
-    status: String(row.agent_status ?? "offline") as ConclaveAgent["status"],
+    status: String(row.agent_status ?? "offline") as ExecutionHost["status"],
     version: String(row.agent_version ?? "unknown"),
     capabilities: {
       os: String(
         capabilities.os ?? "macos",
-      ) as ConclaveAgent["capabilities"]["os"],
+      ) as ExecutionHost["capabilities"]["os"],
       arch: String(
         capabilities.arch ?? "arm64",
-      ) as ConclaveAgent["capabilities"]["arch"],
+      ) as ExecutionHost["capabilities"]["arch"],
       version: String(capabilities.version ?? row.agent_version ?? "unknown"),
       supportedRuntimes: parseJsonArray(capabilities.supportedRuntimes),
       maxConcurrentWorkers: Number(capabilities.maxConcurrentWorkers ?? 1),
@@ -473,9 +473,9 @@ class DurableForgePersistence implements ForgePersistence {
 }
 
 /**
- * Executes repository operations through an Host Worker assignment.
+ * Executes repository operations through an ExecutionHost Worker assignment.
  *
- * Cloud owns orchestration and evidence persistence, while the Host/Plugin
+ * Cloud owns orchestration and evidence persistence, while the ExecutionHost/Plugin
  * owns filesystem and process access. Keeping this adapter on the Worker
  * assignment interface keeps Forge independent from plugin/provider details.
  */
@@ -676,7 +676,7 @@ class HostWorkerRuntime implements ForgeRuntimeAdapter {
 class HostGatewayForgeWorker implements ForgeWorker {
   constructor(
     readonly worker: Worker,
-    readonly agent: ConclaveAgent,
+    readonly agent: ExecutionHost,
     private readonly env: ForgeExecutionEnv,
     private readonly context: ForgeExecutionContext,
     private readonly executionTarget?: ResolvedExecutionTarget,
@@ -723,7 +723,9 @@ class HostGatewayForgeWorker implements ForgeWorker {
     };
     const dispatched = await this.dispatch(request, task);
     if (!dispatched.accepted) {
-      return this.failed(dispatched.error ?? "Host assignment was rejected");
+      return this.failed(
+        dispatched.error ?? "ExecutionHost assignment was rejected",
+      );
     }
 
     const deadline = Date.now() + this.deadline(request);
@@ -769,12 +771,15 @@ class HostGatewayForgeWorker implements ForgeWorker {
       if (row?.status === "failed" || row?.status === "cancelled") {
         return this.failed(
           this.assignmentError(row.error_json) ??
-            `Host assignment ended with status ${row.status}`,
+            `ExecutionHost assignment ended with status ${row.status}`,
         );
       }
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
-    return this.failed("Timed out waiting for Host assignment result", true);
+    return this.failed(
+      "Timed out waiting for ExecutionHost assignment result",
+      true,
+    );
   }
 
   private async dispatch(
@@ -810,10 +815,11 @@ class HostGatewayForgeWorker implements ForgeWorker {
         attemptId: "",
         workerId: this.worker.id,
         agentId: "",
-        pluginId: this.worker.pluginId,
+        workerCatalogId: this.worker.workerCatalogId,
         status: "failed",
         accepted: false,
-        error: "Host Gateway or internal Forge dispatch is not configured",
+        error:
+          "ExecutionHost Gateway or internal Forge dispatch is not configured",
       };
     }
     const dispatchRequest = new Request(
@@ -848,7 +854,7 @@ class HostGatewayForgeWorker implements ForgeWorker {
         attemptId: "",
         workerId: this.worker.id,
         agentId: "",
-        pluginId: this.worker.pluginId,
+        workerCatalogId: this.worker.workerCatalogId,
         status: "failed",
         accepted: false,
         error:
@@ -936,10 +942,10 @@ class HostGatewayForgeWorker implements ForgeWorker {
         attemptId,
         workerId: target.workerId,
         agentId: target.hostId,
-        pluginId: target.workerId,
+        workerCatalogId: target.workerId,
         status: "failed",
         accepted: false,
-        error: "Host Gateway is not configured",
+        error: "ExecutionHost Gateway is not configured",
       };
     }
     const stub = namespace.get(namespace.idFromName(target.hostId));
@@ -956,8 +962,8 @@ class HostGatewayForgeWorker implements ForgeWorker {
         assignmentId,
         idempotencyKey,
         payload: {
-          pluginId: target.workerId,
-          resolvedPluginVersion: target.resolvedWorkerVersion,
+          workerCatalogId: target.workerId,
+          resolvedWorkerVersion: target.resolvedWorkerVersion,
           role: task.role,
           objective: task.objective,
           input: task.input,
@@ -973,7 +979,7 @@ class HostGatewayForgeWorker implements ForgeWorker {
         attemptId,
         workerId: target.workerId,
         agentId: target.hostId,
-        pluginId: target.workerId,
+        workerCatalogId: target.workerId,
         status: "failed",
         accepted: false,
         error: await response.text(),
@@ -984,7 +990,7 @@ class HostGatewayForgeWorker implements ForgeWorker {
       attemptId,
       workerId: target.workerId,
       agentId: target.hostId,
-      pluginId: target.workerId,
+      workerCatalogId: target.workerId,
       status: "dispatched",
       accepted: true,
     };
@@ -1065,7 +1071,7 @@ export type ForgeExecutionMode = "single_worker" | "multi_worker";
 export function resolveForgeExecutionMode(value: unknown): ForgeExecutionMode {
   if (value === "cloud_api") {
     throw new Error(
-      "Forge direct cloud model execution has been retired; use Dart Host workers",
+      "Forge direct cloud model execution has been retired; use Dart ExecutionHost workers",
     );
   }
   return value === "multi_worker" ? "multi_worker" : "single_worker";
@@ -1252,7 +1258,7 @@ export async function executeForgeService(
       : undefined;
   if (executionMode === "multi_worker" && !secondaryResearchResource) {
     throw new Error(
-      "Multi-worker Forge requires a repository research worker on the second Host",
+      "Multi-worker Forge requires a repository research worker on the second ExecutionHost",
     );
   }
   const persistence = new DurableForgePersistence(

@@ -32,3 +32,10 @@ Track progress of the [v4 implementation roadmap](ARCHITECTURE_V4_IMPLEMENTATION
 | V4-25 | Clean-room rebuild and recovery | 🚧 In progress |
 | V4-26 | High-quality UI/UX acceptance pass | ✅ Complete |
 | V4-27 | Architecture v4 release gate | 🚧 In progress |
+
+## AUTH-0 — Green V4 baseline
+
+Completed 2026-09-23. The architecture guard baseline is clean, CI paths target
+`apps/studio` and `apps/host`, and the TypeScript, protocol, Flutter, Dart,
+documentation, Wrangler, and security preflight checks pass. Human
+authentication migration is intentionally not included in this baseline.

@@ -92,11 +92,11 @@ class StudioFixtureDataSource implements StudioDataSource {
   }) async {}
 
   @override
-  Future<StudioAgentEnrollment> createAgentEnrollment({
+  Future<StudioHostEnrollment> createHostEnrollment({
     required String workspaceId,
     int expiresHours = 24,
   }) async {
-    return StudioAgentEnrollment(
+    return StudioHostEnrollment(
       id: 'enrollment-fixture',
       token: 'conclave_enroll_fixture',
       workspaceId: workspaceId,
@@ -110,11 +110,11 @@ class StudioFixtureDataSource implements StudioDataSource {
     String? workerId,
     required String name,
     required String agentId,
-    required String pluginId,
+    required String workerCatalogId,
     required List<String> roles,
     required List<String> capabilities,
     required bool enabled,
-    String pluginVersionPolicy = 'latest',
+    String workerVersionPolicy = 'latest',
     Map<String, dynamic> config = const {},
     String sessionPolicy = 'stateless',
     int concurrencyLimit = 1,

@@ -77,35 +77,35 @@ export interface ChatMessage {
   readonly createdAt: string;
 }
 
-export type AgentStatus =
+export type ExecutionHostStatus =
   "enrolled" | "online" | "offline" | "busy" | "draining" | "revoked";
 
-export type AgentPlatform = "macos" | "linux" | "windows";
-export type AgentArchitecture = "arm64" | "x64";
+export type ExecutionHostPlatform = "macos" | "linux" | "windows";
+export type ExecutionHostArchitecture = "arm64" | "x64";
 
-export interface AgentCapabilities {
-  readonly os: AgentPlatform;
-  readonly arch: AgentArchitecture;
+export interface ExecutionHostCapabilities {
+  readonly os: ExecutionHostPlatform;
+  readonly arch: ExecutionHostArchitecture;
   readonly version: string;
   readonly supportedRuntimes: readonly string[];
   readonly maxConcurrentWorkers: number;
   readonly customCapabilities?: readonly string[];
 }
 
-export interface ConclaveAgent {
+export interface ExecutionHost {
   readonly id: string;
   readonly workspaceId: string;
   readonly name: string;
   readonly hostname: string;
-  readonly status: AgentStatus;
+  readonly status: ExecutionHostStatus;
   readonly version: string;
-  readonly capabilities: AgentCapabilities;
+  readonly capabilities: ExecutionHostCapabilities;
   readonly enrolledAt: string;
   readonly lastHeartbeatAt: string | null;
   readonly revokedAt: string | null;
 }
 
-export interface AgentEnrollment {
+export interface ExecutionHostEnrollment {
   readonly id: string;
   readonly workspaceId: string;
   readonly tokenHash: string;
@@ -115,7 +115,7 @@ export interface AgentEnrollment {
   readonly createdBy: string;
 }
 
-export interface AgentSession {
+export interface ExecutionHostSession {
   readonly id: string;
   readonly agentId: string;
   readonly workspaceId: string;
@@ -127,14 +127,14 @@ export interface AgentSession {
   readonly ipAddress?: string;
 }
 
-export type AgentReleaseChannel = "stable" | "beta" | "development";
+export type ExecutionHostReleaseChannel = "stable" | "beta" | "development";
 
-export interface AgentRelease {
+export interface ExecutionHostRelease {
   readonly version: string;
-  readonly channel: AgentReleaseChannel;
+  readonly channel: ExecutionHostReleaseChannel;
   readonly minSupportedAgentVersion?: string | null;
-  readonly supportedOS: readonly AgentPlatform[];
-  readonly supportedArch: readonly AgentArchitecture[];
+  readonly supportedOS: readonly ExecutionHostPlatform[];
+  readonly supportedArch: readonly ExecutionHostArchitecture[];
   readonly packageDigest: string;
   readonly packageR2Key: string;
   readonly signature: string;
@@ -145,16 +145,16 @@ export interface AgentRelease {
   readonly createdAt: string;
 }
 
-export type WorkerPluginStatus = "active" | "deprecated" | "revoked";
+export type WorkerCatalogStatus = "active" | "deprecated" | "revoked";
 
-export interface WorkerPlugin {
+export interface WorkerCatalog {
   readonly id: string;
   readonly displayName: string;
   readonly description: string;
   readonly publisher: string;
   readonly supportedRoles: readonly string[];
   readonly supportedCapabilities: readonly string[];
-  readonly status: WorkerPluginStatus;
+  readonly status: WorkerCatalogStatus;
 }
 
 export type WorkerBillingMode =
@@ -165,18 +165,18 @@ export type WorkerBillingMode =
   | "manual"
   | "free";
 
-export type WorkerPluginChannel = "stable" | "beta" | "development";
+export type WorkerChannel = "stable" | "beta" | "development";
 
-export interface WorkerPluginVersion {
+export interface WorkerVersion {
   readonly id: string;
-  readonly pluginId: string;
+  readonly workerCatalogId: string;
   readonly version: string;
-  readonly channel: WorkerPluginChannel;
+  readonly channel: WorkerChannel;
   readonly protocolVersion: string;
   readonly minAgentVersion: string;
   readonly maxAgentVersion?: string;
-  readonly supportedOs: readonly AgentPlatform[];
-  readonly supportedArch: readonly AgentArchitecture[];
+  readonly supportedOs: readonly ExecutionHostPlatform[];
+  readonly supportedArch: readonly ExecutionHostArchitecture[];
   readonly packageDigest: string;
   readonly packageR2Key: string;
   readonly signature: string;
@@ -200,8 +200,8 @@ export interface Worker {
   readonly id: string;
   readonly workspaceId: string;
   readonly agentId: string;
-  readonly pluginId: string;
-  readonly pluginVersionPolicy: string;
+  readonly workerCatalogId: string;
+  readonly workerVersionPolicy: string;
   readonly name: string;
   readonly roles: readonly string[];
   readonly capabilities: readonly string[];
@@ -238,8 +238,8 @@ export interface WorkerAssignment {
   readonly attemptId: string;
   readonly agentId: string;
   readonly workerId: string;
-  readonly pluginId: string;
-  readonly resolvedPluginVersion?: string;
+  readonly workerCatalogId: string;
+  readonly resolvedWorkerVersion?: string;
   readonly status: WorkerAssignmentStatus;
   readonly input: Record<string, unknown>;
   readonly idempotencyKey: string;
@@ -405,7 +405,7 @@ export function validateChatMessage(message: ChatMessage, chat?: Chat): void {
 /**
  * Validates invariants for a Conclave Agent.
  */
-export function validateAgent(agent: ConclaveAgent): void {
+export function validateExecutionHost(agent: ExecutionHost): void {
   if (!agent.id || agent.id.trim().length === 0) {
     throw new DomainInvariantError("Agent id is required");
   }
@@ -423,97 +423,103 @@ export function validateAgent(agent: ConclaveAgent): void {
 }
 
 /**
- * Validates invariants for an AgentRelease.
+ * Validates invariants for an ExecutionHostRelease.
  */
-export function validateAgentRelease(release: AgentRelease): void {
+export function validateExecutionHostRelease(
+  release: ExecutionHostRelease,
+): void {
   if (!release.version || release.version.trim().length === 0) {
-    throw new DomainInvariantError("AgentRelease version is required");
+    throw new DomainInvariantError("ExecutionHostRelease version is required");
   }
   if (!["stable", "beta", "development"].includes(release.channel)) {
     throw new DomainInvariantError(
-      `Invalid AgentRelease channel '${release.channel}'. Must be stable, beta, or development`,
+      `Invalid ExecutionHostRelease channel '${release.channel}'. Must be stable, beta, or development`,
     );
   }
   if (!release.packageDigest || release.packageDigest.trim().length === 0) {
-    throw new DomainInvariantError("AgentRelease packageDigest is required");
+    throw new DomainInvariantError(
+      "ExecutionHostRelease packageDigest is required",
+    );
   }
   if (!release.packageR2Key || release.packageR2Key.trim().length === 0) {
-    throw new DomainInvariantError("AgentRelease packageR2Key is required");
+    throw new DomainInvariantError(
+      "ExecutionHostRelease packageR2Key is required",
+    );
   }
   if (!release.signature || release.signature.trim().length === 0) {
-    throw new DomainInvariantError("AgentRelease signature is required");
+    throw new DomainInvariantError(
+      "ExecutionHostRelease signature is required",
+    );
   }
   if (!release.supportedOS || release.supportedOS.length === 0) {
-    throw new DomainInvariantError("AgentRelease must support at least one OS");
+    throw new DomainInvariantError(
+      "ExecutionHostRelease must support at least one OS",
+    );
   }
   if (!release.supportedArch || release.supportedArch.length === 0) {
     throw new DomainInvariantError(
-      "AgentRelease must support at least one architecture",
+      "ExecutionHostRelease must support at least one architecture",
     );
   }
 }
 
 /**
- * Validates invariants for a WorkerPlugin:
+ * Validates invariants for a WorkerCatalog:
  * - Plugin has id, displayName, publisher, and valid status
  */
-export function validateWorkerPlugin(plugin: WorkerPlugin): void {
+export function validateWorkerCatalog(plugin: WorkerCatalog): void {
   if (!plugin.id || plugin.id.trim().length === 0) {
-    throw new DomainInvariantError("WorkerPlugin id is required");
+    throw new DomainInvariantError("WorkerCatalog id is required");
   }
   if (!plugin.displayName || plugin.displayName.trim().length === 0) {
-    throw new DomainInvariantError("WorkerPlugin displayName is required");
+    throw new DomainInvariantError("WorkerCatalog displayName is required");
   }
   if (!plugin.publisher || plugin.publisher.trim().length === 0) {
-    throw new DomainInvariantError("WorkerPlugin publisher is required");
+    throw new DomainInvariantError("WorkerCatalog publisher is required");
   }
   if (!plugin.status) {
-    throw new DomainInvariantError("WorkerPlugin status is required");
+    throw new DomainInvariantError("WorkerCatalog status is required");
   }
 }
 
 /**
- * Validates invariants for a WorkerPluginVersion:
+ * Validates invariants for a WorkerVersion:
  * - Version belongs to a valid plugin
  * - Protocol version, digest, signature, and R2 key are present
  * - Valid release channel (stable, beta, development)
  */
-export function validateWorkerPluginVersion(
-  version: WorkerPluginVersion,
-  parentPlugin?: WorkerPlugin,
+export function validateWorkerVersion(
+  version: WorkerVersion,
+  parentPlugin?: WorkerCatalog,
 ): void {
   if (!version.id || version.id.trim().length === 0) {
-    throw new DomainInvariantError("WorkerPluginVersion id is required");
+    throw new DomainInvariantError("WorkerVersion id is required");
   }
-  if (!version.pluginId || version.pluginId.trim().length === 0) {
-    throw new DomainInvariantError("WorkerPluginVersion pluginId is required");
+  if (!version.workerCatalogId || version.workerCatalogId.trim().length === 0) {
+    throw new DomainInvariantError("WorkerVersion workerCatalogId is required");
   }
   if (!version.version || version.version.trim().length === 0) {
-    throw new DomainInvariantError("WorkerPluginVersion version is required");
+    throw new DomainInvariantError("WorkerVersion version is required");
   }
   if (!["stable", "beta", "development"].includes(version.channel)) {
     throw new DomainInvariantError(
-      `Invalid WorkerPluginVersion channel '${version.channel}'. Must be stable, beta, or development`,
+      `Invalid WorkerVersion channel '${version.channel}'. Must be stable, beta, or development`,
     );
   }
   if (!version.packageDigest || version.packageDigest.trim().length === 0) {
-    throw new DomainInvariantError(
-      "WorkerPluginVersion packageDigest is required",
-    );
+    throw new DomainInvariantError("WorkerVersion packageDigest is required");
   }
   if (!version.packageR2Key || version.packageR2Key.trim().length === 0) {
-    throw new DomainInvariantError(
-      "WorkerPluginVersion packageR2Key is required",
-    );
+    throw new DomainInvariantError("WorkerVersion packageR2Key is required");
   }
   if (!version.signature || version.signature.trim().length === 0) {
-    throw new DomainInvariantError("WorkerPluginVersion signature is required");
+    throw new DomainInvariantError("WorkerVersion signature is required");
   }
 
   if (parentPlugin) {
-    if (parentPlugin.id !== version.pluginId) {
+    if (parentPlugin.id !== version.workerCatalogId) {
       throw new DomainInvariantError(
-        `Version pluginId '${version.pluginId}' does not match parent plugin id '${parentPlugin.id}'`,
+        `Version workerCatalogId '${version.workerCatalogId}' does not match parent plugin id '${parentPlugin.id}'`,
       );
     }
   }
@@ -528,7 +534,7 @@ export function validateWorkerPluginVersion(
  */
 export function validateWorker(
   worker: Worker,
-  context?: { agent?: ConclaveAgent; plugin?: WorkerPlugin },
+  context?: { agent?: ExecutionHost; plugin?: WorkerCatalog },
 ): void {
   if (!worker.id || worker.id.trim().length === 0) {
     throw new DomainInvariantError("Worker id is required");
@@ -543,9 +549,9 @@ export function validateWorker(
       "Worker agentId is required (Worker must be hosted by one Agent)",
     );
   }
-  if (!worker.pluginId || worker.pluginId.trim().length === 0) {
+  if (!worker.workerCatalogId || worker.workerCatalogId.trim().length === 0) {
     throw new DomainInvariantError(
-      "Worker pluginId is required (Worker must reference one Plugin)",
+      "Worker workerCatalogId is required (Worker must reference one Plugin)",
     );
   }
   if (!worker.name || worker.name.trim().length === 0) {
@@ -611,9 +617,9 @@ export function validateWorker(
   }
 
   if (context?.plugin) {
-    if (context.plugin.id !== worker.pluginId) {
+    if (context.plugin.id !== worker.workerCatalogId) {
       throw new DomainInvariantError(
-        `Worker pluginId '${worker.pluginId}' does not match Plugin id '${context.plugin.id}'`,
+        `Worker workerCatalogId '${worker.workerCatalogId}' does not match Plugin id '${context.plugin.id}'`,
       );
     }
     if (context.plugin.status === "revoked") {
@@ -659,8 +665,11 @@ export function validateAssignment(
       "Assignment workerId is required (Assignment targets exactly one Worker)",
     );
   }
-  if (!assignment.pluginId || assignment.pluginId.trim().length === 0) {
-    throw new DomainInvariantError("Assignment pluginId is required");
+  if (
+    !assignment.workerCatalogId ||
+    assignment.workerCatalogId.trim().length === 0
+  ) {
+    throw new DomainInvariantError("Assignment workerCatalogId is required");
   }
   if (
     !assignment.idempotencyKey ||
@@ -691,9 +700,9 @@ export function validateAssignment(
         `Assignment agentId '${assignment.agentId}' does not match Worker host Agent '${context.worker.agentId}'`,
       );
     }
-    if (context.worker.pluginId !== assignment.pluginId) {
+    if (context.worker.workerCatalogId !== assignment.workerCatalogId) {
       throw new DomainInvariantError(
-        `Assignment pluginId '${assignment.pluginId}' does not match Worker plugin '${context.worker.pluginId}'`,
+        `Assignment workerCatalogId '${assignment.workerCatalogId}' does not match Worker plugin '${context.worker.workerCatalogId}'`,
       );
     }
     if (!context.worker.enabled || context.worker.status === "disabled") {

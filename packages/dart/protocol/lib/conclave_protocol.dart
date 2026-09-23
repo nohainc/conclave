@@ -61,9 +61,9 @@ class HostProtocolMessage {
         _requiredString(map, field);
       }
       if (type == 'assignment.start') {
-        AssignmentSnapshot.validate(
-          Map<String, Object?>.from(map['payload'] as Map)['snapshot'],
-        );
+        final payload = Map<String, Object?>.from(map['payload'] as Map);
+        final snapshot = payload['snapshot'];
+        if (snapshot != null) AssignmentSnapshot.validate(snapshot);
       }
     }
     return HostProtocolMessage._(map);

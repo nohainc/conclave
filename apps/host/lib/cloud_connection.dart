@@ -293,7 +293,7 @@ class HostCloudConnection {
         sessionId = payload['sessionId'] as String;
         unawaited(_sendSyncRequest());
       }
-    } else if (decoded['type'] == 'host.sync.response') {
+    } else if (decoded['type'] == 'host.sync.result') {
       final payload = decoded['payload'];
       if (payload is Map<String, dynamic>) {
         syncResponse = Map<String, Object?>.from(payload);
@@ -303,7 +303,7 @@ class HostCloudConnection {
           unawaited(handler(syncResponse!).catchError((_) {}));
         }
       }
-    } else if (decoded['type'] == 'host.update.available') {
+    } else if (decoded['type'] == 'host.update') {
       final payload = decoded['payload'];
       final handler = hostUpdateAvailableHandler;
       if (payload is Map<String, dynamic> && handler != null) {
@@ -351,7 +351,14 @@ class HostCloudConnection {
       return;
     }
 
-    final payloadError = _validateAssignmentPayload(payload);
+    final assignmentPayload = payload['snapshot'] is Map
+        ? <String, dynamic>{
+            ...(payload['snapshot'] as Map).cast<String, dynamic>(),
+            if (payload['input'] is Map)
+              'input': (payload['input'] as Map).cast<String, dynamic>(),
+          }
+        : payload;
+    final payloadError = _validateAssignmentPayload(assignmentPayload);
     if (payloadError != null) {
       _sendAssignmentError(
         socket,
@@ -372,7 +379,7 @@ class HostCloudConnection {
       attemptId: message['attemptId'] as String,
       assignmentId: message['assignmentId'] as String,
       idempotencyKey: message['idempotencyKey'] as String,
-      payload: Map<String, Object?>.from(payload),
+      payload: Map<String, Object?>.from(assignmentPayload),
     );
     final correlation = _assignmentCorrelation(message);
     final journalState = await assignmentJournal?.reconcile();
@@ -522,6 +529,40 @@ class HostCloudConnection {
   String? _validateAssignmentPayload(Object? rawPayload) {
     if (rawPayload is! Map<String, dynamic>) {
       return 'Assignment payload must be an object';
+    }
+    if (rawPayload['snapshot'] == null &&
+        rawPayload['objective'] == null &&
+        rawPayload['role'] == null) {
+      for (final field in [
+        'assignmentId',
+        'workspaceId',
+        'projectId',
+        'runId',
+        'taskId',
+        'attemptId',
+        'requestedByUserId',
+        'hostId',
+        'workerId',
+        'resolvedWorkerVersion',
+        'credentialProfileId',
+        'config',
+        'sessionPolicy',
+        'permissions',
+        'contextRefs',
+        'timeoutMs',
+        'idempotencyKey',
+      ]) {
+        if (!rawPayload.containsKey(field))
+          return 'Assignment field $field is required';
+      }
+      if (rawPayload['config'] is! Map ||
+          rawPayload['permissions'] is! List ||
+          rawPayload['contextRefs'] is! List ||
+          rawPayload['timeoutMs'] is! int ||
+          (rawPayload['timeoutMs'] as int) < 1000) {
+        return 'Assignment snapshot fields are invalid';
+      }
+      return null;
     }
     for (final field in [
       'objective',

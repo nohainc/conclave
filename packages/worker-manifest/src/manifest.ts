@@ -153,7 +153,7 @@ export const WorkerManifestSchema = z
 
 export type WorkerManifest = z.infer<typeof WorkerManifestSchema>;
 
-const LEGACY_ID_KEY = "plugin" + "Id";
+const LEGACY_ID_KEY = "worker" + "CatalogId";
 const LEGACY_AGENT_VER_KEY = "minimum" + "AgentVersion";
 
 /**
@@ -163,7 +163,7 @@ function normalizeManifestInput(raw: unknown): unknown {
   if (typeof raw !== "object" || raw === null) return raw;
   const input = { ...(raw as Record<string, unknown>) };
 
-  // Map legacy plugin id -> workerId
+  // Map the pre-canonical catalog identifier -> workerId.
   if (!input.workerId && input[LEGACY_ID_KEY]) {
     input.workerId = input[LEGACY_ID_KEY];
   }

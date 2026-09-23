@@ -41,7 +41,7 @@ class _StudioAppState extends State<StudioApp> {
   bool showNewGoal = false;
   bool showWorkerDrawer = false;
   String? workerActionMessage;
-  StudioAgentEnrollment? enrollmentResult;
+  StudioHostEnrollment? enrollmentResult;
   StudioQualityPreset selectedQuality = StudioQualityPreset.balanced;
   String selectedExecutionWorker = 'Auto';
   String selectedExecutionModel = 'Auto';
@@ -366,7 +366,7 @@ class _StudioAppState extends State<StudioApp> {
         text:
             const JsonEncoder.withIndent('  ').convert(existing?.config ?? {}));
     final versionPolicyController =
-        TextEditingController(text: existing?.pluginVersionPolicy ?? 'latest');
+        TextEditingController(text: existing?.workerVersionPolicy ?? 'latest');
     final independenceController =
         TextEditingController(text: existing?.independenceKey ?? '');
     final concurrencyController =
@@ -376,8 +376,8 @@ class _StudioAppState extends State<StudioApp> {
             snapshot.agents.any((agent) => agent.id == configuredAgentId)
         ? configuredAgentId
         : snapshot.agents.firstOrNull?.id;
-    final configuredPluginId = existing?.pluginId;
-    var pluginId = configuredPluginId != null &&
+    final configuredPluginId = existing?.workerCatalogId;
+    var workerCatalogId = configuredPluginId != null &&
             snapshot.plugins.any((plugin) => plugin.id == configuredPluginId)
         ? configuredPluginId
         : snapshot.plugins.firstOrNull?.id;
@@ -409,13 +409,13 @@ class _StudioAppState extends State<StudioApp> {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
-                  initialValue: pluginId,
+                  initialValue: workerCatalogId,
                   decoration: const InputDecoration(labelText: 'Plugin'),
                   items: snapshot.plugins
                       .map((plugin) => DropdownMenuItem(
                           value: plugin.id, child: Text(plugin.name)))
                       .toList(),
-                  onChanged: (value) => setDialogState(() => pluginId = value),
+                  onChanged: (value) => setDialogState(() => workerCatalogId = value),
                 ),
                 const SizedBox(height: 10),
                 TextField(
@@ -506,7 +506,7 @@ class _StudioAppState extends State<StudioApp> {
               FilledButton(
                 onPressed: nameController.text.trim().isEmpty ||
                         agentId == null ||
-                        pluginId == null
+                        workerCatalogId == null
                     ? null
                     : () => Navigator.pop(dialogContext, true),
                 child: const Text('Save'),
@@ -528,7 +528,7 @@ class _StudioAppState extends State<StudioApp> {
       concurrencyController.dispose();
       return;
     }
-    if (saved != true || agentId == null || pluginId == null) {
+    if (saved != true || agentId == null || workerCatalogId == null) {
       nameController.dispose();
       rolesController.dispose();
       capabilitiesController.dispose();
@@ -544,7 +544,7 @@ class _StudioAppState extends State<StudioApp> {
         workerId: existing?.id,
         name: nameController.text.trim(),
         agentId: agentId!,
-        pluginId: pluginId!,
+        workerCatalogId: workerCatalogId!,
         roles: rolesController.text
             .split(',')
             .map((value) => value.trim())
@@ -556,7 +556,7 @@ class _StudioAppState extends State<StudioApp> {
             .where((value) => value.isNotEmpty)
             .toList(),
         enabled: enabled,
-        pluginVersionPolicy: versionPolicyController.text.trim().isEmpty
+        workerVersionPolicy: versionPolicyController.text.trim().isEmpty
             ? 'latest'
             : versionPolicyController.text.trim(),
         config: _parseWorkerConfig(configController.text),

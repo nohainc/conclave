@@ -140,7 +140,7 @@ describe("Cloudflare persistence adapters", () => {
       id: "worker-1",
       workspaceId: "workspace-1",
       agentId: "agent-1",
-      pluginId: "codex",
+      workerCatalogId: "codex",
       roles: ["implementation"],
       capabilities: ["repository_write"],
       billingMode: "subscription",

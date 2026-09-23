@@ -853,7 +853,7 @@ export const assignmentEnvelopeFields = {
   idempotencyKey: nonEmptyStr,
 };
 
-export const AgentCapabilitiesSchema = z
+export const LegacyHostCapabilitiesSchema = z
   .object({
     os: z.enum(["macos", "linux", "windows"]),
     arch: z.enum(["arm64", "x64"]),
@@ -863,7 +863,9 @@ export const AgentCapabilitiesSchema = z
     customCapabilities: z.array(nonEmptyStr).optional(),
   })
   .strict();
-export type AgentCapabilities = z.infer<typeof AgentCapabilitiesSchema>;
+export type LegacyHostCapabilities = z.infer<
+  typeof LegacyHostCapabilitiesSchema
+>;
 
 export const AgentHelloPayloadSchema = z
   .object({
@@ -872,7 +874,7 @@ export const AgentHelloPayloadSchema = z
     name: nonEmptyStr,
     hostname: nonEmptyStr,
     agentVersion: nonEmptyStr,
-    capabilities: AgentCapabilitiesSchema,
+    capabilities: LegacyHostCapabilitiesSchema,
     authCredentials: z.record(z.string(), z.string()).optional(),
   })
   .strict();
@@ -964,7 +966,7 @@ export type AgentUpdateStatusPayload = z.infer<
 
 export const PluginInstallPayloadSchema = z
   .object({
-    pluginId: nonEmptyStr,
+    workerCatalogId: nonEmptyStr,
     version: nonEmptyStr,
     packageR2Key: nonEmptyStr,
     packageDigest: nonEmptyStr,
@@ -978,7 +980,7 @@ export type PluginInstallPayload = z.infer<typeof PluginInstallPayloadSchema>;
 
 export const PluginUpdatePayloadSchema = z
   .object({
-    pluginId: nonEmptyStr,
+    workerCatalogId: nonEmptyStr,
     fromVersion: nonEmptyStr,
     targetVersion: nonEmptyStr,
     packageR2Key: nonEmptyStr,
@@ -990,7 +992,7 @@ export type PluginUpdatePayload = z.infer<typeof PluginUpdatePayloadSchema>;
 
 export const PluginRemovePayloadSchema = z
   .object({
-    pluginId: nonEmptyStr,
+    workerCatalogId: nonEmptyStr,
     version: nonEmptyStr.optional(),
     purgeData: z.boolean().default(false),
   })
@@ -999,7 +1001,7 @@ export type PluginRemovePayload = z.infer<typeof PluginRemovePayloadSchema>;
 
 export const PluginStatusPayloadSchema = z
   .object({
-    pluginId: nonEmptyStr,
+    workerCatalogId: nonEmptyStr,
     version: nonEmptyStr,
     status: z.enum(["installed", "installing", "failed", "removed"]),
     error: z.string().optional(),
@@ -1010,7 +1012,7 @@ export type PluginStatusPayload = z.infer<typeof PluginStatusPayloadSchema>;
 export const WorkerConfigurePayloadSchema = z
   .object({
     workerId: nonEmptyStr,
-    pluginId: nonEmptyStr,
+    workerCatalogId: nonEmptyStr,
     configuration: z.record(z.string(), z.unknown()).default({}),
     secrets: z.record(z.string(), z.string()).default({}),
   })
@@ -1158,7 +1160,7 @@ export const AgentProtocolMessageSchema = z.discriminatedUnion("type", [
   agentMessage("agent.heartbeat.ack", AgentHeartbeatAckPayloadSchema),
   agentMessage("agent.sync.request", AgentSyncRequestPayloadSchema),
   agentMessage("agent.sync.response", AgentSyncResponsePayloadSchema),
-  agentMessage("agent.capabilities", AgentCapabilitiesSchema),
+  agentMessage("agent.capabilities", LegacyHostCapabilitiesSchema),
   agentMessage("agent.update.available", AgentUpdateAvailablePayloadSchema),
   agentMessage("agent.update.status", AgentUpdateStatusPayloadSchema),
 

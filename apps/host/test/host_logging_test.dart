@@ -7,7 +7,7 @@ import 'package:test/test.dart';
 void main() {
   test('writes structured logs to a user-private rotating log file', () async {
     final directory = await Directory.systemTemp.createTemp('conclave-logs-');
-    final current = File('${directory.path}/logs/host-engine.log');
+    final current = File('${directory.path}/logs/host.log');
     await current.parent.create(recursive: true);
     await current.writeAsString('${List.filled(128, 'x').join()}\n');
 
@@ -18,7 +18,7 @@ void main() {
     await engine.start();
     await engine.stop();
 
-    final rotated = File('${directory.path}/logs/host-engine.log.1');
+    final rotated = File('${directory.path}/logs/host.log.1');
     expect(await rotated.exists(), isTrue);
     final lines =
         (await current.readAsLines()).where((line) => line.isNotEmpty);

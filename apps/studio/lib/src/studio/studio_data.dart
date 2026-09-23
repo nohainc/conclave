@@ -41,7 +41,7 @@ abstract interface class StudioDataSource {
     String? channel,
     String? version,
   });
-  Future<StudioAgentEnrollment> createAgentEnrollment({
+  Future<StudioHostEnrollment> createHostEnrollment({
     required String workspaceId,
     int expiresHours = 24,
   });
@@ -50,11 +50,11 @@ abstract interface class StudioDataSource {
     String? workerId,
     required String name,
     required String agentId,
-    required String pluginId,
+    required String workerCatalogId,
     required List<String> roles,
     required List<String> capabilities,
     required bool enabled,
-    String pluginVersionPolicy = 'latest',
+    String workerVersionPolicy = 'latest',
     Map<String, dynamic> config = const {},
     String sessionPolicy = 'stateless',
     int concurrencyLimit = 1,
@@ -305,7 +305,7 @@ class StudioApiClient implements StudioDataSource {
   }
 
   @override
-  Future<StudioAgentEnrollment> createAgentEnrollment({
+  Future<StudioHostEnrollment> createHostEnrollment({
     required String workspaceId,
     int expiresHours = 24,
   }) async {
@@ -318,7 +318,7 @@ class StudioApiClient implements StudioDataSource {
       throw StudioApiException(
           'Agent enrollment failed (${response.statusCode})');
     }
-    return StudioAgentEnrollment.fromJson(
+    return StudioHostEnrollment.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>);
   }
 
@@ -328,11 +328,11 @@ class StudioApiClient implements StudioDataSource {
     String? workerId,
     required String name,
     required String agentId,
-    required String pluginId,
+    required String workerCatalogId,
     required List<String> roles,
     required List<String> capabilities,
     required bool enabled,
-    String pluginVersionPolicy = 'latest',
+    String workerVersionPolicy = 'latest',
     Map<String, dynamic> config = const {},
     String sessionPolicy = 'stateless',
     int concurrencyLimit = 1,
@@ -348,7 +348,7 @@ class StudioApiClient implements StudioDataSource {
       'roles': roles,
       'capabilities': capabilities,
       'enabled': enabled,
-      'pluginVersionPolicy': pluginVersionPolicy,
+      'workerVersionPolicy': workerVersionPolicy,
       'config': config,
       'sessionPolicy': sessionPolicy,
       'concurrencyLimit': concurrencyLimit,
@@ -363,14 +363,14 @@ class StudioApiClient implements StudioDataSource {
               ...payload,
               'name': name,
               'agentId': agentId,
-              'pluginId': pluginId,
+              'workerCatalogId': workerCatalogId,
             }))
         : await client.put(uri,
             headers: {'content-type': 'application/json'},
             body: jsonEncode({
               ...payload,
               'agentId': agentId,
-              'pluginId': pluginId,
+              'workerCatalogId': workerCatalogId,
             }));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StudioApiException('Worker save failed (${response.statusCode})');

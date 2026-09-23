@@ -34,8 +34,8 @@ export interface CompletionCriterionRecord {
 export interface WorkerRecord extends EntityRecord {
   readonly workspaceId?: string;
   readonly agentId?: string;
-  readonly pluginId?: string;
-  readonly pluginVersionPolicy?: string;
+  readonly workerCatalogId?: string;
+  readonly workerVersionPolicy?: string;
   readonly name: string;
   readonly kind: "model" | "agent" | "runtime" | "ci" | "tool" | "human";
   readonly roles: readonly string[];

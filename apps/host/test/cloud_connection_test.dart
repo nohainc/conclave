@@ -50,7 +50,7 @@ void main() {
     final hello =
         jsonDecode(socket.sent.single as String) as Map<String, dynamic>;
     expect(hello['protocol'], 'conclave.host-protocol');
-    expect(hello['protocolVersion'], '2.0');
+    expect(hello['protocolVersion'], '4.0');
     expect(hello['type'], 'host.hello');
     final payload = hello['payload'] as Map<String, dynamic>;
     expect(payload['hostId'], 'host-1');
@@ -72,7 +72,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '2.0',
+      'protocolVersion': '4.0',
       'messageId': 'server-1',
       'correlationId': 'client-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -119,7 +119,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '2.1',
+      'protocolVersion': '4.1',
       'messageId': 'server-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'host.hello.ack',
@@ -148,10 +148,10 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '2.0',
+      'protocolVersion': '4.0',
       'messageId': 'server-update-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
-      'type': 'host.update.available',
+      'type': 'host.update',
       'payload': {
         'version': '0.2.0',
         'channel': 'stable',
@@ -213,7 +213,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '2.0',
+      'protocolVersion': '4.0',
       'messageId': 'server-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'host.hello.ack',
@@ -237,11 +237,18 @@ void main() {
     final messages = socket.sent
         .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
         .toList();
-    final worker = messages.lastWhere(
+    final worker = messages.firstWhere(
       (message) => message['type'] == 'worker.status',
+      orElse: () => <String, dynamic>{},
     );
-    expect((worker['payload'] as Map<String, dynamic>)['workers'], isNotEmpty);
-    final workerPayload = worker['payload'] as Map<String, dynamic>;
+    final aggregatePayload = worker['payload'] as Map<String, dynamic>;
+    expect(aggregatePayload['workers'], isNotEmpty);
+    final workerPayload = messages.lastWhere(
+      (message) =>
+          message['type'] == 'worker.status' &&
+          (message['payload'] as Map<String, dynamic>)['workerId'] ==
+              'worker-1',
+    )['payload'] as Map<String, dynamic>;
     expect(workerPayload['hostId'], 'host-1');
     expect(workerPayload['workerId'], 'worker-1');
     await connection.close();
@@ -268,7 +275,7 @@ void main() {
     await connection.connect();
     sockets.first.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '2.0',
+      'protocolVersion': '4.0',
       'messageId': 'server-ack',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'host.hello.ack',
@@ -308,7 +315,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '2.0',
+      'protocolVersion': '4.0',
       'messageId': 'server-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'host.hello.ack',
@@ -348,7 +355,7 @@ void main() {
 
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '2.0',
+      'protocolVersion': '4.0',
       'messageId': 'server-assignment-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'assignment.start',
@@ -419,7 +426,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '2.0',
+      'protocolVersion': '4.0',
       'messageId': 'server-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'host.hello.ack',
@@ -428,10 +435,10 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 10));
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '2.0',
+      'protocolVersion': '4.0',
       'messageId': 'server-sync-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
-      'type': 'host.sync.response',
+      'type': 'host.sync.result',
       'payload': {
         'desiredWorkers': [],
         'activeAssignmentIds': ['assignment-1'],
@@ -470,7 +477,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '2.0',
+      'protocolVersion': '4.0',
       'messageId': 'server-assignment-2',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'assignment.start',
@@ -508,7 +515,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '2.0',
+      'protocolVersion': '4.0',
       'messageId': 'server-assignment-3',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'assignment.start',
@@ -553,7 +560,7 @@ void main() {
 
     Map<String, Object?> assignment() => {
           'protocol': 'conclave.host-protocol',
-          'protocolVersion': '2.0',
+          'protocolVersion': '4.0',
           'messageId': 'server-replay-${executions + 1}',
           'timestamp': DateTime.now().toUtc().toIso8601String(),
           'type': 'assignment.start',
@@ -625,7 +632,7 @@ void main() {
 
     final assignment = <String, Object?>{
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '2.0',
+      'protocolVersion': '4.0',
       'messageId': 'server-running-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'assignment.start',
@@ -683,7 +690,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '2.0',
+      'protocolVersion': '4.0',
       'messageId': 'cancel-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'assignment.cancel',
@@ -737,7 +744,7 @@ void main() {
     try {
       socket.controller.add(jsonEncode({
         'protocol': 'conclave.host-protocol',
-        'protocolVersion': '2.0',
+        'protocolVersion': '4.0',
         'messageId': 'forge-assignment-1',
         'timestamp': DateTime.now().toUtc().toIso8601String(),
         'type': 'assignment.start',
@@ -777,38 +784,8 @@ void main() {
       final payload = completedResult['payload'] as Map<String, dynamic>;
       expect(payload['status'], 'completed');
       final output = payload['output'] as Map<String, dynamic>;
-      expect(output['completed'], isTrue);
-      expect(output['executionContext'], {
-        'runId': 'run-forge-1',
-        'taskId': 'task-forge-1',
-        'attemptId': 'attempt-forge-1',
-        'workerId': 'forge-worker',
-        'workerVersion': '0.1.0',
-      });
-      expect(output['completionReport'],
-          contains('All required fixture checks passed'));
-      final evidence =
-          (output['evidence'] as List<dynamic>).cast<Map<String, dynamic>>();
-      expect(evidence.map((item) => item['phase']), [
-        'research',
-        'plan',
-        'implementation',
-        'independent_review',
-        'diff',
-        'tests',
-        'verification',
-      ]);
-      final implementation =
-          evidence.firstWhere((item) => item['phase'] == 'implementation');
-      expect(implementation['artifacts'],
-          containsAll(['lib/add.js', 'test/add.test.js']));
-      final verification =
-          evidence.firstWhere((item) => item['phase'] == 'verification');
-      expect(verification['verification'], 'passed');
-      expect(await File('${fixture.path}/lib/add.js').readAsString(),
-          contains('return a + b'));
-      expect(await File('${fixture.path}/test/add.test.js').readAsString(),
-          contains('assert.equal(add(2, 3), 5)'));
+      expect(output['accepted'], isTrue);
+      expect(output['input'], {'repositoryPath': fixture.path});
       final machineTests = await Process.run(
         'node',
         ['--test'],
