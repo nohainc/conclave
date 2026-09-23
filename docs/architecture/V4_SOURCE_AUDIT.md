@@ -430,6 +430,12 @@ execution. Cloud Host authentication is bound to the message Workspace, so a
 multi-Workspace Host credential cannot authenticate a message through an
 unrelated binding.
 
+V4-24 has removed the retired v3 migration, Agent distribution/build artifacts,
+and obsolete fleet/registry test suites. The active-source cleanup is still in
+progress: Cloud route compatibility code, the legacy protocol package, and
+some persistence/Studio adapters still require migration before the search
+gate can pass.
+
 ## 9. Architectural deletion gate
 
 Architecture v4 cleanup is complete when active source search returns no product/domain usage of:
