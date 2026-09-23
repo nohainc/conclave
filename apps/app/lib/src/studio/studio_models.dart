@@ -10,6 +10,28 @@ enum RunStatus {
 
 enum TaskStatus { completed, running, ready, blocked, pending }
 
+extension TaskStatusHelpers on TaskStatus {
+  bool get isCompleted => this == TaskStatus.completed;
+  bool get isRunning => this == TaskStatus.running;
+  bool get isBlocked => this == TaskStatus.blocked;
+  bool get isPending => this == TaskStatus.pending || this == TaskStatus.ready;
+  String get label => switch (this) {
+        TaskStatus.completed => 'Completed',
+        TaskStatus.running => 'Running',
+        TaskStatus.ready => 'Ready',
+        TaskStatus.blocked => 'Blocked',
+        TaskStatus.pending => 'Pending',
+      };
+}
+
+extension StudioTaskHelpers on StudioTask {
+  bool get isCompleted => status.isCompleted;
+  bool get isRunning => status.isRunning;
+  bool get isFailed => status == TaskStatus.blocked;
+  String get stage => phase.isNotEmpty ? phase : 'Execution';
+  String? get assignedWorkerId => worker.isNotEmpty ? worker : null;
+}
+
 enum FindingSeverity { blocker, major, minor, note }
 
 enum FindingStatus { open, fixed, verified }

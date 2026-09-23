@@ -10,6 +10,10 @@ import '../notifications/notification_models.dart';
 import '../platform/platform_services.dart';
 import '../realtime/realtime_client.dart';
 import '../brand.dart';
+import '../features/common/toast_overlay.dart';
+import '../features/common/code_block_view.dart';
+import '../features/common/command_palette.dart';
+import '../features/execution/task_pipeline_dag.dart';
 import 'studio_models.dart';
 import 'studio_data.dart';
 import 'studio_stores.dart';
@@ -87,9 +91,68 @@ class _StudioAppState extends State<StudioApp> {
   List<StudioPendingInvitation> pendingInvitations = const [];
   StudioAccountSecurity? accountSecurity;
   bool accountSecurityLoading = false;
+  ThemeMode _themeMode = ThemeMode.system;
+  final List<ToastMessage> activeToasts = [];
 
   void _showSnackBar(String message) {
     messengerKey.currentState?.showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _showToast(String message, {ToastType type = ToastType.info}) {
+    final id = DateTime.now().microsecondsSinceEpoch.toString();
+    final toast = ToastMessage(id: id, message: message, type: type);
+    setState(() => activeToasts.add(toast));
+    Future<void>.delayed(toast.duration, () {
+      if (mounted) {
+        setState(() => activeToasts.removeWhere((t) => t.id == id));
+      }
+    });
+  }
+
+  void _openCommandPalette() {
+    final context = navigatorKey.currentContext;
+    if (context == null) return;
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => CommandPaletteDialog(
+        snapshot: snapshot,
+        onSelectProject: (projectId) {
+          setState(() {
+            selectedProjectId = projectId;
+            showRunDetails = false;
+            navigationIndex = 0;
+          });
+          unawaited(_loadSnapshot(projectId: projectId));
+        },
+        onSelectChat: (projectId, chatId) {
+          setState(() {
+            selectedProjectId = projectId;
+            selectedChatId = chatId;
+            showRunDetails = false;
+            navigationIndex = 0;
+          });
+          unawaited(_loadSnapshot(projectId: projectId));
+        },
+        onNavigateTo: (index) {
+          setState(() {
+            navigationIndex = index;
+            showRunDetails = (index != 0);
+          });
+        },
+        onToggleTheme: () {
+          setState(() {
+            _themeMode = _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+          });
+        },
+        onNewGoal: () {
+          setState(() {
+            showNewGoal = true;
+            showRunDetails = false;
+            navigationIndex = 0;
+          });
+        },
+      ),
+    );
   }
 
   StudioProject? get selectedProject => snapshot.projects
@@ -1153,25 +1216,43 @@ class _StudioAppState extends State<StudioApp> {
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey,
       scaffoldMessengerKey: messengerKey,
-      theme: _theme(),
-      home: LayoutBuilder(
-        builder: (context, constraints) {
-          if (isLoading) return _loadingScaffold();
-          if (authRequired) return _authScaffold();
-          if (loadError != null) return _errorScaffold();
-          if (snapshot.projects.isEmpty) return _emptyWorkspaceScaffold();
-          final compact = constraints.maxWidth < 900;
-          return Scaffold(
-            backgroundColor: ConclaveBrand.paper,
-            drawer: compact ? Drawer(child: _sidebar(compact: true)) : null,
-            body: Row(
-              children: [
-                if (!compact) SizedBox(width: 248, child: _sidebar()),
-                Expanded(child: _content(compact)),
-              ],
-            ),
-          );
+      theme: ConclaveBrand.lightTheme(),
+      darkTheme: ConclaveBrand.darkTheme(),
+      themeMode: _themeMode,
+      home: CallbackShortcuts(
+        bindings: <ShortcutActivator, VoidCallback>{
+          const SingleActivator(LogicalKeyboardKey.keyK, meta: true): _openCommandPalette,
+          const SingleActivator(LogicalKeyboardKey.keyK, control: true): _openCommandPalette,
         },
+        child: Focus(
+          autofocus: true,
+          child: Stack(
+            children: [
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  if (isLoading) return _loadingScaffold();
+                  if (authRequired) return _authScaffold();
+                  if (loadError != null) return _errorScaffold();
+                  if (snapshot.projects.isEmpty) return _emptyWorkspaceScaffold();
+                  final compact = constraints.maxWidth < 900;
+                  return Scaffold(
+                    drawer: compact ? Drawer(child: _sidebar(compact: true)) : null,
+                    body: Row(
+                      children: [
+                        if (!compact) SizedBox(width: 248, child: _sidebar()),
+                        Expanded(child: _content(compact)),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              ToastOverlay(
+                toasts: activeToasts,
+                onDismiss: (id) => setState(() => activeToasts.removeWhere((t) => t.id == id)),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2477,11 +2558,14 @@ class _StudioAppState extends State<StudioApp> {
           border: isUser ? null : Border.all(color: const Color(0xffe6e3f8)),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(message.text,
-              style: TextStyle(
-                  color: isUser ? Colors.white : const Color(0xff393743),
-                  fontSize: 13,
-                  height: 1.45)),
+          MarkdownMessageBody(
+            text: message.text,
+            textStyle: TextStyle(
+              color: isUser ? Colors.white : const Color(0xff393743),
+              fontSize: 13,
+              height: 1.45,
+            ),
+          ),
           const SizedBox(height: 5),
           Text(message.timestamp,
               style: TextStyle(
@@ -2697,7 +2781,14 @@ class _StudioAppState extends State<StudioApp> {
         subtitle: 'Live run state',
         trailing: _statusChip('$completed / ${snapshot.tasks.length} tasks',
             const Color(0xff6254d9)),
-        child: Column(children: snapshot.tasks.map(_taskRow).toList()));
+        child: Column(children: [
+          TaskPipelineDAG(
+            tasks: snapshot.tasks,
+            selectedTaskId: selectedTaskId,
+            onSelectTask: (taskId) => setState(() => selectedTaskId = taskId),
+          ),
+          ...snapshot.tasks.map(_taskRow),
+        ]));
   }
 
   Widget _runContextCard() {
