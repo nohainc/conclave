@@ -415,6 +415,13 @@ assignment results and machine evidence; provider routing remains inside the
 Worker boundary, and v4 Forge dispatch writes immutable `worker_assignments`
 instead of configured Worker or Agent/Plugin records.
 
+V4-22 usage records preserve requester, Project, Worker, provider/model,
+Credential Profile and immutable profile-owner attribution, Host, token usage,
+duration, and nullable monetary cost. Subscription usage with no provider price
+is recorded as unknown rather than assigned a fabricated cost. Workspace,
+Project, Run, and Credential Profile budgets are checked before v4 Forge
+assignments are created, and Studio usage rows expose the accounting dimensions.
+
 ## 9. Architectural deletion gate
 
 Architecture v4 cleanup is complete when active source search returns no product/domain usage of:

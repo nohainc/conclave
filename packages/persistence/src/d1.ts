@@ -276,11 +276,12 @@ export class D1BudgetRepository {
   async save(budget: BudgetRecord): Promise<void> {
     await this.db
       .prepare(
-        `INSERT INTO budgets (id, workspace_id, project_id, run_id, max_cost_micros,
+        `INSERT INTO budgets (id, workspace_id, project_id, run_id, credential_profile_id, max_cost_micros,
            max_input_tokens, max_output_tokens, used_input_tokens, used_output_tokens,
            used_cost_micros, status, max_attempts, max_wall_time_seconds, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, NULL, NULL, ?12, ?13)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, NULL, NULL, ?13, ?14)
          ON CONFLICT(id) DO UPDATE SET project_id=excluded.project_id, run_id=excluded.run_id,
+           credential_profile_id=excluded.credential_profile_id,
            max_cost_micros=excluded.max_cost_micros, max_input_tokens=excluded.max_input_tokens,
            max_output_tokens=excluded.max_output_tokens, used_input_tokens=excluded.used_input_tokens,
            used_output_tokens=excluded.used_output_tokens, used_cost_micros=excluded.used_cost_micros,
@@ -291,6 +292,7 @@ export class D1BudgetRepository {
         budget.organizationId,
         budget.projectId,
         budget.runId,
+        budget.credentialProfileId,
         budget.maxCostMicros,
         budget.maxInputTokens,
         budget.maxOutputTokens,
@@ -311,6 +313,11 @@ function toBudget(row: Record<string, unknown>): BudgetRecord {
     organizationId: String(row.workspace_id),
     projectId: row.project_id === null ? null : String(row.project_id),
     runId: row.run_id === null ? null : String(row.run_id),
+    credentialProfileId:
+      row.credential_profile_id === null ||
+      row.credential_profile_id === undefined
+        ? null
+        : String(row.credential_profile_id),
     maxInputTokens:
       row.max_input_tokens === null ? null : Number(row.max_input_tokens),
     maxOutputTokens:
@@ -1181,8 +1188,8 @@ export class D1ModelCallRepository {
     await this.db
       .prepare(
         `INSERT INTO usage (id, workspace_id, project_id, run_id, worker_id, assignment_id,
-           input_tokens, output_tokens, cost_micros, duration_ms, recorded_at)
-         SELECT ?1, r.workspace_id, r.project_id, r.id, ?2, NULL, ?3, ?4, 0, ?5, ?6
+           provider, billing_category, input_tokens, output_tokens, cost_micros, duration_ms, recorded_at)
+         SELECT ?1, r.workspace_id, r.project_id, r.id, ?2, NULL, ?3, 'api', ?4, ?5, NULL, ?6, ?7
          FROM attempts a
          JOIN tasks t ON t.id = a.task_id
          JOIN phases p ON p.id = t.phase_id
@@ -1195,6 +1202,7 @@ export class D1ModelCallRepository {
       .bind(
         `usage:model-call:${call.id}`,
         call.workerId,
+        call.provider,
         call.inputTokens ?? 0,
         call.outputTokens ?? 0,
         durationMs,
@@ -1397,13 +1405,23 @@ export class D1UsageRepository {
   async save(usage: UsageRecord): Promise<void> {
     const scope = await runScope(this.db, usage.runId);
     if (!usage.workerId) throw new Error("D1 usage requires workerId");
+    const profile = usage.credentialProfileId
+      ? await this.db
+          .prepare(
+            "SELECT owner_type, owner_id FROM credential_profiles WHERE id = ?1",
+          )
+          .bind(usage.credentialProfileId)
+          .first<{ owner_type: string; owner_id: string }>()
+      : null;
     await this.db
       .prepare(
-        `INSERT INTO usage (id, workspace_id, project_id, run_id, worker_id, assignment_id, credential_profile_id, requester_user_id, host_id, model, input_tokens, output_tokens, cost_micros, duration_ms, recorded_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+        `INSERT INTO usage (id, workspace_id, project_id, run_id, worker_id, assignment_id, credential_profile_id, credential_profile_owner_type, credential_profile_owner_id, requester_user_id, host_id, provider, billing_category, model, input_tokens, output_tokens, cost_micros, duration_ms, recorded_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
          ON CONFLICT(id) DO UPDATE SET input_tokens=excluded.input_tokens, output_tokens=excluded.output_tokens,
-           credential_profile_id=excluded.credential_profile_id, requester_user_id=excluded.requester_user_id,
-           host_id=excluded.host_id, model=excluded.model, cost_micros=excluded.cost_micros,
+           credential_profile_id=excluded.credential_profile_id, credential_profile_owner_type=excluded.credential_profile_owner_type,
+           credential_profile_owner_id=excluded.credential_profile_owner_id, requester_user_id=excluded.requester_user_id,
+           host_id=excluded.host_id, provider=excluded.provider, billing_category=excluded.billing_category,
+           model=excluded.model, cost_micros=excluded.cost_micros,
            duration_ms=excluded.duration_ms, recorded_at=excluded.recorded_at`,
       )
       .bind(
@@ -1414,8 +1432,14 @@ export class D1UsageRepository {
         usage.workerId,
         null,
         usage.credentialProfileId ?? null,
+        usage.credentialProfileOwnerType ??
+          (profile?.owner_type as "user" | "workspace" | undefined) ??
+          null,
+        usage.credentialProfileOwnerId ?? profile?.owner_id ?? null,
         usage.requesterUserId ?? null,
         usage.hostId ?? null,
+        usage.provider ?? null,
+        usage.billingCategory ?? "unknown",
         usage.model ?? null,
         usage.inputTokens,
         usage.outputTokens,
@@ -1460,6 +1484,16 @@ function toUsage(row: Record<string, unknown>): UsageRecord {
       row.credential_profile_id === undefined
         ? null
         : String(row.credential_profile_id),
+    credentialProfileOwnerType:
+      row.credential_profile_owner_type === null ||
+      row.credential_profile_owner_type === undefined
+        ? null
+        : (String(row.credential_profile_owner_type) as "user" | "workspace"),
+    credentialProfileOwnerId:
+      row.credential_profile_owner_id === null ||
+      row.credential_profile_owner_id === undefined
+        ? null
+        : String(row.credential_profile_owner_id),
     requesterUserId:
       row.requester_user_id === null || row.requester_user_id === undefined
         ? null
@@ -1468,12 +1502,22 @@ function toUsage(row: Record<string, unknown>): UsageRecord {
       row.host_id === null || row.host_id === undefined
         ? null
         : String(row.host_id),
+    provider:
+      row.provider === null || row.provider === undefined
+        ? null
+        : String(row.provider),
+    billingCategory: String(
+      row.billing_category ?? "unknown",
+    ) as UsageRecord["billingCategory"],
     model:
       row.model === null || row.model === undefined ? null : String(row.model),
     inputTokens: Number(row.input_tokens),
     outputTokens: Number(row.output_tokens),
     executionMs: Number(row.duration_ms),
-    estimatedCostMicros: Number(row.cost_micros),
+    estimatedCostMicros:
+      row.cost_micros === null || row.cost_micros === undefined
+        ? null
+        : Number(row.cost_micros),
     recordedAt: String(row.recorded_at),
   };
 }

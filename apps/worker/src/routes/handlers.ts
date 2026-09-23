@@ -4247,7 +4247,19 @@ async function handleStudioSnapshot(
       .bind(...scopedOwnershipBind)
       .all(),
     env.CONCLAVE_DB.prepare(
-      `SELECT mc.worker_id AS worker, mc.model, mc.attempt_id AS task, COALESCE(u.input_tokens + u.output_tokens, 0) AS tokens, COALESCE(u.cost_micros, 0) AS cost, COALESCE(u.duration_ms, 0) AS duration, mc.status FROM model_calls mc JOIN attempts a ON a.id = mc.attempt_id JOIN tasks t ON t.id = a.task_id JOIN phases ph ON ph.id = t.phase_id JOIN runs r ON r.id = ph.run_id JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id LEFT JOIN usage u ON u.run_id = r.id AND u.worker_id = mc.worker_id WHERE ${scopedOwnership} ORDER BY mc.started_at DESC LIMIT 100`,
+      `SELECT u.worker_id AS worker, u.model, u.provider, u.credential_profile_id AS credentialProfileId,
+              u.credential_profile_owner_type AS credentialProfileOwnerType,
+              u.credential_profile_owner_id AS credentialProfileOwnerId,
+              u.requester_user_id AS requesterUserId, u.host_id AS hostId,
+              u.billing_category AS billingCategory,
+              u.run_id AS task, (u.input_tokens + u.output_tokens) AS tokens,
+              u.cost_micros AS cost, u.duration_ms AS duration,
+              'recorded' AS status
+       FROM usage u
+       JOIN runs r ON r.id = u.run_id
+       JOIN goals g ON g.id = r.goal_id
+       JOIN projects p ON p.id = g.project_id
+       WHERE ${scopedOwnership} ORDER BY u.recorded_at DESC LIMIT 100`,
     )
       .bind(...scopedOwnershipBind)
       .all(),

@@ -176,6 +176,84 @@ function cost(value: unknown): WorkerCostMetadata {
   };
 }
 
+export async function assertV4BudgetAvailable(input: {
+  readonly db: D1DatabaseLike;
+  readonly workspaceId: string;
+  readonly projectId: string;
+  readonly runId: string;
+  readonly credentialProfileId: string;
+  readonly inputTokens?: number;
+  readonly outputTokens?: number;
+  readonly estimatedCostMicros: number | null;
+}): Promise<void> {
+  const budgets = await input.db
+    .prepare(
+      `SELECT id, project_id, run_id, credential_profile_id,
+              max_input_tokens, max_output_tokens, max_cost_micros
+       FROM budgets
+       WHERE workspace_id = ?1
+         AND (project_id IS NULL OR project_id = ?2)
+         AND (run_id IS NULL OR run_id = ?3)
+         AND (credential_profile_id IS NULL OR credential_profile_id = ?4)
+         AND status = 'active'`,
+    )
+    .bind(
+      input.workspaceId,
+      input.projectId,
+      input.runId,
+      input.credentialProfileId,
+    )
+    .all<Record<string, unknown>>();
+  for (const budget of budgets.results ?? []) {
+    const usage = await input.db
+      .prepare(
+        `SELECT COALESCE(SUM(input_tokens), 0) AS input_tokens,
+                COALESCE(SUM(output_tokens), 0) AS output_tokens,
+                SUM(cost_micros) AS cost_micros
+         FROM usage
+         WHERE workspace_id = ?1
+           AND (?2 IS NULL OR project_id = ?2)
+           AND (?3 IS NULL OR run_id = ?3)
+           AND (?4 IS NULL OR credential_profile_id = ?4)`,
+      )
+      .bind(
+        input.workspaceId,
+        budget.project_id ?? null,
+        budget.run_id ?? null,
+        budget.credential_profile_id ?? null,
+      )
+      .first<Record<string, unknown>>();
+    const nextInput =
+      Number(usage?.input_tokens ?? 0) + (input.inputTokens ?? 0);
+    const nextOutput =
+      Number(usage?.output_tokens ?? 0) + (input.outputTokens ?? 0);
+    const maxInput =
+      budget.max_input_tokens == null ? null : Number(budget.max_input_tokens);
+    const maxOutput =
+      budget.max_output_tokens == null
+        ? null
+        : Number(budget.max_output_tokens);
+    if (maxInput !== null && nextInput > maxInput) {
+      throw new Error(`Budget ${String(budget.id)} rejects input token usage`);
+    }
+    if (maxOutput !== null && nextOutput > maxOutput) {
+      throw new Error(`Budget ${String(budget.id)} rejects output token usage`);
+    }
+    if (budget.max_cost_micros != null) {
+      if (input.estimatedCostMicros == null) {
+        throw new Error(
+          `Budget ${String(budget.id)} requires known monetary cost`,
+        );
+      }
+      const nextCost =
+        Number(usage?.cost_micros ?? 0) + input.estimatedCostMicros;
+      if (nextCost > Number(budget.max_cost_micros)) {
+        throw new Error(`Budget ${String(budget.id)} rejects monetary cost`);
+      }
+    }
+  }
+}
+
 export interface ForgeWorkerBinding {
   readonly worker: Worker;
   readonly agent: ConclaveAgent;
@@ -794,6 +872,15 @@ class HostGatewayForgeWorker implements ForgeWorker {
   ): Promise<DispatchAssignmentResult> {
     const target = this.executionTarget!;
     const now = new Date().toISOString();
+    await assertV4BudgetAvailable({
+      db: this.env.CONCLAVE_DB,
+      workspaceId: this.context.organizationId,
+      projectId: this.context.projectId,
+      runId: request.runId,
+      credentialProfileId: target.credentialProfileId,
+      estimatedCostMicros:
+        this.worker.costMetadata?.estimatedCostMicrosPerAttempt ?? null,
+    });
     const attemptId = `att-${request.taskId}-${crypto.randomUUID().slice(0, 12)}`;
     const assignmentId = `asg-${request.taskId}-${crypto.randomUUID().slice(0, 12)}`;
     const idempotencyKey = `idem-${assignmentId}`;

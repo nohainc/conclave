@@ -191,13 +191,17 @@ export interface UsageRecord {
   readonly attemptId: string | null;
   readonly workerId: string | null;
   readonly credentialProfileId?: string | null;
+  readonly credentialProfileOwnerType?: "user" | "workspace" | null;
+  readonly credentialProfileOwnerId?: string | null;
   readonly requesterUserId?: string | null;
   readonly hostId?: string | null;
+  readonly provider?: string | null;
+  readonly billingCategory?: "subscription" | "api" | "local" | "unknown";
   readonly model?: string | null;
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly executionMs: number;
-  readonly estimatedCostMicros: number;
+  readonly estimatedCostMicros: number | null;
   readonly recordedAt: string;
 }
 
@@ -241,6 +245,7 @@ export interface BudgetRecord extends EntityRecord {
   readonly organizationId: string;
   readonly projectId: string | null;
   readonly runId: string | null;
+  readonly credentialProfileId?: string | null;
   readonly maxInputTokens: number | null;
   readonly maxOutputTokens: number | null;
   readonly maxCostMicros: number | null;

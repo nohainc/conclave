@@ -160,8 +160,12 @@ describe("Architecture v4 clean D1 schema", () => {
     expect(usageColumns.map((column) => column.name)).toEqual(
       expect.arrayContaining([
         "credential_profile_id",
+        "credential_profile_owner_type",
+        "credential_profile_owner_id",
         "requester_user_id",
         "host_id",
+        "provider",
+        "billing_category",
         "worker_id",
         "model",
         "input_tokens",
@@ -171,6 +175,12 @@ describe("Architecture v4 clean D1 schema", () => {
       ]),
     );
     expect(usageColumns.map((column) => column.name)).not.toContain("secret");
+    const budgetColumns = db.prepare("PRAGMA table_info(budgets)").all() as {
+      name: string;
+    }[];
+    expect(budgetColumns.map((column) => column.name)).toContain(
+      "credential_profile_id",
+    );
   });
 
   it("reconstructs a v4 assignment from its immutable execution snapshot", () => {
