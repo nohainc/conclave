@@ -180,6 +180,16 @@ StudioSnapshot studioFixtureSnapshot() => const StudioSnapshot(
           pluginCount: 3,
           workerCount: 5,
           activeTaskCount: 1,
+          desiredWorkers: [
+            StudioDesiredWorker(workerId: 'codex', version: '1.2.0'),
+            StudioDesiredWorker(workerId: 'claude-code', version: '1.0.4'),
+          ],
+          installedWorkers: [
+            StudioInstalledWorker(
+                workerId: 'codex', version: '1.2.0', status: 'ready'),
+            StudioInstalledWorker(
+                workerId: 'claude-code', version: '1.0.4', status: 'ready'),
+          ],
         ),
       ],
       plugins: [

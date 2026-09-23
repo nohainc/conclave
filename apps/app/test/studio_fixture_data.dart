@@ -191,6 +191,7 @@ class StudioFixtureDataSource implements StudioDataSource {
     required String workspaceId,
     required String workerId,
     required bool enabled,
+    String? hostId,
   }) async {}
 
   @override

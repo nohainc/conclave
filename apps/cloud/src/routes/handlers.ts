@@ -2994,14 +2994,49 @@ async function handleListHosts(
   requireWorkspaceContext(context, env, workspaceId);
 
   const rows = await env.CONCLAVE_DB.prepare(
-    `SELECT h.id, b.workspace_id as workspaceId, h.name, h.hostname, h.status, h.version, h.capabilities_json as capabilitiesJson, h.enrolled_at as enrolledAt, h.last_heartbeat_at as lastHeartbeatAt, h.revoked_at as revokedAt, h.created_at as createdAt, h.updated_at as updatedAt
+    `SELECT h.id, b.workspace_id as workspaceId, h.name, h.hostname, h.status, h.version, h.capabilities_json as capabilitiesJson, h.enrolled_at as enrolledAt, h.last_heartbeat_at as lastHeartbeatAt, h.revoked_at as revokedAt, h.created_at as createdAt, h.updated_at as updatedAt,
+       COALESCE((SELECT json_group_array(json_object(
+         'workerId', dw.worker_id,
+         'version', dw.required_version
+       )) FROM host_desired_workers dw WHERE dw.host_id = h.id), '[]') AS desiredWorkersJson,
+       COALESCE((SELECT json_group_array(json_object(
+         'workerId', i.worker_id,
+         'version', wv.version,
+         'status', i.status
+       )) FROM host_worker_installations i
+       JOIN worker_versions wv ON wv.id = i.worker_version_id
+       WHERE i.host_id = h.id AND i.status <> 'removed'), '[]') AS installedWorkersJson
      FROM hosts h JOIN host_workspace_bindings b ON b.host_id = h.id
      WHERE b.workspace_id = ?1 AND b.status = 'active' ORDER BY h.created_at DESC`,
   )
     .bind(workspaceId)
-    .all();
+    .all<Record<string, unknown>>();
 
-  return json({ hosts: rows.results ?? [] });
+  return json({
+    hosts: (rows.results ?? []).map((row) => {
+      let desiredWorkers: unknown[] = [];
+      let installedWorkers: unknown[] = [];
+      try {
+        const parsed = JSON.parse(String(row.desiredWorkersJson ?? "[]"));
+        if (Array.isArray(parsed)) desiredWorkers = parsed;
+      } catch {
+        // Keep the read model usable if an older row contains malformed JSON.
+      }
+      try {
+        const parsed = JSON.parse(String(row.installedWorkersJson ?? "[]"));
+        if (Array.isArray(parsed)) installedWorkers = parsed;
+      } catch {
+        // Keep the read model usable if an older row contains malformed JSON.
+      }
+      return {
+        ...row,
+        desiredWorkers,
+        installedWorkers,
+        desiredWorkersJson: undefined,
+        installedWorkersJson: undefined,
+      };
+    }),
+  });
 }
 
 async function handleGetHost(

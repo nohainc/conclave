@@ -481,6 +481,8 @@ class StudioAgent {
     this.updateChannel = '—',
     this.lastSeen = '—',
     this.workspaceBindings = const [],
+    this.desiredWorkers = const [],
+    this.installedWorkers = const [],
   });
 
   final String id;
@@ -497,6 +499,8 @@ class StudioAgent {
   final String updateChannel;
   final String lastSeen;
   final List<String> workspaceBindings;
+  final List<StudioDesiredWorker> desiredWorkers;
+  final List<StudioInstalledWorker> installedWorkers;
 
   factory StudioAgent.fromJson(Map<String, dynamic> json) => StudioAgent(
         id: _string(json, 'id'),
@@ -513,6 +517,54 @@ class StudioAgent {
         updateChannel: _string(json, 'updateChannel'),
         lastSeen: _string(json, 'lastSeen'),
         workspaceBindings: _strings(json, 'workspaceBindings'),
+        desiredWorkers: (json['desiredWorkers'] as List? ?? const [])
+            .whereType<Map>()
+            .map((item) =>
+                StudioDesiredWorker.fromJson(Map<String, dynamic>.from(item)))
+            .toList(),
+        installedWorkers: (json['installedWorkers'] as List? ?? const [])
+            .whereType<Map>()
+            .map((item) =>
+                StudioInstalledWorker.fromJson(Map<String, dynamic>.from(item)))
+            .toList(),
+      );
+}
+
+class StudioDesiredWorker {
+  const StudioDesiredWorker({
+    required this.workerId,
+    required this.version,
+    this.status = 'requested',
+  });
+
+  final String workerId;
+  final String version;
+  final String status;
+
+  factory StudioDesiredWorker.fromJson(Map<String, dynamic> json) =>
+      StudioDesiredWorker(
+        workerId: _string(json, 'workerId', _string(json, 'worker_id')),
+        version: _string(json, 'version', _string(json, 'requiredVersion')),
+        status: _string(json, 'status', 'requested'),
+      );
+}
+
+class StudioInstalledWorker {
+  const StudioInstalledWorker({
+    required this.workerId,
+    required this.version,
+    required this.status,
+  });
+
+  final String workerId;
+  final String version;
+  final String status;
+
+  factory StudioInstalledWorker.fromJson(Map<String, dynamic> json) =>
+      StudioInstalledWorker(
+        workerId: _string(json, 'workerId', _string(json, 'worker_id')),
+        version: _string(json, 'version'),
+        status: _string(json, 'status', 'installed'),
       );
 }
 

@@ -422,6 +422,28 @@ void main() {
         '/api/workspaces/workspace-1/hosts/host-1');
   });
 
+  test('updates Worker desired state for one Host without configured instances',
+      () async {
+    final client = _JsonClient({}, statusCode: 200);
+    final api = StudioApiClient(
+      baseUrl: 'https://conclave.test/api',
+      client: client,
+    );
+
+    await api.setWorkerEnabled(
+      workspaceId: 'workspace-1',
+      workerId: 'worker-codex',
+      enabled: true,
+      hostId: 'host-1',
+    );
+
+    expect(client.lastRequest?.method, 'PUT');
+    expect(client.lastRequest?.url.path,
+        '/api/workspaces/workspace-1/workers/worker-codex');
+    expect(jsonDecode(client.lastBody!)['enabled'], isTrue);
+    expect(jsonDecode(client.lastBody!)['hostId'], 'host-1');
+  });
+
   test('sends the explicitly selected Workspace on scoped requests', () async {
     final client = _JsonClient({
       'workspaceId': 'workspace-2',

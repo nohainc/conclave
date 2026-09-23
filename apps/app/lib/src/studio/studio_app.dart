@@ -3792,6 +3792,109 @@ class _StudioAppState extends State<ConclaveAppShell> {
         ],
       );
 
+  Future<void> _setWorkerAvailability(
+      StudioPlugin plugin, StudioAgent host, bool enabled) async {
+    final workspaceId = snapshot.workspaceId;
+    if (workspaceId == null || workspaceId.isEmpty) return;
+    try {
+      await store.workers.setEnabled(
+        workspaceId,
+        plugin.id,
+        enabled,
+        hostId: host.id,
+      );
+      await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
+      if (mounted) {
+        _showSnackBar(enabled
+            ? '${plugin.name} is now available on ${host.name}.'
+            : '${plugin.name} was removed from ${host.name}.');
+      }
+    } catch (error) {
+      if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
+    }
+  }
+
+  Future<void> _showWorkerDetails(StudioPlugin plugin) async {
+    await showDialog<void>(
+      context: navigatorKey.currentContext ?? context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(plugin.name),
+        content: SingleChildScrollView(
+          child: Text([
+            if (plugin.description.isNotEmpty) plugin.description,
+            'Version: ${plugin.version}',
+            'Publisher: ${plugin.publisher.isEmpty ? 'Unknown' : plugin.publisher}',
+            'Capabilities: ${plugin.capabilities.isEmpty ? 'None listed' : plugin.capabilities.join(', ')}',
+            'Roles: ${plugin.roles.isEmpty ? 'None listed' : plugin.roles.join(', ')}',
+            'Requirements: ${plugin.permissions.isEmpty ? 'No special permissions' : plugin.permissions.join(', ')}',
+            'Platforms: ${[
+              ...plugin.supportedOS,
+              ...plugin.supportedArchitecture
+            ].isEmpty ? 'Any compatible Host' : [
+                ...plugin.supportedOS,
+                ...plugin.supportedArchitecture
+              ].join(', ')}',
+          ].join('\n\n')),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool _workerDesiredOn(StudioPlugin plugin, StudioAgent host) =>
+      host.desiredWorkers.any((worker) => worker.workerId == plugin.id);
+
+  bool _workerInstalledOn(StudioPlugin plugin, StudioAgent host) =>
+      host.installedWorkers.any((worker) =>
+          worker.workerId == plugin.id &&
+          worker.status.toLowerCase() != 'failed');
+
+  Widget _workerHostRow(StudioPlugin plugin, StudioAgent host) {
+    final desired = _workerDesiredOn(plugin, host);
+    final installed = _workerInstalledOn(plugin, host);
+    final state = !desired
+        ? 'Not installed'
+        : installed
+            ? 'Installed'
+            : 'Installing';
+    final stateColor = !desired
+        ? const Color(0xff777683)
+        : installed
+            ? const Color(0xff3ca879)
+            : const Color(0xffc1842d);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          Icon(
+            installed ? Icons.check_circle_outline : Icons.circle_outlined,
+            size: 18,
+            color: stateColor,
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Text(host.name)),
+          Text(state, style: TextStyle(color: stateColor)),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: () => _setWorkerAvailability(plugin, host, !desired),
+            child: Text(desired ? 'Remove from Host' : 'Make available'),
+          ),
+          if (desired)
+            IconButton(
+              tooltip: 'Update Worker',
+              onPressed: () => _setWorkerAvailability(plugin, host, true),
+              icon: const Icon(Icons.system_update_outlined, size: 19),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _hostsView() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -3945,36 +4048,75 @@ class _StudioAppState extends State<ConclaveAppShell> {
             _emptyFleetCard('No Workers available',
                 'Workers appear when the catalog has a compatible release.')
           else
-            ...snapshot.plugins.map((plugin) => Card(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  child: ListTile(
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 18, vertical: 5),
-                    leading: const CircleAvatar(
-                        backgroundColor: Color(0xffeeecff),
-                        child: Icon(Icons.extension_outlined,
-                            color: Color(0xff6254d9))),
-                    title: Text(plugin.name,
-                        style: const TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: Text(
-                        '${plugin.version} · ${plugin.channel} · ${plugin.publisher}\n'
-                        '${plugin.roles.join(', ')} · ${plugin.capabilities.join(' · ')}\n'
-                        'Permissions: ${plugin.permissions.isEmpty ? 'none' : plugin.permissions.join(', ')}\n'
-                        'Platforms: ${[
-                      ...plugin.supportedOS,
-                      ...plugin.supportedArchitecture
-                    ].isEmpty ? 'any' : [
-                            ...plugin.supportedOS,
-                            ...plugin.supportedArchitecture
-                          ].join(', ')} · ${plugin.installedAgentCount} ready Hosts · ${plugin.connectedAccountCount} connected Accounts'),
-                    isThreeLine: true,
-                    trailing: _statusChip(
-                        plugin.status,
-                        plugin.status.toLowerCase() == 'installed'
-                            ? const Color(0xff3ca879)
-                            : const Color(0xff777683)),
+            ...snapshot.plugins.map((plugin) {
+              final readyHosts = snapshot.agents
+                  .where((host) => _workerInstalledOn(plugin, host))
+                  .length;
+              return Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const CircleAvatar(
+                            backgroundColor: Color(0xffeeecff),
+                            child: Icon(Icons.extension_outlined,
+                                color: Color(0xff6254d9)),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(plugin.name,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700, fontSize: 16)),
+                          ),
+                          Text('Ready on $readyHosts Hosts',
+                              style: const TextStyle(color: Color(0xff777683))),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                          '${plugin.version} · ${plugin.publisher.isEmpty ? 'Unknown publisher' : plugin.publisher} · ${plugin.capabilities.join(' · ')}'),
+                      const SizedBox(height: 6),
+                      Text(plugin.permissions.isEmpty
+                          ? 'No special permissions'
+                          : 'Requirements: ${plugin.permissions.join(', ')}'),
+                      if (snapshot.agents.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        ...snapshot.agents
+                            .map((host) => _workerHostRow(plugin, host)),
+                      ],
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: () => _showWorkerDetails(plugin),
+                            icon: const Icon(Icons.info_outline, size: 18),
+                            label: const Text('View capabilities'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: () => _showWorkerDetails(plugin),
+                            icon: const Icon(Icons.rule_outlined, size: 18),
+                            label: const Text('View requirements'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: () =>
+                                _navigateTo(const StudioNavigation.accounts()),
+                            icon: const Icon(Icons.account_circle_outlined,
+                                size: 18),
+                            label: const Text('Connect Account'),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                )),
+                ),
+              );
+            }),
         ],
       );
 

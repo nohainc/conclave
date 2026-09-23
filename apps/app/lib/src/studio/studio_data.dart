@@ -76,6 +76,7 @@ abstract interface class StudioDataSource {
     required String workspaceId,
     required String workerId,
     required bool enabled,
+    String? hostId,
   });
   Future<void> requestCredentialSetup({
     required String workspaceId,
@@ -756,11 +757,15 @@ class StudioApiClient implements StudioDataSource {
     required String workspaceId,
     required String workerId,
     required bool enabled,
+    String? hostId,
   }) async {
     final response = await client.put(
       Uri.parse('$baseUrl/workspaces/$workspaceId/workers/$workerId'),
       headers: _headers(contentType: 'application/json'),
-      body: jsonEncode({'enabled': enabled}),
+      body: jsonEncode({
+        'enabled': enabled,
+        if (hostId != null) 'hostId': hostId,
+      }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StudioApiException('Worker update failed (${response.statusCode})');

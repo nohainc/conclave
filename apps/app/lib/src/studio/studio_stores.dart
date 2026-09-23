@@ -134,9 +134,13 @@ class WorkerStore {
 
   void replace(List<StudioWorker> value) => items = List.unmodifiable(value);
 
-  Future<void> setEnabled(String workspaceId, String workerId, bool enabled) =>
+  Future<void> setEnabled(String workspaceId, String workerId, bool enabled,
+          {String? hostId}) =>
       source.setWorkerEnabled(
-          workspaceId: workspaceId, workerId: workerId, enabled: enabled);
+          workspaceId: workspaceId,
+          workerId: workerId,
+          enabled: enabled,
+          hostId: hostId);
 
   Future<void> save({
     required String workspaceId,
