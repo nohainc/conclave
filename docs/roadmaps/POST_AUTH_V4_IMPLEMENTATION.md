@@ -316,6 +316,12 @@ Cloud, App and Host share one typed event vocabulary.
 
 # PA-5 — Add authenticated Conclave AX <-> Cloud realtime gateway
 
+**Status: Complete.** Conclave Cloud now routes authenticated browser WebSocket
+connections through the `RealtimeGateway` Durable Object. Workspace, Project,
+Chat, and Run subscriptions are checked against D1 membership and ownership;
+the App reconnects with a durable sequence cursor and refreshes its read model
+from events. HTTPS remains the mutation boundary.
+
 ## Goal
 Provide immediate UI updates after Better Auth is stable.
 

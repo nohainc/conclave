@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../navigation/studio_browser_navigation.dart';
 import '../navigation/studio_navigation.dart';
 import '../platform/platform_services.dart';
+import '../realtime/realtime_client.dart';
 import 'studio_models.dart';
 import 'studio_data.dart';
 import 'studio_stores.dart';
@@ -60,6 +61,9 @@ class _StudioAppState extends State<StudioApp> {
   late StudioNavigation navigation;
   StreamSubscription<Uri>? navigationSubscription;
   StreamSubscription<void>? lifecycleSubscription;
+  late final RealtimeClient realtimeClient;
+  StreamSubscription<Map<String, dynamic>>? realtimeSubscription;
+  bool realtimeStarted = false;
   bool authRequired = false;
   bool isReconnecting = false;
   List<StudioPendingInvitation> pendingInvitations = const [];
@@ -102,6 +106,8 @@ class _StudioAppState extends State<StudioApp> {
         browserNavigation.changes.listen(_onBrowserNavigation);
     lifecycleSubscription = browserNavigation.lifecycleChanges
         .listen((_) => unawaited(_syncSession()));
+    realtimeClient = createRealtimeClient();
+    realtimeSubscription = realtimeClient.events.listen(_onRealtimeEvent);
     store = StudioStore(widget.dataSource);
     snapshot = StudioSnapshot.empty();
     unawaited(_loadSession());
@@ -160,8 +166,42 @@ class _StudioAppState extends State<StudioApp> {
         selectedWorkspaceId ??= loaded.firstOrNull?.id;
       });
       widget.dataSource.setActiveWorkspace(selectedWorkspaceId);
+      _startRealtime();
     } catch (_) {
       // Snapshot loading remains the primary path for anonymous development.
+    }
+  }
+
+  void _onRealtimeEvent(Map<String, dynamic> event) {
+    final type = event['type'];
+    if (!mounted) return;
+    if (type == 'reconnect.required') {
+      unawaited(
+          _loadSnapshot(projectId: selectedProjectId, showSpinner: false));
+      return;
+    }
+    if (event['workspaceId'] != activeWorkspaceId) return;
+    if (type is String && type.startsWith('typing')) return;
+    unawaited(_loadSnapshot(projectId: selectedProjectId, showSpinner: false));
+  }
+
+  void _startRealtime() {
+    final workspaceId = activeWorkspaceId;
+    if (workspaceId == null || workspaceId.isEmpty) return;
+    if (!realtimeStarted) {
+      realtimeStarted = true;
+      final apiBaseUrl =
+          const String.fromEnvironment('CONCLAVE_API_URL').isNotEmpty
+              ? const String.fromEnvironment('CONCLAVE_API_URL')
+              : '/api';
+      unawaited(
+        realtimeClient.connect(
+          realtimeEndpointForApi(apiBaseUrl),
+          workspaceId,
+        ),
+      );
+    } else {
+      unawaited(realtimeClient.setWorkspace(workspaceId));
     }
   }
 
@@ -436,7 +476,7 @@ class _StudioAppState extends State<StudioApp> {
           builder: (dialogContext) => AlertDialog(
             title: const Text('Worker prerequisites missing'),
             content: const Text(
-            'A Worker needs one connected Host and an available Worker package. '
+                'A Worker needs one connected Host and an available Worker package. '
                 'Open Hosts or Workers in the navigation to finish setup, then '
                 'return here.'),
             actions: [
@@ -724,6 +764,8 @@ class _StudioAppState extends State<StudioApp> {
     refreshTimer?.cancel();
     navigationSubscription?.cancel();
     lifecycleSubscription?.cancel();
+    realtimeSubscription?.cancel();
+    unawaited(realtimeClient.close());
     browserNavigation.dispose();
     objectiveController.dispose();
     revisionController.dispose();
@@ -1116,6 +1158,7 @@ class _StudioAppState extends State<StudioApp> {
               selectedChatId = null;
             });
             widget.dataSource.setActiveWorkspace(workspaceId);
+            _startRealtime();
             _loadSnapshot(workspaceId: workspaceId);
           },
         ),
@@ -2542,9 +2585,7 @@ class _StudioAppState extends State<StudioApp> {
   Widget _accountsView() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _fleetHeader(
-              'Accounts',
-              'Accounts used by Workers on your Hosts.',
+          _fleetHeader('Accounts', 'Accounts used by Workers on your Hosts.',
               Icons.account_circle_outlined),
           const SizedBox(height: 24),
           if (workerActionMessage != null) ...[

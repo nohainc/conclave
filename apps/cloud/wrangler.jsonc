@@ -44,12 +44,20 @@
         "name": "CONCLAVE_HOST_GATEWAY",
         "class_name": "HostGateway",
       },
+      {
+        "name": "CONCLAVE_REALTIME_GATEWAY",
+        "class_name": "RealtimeGateway",
+      },
     ],
   },
   "migrations": [
     {
       "tag": "v1-host-gateway",
       "new_sqlite_classes": ["HostGateway"],
+    },
+    {
+      "tag": "v2-realtime-gateway",
+      "new_sqlite_classes": ["RealtimeGateway"],
     },
   ],
 }

@@ -89,3 +89,9 @@ Clients may preserve an unknown event type when its event version is a
 compatible minor version. They must never use event payloads as authorization;
 authorization is independently checked against the authenticated request and
 active Workspace membership.
+
+The PA-5 gateway uses one user-scoped Durable Object per browser identity. The
+WebSocket upgrade revalidates the Better Auth session, and every subscription
+is checked against active Workspace membership plus Project, Chat, and Run
+ownership. Mutations continue over HTTPS; the socket carries delivery facts,
+subscription acknowledgements, heartbeats, and reconnect-gap notices.

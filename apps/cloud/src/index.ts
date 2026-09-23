@@ -1,5 +1,6 @@
 export { ConclaveRunWorkflow } from "./workflow.js";
 export { HostGateway } from "./host-gateway.js";
+export { RealtimeGateway } from "./realtime-gateway.js";
 export {
   selectWorkerForTask,
   dispatchTaskAssignment,
@@ -24,7 +25,7 @@ export {
 export { requireSameOriginForCookieMutation } from "./routes/handlers.js";
 
 import * as handlers from "./routes/handlers.js";
-import { handleBetterAuthRequest } from "./auth/index.js";
+import { handleBetterAuthRequest, identityService } from "./auth/index.js";
 import {
   routeWorkerRequest,
   type WorkerRouteDependencies,
@@ -147,6 +148,19 @@ export default {
     }
     if (url.pathname === "/api/auth" || url.pathname.startsWith("/api/auth/")) {
       return handleBetterAuthRequest(request, env);
+    }
+    if (url.pathname === "/api/realtime") {
+      const identity = await identityService.resolve(request, env);
+      if (!identity) {
+        return handlers.json(
+          { error: "Authentication required" },
+          { status: 401 },
+        );
+      }
+      const gateway = env.CONCLAVE_REALTIME_GATEWAY.getByName(
+        `user:${identity.userId}`,
+      );
+      return gateway.fetch(request);
     }
     return routeWorkerRequest(
       request,
