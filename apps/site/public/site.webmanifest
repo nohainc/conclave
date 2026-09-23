@@ -7,10 +7,12 @@
   "display": "standalone",
   "background_color": "#f4f1eb",
   "theme_color": "#625bd6",
-  "icons": [{
-    "src": "/favicon.svg",
-    "sizes": "any",
-    "type": "image/svg+xml",
-    "purpose": "any maskable"
-  }]
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
 }

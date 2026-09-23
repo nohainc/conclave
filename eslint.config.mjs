@@ -9,9 +9,31 @@ export default tseslint.config(
       "**/.wrangler/**",
       "**/.dart_tool/**",
       "**/build/**",
+      "**/.astro/**",
       "**/worker-configuration.d.ts",
     ],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
+  {
+    files: ["apps/site/scripts/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        Buffer: "readonly",
+        URL: "readonly",
+        console: "readonly",
+      },
+    },
+  },
+  {
+    files: ["apps/site/public/scripts/**/*.js"],
+    languageOptions: {
+      globals: {
+        document: "readonly",
+        fetch: "readonly",
+        IntersectionObserver: "readonly",
+        window: "readonly",
+      },
+    },
+  },
 );

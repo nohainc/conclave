@@ -83,7 +83,7 @@ for (const [route, file] of routes) {
 
 const home = sources.get("/");
 const appLinks = [
-  ...home.matchAll(/href="(https:\/\/app\.conclaveax\.com[^\"]*)"/g),
+  ...home.matchAll(/href="(https:\/\/app\.conclaveax\.com[^"]*)"/g),
 ];
 if (appLinks.length < 4)
   errors.push("homepage: expected at least four direct Open Conclave AX links");
