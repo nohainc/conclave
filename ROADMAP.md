@@ -2,20 +2,24 @@
 
 Architecture v4 is normative.
 
-The current implementation roadmap is:
+The active next-phase roadmap after the completed authentication migration is:
+
+[Post-Authentication Architecture v4 Conformance & Realtime Roadmap](docs/roadmaps/POST_AUTH_V4_IMPLEMENTATION.md)
+
+The original v4 migration roadmap remains useful as implementation history:
 
 [Architecture v4 Implementation Roadmap](docs/roadmaps/ARCHITECTURE_V4_IMPLEMENTATION.md)
 
-Track progress:
+Track completed v4/authentication work in:
 
 [v4 Implementation Status](docs/roadmaps/V4_IMPLEMENTATION_STATUS.md)
 
 Current execution model:
 
 ```text
-Studio → Cloud → Host → Worker
+Conclave AX -> Conclave Cloud -> Conclave Host -> Worker
 ```
 
-Credential Profiles provide per-user/workspace authentication and usage context.
+Accounts are the user-facing representation of Credential Profiles.
 
-Do not add new Architecture v3 Agent/Engine/Plugin/configured-Worker concepts.
+Workers never connect directly to Conclave Cloud.
