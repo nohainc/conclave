@@ -277,6 +277,13 @@ assignment identity. The Cloud connector remains a mailbox/callback relay; it
 does not execute provider work. Sessions are profile-bound, support reconnect,
 waiting-for-user, quota, and fallback states, and cannot be reused across
 profiles.
+
+V4-15 reduces the Host desktop UI to machine operations: pairing, health,
+local account actions, repository and permission status, Worker diagnostics,
+logs, updates, and quitting. Projects, Chats, orchestration, Workspace
+management, configured Worker CRUD, and Worker catalog management are not
+present in the Host UI. Advanced Host identity and connection details are
+progressively disclosed behind an accessible details panel.
 - make Studio read models purpose-built instead of one large snapshot response over time.
 
 ## 8. Suggested source organization
