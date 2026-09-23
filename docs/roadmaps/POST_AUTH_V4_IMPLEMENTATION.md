@@ -1025,6 +1025,12 @@ No high-severity unresolved issue in final topology.
 
 # PA-19 — Remove remaining obsolete naming and compatibility source
 
+The obsolete macOS Agent App/Engine packaging scripts were removed. The v4
+architecture guard now also protects the public product name and prevents new
+direct Worker-to-Cloud networking references; Workers communicate through
+Conclave Host. Historical architecture records remain searchable as history,
+but are excluded from active-source retirement checks.
+
 ## Goal
 Finish the conceptual cleanup once new paths are proven.
 

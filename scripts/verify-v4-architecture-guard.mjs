@@ -13,6 +13,8 @@
  *   - WorkerPlugin (as type/interface/class identifier)
  *   - agent_plugin_installs (table/reference)
  *   - pluginId (field declarations and assignments in routing code)
+ *   - Conclave AX Studio (retired user-facing product name)
+ *   - direct Worker -> Cloud networking (Workers must use Host)
  *
  * Usage:
  *   node scripts/verify-v4-architecture-guard.mjs                 # check mode (CI)
@@ -61,6 +63,16 @@ const GUARD_PATTERNS = [
     regex: /\bpluginId\b/g,
     description: "v3 plugin-based assignment routing",
   },
+  {
+    id: "Conclave AX Studio",
+    regex: /\bConclave AX Studio\b/g,
+    description: "retired user-facing product name",
+  },
+  {
+    id: "worker_direct_cloud_networking",
+    regex: /(?:worker|workers)[^\n]*(?:fetch\(|WebSocket\(|Cloudflare|apps\/cloud|cloud\/src)/gi,
+    description: "Workers must communicate through the Host",
+  },
 ];
 
 // ── File discovery ──────────────────────────────────────────────────────────
@@ -75,6 +87,7 @@ const EXCLUDED_PATHS = [
   /^scripts\/verify-v4-architecture-guard\.mjs$/,
   /^scripts\/v4-architecture-baseline\.json$/,
   /node_modules\//,
+  /worker-configuration\.d\.ts$/,
 ];
 
 function getTrackedSourceFiles() {
