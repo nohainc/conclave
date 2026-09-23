@@ -16,12 +16,14 @@ import '../features/common/command_palette.dart';
 import '../features/common/diff_viewer.dart';
 import '../features/chat/typing_indicator.dart';
 import '../features/execution/task_pipeline_dag.dart';
+import '../features/projects/projects_pages.dart';
+import '../features/workspace/workspace_settings_page.dart';
 import 'studio_models.dart';
 import 'studio_data.dart';
 import 'studio_stores.dart';
 
-class StudioApp extends StatefulWidget {
-  const StudioApp(
+class ConclaveAppShell extends StatefulWidget {
+  const ConclaveAppShell(
       {super.key,
       required this.services,
       required this.dataSource,
@@ -32,10 +34,13 @@ class StudioApp extends StatefulWidget {
   final Uri? initialUri;
 
   @override
-  State<StudioApp> createState() => _StudioAppState();
+  State<ConclaveAppShell> createState() => _StudioAppState();
 }
 
-class _StudioAppState extends State<StudioApp> {
+/// Compatibility alias while downstream integrations migrate to the app-shell name.
+typedef StudioApp = ConclaveAppShell;
+
+class _StudioAppState extends State<ConclaveAppShell> {
   late StudioSnapshot snapshot;
   String? selectedWorkspaceId;
   String? selectedProjectId;
@@ -2131,104 +2136,30 @@ class _StudioAppState extends State<StudioApp> {
     );
   }
 
-  Widget _projectsView() => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Projects',
-              style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 6),
-          const Text('Projects organize Chats, Runs, artifacts, and evidence.',
-              style: TextStyle(color: Color(0xff777683), fontSize: 13)),
-          const SizedBox(height: 24),
-          if (snapshot.projects.isEmpty)
-            _panel(
-              title: 'No projects yet',
-              subtitle: 'Create a Project to start your first Chat.',
-              child: FilledButton.icon(
-                onPressed: _createProject,
-                icon: const Icon(Icons.create_new_folder_outlined),
-                label: const Text('Create project'),
-              ),
-            )
-          else
-            ...snapshot.projects.map((project) => _panel(
-                  title: project.name,
-                  subtitle: project.repository.isEmpty
-                      ? 'No repository connected'
-                      : project.repository,
-                  child: Row(
-                    children: [
-                      Text('${project.chats.length} chats'),
-                      const Spacer(),
-                      OutlinedButton(
-                        onPressed: () =>
-                            _navigateTo(StudioNavigation.project(project.id)),
-                        child: const Text('Open project'),
-                      ),
-                    ],
-                  ),
-                )),
-        ],
+  Widget _projectsView() => ProjectsPage(
+        projects: snapshot.projects,
+        onCreateProject: _createProject,
+        onOpenProject: (projectId) =>
+            _navigateTo(StudioNavigation.project(projectId)),
       );
 
   Widget _projectOverviewView() {
     final project = selectedProject;
     if (project == null) return _projectsView();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(project.name,
-            style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 6),
-        const Text('Project overview',
-            style: TextStyle(color: Color(0xff777683), fontSize: 13)),
-        const SizedBox(height: 24),
-        _panel(
-          title: 'Chats',
-          subtitle: 'Continue a conversation or start a new one.',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (project.chats.isEmpty) const Text('No chats yet.'),
-              ...project.chats.map((chat) => ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(chat.title),
-                    subtitle: Text(chat.lastActivity),
-                    onTap: () =>
-                        _navigateTo(StudioNavigation.chat(project.id, chat.id)),
-                  )),
-              FilledButton.icon(
-                onPressed: _createChat,
-                icon: const Icon(Icons.add),
-                label: const Text('New chat'),
-              ),
-            ],
-          ),
-        ),
-      ],
+    return ProjectPage(
+      project: project,
+      onCreateChat: _createChat,
+      onOpenChat: (chatId) =>
+          _navigateTo(StudioNavigation.chat(project.id, chatId)),
     );
   }
 
-  Widget _workspaceSettingsView() => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Workspace settings',
-              style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 6),
-          const Text('Manage the active Workspace and its access.',
-              style: TextStyle(color: Color(0xff777683), fontSize: 13)),
-          const SizedBox(height: 24),
-          _panel(
-            title: 'Active Workspace',
-            subtitle:
-                'Workspace membership and permissions are managed in Conclave Cloud.',
-            child: Text(workspaces
-                    .where((workspace) => workspace.id == activeWorkspaceId)
-                    .firstOrNull
-                    ?.name ??
-                'Workspace unavailable'),
-          ),
-        ],
+  Widget _workspaceSettingsView() => WorkspaceSettingsPage(
+        workspaceName: workspaces
+                .where((workspace) => workspace.id == activeWorkspaceId)
+                .firstOrNull
+                ?.name ??
+            'Workspace unavailable',
       );
 
   Widget _runDetailsView(bool compact) {
