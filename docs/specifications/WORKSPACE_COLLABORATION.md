@@ -1,7 +1,26 @@
 # Workspace Collaboration and Invitations
 
 This is the current workspace collaboration and invitation specification for
-Architecture v3.
+Architecture v4.
+
+Conclave AX exposes these controls in Workspace Settings rather than requiring
+direct API use. The Settings page provides General, Members, Invitations,
+Permissions, and Audit views. Cloud remains authoritative for every read and
+mutation.
+
+The application uses these Cloud routes for the management surface:
+
+- `GET/PATCH /api/workspaces/:workspaceId` for Workspace details and naming;
+- `GET /api/workspaces/:workspaceId/members` for the member directory;
+- `GET/POST /api/workspaces/:workspaceId/invitations` for invitations;
+- `PATCH /api/workspaces/:workspaceId/members/:userId/role` for role changes;
+- `POST /api/workspaces/:workspaceId/members/:userId/{suspend|activate|remove}`
+  for membership status;
+- `GET /api/workspaces/:workspaceId/audit-export` for authorized audit readers.
+
+Invitation and audit views may be unavailable to ordinary members. This is a
+permission result, not a client-side hiding convention; member and resource
+access is still evaluated by Cloud on every request.
 
 ## Membership lifecycle
 

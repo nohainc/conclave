@@ -50,6 +50,35 @@ abstract interface class StudioDataSource {
   Future<void> deletePasskey(String id);
   Future<void> signInWithPasskey();
   Future<List<StudioWorkspace>> loadWorkspaces();
+  Future<StudioWorkspace> updateWorkspace({
+    required String workspaceId,
+    required String name,
+  });
+  Future<List<StudioWorkspaceMember>> loadWorkspaceMembers(
+      {required String workspaceId});
+  Future<List<StudioWorkspaceInvitation>> loadWorkspaceInvitations(
+      {required String workspaceId});
+  Future<List<StudioAuditEntry>> loadWorkspaceAudit(
+      {required String workspaceId});
+  Future<void> inviteWorkspaceMember({
+    required String workspaceId,
+    required String email,
+    required String role,
+  });
+  Future<void> changeWorkspaceMemberRole({
+    required String workspaceId,
+    required String userId,
+    required String role,
+  });
+  Future<void> setWorkspaceMemberStatus({
+    required String workspaceId,
+    required String userId,
+    required String status,
+  });
+  Future<void> expireWorkspaceInvitation({
+    required String workspaceId,
+    required String invitationId,
+  });
 
   /// Loads the focused Workspace/project read models in parallel. The legacy
   /// snapshot remains available for compatibility and fixtures only.
@@ -415,6 +444,137 @@ class StudioApiClient implements StudioDataSource {
             StudioWorkspace.fromJson(Map<String, dynamic>.from(workspace)))
         .toList();
   }
+
+  Future<Map<String, dynamic>> _workspaceJson(Uri uri) async {
+    final response = await client.get(uri, headers: _headers());
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+          'Workspace settings request failed (${response.statusCode})',
+          statusCode: response.statusCode);
+    }
+    final body = jsonDecode(response.body);
+    if (body is! Map) {
+      throw const StudioApiException('Workspace settings response malformed');
+    }
+    return Map<String, dynamic>.from(body);
+  }
+
+  @override
+  Future<StudioWorkspace> updateWorkspace({
+    required String workspaceId,
+    required String name,
+  }) async {
+    final response = await client.patch(
+      Uri.parse('$baseUrl/workspaces/$workspaceId'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({'name': name}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+          'Workspace update failed (${response.statusCode})',
+          statusCode: response.statusCode);
+    }
+    final body = jsonDecode(response.body);
+    final workspace = body is Map ? body['workspace'] : null;
+    if (workspace is! Map) {
+      throw const StudioApiException('Workspace update response malformed');
+    }
+    return StudioWorkspace.fromJson(Map<String, dynamic>.from(workspace));
+  }
+
+  @override
+  Future<List<StudioWorkspaceMember>> loadWorkspaceMembers(
+      {required String workspaceId}) async {
+    final body = await _workspaceJson(
+        Uri.parse('$baseUrl/workspaces/$workspaceId/members'));
+    return (body['members'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) =>
+            StudioWorkspaceMember.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
+  @override
+  Future<List<StudioWorkspaceInvitation>> loadWorkspaceInvitations(
+      {required String workspaceId}) async {
+    final body = await _workspaceJson(
+        Uri.parse('$baseUrl/workspaces/$workspaceId/invitations'));
+    return (body['invitations'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) =>
+            StudioWorkspaceInvitation.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
+  @override
+  Future<List<StudioAuditEntry>> loadWorkspaceAudit(
+      {required String workspaceId}) async {
+    final body = await _workspaceJson(
+        Uri.parse('$baseUrl/workspaces/$workspaceId/audit-export'));
+    return (body['entries'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) =>
+            StudioAuditEntry.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
+  Future<void> _workspaceMutation(Uri uri, Map<String, dynamic> body,
+      {String method = 'POST'}) async {
+    final request = http.Request(method, uri)
+      ..headers.addAll(_headers(contentType: 'application/json'))
+      ..body = jsonEncode(body);
+    final streamed = await client.send(request);
+    if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+      throw StudioApiException(
+          'Workspace action failed (${streamed.statusCode})',
+          statusCode: streamed.statusCode);
+    }
+  }
+
+  @override
+  Future<void> inviteWorkspaceMember({
+    required String workspaceId,
+    required String email,
+    required String role,
+  }) =>
+      _workspaceMutation(
+        Uri.parse('$baseUrl/workspaces/$workspaceId/invitations'),
+        {'email': email, 'role': role},
+      );
+
+  @override
+  Future<void> changeWorkspaceMemberRole({
+    required String workspaceId,
+    required String userId,
+    required String role,
+  }) =>
+      _workspaceMutation(
+        Uri.parse('$baseUrl/workspaces/$workspaceId/members/$userId/role'),
+        {'role': role},
+        method: 'PATCH',
+      );
+
+  @override
+  Future<void> setWorkspaceMemberStatus({
+    required String workspaceId,
+    required String userId,
+    required String status,
+  }) =>
+      _workspaceMutation(
+        Uri.parse('$baseUrl/workspaces/$workspaceId/members/$userId/$status'),
+        {},
+      );
+
+  @override
+  Future<void> expireWorkspaceInvitation({
+    required String workspaceId,
+    required String invitationId,
+  }) =>
+      _workspaceMutation(
+        Uri.parse(
+            '$baseUrl/workspaces/$workspaceId/invitations/$invitationId/expire'),
+        {},
+      );
 
   @override
   Future<StudioProject> createProject(

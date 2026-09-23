@@ -152,6 +152,28 @@ void main() {
     expect(find.text('Plugins'), findsNothing);
   });
 
+  testWidgets('opens Workspace Settings with team management tabs',
+      (WidgetTester tester) async {
+    await tester
+        .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.menu_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Workspace settings').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Workspace settings'), findsOneWidget);
+    expect(find.text('General'), findsWidgets);
+    expect(find.text('Members'), findsOneWidget);
+    expect(find.text('Invitations'), findsOneWidget);
+    expect(find.text('Permissions'), findsOneWidget);
+    expect(find.text('Audit'), findsOneWidget);
+    await tester.tap(find.text('Members'));
+    await tester.pumpAndSettle();
+    expect(find.text('Invite member'), findsOneWidget);
+  });
+
   testWidgets(
       'chat composer defaults to Auto and Balanced with advanced controls',
       (WidgetTester tester) async {

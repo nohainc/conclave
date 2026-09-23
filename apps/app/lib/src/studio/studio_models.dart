@@ -1067,6 +1067,87 @@ class StudioWorkspace {
       );
 }
 
+class StudioWorkspaceMember {
+  const StudioWorkspaceMember({
+    required this.userId,
+    required this.displayName,
+    required this.email,
+    required this.role,
+    required this.status,
+    required this.createdAt,
+  });
+
+  final String userId;
+  final String displayName;
+  final String email;
+  final String role;
+  final String status;
+  final String createdAt;
+
+  factory StudioWorkspaceMember.fromJson(Map<String, dynamic> json) =>
+      StudioWorkspaceMember(
+        userId: _string(json, 'userId'),
+        displayName: _string(json, 'displayName', _string(json, 'email')),
+        email: _string(json, 'email'),
+        role: _string(json, 'role', 'member'),
+        status: _string(json, 'status', 'active'),
+        createdAt: _string(json, 'createdAt'),
+      );
+}
+
+class StudioWorkspaceInvitation {
+  const StudioWorkspaceInvitation({
+    required this.id,
+    required this.email,
+    required this.role,
+    required this.status,
+    required this.expiresAt,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String email;
+  final String role;
+  final String status;
+  final String expiresAt;
+  final String createdAt;
+
+  factory StudioWorkspaceInvitation.fromJson(Map<String, dynamic> json) =>
+      StudioWorkspaceInvitation(
+        id: _string(json, 'id'),
+        email: _string(json, 'email'),
+        role: _string(json, 'role', 'member'),
+        status: _string(json, 'status', 'pending'),
+        expiresAt: _string(json, 'expiresAt'),
+        createdAt: _string(json, 'createdAt'),
+      );
+}
+
+class StudioAuditEntry {
+  const StudioAuditEntry({
+    required this.id,
+    required this.action,
+    required this.targetType,
+    required this.targetId,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String action;
+  final String targetType;
+  final String targetId;
+  final String createdAt;
+
+  factory StudioAuditEntry.fromJson(Map<String, dynamic> json) =>
+      StudioAuditEntry(
+        id: _string(json, 'id'),
+        action: _string(json, 'action'),
+        targetType: _string(json, 'targetType'),
+        targetId: _string(json, 'targetId'),
+        createdAt: _string(json, 'createdAt'),
+      );
+}
+
 class StudioSnapshot {
   const StudioSnapshot({
     this.workspaceId,

@@ -719,11 +719,31 @@ export async function routeWorkerRequest(
     }
 
     const workspaceMatch = url.pathname.match(/^\/api\/workspaces\/([^/]+)$/);
+    if (request.method === "PATCH" && workspaceMatch?.[1]) {
+      return await handlers.handleUpdateWorkspace!(
+        request,
+        env,
+        workspaceMatch[1],
+        ctx,
+      );
+    }
     if (request.method === "GET" && workspaceMatch?.[1]) {
       return await handlers.handleGetWorkspace!(
         request,
         env,
         workspaceMatch[1],
+        ctx,
+      );
+    }
+
+    const workspaceMembersMatch = url.pathname.match(
+      /^\/api\/workspaces\/([^/]+)\/members$/,
+    );
+    if (request.method === "GET" && workspaceMembersMatch?.[1]) {
+      return await handlers.handleListWorkspaceMembers!(
+        request,
+        env,
+        workspaceMembersMatch[1],
         ctx,
       );
     }

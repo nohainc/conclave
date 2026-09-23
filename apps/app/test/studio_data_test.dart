@@ -479,6 +479,37 @@ void main() {
     expect(jsonDecode(client.lastBody!)['sharingPolicy'], 'private_only');
   });
 
+  test('uses Workspace management routes for rename and invitations', () async {
+    final client = _JsonClient({
+      'workspace': {
+        'id': 'workspace-1',
+        'name': 'Updated Workspace',
+        'slug': 'updated-workspace',
+        'status': 'active',
+        'role': 'owner',
+      },
+    }, statusCode: 200);
+    final api = StudioApiClient(
+      baseUrl: 'https://conclave.test/api',
+      client: client,
+    );
+
+    final workspace = await api.updateWorkspace(
+        workspaceId: 'workspace-1', name: 'Updated Workspace');
+    expect(workspace.name, 'Updated Workspace');
+    expect(client.lastRequest?.method, 'PATCH');
+    expect(client.lastRequest?.url.path, '/api/workspaces/workspace-1');
+
+    await api.inviteWorkspaceMember(
+        workspaceId: 'workspace-1',
+        email: 'member@example.test',
+        role: 'member');
+    expect(client.lastRequest?.method, 'POST');
+    expect(client.lastRequest?.url.path,
+        '/api/workspaces/workspace-1/invitations');
+    expect(jsonDecode(client.lastBody!)['email'], 'member@example.test');
+  });
+
   test('sends the explicitly selected Workspace on scoped requests', () async {
     final client = _JsonClient({
       'workspaceId': 'workspace-2',

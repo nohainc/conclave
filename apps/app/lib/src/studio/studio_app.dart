@@ -1952,6 +1952,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    _navItem(Icons.settings_outlined, 'Workspace settings',
+                        const StudioNavigation.workspaceSettings(),
+                        compact: compact, navigationContext: sidebarContext),
                     _sidebarLabel('PROJECTS'),
                     ...snapshot.projects
                         .map((project) => _projectItem(project)),
@@ -2488,11 +2491,15 @@ class _StudioAppState extends State<ConclaveAppShell> {
   }
 
   Widget _workspaceSettingsView() => WorkspaceSettingsPage(
+        workspaceId: activeWorkspaceId ?? snapshot.workspaceId ?? '',
         workspaceName: workspaces
                 .where((workspace) => workspace.id == activeWorkspaceId)
                 .firstOrNull
                 ?.name ??
             'Workspace unavailable',
+        dataSource: widget.dataSource,
+        hostCount: snapshot.agents.length,
+        accountCount: snapshot.accounts.length,
       );
 
   Widget _runDetailsView(bool compact) {

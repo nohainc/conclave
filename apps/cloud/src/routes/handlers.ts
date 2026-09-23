@@ -949,6 +949,75 @@ async function handleGetWorkspace(
   return json({ workspace: row });
 }
 
+async function handleUpdateWorkspace(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const context = await workspaceMemberContext(
+    request,
+    env,
+    workspaceId,
+    "workspace:manage",
+    accessContext,
+  );
+  const body = (await request.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  if (name.length < 1 || name.length > 120) {
+    throw new HttpError(400, "Workspace name must be 1 to 120 characters");
+  }
+  const now = new Date().toISOString();
+  const result = await env.CONCLAVE_DB.prepare(
+    "UPDATE workspaces SET name = ?1, updated_at = ?2 WHERE id = ?3 AND status = 'active'",
+  )
+    .bind(name, now, workspaceId)
+    .run();
+  if (!result.success) throw new HttpError(404, "Workspace not found");
+  await recordAudit(
+    env,
+    context,
+    "workspace.updated",
+    "workspace",
+    workspaceId,
+    {
+      name,
+    },
+  );
+  return json({ workspace: { id: workspaceId, name, updatedAt: now } });
+}
+
+async function handleListWorkspaceMembers(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  await workspaceMemberContext(
+    request,
+    env,
+    workspaceId,
+    "host.view",
+    accessContext,
+  );
+  const rows = await env.CONCLAVE_DB.prepare(
+    `SELECT wm.user_id AS userId, u.display_name AS displayName, u.email,
+            wm.role, wm.status, wm.created_at AS createdAt,
+            wm.updated_at AS updatedAt
+     FROM workspace_memberships wm
+     JOIN users u ON u.id = wm.user_id
+     WHERE wm.workspace_id = ?1
+     ORDER BY CASE wm.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+              u.display_name ASC`,
+  )
+    .bind(workspaceId)
+    .all();
+  return json({ members: rows.results ?? [] });
+}
+
 async function handleExportWorkspaceAudit(
   request: Request,
   env: SecurityEnv,
@@ -6682,6 +6751,8 @@ export {
   handleRevokeHostRelease,
   handleGetHostRelease,
   handleGetWorkspace,
+  handleUpdateWorkspace,
+  handleListWorkspaceMembers,
   handleListProjects,
   handleCreateProject,
   handleUpdateProject,

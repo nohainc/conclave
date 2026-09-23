@@ -136,6 +136,70 @@ class StudioFixtureDataSource implements StudioDataSource {
       ];
 
   @override
+  Future<StudioWorkspace> updateWorkspace({
+    required String workspaceId,
+    required String name,
+  }) async =>
+      StudioWorkspace(
+        id: workspaceId,
+        name: name,
+        slug: name.toLowerCase().replaceAll(' ', '-'),
+        status: 'active',
+        role: 'owner',
+      );
+
+  @override
+  Future<List<StudioWorkspaceMember>> loadWorkspaceMembers(
+          {required String workspaceId}) async =>
+      const [
+        StudioWorkspaceMember(
+          userId: 'user-1',
+          displayName: 'User One',
+          email: 'user@example.test',
+          role: 'owner',
+          status: 'active',
+          createdAt: 'Today',
+        ),
+      ];
+
+  @override
+  Future<List<StudioWorkspaceInvitation>> loadWorkspaceInvitations(
+          {required String workspaceId}) async =>
+      const [];
+
+  @override
+  Future<List<StudioAuditEntry>> loadWorkspaceAudit(
+          {required String workspaceId}) async =>
+      const [];
+
+  @override
+  Future<void> inviteWorkspaceMember({
+    required String workspaceId,
+    required String email,
+    required String role,
+  }) async {}
+
+  @override
+  Future<void> changeWorkspaceMemberRole({
+    required String workspaceId,
+    required String userId,
+    required String role,
+  }) async {}
+
+  @override
+  Future<void> setWorkspaceMemberStatus({
+    required String workspaceId,
+    required String userId,
+    required String status,
+  }) async {}
+
+  @override
+  Future<void> expireWorkspaceInvitation({
+    required String workspaceId,
+    required String invitationId,
+  }) async {}
+
+  @override
   Future<StudioSnapshot> loadReadModels(
           {String? projectId, String? workspaceId}) async =>
       studioFixtureSnapshot();
