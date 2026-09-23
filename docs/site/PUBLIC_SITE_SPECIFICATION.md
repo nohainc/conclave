@@ -223,6 +223,9 @@ constraints when using AI-assisted implementation:
 The current regression gate is intentionally static and dependency-light. It
 does not replace a manual browser review at release time; future screenshot
 coverage may be added when a stable browser capture environment is available.
+Production claims are tracked and reviewed in
+`docs/site/PUBLIC_SITE_CONTENT_AUDIT.md`; unsupported architecture targets must
+not be presented as current capabilities.
 
 The system supports wide, medium, and narrow layouts; visible keyboard focus;
 reduced-motion preferences; and forced-colors/high-contrast mode. Motion is
