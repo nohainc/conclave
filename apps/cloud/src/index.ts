@@ -71,6 +71,7 @@ const routeHandlers = {
   handleHostGatewayConnect: handlers.handleHostGatewayConnect,
   handleHostProtocolMessage: handlers.handleHostProtocolMessage,
   handleEnrollHost: handlers.handleEnrollHost,
+  handleBindHostWorkspace: handlers.handleBindHostWorkspace,
   handleListHostEnrollments: handlers.handleListHostEnrollments,
   handleCreateHostEnrollment: handlers.handleCreateHostEnrollment,
   handleRevokeHostEnrollment: handlers.handleRevokeHostEnrollment,
@@ -81,6 +82,15 @@ const routeHandlers = {
   handleSetHostDesiredState: handlers.handleSetHostDesiredState,
   handleListWorkerCatalog: handlers.handleListWorkerCatalog,
   handleGetWorkerCatalog: handlers.handleGetWorkerCatalog,
+  handleListCredentialProfiles: handlers.handleListCredentialProfiles,
+  handleCreateCredentialProfile: handlers.handleCreateCredentialProfile,
+  handleUpdateCredentialProfile: handlers.handleUpdateCredentialProfile,
+  handleRevokeCredentialProfile: handlers.handleRevokeCredentialProfile,
+  handleCreateCredentialSetupIntent: handlers.handleCreateCredentialSetupIntent,
+  handleCreateCredentialGrant: handlers.handleCreateCredentialGrant,
+  handleRevokeCredentialGrant: handlers.handleRevokeCredentialGrant,
+  handleSetWorkspaceWorkerAvailability:
+    handlers.handleSetWorkspaceWorkerAvailability,
   handleDispatchEnsembleTaskAssignment:
     handlers.handleDispatchEnsembleTaskAssignment,
   handleDispatchTaskAssignment: handlers.handleDispatchTaskAssignment,
