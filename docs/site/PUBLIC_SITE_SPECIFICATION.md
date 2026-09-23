@@ -58,6 +58,11 @@ The first release has only this navigation:
 Navigation should remain shallow and readable. Pricing, blog, and a separate
 documentation portal are explicitly out of scope for the initial release.
 
+The footer provides only live destinations: Product, How it works, Security,
+the public GitHub repository, Privacy, and Terms. The initial legal routes are
+`/privacy/` and `/terms/`; they may begin as concise architecture-aware notices
+but must be replaced with final service notices before public account creation.
+
 ## Content contract
 
 ### Product

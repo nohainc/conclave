@@ -1,0 +1,20 @@
+---
+import Container from "../components/Container.astro";
+import Section from "../components/Section.astro";
+import SectionHeader from "../components/SectionHeader.astro";
+import SiteLayout from "../layouts/SiteLayout.astro";
+---
+
+<SiteLayout title="Terms — Conclave AX" description="Initial terms information for the Conclave AX public website.">
+  <Section>
+    <Container>
+      <SectionHeader eyebrow="Terms" title="Terms for Conclave AX are being prepared." description="The public website is available for product information only. Final service terms will be published before public account creation and paid service use." headingLevel={1} />
+      <div class="legal-content">
+        <h2>Website use</h2>
+        <p>You may browse and link to the public website for informational purposes. Do not submit credentials, API keys, provider secrets, or private Workspace data through this site.</p>
+        <h2>Product availability</h2>
+        <p>Descriptions of Conclave AX, Hosts, Workers, Accounts, and Forge describe the intended product architecture and may change as the service moves toward release.</p>
+      </div>
+    </Container>
+  </Section>
+</SiteLayout>

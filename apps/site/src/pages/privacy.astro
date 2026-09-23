@@ -1,0 +1,24 @@
+---
+import Container from "../components/Container.astro";
+import Section from "../components/Section.astro";
+import SectionHeader from "../components/SectionHeader.astro";
+import SiteLayout from "../layouts/SiteLayout.astro";
+---
+
+<SiteLayout title="Privacy — Conclave AX" description="How Conclave AX approaches privacy for people, Workspaces, Hosts, Workers, and Accounts.">
+  <Section>
+    <Container>
+      <SectionHeader eyebrow="Privacy" title="Privacy is part of the architecture." description="This initial overview explains the boundaries Conclave AX is designed to preserve. A complete production privacy notice will be published before the service accepts public accounts." headingLevel={1} />
+      <div class="legal-content">
+        <h2>Human identity and Workspace data</h2>
+        <p>Conclave Cloud uses human authentication to identify a person and then applies Conclave Workspace membership and permissions. Workspace, Project, Chat, Run, and evidence data is scoped by those permissions.</p>
+        <h2>Accounts and external AI providers</h2>
+        <p>Accounts represent external AI identities. They are private by default. Explicit sharing can allow another person to use an Account without exposing its saved secret. Usage remains attributable to the requester and Account owner.</p>
+        <h2>Hosts and Workers</h2>
+        <p>Hosts are separate machine identities. Workers run behind a Host and do not receive Conclave user sessions or Host machine credentials. Raw provider secrets are not public website content.</p>
+        <h2>Public website</h2>
+        <p>This website is a static presentation layer. It does not collect API keys, pair Hosts, or provide access to private Workspace data.</p>
+      </div>
+    </Container>
+  </Section>
+</SiteLayout>
