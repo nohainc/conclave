@@ -3,18 +3,24 @@ import Container from "../components/Container.astro";
 import FeatureCard from "../components/FeatureCard.astro";
 import Section from "../components/Section.astro";
 import SectionHeader from "../components/SectionHeader.astro";
+import SecurityTopology from "../components/SecurityTopology.astro";
 import SiteLayout from "../layouts/SiteLayout.astro";
 ---
 
 <SiteLayout title="Security — Conclave AX" description="Conclave AX security boundaries for people, Hosts, Workers, and Accounts.">
   <Section>
     <Container>
-      <SectionHeader eyebrow="Security" title="Clear boundaries are a feature." description="Conclave AX keeps human identity, machine identity, and external AI Accounts separate so each can be authorized and revoked independently." />
-    <div class="cards">
-      <FeatureCard title="Human access"><p>People sign in to Conclave AX. Cloud owns Workspace membership and authorization.</p></FeatureCard>
-      <FeatureCard title="Machine access"><p>A Host uses its own machine credential. It never stores a person's browser session.</p></FeatureCard>
-      <FeatureCard title="Account privacy"><p>Accounts are private by default. Raw secrets stay in Host secure storage and are never public site content.</p></FeatureCard>
-    </div>
+      <SectionHeader eyebrow="Architecture and security" title="Clear boundaries are a feature." description="Conclave AX, Cloud, Host, Workers, and Accounts each have a distinct role. That separation keeps authorization and credentials in the right place." headingLevel={1} />
+      <div class="security-overview">
+        <SecurityTopology />
+        <div class="security-boundaries">
+          <FeatureCard title="Cloud"><p>Coordinates work, authorizes Workspace access, and stores control-plane state.</p></FeatureCard>
+          <FeatureCard title="Host"><p>Provides machine execution, protects local credentials, and supervises Workers.</p></FeatureCard>
+          <FeatureCard title="Worker"><p>Talks to an AI model, CLI, or tool. It does not authenticate directly to Conclave Cloud.</p></FeatureCard>
+          <FeatureCard title="Account"><p>Determines whose AI credentials are used for an authorized assignment.</p></FeatureCard>
+        </div>
+      </div>
+      <div class="security-callout"><strong>Workers do not receive Conclave user sessions or Host machine credentials.</strong><span>Workers operate behind the Host boundary and receive only the scoped assignment context they need.</span></div>
     </Container>
   </Section>
 </SiteLayout>
