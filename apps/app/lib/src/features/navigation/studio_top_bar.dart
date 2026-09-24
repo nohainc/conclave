@@ -252,16 +252,17 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
         final projectName = project?.name ?? 'Project';
         final workstreamName = workstream?.name ?? 'Workstream';
         return [
-          _breadcrumbLink(
-            'Projects',
-            () => onNavigateTo(const StudioNavigation.projects()),
-            mutedInk: mutedInk,
-          ),
-          _divider(mutedInk),
           if (project != null) ...[
             _breadcrumbLink(
               projectName,
               () => onNavigateTo(StudioNavigation.project(project.id)),
+              mutedInk: mutedInk,
+            ),
+            _divider(mutedInk),
+          ] else ...[
+            _breadcrumbLink(
+              'Projects',
+              () => onNavigateTo(const StudioNavigation.projects()),
               mutedInk: mutedInk,
             ),
             _divider(mutedInk),
@@ -273,6 +274,7 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
       case StudioRouteKind.run:
         final projectName = project?.name ?? 'Project';
         final workstreamName = workstream?.name ?? 'Workstream';
+        final workstreamId = workstream?.id ?? nav.workstreamId;
         return [
           if (project != null) ...[
             _breadcrumbLink(
@@ -281,12 +283,19 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
               mutedInk: mutedInk,
             ),
             _divider(mutedInk),
+          ] else ...[
+            _breadcrumbLink(
+              'Projects',
+              () => onNavigateTo(const StudioNavigation.projects()),
+              mutedInk: mutedInk,
+            ),
+            _divider(mutedInk),
           ],
-          if (workstream != null && project != null) ...[
+          if (workstreamId != null && project != null) ...[
             _breadcrumbLink(
               workstreamName,
               () => onNavigateTo(
-                  StudioNavigation.workstream(project.id, workstream.id)),
+                  StudioNavigation.workstream(project.id, workstreamId)),
               mutedInk: mutedInk,
             ),
             _divider(mutedInk),

@@ -388,8 +388,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Check Breadcrumbs: Projects / Conclave AX / Authentication redesign
-      expect(find.text('Projects'), findsOneWidget);
+      // Check Breadcrumbs: Conclave AX / Authentication redesign
       expect(find.text('Conclave AX'), findsOneWidget);
       expect(find.text('Authentication redesign'), findsOneWidget);
 
@@ -403,13 +402,70 @@ void main() {
       // Check Notification badge
       expect(find.text('3'), findsOneWidget);
 
-      // Click Projects in breadcrumb
-      await tester.tap(find.text('Projects'));
-      expect(navigatedTo?.kind, StudioRouteKind.projects);
+      // Click Project in breadcrumb
+      await tester.tap(find.text('Conclave AX'));
+      expect(navigatedTo?.kind, StudioRouteKind.project);
+      expect(navigatedTo?.projectId, 'project-1');
 
       // Click Search affordance
       await tester.tap(find.text('Search or jump to...'));
       expect(commandPaletteOpened, isTrue);
+    });
+
+    testWidgets('renders Run breadcrumbs: Project / Workstream / Run',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      StudioNavigation? navigatedTo;
+
+      final shellContext = StudioShellContext(
+        navigation: const StudioNavigation.run('project-1', 'run-1',
+            workstreamId: 'ws-1'),
+        projects: const [testProject],
+        selectedProject: testProject,
+        selectedWorkstream: testProject.workstreams.first,
+        selectedRun: const StudioRun(
+          id: 'run-1',
+          workstreamId: 'ws-1',
+          status: RunStatus.running,
+          objective: 'Run test objective',
+          taskCount: 2,
+          completedTaskCount: 1,
+          openFindingCount: 0,
+          verifiedCriterionCount: 1,
+          criterionCount: 2,
+          tokens: 500,
+          costMicros: 1000,
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: StudioTopBar(
+              shellContext: shellContext,
+              onNavigateTo: (nav) => navigatedTo = nav,
+              onOpenCommandPalette: () {},
+              onToggleTheme: () {},
+              onOpenNotifications: () {},
+              onOpenAbout: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Conclave AX'), findsOneWidget);
+      expect(find.text('Authentication redesign'), findsOneWidget);
+      expect(find.text('Run'), findsOneWidget);
+
+      // Click Workstream link in breadcrumb
+      await tester.tap(find.text('Authentication redesign'));
+      expect(navigatedTo?.kind, StudioRouteKind.workstream);
+      expect(navigatedTo?.projectId, 'project-1');
+      expect(navigatedTo?.workstreamId, 'ws-1');
     });
   });
 }

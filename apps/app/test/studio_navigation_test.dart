@@ -18,10 +18,19 @@ void main() {
     expect(workstream.toUri().path,
         '/projects/project-1/workstreams/workstream-2');
 
-    final run =
+    final legacyRun =
         StudioNavigation.fromUri(Uri.parse('/projects/project-1/runs/run-3'));
-    expect(run.kind, StudioRouteKind.run);
-    expect(run.toUri().path, '/projects/project-1/runs/run-3');
+    expect(legacyRun.kind, StudioRouteKind.run);
+    expect(legacyRun.toUri().path, '/projects/project-1/runs/run-3');
+
+    final canonicalRun = StudioNavigation.fromUri(Uri.parse(
+        '/projects/project-1/workstreams/workstream-2/runs/run-3'));
+    expect(canonicalRun.kind, StudioRouteKind.run);
+    expect(canonicalRun.projectId, 'project-1');
+    expect(canonicalRun.workstreamId, 'workstream-2');
+    expect(canonicalRun.runId, 'run-3');
+    expect(canonicalRun.toUri().path,
+        '/projects/project-1/workstreams/workstream-2/runs/run-3');
 
     final profile = StudioNavigation.fromUri(Uri.parse('/settings/profile'));
     expect(profile.kind, StudioRouteKind.profileSecurity);

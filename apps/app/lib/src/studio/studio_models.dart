@@ -997,6 +997,7 @@ class StudioUsageReport {
 class StudioRun {
   const StudioRun({
     required this.id,
+    this.workstreamId,
     required this.status,
     required this.objective,
     required this.taskCount,
@@ -1009,6 +1010,7 @@ class StudioRun {
   });
 
   final String id;
+  final String? workstreamId;
   final RunStatus status;
   final String objective;
   final int taskCount;
@@ -1021,6 +1023,7 @@ class StudioRun {
 
   factory StudioRun.fromJson(Map<String, dynamic> json) => StudioRun(
         id: _string(json, 'id'),
+        workstreamId: json['workstreamId'] as String?,
         status: RunStatus.values.firstWhere(
           (value) => value.name == json['status'],
           orElse: () => RunStatus.running,

@@ -40,8 +40,14 @@ class StudioNavigation {
             projectId: projectId,
             workstreamId: workstreamId);
 
-  const StudioNavigation.run(String projectId, String runId)
-      : this._(kind: StudioRouteKind.run, projectId: projectId, runId: runId);
+  const StudioNavigation.run(String projectId, String runId,
+      {String? workstreamId})
+      : this._(
+          kind: StudioRouteKind.run,
+          projectId: projectId,
+          runId: runId,
+          workstreamId: workstreamId,
+        );
 
   const StudioNavigation.hosts() : this._(kind: StudioRouteKind.hosts);
 
@@ -88,6 +94,16 @@ class StudioNavigation {
     if (parts case ['workers']) return const StudioNavigation.workers();
     if (parts case ['accounts']) return const StudioNavigation.accounts();
     if (parts case ['usage']) return const StudioNavigation.usage();
+    if (parts case [
+      'projects',
+      final pId,
+      'workstreams',
+      final wsId,
+      'runs',
+      final rId
+    ]) {
+      return StudioNavigation.run(pId, rId, workstreamId: wsId);
+    }
     if (parts.length >= 4 && parts[0] == 'projects') {
       if (parts[2] == 'chats') {
         return StudioNavigation.chat(parts[1], parts[3]);
@@ -113,7 +129,10 @@ class StudioNavigation {
       StudioRouteKind.chat => Uri(path: '/projects/$projectId/chats/$chatId'),
       StudioRouteKind.workstream =>
         Uri(path: '/projects/$projectId/workstreams/$workstreamId'),
-      StudioRouteKind.run => Uri(path: '/projects/$projectId/runs/$runId'),
+      StudioRouteKind.run => workstreamId != null
+          ? Uri(
+              path: '/projects/$projectId/workstreams/$workstreamId/runs/$runId')
+          : Uri(path: '/projects/$projectId/runs/$runId'),
       StudioRouteKind.hosts => Uri(path: '/workspaces'),
       StudioRouteKind.workers => Uri(path: '/workers'),
       StudioRouteKind.accounts => Uri(path: '/accounts'),
