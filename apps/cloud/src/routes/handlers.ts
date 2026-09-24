@@ -7184,11 +7184,10 @@ async function handleStudioSnapshot(
        FROM projects p
        JOIN project_memberships pm ON pm.project_id = p.id
        WHERE pm.user_id = ?1
-         AND (?2 IS NULL OR p.id = ?2)
          AND COALESCE(json_extract(p.settings_json, '$.archived'), 0) = 0
        ORDER BY p.updated_at DESC`,
     )
-      .bind(context.userId, projectId)
+      .bind(context.userId)
       .all<{
         id: string;
         name: string;
@@ -7203,10 +7202,10 @@ async function handleStudioSnapshot(
               ws.created_at AS createdAt, ws.updated_at AS updatedAt
        FROM workstreams ws
        JOIN project_memberships pm ON pm.project_id = ws.project_id
-       WHERE pm.user_id = ?1 AND (?2 IS NULL OR ws.project_id = ?2)
+       WHERE pm.user_id = ?1
        ORDER BY ws.updated_at DESC`,
     )
-      .bind(context.userId, projectId)
+      .bind(context.userId)
       .all<Record<string, unknown>>();
     const workstreamsByProject = new Map<string, Record<string, unknown>[]>();
     for (const row of workstreamRows.results ?? []) {
@@ -7267,21 +7266,13 @@ async function handleStudioSnapshot(
   }
   const testMode = testAuthenticationEnabled(securityEnv);
   const projectFilter =
-    projectId === null
-      ? testMode
-        ? ""
-        : " WHERE p.workspace_id = ?1"
-      : testMode
-        ? " WHERE p.id = ?1"
-        : " WHERE p.id = ?2 AND p.workspace_id = ?1";
+    testMode
+      ? ""
+      : " WHERE p.workspace_id = ?1";
   const bind =
-    projectId === null
-      ? testMode
-        ? []
-        : [context.workspaceId]
-      : testMode
-        ? [projectId]
-        : [context.workspaceId, projectId];
+    testMode
+      ? []
+      : [context.workspaceId];
   const restrictProjects =
     !testMode &&
     context.workspaceRole !== "owner" &&

@@ -132,6 +132,74 @@ describe("v6 Project creation", () => {
     });
   });
 
+  it("serves all user projects when projectId is provided in snapshot query", async () => {
+    const bindArgs: unknown[][] = [];
+    const db = {
+      prepare() {
+        return {
+          bind(...args: unknown[]) {
+            bindArgs.push(args);
+            return this;
+          },
+          async all() {
+            return {
+              results: [
+                {
+                  id: "project-1",
+                  name: "Project 1",
+                  description: null,
+                  repository: null,
+                  lastActivity: "2026-09-24T00:00:00Z",
+                },
+                {
+                  id: "project-2",
+                  name: "Project 2",
+                  description: null,
+                  repository: null,
+                  lastActivity: "2026-09-24T00:00:00Z",
+                },
+              ],
+            };
+          },
+        };
+      },
+    };
+    const response = await handleStudioSnapshot(
+      {
+        CONCLAVE_ENVIRONMENT: "development",
+        CONCLAVE_DB: db,
+        TEST_AUTHENTICATION: async () => ({
+          userId: "user-1",
+          user: {
+            id: "user-1",
+            email: "owner@example.test",
+            displayName: "Owner",
+            status: "active",
+          },
+          workspaceId: "",
+          workspaceRole: "viewer",
+          roles: ["viewer"],
+          authorizedProjectIds: ["project-1", "project-2"],
+          projectRoles: { "project-1": "owner", "project-2": "owner" },
+          sessionId: "session-1",
+          clientType: "web",
+          organizationId: "",
+          organizationRoles: ["viewer"],
+          authorizationModel: "v5",
+          ownedWorkspaceIds: [],
+          ownedAccountIds: [],
+        }),
+      } as never,
+      new Request("https://conclave.test/api/studio/snapshot?projectId=project-1"),
+      "project-1",
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { projects: { id: string }[] };
+    expect(body.projects.length).toBe(2);
+    expect(bindArgs[0]).toEqual(["user-1"]);
+  });
+
   it("creates a persisted Workstream with a lead membership", async () => {
     const prepared: string[] = [];
     let batchSize = 0;

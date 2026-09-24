@@ -16,6 +16,10 @@ class AppSidebar extends StatelessWidget {
     required this.onToggleProjectExpanded,
     required this.onCreateProject,
     this.onCreateWorkstream,
+    this.searchController,
+    this.searchFocusNode,
+    this.onSearchChanged,
+    this.onClearSearch,
     this.onOpenCommandPalette,
     this.onOpenNotifications,
     this.onToggleTheme,
@@ -31,6 +35,10 @@ class AppSidebar extends StatelessWidget {
   final ValueChanged<String> onToggleProjectExpanded;
   final VoidCallback onCreateProject;
   final ValueChanged<StudioProject>? onCreateWorkstream;
+  final TextEditingController? searchController;
+  final FocusNode? searchFocusNode;
+  final ValueChanged<String>? onSearchChanged;
+  final VoidCallback? onClearSearch;
   final VoidCallback? onOpenCommandPalette;
   final VoidCallback? onOpenNotifications;
   final VoidCallback? onToggleTheme;
@@ -65,6 +73,7 @@ class AppSidebar extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
                   child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       ConclaveBrand.logoMark(size: 28),
                       const SizedBox(width: 10),
@@ -95,51 +104,92 @@ class AppSidebar extends StatelessWidget {
                   Expanded(
                     child: Tooltip(
                       message: 'Search or jump to... (⌘K)',
-                      child: InkWell(
-                        onTap: onOpenCommandPalette,
-                        borderRadius: BorderRadius.circular(8),
-                        hoverColor: const Color(0xff29283c),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 6.5),
-                          decoration: BoxDecoration(
-                            color: const Color(0xff181724),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: const Color(0xff2d2b40)),
-                          ),
-                          child: const Row(
+                      child: Container(
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: const Color(0xff181724),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xff2d2b40)),
+                        ),
+                        child: ListenableBuilder(
+                          listenable:
+                              searchController ?? TextEditingController(),
+                          builder: (context, _) {
+                            final hasText =
+                                searchController?.text.isNotEmpty ?? false;
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              Icon(
-                                Icons.search_rounded,
-                                size: 15,
-                                color: Colors.white54,
+                              const Padding(
+                                padding: EdgeInsets.only(left: 8, right: 4),
+                                child: Icon(
+                                  Icons.search_rounded,
+                                  size: 15,
+                                  color: Colors.white54,
+                                ),
                               ),
-                              SizedBox(width: 6),
                               Expanded(
-                                child: Text(
-                                  'Search...',
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
+                                child: TextField(
+                                  controller: searchController,
+                                  focusNode: searchFocusNode,
+                                  onChanged: onSearchChanged,
+                                  style: const TextStyle(
                                     fontSize: 12,
-                                    color: Colors.white54,
+                                    color: Colors.white,
+                                  ),
+                                  cursorColor: ConclaveBrand.accent,
+                                  cursorHeight: 14,
+                                  decoration: const InputDecoration(
+                                    hintText: 'Search...',
+                                    hintStyle: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.white38,
+                                    ),
+                                    isDense: true,
+                                    contentPadding:
+                                        EdgeInsets.symmetric(vertical: 7),
+                                    border: InputBorder.none,
+                                    focusedBorder: InputBorder.none,
+                                    enabledBorder: InputBorder.none,
+                                    errorBorder: InputBorder.none,
+                                    disabledBorder: InputBorder.none,
                                   ),
                                 ),
                               ),
-                              Text(
-                                '⌘K',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white38,
+                              if (hasText)
+                                InkWell(
+                                  onTap: onClearSearch,
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: const Padding(
+                                    padding: EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 4),
+                                    child: Icon(
+                                      Icons.close_rounded,
+                                      size: 14,
+                                      color: Colors.white54,
+                                    ),
+                                  ),
+                                )
+                              else
+                                const Padding(
+                                  padding: EdgeInsets.only(right: 8),
+                                  child: Text(
+                                    '⌘K',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white24,
+                                    ),
+                                  ),
                                 ),
-                              ),
                             ],
-                          ),
-                        ),
+                          );
+                        },
                       ),
                     ),
                   ),
-                  const SizedBox(width: 6),
+                ),
+                const SizedBox(width: 6),
                   Tooltip(
                     message: 'New Project',
                     child: IconButton(

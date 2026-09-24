@@ -180,7 +180,7 @@ class AppTopHud extends StatelessWidget implements PreferredSizeWidget {
             ),
           ],
 
-          // Operational Execution Status Popover Trigger
+          // Operational Execution Status Popover Trigger (desktop/expanded only)
           if (!compact) ...[
             OutlinedButton.icon(
               onPressed: () => _openExecutionStatusPopover(context),
@@ -202,20 +202,6 @@ class AppTopHud extends StatelessWidget implements PreferredSizeWidget {
               ),
             ),
             const SizedBox(width: 8),
-          ] else ...[
-            IconButton(
-              tooltip: shellContext.executionStatusLabel,
-              onPressed: () => _openExecutionStatusPopover(context),
-              icon: Icon(
-                Icons.circle,
-                size: 8,
-                color: shellContext.executionStatusTone.color(isDark),
-              ),
-              splashRadius: 18,
-              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-              padding: EdgeInsets.zero,
-            ),
-            const SizedBox(width: 4),
           ],
 
           // Notifications Bell
@@ -260,113 +246,6 @@ class AppTopHud extends StatelessWidget implements PreferredSizeWidget {
                 ),
             ],
           ),
-
-          // Mobile / Compact Account & Avatar menu
-          if (compact) ...[
-            const SizedBox(width: 4),
-            PopupMenuButton<String>(
-              tooltip: 'Account menu',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 190),
-              onSelected: (value) {
-                if (value == 'profile') {
-                  onNavigateTo(const StudioNavigation.profileSecurity());
-                }
-                if (value == 'theme') onToggleTheme?.call();
-                if (value == 'about') onOpenAbout?.call();
-                if (value == 'website') {
-                  onOpenExternal?.call(Uri.parse('https://conclaveax.com'));
-                }
-                if (value == 'logout') onLogout?.call();
-              },
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: 'profile',
-                  child: Row(
-                    children: [
-                      const Icon(Icons.person_outline_rounded, size: 16),
-                      const SizedBox(width: 8),
-                      Text(
-                        shellContext.viewerDisplayName ??
-                            shellContext.viewerEmail ??
-                            'Profile & Security',
-                      ),
-                    ],
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'theme',
-                  child: Row(
-                    children: [
-                      Icon(
-                        shellContext.isDarkTheme
-                            ? Icons.light_mode_outlined
-                            : Icons.dark_mode_outlined,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        shellContext.isDarkTheme
-                            ? 'Switch to light mode'
-                            : 'Switch to dark mode',
-                      ),
-                    ],
-                  ),
-                ),
-                if (onOpenAbout != null)
-                  PopupMenuItem(
-                    value: 'about',
-                    child: Row(
-                      children: [
-                        ConclaveBrand.logoMark(size: 16),
-                        const SizedBox(width: 8),
-                        const Text('About Conclave AX'),
-                      ],
-                    ),
-                  ),
-                if (onOpenExternal != null)
-                  const PopupMenuItem(
-                    value: 'website',
-                    child: Row(
-                      children: [
-                        Icon(Icons.open_in_new_rounded, size: 16),
-                        SizedBox(width: 8),
-                        Text('Website'),
-                      ],
-                    ),
-                  ),
-                if (onLogout != null) ...[
-                  const PopupMenuDivider(),
-                  const PopupMenuItem(
-                    value: 'logout',
-                    child: Row(
-                      children: [
-                        Icon(Icons.logout_rounded, size: 16),
-                        SizedBox(width: 8),
-                        Text('Log out'),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-              child: CircleAvatar(
-                radius: 13,
-                backgroundColor: isDark
-                    ? ConclaveBrand.accentWashDark
-                    : const Color(0xffd8d2ff),
-                child: Text(
-                  shellContext.viewerInitials,
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    color: isDark
-                        ? ConclaveBrand.accent
-                        : const Color(0xff4238a0),
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-          ],
         ],
       ),
     );

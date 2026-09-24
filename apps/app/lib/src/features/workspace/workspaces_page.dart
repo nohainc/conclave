@@ -123,17 +123,19 @@ class _WorkspacesPageState extends State<WorkspacesPage>
               context,
               'Workspaces',
               'Execution environments, Workers, and AI Accounts.',
-              widget.onAdd,
             ),
             const SizedBox(height: 16),
-            TabBar(
-              controller: _tabController,
-              isScrollable: true,
-              tabs: const [
-                Tab(text: 'Workspaces'),
-                Tab(text: 'Workers'),
-                Tab(text: 'AI Accounts'),
-              ],
+            Center(
+              child: TabBar(
+                controller: _tabController,
+                tabAlignment: TabAlignment.center,
+                isScrollable: true,
+                tabs: const [
+                  Tab(text: 'Workspaces'),
+                  Tab(text: 'Workers'),
+                  Tab(text: 'AI Accounts'),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             if (activeIndex == 0)
@@ -170,37 +172,24 @@ class _WorkspacesPageState extends State<WorkspacesPage>
     BuildContext context,
     String title,
     String subtitle,
-    VoidCallback action,
   ) =>
-      Wrap(
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        runSpacing: 10,
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 25,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  fontSize: 13,
-                ),
-              ),
-            ],
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 25,
+              fontWeight: FontWeight.w700,
+            ),
           ),
-          FilledButton.icon(
-            onPressed: action,
-            icon: const Icon(Icons.add_business_outlined),
-            label: const Text('Add Workspace'),
+          const SizedBox(height: 6),
+          Text(
+            subtitle,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 13,
+            ),
           ),
         ],
       );

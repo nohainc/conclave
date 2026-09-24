@@ -101,6 +101,9 @@ class AppBreadcrumb extends StatelessWidget {
       StudioRouteKind.profileSecurity => [
           _breadcrumbText('Profile & Security', isCurrent: true),
         ],
+      StudioRouteKind.search => [
+          _breadcrumbText('Search', isCurrent: true),
+        ],
       _ => [
           _breadcrumbText('Conclave AX', isCurrent: true),
         ],

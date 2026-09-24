@@ -55,12 +55,23 @@ class WorkspacesOverview extends StatelessWidget {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: workspaces
-          .map((ws) => _WorkspaceCard(
-                workspace: ws,
-                onSelect: () => onSelectWorkspace(ws),
-              ))
-          .toList(),
+      children: [
+        Align(
+          alignment: Alignment.centerRight,
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: FilledButton.icon(
+              onPressed: onAdd,
+              icon: const Icon(Icons.add_business_outlined),
+              label: const Text('Add Workspace'),
+            ),
+          ),
+        ),
+        ...workspaces.map((ws) => _WorkspaceCard(
+              workspace: ws,
+              onSelect: () => onSelectWorkspace(ws),
+            )),
+      ],
     );
   }
 }

@@ -22,6 +22,7 @@ import '../features/navigation/studio_shell_context.dart';
 import '../features/navigation/studio_sidebar.dart';
 import '../features/navigation/studio_top_bar.dart';
 import '../features/projects/projects_pages.dart';
+import '../features/search/search_page.dart';
 import '../features/workspace/workspaces_page.dart';
 import 'studio_models.dart';
 import 'studio_data.dart';
@@ -108,6 +109,10 @@ class _StudioAppState extends State<ConclaveAppShell> {
   String? authError;
   String? pendingRunPrompt;
   final promptResponseController = TextEditingController();
+  final TextEditingController _searchQueryController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  String _searchQuery = '';
+  StudioNavigation? _navigationBeforeSearch;
   DateTime? _lastRealtimeAnnouncement;
   List<StudioPendingInvitation> pendingInvitations = const [];
   StudioAccountSecurity? accountSecurity;
@@ -144,40 +149,56 @@ class _StudioAppState extends State<ConclaveAppShell> {
     });
   }
 
+  void _onSearchQueryChanged() {
+    final newQuery = _searchQueryController.text.trim();
+    if (newQuery == _searchQuery) return;
+
+    if (_searchQuery.isEmpty && newQuery.isNotEmpty) {
+      if (navigation.kind != StudioRouteKind.search) {
+        _navigationBeforeSearch = navigation;
+      }
+      setState(() {
+        _searchQuery = newQuery;
+        navigation = StudioNavigation.search(newQuery);
+      });
+    } else if (_searchQuery.isNotEmpty && newQuery.isEmpty) {
+      final restoreNav =
+          _navigationBeforeSearch ?? const StudioNavigation.home();
+      _navigationBeforeSearch = null;
+      setState(() {
+        _searchQuery = '';
+        navigation = restoreNav;
+      });
+    } else {
+      setState(() {
+        _searchQuery = newQuery;
+        if (navigation.kind == StudioRouteKind.search) {
+          navigation = StudioNavigation.search(newQuery);
+        }
+      });
+    }
+  }
+
+  void _clearSearch() {
+    if (_searchQueryController.text.isNotEmpty) {
+      _searchQueryController.clear();
+    } else if (navigation.kind == StudioRouteKind.search) {
+      final restoreNav =
+          _navigationBeforeSearch ?? const StudioNavigation.home();
+      _navigationBeforeSearch = null;
+      setState(() {
+        _searchQuery = '';
+        navigation = restoreNav;
+      });
+    }
+  }
+
+  void _focusSearch() {
+    _searchFocusNode.requestFocus();
+  }
+
   void _openCommandPalette() {
-    final context = navigatorKey.currentContext;
-    if (context == null) return;
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => CommandPaletteDialog(
-        snapshot: snapshot,
-        onSelectProject: (projectId) {
-          setState(() {
-            selectedProjectId = projectId;
-          });
-          unawaited(_loadSnapshot(projectId: projectId));
-        },
-        onSelectChat: (projectId, chatId) {
-          setState(() {
-            selectedProjectId = projectId;
-            selectedChatId = chatId;
-          });
-          unawaited(_loadSnapshot(projectId: projectId));
-        },
-        onNavigateTo: (target) => _navigateTo(target, replace: true),
-        onToggleTheme: () {
-          setState(() {
-            _themeMode =
-                _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
-          });
-        },
-        onNewGoal: () {
-          setState(() {
-            showNewGoal = true;
-          });
-        },
-      ),
-    );
+    _focusSearch();
   }
 
 
@@ -244,6 +265,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
   @override
   void initState() {
     super.initState();
+    _searchQueryController.addListener(_onSearchQueryChanged);
     browserNavigation = createStudioBrowserNavigation();
     navigation = StudioNavigation.fromUri(
         widget.initialUri ?? browserNavigation.current);
@@ -974,6 +996,14 @@ class _StudioAppState extends State<ConclaveAppShell> {
   }
 
   void _navigateTo(StudioNavigation next, {bool replace = false}) {
+    if (next.kind != StudioRouteKind.search &&
+        _searchQueryController.text.isNotEmpty) {
+      _searchQueryController.removeListener(_onSearchQueryChanged);
+      _searchQueryController.clear();
+      _searchQuery = '';
+      _navigationBeforeSearch = null;
+      _searchQueryController.addListener(_onSearchQueryChanged);
+    }
     setState(() {
       navigation = next;
       selectedProjectId = next.projectId ?? selectedProjectId;
@@ -1438,6 +1468,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
     realtimeSubscription?.cancel();
     unawaited(realtimeClient.close());
     browserNavigation.dispose();
+    _searchQueryController.removeListener(_onSearchQueryChanged);
+    _searchQueryController.dispose();
+    _searchFocusNode.dispose();
     objectiveController.dispose();
     revisionController.dispose();
     chatController.dispose();
@@ -1496,9 +1529,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
       home: CallbackShortcuts(
         bindings: <ShortcutActivator, VoidCallback>{
           const SingleActivator(LogicalKeyboardKey.keyK, meta: true):
-              _openCommandPalette,
+              _focusSearch,
           const SingleActivator(LogicalKeyboardKey.keyK, control: true):
-              _openCommandPalette,
+              _focusSearch,
           const SingleActivator(LogicalKeyboardKey.keyN, meta: true):
               _handleContextualCreate,
           const SingleActivator(LogicalKeyboardKey.keyN, control: true):
@@ -1525,6 +1558,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
                               onToggleProjectExpanded: _toggleProjectExpanded,
                               onCreateProject: _createProject,
                               onCreateWorkstream: _createWorkstream,
+                              searchController: _searchQueryController,
+                              searchFocusNode: _searchFocusNode,
+                              onClearSearch: _clearSearch,
                               onOpenCommandPalette: _openCommandPalette,
                               onOpenNotifications: _showNotifications,
                               onToggleTheme: _toggleTheme,
@@ -1550,6 +1586,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
                                   _toggleProjectExpanded,
                               onCreateProject: _createProject,
                               onCreateWorkstream: _createWorkstream,
+                              searchController: _searchQueryController,
+                              searchFocusNode: _searchFocusNode,
+                              onClearSearch: _clearSearch,
                               onOpenCommandPalette: _openCommandPalette,
                               onOpenNotifications: _showNotifications,
                               onToggleTheme: _toggleTheme,
@@ -2338,6 +2377,27 @@ class _StudioAppState extends State<ConclaveAppShell> {
     );
   }
 
+  Widget _searchView() {
+    return SearchPage(
+      query: _searchQuery.isNotEmpty
+          ? _searchQuery
+          : _searchQueryController.text.trim(),
+      snapshot: snapshot,
+      onNavigateTo: _navigateTo,
+      onSelectProject: (projectId) {
+        _clearSearch();
+        _navigateTo(StudioNavigation.project(projectId));
+      },
+      onSelectChat: (projectId, chatId) {
+        _clearSearch();
+        _navigateTo(StudioNavigation.chat(projectId, chatId));
+      },
+      onClearSearch: _clearSearch,
+      onToggleTheme: _toggleTheme,
+      onNewGoal: () => setState(() => showNewGoal = true),
+    );
+  }
+
   Widget _runDetailsView(bool compact) {
     switch (navigation.kind) {
       case StudioRouteKind.hosts:
@@ -2356,6 +2416,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
         return _projectOverviewView();
       case StudioRouteKind.workstream:
         return _workstreamView();
+      case StudioRouteKind.search:
+        return _searchView();
       case StudioRouteKind.run:
       case StudioRouteKind.home:
       case StudioRouteKind.chat:

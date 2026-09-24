@@ -655,7 +655,8 @@ void main() {
       expect(commandPaletteOpened, isTrue);
     });
 
-    testWidgets('mobile/compact HUD renders account avatar and opens account menu',
+    testWidgets(
+        'tablet/compact HUD omits account avatar and renders direct search & notifications',
         (tester) async {
       tester.view.physicalSize = const Size(400, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -663,11 +664,6 @@ void main() {
         tester.view.resetPhysicalSize();
         tester.view.resetDevicePixelRatio();
       });
-
-      var themeToggled = false;
-      var aboutOpened = false;
-      var logoutCalled = false;
-      StudioNavigation? navigatedTo;
 
       const shellContext = StudioShellContext(
         navigation: StudioNavigation.home(),
@@ -683,12 +679,9 @@ void main() {
           home: Scaffold(
             body: StudioTopBar(
               shellContext: shellContext,
-              onNavigateTo: (nav) => navigatedTo = nav,
+              onNavigateTo: (_) {},
               onOpenCommandPalette: () {},
               onOpenNotifications: () {},
-              onToggleTheme: () => themeToggled = true,
-              onOpenAbout: () => aboutOpened = true,
-              onLogout: () => logoutCalled = true,
               compact: true,
             ),
           ),
@@ -696,44 +689,13 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Check initials avatar in compact HUD
-      expect(find.text('VN'), findsOneWidget);
+      // Account avatar should not be in compact HUD
+      expect(find.text('VN'), findsNothing);
+      expect(find.byTooltip('Account menu'), findsNothing);
 
-      // Tap Account menu avatar
-      await tester.tap(find.byTooltip('Account menu'));
-      await tester.pumpAndSettle();
-
-      // Verify Account Menu contents
-      expect(find.text('Vitalii Noha'), findsOneWidget);
-      expect(find.text('Switch to light mode'), findsOneWidget);
-      expect(find.text('About Conclave AX'), findsOneWidget);
-      expect(find.text('Log out'), findsOneWidget);
-
-      // Tap Switch to light mode
-      await tester.tap(find.text('Switch to light mode'));
-      await tester.pumpAndSettle();
-      expect(themeToggled, isTrue);
-
-      // Open menu again and tap About
-      await tester.tap(find.byTooltip('Account menu'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('About Conclave AX'));
-      await tester.pumpAndSettle();
-      expect(aboutOpened, isTrue);
-
-      // Open menu again and tap Profile
-      await tester.tap(find.byTooltip('Account menu'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Vitalii Noha'));
-      await tester.pumpAndSettle();
-      expect(navigatedTo?.kind, StudioRouteKind.profileSecurity);
-
-      // Open menu again and tap Logout
-      await tester.tap(find.byTooltip('Account menu'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Log out'));
-      await tester.pumpAndSettle();
-      expect(logoutCalled, isTrue);
+      // Search and Notifications should be present
+      expect(find.byTooltip('Search (⌘K)'), findsOneWidget);
+      expect(find.byTooltip('Notifications'), findsOneWidget);
     });
 
     testWidgets('renders Run breadcrumbs: Project / Workstream / Run',

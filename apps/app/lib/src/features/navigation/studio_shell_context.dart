@@ -208,6 +208,8 @@ class StudioShellContext {
             navigation.chatId == target.chatId;
       case StudioRouteKind.login:
         return navigation.kind == StudioRouteKind.login;
+      case StudioRouteKind.search:
+        return navigation.kind == StudioRouteKind.search;
     }
   }
 }

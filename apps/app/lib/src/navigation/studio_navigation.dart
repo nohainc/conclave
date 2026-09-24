@@ -11,6 +11,7 @@ enum StudioRouteKind {
   usage,
   profileSecurity,
   login,
+  search,
 }
 
 class StudioNavigation {
@@ -21,6 +22,7 @@ class StudioNavigation {
     this.workstreamId,
     this.runId,
     this.loginReturnTo,
+    this.searchQuery,
   });
 
   const StudioNavigation.home() : this._(kind: StudioRouteKind.home);
@@ -63,6 +65,9 @@ class StudioNavigation {
   const StudioNavigation.profileSecurity()
       : this._(kind: StudioRouteKind.profileSecurity);
 
+  const StudioNavigation.search([String? query])
+      : this._(kind: StudioRouteKind.search, searchQuery: query);
+
   /// Compatibility parser for old links. New links serialize canonically.
   const StudioNavigation.account()
       : this._(kind: StudioRouteKind.profileSecurity);
@@ -73,6 +78,7 @@ class StudioNavigation {
   final String? workstreamId;
   final String? runId;
   final String? loginReturnTo;
+  final String? searchQuery;
 
   factory StudioNavigation.fromUri(Uri uri) {
     final segments = uri.pathSegments.where((segment) => segment.isNotEmpty);
@@ -105,6 +111,9 @@ class StudioNavigation {
     if (parts case ['workers']) return const StudioNavigation.workers();
     if (parts case ['accounts']) return const StudioNavigation.accounts();
     if (parts case ['usage']) return const StudioNavigation.usage();
+    if (parts case ['search']) {
+      return StudioNavigation.search(uri.queryParameters['q']);
+    }
     if (parts case [
       'projects',
       final pId,
@@ -153,6 +162,12 @@ class StudioNavigation {
           queryParameters:
               loginReturnTo == null ? null : {'returnTo': loginReturnTo}),
       StudioRouteKind.profileSecurity => Uri(path: '/settings/profile'),
+      StudioRouteKind.search => Uri(
+          path: '/search',
+          queryParameters: (searchQuery != null && searchQuery!.isNotEmpty)
+              ? {'q': searchQuery!}
+              : null,
+        ),
     };
   }
 
@@ -164,9 +179,10 @@ class StudioNavigation {
       other.chatId == chatId &&
       other.workstreamId == workstreamId &&
       other.runId == runId &&
-      other.loginReturnTo == loginReturnTo;
+      other.loginReturnTo == loginReturnTo &&
+      other.searchQuery == searchQuery;
 
   @override
-  int get hashCode =>
-      Object.hash(kind, projectId, chatId, workstreamId, runId, loginReturnTo);
+  int get hashCode => Object.hash(
+      kind, projectId, chatId, workstreamId, runId, loginReturnTo, searchQuery);
 }
