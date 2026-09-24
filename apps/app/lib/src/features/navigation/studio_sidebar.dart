@@ -403,66 +403,130 @@ class StudioSidebar extends StatelessWidget {
         shellContext.navigation.projectId == project.id &&
             shellContext.navigation.kind == StudioRouteKind.project;
     final isExpanded = shellContext.isProjectExpanded(project.id);
+    final visibleWorkstreams = project.workstreams
+        .where((w) => w.status.toLowerCase() != 'archived')
+        .toList();
+    final runningCount = visibleWorkstreams
+        .where((w) =>
+            w.status.toLowerCase() == 'running' ||
+            w.status.toLowerCase() == 'executing')
+        .length;
+    final attentionCount = visibleWorkstreams
+        .where((w) =>
+            w.status.toLowerCase() == 'blocked' ||
+            w.status.toLowerCase() == 'failed' ||
+            w.status.toLowerCase() == 'attention' ||
+            w.status.toLowerCase() == 'needs_approval')
+        .length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        InkWell(
-          onTap: () {
-            onNavigateTo(StudioNavigation.project(project.id));
-            if (compact) Scaffold.maybeOf(context)?.closeDrawer();
-          },
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 2),
-            padding: const EdgeInsets.fromLTRB(4, 5, 8, 5),
-            decoration: BoxDecoration(
-              color: isProjectFocused
-                  ? const Color(0xff29283c)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                InkWell(
-                  onTap: () => onToggleProjectExpanded(project.id),
-                  borderRadius: BorderRadius.circular(4),
+        Container(
+          margin: const EdgeInsets.only(bottom: 2),
+          decoration: BoxDecoration(
+            color: isProjectFocused
+                ? const Color(0xff29283c)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              // Chevron: only expands / collapses workstreams
+              IconButton(
+                onPressed: () => onToggleProjectExpanded(project.id),
+                icon: Icon(
+                  isExpanded
+                      ? Icons.expand_more_rounded
+                      : Icons.chevron_right_rounded,
+                  size: 16,
+                  color: Colors.white54,
+                ),
+                tooltip:
+                    isExpanded ? 'Collapse workstreams' : 'Expand workstreams',
+                splashRadius: 12,
+                padding: const EdgeInsets.all(4),
+                constraints:
+                    const BoxConstraints(minWidth: 24, minHeight: 24),
+              ),
+              // Project title row: navigates to /projects/:projectId
+              Expanded(
+                child: InkWell(
+                  onTap: () {
+                    onNavigateTo(StudioNavigation.project(project.id));
+                    if (compact) Scaffold.maybeOf(context)?.closeDrawer();
+                  },
+                  borderRadius: BorderRadius.circular(6),
                   child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Icon(
-                      isExpanded
-                          ? Icons.expand_more_rounded
-                          : Icons.chevron_right_rounded,
-                      size: 16,
-                      color: Colors.white54,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 4, vertical: 6),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            project.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: isProjectFocused
+                                  ? Colors.white
+                                  : Colors.white70,
+                              fontSize: 12,
+                              fontWeight: isProjectFocused
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
+                            ),
+                          ),
+                        ),
+                        if (runningCount > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xff6254d9),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '$runningCount',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          )
+                        else if (attentionCount > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: const Color(0xffd97706),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              '!',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ),
-                const SizedBox(width: 2),
-                Expanded(
-                  child: Text(
-                    project.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: isProjectFocused ? Colors.white : Colors.white70,
-                      fontSize: 12,
-                      fontWeight: isProjectFocused
-                          ? FontWeight.w600
-                          : FontWeight.w400,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
         if (isExpanded)
-          ...project.workstreams.map(
+          ...visibleWorkstreams.map(
             (workstream) {
               final isWorkstreamSelected =
                   shellContext.navigation.workstreamId == workstream.id;
-              final statusColor = _statusColor(workstream.status);
+              final statusIndicator =
+                  _buildWorkstreamStatusIndicator(workstream.status);
 
               return InkWell(
                 onTap: () {
@@ -482,15 +546,10 @@ class StudioSidebar extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      Container(
-                        width: 7,
-                        height: 7,
-                        decoration: BoxDecoration(
-                          color: statusColor,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
+                      if (statusIndicator != null) ...[
+                        statusIndicator,
+                        const SizedBox(width: 8),
+                      ],
                       Expanded(
                         child: Text(
                           workstream.name,
@@ -517,23 +576,52 @@ class StudioSidebar extends StatelessWidget {
     );
   }
 
-  Color _statusColor(String status) {
+  Widget? _buildWorkstreamStatusIndicator(String status) {
     switch (status.toLowerCase()) {
       case 'running':
       case 'executing':
-        return const Color(0xff8c7dfd);
-      case 'active':
+        return Container(
+          width: 6,
+          height: 6,
+          decoration: const BoxDecoration(
+            color: Color(0xffa78bfa),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x66a78bfa),
+                blurRadius: 4,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+        );
       case 'queued':
       case 'ready':
-        return const Color(0xff43b17f);
+        return Container(
+          width: 6,
+          height: 6,
+          decoration: const BoxDecoration(
+            color: Color(0xff94a3b8),
+            shape: BoxShape.circle,
+          ),
+        );
       case 'blocked':
       case 'failed':
-        return const Color(0xffff6b6b);
-      case 'completed':
+      case 'attention':
+      case 'needs_approval':
+        return Container(
+          width: 6,
+          height: 6,
+          decoration: const BoxDecoration(
+            color: Color(0xfff59e0b),
+            shape: BoxShape.circle,
+          ),
+        );
+      case 'idle':
       case 'done':
-        return const Color(0xff70d6a5);
+      case 'completed':
       default:
-        return Colors.white38;
+        return null;
     }
   }
 }

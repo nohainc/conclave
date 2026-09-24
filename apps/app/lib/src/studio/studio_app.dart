@@ -65,7 +65,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
   String? loadError;
   String? selectedTaskId = 'implement';
   String? selectedChatId;
-  final Set<String> expandedProjectIds = {'forge'};
+  final Set<String> expandedProjectIds = <String>{};
   bool showNewGoal = false;
   bool showWorkerDrawer = false;
   String? workerActionMessage;
@@ -859,7 +859,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
                 (project) => project.id == (projectId ?? selectedProjectId))
             ? (projectId ?? selectedProjectId)
             : loaded.projects.firstOrNull?.id;
-        selectedChatId = loaded.activeChatId ?? loaded.activeChat?.id;
+        selectedChatId = navigation.kind == StudioRouteKind.chat
+            ? (loaded.activeChatId ?? loaded.activeChat?.id)
+            : null;
         isLoading = false;
         isReconnecting = false;
         authRequired = false;
@@ -924,9 +926,16 @@ class _StudioAppState extends State<ConclaveAppShell> {
     final project = loaded.projects
         .where((value) => value.id == selectedProjectId)
         .firstOrNull;
-    if (navigation.chatId != null &&
+    if (navigation.kind == StudioRouteKind.chat &&
+        navigation.chatId != null &&
         project?.chats.any((chat) => chat.id == navigation.chatId) == true) {
       selectedChatId = navigation.chatId;
+    } else if (navigation.kind != StudioRouteKind.chat) {
+      selectedChatId = null;
+    }
+    if (navigation.kind == StudioRouteKind.workstream &&
+        navigation.projectId != null) {
+      expandedProjectIds.add(navigation.projectId!);
     }
   }
 
@@ -938,7 +947,11 @@ class _StudioAppState extends State<ConclaveAppShell> {
     setState(() {
       navigation = next;
       selectedProjectId = next.projectId ?? selectedProjectId;
-      selectedChatId = next.chatId ?? selectedChatId;
+      selectedChatId =
+          next.kind == StudioRouteKind.chat ? next.chatId : null;
+      if (next.kind == StudioRouteKind.workstream && next.projectId != null) {
+        expandedProjectIds.add(next.projectId!);
+      }
     });
     if (next.kind == StudioRouteKind.profileSecurity) {
       unawaited(_loadAccountSecurity());
@@ -958,7 +971,11 @@ class _StudioAppState extends State<ConclaveAppShell> {
     setState(() {
       navigation = next;
       selectedProjectId = next.projectId ?? selectedProjectId;
-      selectedChatId = next.chatId ?? selectedChatId;
+      selectedChatId =
+          next.kind == StudioRouteKind.chat ? next.chatId : null;
+      if (next.kind == StudioRouteKind.workstream && next.projectId != null) {
+        expandedProjectIds.add(next.projectId!);
+      }
     });
     if (replace) {
       browserNavigation.replace(next.toUri());
@@ -1451,6 +1468,15 @@ class _StudioAppState extends State<ConclaveAppShell> {
     }
   }
 
+  void _handleContextualCreate() {
+    final project = selectedProject;
+    if (project != null) {
+      _createWorkstream(project);
+    } else {
+      _createProject();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -1468,9 +1494,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
           const SingleActivator(LogicalKeyboardKey.keyK, control: true):
               _openCommandPalette,
           const SingleActivator(LogicalKeyboardKey.keyN, meta: true):
-              _createProject,
+              _handleContextualCreate,
           const SingleActivator(LogicalKeyboardKey.keyN, control: true):
-              _createProject,
+              _handleContextualCreate,
         },
         child: Focus(
           autofocus: true,

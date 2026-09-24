@@ -131,6 +131,9 @@ void main() {
       // Check Project & Workstream tree
       expect(find.text('Authentication redesign'), findsOneWidget);
 
+      // Check Running count badge (1 running workstream) and Workspaces badge (1 workspace)
+      expect(find.text('1'), findsNWidgets(2));
+
       // Check Viewer Initials & Name
       expect(find.text('VN'), findsOneWidget);
       expect(find.text('Vitalii Noha'), findsOneWidget);
@@ -153,6 +156,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(createdWorkstreamProject?.id, 'project-1');
 
+      // Tap Project row to navigate to /projects/:projectId
+      await tester.tap(find.text('Conclave AX').last);
+      expect(navigatedTo?.kind, StudioRouteKind.project);
+      expect(navigatedTo?.projectId, 'project-1');
+
       // Tap workstream row
       await tester.tap(find.text('Authentication redesign'));
       expect(navigatedTo?.kind, StudioRouteKind.workstream);
@@ -161,6 +169,69 @@ void main() {
       // Tap chevron to toggle expansion
       await tester.tap(find.byIcon(Icons.expand_more_rounded));
       expect(toggledProjectId, 'project-1');
+    });
+
+    testWidgets('excludes archived workstreams from sidebar list',
+        (tester) async {
+      const projectWithArchived = StudioProject(
+        id: 'project-2',
+        name: 'Conclave Core',
+        repository: 'github.com/conclave/core',
+        branch: 'main',
+        activeGoals: 0,
+        lastActivity: 'today',
+        workstreams: [
+          StudioWorkstream(
+            id: 'ws-active',
+            projectId: 'project-2',
+            name: 'Active Workstream',
+            lead: 'Vitalii',
+            status: 'active',
+            brief: 'Active task',
+            primaryWorkspace: 'MacBook Pro',
+            currentCheckpoint: 'main',
+            queueStatus: 'Idle',
+          ),
+          StudioWorkstream(
+            id: 'ws-archived',
+            projectId: 'project-2',
+            name: 'Old Archived Workstream',
+            lead: 'Vitalii',
+            status: 'archived',
+            brief: 'Archived task',
+            primaryWorkspace: 'MacBook Pro',
+            currentCheckpoint: 'main',
+            queueStatus: 'Done',
+          ),
+        ],
+      );
+
+      const shellContext = StudioShellContext(
+        navigation: StudioNavigation.home(),
+        projects: [projectWithArchived],
+        expandedProjectIds: {'project-2'},
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: StudioSidebar(
+              shellContext: shellContext,
+              onNavigateTo: (_) {},
+              onToggleProjectExpanded: (_) {},
+              onCreateProject: () {},
+              onLogout: () {},
+              onOpenAbout: () {},
+              onOpenExternal: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Active Workstream'), findsOneWidget);
+      expect(find.text('Old Archived Workstream'), findsNothing);
     });
   });
 
