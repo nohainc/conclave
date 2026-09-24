@@ -59,8 +59,34 @@ class WorkspacesPage extends StatefulWidget {
   State<WorkspacesPage> createState() => _WorkspacesPageState();
 }
 
-class _WorkspacesPageState extends State<WorkspacesPage> {
+class _WorkspacesPageState extends State<WorkspacesPage>
+    with SingleTickerProviderStateMixin {
   StudioAgent? selected;
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(
+      length: 3,
+      initialIndex: widget.initialTab.clamp(0, 2),
+      vsync: this,
+    );
+  }
+
+  @override
+  void didUpdateWidget(WorkspacesPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialTab != widget.initialTab) {
+      _tabController.animateTo(widget.initialTab.clamp(0, 2));
+    }
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -86,58 +112,57 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
   }
 
   Widget _buildExecutionCenter(BuildContext context) {
-    return DefaultTabController(
-      key: ValueKey('execution_tabs_${widget.initialTab}'),
-      length: 3,
-      initialIndex: widget.initialTab.clamp(0, 2),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildHeader(
-            context,
-            'Workspaces',
-            'Execution environments, Workers, and AI Accounts.',
-            widget.onAdd,
-          ),
-          const SizedBox(height: 16),
-          const TabBar(
-            isScrollable: true,
-            tabs: [
-              Tab(text: 'Workspaces'),
-              Tab(text: 'Workers'),
-              Tab(text: 'AI Accounts'),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: TabBarView(
-              children: [
-                WorkspacesOverview(
-                  workspaces: widget.workspaces,
-                  onAdd: widget.onAdd,
-                  onSelectWorkspace: (ws) => setState(() => selected = ws),
-                ),
-                WorkersTab(
-                  workspaces: widget.workspaces,
-                  plugins: widget.plugins,
-                  onSetWorkerAvailability: widget.onSetWorkerAvailability,
-                  onShowWorkerDetails: widget.onShowWorkerDetails,
-                  onNavigateToAccounts: widget.onNavigateToAccounts,
-                ),
-                AccountsTab(
-                  accounts: widget.accounts,
-                  onCreateAccount: widget.onCreateAccount,
-                  onRequestAccountSetup: widget.onRequestAccountSetup,
-                  onRevokeAccount: widget.onRevokeAccount,
-                  workerActionMessage: widget.workerActionMessage,
-                  onDismissWorkerActionMessage:
-                      widget.onDismissWorkerActionMessage,
-                ),
+    return AnimatedBuilder(
+      animation: _tabController,
+      builder: (context, _) {
+        final activeIndex = _tabController.index;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeader(
+              context,
+              'Workspaces',
+              'Execution environments, Workers, and AI Accounts.',
+              widget.onAdd,
+            ),
+            const SizedBox(height: 16),
+            TabBar(
+              controller: _tabController,
+              isScrollable: true,
+              tabs: const [
+                Tab(text: 'Workspaces'),
+                Tab(text: 'Workers'),
+                Tab(text: 'AI Accounts'),
               ],
             ),
-          ),
-        ],
-      ),
+            const SizedBox(height: 16),
+            if (activeIndex == 0)
+              WorkspacesOverview(
+                workspaces: widget.workspaces,
+                onAdd: widget.onAdd,
+                onSelectWorkspace: (ws) => setState(() => selected = ws),
+              )
+            else if (activeIndex == 1)
+              WorkersTab(
+                workspaces: widget.workspaces,
+                plugins: widget.plugins,
+                onSetWorkerAvailability: widget.onSetWorkerAvailability,
+                onShowWorkerDetails: widget.onShowWorkerDetails,
+                onNavigateToAccounts: widget.onNavigateToAccounts,
+              )
+            else
+              AccountsTab(
+                accounts: widget.accounts,
+                onCreateAccount: widget.onCreateAccount,
+                onRequestAccountSetup: widget.onRequestAccountSetup,
+                onRevokeAccount: widget.onRevokeAccount,
+                workerActionMessage: widget.workerActionMessage,
+                onDismissWorkerActionMessage:
+                    widget.onDismissWorkerActionMessage,
+              ),
+          ],
+        );
+      },
     );
   }
 

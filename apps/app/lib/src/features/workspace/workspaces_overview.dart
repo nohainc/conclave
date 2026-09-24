@@ -18,7 +18,8 @@ class WorkspacesOverview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (workspaces.isEmpty) {
-      return ListView(
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Card(
             margin: const EdgeInsets.only(bottom: 14),
@@ -52,7 +53,8 @@ class WorkspacesOverview extends StatelessWidget {
       );
     }
 
-    return ListView(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: workspaces
           .map((ws) => _WorkspaceCard(
                 workspace: ws,

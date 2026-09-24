@@ -6,25 +6,33 @@ import 'package:conclave_app/src/studio/studio_models.dart';
 import 'studio_fixture_snapshot.dart';
 
 void main() {
+  Widget buildTestScaffold(Widget child) {
+    return MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: child,
+        ),
+      ),
+    );
+  }
+
   group('WorkspacesPage (Consolidated Execution Configuration Center)', () {
     testWidgets('exposes top-level tabs: Workspaces, Workers, and AI Accounts',
         (tester) async {
       final snapshot = studioFixtureSnapshot();
       var addWorkspaceCalled = false;
 
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: WorkspacesPage(
-            workspaces: snapshot.agents,
-            workers: snapshot.workers,
-            accounts: snapshot.accounts,
-            plugins: snapshot.plugins,
-            onAdd: () => addWorkspaceCalled = true,
-            onRename: (_) {},
-            onUpdate: (_) {},
-            onRevoke: (_) {},
-            onGrant: (_) {},
-          ),
+      await tester.pumpWidget(buildTestScaffold(
+        WorkspacesPage(
+          workspaces: snapshot.agents,
+          workers: snapshot.workers,
+          accounts: snapshot.accounts,
+          plugins: snapshot.plugins,
+          onAdd: () => addWorkspaceCalled = true,
+          onRename: (_) {},
+          onUpdate: (_) {},
+          onRevoke: (_) {},
+          onGrant: (_) {},
         ),
       ));
       await tester.pumpAndSettle();
@@ -68,20 +76,18 @@ void main() {
       final snapshot = studioFixtureSnapshot();
 
       // initialTab: 1 (Workers)
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: WorkspacesPage(
-            workspaces: snapshot.agents,
-            workers: snapshot.workers,
-            accounts: snapshot.accounts,
-            plugins: snapshot.plugins,
-            initialTab: 1,
-            onAdd: () {},
-            onRename: (_) {},
-            onUpdate: (_) {},
-            onRevoke: (_) {},
-            onGrant: (_) {},
-          ),
+      await tester.pumpWidget(buildTestScaffold(
+        WorkspacesPage(
+          workspaces: snapshot.agents,
+          workers: snapshot.workers,
+          accounts: snapshot.accounts,
+          plugins: snapshot.plugins,
+          initialTab: 1,
+          onAdd: () {},
+          onRename: (_) {},
+          onUpdate: (_) {},
+          onRevoke: (_) {},
+          onGrant: (_) {},
         ),
       ));
       await tester.pumpAndSettle();
@@ -89,20 +95,18 @@ void main() {
       expect(find.text('Codex'), findsWidgets);
 
       // initialTab: 2 (AI Accounts)
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: WorkspacesPage(
-            workspaces: snapshot.agents,
-            workers: snapshot.workers,
-            accounts: snapshot.accounts,
-            plugins: snapshot.plugins,
-            initialTab: 2,
-            onAdd: () {},
-            onRename: (_) {},
-            onUpdate: (_) {},
-            onRevoke: (_) {},
-            onGrant: (_) {},
-          ),
+      await tester.pumpWidget(buildTestScaffold(
+        WorkspacesPage(
+          workspaces: snapshot.agents,
+          workers: snapshot.workers,
+          accounts: snapshot.accounts,
+          plugins: snapshot.plugins,
+          initialTab: 2,
+          onAdd: () {},
+          onRename: (_) {},
+          onUpdate: (_) {},
+          onRevoke: (_) {},
+          onGrant: (_) {},
         ),
       ));
       await tester.pumpAndSettle();
@@ -120,27 +124,25 @@ void main() {
       StudioAgent? toggledHost;
       bool? toggledDesired;
 
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: WorkspacesPage(
-            workspaces: snapshot.agents,
-            workers: snapshot.workers,
-            accounts: snapshot.accounts,
-            plugins: snapshot.plugins,
-            initialTab: 1,
-            onAdd: () {},
-            onRename: (_) {},
-            onUpdate: (_) {},
-            onRevoke: (_) {},
-            onGrant: (_) {},
-            onShowWorkerDetails: (p) => detailsPlugin = p,
-            onNavigateToAccounts: () => navigateToAccountsCalled = true,
-            onSetWorkerAvailability: (p, h, d) {
-              toggledPlugin = p;
-              toggledHost = h;
-              toggledDesired = d;
-            },
-          ),
+      await tester.pumpWidget(buildTestScaffold(
+        WorkspacesPage(
+          workspaces: snapshot.agents,
+          workers: snapshot.workers,
+          accounts: snapshot.accounts,
+          plugins: snapshot.plugins,
+          initialTab: 1,
+          onAdd: () {},
+          onRename: (_) {},
+          onUpdate: (_) {},
+          onRevoke: (_) {},
+          onGrant: (_) {},
+          onShowWorkerDetails: (p) => detailsPlugin = p,
+          onNavigateToAccounts: () => navigateToAccountsCalled = true,
+          onSetWorkerAvailability: (p, h, d) {
+            toggledPlugin = p;
+            toggledHost = h;
+            toggledDesired = d;
+          },
         ),
       ));
       await tester.pumpAndSettle();
@@ -170,25 +172,23 @@ void main() {
       StudioCredentialProfile? revokeProfile;
       var dismissedBanner = false;
 
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: WorkspacesPage(
-            workspaces: snapshot.agents,
-            workers: snapshot.workers,
-            accounts: snapshot.accounts,
-            plugins: snapshot.plugins,
-            initialTab: 2,
-            workerActionMessage: 'Action in progress...',
-            onDismissWorkerActionMessage: () => dismissedBanner = true,
-            onAdd: () {},
-            onRename: (_) {},
-            onUpdate: (_) {},
-            onRevoke: (_) {},
-            onGrant: (_) {},
-            onCreateAccount: () => createAccountCalled = true,
-            onRequestAccountSetup: (p) => setupProfile = p,
-            onRevokeAccount: (p) => revokeProfile = p,
-          ),
+      await tester.pumpWidget(buildTestScaffold(
+        WorkspacesPage(
+          workspaces: snapshot.agents,
+          workers: snapshot.workers,
+          accounts: snapshot.accounts,
+          plugins: snapshot.plugins,
+          initialTab: 2,
+          workerActionMessage: 'Action in progress...',
+          onDismissWorkerActionMessage: () => dismissedBanner = true,
+          onAdd: () {},
+          onRename: (_) {},
+          onUpdate: (_) {},
+          onRevoke: (_) {},
+          onGrant: (_) {},
+          onCreateAccount: () => createAccountCalled = true,
+          onRequestAccountSetup: (p) => setupProfile = p,
+          onRevokeAccount: (p) => revokeProfile = p,
         ),
       ));
       await tester.pumpAndSettle();
@@ -221,19 +221,17 @@ void main() {
     testWidgets('Workspace detail navigation and inner detail tabs',
         (tester) async {
       final snapshot = studioFixtureSnapshot();
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: WorkspacesPage(
-            workspaces: snapshot.agents,
-            workers: snapshot.workers,
-            accounts: snapshot.accounts,
-            plugins: snapshot.plugins,
-            onAdd: () {},
-            onRename: (_) {},
-            onUpdate: (_) {},
-            onRevoke: (_) {},
-            onGrant: (_) {},
-          ),
+      await tester.pumpWidget(buildTestScaffold(
+        WorkspacesPage(
+          workspaces: snapshot.agents,
+          workers: snapshot.workers,
+          accounts: snapshot.accounts,
+          plugins: snapshot.plugins,
+          onAdd: () {},
+          onRename: (_) {},
+          onUpdate: (_) {},
+          onRevoke: (_) {},
+          onGrant: (_) {},
         ),
       ));
       await tester.pumpAndSettle();
@@ -267,19 +265,17 @@ void main() {
         'Phase 5: preserves clear distinction between global and workspace-specific contextual detail',
         (tester) async {
       final snapshot = studioFixtureSnapshot();
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: WorkspacesPage(
-            workspaces: snapshot.agents,
-            workers: snapshot.workers,
-            accounts: snapshot.accounts,
-            plugins: snapshot.plugins,
-            onAdd: () {},
-            onRename: (_) {},
-            onUpdate: (_) {},
-            onRevoke: (_) {},
-            onGrant: (_) {},
-          ),
+      await tester.pumpWidget(buildTestScaffold(
+        WorkspacesPage(
+          workspaces: snapshot.agents,
+          workers: snapshot.workers,
+          accounts: snapshot.accounts,
+          plugins: snapshot.plugins,
+          onAdd: () {},
+          onRename: (_) {},
+          onUpdate: (_) {},
+          onRevoke: (_) {},
+          onGrant: (_) {},
         ),
       ));
       await tester.pumpAndSettle();
@@ -326,6 +322,65 @@ void main() {
               'Secrets remain local to this Workspace and are never transmitted to Cloud.'),
           findsOneWidget);
     });
+
+    testWidgets('renders cleanly without unbounded constraints inside SingleChildScrollView',
+        (tester) async {
+      final snapshot = studioFixtureSnapshot();
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: WorkspacesPage(
+              workspaces: snapshot.agents,
+              workers: snapshot.workers,
+              accounts: snapshot.accounts,
+              plugins: snapshot.plugins,
+              onAdd: () {},
+              onRename: (_) {},
+              onUpdate: (_) {},
+              onRevoke: (_) {},
+              onGrant: (_) {},
+            ),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      // Verify initial tab renders without layout errors
+      expect(find.text('Workspaces'), findsWidgets);
+      expect(tester.takeException(), isNull);
+
+      // Switch to Workers tab in scroll view
+      await tester.tap(find.widgetWithText(Tab, 'Workers'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('Manage Worker availability across your Workspaces.'), findsOneWidget);
+
+      // Switch to AI Accounts tab in scroll view
+      await tester.tap(find.widgetWithText(Tab, 'AI Accounts'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('Accounts used by Workers on your Workspaces.'), findsOneWidget);
+
+      // Drill into WorkspaceDetailView inside scroll view
+      await tester.tap(find.widgetWithText(Tab, 'Workspaces'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('View Workspace').first);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('Workspace overview'), findsOneWidget);
+
+      // Navigate inner tabs of WorkspaceDetailView
+      await tester.tap(find.widgetWithText(Tab, 'Workers'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      await tester.ensureVisible(find.widgetWithText(Tab, 'Repositories & permissions'));
+      await tester.tap(find.widgetWithText(Tab, 'Repositories & permissions'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
   });
 }
+
 
