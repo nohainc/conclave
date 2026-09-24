@@ -561,7 +561,8 @@ class StudioSidebar extends StatelessWidget {
           ...visibleWorkstreams.map(
             (workstream) {
               final isWorkstreamSelected =
-                  shellContext.navigation.workstreamId == workstream.id;
+                  shellContext.navigation.workstreamId == workstream.id ||
+                  shellContext.selectedWorkstream?.id == workstream.id;
               final statusIndicator =
                   _buildWorkstreamStatusIndicator(workstream.status);
 

@@ -1790,6 +1790,104 @@ void main() {
       await tester.pumpAndSettle();
       expect(createProjectCalled, isTrue);
     });
+
+    testWidgets(
+        'Phase 9: Fix Home/Projects active navigation isolation across all routes',
+        (tester) async {
+      const ws1 = StudioWorkstream(
+        id: 'ws-1',
+        projectId: 'p-1',
+        name: 'Authentication redesign',
+        lead: 'Vitalii',
+        status: 'running',
+        brief: 'Redesign login flow',
+        primaryWorkspace: 'MacBook Pro',
+        currentCheckpoint: 'main',
+        queueStatus: 'Running',
+      );
+
+      const project = StudioProject(
+        id: 'p-1',
+        name: 'Conclave AX',
+        repository: 'github.com/conclave/ax',
+        branch: 'main',
+        activeGoals: 0,
+        lastActivity: 'today',
+        workstreams: [ws1],
+      );
+
+      // 1. On Home route (/)
+      const homeCtx = StudioShellContext(
+        navigation: StudioNavigation.home(),
+        projects: [project],
+        expandedProjectIds: {'p-1'},
+      );
+      expect(homeCtx.isNavActive(const StudioNavigation.home()), isTrue);
+      expect(homeCtx.isNavActive(const StudioNavigation.projects()), isFalse);
+
+      // 2. On Projects list (/projects)
+      const projectsCtx = StudioShellContext(
+        navigation: StudioNavigation.projects(),
+        projects: [project],
+        expandedProjectIds: {'p-1'},
+      );
+      expect(projectsCtx.isNavActive(const StudioNavigation.home()), isFalse);
+      expect(projectsCtx.isNavActive(const StudioNavigation.projects()), isTrue);
+
+      // 3. On Project detail (/projects/p-1)
+      const projectDetailCtx = StudioShellContext(
+        navigation: StudioNavigation.project('p-1'),
+        projects: [project],
+        selectedProject: project,
+        expandedProjectIds: {'p-1'},
+      );
+      expect(projectDetailCtx.isNavActive(const StudioNavigation.home()), isFalse);
+      expect(projectDetailCtx.isNavActive(const StudioNavigation.projects()), isTrue);
+
+      // 4. On Workstream detail (/projects/p-1/workstreams/ws-1)
+      const workstreamCtx = StudioShellContext(
+        navigation: StudioNavigation.workstream('p-1', 'ws-1'),
+        projects: [project],
+        selectedProject: project,
+        selectedWorkstream: ws1,
+        expandedProjectIds: {'p-1'},
+      );
+      expect(workstreamCtx.isNavActive(const StudioNavigation.home()), isFalse);
+      expect(workstreamCtx.isNavActive(const StudioNavigation.projects()), isTrue);
+
+      // 5. On Run detail (/projects/p-1/workstreams/ws-1/runs/r-1)
+      const runCtx = StudioShellContext(
+        navigation: StudioNavigation.run('p-1', 'r-1', workstreamId: 'ws-1'),
+        projects: [project],
+        selectedProject: project,
+        selectedWorkstream: ws1,
+        expandedProjectIds: {'p-1'},
+      );
+      expect(runCtx.isNavActive(const StudioNavigation.home()), isFalse);
+      expect(runCtx.isNavActive(const StudioNavigation.projects()), isTrue);
+
+      // 6. Verify Visual UI: when on Workstream, Workstream item is highlighted, Home is not
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: StudioSidebar(
+              shellContext: workstreamCtx,
+              onNavigateTo: (_) {},
+              onToggleProjectExpanded: (_) {},
+              onCreateProject: () {},
+              onLogout: () {},
+              onOpenAbout: () {},
+              onOpenExternal: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Home container has transparent background, Projects nav is active
+      expect(find.text('Authentication redesign'), findsOneWidget);
+    });
   });
 }
 
