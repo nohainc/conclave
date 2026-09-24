@@ -14,6 +14,7 @@ class StudioSidebar extends StatelessWidget {
     required this.onToggleProjectExpanded,
     required this.onCreateProject,
     this.onCreateWorkstream,
+    this.onToggleTheme,
     required this.onLogout,
     required this.onOpenAbout,
     required this.onOpenExternal,
@@ -25,6 +26,7 @@ class StudioSidebar extends StatelessWidget {
   final ValueChanged<String> onToggleProjectExpanded;
   final VoidCallback onCreateProject;
   final ValueChanged<StudioProject>? onCreateWorkstream;
+  final VoidCallback? onToggleTheme;
   final VoidCallback onLogout;
   final VoidCallback onOpenAbout;
   final ValueChanged<Uri> onOpenExternal;
@@ -293,19 +295,64 @@ class StudioSidebar extends StatelessWidget {
                 PopupMenuButton<String>(
                   tooltip: 'Account menu',
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(width: 28),
+                  constraints: const BoxConstraints(minWidth: 190),
                   onSelected: (value) {
-                    if (value == 'logout') onLogout();
+                    if (value == 'theme') onToggleTheme?.call();
                     if (value == 'about') onOpenAbout();
                     if (value == 'website') {
                       onOpenExternal(Uri.parse('https://conclaveax.com'));
                     }
+                    if (value == 'logout') onLogout();
                   },
-                  itemBuilder: (context) => const [
+                  itemBuilder: (context) => [
                     PopupMenuItem(
-                        value: 'about', child: Text('About Conclave AX')),
-                    PopupMenuItem(value: 'website', child: Text('Website')),
-                    PopupMenuItem(value: 'logout', child: Text('Log out')),
+                      value: 'theme',
+                      child: Row(
+                        children: [
+                          Icon(
+                            shellContext.isDarkTheme
+                                ? Icons.light_mode_outlined
+                                : Icons.dark_mode_outlined,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(shellContext.isDarkTheme
+                              ? 'Switch to light mode'
+                              : 'Switch to dark mode'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'about',
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline_rounded, size: 16),
+                          SizedBox(width: 8),
+                          Text('About Conclave AX'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'website',
+                      child: Row(
+                        children: [
+                          Icon(Icons.open_in_new_rounded, size: 16),
+                          SizedBox(width: 8),
+                          Text('Website'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(
+                      value: 'logout',
+                      child: Row(
+                        children: [
+                          Icon(Icons.logout_rounded, size: 16),
+                          SizedBox(width: 8),
+                          Text('Log out'),
+                        ],
+                      ),
+                    ),
                   ],
                   icon: const Icon(Icons.more_horiz,
                       color: Colors.white38, size: 16),

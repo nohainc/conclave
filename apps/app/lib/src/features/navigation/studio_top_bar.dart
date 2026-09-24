@@ -12,18 +12,22 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
     required this.shellContext,
     required this.onNavigateTo,
     required this.onOpenCommandPalette,
-    required this.onToggleTheme,
     required this.onOpenNotifications,
-    required this.onOpenAbout,
+    this.onToggleTheme,
+    this.onOpenAbout,
+    this.onLogout,
+    this.onOpenExternal,
     this.compact = false,
   });
 
   final StudioShellContext shellContext;
   final ValueChanged<StudioNavigation> onNavigateTo;
   final VoidCallback onOpenCommandPalette;
-  final VoidCallback onToggleTheme;
   final VoidCallback onOpenNotifications;
-  final VoidCallback onOpenAbout;
+  final VoidCallback? onToggleTheme;
+  final VoidCallback? onOpenAbout;
+  final VoidCallback? onLogout;
+  final ValueChanged<Uri>? onOpenExternal;
   final bool compact;
 
   @override
@@ -213,18 +217,6 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
             const SizedBox(width: 4),
           ],
 
-          // Quick Theme Mode Toggle
-          IconButton(
-            tooltip: isDark ? 'Switch to light mode' : 'Switch to dark mode',
-            onPressed: onToggleTheme,
-            icon: Icon(
-              isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-              size: 19,
-              color: mutedInk,
-            ),
-            splashRadius: 20,
-          ),
-
           // Notifications Bell
           Stack(
             clipBehavior: Clip.none,
@@ -267,6 +259,113 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                 ),
             ],
           ),
+
+          // Mobile / Compact Account & Avatar menu
+          if (compact) ...[
+            const SizedBox(width: 4),
+            PopupMenuButton<String>(
+              tooltip: 'Account menu',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 190),
+              onSelected: (value) {
+                if (value == 'profile') {
+                  onNavigateTo(const StudioNavigation.profileSecurity());
+                }
+                if (value == 'theme') onToggleTheme?.call();
+                if (value == 'about') onOpenAbout?.call();
+                if (value == 'website') {
+                  onOpenExternal?.call(Uri.parse('https://conclaveax.com'));
+                }
+                if (value == 'logout') onLogout?.call();
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'profile',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.person_outline_rounded, size: 16),
+                      const SizedBox(width: 8),
+                      Text(
+                        shellContext.viewerDisplayName ??
+                            shellContext.viewerEmail ??
+                            'Profile & Security',
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'theme',
+                  child: Row(
+                    children: [
+                      Icon(
+                        shellContext.isDarkTheme
+                            ? Icons.light_mode_outlined
+                            : Icons.dark_mode_outlined,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        shellContext.isDarkTheme
+                            ? 'Switch to light mode'
+                            : 'Switch to dark mode',
+                      ),
+                    ],
+                  ),
+                ),
+                if (onOpenAbout != null)
+                  const PopupMenuItem(
+                    value: 'about',
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline_rounded, size: 16),
+                        SizedBox(width: 8),
+                        Text('About Conclave AX'),
+                      ],
+                    ),
+                  ),
+                if (onOpenExternal != null)
+                  const PopupMenuItem(
+                    value: 'website',
+                    child: Row(
+                      children: [
+                        Icon(Icons.open_in_new_rounded, size: 16),
+                        SizedBox(width: 8),
+                        Text('Website'),
+                      ],
+                    ),
+                  ),
+                if (onLogout != null) ...[
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(
+                    value: 'logout',
+                    child: Row(
+                      children: [
+                        Icon(Icons.logout_rounded, size: 16),
+                        SizedBox(width: 8),
+                        Text('Log out'),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+              child: CircleAvatar(
+                radius: 13,
+                backgroundColor: isDark
+                    ? ConclaveBrand.accentWashDark
+                    : const Color(0xffd8d2ff),
+                child: Text(
+                  shellContext.viewerInitials,
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    color: isDark
+                        ? ConclaveBrand.accent
+                        : const Color(0xff4238a0),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

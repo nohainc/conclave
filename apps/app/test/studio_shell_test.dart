@@ -250,6 +250,14 @@ void main() {
       // Tap chevron to toggle expansion
       await tester.tap(find.byIcon(Icons.expand_more_rounded));
       expect(toggledProjectId, 'project-1');
+
+      // Tap Account menu at bottom of sidebar
+      await tester.tap(find.byTooltip('Account menu'));
+      await tester.pumpAndSettle();
+      expect(find.text('Switch to light mode'), findsOneWidget);
+      expect(find.text('About Conclave AX'), findsOneWidget);
+      expect(find.text('Website'), findsOneWidget);
+      expect(find.text('Log out'), findsOneWidget);
     });
 
     testWidgets('excludes archived workstreams from sidebar list',
@@ -406,6 +414,11 @@ void main() {
       // Check Notification badge
       expect(find.text('3'), findsOneWidget);
 
+      // Low-value controls (theme toggle & about) must NOT be in the permanent top HUD
+      expect(find.byTooltip('Switch to light mode'), findsNothing);
+      expect(find.byTooltip('Switch to dark mode'), findsNothing);
+      expect(find.text('About'), findsNothing);
+
       // Click Project in breadcrumb
       await tester.tap(find.text('Conclave AX'));
       expect(navigatedTo?.kind, StudioRouteKind.project);
@@ -414,6 +427,87 @@ void main() {
       // Click Search affordance
       await tester.tap(find.text('Search or jump to...'));
       expect(commandPaletteOpened, isTrue);
+    });
+
+    testWidgets('mobile/compact HUD renders account avatar and opens account menu',
+        (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      var themeToggled = false;
+      var aboutOpened = false;
+      var logoutCalled = false;
+      StudioNavigation? navigatedTo;
+
+      const shellContext = StudioShellContext(
+        navigation: StudioNavigation.home(),
+        projects: [testProject],
+        viewerDisplayName: 'Vitalii Noha',
+        viewerEmail: 'vitalii@example.com',
+        isDarkTheme: true,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: StudioTopBar(
+              shellContext: shellContext,
+              onNavigateTo: (nav) => navigatedTo = nav,
+              onOpenCommandPalette: () {},
+              onOpenNotifications: () {},
+              onToggleTheme: () => themeToggled = true,
+              onOpenAbout: () => aboutOpened = true,
+              onLogout: () => logoutCalled = true,
+              compact: true,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Check initials avatar in compact HUD
+      expect(find.text('VN'), findsOneWidget);
+
+      // Tap Account menu avatar
+      await tester.tap(find.byTooltip('Account menu'));
+      await tester.pumpAndSettle();
+
+      // Verify Account Menu contents
+      expect(find.text('Vitalii Noha'), findsOneWidget);
+      expect(find.text('Switch to light mode'), findsOneWidget);
+      expect(find.text('About Conclave AX'), findsOneWidget);
+      expect(find.text('Log out'), findsOneWidget);
+
+      // Tap Switch to light mode
+      await tester.tap(find.text('Switch to light mode'));
+      await tester.pumpAndSettle();
+      expect(themeToggled, isTrue);
+
+      // Open menu again and tap About
+      await tester.tap(find.byTooltip('Account menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('About Conclave AX'));
+      await tester.pumpAndSettle();
+      expect(aboutOpened, isTrue);
+
+      // Open menu again and tap Profile
+      await tester.tap(find.byTooltip('Account menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Vitalii Noha'));
+      await tester.pumpAndSettle();
+      expect(navigatedTo?.kind, StudioRouteKind.profileSecurity);
+
+      // Open menu again and tap Logout
+      await tester.tap(find.byTooltip('Account menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Log out'));
+      await tester.pumpAndSettle();
+      expect(logoutCalled, isTrue);
     });
 
     testWidgets('renders Run breadcrumbs: Project / Workstream / Run',

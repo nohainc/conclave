@@ -1518,6 +1518,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                               onToggleProjectExpanded: _toggleProjectExpanded,
                               onCreateProject: _createProject,
                               onCreateWorkstream: _createWorkstream,
+                              onToggleTheme: _toggleTheme,
                               onLogout: () => unawaited(_logout()),
                               onOpenAbout: () =>
                                   unawaited(_showAboutConclave()),
@@ -1550,6 +1551,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                                       _toggleProjectExpanded,
                                   onCreateProject: _createProject,
                                   onCreateWorkstream: _createWorkstream,
+                                  onToggleTheme: _toggleTheme,
                                   onLogout: () => unawaited(_logout()),
                                   onOpenAbout: () =>
                                       unawaited(_showAboutConclave()),
@@ -2182,9 +2184,11 @@ class _StudioAppState extends State<ConclaveAppShell> {
         shellContext: _shellContext,
         onNavigateTo: _navigateTo,
         onOpenCommandPalette: _openCommandPalette,
-        onToggleTheme: _toggleTheme,
         onOpenNotifications: _showNotifications,
+        onToggleTheme: _toggleTheme,
         onOpenAbout: () => unawaited(_showAboutConclave()),
+        onLogout: () => unawaited(_logout()),
+        onOpenExternal: (uri) => browserNavigation.openExternal(uri),
         compact: compact,
       ),
       if (realtimeStale) _realtimeStatusBanner(),
