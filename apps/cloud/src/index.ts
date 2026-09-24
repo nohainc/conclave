@@ -40,11 +40,28 @@ import {
   type WorkerRouteHandlers,
 } from "./routes/router.js";
 import {
+  isTrustedOrigin,
   isTrustedRealtimeOrigin,
   logStructured,
   requestIdFor,
   withRequestId,
 } from "./observability.js";
+
+function applyCorsHeaders(
+  response: Response,
+  origin: string | null,
+  isTrusted: boolean,
+): Response {
+  if (!origin || !isTrusted || response.status === 101) return response;
+  const headers = new Headers(response.headers);
+  headers.set("access-control-allow-origin", origin);
+  headers.set("access-control-allow-credentials", "true");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
 
 const routeHandlers = {
   handleSession: handlers.handleSession,
@@ -160,80 +177,104 @@ export default {
         path: url.pathname,
       },
     );
-    if (request.method === "GET" && url.pathname === "/health") {
+
+    const origin = request.headers.get("origin");
+    const configuredOrigins = (
+      env as unknown as { BETTER_AUTH_TRUSTED_ORIGINS?: string }
+    ).BETTER_AUTH_TRUSTED_ORIGINS?.split(",")
+      .map((item) => item.trim().replace(/\/$/, ""))
+      .filter(Boolean);
+    const isTrusted = origin
+      ? isTrustedOrigin(request, configuredOrigins)
+      : false;
+
+    if (request.method === "OPTIONS" && origin && isTrusted) {
       return withRequestId(
-        handlers.json({
-          ok: true,
-          environment: env.CONCLAVE_ENVIRONMENT,
+        new Response(null, {
+          status: 204,
+          headers: {
+            "access-control-allow-origin": origin,
+            "access-control-allow-credentials": "true",
+            "access-control-allow-methods":
+              "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+            "access-control-allow-headers":
+              request.headers.get("access-control-request-headers") ||
+              "authorization, content-type, accept, x-request-id, x-conclave-workspace-id",
+            "access-control-max-age": "86400",
+          },
         }),
         requestId,
       );
     }
-    if (request.method === "GET" && url.pathname === "/api/dev/sign-in") {
-      if (env.CONCLAVE_ENVIRONMENT !== "development") {
-        return new Response("Not found", { status: 404 });
+
+    const response = await (async (): Promise<Response> => {
+      if (request.method === "GET" && url.pathname === "/health") {
+        return handlers.json({
+          ok: true,
+          environment: env.CONCLAVE_ENVIRONMENT,
+        });
       }
-      const provider = url.searchParams.get("provider") ?? "github";
-      if (provider !== "github" && provider !== "google") {
-        return handlers.json(
-          { error: "provider must be github or google" },
-          { status: 400 },
-        );
+      if (request.method === "GET" && url.pathname === "/api/dev/sign-in") {
+        if (env.CONCLAVE_ENVIRONMENT !== "development") {
+          return new Response("Not found", { status: 404 });
+        }
+        const provider = url.searchParams.get("provider") ?? "github";
+        if (provider !== "github" && provider !== "google") {
+          return handlers.json(
+            { error: "provider must be github or google" },
+            { status: 400 },
+          );
+        }
+        const returnTo = url.searchParams.get("returnTo") ?? "/";
+        const signInUrl = new URL(`/api/auth/sign-in/${provider}`, request.url);
+        signInUrl.searchParams.set("returnTo", returnTo);
+        return Response.redirect(signInUrl.toString(), 302);
       }
-      const returnTo = url.searchParams.get("returnTo") ?? "/";
-      const signInUrl = new URL(`/api/auth/sign-in/${provider}`, request.url);
-      signInUrl.searchParams.set("returnTo", returnTo);
-      return Response.redirect(signInUrl.toString(), 302);
-    }
-    if (
-      request.method === "POST" &&
-      url.pathname === "/api/auth/step-up/passkey/complete"
-    ) {
-      handlers.requireSameOriginForCookieMutation(request);
-      return handlers.handleCompleteStepUp(request, env, ctx);
-    }
-    if (url.pathname === "/api/auth" || url.pathname.startsWith("/api/auth/")) {
-      return withRequestId(
-        await handleBetterAuthRequest(request, env),
-        requestId,
-      );
-    }
-    if (url.pathname === "/api/realtime") {
-      const configuredOrigins = (
-        env as unknown as { BETTER_AUTH_TRUSTED_ORIGINS?: string }
-      ).BETTER_AUTH_TRUSTED_ORIGINS?.split(",")
-        .map((origin) => origin.trim().replace(/\/$/, ""))
-        .filter(Boolean);
-      if (!isTrustedRealtimeOrigin(request, configuredOrigins)) {
-        return withRequestId(
-          handlers.json(
+      if (
+        request.method === "POST" &&
+        url.pathname === "/api/auth/step-up/passkey/complete"
+      ) {
+        handlers.requireSameOriginForCookieMutation(request);
+        return handlers.handleCompleteStepUp(request, env, ctx);
+      }
+      if (
+        url.pathname === "/api/auth" ||
+        url.pathname.startsWith("/api/auth/")
+      ) {
+        return handleBetterAuthRequest(request, env);
+      }
+      if (url.pathname === "/api/realtime") {
+        if (!isTrustedRealtimeOrigin(request, configuredOrigins)) {
+          return handlers.json(
             { error: "Trusted realtime Origin required" },
             { status: 403 },
-          ),
-          requestId,
+          );
+        }
+        const identity = await identityService.resolve(request, env);
+        if (!identity) {
+          return handlers.json(
+            { error: "Authentication required" },
+            { status: 401 },
+          );
+        }
+        const gateway = env.CONCLAVE_REALTIME_GATEWAY.getByName(
+          `user:${identity.userId}`,
         );
+        return gateway.fetch(request);
       }
-      const identity = await identityService.resolve(request, env);
-      if (!identity) {
-        return withRequestId(
-          handlers.json({ error: "Authentication required" }, { status: 401 }),
-          requestId,
-        );
-      }
-      const gateway = env.CONCLAVE_REALTIME_GATEWAY.getByName(
-        `user:${identity.userId}`,
-      );
-      return withRequestId(await gateway.fetch(request), requestId);
-    }
-    return withRequestId(
-      await routeWorkerRequest(
+      return routeWorkerRequest(
         request,
         env,
         ctx,
         routeHandlers,
         routeDependencies,
-      ),
-      requestId,
+      );
+    })();
+
+    return applyCorsHeaders(
+      withRequestId(response, requestId),
+      origin,
+      isTrusted,
     );
   },
 } satisfies ExportedHandler<Env>;

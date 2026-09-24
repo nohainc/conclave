@@ -196,10 +196,8 @@ chmod +x "${RUNNER_API}"
 
 # 2. Create Runner Script for Terminal 2 (Flutter Web Studio)
 RUNNER_FLUTTER="/tmp/conclave-flutter-dev-${PORT}.sh"
-FLUTTER_RUN_CMD="flutter run -d ${DEVICE} --dart-define=CONCLAVE_API_URL=${API_URL}/api"
-if [ -n "${WEB_PORT}" ]; then
-  FLUTTER_RUN_CMD+=" --web-port=${WEB_PORT}"
-fi
+TARGET_WEB_PORT="${WEB_PORT:-3000}"
+FLUTTER_RUN_CMD="flutter run -d ${DEVICE} --web-port=${TARGET_WEB_PORT} --dart-define=CONCLAVE_API_URL=${API_URL}/api"
 
 cat << EOF > "${RUNNER_FLUTTER}"
 #!/usr/bin/env bash

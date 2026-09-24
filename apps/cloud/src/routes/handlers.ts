@@ -17,6 +17,7 @@ export {
 } from "../ensemble-dispatcher.js";
 export { handleConnectorRequest } from "../interactive-connector.js";
 import { handleConnectorTaskRequest } from "../interactive-connector.js";
+import { isTrustedOrigin } from "../observability.js";
 import {
   identityService,
   handleBetterAuthRequest,
@@ -239,12 +240,20 @@ export function requireSameOriginForCookieMutation(request: Request): void {
 
   const requestOrigin = new URL(request.url).origin;
   const origin = request.headers.get("origin");
-  if (origin === requestOrigin) return;
+  if (origin === requestOrigin || (origin && isTrustedOrigin(request))) return;
 
   const referer = request.headers.get("referer");
   if (origin === null && referer) {
     try {
       if (new URL(referer).origin === requestOrigin) return;
+      const refUrl = new URL(referer);
+      if (
+        refUrl.hostname === "localhost" ||
+        refUrl.hostname === "127.0.0.1" ||
+        refUrl.hostname === "[::1]"
+      ) {
+        return;
+      }
     } catch {
       // Treat malformed referers as untrusted.
     }

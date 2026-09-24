@@ -22,14 +22,34 @@ export function requestIdFor(request: Request): string {
   return supplied && supplied.length <= 128 ? supplied : crypto.randomUUID();
 }
 
-export function isTrustedRealtimeOrigin(
+export function isTrustedOrigin(
   request: Request,
   configuredOrigins: readonly string[] = [],
 ): boolean {
   const origin = request.headers.get("origin")?.replace(/\/$/, "");
   if (!origin) return false;
   const requestOrigin = new URL(request.url).origin;
-  return new Set([requestOrigin, ...configuredOrigins]).has(origin);
+  if (new Set([requestOrigin, ...configuredOrigins]).has(origin)) return true;
+  try {
+    const parsed = new URL(origin);
+    if (
+      parsed.hostname === "localhost" ||
+      parsed.hostname === "127.0.0.1" ||
+      parsed.hostname === "[::1]"
+    ) {
+      return true;
+    }
+  } catch {
+    // Malformed origin
+  }
+  return false;
+}
+
+export function isTrustedRealtimeOrigin(
+  request: Request,
+  configuredOrigins: readonly string[] = [],
+): boolean {
+  return isTrustedOrigin(request, configuredOrigins);
 }
 
 export function sanitizeDiagnostics(value: unknown, depth = 0): unknown {
