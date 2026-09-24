@@ -89,17 +89,15 @@ abstract final class ConclaveBrand {
     );
   }
 
-  // Responsive Breakpoints
-  // Desktop >= 800
-  // Tablet 400-799
-  // Mobile < 400 (399 and below)
-  static const double desktopBreakpoint = 800.0;
-  static const double tabletBreakpoint = 400.0;
+  // Responsive Breakpoints (2 modes)
+  // Desktop >= 500
+  // Tablet < 500
+  static const double desktopBreakpoint = 500.0;
+  static const double tabletBreakpoint = 500.0;
 
   static bool isDesktop(double width) => width >= desktopBreakpoint;
-  static bool isTablet(double width) =>
-      width >= tabletBreakpoint && width < desktopBreakpoint;
-  static bool isMobile(double width) => width < tabletBreakpoint;
+  static bool isTablet(double width) => width < desktopBreakpoint;
+  static bool isMobile(double width) => width < desktopBreakpoint;
 
   /// Builds the light [ThemeData] for Conclave AX.
   static ThemeData lightTheme() {

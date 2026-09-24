@@ -95,6 +95,19 @@ abstract interface class StudioDataSource {
     required String projectId,
     required String workspaceId,
   });
+  Future<List<StudioWorkstream>> loadProjectWorkstreams({
+    required String projectId,
+  });
+  Future<StudioWorkstream> createWorkstream({
+    required String projectId,
+    required String name,
+  });
+  Future<StudioWorkstream> updateWorkstream({
+    required String workstreamId,
+    String? name,
+    String? status,
+  });
+  Future<void> deleteWorkstream({required String workstreamId});
   Future<List<StudioAgent>> loadHosts({required String workspaceId});
   Future<List<StudioWorker>> loadWorkers({required String workspaceId});
   Future<List<StudioCredentialProfile>> loadCredentialProfiles(
@@ -329,6 +342,86 @@ class StudioApiClient implements StudioDataSource {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StudioApiException(
         'Workspace grant failed (${response.statusCode})',
+        statusCode: response.statusCode,
+      );
+    }
+  }
+
+  @override
+  Future<List<StudioWorkstream>> loadProjectWorkstreams({
+    required String projectId,
+  }) async {
+    final body =
+        await _getJson(Uri.parse('$baseUrl/projects/$projectId/workstreams'));
+    return (body['workstreams'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) =>
+            StudioWorkstream.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
+  @override
+  Future<StudioWorkstream> createWorkstream({
+    required String projectId,
+    required String name,
+  }) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/projects/$projectId/workstreams'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({'name': name}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+        'Workstream creation failed (${response.statusCode})',
+        statusCode: response.statusCode,
+      );
+    }
+    final body = jsonDecode(response.body);
+    final workstream = body is Map ? body['workstream'] : null;
+    if (workstream is! Map) {
+      throw const StudioApiException(
+          'Workstream creation response is malformed');
+    }
+    return StudioWorkstream.fromJson(Map<String, dynamic>.from(workstream));
+  }
+
+  @override
+  Future<StudioWorkstream> updateWorkstream({
+    required String workstreamId,
+    String? name,
+    String? status,
+  }) async {
+    final response = await client.patch(
+      Uri.parse('$baseUrl/workstreams/$workstreamId'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({
+        if (name != null) 'name': name,
+        if (status != null) 'status': status,
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+        'Workstream update failed (${response.statusCode})',
+        statusCode: response.statusCode,
+      );
+    }
+    final body = jsonDecode(response.body);
+    final workstream = body is Map ? body['workstream'] : null;
+    if (workstream is! Map) {
+      throw const StudioApiException('Workstream update response is malformed');
+    }
+    return StudioWorkstream.fromJson(Map<String, dynamic>.from(workstream));
+  }
+
+  @override
+  Future<void> deleteWorkstream({required String workstreamId}) async {
+    final response = await client.delete(
+      Uri.parse('$baseUrl/workstreams/$workstreamId'),
+      headers: _headers(),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+        'Workstream deletion failed (${response.statusCode})',
         statusCode: response.statusCode,
       );
     }

@@ -500,10 +500,6 @@ void main() {
       await tester.tap(find.text('Log out'));
       await tester.pumpAndSettle();
       expect(logoutTriggered, isTrue);
-
-      // Tap drawer button in rail
-      await tester.tap(find.byTooltip('Open project tree & menu'));
-      expect(drawerOpened, isTrue);
     });
 
     testWidgets('excludes archived workstreams from sidebar list',
@@ -852,13 +848,12 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // In compact mode, parent project 'Conclave AX' is replaced with '…'
-      expect(find.text('Conclave AX'), findsNothing);
-      expect(find.text('…'), findsOneWidget);
+      // In compact mode, parent project 'Conclave AX' and workstream are displayed
+      expect(find.text('Conclave AX'), findsOneWidget);
       expect(find.text('Authentication redesign'), findsOneWidget);
 
-      // Tapping '…' navigates back to the parent Project
-      await tester.tap(find.text('…'));
+      // Tapping parent project navigates back to the Project
+      await tester.tap(find.text('Conclave AX'));
       expect(navigatedTo?.kind, StudioRouteKind.project);
       expect(navigatedTo?.projectId, 'project-1');
     });
@@ -921,7 +916,7 @@ void main() {
       expect(navigatedTo?.kind, StudioRouteKind.hosts);
     });
 
-    testWidgets('compact HUD prioritizes leaf entity in breadcrumbs for run',
+    testWidgets('compact HUD displays full breadcrumb path for run',
         (tester) async {
       tester.view.physicalSize = const Size(500, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -971,13 +966,15 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // In compact mode, parent 'Authentication redesign' is collapsed to '…' while 'Run' remains
-      expect(find.text('Authentication redesign'), findsNothing);
-      expect(find.text('…'), findsOneWidget);
+      // In compact mode, parent project and workstream are displayed
+      expect(find.text('Conclave AX'), findsOneWidget);
+      expect(find.text('Authentication redesign'), findsOneWidget);
       expect(find.text('Run'), findsOneWidget);
 
-      // Tapping '…' navigates to parent Workstream
-      await tester.tap(find.text('…'));
+      // Tapping parent workstream navigates to parent Workstream
+      await tester.ensureVisible(find.text('Authentication redesign'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Authentication redesign'), warnIfMissed: false);
       expect(navigatedTo?.kind, StudioRouteKind.workstream);
       expect(navigatedTo?.projectId, 'project-1');
       expect(navigatedTo?.workstreamId, 'ws-1');
@@ -986,7 +983,6 @@ void main() {
     testWidgets('StudioIconRail has 64px width and renders navigation icons',
         (tester) async {
       StudioNavigation? navigatedTo;
-      var drawerOpened = false;
 
       const shellContext = StudioShellContext(
         navigation: StudioNavigation.home(),
@@ -1004,7 +1000,7 @@ void main() {
               child: StudioIconRail(
                 shellContext: shellContext,
                 onNavigateTo: (nav) => navigatedTo = nav,
-                onOpenDrawer: () => drawerOpened = true,
+                onOpenDrawer: () {},
                 onToggleTheme: () {},
                 onLogout: () {},
                 onOpenAbout: () {},
@@ -1017,17 +1013,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byTooltip('Conclave AX — Home'), findsOneWidget);
-      expect(find.byTooltip('Open project tree & menu'), findsOneWidget);
       expect(find.byTooltip('Vitalii Noha'), findsOneWidget);
       expect(find.byTooltip('Application menu'), findsOneWidget);
 
       // Tapping Conclave AX brand icon navigates to home
       await tester.tap(find.byTooltip('Conclave AX — Home'));
       expect(navigatedTo?.kind, StudioRouteKind.home);
-
-      // Tapping Open project tree & menu opens drawer
-      await tester.tap(find.byTooltip('Open project tree & menu'));
-      expect(drawerOpened, isTrue);
 
       // Tapping Profile avatar button navigates to profile
       await tester.tap(find.byTooltip('Vitalii Noha'));
@@ -1935,18 +1926,18 @@ void main() {
           home: LayoutBuilder(
             builder: (context, constraints) {
               final isDesktop = ConclaveBrand.isDesktop(constraints.maxWidth);
-              final isTablet = ConclaveBrand.isTablet(constraints.maxWidth);
-              final isMobile = ConclaveBrand.isMobile(constraints.maxWidth);
 
               return Scaffold(
                 key: scaffoldKey,
-                drawer: (isTablet || isMobile)
+                drawer: !isDesktop
                     ? Drawer(
                         child: StudioSidebar(
                           shellContext: shellContext,
                           onNavigateTo: (_) {},
                           onToggleProjectExpanded: (_) {},
                           onCreateProject: () {},
+                          onOpenCommandPalette: _dummyAction,
+                          onOpenNotifications: _dummyAction,
                           onLogout: () {},
                           onOpenAbout: () {},
                           onOpenExternal: (_) {},
@@ -1964,19 +1955,8 @@ void main() {
                           onNavigateTo: _dummyNav,
                           onToggleProjectExpanded: _dummyToggle,
                           onCreateProject: _dummyAction,
-                          onLogout: _dummyAction,
-                          onOpenAbout: _dummyAction,
-                          onOpenExternal: _dummyExternal,
-                        ),
-                      )
-                    else if (isTablet)
-                      SizedBox(
-                        width: 64,
-                        child: StudioIconRail(
-                          shellContext: shellContext,
-                          onNavigateTo: _dummyNav,
-                          onOpenDrawer: () =>
-                              scaffoldKey.currentState?.openDrawer(),
+                          onOpenCommandPalette: _dummyAction,
+                          onOpenNotifications: _dummyAction,
                           onLogout: _dummyAction,
                           onOpenAbout: _dummyAction,
                           onOpenExternal: _dummyExternal,
@@ -1985,13 +1965,14 @@ void main() {
                     Expanded(
                       child: Column(
                         children: [
-                          StudioTopBar(
-                            shellContext: shellContext,
-                            onNavigateTo: _dummyNav,
-                            onOpenCommandPalette: _dummyAction,
-                            onOpenNotifications: _dummyAction,
-                            compact: isMobile,
-                          ),
+                          if (!isDesktop)
+                            StudioTopBar(
+                              shellContext: shellContext,
+                              onNavigateTo: _dummyNav,
+                              onOpenCommandPalette: _dummyAction,
+                              onOpenNotifications: _dummyAction,
+                              compact: true,
+                            ),
                           const Expanded(child: SizedBox()),
                         ],
                       ),
@@ -2004,7 +1985,7 @@ void main() {
         );
       }
 
-      // 1. Desktop (>= 800, test at 1000 x 800)
+      // 1. Desktop mode (>= 500, test at 1000 x 800)
       tester.view.physicalSize = const Size(1000, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -2015,44 +1996,24 @@ void main() {
       await tester.pumpWidget(buildAppScaffold());
       await tester.pumpAndSettle();
 
-      // Full sidebar visible with project tree
+      // Full sidebar visible with project tree, search & alarm button
       expect(find.byType(StudioSidebar), findsOneWidget);
-      expect(find.byType(StudioIconRail), findsNothing);
-      expect(find.text('Authentication redesign'), findsNWidgets(2)); // sidebar + HUD breadcrumb
+      expect(find.byType(StudioTopBar), findsNothing); // Top HUD hidden on desktop
+      expect(find.text('Authentication redesign'), findsOneWidget); // sidebar item
+      expect(find.byTooltip('Search or jump to... (⌘K)'), findsOneWidget); // Search on sidebar
+      expect(find.byTooltip('Notifications'), findsOneWidget); // Alarm on sidebar
       expect(find.byTooltip('Open menu'), findsNothing); // No hamburger on desktop
 
-      // 2. Medium / Tablet (400-799, test at 600 x 800)
-      tester.view.physicalSize = const Size(600, 800);
+      // 2. Tablet mode (< 500, test at 400 x 800)
+      tester.view.physicalSize = const Size(400, 800);
       await tester.pumpWidget(buildAppScaffold());
       await tester.pumpAndSettle();
 
-      // Collapsed rail visible, sidebar not on main screen
-      expect(find.byType(StudioIconRail), findsOneWidget);
-      expect(find.byTooltip('Open project tree & menu'), findsOneWidget);
-      expect(find.byTooltip('Open menu'), findsNothing);
-
-      // Open drawer from rail
-      await tester.tap(find.byTooltip('Open project tree & menu'));
-      await tester.pumpAndSettle();
-      expect(find.byType(Drawer), findsOneWidget);
-      expect(find.text('PROJECTS'), findsOneWidget);
-
-      // Close drawer
-      await tester.tap(find.text('Close menu'));
-      await tester.pumpAndSettle();
-      expect(find.byType(Drawer), findsNothing);
-
-      // 3. Mobile (< 400, test at 380 x 800)
-      tester.view.physicalSize = const Size(380, 800);
-      await tester.pumpWidget(buildAppScaffold());
-      await tester.pumpAndSettle();
-
-      // No persistent sidebar or icon rail on screen
-      expect(find.byType(StudioSidebar), findsNothing);
-      expect(find.byType(StudioIconRail), findsNothing);
-
-      // Hamburger menu button visible in HUD
+      // Top HUD visible with breadcrumb and hamburger menu, pinned sidebar hidden
+      expect(find.byType(StudioTopBar), findsOneWidget);
       expect(find.byTooltip('Open menu'), findsOneWidget);
+      expect(find.text('Conclave AX'), findsOneWidget); // breadcrumb project
+      expect(find.text('Authentication redesign'), findsOneWidget); // breadcrumb workstream
 
       // Tap hamburger menu to open drawer with full sidebar
       await tester.tap(find.byTooltip('Open menu'));
@@ -2060,6 +2021,11 @@ void main() {
       expect(find.byType(Drawer), findsOneWidget);
       expect(find.byType(StudioSidebar), findsOneWidget);
       expect(find.text('PROJECTS'), findsOneWidget);
+
+      // Close drawer
+      await tester.tap(find.text('Close menu'));
+      await tester.pumpAndSettle();
+      expect(find.byType(Drawer), findsNothing);
     });
   });
 }

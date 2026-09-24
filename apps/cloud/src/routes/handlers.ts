@@ -3172,6 +3172,177 @@ async function handleCreateChatMessage(
 // V6 Workstream Discuss / Work API
 // =========================================================================
 
+function workstreamMetadata(row: Record<string, unknown>): Record<string, unknown> {
+  const accessPolicy = parseJson<Record<string, unknown>>(
+    row.accessPolicyJson ?? row.access_policy_json,
+    {},
+  );
+  return {
+    id: String(row.id),
+    projectId: String(row.projectId ?? row.project_id),
+    name: String(row.name),
+    status: String(row.status),
+    lead: row.leadUserId ?? row.lead_user_id ?? null,
+    accessPolicy,
+    primaryWorkspace:
+      accessPolicy.primaryWorkspaceId ?? accessPolicy.primary_workspace_id ?? null,
+    currentCheckpoint: null,
+    queueStatus: "Idle",
+    createdAt: String(row.createdAt ?? row.created_at),
+    updatedAt: String(row.updatedAt ?? row.updated_at),
+  };
+}
+
+export async function handleListProjectWorkstreams(
+  request: Request,
+  env: SecurityEnv,
+  projectId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  await authorizeRequest(request, env, "project:read", projectId, accessContext);
+  const rows = await env.CONCLAVE_DB.prepare(
+    `SELECT id, project_id AS projectId, name, status,
+            access_policy_json AS accessPolicyJson,
+            lead_user_id AS leadUserId,
+            created_at AS createdAt, updated_at AS updatedAt
+     FROM workstreams WHERE project_id = ?1 ORDER BY updated_at DESC`,
+  )
+    .bind(projectId)
+    .all<Record<string, unknown>>();
+  return json({ workstreams: (rows.results ?? []).map(workstreamMetadata) });
+}
+
+export async function handleCreateWorkstream(
+  request: Request,
+  env: SecurityEnv,
+  projectId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const context = await authorizeRequest(
+    request,
+    env,
+    "projects:write",
+    projectId,
+    accessContext,
+  );
+  const body = (await request.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
+  const name = requiredString(body.name, "name");
+  const id = `workstream-${crypto.randomUUID()}`;
+  const now = new Date().toISOString();
+  const accessPolicy =
+    typeof body.accessPolicy === "object" && body.accessPolicy !== null
+      ? body.accessPolicy
+      : DEFAULT_WORKSTREAM_ACCESS_POLICY;
+  await env.CONCLAVE_DB.batch([
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO workstreams
+       (id, project_id, name, status, access_policy_json, lead_user_id, created_at, updated_at)
+       VALUES (?1, ?2, ?3, 'active', ?4, ?5, ?6, ?6)`,
+    ).bind(id, projectId, name, JSON.stringify(accessPolicy), context.userId, now),
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO workstream_memberships
+       (workstream_id, user_id, role, created_at)
+       VALUES (?1, ?2, 'lead', ?3)`,
+    ).bind(id, context.userId, now),
+  ]);
+  return json(
+    {
+      workstream: workstreamMetadata({
+        id,
+        projectId,
+        name,
+        status: "active",
+        accessPolicyJson: JSON.stringify(accessPolicy),
+        leadUserId: context.userId,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    },
+    { status: 201 },
+  );
+}
+
+export async function handleUpdateWorkstream(
+  request: Request,
+  env: SecurityEnv,
+  workstreamId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const { context, workstream } = await authorizeWorkstreamAccess(
+    request,
+    env,
+    workstreamId,
+    "manage",
+    accessContext,
+  );
+  const body = (await request.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
+  const name =
+    body.name === undefined ? workstream.name : requiredString(body.name, "name");
+  const status =
+    body.status === undefined ? workstream.status : String(body.status);
+  if (!["active", "paused", "blocked", "completed", "archived"].includes(status)) {
+    throw new HttpError(400, "Unsupported Workstream status");
+  }
+  const accessPolicy =
+    body.accessPolicy === undefined
+      ? workstream.accessPolicy
+      : body.accessPolicy;
+  if (typeof accessPolicy !== "object" || accessPolicy === null) {
+    throw new HttpError(400, "accessPolicy must be an object");
+  }
+  const now = new Date().toISOString();
+  await env.CONCLAVE_DB.prepare(
+    `UPDATE workstreams
+     SET name = ?1, status = ?2, access_policy_json = ?3, updated_at = ?4
+     WHERE id = ?5`,
+  )
+    .bind(name, status, JSON.stringify(accessPolicy), now, workstreamId)
+    .run();
+  return json({
+    workstream: workstreamMetadata({
+      id: workstream.id,
+      projectId: workstream.projectId,
+      name,
+      status,
+      accessPolicyJson: JSON.stringify(accessPolicy),
+      leadUserId: workstream.lead.userId,
+      createdAt: workstream.createdAt,
+      updatedAt: now,
+    }),
+    updatedByUserId: context.userId,
+  });
+}
+
+export async function handleDeleteWorkstream(
+  request: Request,
+  env: SecurityEnv,
+  workstreamId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  await authorizeWorkstreamAccess(
+    request,
+    env,
+    workstreamId,
+    "manage",
+    accessContext,
+  );
+  const result = await env.CONCLAVE_DB.prepare(
+    "DELETE FROM workstreams WHERE id = ?1",
+  )
+    .bind(workstreamId)
+    .run();
+  if ((result.meta?.changes ?? 0) === 0) {
+    throw new HttpError(404, "Workstream not found");
+  }
+  return json({ ok: true, workstreamId });
+}
+
 function discussionReferences(value: unknown): readonly string[] {
   if (value === undefined) return [];
   if (!Array.isArray(value))
@@ -7001,6 +7172,77 @@ async function handleStudioSnapshot(
         accessContext,
       )
     : await securityContext(request, securityEnv, accessContext);
+  if (context.authorizationModel === "v5") {
+    // The snapshot endpoint is retained for older clients, but its previous
+    // implementation queried the removed v4 Workspace-owned tables. V5/v6
+    // clients use Project read models and explicit Workspace Grant endpoints;
+    // this compatibility response only needs the user's Project list.
+    const rows = await env.CONCLAVE_DB.prepare(
+      `SELECT p.id, p.name, p.description,
+              p.repository_id AS repository,
+              p.updated_at AS lastActivity
+       FROM projects p
+       JOIN project_memberships pm ON pm.project_id = p.id
+       WHERE pm.user_id = ?1
+         AND (?2 IS NULL OR p.id = ?2)
+         AND COALESCE(json_extract(p.settings_json, '$.archived'), 0) = 0
+       ORDER BY p.updated_at DESC`,
+    )
+      .bind(context.userId, projectId)
+      .all<{
+        id: string;
+        name: string;
+        description: string | null;
+        repository: string | null;
+        lastActivity: string;
+      }>();
+    const workstreamRows = await env.CONCLAVE_DB.prepare(
+      `SELECT ws.id, ws.project_id AS projectId, ws.name, ws.status,
+              ws.access_policy_json AS accessPolicyJson,
+              ws.lead_user_id AS leadUserId,
+              ws.created_at AS createdAt, ws.updated_at AS updatedAt
+       FROM workstreams ws
+       JOIN project_memberships pm ON pm.project_id = ws.project_id
+       WHERE pm.user_id = ?1 AND (?2 IS NULL OR ws.project_id = ?2)
+       ORDER BY ws.updated_at DESC`,
+    )
+      .bind(context.userId, projectId)
+      .all<Record<string, unknown>>();
+    const workstreamsByProject = new Map<string, Record<string, unknown>[]>();
+    for (const row of workstreamRows.results ?? []) {
+      const projectWorkstreams =
+        workstreamsByProject.get(String(row.projectId)) ?? [];
+      projectWorkstreams.push(workstreamMetadata(row));
+      workstreamsByProject.set(String(row.projectId), projectWorkstreams);
+    }
+    return json({
+      workspaceId: null,
+      viewer: {
+        id: context.userId,
+        displayName: context.user.displayName,
+        email: context.user.email,
+      },
+      activeRunId: null,
+      run: null,
+      projects: (rows.results ?? []).map((project) => ({
+        ...project,
+        repository: project.repository ?? "",
+        branch: "",
+        activeGoals: 0,
+        chats: [],
+        workstreams: workstreamsByProject.get(String(project.id)) ?? [],
+      })),
+      workers: [],
+      hosts: [],
+      plugins: [],
+      tasks: [],
+      findings: [],
+      events: [],
+      artifacts: [],
+      modelCalls: [],
+      accounts: [],
+    });
+  }
   if (!projectId && context.authorizedProjectIds.length === 0) {
     return json({
       workspaceId: null,

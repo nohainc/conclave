@@ -168,24 +168,17 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
     final value = name.text.trim();
     name.dispose();
     if (created != true || value.isEmpty) return;
-    final id = 'workstream-${DateTime.now().microsecondsSinceEpoch}';
-    setState(() {
-      workstreams = [
-        ...workstreams,
-        StudioWorkstream(
-          id: id,
-          projectId: widget.project.id,
-          name: value,
-          lead: 'You',
-          status: 'active',
-          brief:
-              'Add a brief so collaborators understand the intended outcome.',
-          primaryWorkspace: 'Not selected',
-          currentCheckpoint: 'Not started',
-          queueStatus: 'Idle',
-        ),
-      ];
-    });
+    try {
+      final workstream = await widget.dataSource.createWorkstream(
+        projectId: widget.project.id,
+        name: value,
+      );
+      if (!mounted) return;
+      setState(() => workstreams = [...workstreams, workstream]);
+      widget.onOpenWorkstream(workstream.id);
+    } catch (error) {
+      _message(error.toString());
+    }
   }
 
   Future<void> _loadCollaboration() async {
@@ -194,12 +187,16 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
         widget.dataSource.loadProjectMembers(projectId: widget.project.id),
         widget.dataSource.loadProjectInvitations(projectId: widget.project.id),
         widget.dataSource.loadProjectAudit(projectId: widget.project.id),
+        widget.dataSource.loadProjectWorkstreams(projectId: widget.project.id),
+        widget.dataSource.loadProjectWorkstreams(projectId: widget.project.id),
       ]);
       if (!mounted) return;
       setState(() {
         members = loaded[0] as List<StudioProjectMember>;
         invitations = loaded[1] as List<StudioProjectInvitation>;
         audit = loaded[2] as List<StudioAuditEntry>;
+        workstreams = loaded[3] as List<StudioWorkstream>;
+        workstreams = loaded[3] as List<StudioWorkstream>;
         loading = false;
       });
     } catch (_) {
@@ -335,8 +332,7 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
           else if (_tabIndex == 1)
             _workstreams()
           else if (_tabIndex == 2)
-            _emptySection(
-                'Runs', 'Runs created from this Project appear here.')
+            _emptySection('Runs', 'Runs created from this Project appear here.')
           else if (_tabIndex == 3)
             _emptySection('Artifacts',
                 'Artifacts and findings produced by this Project appear here.')
@@ -349,7 +345,8 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
         ]),
       );
 
-  Widget _overview() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+  Widget _overview() =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _ProjectPanel(
             title: 'Project overview',
             subtitle: widget.project.description.isEmpty
@@ -364,7 +361,8 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
                 'No execution Workspace is required to create this Project. Connect one later from the Execution tab when you are ready to run work.')),
       ]);
 
-  Widget _execution() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+  Widget _execution() =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _ProjectPanel(
           title: 'Execution Workspaces',
           subtitle:
@@ -400,7 +398,8 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
         ),
       ]);
 
-  Widget _workstreams() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+  Widget _workstreams() =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _ProjectPanel(
             title: 'Workstreams',
             subtitle: 'One Workstream is one thing your team is working on.',
@@ -428,7 +427,8 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
             ])),
       ]);
 
-  Widget _members() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+  Widget _members() =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _ProjectPanel(
             title: 'Members',
             subtitle:
@@ -479,7 +479,8 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
                   ])),
       ]);
 
-  Widget _settings() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+  Widget _settings() =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _ProjectPanel(
             title: 'Project settings',
             subtitle:
@@ -535,6 +536,7 @@ class WorkstreamPage extends StatefulWidget {
     required this.onBackToProject,
     required this.onArchive,
     required this.onProvisionCheckout,
+    this.onRename,
     this.onRunWork,
     this.initialTab = 0,
   });
@@ -544,6 +546,7 @@ class WorkstreamPage extends StatefulWidget {
   final VoidCallback onBackToProject;
   final VoidCallback onArchive;
   final VoidCallback onProvisionCheckout;
+  final Future<void> Function(String name)? onRename;
   final ValueChanged<String>? onRunWork;
   final int initialTab;
 
@@ -588,6 +591,36 @@ class _WorkstreamPageState extends State<WorkstreamPage> {
   bool get _canExecute =>
       widget.project.role == 'owner' || widget.project.role == 'collaborator';
 
+  Future<void> _rename() async {
+    if (widget.onRename == null) return;
+    var name = widget.workstream.name;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Rename Workstream'),
+        content: TextField(
+          autofocus: true,
+          controller: TextEditingController(text: name),
+          onChanged: (value) => name = value,
+          decoration: const InputDecoration(labelText: 'Workstream name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (accepted == true && name.trim().isNotEmpty) {
+      await widget.onRename!(name.trim());
+    }
+  }
+
   @override
   void dispose() {
     _requestController.dispose();
@@ -628,6 +661,13 @@ class _WorkstreamPageState extends State<WorkstreamPage> {
                 if (widget.project.role == 'owner' ||
                     widget.project.role == 'collaborator')
                   TextButton.icon(
+                    onPressed: _rename,
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Rename'),
+                  ),
+                if (widget.project.role == 'owner' ||
+                    widget.project.role == 'collaborator')
+                  TextButton.icon(
                     onPressed: widget.onArchive,
                     icon: const Icon(Icons.archive_outlined),
                     label: const Text('Archive'),
@@ -658,9 +698,8 @@ class _WorkstreamPageState extends State<WorkstreamPage> {
         ]),
       );
 
-  Widget _discuss(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+  Widget _discuss(BuildContext context) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _ProjectPanel(
           title: 'Brief',
           subtitle: 'The shared context for this Workstream.',
@@ -770,9 +809,8 @@ class _WorkstreamPageState extends State<WorkstreamPage> {
         ),
       );
 
-  Widget _work(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+  Widget _work(BuildContext context) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _WorkComposer(
           requestController: _requestController,
           workflow: _workflow,

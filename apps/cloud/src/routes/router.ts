@@ -964,6 +964,44 @@ export async function routeWorkerRequest(
       return await handlers.handleUpdateChat!(request, env, chatMatch[1], ctx);
     }
 
+    const projectWorkstreamsMatch = url.pathname.match(
+      /^\/api\/projects\/([^/]+)\/workstreams$/,
+    );
+    if (request.method === "GET" && projectWorkstreamsMatch?.[1]) {
+      return await handlers.handleListProjectWorkstreams!(
+        request,
+        env,
+        projectWorkstreamsMatch[1],
+        ctx,
+      );
+    }
+    if (request.method === "POST" && projectWorkstreamsMatch?.[1]) {
+      return await handlers.handleCreateWorkstream!(
+        request,
+        env,
+        projectWorkstreamsMatch[1],
+        ctx,
+      );
+    }
+
+    const workstreamMatch = url.pathname.match(/^\/api\/workstreams\/([^/]+)$/);
+    if (request.method === "PATCH" && workstreamMatch?.[1]) {
+      return await handlers.handleUpdateWorkstream!(
+        request,
+        env,
+        workstreamMatch[1],
+        ctx,
+      );
+    }
+    if (request.method === "DELETE" && workstreamMatch?.[1]) {
+      return await handlers.handleDeleteWorkstream!(
+        request,
+        env,
+        workstreamMatch[1],
+        ctx,
+      );
+    }
+
     const workstreamDiscussionMatch = url.pathname.match(
       /^\/api\/workstreams\/([^/]+)\/discussion-messages$/,
     );

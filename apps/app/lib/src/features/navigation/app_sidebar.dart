@@ -16,6 +16,8 @@ class AppSidebar extends StatelessWidget {
     required this.onToggleProjectExpanded,
     required this.onCreateProject,
     this.onCreateWorkstream,
+    this.onOpenCommandPalette,
+    this.onOpenNotifications,
     this.onToggleTheme,
     this.onSetThemeMode,
     required this.onLogout,
@@ -29,6 +31,8 @@ class AppSidebar extends StatelessWidget {
   final ValueChanged<String> onToggleProjectExpanded;
   final VoidCallback onCreateProject;
   final ValueChanged<StudioProject>? onCreateWorkstream;
+  final VoidCallback? onOpenCommandPalette;
+  final VoidCallback? onOpenNotifications;
   final VoidCallback? onToggleTheme;
   final ValueChanged<ThemeMode>? onSetThemeMode;
   final VoidCallback onLogout;
@@ -79,6 +83,86 @@ class AppSidebar extends StatelessWidget {
                     ],
                   ),
                 ),
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // Search control & Notifications Alarm button
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Tooltip(
+                      message: 'Search or jump to... (⌘K)',
+                      child: InkWell(
+                        onTap: onOpenCommandPalette,
+                        borderRadius: BorderRadius.circular(8),
+                        hoverColor: const Color(0xff29283c),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 6.5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xff181724),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xff2d2b40)),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(
+                                Icons.search_rounded,
+                                size: 15,
+                                color: Colors.white54,
+                              ),
+                              SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Search...',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.white54,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                '⌘K',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white38,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Tooltip(
+                    message: 'Notifications',
+                    child: IconButton(
+                      onPressed: onOpenNotifications,
+                      icon: const Icon(
+                        Icons.notifications_none_rounded,
+                        size: 18,
+                        color: Colors.white60,
+                      ),
+                      splashRadius: 14,
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints(minWidth: 32, minHeight: 32),
+                      style: IconButton.styleFrom(
+                        backgroundColor: const Color(0xff181724),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: const BorderSide(color: Color(0xff2d2b40)),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 12),
@@ -304,15 +388,6 @@ class AppIconRail extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           const Spacer(),
-          Tooltip(
-            message: 'Open project tree & menu',
-            child: IconButton(
-              icon: const Icon(Icons.menu_rounded,
-                  color: Colors.white60, size: 20),
-              onPressed: onOpenDrawer,
-            ),
-          ),
-          const SizedBox(height: 6),
           Tooltip(
             message: shellContext.viewerDisplayName ??
                 shellContext.viewerEmail ??

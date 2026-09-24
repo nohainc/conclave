@@ -13,6 +13,8 @@ class StudioSidebar extends AppSidebar {
     required super.onToggleProjectExpanded,
     required super.onCreateProject,
     super.onCreateWorkstream,
+    super.onOpenCommandPalette,
+    super.onOpenNotifications,
     super.onToggleTheme,
     super.onSetThemeMode,
     required super.onLogout,

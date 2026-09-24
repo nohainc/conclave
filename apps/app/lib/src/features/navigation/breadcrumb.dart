@@ -37,65 +37,42 @@ class AppBreadcrumb extends StatelessWidget {
           _breadcrumbText(project?.name ?? 'Project', isCurrent: true),
         ],
       StudioRouteKind.workstream => [
-          if (compact) ...[
+          if (project != null) ...[
             _breadcrumbLink(
-              '…',
-              () => project != null
-                  ? onNavigateTo(StudioNavigation.project(project.id))
-                  : onNavigateTo(const StudioNavigation.home()),
-              tooltip: project?.name ?? 'Project',
+              project.name,
+              () => onNavigateTo(StudioNavigation.project(project.id)),
             ),
             _divider(),
           ] else ...[
-            if (project != null) ...[
-              _breadcrumbLink(
-                project.name,
-                () => onNavigateTo(StudioNavigation.project(project.id)),
-              ),
-              _divider(),
-            ] else ...[
-              _breadcrumbLink(
-                'Home',
-                () => onNavigateTo(const StudioNavigation.home()),
-              ),
-              _divider(),
-            ],
+            _breadcrumbLink(
+              'Home',
+              () => onNavigateTo(const StudioNavigation.home()),
+            ),
+            _divider(),
           ],
           _breadcrumbText(workstream?.name ?? 'Workstream', isCurrent: true),
         ],
       StudioRouteKind.run => [
-          if (compact) ...[
+          if (project != null) ...[
             _breadcrumbLink(
-              '…',
-              () => (nav.workstreamId != null && project != null)
-                  ? onNavigateTo(
-                      StudioNavigation.workstream(project.id, nav.workstreamId!))
-                  : onNavigateTo(const StudioNavigation.projects()),
-              tooltip: workstream?.name ?? 'Workstream',
+              project.name,
+              () => onNavigateTo(StudioNavigation.project(project.id)),
             ),
             _divider(),
           ] else ...[
-            if (project != null) ...[
-              _breadcrumbLink(
-                project.name,
-                () => onNavigateTo(StudioNavigation.project(project.id)),
-              ),
-              _divider(),
-            ] else ...[
-              _breadcrumbLink(
-                'Projects',
-                () => onNavigateTo(const StudioNavigation.projects()),
-              ),
-              _divider(),
-            ],
-            if (nav.workstreamId != null && project != null) ...[
-              _breadcrumbLink(
-                workstream?.name ?? 'Workstream',
-                () => onNavigateTo(
-                    StudioNavigation.workstream(project.id, nav.workstreamId!)),
-              ),
-              _divider(),
-            ],
+            _breadcrumbLink(
+              'Projects',
+              () => onNavigateTo(const StudioNavigation.projects()),
+            ),
+            _divider(),
+          ],
+          if (nav.workstreamId != null && project != null) ...[
+            _breadcrumbLink(
+              workstream?.name ?? 'Workstream',
+              () => onNavigateTo(
+                  StudioNavigation.workstream(project.id, nav.workstreamId!)),
+            ),
+            _divider(),
           ],
           _breadcrumbText('Run', isCurrent: true),
         ],

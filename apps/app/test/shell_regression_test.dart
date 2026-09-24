@@ -387,18 +387,18 @@ void main() {
           home: LayoutBuilder(
             builder: (context, constraints) {
               final isDesktop = ConclaveBrand.isDesktop(constraints.maxWidth);
-              final isTablet = ConclaveBrand.isTablet(constraints.maxWidth);
-              final isMobile = ConclaveBrand.isMobile(constraints.maxWidth);
 
               return Scaffold(
                 key: scaffoldKey,
-                drawer: (isTablet || isMobile)
+                drawer: !isDesktop
                     ? Drawer(
                         child: AppSidebar(
                           shellContext: baseShellContext,
                           onNavigateTo: (_) {},
                           onToggleProjectExpanded: (_) {},
                           onCreateProject: () {},
+                          onOpenCommandPalette: _dummyAction,
+                          onOpenNotifications: _dummyAction,
                           onLogout: () {},
                           onOpenAbout: () {},
                           onOpenExternal: (_) {},
@@ -416,19 +416,8 @@ void main() {
                           onNavigateTo: _dummyNav,
                           onToggleProjectExpanded: _dummyToggle,
                           onCreateProject: _dummyAction,
-                          onLogout: _dummyAction,
-                          onOpenAbout: _dummyAction,
-                          onOpenExternal: _dummyExternal,
-                        ),
-                      )
-                    else if (isTablet)
-                      SizedBox(
-                        width: 64,
-                        child: AppIconRail(
-                          shellContext: baseShellContext,
-                          onNavigateTo: _dummyNav,
-                          onOpenDrawer: () =>
-                              scaffoldKey.currentState?.openDrawer(),
+                          onOpenCommandPalette: _dummyAction,
+                          onOpenNotifications: _dummyAction,
                           onLogout: _dummyAction,
                           onOpenAbout: _dummyAction,
                           onOpenExternal: _dummyExternal,
@@ -437,13 +426,14 @@ void main() {
                     Expanded(
                       child: Column(
                         children: [
-                          AppTopHud(
-                            shellContext: baseShellContext,
-                            onNavigateTo: _dummyNav,
-                            onOpenCommandPalette: _dummyAction,
-                            onOpenNotifications: _dummyAction,
-                            compact: isMobile,
-                          ),
+                          if (!isDesktop)
+                            AppTopHud(
+                              shellContext: baseShellContext,
+                              onNavigateTo: _dummyNav,
+                              onOpenCommandPalette: _dummyAction,
+                              onOpenNotifications: _dummyAction,
+                              compact: true,
+                            ),
                           const Expanded(child: SizedBox()),
                         ],
                       ),
@@ -456,7 +446,7 @@ void main() {
         );
       }
 
-      // 1. Desktop mode (>= 800)
+      // 1. Desktop mode (>= 500)
       tester.view.physicalSize = const Size(1000, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -467,40 +457,30 @@ void main() {
       await tester.pumpWidget(buildAppScaffold());
       await tester.pumpAndSettle();
       expect(find.byType(AppSidebar), findsOneWidget);
-      expect(find.byType(AppIconRail), findsNothing);
+      expect(find.byType(AppTopHud), findsNothing); // Top HUD hidden on desktop
+      expect(find.byTooltip('Search or jump to... (⌘K)'), findsOneWidget); // Search on sidebar
+      expect(find.byTooltip('Notifications'), findsOneWidget); // Alarm on sidebar
       expect(find.byTooltip('Open menu'), findsNothing);
 
-      // 2. Tablet mode (400 - 799)
-      tester.view.physicalSize = const Size(600, 800);
+      // 2. Tablet mode (< 500)
+      tester.view.physicalSize = const Size(400, 800);
       await tester.pumpWidget(buildAppScaffold());
       await tester.pumpAndSettle();
-      expect(find.byType(AppIconRail), findsOneWidget);
-      expect(find.byTooltip('Open project tree & menu'), findsOneWidget);
+      expect(find.byType(AppSidebar), findsNothing);
+      expect(find.byType(AppTopHud), findsOneWidget); // Top HUD visible on tablet
+      expect(find.byTooltip('Open menu'), findsOneWidget);
 
-      // Open drawer from icon rail
-      await tester.tap(find.byTooltip('Open project tree & menu'));
+      // Open tablet drawer
+      await tester.tap(find.byTooltip('Open menu'));
       await tester.pumpAndSettle();
       expect(find.byType(Drawer), findsOneWidget);
+      expect(find.byType(AppSidebar), findsOneWidget);
       expect(find.text('PROJECTS'), findsOneWidget);
 
       // Close drawer
       await tester.tap(find.text('Close menu'));
       await tester.pumpAndSettle();
       expect(find.byType(Drawer), findsNothing);
-
-      // 3. Mobile mode (< 400, e.g. 380)
-      tester.view.physicalSize = const Size(380, 800);
-      await tester.pumpWidget(buildAppScaffold());
-      await tester.pumpAndSettle();
-      expect(find.byType(AppSidebar), findsNothing);
-      expect(find.byType(AppIconRail), findsNothing);
-      expect(find.byTooltip('Open menu'), findsOneWidget);
-
-      // Open mobile drawer
-      await tester.tap(find.byTooltip('Open menu'));
-      await tester.pumpAndSettle();
-      expect(find.byType(Drawer), findsOneWidget);
-      expect(find.byType(AppSidebar), findsOneWidget);
     });
   });
 

@@ -1514,12 +1514,10 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   if (authRequired) return _authScaffold();
                   if (loadError != null) return _errorScaffold();
                   final isDesktop = ConclaveBrand.isDesktop(constraints.maxWidth);
-                  final isTablet = ConclaveBrand.isTablet(constraints.maxWidth);
-                  final isMobile = ConclaveBrand.isMobile(constraints.maxWidth);
                   final shell = _shellContext;
 
                   return Scaffold(
-                    drawer: (isTablet || isMobile)
+                    drawer: !isDesktop
                         ? Drawer(
                             child: StudioSidebar(
                               shellContext: shell,
@@ -1527,6 +1525,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
                               onToggleProjectExpanded: _toggleProjectExpanded,
                               onCreateProject: _createProject,
                               onCreateWorkstream: _createWorkstream,
+                              onOpenCommandPalette: _openCommandPalette,
+                              onOpenNotifications: _showNotifications,
                               onToggleTheme: _toggleTheme,
                               onSetThemeMode: _setThemeMode,
                               onLogout: () => unawaited(_logout()),
@@ -1550,23 +1550,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
                                   _toggleProjectExpanded,
                               onCreateProject: _createProject,
                               onCreateWorkstream: _createWorkstream,
-                              onToggleTheme: _toggleTheme,
-                              onSetThemeMode: _setThemeMode,
-                              onLogout: () => unawaited(_logout()),
-                              onOpenAbout: () =>
-                                  unawaited(_showAboutConclave()),
-                              onOpenExternal: (uri) =>
-                                  browserNavigation.openExternal(uri),
-                            ),
-                          )
-                        else if (isTablet)
-                          SizedBox(
-                            width: 64,
-                            child: StudioIconRail(
-                              shellContext: shell,
-                              onNavigateTo: _navigateTo,
-                              onOpenDrawer: () =>
-                                  Scaffold.of(context).openDrawer(),
+                              onOpenCommandPalette: _openCommandPalette,
+                              onOpenNotifications: _showNotifications,
                               onToggleTheme: _toggleTheme,
                               onSetThemeMode: _setThemeMode,
                               onLogout: () => unawaited(_logout()),
@@ -1576,7 +1561,12 @@ class _StudioAppState extends State<ConclaveAppShell> {
                                   browserNavigation.openExternal(uri),
                             ),
                           ),
-                        Expanded(child: _content(isMobile)),
+                        Expanded(
+                          child: _content(
+                            compact: !isDesktop,
+                            showTopHud: !isDesktop,
+                          ),
+                        ),
                       ],
                     ),
                   );
@@ -2185,19 +2175,20 @@ class _StudioAppState extends State<ConclaveAppShell> {
         ),
       );
 
-  Widget _content(bool compact) {
+  Widget _content({required bool compact, required bool showTopHud}) {
     return Column(children: [
-      StudioTopBar(
-        shellContext: _shellContext,
-        onNavigateTo: _navigateTo,
-        onOpenCommandPalette: _openCommandPalette,
-        onOpenNotifications: _showNotifications,
-        onToggleTheme: _toggleTheme,
-        onOpenAbout: () => unawaited(_showAboutConclave()),
-        onLogout: () => unawaited(_logout()),
-        onOpenExternal: (uri) => browserNavigation.openExternal(uri),
-        compact: compact,
-      ),
+      if (showTopHud)
+        StudioTopBar(
+          shellContext: _shellContext,
+          onNavigateTo: _navigateTo,
+          onOpenCommandPalette: _openCommandPalette,
+          onOpenNotifications: _showNotifications,
+          onToggleTheme: _toggleTheme,
+          onOpenAbout: () => unawaited(_showAboutConclave()),
+          onLogout: () => unawaited(_logout()),
+          onOpenExternal: (uri) => browserNavigation.openExternal(uri),
+          compact: compact,
+        ),
       if (realtimeStale) _realtimeStatusBanner(),
       if (realtimeNotice != null)
         Semantics(
@@ -2288,11 +2279,16 @@ class _StudioAppState extends State<ConclaveAppShell> {
       project: project,
       dataSource: widget.dataSource,
       onOpenWorkstream: (workstreamId) =>
-          _navigateTo(StudioNavigation.workstream(project.id, workstreamId)),
+          _openWorkstream(project.id, workstreamId),
       onEdit: () => _editProject(project),
       onArchive: () => _archiveProject(project),
       onDelete: () => _deleteProject(project.id),
     );
+  }
+
+  Future<void> _openWorkstream(String projectId, String workstreamId) async {
+    _navigateTo(StudioNavigation.workstream(projectId, workstreamId));
+    await _loadSnapshot(projectId: projectId, showSpinner: false);
   }
 
   Widget _workstreamView() {
@@ -2304,7 +2300,29 @@ class _StudioAppState extends State<ConclaveAppShell> {
       workstream: workstream,
       onBackToProject: () =>
           _navigateTo(StudioNavigation.project(project.id)),
-      onArchive: () => _showSnackBar('Workstream archived in the v6 shell.'),
+      onArchive: () async {
+        try {
+          await widget.dataSource.deleteWorkstream(workstreamId: workstream.id);
+          if (!mounted) return;
+          _showSnackBar('Workstream deleted.');
+          _navigateTo(StudioNavigation.project(project.id));
+          await _loadSnapshot(projectId: project.id, showSpinner: false);
+        } catch (error) {
+          if (mounted) _showSnackBar(error.toString());
+        }
+      },
+      onRename: (name) async {
+        try {
+          await widget.dataSource.updateWorkstream(
+            workstreamId: workstream.id,
+            name: name,
+          );
+          await _loadSnapshot(projectId: project.id, showSpinner: false);
+          if (mounted) _showSnackBar('Workstream updated.');
+        } catch (error) {
+          if (mounted) _showSnackBar(error.toString());
+        }
+      },
       onProvisionCheckout: () async {
         try {
           await widget.dataSource.provisionWorkstreamCheckout(

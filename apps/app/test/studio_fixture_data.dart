@@ -221,6 +221,54 @@ class StudioFixtureDataSource implements StudioDataSource {
   }) async {}
 
   @override
+  Future<List<StudioWorkstream>> loadProjectWorkstreams({
+    required String projectId,
+  }) async =>
+      studioFixtureSnapshot()
+          .projects
+          .where((project) => project.id == projectId)
+          .expand((project) => project.workstreams)
+          .toList();
+
+  @override
+  Future<StudioWorkstream> createWorkstream({
+    required String projectId,
+    required String name,
+  }) async =>
+      StudioWorkstream(
+        id: 'workstream-created',
+        projectId: projectId,
+        name: name,
+        lead: 'You',
+        status: 'active',
+        brief: '',
+        primaryWorkspace: 'Not selected',
+        currentCheckpoint: 'Not started',
+        queueStatus: 'Idle',
+      );
+
+  @override
+  Future<StudioWorkstream> updateWorkstream({
+    required String workstreamId,
+    String? name,
+    String? status,
+  }) async =>
+      StudioWorkstream(
+        id: workstreamId,
+        projectId: 'project-1',
+        name: name ?? 'Updated Workstream',
+        lead: 'You',
+        status: status ?? 'active',
+        brief: '',
+        primaryWorkspace: 'Not selected',
+        currentCheckpoint: 'Not started',
+        queueStatus: 'Idle',
+      );
+
+  @override
+  Future<void> deleteWorkstream({required String workstreamId}) async {}
+
+  @override
   Future<List<StudioAgent>> loadHosts({required String workspaceId}) async =>
       studioFixtureSnapshot().agents;
 
