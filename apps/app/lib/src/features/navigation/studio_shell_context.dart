@@ -187,7 +187,9 @@ class StudioShellContext {
             target.workstreamId != null &&
             navigation.workstreamId == target.workstreamId;
       case StudioRouteKind.hosts:
-        return navigation.kind == StudioRouteKind.hosts;
+        return navigation.kind == StudioRouteKind.hosts ||
+            navigation.kind == StudioRouteKind.workers ||
+            navigation.kind == StudioRouteKind.accounts;
       case StudioRouteKind.workers:
         return navigation.kind == StudioRouteKind.workers;
       case StudioRouteKind.accounts:

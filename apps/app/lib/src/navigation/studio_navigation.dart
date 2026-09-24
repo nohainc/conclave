@@ -89,8 +89,19 @@ class StudioNavigation {
     if (parts case ['projects']) return const StudioNavigation.projects();
     if (parts.length == 1 &&
         (parts[0] == 'workspaces' || parts[0] == 'hosts')) {
+      final tab = uri.queryParameters['tab']?.toLowerCase();
+      if (tab == 'workers') return const StudioNavigation.workers();
+      if (tab == 'accounts' || tab == 'ai_accounts') {
+        return const StudioNavigation.accounts();
+      }
       return const StudioNavigation.hosts();
     }
+    if (parts.length == 2 &&
+        (parts[0] == 'workspaces' || parts[0] == 'hosts')) {
+      if (parts[1] == 'workers') return const StudioNavigation.workers();
+      if (parts[1] == 'accounts') return const StudioNavigation.accounts();
+    }
+    // Backward compatibility for standalone /workers and /accounts
     if (parts case ['workers']) return const StudioNavigation.workers();
     if (parts case ['accounts']) return const StudioNavigation.accounts();
     if (parts case ['usage']) return const StudioNavigation.usage();
@@ -134,8 +145,8 @@ class StudioNavigation {
               path: '/projects/$projectId/workstreams/$workstreamId/runs/$runId')
           : Uri(path: '/projects/$projectId/runs/$runId'),
       StudioRouteKind.hosts => Uri(path: '/workspaces'),
-      StudioRouteKind.workers => Uri(path: '/workers'),
-      StudioRouteKind.accounts => Uri(path: '/accounts'),
+      StudioRouteKind.workers => Uri(path: '/workspaces/workers'),
+      StudioRouteKind.accounts => Uri(path: '/workspaces/accounts'),
       StudioRouteKind.usage => Uri(path: '/usage'),
       StudioRouteKind.login => Uri(
           path: '/login',

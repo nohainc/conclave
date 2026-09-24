@@ -486,11 +486,23 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
 
       case StudioRouteKind.workers:
         return [
+          _breadcrumbLink(
+            'Workspaces',
+            () => onNavigateTo(const StudioNavigation.hosts()),
+            mutedInk: mutedInk,
+          ),
+          _divider(mutedInk),
           _breadcrumbText('Workers', isCurrent: true, inkColor: inkColor),
         ];
 
       case StudioRouteKind.accounts:
         return [
+          _breadcrumbLink(
+            'Workspaces',
+            () => onNavigateTo(const StudioNavigation.hosts()),
+            mutedInk: mutedInk,
+          ),
+          _divider(mutedInk),
           _breadcrumbText('AI Accounts', isCurrent: true, inkColor: inkColor),
         ];
 

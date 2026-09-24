@@ -93,7 +93,7 @@ void main() {
         projects: [],
       );
       expect(workersCtx.isNavActive(const StudioNavigation.workers()), isTrue);
-      expect(workersCtx.isNavActive(const StudioNavigation.hosts()), isFalse);
+      expect(workersCtx.isNavActive(const StudioNavigation.hosts()), isTrue);
       expect(workersCtx.isNavActive(const StudioNavigation.home()), isFalse);
 
       // AI Accounts route
@@ -102,6 +102,7 @@ void main() {
         projects: [],
       );
       expect(accountsCtx.isNavActive(const StudioNavigation.accounts()), isTrue);
+      expect(accountsCtx.isNavActive(const StudioNavigation.hosts()), isTrue);
       expect(accountsCtx.isNavActive(const StudioNavigation.projects()), isFalse);
 
       // Usage route
@@ -855,6 +856,64 @@ void main() {
       await tester.tap(find.text('…'));
       expect(navigatedTo?.kind, StudioRouteKind.project);
       expect(navigatedTo?.projectId, 'project-1');
+    });
+
+    testWidgets('renders nested breadcrumbs for Workers and AI Accounts',
+        (tester) async {
+      StudioNavigation? navigatedTo;
+
+      const workersContext = StudioShellContext(
+        navigation: StudioNavigation.workers(),
+        projects: [testProject],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: StudioTopBar(
+              shellContext: workersContext,
+              onNavigateTo: (nav) => navigatedTo = nav,
+              onOpenCommandPalette: () {},
+              onOpenNotifications: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Workspaces'), findsOneWidget);
+      expect(find.text('Workers'), findsOneWidget);
+
+      await tester.tap(find.text('Workspaces'));
+      expect(navigatedTo?.kind, StudioRouteKind.hosts);
+
+      navigatedTo = null;
+      const accountsContext = StudioShellContext(
+        navigation: StudioNavigation.accounts(),
+        projects: [testProject],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: StudioTopBar(
+              shellContext: accountsContext,
+              onNavigateTo: (nav) => navigatedTo = nav,
+              onOpenCommandPalette: () {},
+              onOpenNotifications: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Workspaces'), findsOneWidget);
+      expect(find.text('AI Accounts'), findsOneWidget);
+
+      await tester.tap(find.text('Workspaces'));
+      expect(navigatedTo?.kind, StudioRouteKind.hosts);
     });
 
     testWidgets('compact HUD prioritizes leaf entity in breadcrumbs for run',

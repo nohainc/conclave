@@ -53,11 +53,31 @@ void main() {
     }
   });
 
-  test('uses the Workspace route while accepting legacy Host links', () {
+  test('uses canonical nested routes for Workspaces, Workers, and AI Accounts', () {
     const workspace = StudioNavigation.hosts();
     expect(workspace.toUri().path, '/workspaces');
     expect(StudioNavigation.fromUri(Uri.parse('/workspaces')), workspace);
     expect(StudioNavigation.fromUri(Uri.parse('/hosts')), workspace);
+
+    const workers = StudioNavigation.workers();
+    expect(workers.toUri().path, '/workspaces/workers');
+    expect(StudioNavigation.fromUri(Uri.parse('/workspaces/workers')), workers);
+    expect(StudioNavigation.fromUri(Uri.parse('/hosts/workers')), workers);
+    expect(StudioNavigation.fromUri(Uri.parse('/workers')), workers);
+    expect(
+        StudioNavigation.fromUri(Uri.parse('/workspaces?tab=workers')), workers);
+    expect(StudioNavigation.fromUri(Uri.parse('/hosts?tab=workers')), workers);
+
+    const accounts = StudioNavigation.accounts();
+    expect(accounts.toUri().path, '/workspaces/accounts');
+    expect(
+        StudioNavigation.fromUri(Uri.parse('/workspaces/accounts')), accounts);
+    expect(StudioNavigation.fromUri(Uri.parse('/hosts/accounts')), accounts);
+    expect(StudioNavigation.fromUri(Uri.parse('/accounts')), accounts);
+    expect(StudioNavigation.fromUri(Uri.parse('/workspaces?tab=accounts')),
+        accounts);
+    expect(StudioNavigation.fromUri(Uri.parse('/hosts?tab=ai_accounts')),
+        accounts);
   });
 
   test('each browser tab can own an independent navigation state', () {
