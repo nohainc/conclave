@@ -39,6 +39,7 @@ class StudioShellContext {
     this.accounts = const [],
     this.unreadNotificationCount = 0,
     this.isDarkTheme = true,
+    this.themeMode = ThemeMode.system,
     this.realtimeStale = false,
     this.realtimeNotice,
     this.viewerDisplayName,
@@ -56,6 +57,7 @@ class StudioShellContext {
   final List<StudioCredentialProfile> accounts;
   final int unreadNotificationCount;
   final bool isDarkTheme;
+  final ThemeMode themeMode;
   final bool realtimeStale;
   final String? realtimeNotice;
   final String? viewerDisplayName;

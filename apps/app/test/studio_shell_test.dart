@@ -326,6 +326,180 @@ void main() {
       expect(find.text('Log out'), findsOneWidget);
     });
 
+    testWidgets(
+        'Phase 3: Global application menu actions (destinations, appearance submenu, product info, session logout)',
+        (tester) async {
+      StudioNavigation? navigatedTo;
+      ThemeMode? selectedThemeMode;
+      var logoutTriggered = false;
+      var aboutTriggered = false;
+      Uri? openedExternalUri;
+
+      const shellContext = StudioShellContext(
+        navigation: StudioNavigation.home(),
+        projects: [testProject],
+        themeMode: ThemeMode.system,
+        viewerDisplayName: 'Vitalii Noha',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: StudioSidebar(
+              shellContext: shellContext,
+              onNavigateTo: (nav) => navigatedTo = nav,
+              onToggleProjectExpanded: (_) {},
+              onCreateProject: () {},
+              onSetThemeMode: (mode) => selectedThemeMode = mode,
+              onLogout: () => logoutTriggered = true,
+              onOpenAbout: () => aboutTriggered = true,
+              onOpenExternal: (uri) => openedExternalUri = uri,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open menu in sidebar
+      await tester.tap(find.byTooltip('Application menu'));
+      await tester.pumpAndSettle();
+
+      // Test 1: Usage destination
+      await tester.tap(find.text('Usage'));
+      await tester.pumpAndSettle();
+      expect(navigatedTo?.kind, StudioRouteKind.usage);
+
+      // Re-open menu
+      await tester.tap(find.byTooltip('Application menu'));
+      await tester.pumpAndSettle();
+
+      // Test 2: Appearance Submenu
+      await tester.tap(find.text('Appearance'));
+      await tester.pumpAndSettle();
+      expect(find.text('System'), findsOneWidget);
+      expect(find.text('Light'), findsOneWidget);
+      expect(find.text('Dark'), findsOneWidget);
+
+      await tester.tap(find.text('Dark'));
+      await tester.pumpAndSettle();
+      expect(selectedThemeMode, ThemeMode.dark);
+
+      // Re-open menu
+      await tester.tap(find.byTooltip('Application menu'));
+      await tester.pumpAndSettle();
+
+      // Test 3: About Conclave AX
+      await tester.tap(find.text('About Conclave AX'));
+      await tester.pumpAndSettle();
+      expect(aboutTriggered, isTrue);
+
+      // Re-open menu
+      await tester.tap(find.byTooltip('Application menu'));
+      await tester.pumpAndSettle();
+
+      // Test 4: Website
+      await tester.tap(find.text('Website'));
+      await tester.pumpAndSettle();
+      expect(openedExternalUri, Uri.parse('https://conclaveax.com'));
+
+      // Re-open menu
+      await tester.tap(find.byTooltip('Application menu'));
+      await tester.pumpAndSettle();
+
+      // Test 5: Log out
+      await tester.tap(find.text('Log out'));
+      await tester.pumpAndSettle();
+      expect(logoutTriggered, isTrue);
+    });
+
+    testWidgets(
+        'Phase 3: StudioIconRail includes global application menu with destinations and actions',
+        (tester) async {
+      StudioNavigation? navigatedTo;
+      ThemeMode? selectedThemeMode;
+      var logoutTriggered = false;
+      var aboutTriggered = false;
+      Uri? openedExternalUri;
+      var drawerOpened = false;
+
+      const shellContext = StudioShellContext(
+        navigation: StudioNavigation.home(),
+        projects: [testProject],
+        themeMode: ThemeMode.light,
+        viewerDisplayName: 'Vitalii Noha',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.lightTheme(),
+          home: Scaffold(
+            body: StudioIconRail(
+              shellContext: shellContext,
+              onNavigateTo: (nav) => navigatedTo = nav,
+              onOpenDrawer: () => drawerOpened = true,
+              onSetThemeMode: (mode) => selectedThemeMode = mode,
+              onLogout: () => logoutTriggered = true,
+              onOpenAbout: () => aboutTriggered = true,
+              onOpenExternal: (uri) => openedExternalUri = uri,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open menu in rail
+      await tester.tap(find.byTooltip('Application menu'));
+      await tester.pumpAndSettle();
+
+      // Check items exist
+      expect(find.text('Workspaces'), findsOneWidget);
+      expect(find.text('Usage'), findsOneWidget);
+      expect(find.text('Appearance'), findsOneWidget);
+      expect(find.text('About Conclave AX'), findsOneWidget);
+      expect(find.text('Website'), findsOneWidget);
+      expect(find.text('Log out'), findsOneWidget);
+
+      // Click Workspaces
+      await tester.tap(find.text('Workspaces'));
+      await tester.pumpAndSettle();
+      expect(navigatedTo?.kind, StudioRouteKind.hosts);
+
+      // Reopen and check Appearance -> System
+      await tester.tap(find.byTooltip('Application menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Appearance'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('System'));
+      await tester.pumpAndSettle();
+      expect(selectedThemeMode, ThemeMode.system);
+
+      // Reopen and check About Conclave AX
+      await tester.tap(find.byTooltip('Application menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('About Conclave AX'));
+      await tester.pumpAndSettle();
+      expect(aboutTriggered, isTrue);
+
+      // Reopen and check Website
+      await tester.tap(find.byTooltip('Application menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Website'));
+      await tester.pumpAndSettle();
+      expect(openedExternalUri, Uri.parse('https://conclaveax.com'));
+
+      // Reopen and check Log out
+      await tester.tap(find.byTooltip('Application menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Log out'));
+      await tester.pumpAndSettle();
+      expect(logoutTriggered, isTrue);
+
+      // Tap drawer button in rail
+      await tester.tap(find.byTooltip('Open project tree & menu'));
+      expect(drawerOpened, isTrue);
+    });
+
     testWidgets('excludes archived workstreams from sidebar list',
         (tester) async {
       const projectWithArchived = StudioProject(

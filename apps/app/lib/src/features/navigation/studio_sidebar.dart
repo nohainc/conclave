@@ -15,6 +15,7 @@ class StudioSidebar extends StatelessWidget {
     required this.onCreateProject,
     this.onCreateWorkstream,
     this.onToggleTheme,
+    this.onSetThemeMode,
     required this.onLogout,
     required this.onOpenAbout,
     required this.onOpenExternal,
@@ -27,6 +28,7 @@ class StudioSidebar extends StatelessWidget {
   final VoidCallback onCreateProject;
   final ValueChanged<StudioProject>? onCreateWorkstream;
   final VoidCallback? onToggleTheme;
+  final ValueChanged<ThemeMode>? onSetThemeMode;
   final VoidCallback onLogout;
   final VoidCallback onOpenAbout;
   final ValueChanged<Uri> onOpenExternal;
@@ -302,6 +304,7 @@ class StudioSidebar extends StatelessWidget {
   }
 
   Widget _buildApplicationMenu(BuildContext context) {
+    final activeThemeMode = shellContext.themeMode;
     return MenuAnchor(
       builder: (context, controller, child) {
         return IconButton(
@@ -324,8 +327,9 @@ class StudioSidebar extends StatelessWidget {
         );
       },
       menuChildren: [
+        // 1. Application destinations
         MenuItemButton(
-          leadingIcon: const Icon(Icons.computer_outlined, size: 16),
+          leadingIcon: const Icon(Icons.grid_view_rounded, size: 16),
           onPressed: () {
             onNavigateTo(const StudioNavigation.hosts());
             if (compact) Scaffold.maybeOf(context)?.closeDrawer();
@@ -333,7 +337,7 @@ class StudioSidebar extends StatelessWidget {
           child: const Text('Workspaces'),
         ),
         MenuItemButton(
-          leadingIcon: const Icon(Icons.analytics_outlined, size: 16),
+          leadingIcon: const Icon(Icons.pie_chart_outline_rounded, size: 16),
           onPressed: () {
             onNavigateTo(const StudioNavigation.usage());
             if (compact) Scaffold.maybeOf(context)?.closeDrawer();
@@ -341,33 +345,61 @@ class StudioSidebar extends StatelessWidget {
           child: const Text('Usage'),
         ),
         const Divider(height: 1),
+
+        // 2. Preferences
         SubmenuButton(
-          leadingIcon: const Icon(Icons.palette_outlined, size: 16),
+          leadingIcon: const Icon(Icons.contrast_rounded, size: 16),
           menuChildren: [
             MenuItemButton(
               leadingIcon: Icon(
-                shellContext.isDarkTheme ? Icons.check_rounded : null,
+                activeThemeMode == ThemeMode.system
+                    ? Icons.check_rounded
+                    : null,
                 size: 16,
               ),
               onPressed: () {
-                if (!shellContext.isDarkTheme) onToggleTheme?.call();
+                if (onSetThemeMode != null) {
+                  onSetThemeMode!(ThemeMode.system);
+                } else {
+                  onToggleTheme?.call();
+                }
               },
-              child: const Text('Dark'),
+              child: const Text('System'),
             ),
             MenuItemButton(
               leadingIcon: Icon(
-                !shellContext.isDarkTheme ? Icons.check_rounded : null,
+                activeThemeMode == ThemeMode.light ? Icons.check_rounded : null,
                 size: 16,
               ),
               onPressed: () {
-                if (shellContext.isDarkTheme) onToggleTheme?.call();
+                if (onSetThemeMode != null) {
+                  onSetThemeMode!(ThemeMode.light);
+                } else if (shellContext.isDarkTheme) {
+                  onToggleTheme?.call();
+                }
               },
               child: const Text('Light'),
+            ),
+            MenuItemButton(
+              leadingIcon: Icon(
+                activeThemeMode == ThemeMode.dark ? Icons.check_rounded : null,
+                size: 16,
+              ),
+              onPressed: () {
+                if (onSetThemeMode != null) {
+                  onSetThemeMode!(ThemeMode.dark);
+                } else if (!shellContext.isDarkTheme) {
+                  onToggleTheme?.call();
+                }
+              },
+              child: const Text('Dark'),
             ),
           ],
           child: const Text('Appearance'),
         ),
         const Divider(height: 1),
+
+        // 3. Product information
         MenuItemButton(
           leadingIcon: const Icon(Icons.info_outline_rounded, size: 16),
           onPressed: onOpenAbout,
@@ -379,6 +411,8 @@ class StudioSidebar extends StatelessWidget {
           child: const Text('Website'),
         ),
         const Divider(height: 1),
+
+        // 4. Session action
         MenuItemButton(
           leadingIcon: const Icon(Icons.logout_rounded, size: 16),
           onPressed: onLogout,
@@ -689,6 +723,7 @@ class StudioIconRail extends StatelessWidget {
     required this.onNavigateTo,
     required this.onOpenDrawer,
     this.onToggleTheme,
+    this.onSetThemeMode,
     required this.onLogout,
     required this.onOpenAbout,
     required this.onOpenExternal,
@@ -698,12 +733,14 @@ class StudioIconRail extends StatelessWidget {
   final ValueChanged<StudioNavigation> onNavigateTo;
   final VoidCallback onOpenDrawer;
   final VoidCallback? onToggleTheme;
+  final ValueChanged<ThemeMode>? onSetThemeMode;
   final VoidCallback onLogout;
   final VoidCallback onOpenAbout;
   final ValueChanged<Uri> onOpenExternal;
 
   @override
   Widget build(BuildContext context) {
+    final activeThemeMode = shellContext.themeMode;
     return Container(
       width: 64,
       color: ConclaveBrand.navigation,
@@ -799,44 +836,78 @@ class StudioIconRail extends StatelessWidget {
               );
             },
             menuChildren: [
+              // 1. Application destinations
               MenuItemButton(
-                leadingIcon: const Icon(Icons.computer_outlined, size: 16),
+                leadingIcon: const Icon(Icons.grid_view_rounded, size: 16),
                 onPressed: () => onNavigateTo(const StudioNavigation.hosts()),
                 child: const Text('Workspaces'),
               ),
               MenuItemButton(
-                leadingIcon: const Icon(Icons.analytics_outlined, size: 16),
+                leadingIcon:
+                    const Icon(Icons.pie_chart_outline_rounded, size: 16),
                 onPressed: () => onNavigateTo(const StudioNavigation.usage()),
                 child: const Text('Usage'),
               ),
               const Divider(height: 1),
+
+              // 2. Preferences
               SubmenuButton(
-                leadingIcon: const Icon(Icons.palette_outlined, size: 16),
+                leadingIcon: const Icon(Icons.contrast_rounded, size: 16),
                 menuChildren: [
                   MenuItemButton(
                     leadingIcon: Icon(
-                      shellContext.isDarkTheme ? Icons.check_rounded : null,
+                      activeThemeMode == ThemeMode.system
+                          ? Icons.check_rounded
+                          : null,
                       size: 16,
                     ),
                     onPressed: () {
-                      if (!shellContext.isDarkTheme) onToggleTheme?.call();
+                      if (onSetThemeMode != null) {
+                        onSetThemeMode!(ThemeMode.system);
+                      } else {
+                        onToggleTheme?.call();
+                      }
                     },
-                    child: const Text('Dark'),
+                    child: const Text('System'),
                   ),
                   MenuItemButton(
                     leadingIcon: Icon(
-                      !shellContext.isDarkTheme ? Icons.check_rounded : null,
+                      activeThemeMode == ThemeMode.light
+                          ? Icons.check_rounded
+                          : null,
                       size: 16,
                     ),
                     onPressed: () {
-                      if (shellContext.isDarkTheme) onToggleTheme?.call();
+                      if (onSetThemeMode != null) {
+                        onSetThemeMode!(ThemeMode.light);
+                      } else if (shellContext.isDarkTheme) {
+                        onToggleTheme?.call();
+                      }
                     },
                     child: const Text('Light'),
+                  ),
+                  MenuItemButton(
+                    leadingIcon: Icon(
+                      activeThemeMode == ThemeMode.dark
+                          ? Icons.check_rounded
+                          : null,
+                      size: 16,
+                    ),
+                    onPressed: () {
+                      if (onSetThemeMode != null) {
+                        onSetThemeMode!(ThemeMode.dark);
+                      } else if (!shellContext.isDarkTheme) {
+                        onToggleTheme?.call();
+                      }
+                    },
+                    child: const Text('Dark'),
                   ),
                 ],
                 child: const Text('Appearance'),
               ),
               const Divider(height: 1),
+
+              // 3. Product information
               MenuItemButton(
                 leadingIcon: const Icon(Icons.info_outline_rounded, size: 16),
                 onPressed: onOpenAbout,
@@ -849,6 +920,8 @@ class StudioIconRail extends StatelessWidget {
                 child: const Text('Website'),
               ),
               const Divider(height: 1),
+
+              // 4. Session action
               MenuItemButton(
                 leadingIcon: const Icon(Icons.logout_rounded, size: 16),
                 onPressed: onLogout,

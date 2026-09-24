@@ -222,6 +222,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
         isDarkTheme: _themeMode == ThemeMode.dark ||
             (_themeMode == ThemeMode.system &&
                 Theme.of(context).brightness == Brightness.dark),
+        themeMode: _themeMode,
         realtimeStale: realtimeStale,
         realtimeNotice: realtimeNotice,
         viewerDisplayName: store.auth.viewer?.displayName ??
@@ -1522,6 +1523,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                               onCreateProject: _createProject,
                               onCreateWorkstream: _createWorkstream,
                               onToggleTheme: _toggleTheme,
+                              onSetThemeMode: _setThemeMode,
                               onLogout: () => unawaited(_logout()),
                               onOpenAbout: () =>
                                   unawaited(_showAboutConclave()),
@@ -1544,6 +1546,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                               onCreateProject: _createProject,
                               onCreateWorkstream: _createWorkstream,
                               onToggleTheme: _toggleTheme,
+                              onSetThemeMode: _setThemeMode,
                               onLogout: () => unawaited(_logout()),
                               onOpenAbout: () =>
                                   unawaited(_showAboutConclave()),
@@ -1560,6 +1563,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                               onOpenDrawer: () =>
                                   Scaffold.of(context).openDrawer(),
                               onToggleTheme: _toggleTheme,
+                              onSetThemeMode: _setThemeMode,
                               onLogout: () => unawaited(_logout()),
                               onOpenAbout: () =>
                                   unawaited(_showAboutConclave()),
@@ -2249,6 +2253,12 @@ class _StudioAppState extends State<ConclaveAppShell> {
     setState(() {
       _themeMode =
           _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+    });
+  }
+
+  void _setThemeMode(ThemeMode mode) {
+    setState(() {
+      _themeMode = mode;
     });
   }
 
