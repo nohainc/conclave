@@ -72,6 +72,12 @@ class WorkspaceStore {
     return value;
   }
 
+  Future<StudioWorkspace> create({required String name, String? slug}) async {
+    final workspace = await source.createWorkspace(name: name, slug: slug);
+    items = List.unmodifiable([...items, workspace]);
+    return workspace;
+  }
+
   void replace(String? activeWorkspaceId) {
     this.activeWorkspaceId = activeWorkspaceId;
     source.setActiveWorkspace(activeWorkspaceId);

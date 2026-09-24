@@ -50,6 +50,10 @@ abstract interface class StudioDataSource {
   Future<void> deletePasskey(String id);
   Future<void> signInWithPasskey();
   Future<List<StudioWorkspace>> loadWorkspaces();
+  Future<StudioWorkspace> createWorkspace({
+    required String name,
+    String? slug,
+  });
   Future<List<StudioProject>> loadProjects();
   Future<List<StudioAgent>> loadHosts({required String workspaceId});
   Future<List<StudioWorker>> loadWorkers({required String workspaceId});
@@ -362,7 +366,8 @@ class StudioApiClient implements StudioDataSource {
     }
     try {
       final setCookie = response.headers['set-cookie'];
-      if (setCookie != null && (sessionToken == null || sessionToken!.isEmpty)) {
+      if (setCookie != null &&
+          (sessionToken == null || sessionToken!.isEmpty)) {
         final match = RegExp(
                 r'(?:better-auth\.session_token|__Secure-better-auth\.session_token)=([^;]+)')
             .firstMatch(setCookie);
@@ -541,6 +546,35 @@ class StudioApiClient implements StudioDataSource {
         .map((workspace) =>
             StudioWorkspace.fromJson(Map<String, dynamic>.from(workspace)))
         .toList();
+  }
+
+  @override
+  Future<StudioWorkspace> createWorkspace({
+    required String name,
+    String? slug,
+  }) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/workspaces'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({
+        'name': name,
+        if (slug != null && slug.trim().isNotEmpty) 'slug': slug.trim(),
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+        'Workspace creation failed (${response.statusCode})',
+        statusCode: response.statusCode,
+      );
+    }
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map || decoded['workspace'] is! Map) {
+      throw const StudioApiException(
+          'Workspace creation response is malformed');
+    }
+    return StudioWorkspace.fromJson(
+      Map<String, dynamic>.from(decoded['workspace'] as Map),
+    );
   }
 
   Future<Map<String, dynamic>> _workspaceJson(Uri uri) async {

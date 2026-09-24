@@ -388,6 +388,143 @@ class _StudioAppState extends State<ConclaveAppShell> {
     }
   }
 
+  Future<void> _switchWorkspace(String workspaceId) async {
+    if (workspaceId == selectedWorkspaceId) return;
+    setState(() {
+      selectedWorkspaceId = workspaceId;
+      selectedProjectId = null;
+      selectedChatId = null;
+      isLoading = true;
+      loadError = null;
+    });
+    widget.dataSource.setActiveWorkspace(workspaceId);
+    _startRealtime();
+    await _loadSnapshot(workspaceId: workspaceId);
+  }
+
+  Future<void> _createWorkspace() async {
+    final nameController = TextEditingController();
+    final name = await showDialog<String>(
+      context: navigatorKey.currentState?.overlay?.context ?? context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Create workspace'),
+        content: TextField(
+          controller: nameController,
+          autofocus: true,
+          textInputAction: TextInputAction.done,
+          decoration: const InputDecoration(
+            labelText: 'Workspace name',
+            hintText: 'e.g. Conclave AX',
+          ),
+          onSubmitted: (_) => Navigator.of(dialogContext).pop(
+              nameController.text.trim().isEmpty
+                  ? null
+                  : nameController.text.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(
+                nameController.text.trim().isEmpty
+                    ? null
+                    : nameController.text.trim()),
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+    nameController.dispose();
+    if (!mounted || name == null || name.isEmpty) return;
+
+    try {
+      final workspace = await store.workspaces.create(name: name);
+      if (!mounted) return;
+      setState(() {
+        selectedWorkspaceId = workspace.id;
+        selectedProjectId = null;
+        selectedChatId = null;
+      });
+      widget.dataSource.setActiveWorkspace(workspace.id);
+      _startRealtime();
+      await _loadSnapshot(workspaceId: workspace.id, showSpinner: false);
+      if (mounted) _showSnackBar('Workspace created.');
+    } catch (error) {
+      if (mounted) {
+        _showSnackBar(error.toString(), type: ToastType.error);
+      }
+    }
+  }
+
+  Future<void> _showWorkspaceMenu() async {
+    final sheetContext = navigatorKey.currentState?.overlay?.context ?? context;
+    final action = await showModalBottomSheet<String>(
+      context: sheetContext,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.only(bottom: 12),
+          children: [
+            const ListTile(
+              title: Text('Workspace'),
+              subtitle: Text('Projects, people and execution resources'),
+            ),
+            ...workspaces.map(
+              (workspace) => ListTile(
+                leading: Icon(
+                  workspace.id == selectedWorkspaceId
+                      ? Icons.check_circle
+                      : Icons.circle_outlined,
+                  color: workspace.id == selectedWorkspaceId
+                      ? Theme.of(sheetContext).colorScheme.primary
+                      : null,
+                ),
+                title: Text(workspace.name),
+                subtitle: Text(workspace.role),
+                onTap: () => Navigator.of(sheetContext).pop(workspace.id),
+              ),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.add_business_outlined),
+              title: const Text('New workspace'),
+              onTap: () => Navigator.of(sheetContext).pop('create'),
+            ),
+            if (pendingInvitations.isNotEmpty)
+              ListTile(
+                leading: const Icon(Icons.mail_outline),
+                title: const Text('Invitations'),
+                trailing: CircleAvatar(
+                  radius: 11,
+                  child: Text('${pendingInvitations.length}',
+                      style: const TextStyle(fontSize: 11)),
+                ),
+                onTap: () => Navigator.of(sheetContext).pop('invitations'),
+              ),
+            ListTile(
+              leading: const Icon(Icons.settings_outlined),
+              title: const Text('Workspace settings'),
+              onTap: () => Navigator.of(sheetContext).pop('settings'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+    if (action == 'create') {
+      await _createWorkspace();
+    } else if (action == 'settings') {
+      _navigateTo(const StudioNavigation.workspaceSettings());
+    } else if (action == 'invitations') {
+      _navigateTo(const StudioNavigation.workspaceSettings());
+    } else {
+      await _switchWorkspace(action);
+    }
+  }
+
   void _onRealtimeEvent(Map<String, dynamic> event) {
     final type = event['type'];
     if (!mounted) return;
@@ -2020,18 +2157,16 @@ class _StudioAppState extends State<ConclaveAppShell> {
           ),
           const SizedBox(height: 18),
           _railItem(Icons.home_outlined, 'Home', const StudioNavigation.home()),
-          _railItem(
-              Icons.folder_outlined, 'Projects', const StudioNavigation.projects()),
+          _railItem(Icons.folder_outlined, 'Projects',
+              const StudioNavigation.projects()),
           _railItem(
               Icons.computer_outlined, 'Hosts', const StudioNavigation.hosts()),
           _railItem(Icons.extension_outlined, 'Workers',
               const StudioNavigation.workers()),
           _railItem(Icons.account_circle_outlined, 'AI Accounts',
               const StudioNavigation.accounts()),
-          _railItem(
-              Icons.analytics_outlined, 'Usage', const StudioNavigation.usage()),
-          _railItem(Icons.settings_outlined, 'Workspace settings',
-              const StudioNavigation.workspaceSettings()),
+          _railItem(Icons.analytics_outlined, 'Usage',
+              const StudioNavigation.usage()),
           const Spacer(),
           Builder(
             builder: (context) => Tooltip(
@@ -2150,10 +2285,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
               ),
             ]),
             const SizedBox(height: 24),
-            if (workspaces.length > 1) ...[
-              _workspaceSelector(),
-              const SizedBox(height: 16),
-            ],
+            _workspaceSelector(),
+            const SizedBox(height: 16),
             _sidebarLabel('WORKSPACE'),
             _navItem(Icons.home_outlined, 'Home', const StudioNavigation.home(),
                 compact: compact, navigationContext: sidebarContext),
@@ -2178,9 +2311,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _navItem(Icons.settings_outlined, 'Workspace settings',
-                        const StudioNavigation.workspaceSettings(),
-                        compact: compact, navigationContext: sidebarContext),
                     _sidebarLabel('PROJECTS'),
                     ...snapshot.projects
                         .map((project) => _projectItem(project)),
@@ -2271,38 +2401,46 @@ class _StudioAppState extends State<ConclaveAppShell> {
               fontWeight: FontWeight.w700,
               letterSpacing: 1.0)));
 
-  Widget _workspaceSelector() => DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value:
-              workspaces.any((workspace) => workspace.id == selectedWorkspaceId)
-                  ? selectedWorkspaceId
-                  : workspaces.first.id,
-          isExpanded: true,
-          dropdownColor: const Color(0xff29283c),
-          icon: const Icon(Icons.unfold_more, color: Colors.white54, size: 16),
-          style: const TextStyle(color: Colors.white, fontSize: 12),
-          items: workspaces
-              .map((workspace) => DropdownMenuItem<String>(
-                    value: workspace.id,
-                    child:
-                        Text(workspace.name, overflow: TextOverflow.ellipsis),
-                  ))
-              .toList(),
-          onChanged: (workspaceId) {
-            if (workspaceId == null || workspaceId == selectedWorkspaceId) {
-              return;
-            }
-            setState(() {
-              selectedWorkspaceId = workspaceId;
-              selectedProjectId = null;
-              selectedChatId = null;
-            });
-            widget.dataSource.setActiveWorkspace(workspaceId);
-            _startRealtime();
-            _loadSnapshot(workspaceId: workspaceId);
-          },
+  Widget _workspaceSelector() {
+    final workspace =
+        workspaces.where((item) => item.id == selectedWorkspaceId).firstOrNull;
+    return Semantics(
+      button: true,
+      label: workspace == null
+          ? 'Select workspace'
+          : 'Current workspace: ${workspace.name}',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: _showWorkspaceMenu,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: .07),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.white.withValues(alpha: .1)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.workspaces_outline,
+                  color: Colors.white70, size: 17),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  workspace?.name ?? 'Choose workspace',
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600),
+                ),
+              ),
+              const Icon(Icons.expand_more, color: Colors.white60, size: 18),
+            ],
+          ),
         ),
-      );
+      ),
+    );
+  }
 
   Widget _navItem(IconData icon, String label, StudioNavigation? target,
       {String? badge, bool compact = false, BuildContext? navigationContext}) {

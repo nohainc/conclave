@@ -11,7 +11,7 @@ void main() {
     await tester.pumpWidget(ConclaveApp(dataSource: dataSource));
     await tester.pumpAndSettle();
 
-    expect(find.text('Conclave AX'), findsOneWidget);
+    expect(find.text('Conclave AX'), findsWidgets);
     expect(find.text('Getting started'), findsOneWidget);
     expect(find.text('Create project'), findsOneWidget);
 
@@ -40,7 +40,7 @@ void main() {
     await tester
         .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
     await tester.pumpAndSettle();
-    expect(find.text('Conclave AX'), findsOneWidget);
+    expect(find.text('Conclave AX'), findsWidgets);
     expect(find.text('Improve authentication architecture'), findsWidgets);
     await tester.tap(find.byIcon(Icons.menu_rounded));
     await tester.pumpAndSettle();
@@ -51,6 +51,23 @@ void main() {
     expect(find.text('Home'), findsWidgets);
     expect(find.text('Active Runs'), findsOneWidget);
     expect(find.text('Recent Projects'), findsOneWidget);
+  });
+
+  testWidgets('keeps the Workspace menu visible with one Workspace',
+      (WidgetTester tester) async {
+    await tester
+        .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Fixture Workspace'), findsOneWidget);
+    await tester.tap(find.text('Fixture Workspace'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('New workspace'), findsOneWidget);
+    expect(find.text('Workspace settings'), findsOneWidget);
+    await tester.tap(find.text('New workspace'));
+    await tester.pumpAndSettle();
+    expect(find.text('Create workspace'), findsOneWidget);
   });
 
   testWidgets('can open run details and return to chat',
