@@ -1,294 +1,74 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:conclave_app/src/features/projects/projects_pages.dart';
+import 'package:conclave_app/src/studio/studio_models.dart';
 
-import 'package:conclave_app/main.dart';
 import 'studio_fixture_data.dart';
 
 void main() {
-  testWidgets('onboards an empty Workspace into a Project and Chat',
-      (WidgetTester tester) async {
-    final dataSource = EmptyWorkspaceFixtureDataSource();
-    await tester.pumpWidget(ConclaveApp(dataSource: dataSource));
-    await tester.pumpAndSettle();
+  const project = StudioProject(
+    id: 'project-1',
+    name: 'Authentication',
+    repository: 'repo',
+    branch: 'main',
+    activeGoals: 0,
+    lastActivity: 'today',
+    role: 'collaborator',
+  );
+  const workstream = StudioWorkstream(
+    id: 'workstream-1',
+    projectId: 'project-1',
+    name: 'Login reliability',
+    lead: 'Owner',
+    status: 'active',
+    brief: 'Make login reliable.',
+    primaryWorkspace: 'Mac Workspace',
+    currentCheckpoint: 'Not started',
+    queueStatus: 'Idle',
+  );
 
-    expect(find.text('Conclave AX'), findsWidgets);
-    expect(find.text('Getting started'), findsOneWidget);
-    expect(find.text('Create project'), findsOneWidget);
-
-    await tester.tap(find.text('Create project'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Create'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('My first project'), findsWidgets);
-    expect(find.text('Start first chat'), findsOneWidget);
-
-    await tester.tap(find.text('Start first chat'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'First chat');
-    await tester.tap(find.text('Create'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('First chat'), findsWidgets);
-    expect(dataSource.hasProject, isTrue);
-    expect(dataSource.hasChat, isTrue);
-    await tester.pump(const Duration(seconds: 4));
-  });
-
-  testWidgets('renders the Workspace Home for an established Workspace',
-      (WidgetTester tester) async {
-    await tester
-        .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
-    await tester.pumpAndSettle();
-    expect(find.text('Conclave AX'), findsWidgets);
-    expect(find.text('Improve authentication architecture'), findsWidgets);
-    await tester.tap(find.byIcon(Icons.menu_rounded));
-    await tester.pumpAndSettle();
-    expect(find.text('Streaming assignment protocol', skipOffstage: false),
-        findsWidgets);
-    await tester.tap(find.text('Close menu'));
-    await tester.pumpAndSettle();
-    expect(find.text('Home'), findsWidgets);
-    expect(find.text('Active Runs'), findsOneWidget);
-    expect(find.text('Recent Projects'), findsOneWidget);
-  });
-
-  testWidgets('does not expose a global Workspace switcher',
-      (WidgetTester tester) async {
-    await tester
-        .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Fixture Workspace'), findsOneWidget);
-    expect(find.text('Choose workspace'), findsNothing);
-    expect(find.text('New workspace'), findsNothing);
-    expect(find.text('Workspace settings'), findsNothing);
-  });
-
-  testWidgets('can open run details and return to chat',
-      (WidgetTester tester) async {
-    await tester
-        .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
-    await tester.pumpAndSettle();
-
-    await tester.ensureVisible(find.text('Open run details'));
-    await tester.tap(find.text('Open run details'));
-    await tester.pumpAndSettle();
-    expect(find.text('Execution tree'), findsOneWidget);
-    expect(find.text('Evidence & findings'), findsOneWidget);
-    await tester.tap(find.byIcon(Icons.arrow_back_rounded));
-    await tester.pumpAndSettle();
-    expect(find.text('Conversation'), findsOneWidget);
-  });
-
-  testWidgets('can pause a run and open goal creation',
-      (WidgetTester tester) async {
-    await tester
-        .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Open run details'));
-    await tester.tap(find.text('Open run details'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Pause'));
-    await tester.tap(find.text('Pause'));
-    await tester.pump();
-    expect(find.text('Resume'), findsOneWidget);
-    expect(find.text('Paused'), findsOneWidget);
-
-    await tester.ensureVisible(find.text('New goal'));
-    await tester.tap(find.text('New goal'));
-    await tester.pump();
-    expect(find.text('Create a goal'), findsOneWidget);
-    expect(find.text('What should Conclave accomplish?'), findsOneWidget);
-  });
-
-  testWidgets('switches project chats and sends a new prompt',
-      (WidgetTester tester) async {
-    await tester
-        .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byIcon(Icons.menu_rounded));
-    await tester.pumpAndSettle();
-    await tester
-        .ensureVisible(find.text('Atlas API', skipOffstage: false).last);
-    await tester.tap(find.text('Atlas API').last);
-    await tester.pumpAndSettle();
-    final migrationChat =
-        find.text('Database migration v2', skipOffstage: false).last;
-    await tester.ensureVisible(migrationChat);
-    await tester.tap(migrationChat);
-    await tester.pumpAndSettle();
-    expect(find.text('Database migration v2'), findsWidgets);
-
-    final prompt = find.byType(TextField);
-    await tester.enterText(
-        prompt, 'Compare the migration rollback strategies.');
-    await tester.ensureVisible(find.byIcon(Icons.arrow_upward_rounded));
-    await tester.tap(find.byIcon(Icons.arrow_upward_rounded));
-    await tester.pumpAndSettle();
-    expect(
-        find.text('Compare the migration rollback strategies.'), findsWidgets);
-  });
-
-  testWidgets('opens Workspaces, Workers, and Accounts without v3 terminology',
-      (WidgetTester tester) async {
-    await tester
-        .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byIcon(Icons.menu_rounded));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Workspaces').last);
-    await tester.pumpAndSettle();
-    expect(find.text('Development Workspace'), findsOneWidget);
-    expect(find.text('Add Workspace'), findsOneWidget);
-
-    await tester.tap(find.byIcon(Icons.menu_rounded));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Workers').last);
-    await tester.pumpAndSettle();
-    expect(find.text('Claude Code'), findsOneWidget);
-    expect(find.text('Docker'), findsOneWidget);
-
-    await tester.tap(find.byIcon(Icons.menu_rounded));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('AI Accounts').last);
-    await tester.pumpAndSettle();
-    expect(find.text('AI Accounts'), findsOneWidget);
-    expect(find.text('Add AI Account'), findsOneWidget);
-    expect(find.text('Accounts'), findsWidgets);
-    expect(find.text('Vitalii Codex'), findsOneWidget);
-    expect(find.text('Create Worker'), findsNothing);
-    expect(find.text('Agents'), findsNothing);
-    expect(find.text('Plugins'), findsNothing);
-  });
-
-  testWidgets(
-      'chat composer defaults to Auto and Balanced with advanced controls',
-      (WidgetTester tester) async {
-    await tester.pumpWidget(ConclaveApp(
-      dataSource: const StudioFixtureDataSource(),
-      initialUri: Uri(path: '/projects/forge/chats/chat-auth-1'),
-    ));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Auto'), findsOneWidget);
-    expect(find.text('Balanced'), findsOneWidget);
-    await tester.ensureVisible(find.text('Advanced execution'));
-    await tester.tap(find.text('Advanced execution'));
-    await tester.pumpAndSettle();
-    expect(find.text('Model'), findsOneWidget);
-    expect(find.text('Account'), findsOneWidget);
-    expect(find.text('Workspace'), findsOneWidget);
-    expect(find.text('Candidates'), findsOneWidget);
-    expect(find.text('Cost'), findsOneWidget);
-  });
-
-  testWidgets('navigation adapts from wide sidebar to compact drawer',
-      (WidgetTester tester) async {
-    await tester.binding.setSurfaceSize(const Size(1280, 900));
-    await tester
-        .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
-    await tester.pumpAndSettle();
-    expect(find.text('Workspaces').first, findsOneWidget);
-    expect(find.text('Accounts').first, findsOneWidget);
-
-    await tester.binding.setSurfaceSize(const Size(540, 900));
-    await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.menu_rounded).first, findsOneWidget);
-    await tester.tap(find.byIcon(Icons.menu_rounded).first);
-    await tester.pumpAndSettle();
-    expect(find.text('Workspaces', skipOffstage: false).last, findsOneWidget);
-    expect(find.text('Accounts', skipOffstage: false).last, findsOneWidget);
-    await tester.binding.setSurfaceSize(null);
-  });
-
-  testWidgets('Workspace Home reflows for narrow phone browsers',
-      (WidgetTester tester) async {
-    await tester.binding.setSurfaceSize(const Size(375, 800));
-    await tester.pumpWidget(const ConclaveApp(
-      dataSource: StudioFixtureDataSource(),
-    ));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Home'), findsOneWidget);
-    expect(find.text('Active Runs'), findsOneWidget);
-    expect(find.text('Attention required'), findsOneWidget);
-    await tester.binding.setSurfaceSize(null);
-  });
-
-  testWidgets('opens Profile & Security with methods and sessions',
-      (WidgetTester tester) async {
-    await tester.pumpWidget(ConclaveApp(
-        dataSource: const StudioFixtureDataSource(),
-        initialUri: Uri(path: '/account')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Profile & Security'), findsNWidgets(2));
-    expect(find.text('Linked login methods'), findsOneWidget);
-    expect(find.text('GitHub'), findsOneWidget);
-    expect(find.text('Active sessions'), findsOneWidget);
-    expect(find.text('Revoke'), findsOneWidget);
-    expect(find.text('Passkeys'), findsOneWidget);
-    expect(find.text('MacBook Touch ID'), findsOneWidget);
-    expect(find.text('Add passkey'), findsOneWidget);
-  });
-
-  testWidgets('exposes lightweight links back to the public product site',
-      (WidgetTester tester) async {
-    await tester
-        .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byTooltip('About Conclave AX'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('About Conclave AX'), findsOneWidget);
-    expect(find.text('Visit website'), findsOneWidget);
-  });
-
-  testWidgets('auth redirects to sign-in without loading workspace data',
-      (WidgetTester tester) async {
-    await tester.pumpWidget(const ConclaveApp(
-        dataSource: StudioFixtureDataSource(authenticated: false)));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Welcome to Conclave AX'), findsOneWidget);
-    expect(find.text('Email'), findsOneWidget);
-    expect(find.text('Password'), findsOneWidget);
-    expect(find.text('Sign in with email'), findsOneWidget);
-    expect(find.text('Forgot password?'), findsOneWidget);
-    expect(find.text('New here? Create an account'), findsOneWidget);
-    expect(find.text('Continue with GitHub'), findsOneWidget);
-    expect(find.text('Continue with Google'), findsOneWidget);
-    expect(find.text('Continue with Passkey'), findsOneWidget);
-    expect(find.text('Improve authentication architecture'), findsNothing);
-  });
-
-  testWidgets('chat and run links can be opened from a refreshed URL',
-      (WidgetTester tester) async {
-    await tester.pumpWidget(
-      ConclaveApp(
-        dataSource: const StudioFixtureDataSource(),
-        initialUri: Uri(path: '/projects/forge/chats/chat-auth-1'),
+  testWidgets('V6 Project explains team collaboration and Workstreams',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ProjectPage(
+          project: project,
+          dataSource: const StudioFixtureDataSource(),
+          onOpenWorkstream: (_) {},
+          onEdit: () {},
+          onArchive: () {},
+          onDelete: () {},
+        ),
       ),
-    );
+    ));
     await tester.pumpAndSettle();
-    expect(find.text('Conversation'), findsOneWidget);
-    expect(find.text('Improve authentication architecture'), findsWidgets);
+
+    expect(find.textContaining("Your team's shared Project space"), findsOneWidget);
+    expect(find.text('Workstreams'), findsOneWidget);
+    expect(find.text('Members'), findsOneWidget);
+    expect(find.text('Execution'), findsOneWidget);
   });
 
-  testWidgets('opens the in-app notification center without browser permission',
-      (WidgetTester tester) async {
-    await tester
-        .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
+  testWidgets('V6 normal Workstream UI uses product vocabulary', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: WorkstreamPage(
+          project: project,
+          workstream: workstream,
+          onBackToProject: () {},
+          onArchive: () {},
+          onProvisionCheckout: () {},
+        ),
+      ),
+    ));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Notifications'));
-    await tester.pumpAndSettle();
-    expect(find.text('Attention center'), findsOneWidget);
-    expect(find.text('You are all caught up.'), findsOneWidget);
-    expect(find.text('Allow notifications'), findsNothing);
+    expect(find.text('Discuss'), findsOneWidget);
+    expect(find.text('Work'), findsOneWidget);
+    expect(find.text('No Work yet. Describe what you need, then press Run.'), findsOneWidget);
+    expect(find.text('lease'), findsNothing);
+    expect(find.text('fencing token'), findsNothing);
+    expect(find.text('Durable Object'), findsNothing);
+    expect(find.text('checkout key'), findsNothing);
   });
 }

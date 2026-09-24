@@ -191,7 +191,7 @@ void main() {
     });
   });
 
-  test('composes focused read models without the workspace snapshot', () async {
+  test('composes focused Project and Workstream read models without Workspace snapshot', () async {
     final client = _ReadModelClient({
       '/api/projects': {
         'projects': [
@@ -216,13 +216,17 @@ void main() {
           'repository': 'repo',
           'activeGoals': 0,
           'lastActivity': 'today',
-          'chats': [
+          'workstreams': [
             {
-              'id': 'chat-1',
+              'id': 'workstream-1',
               'projectId': 'project-1',
-              'title': 'Chat',
-              'lastActivity': 'today',
-              'messages': [],
+              'name': 'Authentication',
+              'lead': 'Owner',
+              'status': 'active',
+              'brief': 'Improve authentication.',
+              'primaryWorkspace': 'Workspace One',
+              'currentCheckpoint': 'Not started',
+              'queueStatus': 'Idle',
             },
           ],
         },
@@ -238,9 +242,9 @@ void main() {
       client: client,
     );
 
-    final readModel = await api.loadReadModels();
+    final readModel = await api.loadReadModels(workspaceId: 'workspace-1');
 
-    expect(readModel.projects.single.chats.single.id, 'chat-1');
+    expect(readModel.projects.single.workstreams.single.id, 'workstream-1');
     expect(client.requests, isNot(contains('/api/studio/snapshot')));
     expect(client.requests, contains('/api/projects/project-1/read-model'));
     expect(client.requests, contains('/api/projects/project-1/usage'));
@@ -398,7 +402,7 @@ void main() {
     expect(jsonDecode(client.lastBody!)['channel'], 'stable');
   });
 
-  test('uses Host paths for enrollment and revocation', () async {
+  test('uses Workspace runtime enrollment and revocation paths', () async {
     final client = _JsonClient({
       'enrollment': {
         'id': 'enrollment-1',
@@ -414,7 +418,7 @@ void main() {
 
     await api.createHostEnrollment(workspaceId: 'workspace-1');
     expect(client.lastRequest?.url.path,
-        '/api/workspaces/workspace-1/host-enrollments');
+        '/api/workspaces/workspace-1/enrollments');
 
     await api.revokeAgent(workspaceId: 'workspace-1', agentId: 'host-1');
     expect(client.lastRequest?.method, 'DELETE');
