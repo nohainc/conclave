@@ -1442,13 +1442,16 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   if (isLoading) return _loadingScaffold();
                   if (authRequired) return _authScaffold();
                   if (loadError != null) return _errorScaffold();
-                  final compact = constraints.maxWidth < 900;
+                  final compact = constraints.maxWidth < 600;
                   return Scaffold(
                     drawer:
                         compact ? Drawer(child: _sidebar(compact: true)) : null,
                     body: Row(
                       children: [
-                        if (!compact) SizedBox(width: 248, child: _sidebar()),
+                        SizedBox(
+                          width: compact ? 56 : 200,
+                          child: compact ? _iconRail() : _sidebar(),
+                        ),
                         Expanded(child: _content(compact)),
                       ],
                     ),
@@ -1991,40 +1994,165 @@ class _StudioAppState extends State<ConclaveAppShell> {
         ),
       );
 
+  Widget _iconRail() {
+    return Container(
+      width: 56,
+      color: ConclaveBrand.navigation,
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 4),
+      child: Column(
+        children: [
+          Tooltip(
+            message: 'Conclave AX',
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: ConclaveBrand.brandMark,
+              alignment: Alignment.center,
+              child: const Text(
+                'C',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          _railItem(Icons.home_outlined, 'Home', const StudioNavigation.home()),
+          _railItem(
+              Icons.folder_outlined, 'Projects', const StudioNavigation.projects()),
+          _railItem(
+              Icons.computer_outlined, 'Hosts', const StudioNavigation.hosts()),
+          _railItem(Icons.extension_outlined, 'Workers',
+              const StudioNavigation.workers()),
+          _railItem(Icons.account_circle_outlined, 'AI Accounts',
+              const StudioNavigation.accounts()),
+          _railItem(
+              Icons.analytics_outlined, 'Usage', const StudioNavigation.usage()),
+          _railItem(Icons.settings_outlined, 'Workspace settings',
+              const StudioNavigation.workspaceSettings()),
+          const Spacer(),
+          Builder(
+            builder: (context) => Tooltip(
+              message: 'Open project & chat menu',
+              child: IconButton(
+                icon: const Icon(Icons.menu_rounded,
+                    color: Colors.white60, size: 20),
+                onPressed: () => Scaffold.of(context).openDrawer(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          _railItem(Icons.person_outline_rounded, 'Profile & Security',
+              const StudioNavigation.profileSecurity()),
+          const SizedBox(height: 6),
+          PopupMenuButton<String>(
+            tooltip: 'Account menu',
+            padding: EdgeInsets.zero,
+            onSelected: (value) {
+              if (value == 'logout') unawaited(_logout());
+              if (value == 'about') unawaited(_showAboutConclave());
+              if (value == 'website') {
+                browserNavigation
+                    .openExternal(Uri.parse('https://conclaveax.com'));
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'about', child: Text('About Conclave AX')),
+              PopupMenuItem(value: 'website', child: Text('Website')),
+              PopupMenuItem(value: 'logout', child: Text('Log out')),
+            ],
+            child: CircleAvatar(
+              radius: 14,
+              backgroundColor: const Color(0xffd8d2ff),
+              child: Text(
+                _viewerInitials,
+                style: const TextStyle(
+                  fontSize: 9,
+                  color: Color(0xff4238a0),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _railItem(IconData icon, String label, StudioNavigation target) {
+    final active = _isNavActive(target);
+    return Tooltip(
+      message: label,
+      child: InkWell(
+        onTap: () => _navigateTo(target, replace: true),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          width: 40,
+          height: 36,
+          margin: const EdgeInsets.only(bottom: 4),
+          decoration: BoxDecoration(
+            color: active ? const Color(0xff302d4b) : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          alignment: Alignment.center,
+          child: Icon(
+            icon,
+            size: 18,
+            color: active ? const Color(0xffbcb3ff) : Colors.white54,
+          ),
+        ),
+      ),
+    );
+  }
+
+  bool _isNavActive(StudioNavigation? target) {
+    if (target == null) return false;
+    return navigation.kind == target.kind ||
+        (target.kind == StudioRouteKind.home &&
+            {
+              StudioRouteKind.home,
+              StudioRouteKind.projects,
+              StudioRouteKind.project,
+              StudioRouteKind.chat,
+            }.contains(navigation.kind));
+  }
+
   Widget _sidebar({bool compact = false}) {
     return Builder(
       builder: (sidebarContext) => Container(
         color: ConclaveBrand.navigation,
-        padding: const EdgeInsets.fromLTRB(18, 24, 14, 18),
+        padding: const EdgeInsets.fromLTRB(10, 18, 8, 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(children: [
               Container(
-                  width: 30,
-                  height: 30,
+                  width: 28,
+                  height: 28,
                   decoration: ConclaveBrand.brandMark,
                   alignment: Alignment.center,
                   child: const Text('C',
                       style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w800,
-                          fontSize: 17))),
-              const SizedBox(width: 10),
+                          fontSize: 15))),
+              const SizedBox(width: 8),
               const Flexible(
                 child: Text('Conclave AX',
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
-                        fontSize: 18,
+                        fontSize: 16,
                         letterSpacing: -.3)),
               ),
             ]),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
             if (workspaces.length > 1) ...[
               _workspaceSelector(),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
             ],
             _sidebarLabel('WORKSPACE'),
             _navItem(Icons.home_outlined, 'Home', const StudioNavigation.home(),
@@ -2044,7 +2172,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
             _navItem(Icons.analytics_outlined, 'Usage',
                 const StudioNavigation.usage(),
                 compact: compact, navigationContext: sidebarContext),
-            const SizedBox(height: 26),
+            const SizedBox(height: 20),
             Expanded(
               child: SingleChildScrollView(
                 child: Column(
@@ -2058,13 +2186,14 @@ class _StudioAppState extends State<ConclaveAppShell> {
                         .map((project) => _projectItem(project)),
                     TextButton.icon(
                       onPressed: _createChat,
-                      icon: const Icon(Icons.add, size: 15),
-                      label: const Text('New chat'),
+                      icon: const Icon(Icons.add, size: 14),
+                      label: const Text('New chat',
+                          style: TextStyle(fontSize: 12)),
                       style: TextButton.styleFrom(
                           alignment: Alignment.centerLeft,
                           foregroundColor: Colors.white54,
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8)),
+                              horizontal: 8, vertical: 6)),
                     ),
                   ],
                 ),
@@ -2079,25 +2208,26 @@ class _StudioAppState extends State<ConclaveAppShell> {
             const SizedBox(height: 6),
             Row(children: [
               CircleAvatar(
-                  radius: 15,
+                  radius: 13,
                   backgroundColor: const Color(0xffd8d2ff),
                   child: Text(_viewerInitials,
                       style: const TextStyle(
-                          fontSize: 10,
+                          fontSize: 9,
                           color: Color(0xff4238a0),
                           fontWeight: FontWeight.bold))),
-              const SizedBox(width: 9),
+              const SizedBox(width: 8),
               Expanded(
                   child: Text(
                       store.auth.viewer?.displayName ??
                           snapshot.viewer?.displayName ??
                           'Not signed in',
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                          color: Colors.white70, fontSize: 12))),
+                          color: Colors.white70, fontSize: 11))),
               PopupMenuButton<String>(
                 tooltip: 'Account menu',
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints.tightFor(width: 32),
+                constraints: const BoxConstraints.tightFor(width: 28),
                 onSelected: (value) {
                   if (value == 'logout') unawaited(_logout());
                   if (value == 'about') unawaited(_showAboutConclave());
@@ -2113,7 +2243,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   PopupMenuItem(value: 'logout', child: Text('Log out')),
                 ],
                 icon: const Icon(Icons.more_horiz,
-                    color: Colors.white38, size: 18),
+                    color: Colors.white38, size: 16),
               ),
             ]),
           ],
@@ -2133,13 +2263,13 @@ class _StudioAppState extends State<ConclaveAppShell> {
   }
 
   Widget _sidebarLabel(String text) => Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 0, 8),
+      padding: const EdgeInsets.fromLTRB(8, 0, 0, 6),
       child: Text(text,
           style: const TextStyle(
               color: Colors.white38,
-              fontSize: 10,
+              fontSize: 9.5,
               fontWeight: FontWeight.w700,
-              letterSpacing: 1.2)));
+              letterSpacing: 1.0)));
 
   Widget _workspaceSelector() => DropdownButtonHideUnderline(
         child: DropdownButton<String>(
@@ -2149,8 +2279,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   : workspaces.first.id,
           isExpanded: true,
           dropdownColor: const Color(0xff29283c),
-          icon: const Icon(Icons.unfold_more, color: Colors.white54, size: 17),
-          style: const TextStyle(color: Colors.white, fontSize: 13),
+          icon: const Icon(Icons.unfold_more, color: Colors.white54, size: 16),
+          style: const TextStyle(color: Colors.white, fontSize: 12),
           items: workspaces
               .map((workspace) => DropdownMenuItem<String>(
                     value: workspace.id,
@@ -2176,15 +2306,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
 
   Widget _navItem(IconData icon, String label, StudioNavigation? target,
       {String? badge, bool compact = false, BuildContext? navigationContext}) {
-    final active = target != null &&
-        (navigation.kind == target.kind ||
-            (target.kind == StudioRouteKind.home &&
-                {
-                  StudioRouteKind.home,
-                  StudioRouteKind.projects,
-                  StudioRouteKind.project,
-                  StudioRouteKind.chat,
-                }.contains(navigation.kind)));
+    final active = _isNavActive(target);
     return InkWell(
       onTap: () {
         if (target != null) {
@@ -2206,36 +2328,37 @@ class _StudioAppState extends State<ConclaveAppShell> {
           Scaffold.maybeOf(navigationContext ?? context)?.closeDrawer();
         }
       },
-      borderRadius: BorderRadius.circular(9),
+      borderRadius: BorderRadius.circular(8),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 3),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        margin: const EdgeInsets.only(bottom: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
         decoration: BoxDecoration(
             color: active ? const Color(0xff302d4b) : Colors.transparent,
-            borderRadius: BorderRadius.circular(9)),
+            borderRadius: BorderRadius.circular(8)),
         child: Row(
           children: [
             Icon(icon,
-                size: 18,
+                size: 17,
                 color: active ? const Color(0xffbcb3ff) : Colors.white54),
-            const SizedBox(width: 11),
+            const SizedBox(width: 8),
             Expanded(
                 child: Text(label,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                         color: active ? Colors.white : Colors.white60,
-                        fontSize: 13,
+                        fontSize: 12.5,
                         fontWeight:
                             active ? FontWeight.w600 : FontWeight.w400))),
             if (badge != null)
               Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                   decoration: BoxDecoration(
                       color: const Color(0xff6254d9),
-                      borderRadius: BorderRadius.circular(8)),
+                      borderRadius: BorderRadius.circular(6)),
                   child: Text(badge,
                       style:
-                          const TextStyle(color: Colors.white, fontSize: 10)))
+                          const TextStyle(color: Colors.white, fontSize: 9.5)))
           ],
         ),
       ),

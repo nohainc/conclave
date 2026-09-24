@@ -204,10 +204,10 @@ void main() {
     expect(find.text('Hosts').first, findsOneWidget);
     expect(find.text('Accounts').first, findsOneWidget);
 
-    await tester.binding.setSurfaceSize(const Size(720, 900));
+    await tester.binding.setSurfaceSize(const Size(540, 900));
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.menu_rounded), findsOneWidget);
-    await tester.tap(find.byIcon(Icons.menu_rounded));
+    expect(find.byIcon(Icons.menu_rounded).first, findsOneWidget);
+    await tester.tap(find.byIcon(Icons.menu_rounded).first);
     await tester.pumpAndSettle();
     expect(find.text('Hosts', skipOffstage: false).last, findsOneWidget);
     expect(find.text('Accounts', skipOffstage: false).last, findsOneWidget);
