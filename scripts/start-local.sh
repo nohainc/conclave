@@ -18,7 +18,12 @@ CYAN=$'\033[0;36m'
 RESET=$'\033[0m'
 
 PORT="${PORT:-8787}"
+# Keep the server bind address separate from the browser-facing hostname.
+# `localhost` and `127.0.0.1` are different cookie sites, so using one for
+# the API and the other for Flutter causes Better Auth's session cookie to be
+# omitted from the follow-up /api/session request.
 IP="${IP:-127.0.0.1}"
+API_HOST="${API_HOST:-localhost}"
 DEVICE="${DEVICE:-chrome}"
 WEB_PORT="${WEB_PORT:-3000}"
 
@@ -31,16 +36,17 @@ while [[ $# -gt 0 ]]; do
     -d|--device) DEVICE="$2"; shift 2 ;;
     -p|--port) PORT="$2"; shift 2 ;;
     -i|--ip) IP="$2"; shift 2 ;;
+    --api-host) API_HOST="$2"; shift 2 ;;
     --web-port) WEB_PORT="$2"; shift 2 ;;
     -h|--help)
-      echo "Usage: ./start-local.sh [-p port] [-d device] [--web-port port]"
+      echo "Usage: ./start-local.sh [-p port] [-d device] [--web-port port] [--api-host host]"
       exit 0
       ;;
     *) shift ;;
   esac
 done
 
-API_URL="http://${IP}:${PORT}"
+API_URL="http://${API_HOST}:${PORT}"
 WEB_URL="http://localhost:${WEB_PORT}"
 
 WRANGLER_BIN="pnpm exec wrangler"
@@ -108,4 +114,4 @@ spawn_terminal "${RUNNER_FLUTTER}" "Conclave AX - Web Studio"
 
 # Print exactly 2 concise lines and exit immediately
 echo -e "${GREEN}✓ Conclave AX started in 2 new terminals (Backend & Frontend in parallel).${RESET}"
-echo -e "${CYAN}• Web Studio:${RESET} ${BOLD}${WEB_URL}${RESET} | ${CYAN}API:${RESET} ${BOLD}${API_URL}${RESET} (Production D1)"
+echo -e "${CYAN}• Web App:${RESET} ${BOLD}${WEB_URL}${RESET} | ${CYAN}API:${RESET} ${BOLD}${API_URL}${RESET} (Production D1 via remote Wrangler)"
