@@ -10,7 +10,7 @@ interface Props {
   image?: string;
 }
 
-const { title, description, image = "/social-preview.png" } = Astro.props;
+const { title, description, image = "/social-preview.svg" } = Astro.props;
 const canonicalUrl = new URL(Astro.url.pathname, Astro.site ?? "https://conclaveax.com").href;
 const imageUrl = new URL(image, Astro.site ?? "https://conclaveax.com").href;
 ---

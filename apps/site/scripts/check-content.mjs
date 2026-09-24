@@ -9,39 +9,41 @@ const routes = new Map([
   ["/privacy/", "privacy/index.html"],
   ["/terms/", "terms/index.html"],
 ]);
+
 /** @type {Record<string, {title: string, heading: string, content: string[]}>} */
 const expected = {
   "/": {
-    title: "Conclave AX — AI work with a clear path to done",
-    heading: "Build with a team of AI Workers.",
-    content: ["Why Conclave AX", "Conclave Host", "Accounts and privacy"],
+    title: "Conclave AX — Turn team decisions into verified AI work",
+    heading: "Turn team decisions into verified AI work.",
+    content: ["Workstreams", "Discuss", "Work Request", "Safe parallel work", "Accounts and privacy"],
   },
   "/how-it-works/": {
     title: "How Conclave AX works",
-    heading: "From a question to a verified result.",
-    content: ["Ask", "Plan", "Delegate", "Verify", "Complete"],
+    heading: "From team discussion to a verified result.",
+    content: ["Create a Project", "Open a Workstream", "Discuss", "Run a Work Request", "Coordinate", "Verify and continue"],
   },
   "/workers/": {
     title: "Workers — Conclave AX",
-    heading: "Choose capability, not a permanent machine identity.",
+    heading: "Treat models and tools as capabilities, not as the whole workflow.",
     content: ["Codex", "Claude Code", "OpenAI", "Anthropic"],
   },
   "/security/": {
     title: "Security — Conclave AX",
-    heading: "Clear boundaries are a feature.",
-    content: ["Conclave Cloud", "Conclave Host", "Worker", "Account"],
+    heading: "Share the project without sharing the whole machine.",
+    content: ["Project", "Workspace", "Worker", "AI Account"],
   },
   "/privacy/": {
     title: "Privacy — Conclave AX",
-    heading: "Privacy is part of the architecture.",
-    content: ["Hosts and Workers", "Accounts"],
+    heading: "Privacy follows the same boundaries as the product.",
+    content: ["Human identity and Projects", "Workspaces and local execution", "AI Accounts"],
   },
   "/terms/": {
     title: "Terms — Conclave AX",
     heading: "Terms of Service",
-    content: ["Website Use", "Conclave AX"],
+    content: ["Connected Workspaces", "Third-party AI providers", "Work outputs"],
   },
 };
+
 const errors = [];
 const sources = new Map();
 
@@ -85,12 +87,21 @@ const home = sources.get("/");
 const appLinks = [
   ...home.matchAll(/href="(https:\/\/app\.conclaveax\.com[^"]*)"/g),
 ];
-if (appLinks.length < 4)
-  errors.push("homepage: expected at least four direct Open Conclave AX links");
+if (appLinks.length < 3)
+  errors.push("homepage: expected at least three direct Open Conclave AX links");
 if (!home.includes('href="/#product"'))
   errors.push("homepage: Product navigation anchor is missing");
+if (!home.includes('href="/#workstreams"'))
+  errors.push("homepage: Workstreams navigation anchor is missing");
 
 for (const [route, source] of sources) {
+  if (/github\.com\/nohainc\/conclave/i.test(source))
+    errors.push(`${route}: public GitHub repository link must not be present`);
+  if (/\b(?:architecture\s+)?v\d+\b/i.test(source))
+    errors.push(`${route}: architecture version language must not be public product copy`);
+  if (/shared workspace/i.test(source))
+    errors.push(`${route}: collaborative Workspace terminology must not return`);
+
   for (const [, href] of source.matchAll(
     /<a\b[^>]*href="([^"#]+)(#[^"]+)?"/g,
   )) {
@@ -103,6 +114,7 @@ for (const [route, source] of sources) {
 
 if (errors.length)
   throw new Error(`Content regression checks failed:\n${errors.join("\n")}`);
+
 console.log(
-  `Content regression checks passed: ${routes.size} critical routes, CTA targets, navigation anchors, and metadata verified.`,
+  `Content regression checks passed: ${routes.size} critical routes, Workstream terminology, CTA targets, private-repository posture, and metadata verified.`,
 );
