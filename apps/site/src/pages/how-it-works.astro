@@ -5,32 +5,31 @@ import Section from "../components/Section.astro";
 import SectionHeader from "../components/SectionHeader.astro";
 import SiteLayout from "../layouts/SiteLayout.astro";
 import WorkflowStep from "../components/WorkflowStep.astro";
+import WorkstreamModel from "../components/WorkstreamModel.astro";
 ---
 
-<SiteLayout title="How Conclave AX works" description="Understand the Conclave AX Cloud, Workspace, Worker, and Account model.">
+<SiteLayout title="How Conclave AX works" description="See how Conclave AX turns team discussion into explicit AI Work Requests, coordinated execution, and inspectable results.">
   <Section>
     <Container>
-      <SectionHeader eyebrow="How it works" title="From a question to a verified result." description="Conclave AX turns a complex goal into visible phases, focused tasks, independent checks, and one result you can inspect." headingLevel={1} />
+      <SectionHeader eyebrow="How it works" title="From team discussion to a verified result." description="Conclave AX keeps collaboration, AI execution, and machine access distinct so complex work stays understandable and controllable." headingLevel={1} />
       <div class="workflow-layout">
         <ol class="workflow-steps">
-          <WorkflowStep number="01" title="Ask"><p>“Improve the authentication architecture.”</p></WorkflowStep>
-          <WorkflowStep number="02" title="Plan"><p>Conclave AX creates phases and tasks with clear completion criteria.</p></WorkflowStep>
-          <WorkflowStep number="03" title="Delegate"><p>Research → Worker A · Implementation → Worker B · Review → Worker C.</p></WorkflowStep>
-          <WorkflowStep number="04" title="Verify"><p>Tests, review findings, and evidence check whether the work is complete.</p></WorkflowStep>
-          <WorkflowStep number="05" title="Complete"><p>One verified final result, with the work and evidence kept together.</p></WorkflowStep>
+          <WorkflowStep number="01" title="Create a Project"><p>Bring the people, shared context, repository configuration, execution policy, and history for a body of work into one place.</p></WorkflowStep>
+          <WorkflowStep number="02" title="Open a Workstream"><p>Give one feature, investigation, or delivery thread its own focused context and execution history.</p></WorkflowStep>
+          <WorkflowStep number="03" title="Discuss"><p>People explore the problem and agree on the next step. Discussion never starts AI execution on its own.</p></WorkflowStep>
+          <WorkflowStep number="04" title="Run a Work Request"><p>Choose a workflow and explicitly start AI work. The requester, policy, execution environment, and authorized Accounts are known before execution.</p></WorkflowStep>
+          <WorkflowStep number="05" title="Coordinate"><p>Research, implementation, testing, and review can be assigned to different Workers based on capability and policy.</p></WorkflowStep>
+          <WorkflowStep number="06" title="Verify and continue"><p>Inspect changes, evidence, tests, findings, and checkpoints. Discuss the result, then create the next Work Request when needed.</p></WorkflowStep>
         </ol>
-        <div class="run-card" aria-label="Authentication redesign run progress">
-          <div class="run-card__header"><span>Run</span><strong>Authentication redesign</strong></div>
-          <div class="run-card__progress"><span style="width: 58%"></span></div>
-          <ul>
-            <li class="is-complete"><span aria-hidden="true">✓</span>Research</li>
-            <li class="is-complete"><span aria-hidden="true">✓</span>Architecture</li>
-            <li class="is-active"><span aria-hidden="true">●</span>Implementation</li>
-            <li><span aria-hidden="true">○</span>Review</li>
-            <li><span aria-hidden="true">○</span>Verification</li>
-          </ul>
-        </div>
+        <WorkstreamModel />
       </div>
+
+      <div class="how-it-works-principles">
+        <div><strong>Human discussion is side-effect free.</strong><span>No hidden execution trigger behind normal team conversation.</span></div>
+        <div><strong>Stateful work is isolated.</strong><span>Each Workstream gets a managed checkout on its Primary Workspace.</span></div>
+        <div><strong>Credentials stay separate.</strong><span>Workspace access never automatically grants use of an AI Account.</span></div>
+      </div>
+
       <div class="actions"><Button href="https://app.conclaveax.com" label="Open Conclave AX" /></div>
     </Container>
   </Section>
