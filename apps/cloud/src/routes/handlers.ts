@@ -398,11 +398,24 @@ async function authorizeRequest(
   return context;
 }
 
-function requireWorkspaceContext(
+async function requireWorkspaceContext(
   context: SecurityContext,
   env: SecurityEnv,
   workspaceId: string,
-): void {
+): Promise<void> {
+  // v5/v6 Workspaces are user-owned execution resources, not the active
+  // browser tenant. The requested resource must be checked by ownership;
+  // comparing it with the legacy session workspace would reject a newly
+  // created Workspace before its first enrollment.
+  if (context.authorizationModel === "v5") {
+    await authorizeWorkspaceOwner(
+      env.CONCLAVE_DB,
+      context,
+      workspaceId,
+      "workspace:manage",
+    );
+    return;
+  }
   if (!testAuthenticationEnabled(env) && context.workspaceId !== workspaceId) {
     throw new HttpError(404, "Resource not found");
   }
@@ -3966,7 +3979,7 @@ async function handleCreateHostEnrollment(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "host.manage");
-  requireWorkspaceContext(context, env, workspaceId);
+  await requireWorkspaceContext(context, env, workspaceId);
 
   const body = parseJson<{ expiresHours?: number }>(await request.text(), {});
   const enrollmentId = `enr-${crypto.randomUUID().slice(0, 12)}`;
@@ -3990,7 +4003,7 @@ async function handleCreateHostEnrollment(
   const createdAt = now.toISOString();
 
   await env.CONCLAVE_DB.prepare(
-    `INSERT INTO host_enrollments (id, workspace_id, token_hash, created_by_user_id, expires_at, created_at)
+    `INSERT INTO workspace_enrollments (id, workspace_id, token_hash, created_by_user_id, expires_at, created_at)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
   )
     .bind(
@@ -4006,8 +4019,8 @@ async function handleCreateHostEnrollment(
   await recordAudit(
     env,
     context,
-    "host.enrollment.created",
-    "host_enrollment",
+    "workspace.enrollment.created",
+    "workspace_enrollment",
     enrollmentId,
     { expiresAt, oneTime: true },
   );
@@ -4032,11 +4045,11 @@ async function handleListHostEnrollments(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "host.view");
-  requireWorkspaceContext(context, env, workspaceId);
+  await requireWorkspaceContext(context, env, workspaceId);
 
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT id, workspace_id as workspaceId, created_by_user_id as createdByUserId, expires_at as expiresAt, used_at as usedAt, revoked_at as revokedAt, created_at as createdAt
-     FROM host_enrollments WHERE workspace_id = ?1 ORDER BY created_at DESC`,
+     FROM workspace_enrollments WHERE workspace_id = ?1 ORDER BY created_at DESC`,
   )
     .bind(workspaceId)
     .all();
@@ -4053,12 +4066,12 @@ async function handleRevokeHostEnrollment(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "host.manage");
-  requireWorkspaceContext(context, env, workspaceId);
+  await requireWorkspaceContext(context, env, workspaceId);
   await requireRecentStepUp(env, context, SENSITIVE_OPERATIONS.hostRevoke);
 
   const now = new Date().toISOString();
   await env.CONCLAVE_DB.prepare(
-    `UPDATE host_enrollments SET revoked_at = ?1 WHERE id = ?2 AND workspace_id = ?3`,
+    `UPDATE workspace_enrollments SET revoked_at = ?1 WHERE id = ?2 AND workspace_id = ?3`,
   )
     .bind(now, enrollmentId, workspaceId)
     .run();
@@ -4066,8 +4079,8 @@ async function handleRevokeHostEnrollment(
   await recordAudit(
     env,
     context,
-    "host.enrollment.revoked",
-    "host_enrollment",
+    "workspace.enrollment.revoked",
+    "workspace_enrollment",
     enrollmentId,
   );
 
@@ -4174,7 +4187,7 @@ async function handleBindHostWorkspace(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "host.bind_workspace");
-  requireWorkspaceContext(context, env, workspaceId);
+  await requireWorkspaceContext(context, env, workspaceId);
 
   // Binding a Host to another Workspace is an administrative action in the
   // target Workspace and also requires management authority through an
@@ -4226,7 +4239,7 @@ async function handleListHosts(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "host.view");
-  requireWorkspaceContext(context, env, workspaceId);
+  await requireWorkspaceContext(context, env, workspaceId);
 
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT h.id, b.workspace_id as workspaceId, h.name, h.hostname, h.status, h.version, h.capabilities_json as capabilitiesJson, h.enrolled_at as enrolledAt, h.last_heartbeat_at as lastHeartbeatAt, h.revoked_at as revokedAt, h.created_at as createdAt, h.updated_at as updatedAt,
@@ -4283,7 +4296,7 @@ async function handleGetHost(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "host.view");
-  requireWorkspaceContext(context, env, workspaceId);
+  await requireWorkspaceContext(context, env, workspaceId);
 
   const host = await env.CONCLAVE_DB.prepare(
     `SELECT h.id, b.workspace_id as workspaceId, h.name, h.hostname, h.status, h.version, h.capabilities_json as capabilitiesJson, h.enrolled_at as enrolledAt, h.last_heartbeat_at as lastHeartbeatAt, h.revoked_at as revokedAt, h.created_at as createdAt, h.updated_at as updatedAt
@@ -4392,7 +4405,7 @@ async function handleRevokeHost(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "host.revoke");
-  requireWorkspaceContext(context, env, workspaceId);
+  await requireWorkspaceContext(context, env, workspaceId);
   await requireRecentStepUp(env, context, SENSITIVE_OPERATIONS.hostRevoke);
 
   const now = new Date().toISOString();
@@ -4419,7 +4432,7 @@ async function handleUpdateHost(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "host.manage");
-  requireWorkspaceContext(context, env, workspaceId);
+  await requireWorkspaceContext(context, env, workspaceId);
   const body = (await request.json()) as Record<string, unknown>;
   const name = typeof body.name === "string" ? body.name.trim() : undefined;
   const channel = typeof body.channel === "string" ? body.channel : undefined;
@@ -4473,7 +4486,7 @@ async function handleAnnounceHostUpdate(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "host.manage");
-  requireWorkspaceContext(context, env, workspaceId);
+  await requireWorkspaceContext(context, env, workspaceId);
 
   const body = parseJson<{
     channel?: string;
@@ -4613,7 +4626,7 @@ async function handleSetHostDesiredState(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "worker.manage_on_host");
-  requireWorkspaceContext(context, env, workspaceId);
+  await requireWorkspaceContext(context, env, workspaceId);
 
   const binding = await env.CONCLAVE_DB.prepare(
     `SELECT h.id FROM hosts h
@@ -4770,7 +4783,7 @@ export async function handleListWorkerCatalog(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "host.view");
-  requireWorkspaceContext(context, env, workspaceId);
+  await requireWorkspaceContext(context, env, workspaceId);
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT w.id, w.display_name, w.description, w.publisher, w.status,
             wv.version, wv.capabilities_json, wv.credential_requirements_json
@@ -4805,7 +4818,7 @@ export async function handleGetWorkerCatalog(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "host.view");
-  requireWorkspaceContext(context, env, workspaceId);
+  await requireWorkspaceContext(context, env, workspaceId);
   const row = await env.CONCLAVE_DB.prepare(
     `SELECT w.id, w.display_name, w.description, w.publisher, w.status,
             wv.version, wv.capabilities_json, wv.credential_requirements_json
@@ -4843,7 +4856,7 @@ export async function handleSetWorkspaceWorkerAvailability(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "worker.manage_on_host");
-  requireWorkspaceContext(context, env, workspaceId);
+  await requireWorkspaceContext(context, env, workspaceId);
 
   const body = (await request.json().catch(() => ({}))) as Record<
     string,
@@ -5969,7 +5982,7 @@ async function handleListCredentialProfiles(
     return handleListV5Accounts(request, env, context);
   }
   authorize(context, "credential.use");
-  requireWorkspaceContext(context, env, workspaceId);
+  await requireWorkspaceContext(context, env, workspaceId);
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT cp.id FROM credential_profiles cp
      WHERE cp.workspace_id = ?1 AND cp.status <> 'revoked'
@@ -6002,7 +6015,7 @@ async function handleCreateCredentialProfile(
     return handleCreateV5Account(request, env, context, workspaceId);
   }
   authorize(context, "credential.create");
-  requireWorkspaceContext(context, env, workspaceId);
+  await requireWorkspaceContext(context, env, workspaceId);
   const body = (await request.json().catch(() => ({}))) as Record<
     string,
     unknown
@@ -6111,7 +6124,7 @@ async function handleUpdateCredentialProfile(
   if (context.authorizationModel === "v5") {
     return handleUpdateV5Account(request, env, context, profileId);
   }
-  requireWorkspaceContext(context, env, workspaceId);
+  await requireWorkspaceContext(context, env, workspaceId);
   const profile = await authorizeCredentialProfileOwner(
     env,
     context,
@@ -6175,7 +6188,7 @@ async function handleRevokeCredentialProfile(
   if (context.authorizationModel === "v5") {
     return handleRevokeV5Account(env, context, profileId);
   }
-  requireWorkspaceContext(context, env, workspaceId);
+  await requireWorkspaceContext(context, env, workspaceId);
   await authorizeCredentialProfileOwner(
     env,
     context,
@@ -6215,7 +6228,7 @@ async function handleCreateCredentialSetupIntent(
       profileId,
     );
   }
-  requireWorkspaceContext(context, env, workspaceId);
+  await requireWorkspaceContext(context, env, workspaceId);
   const profile = await authorizeCredentialProfileOwner(
     env,
     context,
@@ -6290,7 +6303,7 @@ async function handleCreateCredentialGrant(
   if (context.authorizationModel === "v5") {
     return handleCreateV5AccountGrant(request, env, context, profileId);
   }
-  requireWorkspaceContext(context, env, workspaceId);
+  await requireWorkspaceContext(context, env, workspaceId);
   const profile = await authorizeCredentialProfileOwner(
     env,
     context,
@@ -6379,7 +6392,7 @@ async function handleRevokeCredentialGrant(
   if (context.authorizationModel === "v5") {
     return handleRevokeV5AccountGrant(env, context, profileId, grantId);
   }
-  requireWorkspaceContext(context, env, workspaceId);
+  await requireWorkspaceContext(context, env, workspaceId);
   await authorizeCredentialProfileOwner(
     env,
     context,
@@ -6499,7 +6512,7 @@ async function handleDispatchTaskAssignment(
 
   authorize(context, "runs:control");
   authorize(context, "host.use");
-  requireWorkspaceContext(context, env, workspaceId);
+  await requireWorkspaceContext(context, env, workspaceId);
 
   const taskRow = await env.CONCLAVE_DB.prepare(
     `SELECT t.id, t.phase_id as phaseId, t.role, t.objective, t.capabilities_json as capabilitiesJson,
@@ -6621,7 +6634,7 @@ async function handleCancelTaskAssignment(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   authorize(context, "runs:control");
-  requireWorkspaceContext(context, env, workspaceId);
+  await requireWorkspaceContext(context, env, workspaceId);
 
   const body = ((await request.json().catch(() => ({}))) || {}) as Record<
     string,
@@ -6650,7 +6663,7 @@ async function handleDispatchEnsembleTaskAssignment(
   const context = await securityContext(request, env, ctx);
   authorize(context, "runs:control");
   authorize(context, "host.use");
-  requireWorkspaceContext(context, env, workspaceId);
+  await requireWorkspaceContext(context, env, workspaceId);
 
   const body = ((await request.json().catch(() => ({}))) || {}) as Record<
     string,
@@ -7701,7 +7714,7 @@ async function handleWorkspaceUsage(
 ): Promise<Response> {
   const context = await securityContext(request, env, accessContext);
   authorize(context, "project:read");
-  requireWorkspaceContext(context, env, workspaceId);
+  await requireWorkspaceContext(context, env, workspaceId);
   const search = new URL(request.url).searchParams;
   const urlSearch = (name: string) => search.get(name) ?? "";
   const allowedRanges = new Set(["7d", "30d"]);

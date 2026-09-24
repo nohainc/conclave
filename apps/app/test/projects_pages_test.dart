@@ -6,9 +6,9 @@ import 'package:conclave_app/src/studio/studio_models.dart';
 import 'studio_fixture_data.dart';
 
 void main() {
-  testWidgets('Project page exposes Workstreams and collaboration areas',
+  testWidgets('Project page exposes Create Workstream and collaboration areas',
       (tester) async {
-    await tester.binding.setSurfaceSize(const Size(360, 800));
+    await tester.binding.setSurfaceSize(const Size(800, 800));
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: SingleChildScrollView(
@@ -33,11 +33,11 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
+    expect(find.text('Create Workstream'), findsOneWidget);
     expect(find.text('Share Project'), findsOneWidget);
     expect(find.text('Shared space for Project One'), findsOneWidget);
     expect(find.text('Project One'), findsNothing);
     for (final label in [
-      'Runs',
       'Artifacts',
       'Members',
       'Execution',
@@ -45,58 +45,35 @@ void main() {
     ]) {
       expect(find.text(label), findsOneWidget);
     }
-    expect(find.text('Workstreams'), findsWidgets);
+    expect(find.text('Runs'), findsWidgets);
+    expect(find.text('Workstreams'), findsNothing);
     expect(find.text('Overview'), findsNothing);
 
-    expect(find.text('Members'), findsOneWidget);
-    expect(find.text('No Workstreams yet. Create the first one below.'),
-        findsOneWidget);
+    await tester.tap(find.text('Members'));
+    await tester.pumpAndSettle();
+    expect(find.text('user-owner'), findsNothing);
     await tester.binding.setSurfaceSize(null);
   });
 
-  testWidgets('Project page updates workstreams when switching projects',
+  testWidgets('Project page updates description when switching projects',
       (tester) async {
     const p1 = StudioProject(
       id: 'project-1',
       name: 'Project One',
+      description: 'First project description',
       repository: '',
       branch: '',
       activeGoals: 0,
       lastActivity: 'today',
-      workstreams: [
-        StudioWorkstream(
-          id: 'ws-1',
-          projectId: 'project-1',
-          name: 'P1 Workstream',
-          lead: 'Owner',
-          status: 'active',
-          brief: 'Brief 1',
-          primaryWorkspace: 'Workspace 1',
-          currentCheckpoint: 'main',
-          queueStatus: 'Idle',
-        ),
-      ],
     );
     const p2 = StudioProject(
       id: 'project-2',
       name: 'Project Two',
+      description: 'Second project description',
       repository: '',
       branch: '',
       activeGoals: 0,
       lastActivity: 'today',
-      workstreams: [
-        StudioWorkstream(
-          id: 'ws-2',
-          projectId: 'project-2',
-          name: 'P2 Workstream',
-          lead: 'Owner',
-          status: 'active',
-          brief: 'Brief 2',
-          primaryWorkspace: 'Workspace 2',
-          currentCheckpoint: 'main',
-          queueStatus: 'Idle',
-        ),
-      ],
     );
 
     await tester.pumpWidget(MaterialApp(
@@ -114,8 +91,8 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('P1 Workstream'), findsOneWidget);
-    expect(find.text('P2 Workstream'), findsNothing);
+    expect(find.text('First project description'), findsOneWidget);
+    expect(find.text('Second project description'), findsNothing);
 
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
@@ -132,8 +109,8 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('P1 Workstream'), findsNothing);
-    expect(find.text('P2 Workstream'), findsOneWidget);
+    expect(find.text('First project description'), findsNothing);
+    expect(find.text('Second project description'), findsOneWidget);
   });
 
   testWidgets(

@@ -303,29 +303,35 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
   @override
   Widget build(BuildContext context) => DefaultTabController(
         initialIndex: _tabIndex,
-        length: 6,
+        length: 5,
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (widget.project.description.trim().isNotEmpty) ...[
+            Text(
+              widget.project.description.trim(),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
             runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              if (widget.project.description.trim().isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Text(
-                    widget.project.description.trim(),
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 14,
-                    ),
-                  ),
+              if (canManage)
+                FilledButton.icon(
+                  onPressed: _createWorkstream,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Create Workstream'),
                 ),
               if (isOwner)
-                FilledButton.icon(
-                    onPressed: _share,
-                    icon: const Icon(Icons.person_add_alt_1),
-                    label: const Text('Share Project')),
+                OutlinedButton.icon(
+                  onPressed: _share,
+                  icon: const Icon(Icons.person_add_alt_1),
+                  label: const Text('Share Project'),
+                ),
             ],
           ),
           const SizedBox(height: 18),
@@ -333,7 +339,6 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
             isScrollable: true,
             onTap: (index) => setState(() => _tabIndex = index),
             tabs: const [
-              Tab(text: 'Workstreams'),
               Tab(text: 'Runs'),
               Tab(text: 'Artifacts'),
               Tab(text: 'Members'),
@@ -343,15 +348,13 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
           ),
           const SizedBox(height: 16),
           if (_tabIndex == 0)
-            _workstreams()
-          else if (_tabIndex == 1)
             _emptySection('Runs', 'Runs created from this Project appear here.')
-          else if (_tabIndex == 2)
+          else if (_tabIndex == 1)
             _emptySection('Artifacts',
                 'Artifacts and findings produced by this Project appear here.')
-          else if (_tabIndex == 3)
+          else if (_tabIndex == 2)
             _members()
-          else if (_tabIndex == 4)
+          else if (_tabIndex == 3)
             _execution()
           else
             _settings(),
@@ -393,35 +396,6 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
                   ],
                 ),
         ),
-      ]);
-
-  Widget _workstreams() =>
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _ProjectPanel(
-            title: 'Workstreams',
-            subtitle: 'One Workstream is one thing your team is working on.',
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              if (workstreams.where((item) => !item.archived).isEmpty)
-                const Padding(
-                    padding: EdgeInsets.only(bottom: 12),
-                    child: Text(
-                        'No Workstreams yet. Create the first one below.')),
-              ...workstreams.where((item) => !item.archived).map((workstream) =>
-                  ListTile(
-                      leading: const Icon(Icons.route_outlined),
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(workstream.name),
-                      subtitle: Text(
-                          '${workstream.lead} · ${workstream.status} · ${workstream.queueStatus}'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => widget.onOpenWorkstream(workstream.id))),
-              if (canManage)
-                FilledButton.icon(
-                    onPressed: _createWorkstream,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Create Workstream')),
-            ])),
       ]);
 
   Widget _members() =>

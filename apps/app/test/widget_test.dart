@@ -45,7 +45,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('Workstreams'), findsWidgets);
+    expect(find.text('Create Workstream'), findsOneWidget);
     expect(find.text('Members'), findsOneWidget);
     expect(find.text('Execution'), findsOneWidget);
   });
