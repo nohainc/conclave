@@ -7,20 +7,31 @@ import SecurityTopology from "../components/SecurityTopology.astro";
 import SiteLayout from "../layouts/SiteLayout.astro";
 ---
 
-<SiteLayout title="Security — Conclave AX" description="Conclave AX security boundaries for people, Workspaces, Workers, and Accounts.">
+<SiteLayout title="Security — Conclave AX" description="Conclave AX separates Project collaboration, Workspace execution, Worker capability, and AI Account authorization.">
   <Section>
     <Container>
-      <SectionHeader eyebrow="Architecture and security" title="Clear boundaries are a feature." description="Conclave AX, Cloud, Workspace, Workers, and Accounts each have a distinct role. That separation keeps authorization and credentials in the right place." headingLevel={1} />
+      <SectionHeader eyebrow="Security" title="Share the project without sharing the whole machine." description="Conclave AX uses separate authorization boundaries for people, Projects, Workstreams, Workspaces, Workers, and AI Accounts." headingLevel={1} />
+
       <div class="security-overview">
         <SecurityTopology />
         <div class="security-boundaries">
-          <FeatureCard title="Cloud" headingLevel={2}><p>Coordinates work, authorizes Workspace access, and stores control-plane state.</p></FeatureCard>
-          <FeatureCard title="Workspace" headingLevel={2}><p>Provides machine execution, protects local credentials, and supervises Workers.</p></FeatureCard>
-          <FeatureCard title="Worker" headingLevel={2}><p>Talks to an AI model, CLI, or tool. It does not authenticate directly to Conclave Cloud.</p></FeatureCard>
-          <FeatureCard title="Account" headingLevel={2}><p>Determines whose AI credentials are used for an authorized assignment.</p></FeatureCard>
+          <FeatureCard title="Project" headingLevel={2}><p>Defines who can collaborate, discuss, inspect results, and request work. Project membership does not grant machine access.</p></FeatureCard>
+          <FeatureCard title="Workspace" headingLevel={2}><p>Represents one execution environment. Projects use it only through an explicit, scoped Workspace grant.</p></FeatureCard>
+          <FeatureCard title="Worker" headingLevel={2}><p>Provides a model, tool, CLI, or other capability behind the Workspace runtime. Workers do not authenticate directly as Conclave users.</p></FeatureCard>
+          <FeatureCard title="AI Account" headingLevel={2}><p>Determines which external AI identity may be used. Workspace access never implies Account access.</p></FeatureCard>
         </div>
       </div>
-      <div class="security-callout"><strong>Workers do not receive Conclave user sessions or Workspace machine credentials.</strong><span>Workers operate behind the Workspace boundary and receive only the scoped assignment context they need.</span></div>
+
+      <div class="security-callout">
+        <strong>Effective execution permissions can only get narrower.</strong>
+        <span>Project role, Workspace grant, Worker permissions, local Workspace policy, and Project policy are intersected before an Assignment is dispatched.</span>
+      </div>
+
+      <div class="cards security-detail-cards">
+        <FeatureCard title="Scoped execution"><p>Repository and path mappings define where a Project may work. Full-machine access is not the normal execution path.</p></FeatureCard>
+        <FeatureCard title="Isolated Workstreams"><p>Stateful Workstreams use managed checkouts and controlled concurrency so parallel project work does not share one mutable tree.</p></FeatureCard>
+        <FeatureCard title="Credential isolation"><p>Secrets stay behind the Workspace boundary and are not exposed merely because another person can execute authorized Project work.</p></FeatureCard>
+      </div>
     </Container>
   </Section>
 </SiteLayout>

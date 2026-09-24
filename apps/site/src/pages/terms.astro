@@ -5,28 +5,31 @@ import SectionHeader from "../components/SectionHeader.astro";
 import SiteLayout from "../layouts/SiteLayout.astro";
 ---
 
-<SiteLayout title="Terms — Conclave AX" description="Terms of Service for Conclave AX orchestration platform and public website.">
+<SiteLayout title="Terms — Conclave AX" description="Terms for using Conclave AX, connected Workspaces, AI Workers, Accounts, and the public website.">
   <Section>
     <Container>
-      <SectionHeader eyebrow="Terms" title="Terms of Service" description="Guidelines governing your access to and use of Conclave AX, including Cloud orchestration, Workspaces, Workers, and Project accounts." headingLevel={1} />
+      <SectionHeader eyebrow="Terms" title="Terms of Service" description="General terms governing access to Conclave AX, connected execution environments, third-party AI providers, and the public website." headingLevel={1} />
       <div class="legal-content">
-        <h2>1. Service Overview</h2>
-        <p>Conclave AX provides a multi-worker orchestration platform that coordinates AI models, code generation tools, and verification workflows across Cloud infrastructure and connected Workspaces.</p>
+        <h2>1. Service overview</h2>
+        <p>Conclave AX provides software for coordinating people, AI models, tools, execution environments, workflows, and verification around Projects and Workstreams.</p>
 
-        <h2>2. Workspaces and Account Responsibility</h2>
-        <p>You are responsible for maintaining the confidentiality of your account credentials, passkeys, and connected Workspace profiles. All actions performed through authorized sessions remain attributable to your account.</p>
+        <h2>2. Your account and Project activity</h2>
+        <p>You are responsible for protecting your authentication credentials and for actions taken through authorized sessions. Project owners and collaborators are responsible for granting appropriate access to Project content and execution capabilities.</p>
 
-        <h2>3. Connected Workspaces and Local Execution</h2>
-        <p>When you enroll a machine as a Conclave Workspace, you authorize Conclave Cloud to dispatch assigned Worker tasks to that machine. You retain full control over Workspace enrollment, local execution privileges, and revocation at all times.</p>
+        <h2>3. Connected Workspaces</h2>
+        <p>When you connect a machine as a Workspace, you authorize Conclave AX to dispatch work that is permitted by the Workspace's active Project grants and local execution policy. Workspace owners remain responsible for the machine, local repositories, installed software, and revoking access when appropriate.</p>
 
-        <h2>4. Third-Party AI Providers and API Keys</h2>
-        <p>Conclave AX integrates with third-party model providers (such as OpenAI and Anthropic) via your configured Account credentials. You are responsible for complying with the terms, acceptable use policies, and usage fees of those respective providers.</p>
+        <h2>4. Third-party AI providers</h2>
+        <p>Conclave AX can use third-party AI services through configured AI Accounts. You are responsible for complying with the terms, acceptable-use requirements, subscription conditions, and usage charges of those providers.</p>
 
-        <h2>5. Website Use</h2>
-        <p>You may browse and link to the public website for informational purposes. Do not submit credentials, raw API keys, or proprietary data through unauthenticated public web forms.</p>
+        <h2>5. Work outputs</h2>
+        <p>AI-generated code, analysis, reviews, tests, and other outputs may be incomplete or incorrect. You are responsible for reviewing outputs and deciding whether they are appropriate to use, merge, publish, or deploy.</p>
 
-        <h2>6. Service Availability and Updates</h2>
-        <p>We continually refine Conclave AX features, protocol specifications, and Worker catalog capabilities. Features and architectural interfaces are updated with versioned compatibility.</p>
+        <h2>6. Public website</h2>
+        <p>The public website is provided for product information. Do not submit passwords, API keys, private source code, or other confidential execution material through unauthenticated public-site channels.</p>
+
+        <h2>7. Service changes and availability</h2>
+        <p>Conclave AX may change as capabilities are improved, added, or removed. Availability may be interrupted for maintenance, provider outages, security work, or infrastructure changes.</p>
       </div>
     </Container>
   </Section>

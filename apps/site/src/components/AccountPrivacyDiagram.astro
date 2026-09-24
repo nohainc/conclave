@@ -1,10 +1,11 @@
-<div class="account-privacy-diagram" aria-label="A shared Workspace and Codex Worker connected to separate Accounts">
-  <div class="account-privacy-diagram__node">Shared Workspace</div>
-  <div class="account-privacy-diagram__line" aria-hidden="true">│</div>
-  <div class="account-privacy-diagram__node">└── Codex Worker</div>
+<div class="account-privacy-diagram" aria-label="Project execution uses an authorized Workspace and separately authorized AI Accounts">
+  <div class="account-privacy-diagram__node">Project Workstream</div>
+  <div class="account-privacy-diagram__line" aria-hidden="true">│ explicit Workspace grant</div>
+  <div class="account-privacy-diagram__node">Workspace · Worker</div>
+  <div class="account-privacy-diagram__line" aria-hidden="true">│ separate Account authorization</div>
   <div class="account-privacy-diagram__accounts">
-    <span>├── Account A</span>
-    <span>├── Account B</span>
-    <span>└── Team Account</span>
+    <span>├── Requester's Account</span>
+    <span>├── Explicitly shared Account</span>
+    <span>└── Sponsor Account, when allowed</span>
   </div>
 </div>

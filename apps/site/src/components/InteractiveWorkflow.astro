@@ -1,154 +1,63 @@
----
----
-
-<div class="interactive-workflow" data-interactive-tabs aria-label="Interactive workflow example">
+<div class="interactive-workflow" data-interactive-tabs aria-label="Interactive Conclave workflow example">
   <div class="tab-nav" role="tablist" aria-label="Workflow stages">
-    <button
-      id="tab-btn-delegate"
-      class="tab-btn is-active"
-      type="button"
-      role="tab"
-      aria-selected="true"
-      aria-controls="tab-panel-delegate"
-      tabindex="0"
-      data-tab-target="tab-panel-delegate"
-    >
-      <strong>1. Delegate</strong>
-      <span>Route to specialized capability</span>
+    <button id="tab-btn-discuss" class="tab-btn is-active" type="button" role="tab" aria-selected="true" aria-controls="tab-panel-discuss" tabindex="0" data-tab-target="tab-panel-discuss">
+      <strong>1. Discuss</strong>
+      <span>People align before execution</span>
     </button>
-    <button
-      id="tab-btn-compare"
-      class="tab-btn"
-      type="button"
-      role="tab"
-      aria-selected="false"
-      aria-controls="tab-panel-compare"
-      tabindex="-1"
-      data-tab-target="tab-panel-compare"
-    >
-      <strong>2. Compare</strong>
-      <span>Parallel candidate synthesis</span>
+    <button id="tab-btn-run" class="tab-btn" type="button" role="tab" aria-selected="false" aria-controls="tab-panel-run" tabindex="-1" data-tab-target="tab-panel-run">
+      <strong>2. Run</strong>
+      <span>Start an explicit Work Request</span>
     </button>
-    <button
-      id="tab-btn-verify"
-      class="tab-btn"
-      type="button"
-      role="tab"
-      aria-selected="false"
-      aria-controls="tab-panel-verify"
-      tabindex="-1"
-      data-tab-target="tab-panel-verify"
-    >
-      <strong>3. Verify</strong>
-      <span>Executable tests & machine evidence</span>
+    <button id="tab-btn-coordinate" class="tab-btn" type="button" role="tab" aria-selected="false" aria-controls="tab-panel-coordinate" tabindex="-1" data-tab-target="tab-panel-coordinate">
+      <strong>3. Coordinate</strong>
+      <span>Route each step to the right capability</span>
     </button>
-    <button
-      id="tab-btn-iterate"
-      class="tab-btn"
-      type="button"
-      role="tab"
-      aria-selected="false"
-      aria-controls="tab-panel-iterate"
-      tabindex="-1"
-      data-tab-target="tab-panel-iterate"
-    >
-      <strong>4. Iterate</strong>
-      <span>Autonomous finding correction</span>
+    <button id="tab-btn-verify" class="tab-btn" type="button" role="tab" aria-selected="false" aria-controls="tab-panel-verify" tabindex="-1" data-tab-target="tab-panel-verify">
+      <strong>4. Verify</strong>
+      <span>Review changes and evidence</span>
     </button>
   </div>
 
   <div class="tab-content">
-    <div
-      id="tab-panel-delegate"
-      class="tab-panel is-active"
-      data-tab-panel="tab-panel-delegate"
-      role="tabpanel"
-      aria-labelledby="tab-btn-delegate"
-      tabindex="0"
-    >
-      <div class="run-card__header">
-        <span>Assignment Resolver</span>
-        <strong>Target Resolved: Codex Worker on MacBook Workspace</strong>
+    <div id="tab-panel-discuss" class="tab-panel is-active" data-tab-panel="tab-panel-discuss" role="tabpanel" aria-labelledby="tab-btn-discuss" tabindex="0">
+      <div class="run-card__header"><span>Discuss</span><strong>Authentication redesign</strong></div>
+      <div class="conversation-preview">
+        <p><strong>Alex</strong><span>The refresh flow still has a race condition.</span></p>
+        <p><strong>Vitalii</strong><span>Agreed. Fix it and add a regression test.</span></p>
       </div>
-      <div class="terminal-panel">
-<code is:raw>// Cloud evaluates task requirements and routes to authorized Workspace
-const target = await scheduler.resolveTarget({
-  task: "Implement D1 durable transaction adapter",
-  workspace: "ws_production",
-  requiredCapabilities: ["filesystem", "d1_sqlite"]
-});
-// → Dispatched to MacBook Workspace (Status: Ready, Verified capability: filesystem)</code>
-      </div>
-      <p>Tasks declare execution requirements. Conclave Cloud matches them against online Workspaces, installed Workers, and authorized Accounts without hardcoding model locations.</p>
+      <p>Discussion is side-effect free. Your team can explore ideas and agree on the next step without accidentally starting AI work.</p>
     </div>
 
-    <div
-      id="tab-panel-compare"
-      class="tab-panel"
-      data-tab-panel="tab-panel-compare"
-      role="tabpanel"
-      aria-labelledby="tab-btn-compare"
-      tabindex="0"
-      hidden
-    >
-      <div class="run-card__header">
-        <span>Multi-Worker Synthesis</span>
-        <strong>Evaluating Candidate Implementations</strong>
+    <div id="tab-panel-run" class="tab-panel" data-tab-panel="tab-panel-run" role="tabpanel" aria-labelledby="tab-btn-run" tabindex="0" hidden>
+      <div class="run-card__header"><span>Work Request</span><strong>Fix refresh race and add regression coverage</strong></div>
+      <div class="work-request-preview">
+        <span>Workflow</span><strong>Implementation → Test → Review</strong>
+        <span>Primary Workspace</span><strong>MacBook Pro</strong>
+        <button type="button" tabindex="-1" aria-hidden="true">Run</button>
       </div>
-      <div class="terminal-panel">
-<code is:raw>[Candidate A - OpenAI Worker]
-+ Implements batch atomic statements with retry backoff.
-[Candidate B - Claude Worker]
-+ Implements write-ahead journal with rollback hooks.
-
-// Synthesis Worker identifies edge cases in Candidate B
-// Recommends: Merge atomic retry with rollback hooks</code>
-      </div>
-      <p>When solving hard problems, run diverse model capabilities in parallel. Conclave synthesizes their strengths and highlights architectural trade-offs.</p>
+      <p>AI execution is explicit. The request, workflow, requester, execution environment, and account policy are known before work starts.</p>
     </div>
 
-    <div
-      id="tab-panel-verify"
-      class="tab-panel"
-      data-tab-panel="tab-panel-verify"
-      role="tabpanel"
-      aria-labelledby="tab-btn-verify"
-      tabindex="0"
-      hidden
-    >
-      <div class="run-card__header">
-        <span>Independent Verification</span>
-        <strong>Machine-Verifiable Proof Collection</strong>
+    <div id="tab-panel-coordinate" class="tab-panel" data-tab-panel="tab-panel-coordinate" role="tabpanel" aria-labelledby="tab-btn-coordinate" tabindex="0" hidden>
+      <div class="run-card__header"><span>Workflow</span><strong>Best capability for each step</strong></div>
+      <div class="coordination-preview">
+        <div><span>Research</span><strong>Claude Code</strong></div>
+        <div><span>Implementation</span><strong>Codex</strong></div>
+        <div><span>Tests</span><strong>Workspace tools</strong></div>
+        <div><span>Review</span><strong>Independent model</strong></div>
       </div>
-      <div class="terminal-panel">
-<code is:raw>✓ Test suite passed with executable proof
-✓ Architecture boundary guard: 0 violations
-✓ Credential isolation preserved
-✓ Artifact generated: dist/adapter.mjs (SHA256 verified)</code>
-      </div>
-      <p>Never trust natural-language claims that "it works". Conclave executes real tests, collects machine evidence, and ensures deterministic completion.</p>
+      <p>Workers are selected by role, capability, authorization, availability, and policy instead of binding an entire project to one model.</p>
     </div>
 
-    <div
-      id="tab-panel-iterate"
-      class="tab-panel"
-      data-tab-panel="tab-panel-iterate"
-      role="tabpanel"
-      aria-labelledby="tab-btn-iterate"
-      tabindex="0"
-      hidden
-    >
-      <div class="run-card__header">
-        <span>Correction Loop</span>
-        <strong>Finding Remediation & Reverification</strong>
+    <div id="tab-panel-verify" class="tab-panel" data-tab-panel="tab-panel-verify" role="tabpanel" aria-labelledby="tab-btn-verify" tabindex="0" hidden>
+      <div class="run-card__header"><span>Result</span><strong>Work Request completed</strong></div>
+      <div class="evidence-preview">
+        <span>✓ 7 files changed</span>
+        <span>✓ Tests passed</span>
+        <span>✓ Independent review completed</span>
+        <span>✓ Checkpoint recorded</span>
       </div>
-      <div class="terminal-panel">
-<code is:raw>[Finding] Reviewer noted edge case on lock release
-[Correction] Task dispatched to Worker with review finding
-[Patch Applied] Lock lease timeout bounded safely
-[Reverification] Test suite passed on reverification cycle</code>
-      </div>
-      <p>When a reviewer or test finds an issue, Conclave feeds the exact findings back into a focused correction task and reverifies the result.</p>
+      <p>Conclave keeps the result, evidence, findings, and execution history together so the team can inspect what actually happened.</p>
     </div>
   </div>
 </div>
