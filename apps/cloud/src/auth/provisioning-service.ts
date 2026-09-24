@@ -38,8 +38,8 @@ export async function provisionConclaveUser(
 ): Promise<void> {
   await db
     .prepare(
-      `INSERT INTO users (id, email, display_name, email_verified, status, created_at, updated_at)
-       VALUES (?1, ?2, ?3, 0, 'active', ?4, ?4)
+      `INSERT INTO users (id, email, display_name, status, created_at, updated_at)
+       VALUES (?1, ?2, ?3, 'active', ?4, ?4)
        ON CONFLICT(id) DO UPDATE SET
          email = excluded.email,
          display_name = excluded.display_name,
@@ -47,7 +47,6 @@ export async function provisionConclaveUser(
     )
     .bind(identity.userId, identity.email, identity.name, now)
     .run();
-
 }
 
 export async function listPendingInvitations(

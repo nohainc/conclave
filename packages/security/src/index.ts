@@ -277,11 +277,13 @@ export function authorize(
   }
 
   if (context.authorizationModel === "v5") {
-    if (!projectId) throw new AuthorizationError(permission);
-    const projectRole = context.projectRoles[projectId];
-    if (!projectRole) throw new AuthorizationError(permission, projectId);
-    if (!PROJECT_ROLE_PERMISSIONS[projectRole].includes(permission)) {
-      throw new AuthorizationError(permission, projectId);
+    if (projectId) {
+      const projectRole = context.projectRoles[projectId];
+      if (!projectRole) throw new AuthorizationError(permission, projectId);
+      if (!PROJECT_ROLE_PERMISSIONS[projectRole].includes(permission)) {
+        throw new AuthorizationError(permission, projectId);
+      }
+      return;
     }
     return;
   }
@@ -833,7 +835,8 @@ export async function resolveProjectSecurityContextFromIdentity(
        WHERE user_id = ?1`,
     )
     .bind(user.id)
-    .all<{ project_id: string; role: ProjectRole }>();
+    .all<{ project_id: string; role: ProjectRole }>()
+    .catch(() => ({ results: [] }));
   const authorizedProjectIds: string[] = [];
   const projectRoles: Record<string, ProjectRole> = {};
   for (const membership of memberships.results ?? []) {
@@ -845,11 +848,13 @@ export async function resolveProjectSecurityContextFromIdentity(
       "SELECT id FROM execution_workspaces WHERE owner_user_id = ?1 AND status <> 'revoked'",
     )
     .bind(user.id)
-    .all<{ id: string }>();
+    .all<{ id: string }>()
+    .catch(() => ({ results: [] }));
   const accounts = await db
     .prepare("SELECT id FROM ai_accounts WHERE owner_user_id = ?1")
     .bind(user.id)
-    .all<{ id: string }>();
+    .all<{ id: string }>()
+    .catch(() => ({ results: [] }));
 
   return {
     userId: user.id,

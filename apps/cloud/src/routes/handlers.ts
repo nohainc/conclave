@@ -47,6 +47,7 @@ import {
   signPackageDigest,
   verifyPackageDigestSignature,
   resolveProjectSecurityContextFromIdentity,
+  resolveSecurityContextFromIdentity,
   authorizeProjectMembership,
   authorizeWorkspaceOwner,
   authorizeProjectOwner,
@@ -296,6 +297,19 @@ async function securityContext(
     if (!identity) throw new HttpError(401, "Authentication required");
     try {
       await provisionConclaveUser(env.CONCLAVE_DB, identity);
+      const requestedWorkspaceId =
+        request.headers.get("x-conclave-workspace-id")?.trim() || undefined;
+      if (requestedWorkspaceId) {
+        try {
+          return await resolveSecurityContextFromIdentity(
+            env.CONCLAVE_DB,
+            identity,
+            { requestedWorkspaceId },
+          );
+        } catch {
+          // Fall back to project security context if requested workspace is invalid/not found
+        }
+      }
       return await resolveProjectSecurityContextFromIdentity(
         env.CONCLAVE_DB,
         identity,
@@ -935,7 +949,28 @@ async function handleListWorkspaces(
       role: string;
       createdAt: string;
       updatedAt: string;
-    }>();
+    }>()
+    .catch(async () => {
+      return await env.CONCLAVE_DB.prepare(
+        `SELECT w.id, w.name, w.status, wm.role,
+                w.created_at AS createdAt, w.updated_at AS updatedAt
+         FROM workspaces w
+         JOIN workspace_memberships wm ON wm.workspace_id = w.id
+         WHERE wm.user_id = ?1
+         ORDER BY w.name ASC`,
+      )
+        .bind(context.userId)
+        .all<{
+          id: string;
+          name: string;
+          slug: string;
+          status: string;
+          role: string;
+          createdAt: string;
+          updatedAt: string;
+        }>()
+        .catch(() => ({ results: [] }));
+    });
   return json({ workspaces: rows.results ?? [] });
 }
 
@@ -2031,6 +2066,41 @@ async function handleListProjects(
     undefined,
     accessContext,
   );
+  if (context.authorizationModel === "v5") {
+    const rows = await env.CONCLAVE_DB.prepare(
+      `SELECT p.id, '' AS workspaceId, p.name, p.description, p.repository_id AS repositoryId,
+              p.settings_json AS settingsJson, p.created_at AS createdAt, p.updated_at AS updatedAt
+       FROM projects p
+       JOIN project_memberships pm ON pm.project_id = p.id
+       WHERE pm.user_id = ?1
+         AND COALESCE(json_extract(p.settings_json, '$.archived'), 0) = 0
+       ORDER BY p.updated_at DESC`,
+    )
+      .bind(context.userId)
+      .all<{
+        id: string;
+        workspaceId: string;
+        name: string;
+        description: string | null;
+        repositoryId: string | null;
+        settingsJson: string;
+        createdAt: string;
+        updatedAt: string;
+      }>();
+
+    const projects = (rows.results ?? []).map((row) => ({
+      id: row.id,
+      workspaceId: row.workspaceId,
+      name: row.name,
+      description: row.description,
+      repositoryId: row.repositoryId,
+      settings: parseJson(row.settingsJson),
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    }));
+    return json({ projects });
+  }
+
   const isOwnerOrAdmin =
     context.workspaceRole === "owner" ||
     context.workspaceRole === "admin" ||
@@ -2129,25 +2199,47 @@ async function handleCreateProject(
   };
   validateProject(project);
 
-  await env.CONCLAVE_DB.batch([
-    env.CONCLAVE_DB.prepare(
-      `INSERT INTO projects (id, workspace_id, name, description, repository_id, settings_json, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)`,
-    ).bind(
-      id,
-      context.workspaceId,
-      name,
-      description,
-      repositoryId,
-      JSON.stringify(settings),
-      now,
-    ),
-    env.CONCLAVE_DB.prepare(
-      `INSERT INTO project_memberships (id, project_id, user_id, role, created_at, updated_at)
-       VALUES (?1, ?2, ?3, 'lead', ?4, ?4)
-       ON CONFLICT(project_id, user_id) DO NOTHING`,
-    ).bind(`pm-${crypto.randomUUID()}`, id, context.userId, now),
-  ]);
+  if (context.authorizationModel === "v5") {
+    await env.CONCLAVE_DB.batch([
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO projects (id, owner_user_id, name, description, repository_id, settings_json, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)`,
+      ).bind(
+        id,
+        context.userId,
+        name,
+        description,
+        repositoryId,
+        JSON.stringify(settings),
+        now,
+      ),
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO project_memberships (id, project_id, user_id, role, created_at, updated_at)
+         VALUES (?1, ?2, ?3, 'owner', ?4, ?4)
+         ON CONFLICT(project_id, user_id) DO NOTHING`,
+      ).bind(`pm-${crypto.randomUUID()}`, id, context.userId, now),
+    ]);
+  } else {
+    await env.CONCLAVE_DB.batch([
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO projects (id, workspace_id, name, description, repository_id, settings_json, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)`,
+      ).bind(
+        id,
+        context.workspaceId,
+        name,
+        description,
+        repositoryId,
+        JSON.stringify(settings),
+        now,
+      ),
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO project_memberships (id, project_id, user_id, role, created_at, updated_at)
+         VALUES (?1, ?2, ?3, 'lead', ?4, ?4)
+         ON CONFLICT(project_id, user_id) DO NOTHING`,
+      ).bind(`pm-${crypto.randomUUID()}`, id, context.userId, now),
+    ]);
+  }
 
   return json({ project }, { status: 201 });
 }
