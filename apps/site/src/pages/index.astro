@@ -4,29 +4,31 @@ import Button from "../components/Button.astro";
 import AccountPrivacyDiagram from "../components/AccountPrivacyDiagram.astro";
 import Container from "../components/Container.astro";
 import FeatureCard from "../components/FeatureCard.astro";
-import ForgeFlow from "../components/ForgeFlow.astro";
 import HeroArchitecture from "../components/HeroArchitecture.astro";
 import HostTopology from "../components/HostTopology.astro";
 import HostQuickstart from "../components/HostQuickstart.astro";
 import InteractiveWorkflow from "../components/InteractiveWorkflow.astro";
+import IsolationModel from "../components/IsolationModel.astro";
 import QualityFlow from "../components/QualityFlow.astro";
 import Section from "../components/Section.astro";
 import SectionHeader from "../components/SectionHeader.astro";
 import WorkerEcosystem from "../components/WorkerEcosystem.astro";
+import WorkstreamModel from "../components/WorkstreamModel.astro";
 ---
 
 <SiteLayout
-  title="Conclave AX — AI work with a clear path to done"
-  description="Conclave AX coordinates AI Workers across models and machines to research, implement, review, test, and verify complex work."
+  title="Conclave AX — Turn team decisions into verified AI work"
+  description="Conclave AX gives teams a shared place to discuss work, run coordinated AI workflows, and inspect verified results across models and machines."
 >
   <Container>
     <section class="hero" id="product">
       <div>
-        <div class="eyebrow">Multi-Worker AI Orchestration</div>
-        <h1>Build with a team of AI Workers.</h1>
+        <div class="eyebrow">Collaborative AI orchestration</div>
+        <h1>Turn team decisions into verified AI work.</h1>
         <p class="lede">
-          Conclave AX coordinates AI models and tools across machines to research, plan, implement,
-          review, test, and verify complex work with machine-executable evidence.
+          Conclave AX gives people one place to discuss a problem, deliberately start AI work,
+          coordinate specialized models and tools, and inspect the result with tests, review,
+          artifacts, and evidence.
         </p>
         <div class="actions">
           <Button href="https://app.conclaveax.com" label="Open Conclave AX" />
@@ -35,16 +37,16 @@ import WorkerEcosystem from "../components/WorkerEcosystem.astro";
 
         <div class="metrics-strip">
           <div class="metric-item">
-            <strong>Provider-independent</strong>
-            <span>Codex, Claude Code, OpenAI, Anthropic</span>
+            <strong>Human-controlled</strong>
+            <span>Discussion never starts execution by itself.</span>
           </div>
           <div class="metric-item">
-            <strong>Machine-verifiable</strong>
-            <span>Tests, artifacts, and execution evidence</span>
+            <strong>Multi-model</strong>
+            <span>Use different Workers for research, implementation, review, and verification.</span>
           </div>
           <div class="metric-item">
-            <strong>Credential isolation</strong>
-            <span>Private by default, scoped per Workspace</span>
+            <strong>Isolated execution</strong>
+            <span>Parallel Workstreams keep mutable work from colliding.</span>
           </div>
         </div>
       </div>
@@ -52,19 +54,20 @@ import WorkerEcosystem from "../components/WorkerEcosystem.astro";
     </section>
   </Container>
 
-  <Section>
+  <Section id="workstreams">
     <Container>
-      <SectionHeader
-        eyebrow="Why Conclave AX"
-        title="Complex work needs more than one answer."
-        description="One large AI request often produces inconsistent quality. Conclave AX breaks complex goals into smaller work, assigns the right Workers, checks results independently, and iterates until the goal is verified."
-      />
-      <InteractiveWorkflow />
-      <div class="workflow-phases-strip">
-        <span>Research</span>
-        <span>Implementation</span>
-        <span>Independent Review</span>
-        <span>Testing & Verification</span>
+      <div class="split-section">
+        <div>
+          <SectionHeader
+            eyebrow="Workstreams"
+            title="Give every piece of work its own place."
+            description="A Project brings people together. Workstreams keep each feature, investigation, or delivery thread focused, with human discussion and AI execution connected but deliberately separate."
+          />
+          <div class="quality-points">
+            <span>Shared context</span><span>Discuss</span><span>Work Requests</span><span>Checkpoints</span><span>Clear ownership</span>
+          </div>
+        </div>
+        <WorkstreamModel />
       </div>
     </Container>
   </Section>
@@ -72,11 +75,11 @@ import WorkerEcosystem from "../components/WorkerEcosystem.astro";
   <Section>
     <Container>
       <SectionHeader
-        eyebrow="Supported Ecosystem"
-        title="Use the right AI for each task."
-        description="Connect Codex, Claude Code, OpenAI, Anthropic, and other Workers. Conclave AX chooses the right capability for each part of the workflow."
+        eyebrow="How teams work"
+        title="Talk first. Run AI when the team is ready."
+        description="Conclave separates collaboration from execution. People can challenge ideas, refine requirements, and agree on the next step without accidentally spending an AI Account or changing a repository."
       />
-      <WorkerEcosystem />
+      <InteractiveWorkflow />
     </Container>
   </Section>
 
@@ -86,14 +89,14 @@ import WorkerEcosystem from "../components/WorkerEcosystem.astro";
         <div>
           <SectionHeader
             eyebrow="Quality and verification"
-            title="More models are not enough. Their work has to be checked."
-            description="Conclave AX treats orchestration as a quality process: compare candidates, review independently, correct findings, and verify the result against explicit criteria."
+            title="A result is more useful when you can inspect how it was produced."
+            description="Workflows can combine specialized Workers, independent review, correction loops, tests, and evidence instead of relying on a single model response."
           />
           <div class="quality-points">
-            <span>Multiple candidates</span><span>Independent review</span><span>Correction loops</span><span>Automated tests</span><span>Structured evidence</span><span>Completion criteria</span>
+            <span>Role-based delegation</span><span>Independent review</span><span>Correction loops</span><span>Automated tests</span><span>Structured evidence</span>
           </div>
           <div class="actions">
-            <Button href="/how-it-works/" label="Explore How it works →" variant="secondary" />
+            <Button href="/how-it-works/" label="Explore the workflow →" variant="secondary" />
           </div>
         </div>
         <QualityFlow />
@@ -103,16 +106,46 @@ import WorkerEcosystem from "../components/WorkerEcosystem.astro";
 
   <Section>
     <Container>
-      <div class="host-section" data-site-event="section.host_reached">
+      <div class="split-section">
         <div>
           <SectionHeader
-            eyebrow="Conclave Workspace"
-            title="Use the machines you already have."
-            description="Install Conclave Workspace once. Conclave AX can then run Workers on that machine while Cloud coordinates the workflow."
+            eyebrow="Safe parallel work"
+            title="Run multiple Workstreams without sharing one mutable folder."
+            description="Each stateful Workstream uses its own managed checkout on a Primary Workspace. Different Workstreams can run in parallel, while mutating work inside one Workstream is serialized to keep the environment deterministic."
           />
-          <p class="host-section__copy">One Workspace represents one machine. People with an authorized Project grant can use it, while Workers are managed automatically in the background.</p>
-          <div class="host-platforms"><span>macOS first</span><span>Windows</span><span>Linux</span></div>
-          <div class="actions"><Button href="https://app.conclaveax.com" label="Open Conclave AX to add a Workspace →" /></div>
+          <p class="section-intro">The result is practical team concurrency without turning your development machine into a distributed merge problem.</p>
+        </div>
+        <IsolationModel />
+      </div>
+    </Container>
+  </Section>
+
+  <Section>
+    <Container>
+      <SectionHeader
+        eyebrow="Workers"
+        title="Use the right AI or tool for each step."
+        description="Connect coding agents, model APIs, local tools, and verification capabilities as Workers. Workflows request roles and capabilities; Conclave resolves eligible execution resources."
+      />
+      <WorkerEcosystem />
+      <div class="actions">
+        <Button href="/workers/" label="Explore Workers →" variant="secondary" />
+      </div>
+    </Container>
+  </Section>
+
+  <Section>
+    <Container>
+      <div class="host-section" data-site-event="section.workspace_reached">
+        <div>
+          <SectionHeader
+            eyebrow="Workspaces"
+            title="Bring execution to the machines you control."
+            description="A Workspace represents one execution environment. It owns local Worker installations, repository access, runtime capacity, and local credential material."
+          />
+          <p class="host-section__copy">Projects do not inherit access to a machine. A Workspace is usable only through an explicit Project grant with bounded permissions.</p>
+          <div class="host-platforms"><span>macOS</span><span>Windows</span><span>Linux</span></div>
+          <div class="actions"><Button href="https://app.conclaveax.com" label="Open Conclave AX →" /></div>
         </div>
         <HostTopology />
       </div>
@@ -128,16 +161,16 @@ import WorkerEcosystem from "../components/WorkerEcosystem.astro";
         <div>
           <SectionHeader
             eyebrow="Accounts and privacy"
-            title="Shared machines. Separate AI Accounts."
-            description="Worker software is installed once, while each person connects the Account they are authorized to use."
+            title="Execution access and AI credentials are separate decisions."
+            description="A Project may be allowed to use a Workspace without automatically receiving access to anyone's AI Account."
           />
           <ul class="privacy-points">
-            <li>Accounts are private by default.</li>
-            <li>Sharing is explicit and can be revoked.</li>
-            <li>Sharing allows use, never secret visibility.</li>
-            <li>Usage stays attributable to the requester and Account owner.</li>
+            <li>AI Accounts are private by default.</li>
+            <li>Project sharing is explicit and revocable.</li>
+            <li>Sharing authorizes use, not secret visibility.</li>
+            <li>Usage remains attributable to the requester and Account owner.</li>
           </ul>
-          <div class="actions"><Button href="https://app.conclaveax.com" label="Connect an Account in Conclave AX →" /></div>
+          <div class="actions"><Button href="/security/" label="Read about security →" variant="secondary" /></div>
         </div>
         <AccountPrivacyDiagram />
       </div>
@@ -146,35 +179,15 @@ import WorkerEcosystem from "../components/WorkerEcosystem.astro";
 
   <Section>
     <Container>
-      <div class="forge-section">
-        <div>
-          <SectionHeader
-            eyebrow="Conclave Forge"
-            title="Software development is the first Conclave AX workflow."
-            description="Ask for a meaningful change and Forge carries it through research, architecture, implementation, tests, review, correction, and verification."
-          />
-          <p class="forge-section__context">Forge is a concrete starting point—not the boundary of the product. Conclave AX provides the same quality-driven coordination for future workflows beyond software development.</p>
-          <div class="forge-scope"><strong>Conclave AX</strong><span>├── Forge</span><span>└── Future workflows</span></div>
-          <div class="actions">
-            <Button href="https://app.conclaveax.com" label="Launch Forge in Conclave AX →" />
-          </div>
-        </div>
-        <ForgeFlow />
-      </div>
-    </Container>
-  </Section>
-
-  <Section>
-    <Container>
       <SectionHeader
-        eyebrow="Designed for real work"
-        title="Less black box. More useful control."
-        description="Your work stays organized in Workspaces and Projects. Progress, artifacts, findings, and verification become part of the result—not scattered afterthoughts."
+        eyebrow="Built for individuals and teams"
+        title="Useful when you work alone. More valuable when several people share the same project."
+        description="Conclave keeps project collaboration, execution resources, AI Accounts, and work history separate enough to stay understandable as your team grows."
       />
       <div class="cards">
-        <FeatureCard title="Direct the work"><p>Describe the outcome. Conclave AX coordinates the steps and the people or Workers involved.</p></FeatureCard>
-        <FeatureCard title="Keep capability close"><p>A Conclave Workspace runs on your machine and supervises the Workers you choose to use.</p></FeatureCard>
-        <FeatureCard title="See what happened"><p>Inspect progress, evidence, artifacts, and usage without relying on a model's summary alone.</p></FeatureCard>
+        <FeatureCard title="For individuals"><p>Keep complex work organized across Workstreams, reuse your machines and AI Accounts, and build a reliable history of what was tried and verified.</p></FeatureCard>
+        <FeatureCard title="For teams"><p>Discuss together, control who can run AI work, share only the execution resources you intend to share, and avoid overlapping mutable environments.</p></FeatureCard>
+        <FeatureCard title="For organizations"><p>Use explicit Project membership, scoped Workspace grants, auditable execution, account attribution, budgets, and repeatable workflows as the operating model expands.</p></FeatureCard>
       </div>
     </Container>
   </Section>
@@ -182,10 +195,10 @@ import WorkerEcosystem from "../components/WorkerEcosystem.astro";
   <Section class="final-cta-section">
     <Container>
       <div class="final-cta">
-        <SectionHeader eyebrow="Start with a better workflow" title="Give your AI models a workflow." description="Coordinate the work, check the result, and keep the evidence together in Conclave AX." />
+        <SectionHeader eyebrow="Make AI work part of the team workflow" title="Discuss it. Run it. Verify it." description="Bring people, AI Workers, execution environments, and evidence together without turning everything into one opaque chat." />
         <div class="final-cta__actions">
           <Button href="https://app.conclaveax.com" label="Open Conclave AX" />
-          <a href="/security/">View architecture <span aria-hidden="true">→</span></a>
+          <a href="/how-it-works/">See how it works <span aria-hidden="true">→</span></a>
         </div>
       </div>
     </Container>
