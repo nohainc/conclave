@@ -262,6 +262,70 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.widgetWithText(Tab, 'Workspaces'), findsOneWidget);
     });
+
+    testWidgets(
+        'Phase 5: preserves clear distinction between global and workspace-specific contextual detail',
+        (tester) async {
+      final snapshot = studioFixtureSnapshot();
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: WorkspacesPage(
+            workspaces: snapshot.agents,
+            workers: snapshot.workers,
+            accounts: snapshot.accounts,
+            plugins: snapshot.plugins,
+            onAdd: () {},
+            onRename: (_) {},
+            onUpdate: (_) {},
+            onRevoke: (_) {},
+            onGrant: (_) {},
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      // 1. Global Workers Tab
+      await tester.tap(find.widgetWithText(Tab, 'Workers'));
+      await tester.pumpAndSettle();
+      expect(
+          find.text('Manage Worker availability across your Workspaces.'),
+          findsOneWidget);
+
+      // 2. Global AI Accounts Tab
+      await tester.tap(find.widgetWithText(Tab, 'AI Accounts'));
+      await tester.pumpAndSettle();
+      expect(find.text('Accounts used by Workers on your Workspaces.'),
+          findsOneWidget);
+
+      // 3. Drilldown into Workspace Contextual Detail
+      await tester.tap(find.widgetWithText(Tab, 'Workspaces'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('View Workspace'));
+      await tester.pumpAndSettle();
+
+      // Contextual Overview
+      expect(find.text('Workspace overview'), findsOneWidget);
+      expect(
+          find.text(
+              'Runtime identity and current capacity for Development Workspace.'),
+          findsOneWidget);
+
+      // Contextual Workers
+      await tester.tap(find.widgetWithText(Tab, 'Workers'));
+      await tester.pumpAndSettle();
+      expect(find.text('Workers on Development Workspace'), findsOneWidget);
+      expect(find.text('Manage what this Workspace has installed.'),
+          findsOneWidget);
+
+      // Contextual AI Accounts
+      await tester.tap(find.widgetWithText(Tab, 'AI Accounts'));
+      await tester.pumpAndSettle();
+      expect(find.text('AI Accounts on Development Workspace'), findsOneWidget);
+      expect(
+          find.text(
+              'Secrets remain local to this Workspace and are never transmitted to Cloud.'),
+          findsOneWidget);
+    });
   });
 }
 

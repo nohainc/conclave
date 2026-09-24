@@ -221,6 +221,26 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
 
   Widget _workersTab(BuildContext context) => ListView(
         children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Workers',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Manage Worker availability across your Workspaces.',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
           if (widget.plugins.isEmpty)
             const _Panel(
               title: 'No Workers available',
@@ -316,15 +336,41 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
 
   Widget _accountsTab(BuildContext context) => ListView(
         children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FilledButton.icon(
-              onPressed: widget.onCreateAccount,
-              icon: const Icon(Icons.add),
-              label: const Text('Add AI Account'),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'AI Accounts',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Accounts used by Workers on your Workspaces.',
+                        style: TextStyle(
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                FilledButton.icon(
+                  onPressed: widget.onCreateAccount,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add AI Account'),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 16),
           if (widget.workerActionMessage != null) ...[
             MaterialBanner(
               content: Text(widget.workerActionMessage!),
@@ -448,7 +494,7 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
             child: TabBarView(children: [
           _overview(workspace),
           _workers(workspace),
-          _accounts(localAccounts),
+          _accounts(workspace, localAccounts),
           _projectAccess(workspace),
           _repositories(workspace),
           _activity(workspace),
@@ -461,7 +507,8 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
   Widget _overview(StudioAgent workspace) => ListView(children: [
         _Panel(
             title: 'Workspace overview',
-            subtitle: 'Runtime identity and current capacity.',
+            subtitle:
+                'Runtime identity and current capacity for ${workspace.name}.',
             child: Wrap(spacing: 24, runSpacing: 12, children: [
               Text('Status: ${workspace.status}'),
               Text('Current load: ${workspace.activeTaskCount} active tasks'),
@@ -477,9 +524,9 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
 
   Widget _workers(StudioAgent workspace) => ListView(children: [
         _Panel(
-            title: 'Workers',
+            title: 'Workers on ${workspace.name}',
             subtitle:
-                'Installed and desired Worker state is managed by the Workspace owner.',
+                'Manage what this Workspace has installed.',
             child: workspace.installedWorkers.isEmpty
                 ? const Text('No Workers installed.')
                 : Column(
@@ -493,12 +540,12 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
                         .toList())),
       ]);
 
-  Widget _accounts(List<StudioCredentialProfile> accounts) =>
+  Widget _accounts(StudioAgent workspace, List<StudioCredentialProfile> accounts) =>
       ListView(children: [
         _Panel(
-            title: 'AI Accounts and local actions',
+            title: 'AI Accounts on ${workspace.name}',
             subtitle:
-                'Secrets remain local to this Workspace and are never shown here.',
+                'Secrets remain local to this Workspace and are never transmitted to Cloud.',
             child: accounts.isEmpty
                 ? const Text('No local AI Accounts.')
                 : Column(
@@ -514,7 +561,7 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
 
   Widget _projectAccess(StudioAgent workspace) => ListView(children: [
         _Panel(
-            title: 'Project access',
+            title: 'Project access for ${workspace.name}',
             subtitle:
                 'Explicit Project Grants determine which Projects may use this Workspace.',
             child:
@@ -531,9 +578,9 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
 
   Widget _repositories(StudioAgent workspace) => ListView(children: [
         _Panel(
-            title: 'Repositories and permissions',
+            title: 'Repositories and permissions for ${workspace.name}',
             subtitle:
-                'Repository mappings and effective permissions are defined by Project Grants.',
+                'Repository mappings and effective filesystem permissions on this Workspace.',
             child: Text(workspace.workspaceBindings.isEmpty
                 ? 'No Project Grant mappings yet.'
                 : 'Review repository paths and permissions from the connected Project Grants.')),
@@ -541,7 +588,7 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
 
   Widget _activity(StudioAgent workspace) => ListView(children: [
         _Panel(
-            title: 'Activity',
+            title: 'Activity on ${workspace.name}',
             subtitle: 'Recent runtime state for this Workspace.',
             child: ListTile(
                 contentPadding: EdgeInsets.zero,
@@ -552,7 +599,7 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
 
   Widget _settings(StudioAgent workspace) => ListView(children: [
         _Panel(
-            title: 'Runtime settings',
+            title: 'Runtime settings for ${workspace.name}',
             subtitle: 'Manage the runtime environment and its lifecycle.',
             child: Wrap(spacing: 8, runSpacing: 8, children: [
               OutlinedButton.icon(
