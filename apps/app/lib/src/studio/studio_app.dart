@@ -67,7 +67,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
   String? selectedChatId;
   final Set<String> expandedProjectIds = <String>{};
   bool showNewGoal = false;
-  bool showWorkerDrawer = false;
   String? workerActionMessage;
   StudioHostEnrollment? enrollmentResult;
   StudioQualityPreset selectedQuality = StudioQualityPreset.balanced;
@@ -2424,7 +2423,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
           _timelineCard(),
         ]),
       ),
-      if (showWorkerDrawer) ...[const SizedBox(height: 16), _workerStrip()],
       if (showNewGoal) _newGoalDialog(),
     ]);
   }
@@ -3508,19 +3506,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
             style: TextStyle(
                 color: color, fontSize: 10, fontWeight: FontWeight.w700))
       ]));
-
-  Widget _workerStrip() => _panel(
-      title: 'Worker registry',
-      subtitle: 'Capability-based routing',
-      child: Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: snapshot.workers
-              .map((worker) => Chip(
-                  avatar: const Icon(Icons.circle,
-                      size: 8, color: Color(0xff55bf8f)),
-                  label: Text('${worker.name} · ${worker.provider}')))
-              .toList()));
 
   Widget _fleetHeader(String title, String subtitle, IconData icon) => Row(
         crossAxisAlignment: CrossAxisAlignment.start,

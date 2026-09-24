@@ -1,5 +1,30 @@
+import 'package:flutter/material.dart';
+
+import '../../brand.dart';
 import '../../navigation/studio_navigation.dart';
 import '../../studio/studio_models.dart';
+
+enum ExecutionStatusTone {
+  usable,
+  degraded,
+  neutral,
+  failed,
+}
+
+extension ExecutionStatusToneHelpers on ExecutionStatusTone {
+  Color color(bool isDark) {
+    switch (this) {
+      case ExecutionStatusTone.usable:
+        return ConclaveBrand.success;
+      case ExecutionStatusTone.degraded:
+        return ConclaveBrand.warning;
+      case ExecutionStatusTone.neutral:
+        return isDark ? Colors.white38 : ConclaveBrand.lightInkMuted;
+      case ExecutionStatusTone.failed:
+        return ConclaveBrand.error;
+    }
+  }
+}
 
 /// Context model encapsulating state needed by the Conclave AX App Shell (Sidebar & HUD).
 class StudioShellContext {
@@ -40,18 +65,89 @@ class StudioShellContext {
   int get onlineWorkspaceCount =>
       workspaces.where((w) => w.status.toLowerCase() == 'online').length;
 
-  String? get primaryWorkspaceLabel {
-    final online = workspaces
-        .where((w) => w.status.toLowerCase() == 'online')
-        .firstOrNull;
-    if (online != null) {
-      return '${online.name} · Online';
+  StudioAgent? get targetedWorkspace {
+    final workstream = selectedWorkstream;
+    if (workstream != null &&
+        workstream.primaryWorkspace.isNotEmpty &&
+        workstream.primaryWorkspace != 'Not selected') {
+      final query = workstream.primaryWorkspace.trim().toLowerCase();
+      return workspaces.where((w) {
+        return w.name.trim().toLowerCase() == query ||
+            w.id.trim().toLowerCase() == query ||
+            w.hostname.trim().toLowerCase() == query;
+      }).firstOrNull;
     }
-    if (workspaces.isNotEmpty) {
-      return '${workspaces.first.name} · Offline';
-    }
-    return 'No Workspaces';
+    return null;
   }
+
+  bool get isWorkstreamContext =>
+      selectedWorkstream != null ||
+      navigation.kind == StudioRouteKind.workstream ||
+      navigation.kind == StudioRouteKind.run;
+
+  String get executionStatusLabel {
+    if (isWorkstreamContext) {
+      final target = targetedWorkspace;
+      if (target != null) {
+        final isOnline = target.status.toLowerCase() == 'online';
+        final isDegraded = target.status.toLowerCase() == 'degraded' ||
+            target.status.toLowerCase() == 'reconnecting';
+        final statusText = isOnline
+            ? 'Online'
+            : isDegraded
+                ? 'Degraded'
+                : 'Offline';
+        return '${target.name} · $statusText';
+      }
+      final customName = selectedWorkstream?.primaryWorkspace;
+      if (customName != null &&
+          customName.isNotEmpty &&
+          customName != 'Not selected') {
+        return '$customName · Offline';
+      }
+    }
+    if (workspaces.isEmpty) {
+      return 'No Workspaces';
+    }
+    final online = onlineWorkspaceCount;
+    final total = workspaces.length;
+    return '$online / $total ${total == 1 ? 'Workspace' : 'Workspaces'} online';
+  }
+
+  ExecutionStatusTone get executionStatusTone {
+    if (realtimeStale) {
+      return ExecutionStatusTone.degraded;
+    }
+    if (workspaces.isEmpty) {
+      return ExecutionStatusTone.neutral;
+    }
+    if (isWorkstreamContext) {
+      final target = targetedWorkspace;
+      if (target != null) {
+        final st = target.status.toLowerCase();
+        if (st == 'online') return ExecutionStatusTone.usable;
+        if (st == 'degraded' || st == 'reconnecting') {
+          return ExecutionStatusTone.degraded;
+        }
+        return ExecutionStatusTone.failed;
+      }
+      final customName = selectedWorkstream?.primaryWorkspace;
+      if (customName != null &&
+          customName.isNotEmpty &&
+          customName != 'Not selected') {
+        return ExecutionStatusTone.failed;
+      }
+      return onlineWorkspaceCount > 0
+          ? ExecutionStatusTone.usable
+          : ExecutionStatusTone.failed;
+    }
+    if (onlineWorkspaceCount > 0) {
+      return ExecutionStatusTone.usable;
+    }
+    return ExecutionStatusTone.failed;
+  }
+
+  String? get primaryWorkspaceLabel => executionStatusLabel;
 
   bool get hasOnlineWorkspace => onlineWorkspaceCount > 0;
 

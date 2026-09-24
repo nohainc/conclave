@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../brand.dart';
 import '../../navigation/studio_navigation.dart';
+import 'execution_status_popover.dart';
 import 'studio_shell_context.dart';
 
 /// Canonical Top Application Header Bar (HUD) for Conclave AX.
@@ -174,19 +175,17 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
             ),
           ],
 
-          // Workspace Status Chip
-          if (!compact && shellContext.workspaces.isNotEmpty) ...[
+          // Execution Status Popover Trigger
+          if (!compact) ...[
             OutlinedButton.icon(
-              onPressed: () => onNavigateTo(const StudioNavigation.hosts()),
+              onPressed: () => _openExecutionStatusPopover(context),
               icon: Icon(
                 Icons.circle,
                 size: 7,
-                color: shellContext.hasOnlineWorkspace
-                    ? ConclaveBrand.success
-                    : Colors.white38,
+                color: shellContext.executionStatusTone.color(isDark),
               ),
               label: Text(
-                shellContext.primaryWorkspaceLabel ?? 'Workspaces',
+                shellContext.executionStatusLabel,
                 style: const TextStyle(fontSize: 12),
               ),
               style: OutlinedButton.styleFrom(
@@ -198,6 +197,20 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
               ),
             ),
             const SizedBox(width: 8),
+          ] else ...[
+            IconButton(
+              tooltip: shellContext.executionStatusLabel,
+              onPressed: () => _openExecutionStatusPopover(context),
+              icon: Icon(
+                Icons.circle,
+                size: 8,
+                color: shellContext.executionStatusTone.color(isDark),
+              ),
+              splashRadius: 18,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              padding: EdgeInsets.zero,
+            ),
+            const SizedBox(width: 4),
           ],
 
           // Quick Theme Mode Toggle
@@ -416,6 +429,17 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
       child: Text(
         '/',
         style: TextStyle(fontSize: 13, color: mutedInk),
+      ),
+    );
+  }
+
+  void _openExecutionStatusPopover(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black26,
+      builder: (dialogContext) => ExecutionStatusPopover(
+        shellContext: shellContext,
+        onNavigateTo: onNavigateTo,
       ),
     );
   }

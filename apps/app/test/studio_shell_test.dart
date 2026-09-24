@@ -475,5 +475,199 @@ void main() {
       expect(navigatedTo?.projectId, 'project-1');
       expect(navigatedTo?.workstreamId, 'ws-1');
     });
+
+    testWidgets('Execution status popover opens and displays workspaces and workers',
+        (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      StudioNavigation? navigatedTo;
+
+      const macBook = StudioAgent(
+        id: 'agent-1',
+        name: 'MacBook Pro',
+        hostname: 'vitalii-mac',
+        status: 'online',
+        os: 'macOS',
+        architecture: 'arm64',
+        version: '0.6.0',
+        lastSeen: 'just now',
+        workerCount: 4,
+        pluginCount: 2,
+        activeTaskCount: 1,
+        workspaceBindings: [],
+      );
+
+      const buildServer = StudioAgent(
+        id: 'agent-2',
+        name: 'Build Server',
+        hostname: 'build-srv',
+        status: 'online',
+        os: 'Linux',
+        architecture: 'x64',
+        version: '0.6.0',
+        lastSeen: 'just now',
+        workerCount: 6,
+        pluginCount: 3,
+        activeTaskCount: 0,
+        workspaceBindings: [],
+      );
+
+      const officeMac = StudioAgent(
+        id: 'agent-3',
+        name: 'Office Mac',
+        hostname: 'office-mac',
+        status: 'offline',
+        os: 'macOS',
+        architecture: 'arm64',
+        version: '0.6.0',
+        lastSeen: '2 hours ago',
+        workerCount: 0,
+        pluginCount: 0,
+        activeTaskCount: 0,
+        workspaceBindings: [],
+      );
+
+      // 1. Global context test: "2 / 3 Workspaces online"
+      const globalContext = StudioShellContext(
+        navigation: StudioNavigation.home(),
+        projects: [],
+        workspaces: [macBook, buildServer, officeMac],
+      );
+
+      expect(globalContext.executionStatusLabel, '2 / 3 Workspaces online');
+      expect(globalContext.executionStatusTone, ExecutionStatusTone.usable);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: StudioTopBar(
+              shellContext: globalContext,
+              onNavigateTo: (nav) => navigatedTo = nav,
+              onOpenCommandPalette: () {},
+              onToggleTheme: () {},
+              onOpenNotifications: () {},
+              onOpenAbout: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('2 / 3 Workspaces online'), findsOneWidget);
+
+      // Tap execution status trigger to open popover
+      await tester.tap(find.text('2 / 3 Workspaces online'));
+      await tester.pumpAndSettle();
+
+      // Check Popover content
+      expect(find.text('Execution'), findsOneWidget);
+      expect(find.text('2 / 3 Online'), findsOneWidget);
+      expect(find.text('MacBook Pro'), findsOneWidget);
+      expect(find.text('4 Workers ready'), findsOneWidget);
+      expect(find.text('Build Server'), findsOneWidget);
+      expect(find.text('6 Workers ready'), findsOneWidget);
+      expect(find.text('Office Mac'), findsOneWidget);
+      expect(find.text('Offline'), findsOneWidget);
+
+      // Tap Manage Workspaces in popover footer
+      await tester.tap(find.text('Manage Workspaces'));
+      await tester.pumpAndSettle();
+      expect(navigatedTo?.kind, StudioRouteKind.hosts);
+    });
+
+    test('StudioShellContext derives correct tone and label across states', () {
+      const macBook = StudioAgent(
+        id: 'agent-1',
+        name: 'MacBook Pro',
+        hostname: 'vitalii-mac',
+        status: 'online',
+        os: 'macOS',
+        architecture: 'arm64',
+        version: '0.6.0',
+        lastSeen: 'just now',
+        workerCount: 4,
+        pluginCount: 2,
+        activeTaskCount: 1,
+        workspaceBindings: [],
+      );
+      const officeMacOffline = StudioAgent(
+        id: 'agent-3',
+        name: 'Office Mac',
+        hostname: 'office-mac',
+        status: 'offline',
+        os: 'macOS',
+        architecture: 'arm64',
+        version: '0.6.0',
+        lastSeen: 'yesterday',
+        workerCount: 0,
+        pluginCount: 0,
+        activeTaskCount: 0,
+        workspaceBindings: [],
+      );
+
+      // Workstream context: targeted workspace online
+      const wsCtxOnline = StudioShellContext(
+        navigation: StudioNavigation.workstream('project-1', 'ws-1'),
+        projects: [],
+        selectedWorkstream: StudioWorkstream(
+          id: 'ws-1',
+          projectId: 'project-1',
+          name: 'Authentication redesign',
+          lead: 'Vitalii',
+          status: 'running',
+          brief: 'Redesign login flow',
+          primaryWorkspace: 'MacBook Pro',
+          currentCheckpoint: 'main',
+          queueStatus: 'Running',
+        ),
+        workspaces: [macBook, officeMacOffline],
+      );
+      expect(wsCtxOnline.executionStatusLabel, 'MacBook Pro · Online');
+      expect(wsCtxOnline.executionStatusTone, ExecutionStatusTone.usable);
+
+      // Workstream context: targeted workspace offline
+      const wsCtxOffline = StudioShellContext(
+        navigation: StudioNavigation.workstream('project-1', 'ws-2'),
+        projects: [],
+        selectedWorkstream: StudioWorkstream(
+          id: 'ws-2',
+          projectId: 'project-1',
+          name: 'Core refactor',
+          lead: 'Vitalii',
+          status: 'running',
+          brief: 'Refactoring core',
+          primaryWorkspace: 'Office Mac',
+          currentCheckpoint: 'main',
+          queueStatus: 'Running',
+        ),
+        workspaces: [macBook, officeMacOffline],
+      );
+      expect(wsCtxOffline.executionStatusLabel, 'Office Mac · Offline');
+      expect(wsCtxOffline.executionStatusTone, ExecutionStatusTone.failed);
+
+      // Reconnecting / stale state
+      const staleCtx = StudioShellContext(
+        navigation: StudioNavigation.home(),
+        projects: [],
+        workspaces: [macBook],
+        realtimeStale: true,
+      );
+      expect(staleCtx.executionStatusTone, ExecutionStatusTone.degraded);
+
+      // Empty workspaces state
+      const emptyCtx = StudioShellContext(
+        navigation: StudioNavigation.home(),
+        projects: [],
+        workspaces: [],
+      );
+      expect(emptyCtx.executionStatusLabel, 'No Workspaces');
+      expect(emptyCtx.executionStatusTone, ExecutionStatusTone.neutral);
+    });
   });
 }
