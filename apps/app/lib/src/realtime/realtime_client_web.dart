@@ -103,14 +103,19 @@ class _BrowserRealtimeClient implements RealtimeClient {
             final chatId = eventValue['chatId'];
             final runId = eventValue['runId'];
             final workspaceId = eventValue['workspaceId'];
-            if (projectId is String)
+            if (projectId is String) {
               _lastDurableSequences['project=$projectId'] = sequence;
-            if (chatId is String)
+            }
+            if (chatId is String) {
               _lastDurableSequences['chat=$chatId'] = sequence;
-            if (runId is String) _lastDurableSequences['run=$runId'] = sequence;
-            if (workspaceId is String)
+            }
+            if (runId is String) {
+              _lastDurableSequences['run=$runId'] = sequence;
+            }
+            if (workspaceId is String) {
               _lastDurableSequences['execution_workspace=$workspaceId'] =
                   sequence;
+            }
           }
           _events.add(eventValue);
         } else if (message['type'] == 'reconnect.required') {

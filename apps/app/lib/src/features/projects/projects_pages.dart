@@ -178,26 +178,6 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
     });
   }
 
-  void _archiveWorkstream(StudioWorkstream workstream) {
-    setState(() {
-      workstreams = workstreams
-          .map((item) => item.id == workstream.id
-              ? StudioWorkstream(
-                  id: item.id,
-                  projectId: item.projectId,
-                  name: item.name,
-                  lead: item.lead,
-                  status: 'archived',
-                  brief: item.brief,
-                  primaryWorkspace: item.primaryWorkspace,
-                  currentCheckpoint: item.currentCheckpoint,
-                  queueStatus: item.queueStatus,
-                  archived: true,
-                )
-              : item)
-          .toList();
-    });
-  }
 
   Future<void> _loadCollaboration() async {
     try {
@@ -358,11 +338,11 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
                 ? 'A shared home for your team, Workstreams, and results.'
                 : widget.project.description,
             child: Text('Role: ${widget.project.role}')),
-        _ProjectPanel(
+        const _ProjectPanel(
             title: 'Execution summary',
             subtitle:
                 'Execution capacity is configured independently from Project collaboration.',
-            child: const Text(
+            child: Text(
                 'No execution summary available yet. Open Execution to connect a Workspace.')),
       ]);
 

@@ -55,10 +55,10 @@ void main() {
   testWidgets(
       'Workstream shell exposes Discuss and Work with viewer-safe controls',
       (tester) async {
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(const MaterialApp(
       home: Scaffold(
         body: WorkstreamPage(
-          project: const StudioProject(
+          project: StudioProject(
             id: 'project-1',
             name: 'Project One',
             repository: '',
@@ -67,7 +67,7 @@ void main() {
             lastActivity: 'today',
             role: 'viewer',
           ),
-          workstream: const StudioWorkstream(
+          workstream: StudioWorkstream(
             id: 'workstream-1',
             projectId: 'project-1',
             name: 'Research',
@@ -107,10 +107,10 @@ void main() {
   testWidgets('collaborator can explicitly run Work and cancel it',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(const MaterialApp(
       home: Scaffold(
         body: WorkstreamPage(
-          project: const StudioProject(
+          project: StudioProject(
             id: 'project-1',
             name: 'Project One',
             repository: '',
@@ -119,7 +119,7 @@ void main() {
             lastActivity: 'today',
             role: 'collaborator',
           ),
-          workstream: const StudioWorkstream(
+          workstream: StudioWorkstream(
             id: 'workstream-1',
             projectId: 'project-1',
             name: 'Implementation',
@@ -159,10 +159,10 @@ void main() {
   testWidgets('Discuss messages can create a Work draft without running it',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(const MaterialApp(
       home: Scaffold(
         body: WorkstreamPage(
-          project: const StudioProject(
+          project: StudioProject(
             id: 'project-1',
             name: 'Project One',
             repository: '',
@@ -171,7 +171,7 @@ void main() {
             lastActivity: 'today',
             role: 'collaborator',
           ),
-          workstream: const StudioWorkstream(
+          workstream: StudioWorkstream(
             id: 'workstream-1',
             projectId: 'project-1',
             name: 'Research',

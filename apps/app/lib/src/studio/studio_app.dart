@@ -386,59 +386,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
     }
   }
 
-  Future<void> _createWorkspace() async {
-    final nameController = TextEditingController();
-    final name = await showDialog<String>(
-      context: navigatorKey.currentState?.overlay?.context ?? context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Create workspace'),
-        content: TextField(
-          controller: nameController,
-          autofocus: true,
-          textInputAction: TextInputAction.done,
-          decoration: const InputDecoration(
-            labelText: 'Workspace name',
-            hintText: 'e.g. Conclave AX',
-          ),
-          onSubmitted: (_) => Navigator.of(dialogContext).pop(
-              nameController.text.trim().isEmpty
-                  ? null
-                  : nameController.text.trim()),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(
-                nameController.text.trim().isEmpty
-                    ? null
-                    : nameController.text.trim()),
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
-    nameController.dispose();
-    if (!mounted || name == null || name.isEmpty) return;
 
-    try {
-      final workspace = await store.workspaces.create(name: name);
-      if (!mounted) return;
-      setState(() {
-        selectedProjectId = null;
-        selectedChatId = null;
-      });
-      _startRealtime();
-      await _loadSnapshot(workspaceId: workspace.id, showSpinner: false);
-      if (mounted) _showSnackBar('Workspace created.');
-    } catch (error) {
-      if (mounted) {
-        _showSnackBar(error.toString(), type: ToastType.error);
-      }
-    }
-  }
 
   void _onRealtimeEvent(Map<String, dynamic> event) {
     final type = event['type'];
@@ -692,21 +640,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
     }
   }
 
-  Future<void> _respondToRunPrompt() async {
-    final runId = snapshot.run?.id ?? snapshot.activeRunId;
-    final response = promptResponseController.text.trim();
-    if (runId == null || response.isEmpty) return;
-    try {
-      await widget.dataSource.respondToRunPrompt(runId, response);
-      if (!mounted) return;
-      promptResponseController.clear();
-      setState(() => pendingRunPrompt = null);
-      _showSnackBar(
-          'Response sent. The Run will continue when Cloud confirms it.');
-    } catch (error) {
-      if (mounted) _showSnackBar(error.toString());
-    }
-  }
+
 
   Future<void> _copyRunDiagnostics() async {
     final run = snapshot.run;
@@ -810,10 +744,13 @@ class _StudioAppState extends State<ConclaveAppShell> {
         workspaceId: workspaceId,
         profileId: account.id,
       );
-      if (mounted)
+      if (mounted) {
         _showSnackBar('Local Account setup requested on the Workspace.');
+      }
     } catch (error) {
-      if (mounted) _showSnackBar(error.toString());
+      if (mounted) {
+        _showSnackBar(error.toString());
+      }
     }
   }
 
@@ -826,9 +763,13 @@ class _StudioAppState extends State<ConclaveAppShell> {
         profileId: account.id,
       );
       await _loadSnapshot(workspaceId: workspaceId, showSpinner: false);
-      if (mounted) _showSnackBar('Account revoked.');
+      if (mounted) {
+        _showSnackBar('Account revoked.');
+      }
     } catch (error) {
-      if (mounted) _showSnackBar(error.toString());
+      if (mounted) {
+        _showSnackBar(error.toString());
+      }
     }
   }
 
@@ -836,9 +777,13 @@ class _StudioAppState extends State<ConclaveAppShell> {
     try {
       await widget.dataSource.registerPasskey('Conclave AX browser passkey');
       await _loadAccountSecurity();
-      if (mounted) _showSnackBar('Passkey added.');
+      if (mounted) {
+        _showSnackBar('Passkey added.');
+      }
     } catch (error) {
-      if (mounted) _showSnackBar(error.toString());
+      if (mounted) {
+        _showSnackBar(error.toString());
+      }
     }
   }
 
@@ -1080,22 +1025,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
     }
   }
 
-  Future<void> _copyHostDiagnostics(StudioAgent host) async {
-    await Clipboard.setData(ClipboardData(
-        text: jsonEncode({
-      'hostId': host.id,
-      'name': host.name,
-      'status': host.status,
-      'os': host.os,
-      'architecture': host.architecture,
-      'version': host.version,
-      'lastSeen': host.lastSeen,
-      'workerCount': host.workerCount,
-      'activeTaskCount': host.activeTaskCount,
-      'workspaceBindings': host.workspaceBindings,
-    })));
-    if (mounted) _showSnackBar('Workspace diagnostics copied without secrets.');
-  }
+
 
   Future<void> _enrollAgent() async {
     final workspaceId = snapshot.workspaceId;
@@ -2489,7 +2419,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
             onTap: () {
               setState(() {
                 selectedProjectId = project.id;
-                selectedWorkstreamId = workstream.id;
               });
               _navigateTo(StudioNavigation.workstream(project.id, workstream.id));
             },
@@ -2498,7 +2427,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
               child: Row(children: [
                 Icon(Icons.route_outlined,
                     size: 13,
-                    color: selectedWorkstreamId == workstream.id
+                    color: navigation.workstreamId == workstream.id
                         ? const Color(0xffbcb3ff)
                         : Colors.white38),
                 const SizedBox(width: 7),
@@ -2507,7 +2436,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                            color: selectedChatId == chat.id
+                            color: navigation.workstreamId == workstream.id
                                 ? Colors.white
                                 : Colors.white54,
                             fontSize: 11))),
@@ -3130,62 +3059,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
     ]);
   }
 
-  Widget _chatExecutionProgress() {
-    final tasks = snapshot.tasks;
-    final completed =
-        tasks.where((task) => task.status == TaskStatus.completed).length;
-    final active = tasks.where((task) => task.status == TaskStatus.running);
-    final headline = active.isNotEmpty
-        ? '${active.first.title} running'
-        : completed == tasks.length
-            ? 'Verification complete'
-            : 'Execution in progress';
-    final progress = tasks.isEmpty ? 0.0 : completed / tasks.length;
-    return Semantics(
-      liveRegion: true,
-      label: '$headline. $completed of ${tasks.length} steps complete.',
-      child: _panel(
-        title: 'Live execution',
-        subtitle: headline,
-        trailing: _statusChip(
-            '$completed / ${tasks.length}', const Color(0xff6254d9)),
-        child: Column(children: [
-          LinearProgressIndicator(
-            value: progress,
-            minHeight: 6,
-            borderRadius: BorderRadius.circular(4),
-            color: const Color(0xff6254d9),
-            backgroundColor: const Color(0xffe8e5fb),
-          ),
-          const SizedBox(height: 12),
-          ...tasks.map((task) => Row(children: [
-                Icon(
-                  task.status == TaskStatus.completed
-                      ? Icons.check_circle_rounded
-                      : task.status == TaskStatus.running
-                          ? Icons.radio_button_checked
-                          : Icons.radio_button_unchecked,
-                  size: 15,
-                  color: task.status == TaskStatus.completed
-                      ? const Color(0xff43b17f)
-                      : task.status == TaskStatus.running
-                          ? const Color(0xff6254d9)
-                          : const Color(0xffaaa8b1),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(task.title,
-                      style: const TextStyle(
-                          fontSize: 12, fontWeight: FontWeight.w600)),
-                ),
-                Text(task.status.name,
-                    style: const TextStyle(
-                        color: Color(0xff898792), fontSize: 11)),
-              ])),
-        ]),
-      ),
-    );
-  }
+
 
   Widget _pendingChatMessage(_PendingChatMessage pending) => Align(
         alignment: Alignment.centerRight,
@@ -3244,27 +3118,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
         ),
       );
 
-  Widget _approvalPromptCard() => _panel(
-        title: 'Conclave needs your input',
-        subtitle: 'The Run is waiting safely for a response.',
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(pendingRunPrompt!,
-              style: const TextStyle(fontSize: 13, height: 1.4)),
-          const SizedBox(height: 12),
-          Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Expanded(
-              child: TextField(
-                controller: promptResponseController,
-                maxLines: 3,
-                decoration: const InputDecoration(labelText: 'Your response'),
-              ),
-            ),
-            const SizedBox(width: 10),
-            FilledButton(
-                onPressed: _respondToRunPrompt, child: const Text('Continue')),
-          ]),
-        ]),
-      );
+
 
   Widget _chatMessage(StudioChatMessage message) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -4242,157 +4096,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
         onGrant: _bindHost,
       );
 
-  Widget _legacyHostsView() => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 16,
-            runSpacing: 12,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              _fleetHeader(
-                  'Workspaces',
-                  'Machines connected to this workspace.',
-                  Icons.computer_outlined),
-              FilledButton.icon(
-                onPressed: snapshot.workspaceId == null ? null : _enrollAgent,
-                icon: const Icon(Icons.add_link),
-                label: const Text('Add Workspace'),
-              ),
-            ],
-          ),
-          if (enrollmentResult != null) ...[
-            const SizedBox(height: 16),
-            Card(
-              color: Theme.of(context).colorScheme.primaryContainer,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(children: [
-                      const Expanded(
-                        child: Text('Workspace pairing token',
-                            style: TextStyle(fontWeight: FontWeight.bold)),
-                      ),
-                      IconButton(
-                        tooltip: 'Hide token',
-                        onPressed: () =>
-                            setState(() => enrollmentResult = null),
-                        icon: const Icon(Icons.close),
-                      ),
-                    ]),
-                    const SizedBox(height: 8),
-                    const Text(
-                        '1. Download and open Conclave Workspace. 2. Enter this one-time code. 3. Keep this page open until the Workspace is online.'),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: () => browserNavigation
-                          .openExternal(Uri.parse('https://conclaveax.com')),
-                      icon: const Icon(Icons.download_outlined),
-                      label: const Text('Download Conclave Workspace'),
-                    ),
-                    const SizedBox(height: 12),
-                    SelectableText(enrollmentResult!.token,
-                        style: const TextStyle(fontFamily: 'monospace')),
-                    const SizedBox(height: 8),
-                    Text('Expires: ${enrollmentResult!.expiresAt}'),
-                  ],
-                ),
-              ),
-            ),
-          ],
-          const SizedBox(height: 24),
-          if (snapshot.agents.isEmpty)
-            _emptyFleetCard('No Workspaces paired',
-                'Pair a Workspace to run Workers on a local machine.')
-          else
-            ...snapshot.agents.map((agent) => Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  child: Padding(
-                    padding: const EdgeInsets.all(18),
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              ConstrainedBox(
-                                constraints:
-                                    const BoxConstraints(maxWidth: 220),
-                                child: Text(agent.name,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 16)),
-                              ),
-                              _statusChip(
-                                  agent.status,
-                                  agent.status.toLowerCase() == 'online'
-                                      ? const Color(0xff3ca879)
-                                      : const Color(0xff9a98a5)),
-                              IconButton(
-                                tooltip: 'Rename Workspace',
-                                onPressed: () => _renameHost(agent),
-                                icon: const Icon(Icons.edit_outlined),
-                              ),
-                              PopupMenuButton<String>(
-                                tooltip: 'Workspace actions',
-                                onSelected: (action) {
-                                  switch (action) {
-                                    case 'bind':
-                                      _bindHost(agent);
-                                    case 'diagnostics':
-                                      _copyHostDiagnostics(agent);
-                                  }
-                                },
-                                itemBuilder: (context) => const [
-                                  PopupMenuItem(
-                                      value: 'bind',
-                                      child: Text('Bind Workspace')),
-                                  PopupMenuItem(
-                                      value: 'diagnostics',
-                                      child: Text('Copy diagnostics')),
-                                ],
-                                icon: const Icon(Icons.more_horiz),
-                              ),
-                              IconButton(
-                                tooltip: 'Announce update',
-                                onPressed:
-                                    agent.status.toLowerCase() == 'revoked'
-                                        ? null
-                                        : () => _announceAgentUpdate(agent),
-                                icon: const Icon(Icons.system_update_outlined),
-                              ),
-                              IconButton(
-                                tooltip: 'Revoke Workspace',
-                                onPressed: () => _revokeAgent(agent.id),
-                                icon: const Icon(Icons.link_off_outlined),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text('${agent.hostname} · Workspace ${agent.version}',
-                              style: const TextStyle(color: Color(0xff777683))),
-                          const SizedBox(height: 14),
-                          Wrap(spacing: 20, runSpacing: 8, children: [
-                            Text('${agent.os} · ${agent.architecture}'),
-                            Text('Channel: ${agent.updateChannel}'),
-                            Text('Last seen: ${agent.lastSeen}'),
-                            Text('${agent.workerCount} installed Workers'),
-                            Text(
-                                '${snapshot.accounts.where((account) => account.host == agent.id || account.host == agent.name).length} Accounts stored locally'),
-                            Text('${agent.activeTaskCount} active task'),
-                            Text(agent.workspaceBindings.isEmpty
-                                ? '1 Workspace binding'
-                                : '${agent.workspaceBindings.length} Workspace bindings'),
-                          ]),
-                        ]),
-                  ),
-                )),
-        ],
-      );
+
 
   Widget _catalogView() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
