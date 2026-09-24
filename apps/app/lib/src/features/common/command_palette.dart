@@ -120,7 +120,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
         },
       ),
       CommandPaletteAction(
-        title: 'Usage',
+        title: 'Open Usage',
         subtitle: 'Token usage, cost analytics, and quotas',
         icon: Icons.analytics_outlined,
         category: 'Navigation',

@@ -146,6 +146,7 @@ void main() {
       expect(find.text('Workspaces'), findsWidgets);
       expect(find.text('Workers'), findsWidgets);
       expect(find.text('AI Accounts'), findsWidgets);
+      expect(find.text('Open Usage'), findsOneWidget);
 
       await tester.enterText(find.byType(TextField), 'Workspaces');
       await tester.pumpAndSettle();
@@ -156,6 +157,15 @@ void main() {
       await tester.tap(find.byType(ListTile).first);
       await tester.pumpAndSettle();
       expect(navigatedTo?.kind, StudioRouteKind.hosts);
+
+      // Search for Usage / Open Usage
+      await tester.enterText(find.byType(TextField), 'Usage');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Open Usage'), findsOneWidget);
+      await tester.tap(find.text('Open Usage'));
+      await tester.pumpAndSettle();
+      expect(navigatedTo?.kind, StudioRouteKind.usage);
     });
 
     testWidgets('CommandPaletteDialog supports keyboard navigation',
