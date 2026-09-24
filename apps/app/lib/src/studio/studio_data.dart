@@ -88,6 +88,13 @@ abstract interface class StudioDataSource {
     String? slug,
   });
   Future<List<StudioProject>> loadProjects();
+  Future<List<Map<String, dynamic>>> loadProjectWorkspaces({
+    required String projectId,
+  });
+  Future<void> requestProjectWorkspace({
+    required String projectId,
+    required String workspaceId,
+  });
   Future<List<StudioAgent>> loadHosts({required String workspaceId});
   Future<List<StudioWorker>> loadWorkers({required String workspaceId});
   Future<List<StudioCredentialProfile>> loadCredentialProfiles(
@@ -147,7 +154,8 @@ abstract interface class StudioDataSource {
     required String workstreamId,
     String? workspaceId,
   }) async =>
-      throw UnimplementedError('Workstream checkout provisioning is not available');
+      throw UnimplementedError(
+          'Workstream checkout provisioning is not available');
   Future<void> setWorkerEnabled({
     required String workspaceId,
     required String workerId,
@@ -294,6 +302,36 @@ class StudioApiClient implements StudioDataSource {
         .whereType<Map>()
         .map((item) => StudioProject.fromJson(Map<String, dynamic>.from(item)))
         .toList();
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> loadProjectWorkspaces({
+    required String projectId,
+  }) async {
+    final body =
+        await _getJson(Uri.parse('$baseUrl/projects/$projectId/workspaces'));
+    return (body['workspaces'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  @override
+  Future<void> requestProjectWorkspace({
+    required String projectId,
+    required String workspaceId,
+  }) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/projects/$projectId/workspaces'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({'workspaceId': workspaceId}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+        'Workspace grant failed (${response.statusCode})',
+        statusCode: response.statusCode,
+      );
+    }
   }
 
   @override

@@ -23,7 +23,8 @@ class ProjectsPage extends StatelessWidget {
           const Text('Projects',
               style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
-          Text('Projects are team spaces for shared work, discussion, and results.',
+          Text(
+              'Projects are team spaces for shared work, discussion, and results.',
               style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                   fontSize: 13)),
@@ -121,7 +122,10 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
   List<StudioProjectMember> members = const [];
   List<StudioProjectInvitation> invitations = const [];
   List<StudioAuditEntry> audit = const [];
+  List<StudioWorkspace> ownedWorkspaces = const [];
+  List<Map<String, dynamic>> projectWorkspaces = const [];
   bool loading = true;
+  bool executionLoading = true;
 
   bool get canManage =>
       widget.project.role == 'owner' || widget.project.role == 'collaborator';
@@ -132,6 +136,75 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
     super.initState();
     workstreams = [...widget.project.workstreams];
     _loadCollaboration();
+    _loadExecution();
+  }
+
+  Future<void> _loadExecution() async {
+    try {
+      final loaded = await Future.wait([
+        widget.dataSource.loadWorkspaces(),
+        widget.dataSource.loadProjectWorkspaces(projectId: widget.project.id),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        ownedWorkspaces = loaded[0] as List<StudioWorkspace>;
+        projectWorkspaces = loaded[1] as List<Map<String, dynamic>>;
+        executionLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => executionLoading = false);
+    }
+  }
+
+  Future<void> _connectWorkspace() async {
+    if (ownedWorkspaces.isEmpty) {
+      _message(
+          'Add a Workspace first. You can connect it to this Project later.');
+      return;
+    }
+    var selectedId = ownedWorkspaces.first.id;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Connect Workspace'),
+          content: DropdownButtonFormField<String>(
+            initialValue: selectedId,
+            decoration: const InputDecoration(labelText: 'Workspace'),
+            items: ownedWorkspaces
+                .map((workspace) => DropdownMenuItem(
+                      value: workspace.id,
+                      child: Text(workspace.name),
+                    ))
+                .toList(),
+            onChanged: (value) {
+              if (value != null) setDialogState(() => selectedId = value);
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Connect'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (accepted != true) return;
+    try {
+      await widget.dataSource.requestProjectWorkspace(
+        projectId: widget.project.id,
+        workspaceId: selectedId,
+      );
+      await _loadExecution();
+      _message('Workspace connected to this Project.');
+    } catch (error) {
+      _message(error.toString());
+    }
   }
 
   Future<void> _createWorkstream() async {
@@ -177,7 +250,6 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
       ];
     });
   }
-
 
   Future<void> _loadCollaboration() async {
     try {
@@ -292,7 +364,8 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
                     style: const TextStyle(
                         fontSize: 25, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 6),
-                Text('Your team\'s shared Project space, organized into focused Workstreams',
+                Text(
+                    'Your team\'s shared Project space, organized into focused Workstreams',
                     style: TextStyle(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                         fontSize: 13)),
@@ -324,8 +397,7 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
             _emptySection('Artifacts',
                 'Artifacts and findings produced by this Project appear here.'),
             _members(),
-            _emptySection('Execution',
-                'Choose Workspaces and review the effective execution access for this Project.'),
+            _execution(),
             _settings(),
           ])),
         ]),
@@ -343,7 +415,43 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
             subtitle:
                 'Execution capacity is configured independently from Project collaboration.',
             child: Text(
-                'No execution summary available yet. Open Execution to connect a Workspace.')),
+                'No execution Workspace is required to create this Project. Connect one later from the Execution tab when you are ready to run work.')),
+      ]);
+
+  Widget _execution() => ListView(children: [
+        _ProjectPanel(
+          title: 'Execution Workspaces',
+          subtitle:
+              'Workspaces provide execution capacity. They are optional and can be connected or changed after Project creation.',
+          child: executionLoading
+              ? const LinearProgressIndicator()
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (projectWorkspaces.isEmpty)
+                      const Text(
+                          'No execution Workspace is connected. Collaboration and discussion continue to work normally.'),
+                    ...projectWorkspaces.map((workspace) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.computer_outlined),
+                          title: Text((workspace['workspaceName'] ??
+                                  workspace['name'] ??
+                                  workspace['workspaceId'] ??
+                                  'Workspace')
+                              .toString()),
+                          subtitle: Text(
+                              '${workspace['status'] ?? 'active'} · ${workspace['scope'] ?? 'project_repository'}'),
+                        )),
+                    const SizedBox(height: 8),
+                    if (canManage)
+                      FilledButton.icon(
+                        onPressed: _connectWorkspace,
+                        icon: const Icon(Icons.add_link),
+                        label: const Text('Connect Workspace'),
+                      ),
+                  ],
+                ),
+        ),
       ]);
 
   Widget _workstreams() => ListView(children: [
@@ -760,7 +868,8 @@ class _WorkstreamPageState extends State<WorkstreamPage> {
               ? const Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('No Work yet. Describe what you need, then press Run.'),
+                    Text(
+                        'No Work yet. Describe what you need, then press Run.'),
                     SizedBox(height: 6),
                     Text('Work requests coming next'),
                   ],
@@ -901,7 +1010,8 @@ class _WorkComposer extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _ProjectPanel(
         title: 'Work',
-        subtitle: 'Ask AI to do something for the team. Nothing runs until you press Run.',
+        subtitle:
+            'Ask AI to do something for the team. Nothing runs until you press Run.',
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           TextField(
             controller: requestController,

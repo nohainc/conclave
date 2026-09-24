@@ -2068,7 +2068,7 @@ async function handleListProjects(
   );
   if (context.authorizationModel === "v5") {
     const rows = await env.CONCLAVE_DB.prepare(
-      `SELECT p.id, '' AS workspaceId, p.name, p.description, p.repository_id AS repositoryId,
+      `SELECT p.id, p.name, p.description, p.repository_id AS repositoryId,
               p.settings_json AS settingsJson, p.created_at AS createdAt, p.updated_at AS updatedAt
        FROM projects p
        JOIN project_memberships pm ON pm.project_id = p.id
@@ -2079,7 +2079,6 @@ async function handleListProjects(
       .bind(context.userId)
       .all<{
         id: string;
-        workspaceId: string;
         name: string;
         description: string | null;
         repositoryId: string | null;
@@ -2090,7 +2089,6 @@ async function handleListProjects(
 
     const projects = (rows.results ?? []).map((row) => ({
       id: row.id,
-      workspaceId: row.workspaceId,
       name: row.name,
       description: row.description,
       repositoryId: row.repositoryId,
@@ -2187,19 +2185,12 @@ async function handleCreateProject(
   const now = new Date().toISOString();
   const id = `proj-${crypto.randomUUID()}`;
 
-  const project: Project = {
-    id,
-    workspaceId: context.workspaceId,
-    name,
-    description,
-    repositoryId,
-    settings,
-    createdAt: now,
-    updatedAt: now,
-  };
-  validateProject(project);
-
   if (context.authorizationModel === "v5") {
+    // v5/v6 Projects are collaboration resources and deliberately have no
+    // Workspace foreign key. Execution is attached later through an explicit
+    // WorkspaceProjectGrant. Do not construct or validate the legacy Project
+    // entity here: its workspaceId invariant belongs to the historical v4
+    // model and would reject a valid zero-Workspace Project.
     await env.CONCLAVE_DB.batch([
       env.CONCLAVE_DB.prepare(
         `INSERT INTO projects (id, owner_user_id, name, description, repository_id, settings_json, created_at, updated_at)
@@ -2219,7 +2210,32 @@ async function handleCreateProject(
          ON CONFLICT(project_id, user_id) DO NOTHING`,
       ).bind(`pm-${crypto.randomUUID()}`, id, context.userId, now),
     ]);
+    return json(
+      {
+        project: {
+          id,
+          name,
+          description,
+          repositoryId,
+          settings,
+          createdAt: now,
+          updatedAt: now,
+        },
+      },
+      { status: 201 },
+    );
   } else {
+    const project: Project = {
+      id,
+      workspaceId: context.workspaceId,
+      name,
+      description,
+      repositoryId,
+      settings,
+      createdAt: now,
+      updatedAt: now,
+    };
+    validateProject(project);
     await env.CONCLAVE_DB.batch([
       env.CONCLAVE_DB.prepare(
         `INSERT INTO projects (id, workspace_id, name, description, repository_id, settings_json, created_at, updated_at)
@@ -2239,9 +2255,8 @@ async function handleCreateProject(
          ON CONFLICT(project_id, user_id) DO NOTHING`,
       ).bind(`pm-${crypto.randomUUID()}`, id, context.userId, now),
     ]);
+    return json({ project }, { status: 201 });
   }
-
-  return json({ project }, { status: 201 });
 }
 
 async function handleGetProject(

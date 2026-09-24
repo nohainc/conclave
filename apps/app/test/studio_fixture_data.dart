@@ -209,6 +209,18 @@ class StudioFixtureDataSource implements StudioDataSource {
       studioFixtureSnapshot().projects;
 
   @override
+  Future<List<Map<String, dynamic>>> loadProjectWorkspaces({
+    required String projectId,
+  }) async =>
+      const [];
+
+  @override
+  Future<void> requestProjectWorkspace({
+    required String projectId,
+    required String workspaceId,
+  }) async {}
+
+  @override
   Future<List<StudioAgent>> loadHosts({required String workspaceId}) async =>
       studioFixtureSnapshot().agents;
 

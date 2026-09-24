@@ -9,6 +9,7 @@ const migrationFiles = [
   "0003_usage_audit_observability.sql",
   "0004_chat_workstream_mapping.sql",
   "0005_execution_foundation.sql",
+  "0007_project_settings.sql",
 ];
 const schema = migrationFiles
   .map((file) => readFileSync(fileURLToPath(new URL(`../migrations-v6/${file}`, import.meta.url)), "utf8"))
@@ -33,7 +34,8 @@ describe("V6 clean-room solo acceptance", () => {
       INSERT INTO worker_versions VALUES ('worker-version-1', 'worker1', '1.0.0', '["git"]', '["repository.read","repository.write"]', 'digest', '2026-01-01');
       INSERT INTO workspace_worker_installations VALUES ('install1', 'ws1', 'worker1', 'worker-version-1', 'ready', '2026-01-01', '2026-01-01');
       INSERT INTO ai_accounts VALUES ('account1', 'u1', 'worker1', 'ws1', 'Private Account', 'ready', '2026-01-01', '2026-01-01');
-      INSERT INTO projects VALUES ('p1', 'u1', 'Solo Project', NULL, 'repo1', '2026-01-01', '2026-01-01');
+      INSERT INTO projects (id, owner_user_id, name, description, repository_id, created_at, updated_at)
+        VALUES ('p1', 'u1', 'Solo Project', NULL, 'repo1', '2026-01-01', '2026-01-01');
       INSERT INTO project_memberships VALUES ('pm1', 'p1', 'u1', 'owner', '2026-01-01', '2026-01-01');
       INSERT INTO workspace_project_grants (id, project_id, workspace_id, granted_by_user_id, scope, created_at, updated_at)
         VALUES ('grant1', 'p1', 'ws1', 'u1', 'project_repository', '2026-01-01', '2026-01-01');

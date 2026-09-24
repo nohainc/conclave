@@ -23,17 +23,22 @@ const executionFoundationSchema = readFileSync(
   fileURLToPath(new URL("../migrations-v6/0005_execution_foundation.sql", import.meta.url)),
   "utf8",
 );
+const projectSettingsSchema = readFileSync(
+  fileURLToPath(new URL("../migrations-v6/0007_project_settings.sql", import.meta.url)),
+  "utf8",
+);
 
 function apply(sql: string): string {
   return execFileSync("sqlite3", ["-json", ":memory:"], {
-    input: `${schema}\n${integrationSchema}\n${observabilitySchema}\n${chatMigrationSchema}\n${executionFoundationSchema}\n${sql}`,
+    input: `${schema}\n${integrationSchema}\n${observabilitySchema}\n${chatMigrationSchema}\n${executionFoundationSchema}\n${projectSettingsSchema}\n${sql}`,
     encoding: "utf8",
   });
 }
 
 const fixture = `
 INSERT INTO users VALUES ('u1', 'owner@example.test', 'Owner', 'active', '2026-01-01', '2026-01-01');
-INSERT INTO projects VALUES ('p1', 'u1', 'Project', NULL, NULL, '2026-01-01', '2026-01-01');
+INSERT INTO projects (id, owner_user_id, name, description, repository_id, created_at, updated_at)
+  VALUES ('p1', 'u1', 'Project', NULL, NULL, '2026-01-01', '2026-01-01');
 INSERT INTO project_memberships VALUES ('pm1', 'p1', 'u1', 'owner', '2026-01-01', '2026-01-01');
 INSERT INTO execution_workspaces VALUES ('ws1', 'u1', 'Workspace', 'online', '2026-01-01', '2026-01-01');
 INSERT INTO workspace_runtime_identities VALUES ('runtime1', 'ws1', 'key-ref', '2026-01-01', NULL);
