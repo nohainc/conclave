@@ -1506,11 +1506,14 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   if (isLoading) return _loadingScaffold();
                   if (authRequired) return _authScaffold();
                   if (loadError != null) return _errorScaffold();
-                  final compact = constraints.maxWidth < 600;
+                  final isDesktop = constraints.maxWidth >= 1100;
+                  final isTablet = constraints.maxWidth >= 768 &&
+                      constraints.maxWidth < 1100;
+                  final isMobile = constraints.maxWidth < 768;
                   final shell = _shellContext;
 
                   return Scaffold(
-                    drawer: compact
+                    drawer: (isTablet || isMobile)
                         ? Drawer(
                             child: StudioSidebar(
                               shellContext: shell,
@@ -1530,36 +1533,41 @@ class _StudioAppState extends State<ConclaveAppShell> {
                         : null,
                     body: Row(
                       children: [
-                        SizedBox(
-                          width: compact ? 56 : 248,
-                          child: compact
-                              ? StudioIconRail(
-                                  shellContext: shell,
-                                  onNavigateTo: _navigateTo,
-                                  onOpenDrawer: () =>
-                                      Scaffold.of(context).openDrawer(),
-                                  onLogout: () => unawaited(_logout()),
-                                  onOpenAbout: () =>
-                                      unawaited(_showAboutConclave()),
-                                  onOpenExternal: (uri) =>
-                                      browserNavigation.openExternal(uri),
-                                )
-                              : StudioSidebar(
-                                  shellContext: shell,
-                                  onNavigateTo: _navigateTo,
-                                  onToggleProjectExpanded:
-                                      _toggleProjectExpanded,
-                                  onCreateProject: _createProject,
-                                  onCreateWorkstream: _createWorkstream,
-                                  onToggleTheme: _toggleTheme,
-                                  onLogout: () => unawaited(_logout()),
-                                  onOpenAbout: () =>
-                                      unawaited(_showAboutConclave()),
-                                  onOpenExternal: (uri) =>
-                                      browserNavigation.openExternal(uri),
-                                ),
-                        ),
-                        Expanded(child: _content(compact)),
+                        if (isDesktop)
+                          SizedBox(
+                            width: 248,
+                            child: StudioSidebar(
+                              shellContext: shell,
+                              onNavigateTo: _navigateTo,
+                              onToggleProjectExpanded:
+                                  _toggleProjectExpanded,
+                              onCreateProject: _createProject,
+                              onCreateWorkstream: _createWorkstream,
+                              onToggleTheme: _toggleTheme,
+                              onLogout: () => unawaited(_logout()),
+                              onOpenAbout: () =>
+                                  unawaited(_showAboutConclave()),
+                              onOpenExternal: (uri) =>
+                                  browserNavigation.openExternal(uri),
+                            ),
+                          )
+                        else if (isTablet)
+                          SizedBox(
+                            width: 64,
+                            child: StudioIconRail(
+                              shellContext: shell,
+                              onNavigateTo: _navigateTo,
+                              onOpenDrawer: () =>
+                                  Scaffold.of(context).openDrawer(),
+                              onToggleTheme: _toggleTheme,
+                              onLogout: () => unawaited(_logout()),
+                              onOpenAbout: () =>
+                                  unawaited(_showAboutConclave()),
+                              onOpenExternal: (uri) =>
+                                  browserNavigation.openExternal(uri),
+                            ),
+                          ),
+                        Expanded(child: _content(isMobile)),
                       ],
                     ),
                   );

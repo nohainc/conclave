@@ -570,6 +570,192 @@ void main() {
       expect(navigatedTo?.workstreamId, 'ws-1');
     });
 
+    testWidgets('compact HUD prioritizes leaf entity in breadcrumbs for workstream',
+        (tester) async {
+      tester.view.physicalSize = const Size(500, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      StudioNavigation? navigatedTo;
+
+      final shellContext = StudioShellContext(
+        navigation: const StudioNavigation.workstream('project-1', 'ws-1'),
+        projects: const [testProject],
+        selectedProject: testProject,
+        selectedWorkstream: testProject.workstreams.first,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: StudioTopBar(
+              shellContext: shellContext,
+              onNavigateTo: (nav) => navigatedTo = nav,
+              onOpenCommandPalette: () {},
+              onToggleTheme: () {},
+              onOpenNotifications: () {},
+              onOpenAbout: () {},
+              compact: true,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // In compact mode, parent project 'Conclave AX' is replaced with '…'
+      expect(find.text('Conclave AX'), findsNothing);
+      expect(find.text('…'), findsOneWidget);
+      expect(find.text('Authentication redesign'), findsOneWidget);
+
+      // Tapping '…' navigates back to the parent Project
+      await tester.tap(find.text('…'));
+      expect(navigatedTo?.kind, StudioRouteKind.project);
+      expect(navigatedTo?.projectId, 'project-1');
+    });
+
+    testWidgets('compact HUD prioritizes leaf entity in breadcrumbs for run',
+        (tester) async {
+      tester.view.physicalSize = const Size(500, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      StudioNavigation? navigatedTo;
+
+      final shellContext = StudioShellContext(
+        navigation: const StudioNavigation.run('project-1', 'run-1',
+            workstreamId: 'ws-1'),
+        projects: const [testProject],
+        selectedProject: testProject,
+        selectedWorkstream: testProject.workstreams.first,
+        selectedRun: const StudioRun(
+          id: 'run-1',
+          workstreamId: 'ws-1',
+          status: RunStatus.running,
+          objective: 'Run test objective',
+          taskCount: 2,
+          completedTaskCount: 1,
+          openFindingCount: 0,
+          verifiedCriterionCount: 1,
+          criterionCount: 2,
+          tokens: 500,
+          costMicros: 1000,
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: StudioTopBar(
+              shellContext: shellContext,
+              onNavigateTo: (nav) => navigatedTo = nav,
+              onOpenCommandPalette: () {},
+              onToggleTheme: () {},
+              onOpenNotifications: () {},
+              onOpenAbout: () {},
+              compact: true,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // In compact mode, parent 'Authentication redesign' is collapsed to '…' while 'Run' remains
+      expect(find.text('Authentication redesign'), findsNothing);
+      expect(find.text('…'), findsOneWidget);
+      expect(find.text('Run'), findsOneWidget);
+
+      // Tapping '…' navigates to parent Workstream
+      await tester.tap(find.text('…'));
+      expect(navigatedTo?.kind, StudioRouteKind.workstream);
+      expect(navigatedTo?.projectId, 'project-1');
+      expect(navigatedTo?.workstreamId, 'ws-1');
+    });
+
+    testWidgets('StudioIconRail has 64px width and renders navigation icons',
+        (tester) async {
+      StudioNavigation? navigatedTo;
+      var drawerOpened = false;
+
+      const shellContext = StudioShellContext(
+        navigation: StudioNavigation.home(),
+        projects: [testProject],
+        viewerDisplayName: 'Vitalii Noha',
+        viewerEmail: 'vitalii@example.com',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: SizedBox(
+              width: 64,
+              child: StudioIconRail(
+                shellContext: shellContext,
+                onNavigateTo: (nav) => navigatedTo = nav,
+                onOpenDrawer: () => drawerOpened = true,
+                onToggleTheme: () {},
+                onLogout: () {},
+                onOpenAbout: () {},
+                onOpenExternal: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Conclave AX'), findsOneWidget);
+      expect(find.byTooltip('Home'), findsOneWidget);
+      expect(find.byTooltip('Projects'), findsOneWidget);
+      expect(find.byTooltip('Workspaces'), findsOneWidget);
+      expect(find.byTooltip('Workers'), findsOneWidget);
+      expect(find.byTooltip('AI Accounts'), findsOneWidget);
+      expect(find.byTooltip('Usage'), findsOneWidget);
+
+      // Tapping Conclave AX brand icon opens about
+      var aboutOpened = false;
+      // Re-pump with about callback tracking
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: SizedBox(
+              width: 64,
+              child: StudioIconRail(
+                shellContext: shellContext,
+                onNavigateTo: (nav) => navigatedTo = nav,
+                onOpenDrawer: () => drawerOpened = true,
+                onToggleTheme: () {},
+                onLogout: () {},
+                onOpenAbout: () => aboutOpened = true,
+                onOpenExternal: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Conclave AX'));
+      expect(aboutOpened, isTrue);
+
+      // Tapping Open project tree & menu opens drawer
+      await tester.tap(find.byTooltip('Open project tree & menu'));
+      expect(drawerOpened, isTrue);
+
+      // Tapping Workspaces navigates to hosts
+      await tester.tap(find.byTooltip('Workspaces'));
+      expect(navigatedTo?.kind, StudioRouteKind.hosts);
+    });
+
     testWidgets('Execution status popover opens and displays workspaces and workers',
         (tester) async {
       tester.view.physicalSize = const Size(1200, 800);

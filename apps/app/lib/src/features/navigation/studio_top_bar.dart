@@ -403,20 +403,32 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
         final projectName = project?.name ?? 'Project';
         final workstreamName = workstream?.name ?? 'Workstream';
         return [
-          if (project != null) ...[
+          if (compact) ...[
             _breadcrumbLink(
-              projectName,
-              () => onNavigateTo(StudioNavigation.project(project.id)),
+              '…',
+              () => project != null
+                  ? onNavigateTo(StudioNavigation.project(project.id))
+                  : onNavigateTo(const StudioNavigation.projects()),
               mutedInk: mutedInk,
+              tooltip: projectName,
             ),
             _divider(mutedInk),
           ] else ...[
-            _breadcrumbLink(
-              'Projects',
-              () => onNavigateTo(const StudioNavigation.projects()),
-              mutedInk: mutedInk,
-            ),
-            _divider(mutedInk),
+            if (project != null) ...[
+              _breadcrumbLink(
+                projectName,
+                () => onNavigateTo(StudioNavigation.project(project.id)),
+                mutedInk: mutedInk,
+              ),
+              _divider(mutedInk),
+            ] else ...[
+              _breadcrumbLink(
+                'Projects',
+                () => onNavigateTo(const StudioNavigation.projects()),
+                mutedInk: mutedInk,
+              ),
+              _divider(mutedInk),
+            ],
           ],
           _breadcrumbText(workstreamName,
               isCurrent: true, inkColor: inkColor),
@@ -427,29 +439,42 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
         final workstreamName = workstream?.name ?? 'Workstream';
         final workstreamId = workstream?.id ?? nav.workstreamId;
         return [
-          if (project != null) ...[
+          if (compact) ...[
             _breadcrumbLink(
-              projectName,
-              () => onNavigateTo(StudioNavigation.project(project.id)),
+              '…',
+              () => (workstreamId != null && project != null)
+                  ? onNavigateTo(
+                      StudioNavigation.workstream(project.id, workstreamId))
+                  : onNavigateTo(const StudioNavigation.projects()),
               mutedInk: mutedInk,
+              tooltip: workstreamName,
             ),
             _divider(mutedInk),
           ] else ...[
-            _breadcrumbLink(
-              'Projects',
-              () => onNavigateTo(const StudioNavigation.projects()),
-              mutedInk: mutedInk,
-            ),
-            _divider(mutedInk),
-          ],
-          if (workstreamId != null && project != null) ...[
-            _breadcrumbLink(
-              workstreamName,
-              () => onNavigateTo(
-                  StudioNavigation.workstream(project.id, workstreamId)),
-              mutedInk: mutedInk,
-            ),
-            _divider(mutedInk),
+            if (project != null) ...[
+              _breadcrumbLink(
+                projectName,
+                () => onNavigateTo(StudioNavigation.project(project.id)),
+                mutedInk: mutedInk,
+              ),
+              _divider(mutedInk),
+            ] else ...[
+              _breadcrumbLink(
+                'Projects',
+                () => onNavigateTo(const StudioNavigation.projects()),
+                mutedInk: mutedInk,
+              ),
+              _divider(mutedInk),
+            ],
+            if (workstreamId != null && project != null) ...[
+              _breadcrumbLink(
+                workstreamName,
+                () => onNavigateTo(
+                    StudioNavigation.workstream(project.id, workstreamId)),
+                mutedInk: mutedInk,
+              ),
+              _divider(mutedInk),
+            ],
           ],
           _breadcrumbText('Run', isCurrent: true, inkColor: inkColor),
         ];
@@ -501,9 +526,13 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 
-  Widget _breadcrumbLink(String text, VoidCallback onTap,
-      {required Color mutedInk}) {
-    return InkWell(
+  Widget _breadcrumbLink(
+    String text,
+    VoidCallback onTap, {
+    required Color mutedInk,
+    String? tooltip,
+  }) {
+    final link = InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(4),
       child: Padding(
@@ -520,6 +549,10 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
         ),
       ),
     );
+    if (tooltip != null) {
+      return Tooltip(message: tooltip, child: link);
+    }
+    return link;
   }
 
   Widget _divider(Color mutedInk) {
