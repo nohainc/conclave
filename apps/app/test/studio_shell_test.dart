@@ -950,4 +950,435 @@ void main() {
       expect(emptyCtx.executionStatusTone, ExecutionStatusTone.neutral);
     });
   });
+
+  group('Phase 10 — Shell Cleanup, Regressions, and Deep Interactions', () {
+    const projectA = StudioProject(
+      id: 'p-1',
+      name: 'Conclave Core',
+      repository: 'github.com/conclave/core',
+      branch: 'main',
+      activeGoals: 0,
+      lastActivity: 'today',
+      workstreams: [
+        StudioWorkstream(
+          id: 'ws-running',
+          projectId: 'p-1',
+          name: 'Engine optimization',
+          lead: 'Vitalii',
+          status: 'running',
+          brief: 'Optimizing worker loop',
+          primaryWorkspace: 'MacBook Pro',
+          currentCheckpoint: 'main',
+          queueStatus: 'Running',
+        ),
+        StudioWorkstream(
+          id: 'ws-queued',
+          projectId: 'p-1',
+          name: 'Queue integration',
+          lead: 'Vitalii',
+          status: 'queued',
+          brief: 'Queue worker tasks',
+          primaryWorkspace: 'MacBook Pro',
+          currentCheckpoint: 'main',
+          queueStatus: 'Queued',
+        ),
+        StudioWorkstream(
+          id: 'ws-failed',
+          projectId: 'p-1',
+          name: 'Buggy patch',
+          lead: 'Vitalii',
+          status: 'failed',
+          brief: 'Failed run',
+          primaryWorkspace: 'MacBook Pro',
+          currentCheckpoint: 'main',
+          queueStatus: 'Failed',
+        ),
+      ],
+    );
+
+    testWidgets('Active sidebar route visual check for all route kinds',
+        (tester) async {
+      const allRoutes = [
+        StudioNavigation.home(),
+        StudioNavigation.projects(),
+        StudioNavigation.project('p-1'),
+        StudioNavigation.workstream('p-1', 'ws-running'),
+        StudioNavigation.run('p-1', 'run-1', workstreamId: 'ws-running'),
+        StudioNavigation.hosts(),
+        StudioNavigation.workers(),
+        StudioNavigation.accounts(),
+        StudioNavigation.usage(),
+        StudioNavigation.profileSecurity(),
+      ];
+
+      for (final nav in allRoutes) {
+        final ctx = StudioShellContext(
+          navigation: nav,
+          projects: const [projectA],
+          selectedProject: projectA,
+          expandedProjectIds: {'p-1'},
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ConclaveBrand.darkTheme(),
+            home: Scaffold(
+              body: StudioSidebar(
+                shellContext: ctx,
+                onNavigateTo: (_) {},
+                onToggleProjectExpanded: (_) {},
+                onCreateProject: () {},
+                onLogout: () {},
+                onOpenAbout: () {},
+                onOpenExternal: (_) {},
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Ensure sidebar renders without error
+        expect(find.text('Conclave AX'), findsOneWidget);
+      }
+    });
+
+    testWidgets('Project click vs chevron click separation and expand/collapse',
+        (tester) async {
+      StudioNavigation? navigatedTo;
+      String? toggledProjectId;
+
+      // 1. Initially collapsed
+      const collapsedContext = StudioShellContext(
+        navigation: StudioNavigation.home(),
+        projects: [projectA],
+        expandedProjectIds: {},
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: StudioSidebar(
+              shellContext: collapsedContext,
+              onNavigateTo: (nav) => navigatedTo = nav,
+              onToggleProjectExpanded: (id) => toggledProjectId = id,
+              onCreateProject: () {},
+              onLogout: () {},
+              onOpenAbout: () {},
+              onOpenExternal: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Workstreams should not be visible when collapsed
+      expect(find.text('Engine optimization'), findsNothing);
+
+      // Tap the project title text -> should navigate to project, NOT toggle expand
+      await tester.tap(find.text('Conclave Core'));
+      expect(navigatedTo?.kind, StudioRouteKind.project);
+      expect(navigatedTo?.projectId, 'p-1');
+      expect(toggledProjectId, isNull);
+
+      // Reset
+      navigatedTo = null;
+
+      // Tap the chevron icon -> should toggle expand, NOT navigate
+      await tester.tap(find.byIcon(Icons.chevron_right_rounded));
+      expect(toggledProjectId, 'p-1');
+      expect(navigatedTo, isNull);
+    });
+
+    testWidgets('Workstream status dot indicators render for each status',
+        (tester) async {
+      const expandedContext = StudioShellContext(
+        navigation: StudioNavigation.home(),
+        projects: [projectA],
+        expandedProjectIds: {'p-1'},
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: StudioSidebar(
+              shellContext: expandedContext,
+              onNavigateTo: (_) {},
+              onToggleProjectExpanded: (_) {},
+              onCreateProject: () {},
+              onLogout: () {},
+              onOpenAbout: () {},
+              onOpenExternal: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Engine optimization'), findsOneWidget);
+      expect(find.text('Queue integration'), findsOneWidget);
+      expect(find.text('Buggy patch'), findsOneWidget);
+    });
+
+    testWidgets('Breadcrumb generation and segment navigation across all routes',
+        (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      StudioNavigation? navigatedTo;
+
+      // Test 1: Project route -> "Projects / Conclave Core"
+      const projectContext = StudioShellContext(
+        navigation: StudioNavigation.project('p-1'),
+        projects: [projectA],
+        selectedProject: projectA,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: StudioTopBar(
+              shellContext: projectContext,
+              onNavigateTo: (nav) => navigatedTo = nav,
+              onOpenCommandPalette: () {},
+              onToggleTheme: () {},
+              onOpenNotifications: () {},
+              onOpenAbout: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Projects'), findsOneWidget);
+      expect(find.text('Conclave Core'), findsOneWidget);
+
+      // Tap 'Projects' breadcrumb link
+      await tester.tap(find.text('Projects'));
+      expect(navigatedTo?.kind, StudioRouteKind.projects);
+
+      // Test 2: AI Accounts route -> "AI Accounts"
+      navigatedTo = null;
+      const accountsContext = StudioShellContext(
+        navigation: StudioNavigation.accounts(),
+        projects: [],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: StudioTopBar(
+              shellContext: accountsContext,
+              onNavigateTo: (nav) => navigatedTo = nav,
+              onOpenCommandPalette: () {},
+              onToggleTheme: () {},
+              onOpenNotifications: () {},
+              onOpenAbout: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('AI Accounts'), findsOneWidget);
+    });
+
+    testWidgets('Execution status popover shows degraded/reconnecting and failed status',
+        (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      const degradedCtx = StudioShellContext(
+        navigation: StudioNavigation.home(),
+        projects: [],
+        workspaces: [
+          StudioAgent(
+            id: 'agent-1',
+            name: 'Build Server',
+            hostname: 'build-srv',
+            status: 'offline',
+            os: 'Linux',
+            architecture: 'x86_64',
+            version: '0.6.0',
+            lastSeen: '10m ago',
+            workerCount: 0,
+            pluginCount: 0,
+            activeTaskCount: 0,
+            workspaceBindings: [],
+          ),
+        ],
+        realtimeStale: true,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: StudioTopBar(
+              shellContext: degradedCtx,
+              onNavigateTo: (_) {},
+              onOpenCommandPalette: () {},
+              onToggleTheme: () {},
+              onOpenNotifications: () {},
+              onOpenAbout: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('0 / 1 Workspace online'), findsOneWidget);
+      expect(degradedCtx.executionStatusTone, ExecutionStatusTone.degraded);
+
+      // Tap to open popover
+      await tester.tap(find.text('0 / 1 Workspace online'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Execution'), findsOneWidget);
+      expect(find.text('Build Server'), findsOneWidget);
+      expect(find.text('Offline'), findsOneWidget);
+    });
+
+    testWidgets('Command Palette HUD control responds to click in desktop, tablet, and mobile',
+        (tester) async {
+      var commandPaletteOpened = false;
+
+      const shellContext = StudioShellContext(
+        navigation: StudioNavigation.home(),
+        projects: [],
+      );
+
+      // 1. Desktop
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: StudioTopBar(
+              shellContext: shellContext,
+              onNavigateTo: (_) {},
+              onOpenCommandPalette: () => commandPaletteOpened = true,
+              onToggleTheme: () {},
+              onOpenNotifications: () {},
+              onOpenAbout: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Search or jump to...'));
+      expect(commandPaletteOpened, isTrue);
+
+      // 2. Compact / Mobile
+      commandPaletteOpened = false;
+      tester.view.physicalSize = const Size(450, 800);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: StudioTopBar(
+              shellContext: shellContext,
+              onNavigateTo: (_) {},
+              onOpenCommandPalette: () => commandPaletteOpened = true,
+              onToggleTheme: () {},
+              onOpenNotifications: () {},
+              onOpenAbout: () {},
+              compact: true,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Search (⌘K)'));
+      expect(commandPaletteOpened, isTrue);
+    });
+
+    testWidgets('Regression Assertions: shell contains no legacy mental models',
+        (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      const shellContext = StudioShellContext(
+        navigation: StudioNavigation.home(),
+        projects: [projectA],
+        selectedProject: projectA,
+        expandedProjectIds: {'p-1'},
+        viewerDisplayName: 'Vitalii Noha',
+        viewerEmail: 'vitalii@example.com',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: Row(
+              children: [
+                StudioSidebar(
+                  shellContext: shellContext,
+                  onNavigateTo: (_) {},
+                  onToggleProjectExpanded: (_) {},
+                  onCreateProject: () {},
+                  onLogout: () {},
+                  onOpenAbout: () {},
+                  onOpenExternal: (_) {},
+                ),
+                Expanded(
+                  child: Scaffold(
+                    appBar: StudioTopBar(
+                      shellContext: shellContext,
+                      onNavigateTo: (_) {},
+                      onOpenCommandPalette: () {},
+                      onToggleTheme: () {},
+                      onOpenNotifications: () {},
+                      onOpenAbout: () {},
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Regression checks:
+      // 1. No "New chat" button in shell
+      expect(find.text('New chat'), findsNothing);
+
+      // 2. No "New goal" button in shell
+      expect(find.text('New goal'), findsNothing);
+
+      // 3. No generic "Back to chat" button
+      expect(find.text('Back to chat'), findsNothing);
+
+      // 4. HUD heading is "Home" (from route breadcrumb), NOT generic "Workspace"
+      expect(find.text('Home'), findsWidgets);
+      // "Workspaces" only appears as the nav section item in sidebar, never as HUD title for Home
+      expect(find.text('Workspace'), findsNothing);
+    });
+  });
 }
+

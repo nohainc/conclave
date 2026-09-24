@@ -2370,10 +2370,10 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   style: TextStyle(color: Color(0xff777683), fontSize: 13))
             ]),
             FilledButton.icon(
-                key: const Key('new-goal-button'),
+                key: const Key('new-work-request-button'),
                 onPressed: () => setState(() => showNewGoal = true),
                 icon: const Icon(Icons.add, size: 18),
-                label: const Text('New goal'),
+                label: const Text('New work request'),
                 style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xff6254d9),
                     padding: const EdgeInsets.symmetric(
@@ -2890,13 +2890,15 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(run?.objective ?? 'No goal has been started',
+                        Text(
+                            run?.objective ??
+                                'No work request has been started',
                             style: const TextStyle(
                                 fontWeight: FontWeight.w700, fontSize: 14)),
                         const SizedBox(height: 4),
                         Text(
                             run == null
-                                ? 'Select New goal to begin'
+                                ? 'Select New work request to begin'
                                 : 'Run ${run.id} · Forge',
                             style: const TextStyle(
                                 color: Color(0xff898896), fontSize: 11))
@@ -4344,7 +4346,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Create a goal',
+                const Text('Create a Work Request',
                     style:
                         TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 6),
@@ -4374,7 +4376,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                     const SizedBox(width: 8),
                     FilledButton(
                         onPressed: _createGoal,
-                        child: const Text('Create goal')),
+                        child: const Text('Create work request')),
                   ],
                 ),
               ],
