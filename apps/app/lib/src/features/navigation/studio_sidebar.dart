@@ -230,57 +230,63 @@ class StudioSidebar extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: InkWell(
-                    onTap: () {
-                      onNavigateTo(const StudioNavigation.profileSecurity());
-                      if (compact) Scaffold.maybeOf(sidebarContext)?.closeDrawer();
-                    },
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: shellContext.isNavActive(
-                                const StudioNavigation.profileSecurity())
-                            ? const Color(0xff302d4b)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 13,
-                            backgroundColor: const Color(0xffd8d2ff),
-                            child: Text(
-                              shellContext.viewerInitials,
-                              style: const TextStyle(
-                                fontSize: 9,
-                                color: Color(0xff4238a0),
-                                fontWeight: FontWeight.bold,
+                  child: Tooltip(
+                    message: 'Profile & Settings',
+                    waitDuration: const Duration(milliseconds: 600),
+                    child: InkWell(
+                      onTap: () {
+                        onNavigateTo(const StudioNavigation.profileSecurity());
+                        if (compact) Scaffold.maybeOf(sidebarContext)?.closeDrawer();
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      hoverColor: const Color(0xff29283c),
+                      focusColor: const Color(0xff302d4b),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: shellContext.isNavActive(
+                                  const StudioNavigation.profileSecurity())
+                              ? const Color(0xff302d4b)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 13,
+                              backgroundColor: const Color(0xffd8d2ff),
+                              child: Text(
+                                shellContext.viewerInitials,
+                                style: const TextStyle(
+                                  fontSize: 9,
+                                  color: Color(0xff4238a0),
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              shellContext.viewerDisplayName ??
-                                  shellContext.viewerEmail ??
-                                  'Not signed in',
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: shellContext.isNavActive(
-                                        const StudioNavigation.profileSecurity())
-                                    ? Colors.white
-                                    : Colors.white70,
-                                fontSize: 11.5,
-                                fontWeight: shellContext.isNavActive(
-                                        const StudioNavigation.profileSecurity())
-                                    ? FontWeight.w600
-                                    : FontWeight.w400,
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                shellContext.viewerDisplayName ??
+                                    shellContext.viewerEmail ??
+                                    'Not signed in',
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: shellContext.isNavActive(
+                                          const StudioNavigation.profileSecurity())
+                                      ? Colors.white
+                                      : Colors.white70,
+                                  fontSize: 11.5,
+                                  fontWeight: shellContext.isNavActive(
+                                          const StudioNavigation.profileSecurity())
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),

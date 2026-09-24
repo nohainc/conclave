@@ -269,6 +269,63 @@ void main() {
       expect(navigatedTo?.kind, StudioRouteKind.hosts);
     });
 
+    testWidgets('Phase 2: bottom user/profile control and separate ⋯ menu hit target',
+        (tester) async {
+      StudioNavigation? navigatedTo;
+
+      const shellContext = StudioShellContext(
+        navigation: StudioNavigation.home(),
+        projects: [testProject],
+        viewerDisplayName: 'Vitalii Noha',
+        viewerEmail: 'vitalii@example.com',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: StudioSidebar(
+              shellContext: shellContext,
+              onNavigateTo: (nav) => navigatedTo = nav,
+              onToggleProjectExpanded: (_) {},
+              onCreateProject: () {},
+              onLogout: () {},
+              onOpenAbout: () {},
+              onOpenExternal: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 1. Tapping the avatar specifically navigates to /settings/profile and does not open menu
+      await tester.tap(find.text('VN'));
+      expect(navigatedTo?.kind, StudioRouteKind.profileSecurity);
+      expect(find.text('Workspaces'), findsNothing);
+
+      // Reset
+      navigatedTo = null;
+
+      // 2. Tapping the user name specifically navigates to /settings/profile and does not open menu
+      await tester.tap(find.text('Vitalii Noha'));
+      expect(navigatedTo?.kind, StudioRouteKind.profileSecurity);
+      expect(find.text('Workspaces'), findsNothing);
+
+      // Reset
+      navigatedTo = null;
+
+      // 3. Tapping the ⋯ button specifically opens the Application Menu and does NOT navigate to profile
+      await tester.tap(find.byTooltip('Application menu'));
+      await tester.pumpAndSettle();
+      expect(navigatedTo, isNull);
+      expect(find.text('Workspaces'), findsOneWidget);
+      expect(find.text('Usage'), findsOneWidget);
+      expect(find.text('Appearance'), findsOneWidget);
+      expect(find.text('About Conclave AX'), findsOneWidget);
+      expect(find.text('Website'), findsOneWidget);
+      expect(find.text('Log out'), findsOneWidget);
+    });
+
     testWidgets('excludes archived workstreams from sidebar list',
         (tester) async {
       const projectWithArchived = StudioProject(
