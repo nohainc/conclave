@@ -1,5 +1,6 @@
 export { ConclaveRunWorkflow } from "./workflow.js";
 export { WorkspaceGateway } from "./workspace-gateway.js";
+export { WorkstreamExecutionCoordinator } from "./workstream-coordinator.js";
 export { RealtimeGateway } from "./realtime-gateway.js";
 export {
   CloudEventPublisher,
@@ -148,6 +149,13 @@ const routeHandlers = {
   handleListChatGoals: handlers.handleListChatGoals,
   handleListChatMessages: handlers.handleListChatMessages,
   handleCreateChatMessage: handlers.handleCreateChatMessage,
+  handleListDiscussionMessages: handlers.handleListDiscussionMessages,
+  handleCreateDiscussionMessage: handlers.handleCreateDiscussionMessage,
+  handleEditDiscussionMessage: handlers.handleEditDiscussionMessage,
+  handleListWorkstreamCheckouts: handlers.handleListWorkstreamCheckouts,
+  handleProvisionWorkstreamCheckout: handlers.handleProvisionWorkstreamCheckout,
+  handleCreateWorkRequest: handlers.handleCreateWorkRequest,
+  handleCancelWorkRequest: handlers.handleCancelWorkRequest,
   handleGetChat: handlers.handleGetChat,
   handleUpdateChat: handlers.handleUpdateChat,
   handleRunRequest: handlers.handleRunRequest,

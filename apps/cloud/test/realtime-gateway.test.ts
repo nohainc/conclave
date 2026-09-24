@@ -100,6 +100,16 @@ describe("realtime gateway contract", () => {
     expect(scopeKey({ kind: "project", projectId: "project-1" })).toBe(
       "project=project-1",
     );
+    expect(scopeKey({ kind: "workstream", workstreamId: "workstream-1" })).toBe(
+      "workstream=workstream-1",
+    );
+    expect(parseRealtimeClientMessage({
+      type: "subscribe",
+      scope: { kind: "workstream", workstreamId: "workstream-1" },
+    })).toEqual({
+      type: "subscribe",
+      scope: { kind: "workstream", workstreamId: "workstream-1" },
+    });
   });
 
   it("matches v5 scopes by Project and execution Workspace identity", () => {
@@ -117,6 +127,8 @@ describe("realtime gateway contract", () => {
     expect(eventMatchesScope(event, { kind: "project", projectId: "project-1" })).toBe(true);
     expect(eventMatchesScope(event, { kind: "project", projectId: "project-2" })).toBe(false);
     expect(eventMatchesScope(event, { kind: "execution_workspace", executionWorkspaceId: "workspace-1" })).toBe(true);
+    expect(eventMatchesScope({ ...event, workstreamId: "workstream-1" }, { kind: "workstream", workstreamId: "workstream-1" })).toBe(true);
+    expect(eventMatchesScope({ ...event, workstreamId: "workstream-2" }, { kind: "workstream", workstreamId: "workstream-1" })).toBe(false);
   });
 
   it("uses bounded exponential reconnect backoff with jitter", () => {

@@ -5,6 +5,20 @@
 **Baseline:** main after Architecture v5 implementation  
 **Target:** [ARCHITECTURE_V6.md](ARCHITECTURE_V6.md)
 
+## V6-0 implementation status
+
+The first convergence slice is now implemented on the working baseline:
+
+- the app no longer exposes a global Workspace selector or Workspace settings/invitation screen;
+- Workspace enrollment uses the execution-Workspace `/enrollments` route;
+- collaborative Workspace invitation/member routes and legacy Host enrollment aliases are no longer routed;
+- assignment dispatch rejects requests without Project/requester context and sends valid requests through the v5 Project scheduler;
+- `scripts/verify-v6-convergence.mjs` is the source-level guard for these removals.
+- `apps/cloud/migrations-v6/0001_conclave_v6.sql` defines the clean Workstream/workflow/checkpoint/lease baseline and v6 correlation columns;
+- SQLite migration tests cover clean apply, foreign keys, one active checkout, one active lease, and checkpoint parents.
+
+The remaining security and persistence cleanup below is intentionally tracked as follow-up V6-0 work; no Workstream implementation should depend on those legacy paths.
+
 ## 1. Executive assessment
 
 The v5 implementation is directionally correct and contains strong reusable primitives, but it is not yet fully converged on the normative v5 architecture.
@@ -416,6 +430,39 @@ Suggested one-time dev converter:
 If clean reset is simpler, prefer clean v6 fixtures.
 
 ## 15. Tests required by v6
+
+### V6-4 Discuss / Work boundary
+
+- Discussion messages are reference-only and never create Goals or Runs.
+- Work Requests are the explicit execution entry point, require Project execute authorization, validate a workflow version, record the requester, and create a correlated Run.
+- Generic Chat message handling has no intent-orchestration or automatic-resume path.
+
+### V6-5 Workstream authorization
+
+- `canViewWorkstream`, `canDiscussWorkstream`, `canExecuteWorkstream`, and `canManageWorkstream` are pure Core policy functions.
+- Project membership is the outer bound; Workstream policy can only narrow selected users, roles, and view/discuss/execute permissions.
+- Project owners retain override, viewers cannot be elevated, and the assigned Workstream Lead may manage the Workstream while remaining subject to Project membership.
+- Cloud Discuss and Work Request routes re-read Project membership and the stored Workstream policy before allowing access.
+
+### V6-6 Workstream Project UX shell
+
+- Project navigation presents Workstreams as the focused unit instead of a Chats tab.
+- Workstream deep links use `/projects/:projectId/workstreams/:workstreamId`.
+- The shell exposes Discuss and Work tabs with Brief, Lead/status, Primary Workspace, Checkpoint, and queue summaries.
+- Creation and archive controls are role-gated; execution remains a disabled preview until the Workstream runner lands.
+
+### V6-7 Runtime managed checkout manager
+
+- `WorkstreamCheckoutManager` is the only runtime mapping from opaque Cloud checkout IDs to local paths.
+- Checkout paths are generated from identifiers under the managed `.conclave/workstreams` root; assignments cannot provide absolute paths or branches.
+- Provisioning is idempotent, branch/revision metadata is verified on reopen, operations use per-checkout file locks, and recovery/checkpoint/archive operations reuse `SafeWorkspace` and `GitRepository`.
+
+### V6-8 Checkout provisioning control plane
+
+- Cloud provisions only after resolving the Workstream Primary Workspace, active Workspace Project Grant, repository, and online status.
+- `checkout.provision`, `checkout.status`, `checkout.recover`, and `checkout.archive` are part of the Workspace Runtime protocol.
+- Runtime status updates persist the ready/stale/deleted state and head revision, and publish `workstream.checkout.status` realtime events.
+- Retry uses the existing active checkout record and opaque ID; grant revocation, offline Workspaces, missing repositories, and invalid base revisions fail explicitly.
 
 ### Domain
 - Workstream Lead must be Project owner/collaborator;

@@ -295,6 +295,15 @@ export type CredentialStatusPayload = z.infer<
 export const AssignmentSnapshotSchema = z
   .object({
     assignmentId: nonEmptyStr,
+    workstreamId: nonEmptyStr.optional(),
+    workRequestId: nonEmptyStr.optional(),
+    checkoutId: nonEmptyStr.optional(),
+    leaseId: nonEmptyStr.optional(),
+    fencingToken: z.number().int().positive().optional(),
+    expectedRevision: nonEmptyStr.optional(),
+    executionClass: z
+      .enum(["stateless_read", "stateful_workstream"])
+      .optional(),
     workspaceId: nonEmptyStr,
     projectId: nonEmptyStr,
     runId: nonEmptyStr,

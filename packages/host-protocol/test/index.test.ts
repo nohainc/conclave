@@ -264,6 +264,31 @@ describe("Conclave Host & Worker Protocol v4", () => {
       expect(parsed.type).toBe("assignment.start");
     });
 
+    it("carries the immutable Workstream lease snapshot", () => {
+      const parsed = parseHostMessage({
+        ...hostAssignmentEnvelope,
+        type: "assignment.start",
+        payload: {
+          snapshot: {
+            ...sampleSnapshot,
+            workstreamId: "workstream-1",
+            workRequestId: "work-request-1",
+            checkoutId: "checkout-1",
+            leaseId: "lease-1",
+            fencingToken: 4,
+            expectedRevision: "abc123",
+            executionClass: "stateful_workstream",
+          },
+          input: {},
+        },
+      });
+      expect(parsed.type).toBe("assignment.start");
+      if (parsed.type === "assignment.start") {
+        expect(parsed.payload.snapshot.fencingToken).toBe(4);
+        expect(parsed.payload.snapshot.executionClass).toBe("stateful_workstream");
+      }
+    });
+
     it("secret rule: uses opaque credentialProfileId, without raw secret fields", () => {
       expect(sampleSnapshot.credentialProfileId).toBe("cred-vitalii-codex");
       expect(sampleSnapshot).not.toHaveProperty("rawApiKey");

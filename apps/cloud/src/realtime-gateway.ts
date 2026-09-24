@@ -14,10 +14,11 @@ import {
 } from "./realtime-queue.js";
 
 export interface RealtimeScope {
-  kind?: "user" | "project" | "chat" | "run" | "execution_workspace";
+  kind?: "user" | "project" | "workstream" | "chat" | "run" | "execution_workspace";
   executionWorkspaceId?: string;
   workspaceId?: string;
   projectId?: string;
+  workstreamId?: string;
   chatId?: string;
   runId?: string;
 }
@@ -57,7 +58,7 @@ const MAX_SOCKET_BUFFERED_BYTES = 256 * 1024;
 
 export function scopeKey(scope: RealtimeScope): string {
   if (scope.kind) {
-    return `${scope.kind}=${scope.executionWorkspaceId ?? scope.projectId ?? scope.chatId ?? scope.runId ?? ""}`;
+    return `${scope.kind}=${scope.executionWorkspaceId ?? scope.projectId ?? scope.workstreamId ?? scope.chatId ?? scope.runId ?? ""}`;
   }
   return ["workspaceId", "projectId", "chatId", "runId"]
     .map((field) => `${field}=${scope[field as keyof RealtimeScope] ?? ""}`)
@@ -108,7 +109,7 @@ export function parseRealtimeClientMessage(
   }
   const scope = rawScope as Record<string, unknown>;
   if (scope.kind === "user") return { type: value.type, scope: { kind: "user" } };
-  if (scope.kind === "project" || scope.kind === "chat" || scope.kind === "run") {
+  if (scope.kind === "project" || scope.kind === "workstream" || scope.kind === "chat" || scope.kind === "run") {
     const idField = `${scope.kind}Id`;
     if (typeof scope[idField] !== "string" || (scope[idField] as string).length === 0) {
       throw new Error(`Realtime ${scope.kind} scope id is required`);
@@ -170,6 +171,7 @@ export function eventMatchesScope(
 ): boolean {
   if (scope.kind === "user") return true;
   if (scope.kind === "project") return event.projectId === scope.projectId;
+  if (scope.kind === "workstream") return event.workstreamId === scope.workstreamId;
   if (scope.kind === "chat") return event.chatId === scope.chatId;
   if (scope.kind === "run") return event.runId === scope.runId;
   if (scope.kind === "execution_workspace") {
@@ -204,6 +206,14 @@ export async function authorizeRealtimeScope(
       "SELECT 1 AS member FROM project_memberships WHERE project_id = ?1 AND user_id = ?2",
     ).bind(scope.projectId, userId).first<{ member: number }>();
     return member ? { allowed: true } : { allowed: false, reason: "project_access_denied" };
+  }
+  if (scope.kind === "workstream") {
+    const member = await db.prepare(
+      `SELECT 1 AS member FROM workstreams w
+       JOIN project_memberships pm ON pm.project_id = w.project_id
+       WHERE w.id = ?1 AND pm.user_id = ?2`,
+    ).bind(scope.workstreamId, userId).first<{ member: number }>();
+    return member ? { allowed: true } : { allowed: false, reason: "workstream_access_denied" };
   }
   if (scope.kind === "execution_workspace") {
     const owner = await db.prepare(

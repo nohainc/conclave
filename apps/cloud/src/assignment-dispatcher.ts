@@ -26,6 +26,13 @@ export interface TaskToDispatch {
   readonly accountId?: string;
   readonly model?: string;
   readonly requiresIndependentVerification?: boolean;
+  readonly workstreamId?: string;
+  readonly workRequestId?: string;
+  readonly checkoutId?: string;
+  readonly leaseId?: string;
+  readonly fencingToken?: number;
+  readonly expectedRevision?: string;
+  readonly executionClass?: "stateless_read" | "stateful_workstream";
   readonly repository?: {
     readonly repositoryId: string;
     readonly revision: string;
@@ -197,6 +204,10 @@ async function dispatchV5ProjectAssignment(
     workerId: params.explicitWorkerId,
     excludeIndependenceKeys: params.excludeIndependenceKeys,
     model: task.model,
+    executionClass: task.executionClass,
+    workstreamId: task.workstreamId,
+    workRequestId: task.workRequestId,
+    expectedRevision: task.expectedRevision,
   });
   if (!target) {
     return {
@@ -295,6 +306,13 @@ async function dispatchV5ProjectAssignment(
   const payload = {
     snapshot: {
       assignmentId,
+      workstreamId: target.workstreamId ?? task.workstreamId,
+      workRequestId: target.workRequestId ?? task.workRequestId,
+      checkoutId: target.checkoutId ?? task.checkoutId,
+      leaseId: target.leaseId ?? task.leaseId,
+      fencingToken: target.fencingToken ?? task.fencingToken,
+      expectedRevision: target.expectedRevision ?? task.expectedRevision,
+      executionClass: target.executionClass,
       executionWorkspaceId: target.workspaceId,
       workspaceRuntimeId: target.workspaceRuntimeIdentityId,
       projectId: target.projectId,
@@ -362,10 +380,24 @@ export async function dispatchTaskAssignment(
   env: AssignmentDispatcherEnv,
   params: DispatchAssignmentParams,
 ): Promise<DispatchAssignmentResult> {
-  const { workspaceId, runId, taskId, task } = params;
-  if (task.projectId && task.requestedByUserId) {
-    return dispatchV5ProjectAssignment(env, params);
+  const { task } = params;
+  // V6-0 removes the pre-Project dispatcher. Every assignment must carry the
+  // authenticated Project requester so selection, grants, and the immutable
+  // target snapshot are evaluated by the v5 scheduler.
+  if (!task.projectId || !task.requestedByUserId) {
+    return {
+      assignmentId: "",
+      attemptId: "",
+      workerId: "",
+      agentId: "",
+      workerCatalogId: "",
+      status: "failed",
+      accepted: false,
+      error: "Project execution context is required for assignment dispatch",
+    };
   }
+  return dispatchV5ProjectAssignment(env, params);
+  /*
   const now = new Date().toISOString();
 
   // 1. Select eligible worker
@@ -604,6 +636,7 @@ export async function dispatchTaskAssignment(
     status: "dispatched",
     accepted: true,
   };
+  */
 }
 
 /**

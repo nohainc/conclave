@@ -63,12 +63,10 @@ class WorkspaceStore {
   WorkspaceStore(this.source);
   final StudioDataSource source;
   List<StudioWorkspace> items = const [];
-  String? activeWorkspaceId;
 
   Future<List<StudioWorkspace>> list() async {
     final value = await source.loadWorkspaces();
     items = List.unmodifiable(value);
-    activeWorkspaceId ??= value.firstOrNull?.id;
     return value;
   }
 
@@ -78,10 +76,7 @@ class WorkspaceStore {
     return workspace;
   }
 
-  void replace(String? activeWorkspaceId) {
-    this.activeWorkspaceId = activeWorkspaceId;
-    source.setActiveWorkspace(activeWorkspaceId);
-  }
+  void replace(String? _) {}
 }
 
 class ChatStore {

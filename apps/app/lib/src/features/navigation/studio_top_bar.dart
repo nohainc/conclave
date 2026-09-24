@@ -1,14 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../brand.dart';
-import '../../studio/studio_models.dart';
 
 /// Top Application Header Bar for Conclave AX
 class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
   const StudioTopBar({
     super.key,
-    required this.workspaces,
-    required this.activeWorkspaceId,
-    required this.onWorkspaceSelected,
     required this.unreadNotificationCount,
     required this.onOpenNotifications,
     required this.onOpenCommandPalette,
@@ -19,9 +15,6 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
     this.viewerEmail,
   });
 
-  final List<StudioWorkspace> workspaces;
-  final String? activeWorkspaceId;
-  final ValueChanged<String> onWorkspaceSelected;
   final int unreadNotificationCount;
   final VoidCallback onOpenNotifications;
   final VoidCallback onOpenCommandPalette;
@@ -37,11 +30,8 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final borderColor = isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine;
-
-    final activeWorkspace = workspaces
-        .where((w) => w.id == activeWorkspaceId)
-        .firstOrNull ?? (workspaces.isNotEmpty ? workspaces.first : null);
+    final borderColor =
+        isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine;
 
     return Container(
       height: 56,
@@ -81,49 +71,14 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
                     letterSpacing: -0.2,
-                    color: isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk,
+                    color:
+                        isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk,
                   ),
                 ),
               ],
             ),
           ),
           const SizedBox(width: 16),
-          // Workspace Selector
-          if (workspaces.isNotEmpty) ...[
-            Container(
-              height: 32,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              decoration: BoxDecoration(
-                color: isDark ? ConclaveBrand.darkPaper : ConclaveBrand.lightPaper,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: borderColor),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: activeWorkspace?.id,
-                  icon: Icon(
-                    Icons.unfold_more_rounded,
-                    size: 16,
-                    color: isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted,
-                  ),
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk,
-                  ),
-                  items: workspaces.map((w) {
-                    return DropdownMenuItem(
-                      value: w.id,
-                      child: Text(w.name),
-                    );
-                  }).toList(),
-                  onChanged: (id) {
-                    if (id != null) onWorkspaceSelected(id);
-                  },
-                ),
-              ),
-            ),
-          ],
           const Spacer(),
           // Command Palette Search Button
           InkWell(
@@ -132,7 +87,8 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: isDark ? ConclaveBrand.darkPaper : ConclaveBrand.lightPaper,
+                color:
+                    isDark ? ConclaveBrand.darkPaper : ConclaveBrand.lightPaper,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: borderColor),
               ),
@@ -142,21 +98,28 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                   Icon(
                     Icons.search_rounded,
                     size: 16,
-                    color: isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted,
+                    color: isDark
+                        ? ConclaveBrand.darkInkMuted
+                        : ConclaveBrand.lightInkMuted,
                   ),
                   const SizedBox(width: 6),
                   Text(
                     'Search or jump to...',
                     style: TextStyle(
                       fontSize: 12,
-                      color: isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted,
+                      color: isDark
+                          ? ConclaveBrand.darkInkMuted
+                          : ConclaveBrand.lightInkMuted,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                     decoration: BoxDecoration(
-                      color: isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface,
+                      color: isDark
+                          ? ConclaveBrand.darkSurface
+                          : ConclaveBrand.lightSurface,
                       borderRadius: BorderRadius.circular(4),
                       border: Border.all(color: borderColor),
                     ),
@@ -165,7 +128,9 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
-                        color: isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted,
+                        color: isDark
+                            ? ConclaveBrand.darkInkMuted
+                            : ConclaveBrand.lightInkMuted,
                       ),
                     ),
                   ),
@@ -177,11 +142,14 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
           // Theme Toggle (Light / Dark)
           IconButton(
             icon: Icon(
-              isDarkTheme ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+              isDarkTheme
+                  ? Icons.light_mode_outlined
+                  : Icons.dark_mode_outlined,
               size: 19,
               color: isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk,
             ),
-            tooltip: isDarkTheme ? 'Switch to light mode' : 'Switch to dark mode',
+            tooltip:
+                isDarkTheme ? 'Switch to light mode' : 'Switch to dark mode',
             splashRadius: 18,
             onPressed: onToggleTheme,
           ),
@@ -193,7 +161,8 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                 icon: Icon(
                   Icons.notifications_outlined,
                   size: 20,
-                  color: isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk,
+                  color:
+                      isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk,
                 ),
                 tooltip: 'Notifications',
                 splashRadius: 18,
@@ -209,7 +178,8 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                       color: ConclaveBrand.accent,
                       shape: BoxShape.circle,
                     ),
-                    constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+                    constraints:
+                        const BoxConstraints(minWidth: 14, minHeight: 14),
                     child: Text(
                       '$unreadNotificationCount',
                       textAlign: TextAlign.center,

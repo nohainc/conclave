@@ -12,6 +12,27 @@ enum StudioNotificationPriority { high, normal, low }
 
 enum StudioNotificationTarget { run, hosts, workers, accounts, workspace }
 
+/// Filters realtime noise from actionable team notifications. Progress,
+/// discussion, queue, checkout, and lease updates update read models but do
+/// not interrupt the user.
+bool isMeaningfulRealtimeNotification(String type) => {
+      'run.input_required',
+      'run.approval_required',
+      'workstream.needs_input',
+      'workstream.completed',
+      'workstream.failed',
+      'workstream.account.problem',
+      'workstream.grant.problem',
+      'workstream.recovery.required',
+      'run.completed',
+      'run.failed',
+      'assignment.failed',
+      'account.expired',
+      'credential.expired',
+      'worker.install.failed',
+      'worker.install_failed',
+    }.contains(type);
+
 class StudioNotification {
   const StudioNotification({
     required this.id,
@@ -65,8 +86,15 @@ StudioNotification? notificationFromRealtimeEvent(
     'assignment.failed' =>
       StudioNotificationKind.failed,
     'run.input_required' ||
-    'run.approval_required' =>
+    'run.approval_required' ||
+    'workstream.needs_input' =>
       StudioNotificationKind.approvalRequired,
+    'workstream.completed' => StudioNotificationKind.completed,
+    'workstream.failed' ||
+    'workstream.grant.problem' ||
+    'workstream.recovery.required' =>
+      StudioNotificationKind.failed,
+    'workstream.account.problem' => StudioNotificationKind.accountExpired,
     'host.offline' || 'host.stale' => StudioNotificationKind.hostOffline,
     'account.expired' ||
     'credential.expired' =>

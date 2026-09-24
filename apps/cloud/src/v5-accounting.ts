@@ -31,7 +31,8 @@ export async function recordV5AssignmentUsage(
   input: V5UsageInput,
 ): Promise<void> {
   const assignment = await db.prepare(
-    `SELECT wa.id, wa.project_id, wa.run_id, wa.worker_id, wa.account_id,
+    `SELECT wa.id, wa.project_id, wa.run_id, wa.workstream_id, wa.work_request_id,
+            wa.workflow_version_id, wa.worker_id, wa.account_id,
             wa.requested_by_user_id, wa.execution_workspace_id,
             ew.owner_user_id AS workspace_owner_user_id,
             aa.owner_user_id AS account_owner_user_id,
@@ -57,16 +58,20 @@ export async function recordV5AssignmentUsage(
 
   await db.prepare(
     `INSERT OR IGNORE INTO usage
-       (id, project_id, run_id, worker_id, assignment_id, account_id,
+       (id, project_id, run_id, workstream_id, work_request_id, workflow_version_id,
+        worker_id, assignment_id, account_id,
         requester_user_id, execution_workspace_id, workspace_owner_user_id,
         account_owner_user_id, provider, billing_category, model,
         input_tokens, output_tokens, cost_micros, duration_ms, recorded_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
-             ?14, ?15, ?16, ?17, ?18)`,
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
+             ?16, ?17, ?18, ?19, ?20, ?21)`,
   ).bind(
     `usage-${input.assignmentId}`,
     assignment.project_id,
     assignment.run_id,
+    assignment.workstream_id,
+    assignment.work_request_id,
+    assignment.workflow_version_id,
     assignment.worker_id,
     assignment.id,
     assignment.account_id,

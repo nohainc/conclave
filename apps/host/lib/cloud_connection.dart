@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'assignment_journal.dart';
 import 'credential_profiles.dart';
+import 'runtime_capabilities.dart';
 import 'package:conclave_protocol/conclave_protocol.dart';
 import 'worker_protocol.dart';
 
@@ -114,6 +115,7 @@ class HostCloudConnection {
     this.assignmentJournal,
     this.syncHandler,
     this.hostUpdateAvailableHandler,
+    this.workstreamCheckoutManager,
     this.heartbeat = const Duration(seconds: 15),
     this.reconnectBaseDelay = const Duration(milliseconds: 10),
     this.reconnectMaxDelay = const Duration(seconds: 5),
@@ -144,6 +146,7 @@ class HostCloudConnection {
   final AssignmentJournal? assignmentJournal;
   final HostSyncHandler? syncHandler;
   final HostUpdateAvailableHandler? hostUpdateAvailableHandler;
+  final WorkstreamCheckoutManager? workstreamCheckoutManager;
   final Duration heartbeat;
   final Duration reconnectBaseDelay;
   final Duration reconnectMaxDelay;
@@ -387,12 +390,13 @@ class HostCloudConnection {
       }
       return result;
     }
+
     final translated = Map<String, Object?>.from(translate(message) as Map);
     translated['protocol'] = 'conclave.host-protocol';
     translated['protocolVersion'] = '4.0';
     if (translated['type'] is String) {
-      translated['type'] = (translated['type'] as String)
-          .replaceFirst('workspace.', 'host.');
+      translated['type'] =
+          (translated['type'] as String).replaceFirst('workspace.', 'host.');
       if (translated['type'] == 'host.sync.result') {
         translated['type'] = 'host.sync.response';
       }
@@ -416,6 +420,7 @@ class HostCloudConnection {
       }
       return result;
     }
+
     final normalized = Map<String, dynamic>.from(translate(message) as Map);
     normalized['protocol'] = workspaceRuntimeProtocolName;
     final legacyVersion = message['protocolVersion'];
@@ -427,8 +432,8 @@ class HostCloudConnection {
       normalized['protocolVersion'] = legacyVersion;
     }
     if (normalized['type'] is String) {
-      normalized['type'] = (normalized['type'] as String)
-          .replaceFirst('host.', 'workspace.');
+      normalized['type'] =
+          (normalized['type'] as String).replaceFirst('host.', 'workspace.');
       if (normalized['type'] == 'workspace.sync.response') {
         normalized['type'] = 'workspace.sync.result';
       }
@@ -496,7 +501,125 @@ class HostCloudConnection {
       unawaited(_handleAssignmentStart(decoded));
     } else if (decoded['type'] == 'assignment.cancel') {
       unawaited(_handleAssignmentCancel(decoded));
+    } else if (decoded['type'] == 'checkout.provision' ||
+        decoded['type'] == 'checkout.recover' ||
+        decoded['type'] == 'checkout.archive' ||
+        decoded['type'] == 'checkout.finalize') {
+      unawaited(_handleCheckoutCommand(decoded));
     }
+  }
+
+  Future<void> _handleCheckoutCommand(Map<String, dynamic> message) async {
+    final payload = message['payload'];
+    final manager = workstreamCheckoutManager;
+    if (payload is! Map<String, dynamic> || manager == null) {
+      _sendCheckoutStatus(message,
+          status: 'stale', error: 'checkout manager unavailable');
+      return;
+    }
+    final checkoutId = payload['checkoutId'];
+    final workstreamId = payload['workstreamId'];
+    if (checkoutId is! String || checkoutId.isEmpty) {
+      _sendCheckoutStatus(message,
+          status: 'stale', error: 'checkoutId is required');
+      return;
+    }
+    try {
+      final type = message['type'];
+      if (type == 'checkout.provision') {
+        if (workstreamId is! String || workstreamId.isEmpty) {
+          throw const RuntimeViolation('workstreamId is required');
+        }
+        await manager.provision(
+          checkoutId: checkoutId,
+          workstreamId: workstreamId,
+          revision: payload['revision'] is String
+              ? payload['revision'] as String
+              : 'HEAD',
+        );
+        final status = await manager.status(checkoutId);
+        _sendCheckoutStatus(
+          message,
+          status: 'ready',
+          relativePath: status.checkout.relativePath,
+          headRevision: status.currentRevision,
+        );
+      } else if (type == 'checkout.recover') {
+        await manager.resetAndRecover(
+          checkoutId,
+          revision: payload['revision'] is String
+              ? payload['revision'] as String
+              : null,
+        );
+        final status = await manager.status(checkoutId);
+        _sendCheckoutStatus(
+          message,
+          status: 'ready',
+          relativePath: status.checkout.relativePath,
+          headRevision: status.currentRevision,
+        );
+      } else if (type == 'checkout.finalize') {
+        final outcome = payload['outcome'];
+        final baseRevision = payload['baseRevision'];
+        if (outcome is! String || baseRevision is! String) {
+          throw const RuntimeViolation(
+              'finalize outcome and baseRevision are required');
+        }
+        final result = await manager.finalizeStatefulLease(
+          checkoutId: checkoutId,
+          baseRevision: baseRevision,
+          outcome: outcome,
+          message: payload['message'] is String
+              ? payload['message'] as String
+              : 'workstream checkpoint',
+        );
+        _sendCheckoutStatus(
+          message,
+          status: result.recoveryStatus == 'quarantined'
+              ? 'recovery_required'
+              : result.outcome == 'success'
+                  ? 'checkpointed'
+                  : 'rolled_back',
+          headRevision: result.revision,
+          diff: result.diff,
+          changed: result.changed,
+          recoveryStatus: result.recoveryStatus,
+        );
+      } else {
+        await manager.archive(checkoutId);
+        _sendCheckoutStatus(message, status: 'deleted');
+      }
+    } catch (error) {
+      _sendCheckoutStatus(
+        message,
+        status: 'stale',
+        error: error is RuntimeViolation ? error.message : error.toString(),
+      );
+    }
+  }
+
+  void _sendCheckoutStatus(
+    Map<String, dynamic> message, {
+    required String status,
+    String? relativePath,
+    String? headRevision,
+    String? error,
+    String? diff,
+    bool? changed,
+    String? recoveryStatus,
+  }) {
+    _sendIfConnected('checkout.status', {
+      'checkoutId': (message['payload'] as Map?)?['checkoutId'],
+      if ((message['payload'] as Map?)?['workRequestId'] is String)
+        'workRequestId': (message['payload'] as Map?)?['workRequestId'],
+      'status': status,
+      if (relativePath != null) 'relativePath': relativePath,
+      if (headRevision != null) 'headRevision': headRevision,
+      if (diff != null) 'diff': diff,
+      if (changed != null) 'changed': changed,
+      if (recoveryStatus != null) 'recoveryStatus': recoveryStatus,
+      if (error != null) 'error': error,
+    });
   }
 
   Future<void> _handleAssignmentStart(Map<String, dynamic> message) async {
@@ -630,7 +753,7 @@ class HostCloudConnection {
       {'accepted': true, 'estimatedStartMs': 0},
     )));
     try {
-      final result = await assignmentHandler!(context);
+      final result = await _runAssignmentWithRuntimeFence(context);
       socket.send(jsonEncode(_assignmentEnvelope(
         'assignment.result',
         correlation,
@@ -674,6 +797,23 @@ class HostCloudConnection {
     } finally {
       _activeAssignments.remove(context.assignmentId);
     }
+  }
+
+  Future<HostAssignmentResult> _runAssignmentWithRuntimeFence(
+      HostAssignmentContext context) async {
+    final handler = assignmentHandler!;
+    if (context.payload['executionClass'] != 'stateful_workstream') {
+      return handler(context);
+    }
+    final manager = workstreamCheckoutManager;
+    if (manager == null) {
+      throw const RuntimeViolation(
+          'stateful assignment requires a checkout manager');
+    }
+    return manager.withStatefulLease(
+      snapshot: context.payload,
+      action: (_) => handler(context),
+    );
   }
 
   Future<void> _handleAssignmentCancel(Map<String, dynamic> message) async {
@@ -893,7 +1033,8 @@ class HostCloudConnection {
           correlation,
           {
             'status': 'cancelled',
-            'reason': 'Assignment was cancelled while the Workspace was offline',
+            'reason':
+                'Assignment was cancelled while the Workspace was offline',
           },
         )));
       }
@@ -903,8 +1044,8 @@ class HostCloudConnection {
   }
 
   Map<String, Object?> _recordCorrelation(AssignmentRecord record) => {
-      'executionWorkspaceId': record.workspaceId,
-      'workspaceRuntimeId': record.hostId,
+        'executionWorkspaceId': record.workspaceId,
+        'workspaceRuntimeId': record.hostId,
         'workerId': record.workerId,
         'runId': record.runId,
         'taskId': record.taskId,

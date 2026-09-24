@@ -9,7 +9,6 @@ import '../platform/http_client_stub.dart'
 import 'studio_models.dart';
 
 abstract interface class StudioDataSource {
-  void setActiveWorkspace(String? workspaceId);
   Future<StudioSession> loadSession();
   Future<void> logout();
   Future<void> signInWithEmail({
@@ -144,6 +143,11 @@ abstract interface class StudioDataSource {
     required String projectId,
     required String title,
   });
+  Future<void> provisionWorkstreamCheckout({
+    required String workstreamId,
+    String? workspaceId,
+  }) async =>
+      throw UnimplementedError('Workstream checkout provisioning is not available');
   Future<void> setWorkerEnabled({
     required String workspaceId,
     required String workerId,
@@ -259,13 +263,7 @@ class StudioApiClient implements StudioDataSource {
   final String baseUrl;
   final http.Client client;
   final passkeyBrowser = passkeys.createStudioPasskeyBrowser();
-  String? activeWorkspaceId;
   String? sessionToken;
-
-  @override
-  void setActiveWorkspace(String? workspaceId) {
-    activeWorkspaceId = workspaceId;
-  }
 
   Map<String, String> _headers({String? contentType}) => {
         'accept': 'application/json',
@@ -969,7 +967,7 @@ class StudioApiClient implements StudioDataSource {
   @override
   Future<StudioSnapshot> loadReadModels(
       {String? projectId, String? workspaceId}) async {
-    final selectedWorkspaceId = workspaceId ?? activeWorkspaceId;
+    final selectedWorkspaceId = workspaceId;
     if (selectedWorkspaceId == null || selectedWorkspaceId.isEmpty) {
       return loadSnapshot(projectId: projectId, workspaceId: workspaceId);
     }
@@ -1190,6 +1188,24 @@ class StudioApiClient implements StudioDataSource {
   }
 
   @override
+  Future<void> provisionWorkstreamCheckout({
+    required String workstreamId,
+    String? workspaceId,
+  }) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/workstreams/$workstreamId/checkouts'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({if (workspaceId != null) 'workspaceId': workspaceId}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+        'Checkout provisioning failed (${response.statusCode})',
+        statusCode: response.statusCode,
+      );
+    }
+  }
+
+  @override
   Future<void> setWorkerEnabled({
     required String workspaceId,
     required String workerId,
@@ -1366,7 +1382,7 @@ class StudioApiClient implements StudioDataSource {
     int expiresHours = 24,
   }) async {
     final response = await client.post(
-      Uri.parse('$baseUrl/workspaces/$workspaceId/host-enrollments'),
+      Uri.parse('$baseUrl/workspaces/$workspaceId/enrollments'),
       headers: _headers(contentType: 'application/json'),
       body: jsonEncode({'expiresHours': expiresHours}),
     );

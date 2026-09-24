@@ -3,12 +3,12 @@ enum StudioRouteKind {
   projects,
   project,
   chat,
+  workstream,
   run,
   hosts,
   workers,
   accounts,
   usage,
-  workspaceSettings,
   profileSecurity,
   login,
 }
@@ -18,6 +18,7 @@ class StudioNavigation {
     required this.kind,
     this.projectId,
     this.chatId,
+    this.workstreamId,
     this.runId,
     this.loginReturnTo,
   });
@@ -33,6 +34,12 @@ class StudioNavigation {
       : this._(
             kind: StudioRouteKind.chat, projectId: projectId, chatId: chatId);
 
+  const StudioNavigation.workstream(String projectId, String workstreamId)
+      : this._(
+            kind: StudioRouteKind.workstream,
+            projectId: projectId,
+            workstreamId: workstreamId);
+
   const StudioNavigation.run(String projectId, String runId)
       : this._(kind: StudioRouteKind.run, projectId: projectId, runId: runId);
 
@@ -43,9 +50,6 @@ class StudioNavigation {
   const StudioNavigation.accounts() : this._(kind: StudioRouteKind.accounts);
 
   const StudioNavigation.usage() : this._(kind: StudioRouteKind.usage);
-
-  const StudioNavigation.workspaceSettings()
-      : this._(kind: StudioRouteKind.workspaceSettings);
 
   const StudioNavigation.login({String? returnTo})
       : this._(kind: StudioRouteKind.login, loginReturnTo: returnTo);
@@ -60,6 +64,7 @@ class StudioNavigation {
   final StudioRouteKind kind;
   final String? projectId;
   final String? chatId;
+  final String? workstreamId;
   final String? runId;
   final String? loginReturnTo;
 
@@ -83,12 +88,12 @@ class StudioNavigation {
     if (parts case ['workers']) return const StudioNavigation.workers();
     if (parts case ['accounts']) return const StudioNavigation.accounts();
     if (parts case ['usage']) return const StudioNavigation.usage();
-    if (parts case ['settings', 'workspace']) {
-      return const StudioNavigation.workspaceSettings();
-    }
     if (parts.length >= 4 && parts[0] == 'projects') {
       if (parts[2] == 'chats') {
         return StudioNavigation.chat(parts[1], parts[3]);
+      }
+      if (parts[2] == 'workstreams') {
+        return StudioNavigation.workstream(parts[1], parts[3]);
       }
       if (parts[2] == 'runs') {
         return StudioNavigation.run(parts[1], parts[3]);
@@ -106,12 +111,13 @@ class StudioNavigation {
       StudioRouteKind.projects => Uri(path: '/projects'),
       StudioRouteKind.project => Uri(path: '/projects/$projectId'),
       StudioRouteKind.chat => Uri(path: '/projects/$projectId/chats/$chatId'),
+      StudioRouteKind.workstream =>
+        Uri(path: '/projects/$projectId/workstreams/$workstreamId'),
       StudioRouteKind.run => Uri(path: '/projects/$projectId/runs/$runId'),
       StudioRouteKind.hosts => Uri(path: '/workspaces'),
       StudioRouteKind.workers => Uri(path: '/workers'),
       StudioRouteKind.accounts => Uri(path: '/accounts'),
       StudioRouteKind.usage => Uri(path: '/usage'),
-      StudioRouteKind.workspaceSettings => Uri(path: '/settings/workspace'),
       StudioRouteKind.login => Uri(
           path: '/login',
           queryParameters:
@@ -126,10 +132,11 @@ class StudioNavigation {
       other.kind == kind &&
       other.projectId == projectId &&
       other.chatId == chatId &&
+      other.workstreamId == workstreamId &&
       other.runId == runId &&
       other.loginReturnTo == loginReturnTo;
 
   @override
   int get hashCode =>
-      Object.hash(kind, projectId, chatId, runId, loginReturnTo);
+      Object.hash(kind, projectId, chatId, workstreamId, runId, loginReturnTo);
 }

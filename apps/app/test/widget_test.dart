@@ -53,21 +53,16 @@ void main() {
     expect(find.text('Recent Projects'), findsOneWidget);
   });
 
-  testWidgets('keeps the Workspace menu visible with one Workspace',
+  testWidgets('does not expose a global Workspace switcher',
       (WidgetTester tester) async {
     await tester
         .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
     await tester.pumpAndSettle();
 
     expect(find.text('Fixture Workspace'), findsOneWidget);
-    await tester.tap(find.text('Fixture Workspace'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('New workspace'), findsOneWidget);
-    expect(find.text('Workspace settings'), findsOneWidget);
-    await tester.tap(find.text('New workspace'));
-    await tester.pumpAndSettle();
-    expect(find.text('Create workspace'), findsOneWidget);
+    expect(find.text('Choose workspace'), findsNothing);
+    expect(find.text('New workspace'), findsNothing);
+    expect(find.text('Workspace settings'), findsNothing);
   });
 
   testWidgets('can open run details and return to chat',
@@ -167,24 +162,6 @@ void main() {
     expect(find.text('Create Worker'), findsNothing);
     expect(find.text('Agents'), findsNothing);
     expect(find.text('Plugins'), findsNothing);
-  });
-
-  testWidgets('opens Workspace Settings without Project collaboration tabs',
-      (WidgetTester tester) async {
-    await tester
-        .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byIcon(Icons.menu_rounded));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Workspace settings').last);
-    await tester.pumpAndSettle();
-
-    expect(find.text('Workspace settings'), findsOneWidget);
-    expect(find.text('General'), findsWidgets);
-    expect(find.text('Project collaboration lives in each Project.'), findsOneWidget);
-    expect(find.text('Members'), findsNothing);
-    expect(find.text('Invitations'), findsNothing);
   });
 
   testWidgets(

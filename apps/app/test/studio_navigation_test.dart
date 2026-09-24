@@ -3,13 +3,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/navigation/studio_navigation.dart';
 
 void main() {
-  test('parses and serializes project, chat, and run deep links', () {
+  test('parses and serializes project, Workstream, and run deep links', () {
     final chat =
         StudioNavigation.fromUri(Uri.parse('/projects/project-1/chats/chat-2'));
     expect(chat.kind, StudioRouteKind.chat);
     expect(chat.projectId, 'project-1');
     expect(chat.chatId, 'chat-2');
     expect(chat.toUri().path, '/projects/project-1/chats/chat-2');
+
+    final workstream = StudioNavigation.fromUri(
+        Uri.parse('/projects/project-1/workstreams/workstream-2'));
+    expect(workstream.kind, StudioRouteKind.workstream);
+    expect(workstream.workstreamId, 'workstream-2');
+    expect(workstream.toUri().path,
+        '/projects/project-1/workstreams/workstream-2');
 
     final run =
         StudioNavigation.fromUri(Uri.parse('/projects/project-1/runs/run-3'));
@@ -29,7 +36,6 @@ void main() {
       const StudioNavigation.workers(),
       const StudioNavigation.accounts(),
       const StudioNavigation.usage(),
-      const StudioNavigation.workspaceSettings(),
       const StudioNavigation.profileSecurity(),
     ];
 

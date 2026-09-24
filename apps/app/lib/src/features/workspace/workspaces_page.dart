@@ -260,7 +260,7 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
 
   Widget _settings(StudioAgent workspace) => ListView(children: [
         _Panel(
-            title: 'Workspace settings',
+            title: 'Runtime settings',
             subtitle: 'Manage the runtime environment and its lifecycle.',
             child: Wrap(spacing: 8, runSpacing: 8, children: [
               OutlinedButton.icon(

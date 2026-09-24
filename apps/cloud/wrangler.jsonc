@@ -21,7 +21,7 @@
       "binding": "CONCLAVE_DB",
       "database_name": "conclave-development",
       "database_id": "local",
-      "migrations_dir": "migrations-v5",
+      "migrations_dir": "migrations-v6",
     },
   ],
   "r2_buckets": [
@@ -53,6 +53,10 @@
         "name": "CONCLAVE_REALTIME_GATEWAY",
         "class_name": "RealtimeGateway",
       },
+      {
+        "name": "CONCLAVE_WORKSTREAM_COORDINATOR",
+        "class_name": "WorkstreamExecutionCoordinator",
+      },
     ],
   },
   "migrations": [
@@ -63,6 +67,10 @@
     {
       "tag": "v2-realtime-gateway",
       "new_sqlite_classes": ["RealtimeGateway"],
+    },
+    {
+      "tag": "v6-workstream-coordinator",
+      "new_sqlite_classes": ["WorkstreamExecutionCoordinator"],
     },
   ],
 }

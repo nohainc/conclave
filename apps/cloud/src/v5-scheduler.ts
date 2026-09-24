@@ -11,6 +11,10 @@ export interface ProjectExecutionSelectionRequest {
   readonly excludeIndependenceKeys?: readonly string[];
   readonly model?: string;
   readonly maxCostMicros?: number;
+  readonly executionClass?: "stateless_read" | "stateful_workstream";
+  readonly workstreamId?: string;
+  readonly workRequestId?: string;
+  readonly expectedRevision?: string;
 }
 
 export interface V5ExecutionTarget {
@@ -25,6 +29,13 @@ export interface V5ExecutionTarget {
   readonly effectivePermissions: readonly string[];
   readonly permissionSnapshot: Record<string, unknown>;
   readonly selectionExplanation: Record<string, unknown>;
+  readonly executionClass: "stateless_read" | "stateful_workstream";
+  readonly workstreamId?: string;
+  readonly workRequestId?: string;
+  readonly checkoutId?: string;
+  readonly leaseId?: string;
+  readonly fencingToken?: number;
+  readonly expectedRevision?: string;
 }
 
 type Row = Record<string, unknown>;
@@ -80,6 +91,48 @@ export async function selectProjectExecutionTarget(
     `SELECT role FROM project_memberships WHERE project_id = ?1 AND user_id = ?2`,
   ).bind(request.projectId, request.requesterUserId).first<{ role: string }>();
   if (!membership || membership.role === "viewer") return null;
+
+  const executionClass = request.executionClass ?? "stateless_read";
+  let statefulLease: {
+    workstreamId: string;
+    workRequestId: string;
+    workspaceId: string;
+    checkoutId: string;
+    leaseId: string;
+    fencingToken: number;
+    expectedRevision: string;
+  } | null = null;
+  if (executionClass === "stateful_workstream") {
+    if (!request.workstreamId || !request.workRequestId) return null;
+    statefulLease = await db.prepare(
+      `SELECT wr.workstream_id AS workstreamId, wr.id AS workRequestId,
+              wr.primary_workspace_id AS workspaceId, wr.checkout_id AS checkoutId,
+              l.id AS leaseId, l.fencing_token AS fencingToken,
+              c.revision AS expectedRevision, p.primary_workspace_id AS primaryWorkspaceId
+       FROM work_requests wr
+       JOIN workstream_execution_leases l ON l.work_request_id = wr.id
+        AND l.workstream_id = wr.workstream_id AND l.status = 'active'
+       JOIN workstream_checkouts c ON c.id = wr.checkout_id
+        AND c.workstream_id = wr.workstream_id AND c.status = 'ready'
+       JOIN workstream_execution_policies p ON p.workstream_id = wr.workstream_id
+       WHERE wr.id = ?1 AND wr.workstream_id = ?2
+         AND wr.mode = 'stateful' AND wr.status = 'running'
+         AND wr.primary_workspace_id = p.primary_workspace_id
+       LIMIT 1`,
+    ).bind(request.workRequestId, request.workstreamId).first<Record<string, unknown>>().then((row) => {
+      if (!row) return null;
+      return {
+        workstreamId: String(row.workstreamId),
+        workRequestId: String(row.workRequestId),
+        workspaceId: String(row.workspaceId),
+        checkoutId: String(row.checkoutId),
+        leaseId: String(row.leaseId),
+        fencingToken: number(row.fencingToken),
+        expectedRevision: String(row.expectedRevision),
+      };
+    });
+    if (!statefulLease || (request.workspaceId && request.workspaceId !== statefulLease.workspaceId)) return null;
+  }
 
   const rows = await db.prepare(
     `SELECT g.id AS grant_id, g.project_id, g.workspace_id, g.status AS grant_status,
@@ -152,6 +205,10 @@ export async function selectProjectExecutionTarget(
     );
 
     const reject = (reason: string) => rejected.push({ workspaceId, workerId, accountId, reason });
+    if (statefulLease && workspaceId !== statefulLease.workspaceId) { reject("stateful_primary_workspace_required"); continue; }
+    if (String(row.workspace_status) !== "online") { reject("workspace_offline"); continue; }
+    if (String(row.grant_status) !== "active") { reject("grant_inactive"); continue; }
+    if (String(row.account_status) !== "ready") { reject("account_unavailable"); continue; }
     if (request.workspaceId && request.workspaceId !== workspaceId) { reject("explicit_workspace_mismatch"); continue; }
     if (request.workerId && request.workerId !== workerId) { reject("explicit_worker_mismatch"); continue; }
     if (request.accountId && request.accountId !== accountId) { reject("explicit_account_mismatch"); continue; }
@@ -188,6 +245,9 @@ export async function selectProjectExecutionTarget(
       networkPolicy: object(row.network_policy_json),
       concurrency,
       budget,
+      ...(request.expectedRevision
+        ? { checkpointRevision: request.expectedRevision }
+        : {}),
       snapshotAt,
     };
     return {
@@ -206,9 +266,22 @@ export async function selectProjectExecutionTarget(
         workspace: { id: workspaceId, status: row.workspace_status, grantId: row.grant_id },
         worker: { id: workerId, version: row.worker_version, status: row.installation_status },
         account: { id: accountId, owner: row.account_owner_user_id === request.requesterUserId, provider },
-        filters: ["project_authorized", "grant_active", "workspace_online", "worker_ready", "account_authorized", "permissions_intersected", "capacity_available", "budget_available"],
+        filters: ["project_authorized", "grant_active", "workspace_online", "worker_ready", "account_authorized", "permissions_intersected", "capacity_available", "budget_available", ...(statefulLease ? ["primary_workspace", "checkout_ready", "lease_active"] : [])],
         rejectedAlternatives: rejected,
       },
+      executionClass,
+      ...(statefulLease
+        ? {
+            workstreamId: statefulLease.workstreamId,
+            workRequestId: statefulLease.workRequestId,
+            checkoutId: statefulLease.checkoutId,
+            leaseId: statefulLease.leaseId,
+            fencingToken: statefulLease.fencingToken,
+            expectedRevision: statefulLease.expectedRevision,
+          }
+        : request.expectedRevision
+          ? { expectedRevision: request.expectedRevision }
+          : {}),
     };
   }
   return null;

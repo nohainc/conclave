@@ -484,6 +484,15 @@ class GitRepository {
     return result.stdout.trim();
   }
 
+  Future<String> resolveRevision(String revision) async {
+    _validateGitValue(revision, 'revision');
+    final result = await _run(['rev-parse', '--verify', revision]);
+    if (result.exitCode != 0) {
+      throw const RuntimeViolation('could not verify Git revision');
+    }
+    return result.stdout.trim();
+  }
+
   Future<String> branch() async {
     final result = await _run(['branch', '--show-current']);
     if (result.exitCode != 0) {
@@ -518,6 +527,23 @@ class GitRepository {
     }
   }
 
+  Future<void> createBranchWorktree(
+    String relativePath, {
+    required String branch,
+    String revision = 'HEAD',
+  }) async {
+    await workspace._contained(relativePath, forWrite: true);
+    _validateGitValue(branch, 'branch');
+    _validateGitValue(revision, 'revision');
+    final result =
+        await _run(['worktree', 'add', '-b', branch, relativePath, revision]);
+    if (result.exitCode != 0) {
+      throw RuntimeViolation(
+        'could not create Git branch worktree: ${result.stderr.trim()}',
+      );
+    }
+  }
+
   /// Removes a worktree below the registered workspace root.
   Future<void> removeWorktree(String relativePath, {bool force = false}) async {
     await workspace._contained(relativePath, forWrite: true);
@@ -532,14 +558,528 @@ class GitRepository {
     }
   }
 
-  Future<CommandResult> _run(List<String> arguments) =>
+  Future<void> resetHard(String revision) async {
+    _validateGitValue(revision, 'revision');
+    final result = await _run(['reset', '--hard', revision]);
+    if (result.exitCode != 0) {
+      throw RuntimeViolation(
+          'could not reset Git worktree: ${result.stderr.trim()}');
+    }
+    final clean = await _run(['clean', '-fd']);
+    if (clean.exitCode != 0) {
+      throw RuntimeViolation(
+          'could not clean Git worktree: ${clean.stderr.trim()}');
+    }
+  }
+
+  Future<String> checkpointCommit(String message) async {
+    if (message.trim().isEmpty || message.contains('\u0000')) {
+      throw const RuntimeViolation('checkpoint message is required');
+    }
+    final add = await _run(['add', '-A']);
+    if (add.exitCode != 0) {
+      throw RuntimeViolation(
+          'could not stage checkpoint: ${add.stderr.trim()}');
+    }
+    final commit = await _run(
+      ['commit', '-m', message],
+      argumentPattern: RegExp(r'^[A-Za-z0-9_./:@= -]+$'),
+    );
+    if (commit.exitCode != 0) {
+      throw RuntimeViolation(
+          'could not create checkpoint commit: ${commit.stderr.trim()}');
+    }
+    return currentRevision();
+  }
+
+  Future<CommandResult> _run(
+    List<String> arguments, {
+    RegExp? argumentPattern,
+  }) =>
       SafeCommandRunner(workspace).run([gitExecutable, ...arguments],
           policy: CommandPolicy(
             allowedExecutables: {gitExecutable},
             allowedArgumentPatterns: {
-              gitExecutable: [RegExp(r'^[A-Za-z0-9_./:@=-]+$')],
+              gitExecutable: [
+                argumentPattern ?? RegExp(r'^[A-Za-z0-9_./:@=-]+$'),
+              ],
             },
           ));
+}
+
+void _validateGitValue(String value, String field) {
+  if (value.isEmpty || value.contains(RegExp(r'[^A-Za-z0-9_./:@=-]'))) {
+    throw RuntimeViolation('invalid Git $field');
+  }
+}
+
+class WorkstreamCheckout {
+  const WorkstreamCheckout({
+    required this.id,
+    required this.workstreamId,
+    required this.relativePath,
+    required this.branch,
+    required this.revision,
+    required this.archived,
+  });
+
+  final String id;
+  final String workstreamId;
+  final String relativePath;
+  final String branch;
+  final String revision;
+  final bool archived;
+}
+
+class WorkstreamCheckoutStatus {
+  const WorkstreamCheckoutStatus({
+    required this.checkout,
+    required this.currentRevision,
+    required this.currentBranch,
+    required this.dirty,
+    required this.status,
+    required this.diff,
+  });
+
+  final WorkstreamCheckout checkout;
+  final String currentRevision;
+  final String currentBranch;
+  final bool dirty;
+  final String status;
+  final String diff;
+}
+
+class WorkstreamCheckoutLifecycleResult {
+  const WorkstreamCheckoutLifecycleResult({
+    required this.outcome,
+    required this.revision,
+    required this.changed,
+    required this.diff,
+    this.recoveryStatus,
+  });
+
+  final String outcome;
+  final String revision;
+  final bool changed;
+  final String diff;
+  final String? recoveryStatus;
+}
+
+/// Owns the only runtime mapping from an opaque Cloud checkout ID to a local
+/// path. Callers never provide a filesystem path or branch name.
+class WorkstreamCheckoutManager {
+  WorkstreamCheckoutManager(Directory repositoryRoot)
+      : _repositoryRoot = SafeWorkspace(repositoryRoot),
+        _repository = GitRepository(SafeWorkspace(repositoryRoot));
+
+  final SafeWorkspace _repositoryRoot;
+  final GitRepository _repository;
+  final Map<String, Future<void>> _localLocks = {};
+
+  String _hash(String value) => sha256.convert(utf8.encode(value)).toString();
+
+  String _metadataRelativePath(String checkoutId) =>
+      '.conclave/checkout-metadata/${_hash(checkoutId)}.json';
+
+  String _checkoutRelativePath(String workstreamId, String checkoutId) =>
+      '.conclave/workstreams/${_hash(workstreamId)}/${_hash(checkoutId)}';
+
+  String _lockRelativePath(String checkoutId) =>
+      '.conclave/checkout-locks/${_hash(checkoutId)}.lock';
+
+  String _fenceRelativePath(String checkoutId) =>
+      '.conclave/checkout-fences/${_hash(checkoutId)}.json';
+
+  void _validateOpaqueId(String value, String field) {
+    if (value.isEmpty ||
+        !RegExp(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$').hasMatch(value)) {
+      throw RuntimeViolation('$field must be an opaque identifier');
+    }
+  }
+
+  Future<WorkstreamCheckout> provision({
+    required String checkoutId,
+    required String workstreamId,
+    String revision = 'HEAD',
+  }) async {
+    _validateOpaqueId(checkoutId, 'checkoutId');
+    _validateOpaqueId(workstreamId, 'workstreamId');
+    return _withFileLock(checkoutId, () async {
+      final existing = await _read(checkoutId);
+      if (existing != null) {
+        if (existing.workstreamId != workstreamId || existing.archived) {
+          throw const RuntimeViolation('checkout ID is already assigned');
+        }
+        await _verify(existing);
+        return existing;
+      }
+      await _repositoryRoot.createDirectory('.conclave/checkout-metadata');
+      await _repositoryRoot.createDirectory('.conclave/checkout-locks');
+      final relativePath = _checkoutRelativePath(workstreamId, checkoutId);
+      final branch =
+          'conclave/workstream/${_hash(checkoutId).substring(0, 16)}';
+      final checkoutPath = await _repositoryRoot._contained(relativePath);
+      if (await Directory(checkoutPath).exists()) {
+        final orphan = WorkstreamCheckout(
+          id: checkoutId,
+          workstreamId: workstreamId,
+          relativePath: relativePath,
+          branch: branch,
+          revision: revision,
+          archived: false,
+        );
+        await _verify(orphan);
+      } else {
+        await _repository.createBranchWorktree(
+          relativePath,
+          branch: branch,
+          revision: revision,
+        );
+      }
+      final checkout = WorkstreamCheckout(
+        id: checkoutId,
+        workstreamId: workstreamId,
+        relativePath: relativePath,
+        branch: branch,
+        revision: revision,
+        archived: false,
+      );
+      await _write(checkout);
+      return checkout;
+    });
+  }
+
+  Future<WorkstreamCheckout?> _read(String checkoutId) async {
+    _validateOpaqueId(checkoutId, 'checkoutId');
+    try {
+      final raw = jsonDecode(
+          await _repositoryRoot.read(_metadataRelativePath(checkoutId)));
+      if (raw is! Map) throw const FormatException('metadata is not an object');
+      return WorkstreamCheckout(
+        id: raw['id'] as String,
+        workstreamId: raw['workstreamId'] as String,
+        relativePath: raw['relativePath'] as String,
+        branch: raw['branch'] as String,
+        revision: raw['revision'] as String,
+        archived: raw['archived'] == true,
+      );
+    } on PathNotFoundException {
+      return null;
+    } on FileSystemException {
+      return null;
+    } on FormatException catch (error) {
+      throw RuntimeViolation('checkout metadata is invalid: $error');
+    }
+  }
+
+  Future<WorkstreamCheckout> resolve(String checkoutId) async {
+    final checkout = await _read(checkoutId);
+    if (checkout == null || checkout.archived) {
+      throw const RuntimeViolation('checkout is not available');
+    }
+    await _verify(checkout);
+    return checkout;
+  }
+
+  Future<void> _verify(WorkstreamCheckout checkout) async {
+    await _repositoryRoot._contained(checkout.relativePath);
+    final repo = GitRepository(
+      SafeWorkspace(Directory(
+          '${_repositoryRoot.root.path}${Platform.pathSeparator}${checkout.relativePath}')),
+    );
+    await repo.validate();
+    if (await repo.branch() != checkout.branch) {
+      throw const RuntimeViolation('checkout branch does not match metadata');
+    }
+    await repo.resolveRevision(checkout.revision);
+  }
+
+  Future<WorkstreamCheckoutStatus> status(String checkoutId) async {
+    final checkout = await resolve(checkoutId);
+    return _statusForCheckout(checkout);
+  }
+
+  Future<WorkstreamCheckoutStatus> _statusForCheckout(
+      WorkstreamCheckout checkout) async {
+    final repo = _repoFor(checkout);
+    final status = await repo.status();
+    final diff = await repo.diff();
+    return WorkstreamCheckoutStatus(
+      checkout: checkout,
+      currentRevision: await repo.currentRevision(),
+      currentBranch: await repo.branch(),
+      dirty: status.stdout.trim().isNotEmpty,
+      status: status.stdout,
+      diff: diff.stdout,
+    );
+  }
+
+  /// Validates a stateful Assignment snapshot and holds the OS lock for the
+  /// complete Worker lifetime. The fence is persisted per checkout so a
+  /// restarted process cannot accept an older lease token.
+  Future<T> withStatefulLease<T>({
+    required Map<String, Object?> snapshot,
+    required Future<T> Function(WorkstreamCheckout checkout) action,
+  }) async {
+    final executionClass = snapshot['executionClass'];
+    if (executionClass != 'stateful_workstream') {
+      throw const RuntimeViolation('stateful execution class is required');
+    }
+    String requiredField(String name) {
+      final value = snapshot[name];
+      if (value is! String || value.isEmpty) {
+        throw RuntimeViolation('stateful assignment field $name is required');
+      }
+      return value;
+    }
+
+    final workstreamId = requiredField('workstreamId');
+    final checkoutId = requiredField('checkoutId');
+    final leaseId = requiredField('leaseId');
+    final expectedRevision = requiredField('expectedRevision');
+    final rawToken = snapshot['fencingToken'];
+    if (rawToken is! int || rawToken <= 0) {
+      throw const RuntimeViolation(
+          'stateful assignment fencingToken is invalid');
+    }
+    return _withFileLock(checkoutId, () async {
+      final checkout = await resolve(checkoutId);
+      if (checkout.workstreamId != workstreamId) {
+        throw const RuntimeViolation(
+            'assignment checkout does not belong to Workstream');
+      }
+      final checkoutStatus = await _statusForCheckout(checkout);
+      if (checkoutStatus.currentRevision != expectedRevision) {
+        throw RuntimeViolation(
+            'checkout revision mismatch: expected $expectedRevision, found ${checkoutStatus.currentRevision}');
+      }
+      if (checkoutStatus.dirty) {
+        throw const RuntimeViolation('stateful checkout must be clean');
+      }
+      final previous = await _readFence(checkoutId);
+      if (previous != null) {
+        final previousToken = previous['fencingToken'];
+        final previousLease = previous['leaseId'];
+        if (previousToken is! int ||
+            rawToken < previousToken ||
+            (rawToken == previousToken && previousLease != leaseId)) {
+          throw const RuntimeViolation(
+              'stale or conflicting checkout fencing token');
+        }
+      }
+      await _writeFence(checkoutId, leaseId, rawToken);
+      return action(checkout);
+    });
+  }
+
+  Future<Map<String, Object?>?> _readFence(String checkoutId) async {
+    try {
+      final raw = jsonDecode(
+          await _repositoryRoot.read(_fenceRelativePath(checkoutId)));
+      if (raw is! Map) return null;
+      return Map<String, Object?>.from(raw);
+    } on PathNotFoundException {
+      return null;
+    } on FileSystemException {
+      return null;
+    } on FormatException {
+      throw const RuntimeViolation('checkout fencing metadata is invalid');
+    }
+  }
+
+  Future<void> _writeFence(String checkoutId, String leaseId, int token) async {
+    await _repositoryRoot.createDirectory('.conclave/checkout-fences');
+    await _repositoryRoot.write(
+      _fenceRelativePath(checkoutId),
+      jsonEncode({
+        'checkoutId': checkoutId,
+        'leaseId': leaseId,
+        'fencingToken': token
+      }),
+    );
+  }
+
+  Future<void> resetAndRecover(String checkoutId, {String? revision}) async {
+    await withLock(checkoutId, (checkout) async {
+      final repo = _repoFor(checkout);
+      await repo.resetHard(revision ?? checkout.revision);
+    });
+  }
+
+  Future<String> checkpointCommit(String checkoutId, String message) async {
+    return withLock(checkoutId, (checkout) async {
+      return _repoFor(checkout).checkpointCommit(message);
+    });
+  }
+
+  /// Finalizes one stateful lease. Success commits only when the Checkout is
+  /// dirty; failure/cancellation captures bounded diagnostics and restores the
+  /// supplied base revision, including controlled untracked files.
+  Future<WorkstreamCheckoutLifecycleResult> finalizeStatefulLease({
+    required String checkoutId,
+    required String baseRevision,
+    required String outcome,
+    String message = 'workstream checkpoint',
+  }) async {
+    if (outcome != 'success' &&
+        outcome != 'failure' &&
+        outcome != 'cancelled') {
+      throw const RuntimeViolation('invalid Checkout lifecycle outcome');
+    }
+    return _withFileLock(checkoutId, () async {
+      final checkout = await resolve(checkoutId);
+      final before = await _statusForCheckout(checkout);
+      final boundedDiff = _boundedText(before.diff);
+      if (outcome == 'success') {
+        if (!before.dirty) {
+          return WorkstreamCheckoutLifecycleResult(
+            outcome: outcome,
+            revision: before.currentRevision,
+            changed: false,
+            diff: boundedDiff,
+          );
+        }
+        final revision = await _repoFor(checkout).checkpointCommit(message);
+        await _write(WorkstreamCheckout(
+          id: checkout.id,
+          workstreamId: checkout.workstreamId,
+          relativePath: checkout.relativePath,
+          branch: checkout.branch,
+          revision: revision,
+          archived: false,
+        ));
+        return WorkstreamCheckoutLifecycleResult(
+          outcome: outcome,
+          revision: revision,
+          changed: true,
+          diff: boundedDiff,
+        );
+      }
+      try {
+        await _repoFor(checkout).resetHard(baseRevision);
+        return WorkstreamCheckoutLifecycleResult(
+          outcome: outcome,
+          revision: await _repoFor(checkout).currentRevision(),
+          changed: before.dirty,
+          diff: boundedDiff,
+          recoveryStatus: 'rolled_back',
+        );
+      } catch (error) {
+        await _writeRecovery(checkoutId, error.toString());
+        return WorkstreamCheckoutLifecycleResult(
+          outcome: outcome,
+          revision: before.currentRevision,
+          changed: before.dirty,
+          diff: boundedDiff,
+          recoveryStatus: 'quarantined',
+        );
+      }
+    });
+  }
+
+  String _boundedText(String value, [int maxBytes = 64 * 1024]) {
+    if (value.length <= maxBytes) return value;
+    return '${value.substring(0, maxBytes)}\n[truncated]';
+  }
+
+  Future<void> _writeRecovery(String checkoutId, String error) async {
+    await _repositoryRoot.createDirectory('.conclave/checkout-recovery');
+    await _repositoryRoot.write(
+      '.conclave/checkout-recovery/${_hash(checkoutId)}.json',
+      jsonEncode({
+        'checkoutId': checkoutId,
+        'status': 'quarantined',
+        'error': _boundedText(error),
+        'createdAt': DateTime.now().toUtc().toIso8601String(),
+      }),
+    );
+  }
+
+  Future<void> archive(String checkoutId) async {
+    await withLock(checkoutId, (checkout) async {
+      await _repository.removeWorktree(checkout.relativePath, force: true);
+      await _write(WorkstreamCheckout(
+        id: checkout.id,
+        workstreamId: checkout.workstreamId,
+        relativePath: checkout.relativePath,
+        branch: checkout.branch,
+        revision: checkout.revision,
+        archived: true,
+      ));
+    });
+  }
+
+  Future<void> remove(String checkoutId) async {
+    await withLock(checkoutId, (checkout) async {
+      await _repository.removeWorktree(checkout.relativePath, force: true);
+      await _repositoryRoot.delete(_metadataRelativePath(checkout.id));
+    });
+  }
+
+  GitRepository _repoFor(WorkstreamCheckout checkout) => GitRepository(
+        SafeWorkspace(Directory(
+            '${_repositoryRoot.root.path}${Platform.pathSeparator}${checkout.relativePath}')),
+      );
+
+  Future<void> _write(WorkstreamCheckout checkout) async {
+    await _repositoryRoot.write(
+      _metadataRelativePath(checkout.id),
+      jsonEncode({
+        'id': checkout.id,
+        'workstreamId': checkout.workstreamId,
+        'relativePath': checkout.relativePath,
+        'branch': checkout.branch,
+        'revision': checkout.revision,
+        'archived': checkout.archived,
+      }),
+    );
+  }
+
+  Future<T> withLock<T>(
+    String checkoutId,
+    Future<T> Function(WorkstreamCheckout checkout) action,
+  ) async {
+    return _withFileLock(checkoutId, () async {
+      final checkout = await resolve(checkoutId);
+      return action(checkout);
+    });
+  }
+
+  Future<T> _withFileLock<T>(
+    String checkoutId,
+    Future<T> Function() action,
+  ) async {
+    _validateOpaqueId(checkoutId, 'checkoutId');
+    // Advisory file locks do not serialize two handles from the same Dart
+    // process consistently on every supported OS. Keep a local queue too;
+    // the file lock remains the cross-process fence.
+    final previous = _localLocks[checkoutId] ?? Future<void>.value();
+    final gate = Completer<void>();
+    final queued = previous.then((_) => gate.future);
+    _localLocks[checkoutId] = queued;
+    await previous;
+    RandomAccessFile? handle;
+    try {
+      await _repositoryRoot.createDirectory('.conclave/checkout-locks');
+      final lockFile = File(
+          '${_repositoryRoot.root.path}${Platform.pathSeparator}${_lockRelativePath(checkoutId)}');
+      handle = await lockFile.open(mode: FileMode.writeOnlyAppend);
+      await handle.lock(FileLock.exclusive);
+      return await action();
+    } finally {
+      if (handle != null) {
+        try {
+          await handle.unlock();
+        } finally {
+          await handle.close();
+        }
+      }
+      gate.complete();
+      if (identical(_localLocks[checkoutId], queued)) {
+        _localLocks.remove(checkoutId);
+      }
+    }
+  }
 }
 
 class RuntimeArtifact {

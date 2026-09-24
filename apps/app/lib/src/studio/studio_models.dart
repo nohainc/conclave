@@ -346,6 +346,46 @@ class StudioChat {
       };
 }
 
+class StudioWorkstream {
+  const StudioWorkstream({
+    required this.id,
+    required this.projectId,
+    required this.name,
+    required this.lead,
+    required this.status,
+    required this.brief,
+    required this.primaryWorkspace,
+    required this.currentCheckpoint,
+    required this.queueStatus,
+    this.archived = false,
+  });
+
+  final String id;
+  final String projectId;
+  final String name;
+  final String lead;
+  final String status;
+  final String brief;
+  final String primaryWorkspace;
+  final String currentCheckpoint;
+  final String queueStatus;
+  final bool archived;
+
+  factory StudioWorkstream.fromJson(Map<String, dynamic> json) =>
+      StudioWorkstream(
+        id: _string(json, 'id'),
+        projectId: _string(json, 'projectId'),
+        name: _string(json, 'name'),
+        lead: _string(json, 'lead', _string(json, 'leadName', 'Unassigned')),
+        status: _string(json, 'status', 'active'),
+        brief: _string(json, 'brief', ''),
+        primaryWorkspace: _string(json, 'primaryWorkspace', 'Not selected'),
+        currentCheckpoint: _string(json, 'currentCheckpoint', 'Not started'),
+        queueStatus: _string(json, 'queueStatus', 'Idle'),
+        archived: json['archived'] == true,
+      );
+}
+
 class StudioProject {
   const StudioProject({
     required this.id,
@@ -355,6 +395,7 @@ class StudioProject {
     required this.activeGoals,
     required this.lastActivity,
     this.chats = const [],
+    this.workstreams = const [],
     this.description = '',
     this.instructions = '',
     this.defaultExecutionPolicy = 'balanced',
@@ -369,6 +410,7 @@ class StudioProject {
   final int activeGoals;
   final String lastActivity;
   final List<StudioChat> chats;
+  final List<StudioWorkstream> workstreams;
   final String description;
   final String instructions;
   final String defaultExecutionPolicy;
@@ -385,6 +427,10 @@ class StudioProject {
         chats: (json['chats'] as List? ?? const [])
             .map((item) =>
                 StudioChat.fromJson(Map<String, dynamic>.from(item as Map)))
+            .toList(),
+        workstreams: (json['workstreams'] as List? ?? const [])
+            .map((item) => StudioWorkstream.fromJson(
+                Map<String, dynamic>.from(item as Map)))
             .toList(),
         description: _string(json, 'description', ''),
         instructions: _string(

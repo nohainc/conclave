@@ -23,6 +23,7 @@ class PromptComposer extends StatefulWidget {
     required this.onToggleAdvanced,
     required this.snapshot,
     this.isBusy = false,
+    this.discussionOnly = false,
   });
 
   final TextEditingController controller;
@@ -41,6 +42,7 @@ class PromptComposer extends StatefulWidget {
   final VoidCallback onToggleAdvanced;
   final StudioSnapshot snapshot;
   final bool isBusy;
+  final bool discussionOnly;
 
   @override
   State<PromptComposer> createState() => _PromptComposerState();
@@ -82,7 +84,7 @@ class _PromptComposerState extends State<PromptComposer> {
         mainAxisSize: MainAxisSize.min,
         children: [
           // Advanced Execution Options Panel (Expandable)
-          if (widget.showAdvanced) ...[
+          if (!widget.discussionOnly && widget.showAdvanced) ...[
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
@@ -211,8 +213,9 @@ class _PromptComposerState extends State<PromptComposer> {
                       isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk,
                 ),
                 decoration: InputDecoration(
-                  hintText:
-                      'Ask Conclave AX to research, design, code, or verify...',
+                  hintText: widget.discussionOnly
+                      ? 'Share context or a decision with the Project…'
+                      : 'Ask Conclave AX to research, design, code, or verify...',
                   hintStyle: TextStyle(
                     fontSize: 14,
                     color: isDark
@@ -238,7 +241,8 @@ class _PromptComposerState extends State<PromptComposer> {
                 Wrap(
                   spacing: 8,
                   children: [
-                    Container(
+                    if (!widget.discussionOnly)
+                      Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
@@ -255,7 +259,8 @@ class _PromptComposerState extends State<PromptComposer> {
                       ),
                     ),
                     // Quality Preset Selector
-                    PopupMenuButton<StudioQualityPreset>(
+                    if (!widget.discussionOnly)
+                      PopupMenuButton<StudioQualityPreset>(
                       tooltip: 'Select quality preset',
                       initialValue: widget.selectedQuality,
                       onSelected: widget.onQualityChanged,
@@ -310,7 +315,8 @@ class _PromptComposerState extends State<PromptComposer> {
                       ),
                     ),
                     // Advanced Execution Toggle Button
-                    InkWell(
+                    if (!widget.discussionOnly)
+                      InkWell(
                       onTap: widget.onToggleAdvanced,
                       borderRadius: BorderRadius.circular(6),
                       child: Container(
@@ -367,7 +373,9 @@ class _PromptComposerState extends State<PromptComposer> {
                               strokeWidth: 2, color: Colors.white),
                         )
                       : const Icon(Icons.arrow_upward_rounded, size: 18),
-                  tooltip: 'Send prompt (Enter)',
+                  tooltip: widget.discussionOnly
+                      ? 'Send message (Enter)'
+                      : 'Send prompt (Enter)',
                   style: IconButton.styleFrom(
                     backgroundColor: ConclaveBrand.accent,
                     foregroundColor: Colors.white,

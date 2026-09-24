@@ -13,6 +13,7 @@ class _BrowserRealtimeClient implements RealtimeClient {
   Uri? _endpoint;
   String? _workspaceId;
   String? _projectId;
+  String? _workstreamId;
   String? _chatId;
   String? _runId;
   String? _executionWorkspaceId;
@@ -42,6 +43,7 @@ class _BrowserRealtimeClient implements RealtimeClient {
   @override
   Future<void> setScopes({
     String? projectId,
+    String? workstreamId,
     String? chatId,
     String? runId,
     String? executionWorkspaceId,
@@ -53,6 +55,7 @@ class _BrowserRealtimeClient implements RealtimeClient {
       }
     }
     _projectId = projectId;
+    _workstreamId = workstreamId;
     _chatId = chatId;
     _runId = runId;
     _executionWorkspaceId = executionWorkspaceId;
@@ -131,6 +134,8 @@ class _BrowserRealtimeClient implements RealtimeClient {
 
   List<Map<String, dynamic>> _currentScopes() => [
         if (_projectId != null) {'kind': 'project', 'projectId': _projectId},
+        if (_workstreamId != null)
+          {'kind': 'workstream', 'workstreamId': _workstreamId},
         if (_chatId != null) {'kind': 'chat', 'chatId': _chatId},
         if (_runId != null) {'kind': 'run', 'runId': _runId},
         if (_executionWorkspaceId != null)

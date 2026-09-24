@@ -5,24 +5,32 @@ import {
   WORKSPACE_RUNTIME_PROTOCOL_VERSION,
   type WorkspaceRuntimeMessage,
 } from "@conclave/host-protocol";
+import { createEventPublisher } from "./event-publisher.js";
 import {
   recordAssignmentCancelled,
   recordAssignmentError,
   recordAssignmentResult,
 } from "./assignment-dispatcher.js";
-import { extractBearerToken, hashToken } from "../../../packages/security/src/index.js";
+import {
+  extractBearerToken,
+  hashToken,
+} from "../../../packages/security/src/index.js";
 
 const jsonArray = (value: unknown): string[] => {
   if (typeof value !== "string") return [];
   try {
     const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string")
+      : [];
   } catch {
     return [];
   }
 };
 
-export function normalizeWorkspaceWorkerInstallationStatus(status: string):
+export function normalizeWorkspaceWorkerInstallationStatus(
+  status: string,
+):
   | "absent"
   | "requested"
   | "installing"
@@ -59,6 +67,7 @@ export function normalizeWorkspaceWorkerInstallationStatus(status: string):
 
 export interface WorkspaceGatewayEnv {
   CONCLAVE_DB: D1Database;
+  CONCLAVE_REALTIME_GATEWAY?: DurableObjectNamespace;
 }
 
 export interface WorkspaceAssignmentCorrelation {
@@ -157,6 +166,18 @@ export class WorkspaceGateway implements DurableObject {
     }
     if (request.method === "POST" && url.pathname === "/cancel-assignment") {
       return this.cancelAssignment(request);
+    }
+    if (request.method === "POST" && url.pathname === "/provision-checkout") {
+      return this.provisionCheckout(request);
+    }
+    if (request.method === "POST" && url.pathname === "/recover-checkout") {
+      return this.sendCheckoutCommand(request, "checkout.recover");
+    }
+    if (request.method === "POST" && url.pathname === "/archive-checkout") {
+      return this.sendCheckoutCommand(request, "checkout.archive");
+    }
+    if (request.method === "POST" && url.pathname === "/finalize-checkout") {
+      return this.sendCheckoutCommand(request, "checkout.finalize");
     }
     return Response.json({ error: "Not found" }, { status: 404 });
   }
@@ -259,7 +280,9 @@ export class WorkspaceGateway implements DurableObject {
   }
 
   private async close(socket: WebSocket, sessionId: string): Promise<void> {
-    if (!isCurrentWorkspaceSocket(this.socket, this.sessionId, socket, sessionId)) {
+    if (
+      !isCurrentWorkspaceSocket(this.socket, this.sessionId, socket, sessionId)
+    ) {
       return;
     }
     this.socket = null;
@@ -284,7 +307,11 @@ export class WorkspaceGateway implements DurableObject {
       const raw = typeof data === "string" ? JSON.parse(data) : data;
       message = parseWorkspaceRuntimeMessage(raw);
     } catch (error) {
-      this.sendError(error instanceof Error ? error.message : "Invalid Workspace protocol message");
+      this.sendError(
+        error instanceof Error
+          ? error.message
+          : "Invalid Workspace protocol message",
+      );
       return;
     }
     if (
@@ -294,7 +321,10 @@ export class WorkspaceGateway implements DurableObject {
       this.socket?.close(1008, "Workspace runtime identity mismatch");
       return;
     }
-    if (message.executionWorkspaceId && message.executionWorkspaceId !== this.executionWorkspaceId) {
+    if (
+      message.executionWorkspaceId &&
+      message.executionWorkspaceId !== this.executionWorkspaceId
+    ) {
       this.socket?.close(1008, "Execution Workspace mismatch");
       return;
     }
@@ -339,14 +369,29 @@ export class WorkspaceGateway implements DurableObject {
       case "worker.status":
         await this.recordWorkerStatus(message.payload);
         return;
+      case "checkout.status":
+        await this.recordCheckoutStatus(message.payload);
+        return;
       case "assignment.result":
-        await recordAssignmentResult(this.env.CONCLAVE_DB, message.assignmentId!, message.payload as never);
+        await recordAssignmentResult(
+          this.env.CONCLAVE_DB,
+          message.assignmentId!,
+          message.payload as never,
+        );
         return;
       case "assignment.error":
-        await recordAssignmentError(this.env.CONCLAVE_DB, message.assignmentId!, message.payload as never);
+        await recordAssignmentError(
+          this.env.CONCLAVE_DB,
+          message.assignmentId!,
+          message.payload as never,
+        );
         return;
       case "assignment.cancelled":
-        await recordAssignmentCancelled(this.env.CONCLAVE_DB, message.assignmentId!, message.payload as never);
+        await recordAssignmentCancelled(
+          this.env.CONCLAVE_DB,
+          message.assignmentId!,
+          message.payload as never,
+        );
         return;
       default:
         return;
@@ -433,7 +478,9 @@ export class WorkspaceGateway implements DurableObject {
         desiredWorkers,
         installedWorkers,
         credentialSetupIntents: [],
-        activeAssignmentIds: (assignments.results ?? []).map((row) => String(row.assignment_id)),
+        activeAssignmentIds: (assignments.results ?? []).map((row) =>
+          String(row.assignment_id),
+        ),
         assignmentStates: (assignments.results ?? []).map((row) => ({
           assignmentId: String(row.assignment_id),
           status: String(row.status),
@@ -490,9 +537,210 @@ export class WorkspaceGateway implements DurableObject {
     }
   }
 
+  private async provisionCheckout(request: Request): Promise<Response> {
+    if (!this.socket) {
+      return Response.json({ error: "Workspace is offline" }, { status: 503 });
+    }
+    const body = (await request.json()) as Record<string, unknown>;
+    const checkoutId =
+      typeof body.checkoutId === "string" ? body.checkoutId : null;
+    const workstreamId =
+      typeof body.workstreamId === "string" ? body.workstreamId : null;
+    if (!checkoutId || !workstreamId) {
+      return Response.json(
+        { error: "checkoutId and workstreamId are required" },
+        { status: 400 },
+      );
+    }
+    const row = await this.env.CONCLAVE_DB.prepare(
+      `SELECT c.id, c.status, c.workstream_id AS workstreamId,
+              c.workspace_id AS workspaceId, c.repository_id AS repositoryId,
+              c.revision, ws.project_id AS projectId, ew.status AS workspaceStatus,
+              g.id AS grantId
+       FROM workstream_checkouts c
+       JOIN workstreams ws ON ws.id = c.workstream_id
+       JOIN execution_workspaces ew ON ew.id = c.workspace_id
+       LEFT JOIN workspace_project_grants g
+         ON g.project_id = ws.project_id AND g.workspace_id = c.workspace_id
+        AND g.status = 'active'
+        AND (g.expires_at IS NULL OR g.expires_at > ?2)
+       WHERE c.id = ?1 AND c.workstream_id = ?3 AND c.workspace_id = ?4`,
+    )
+      .bind(
+        checkoutId,
+        new Date().toISOString(),
+        workstreamId,
+        this.executionWorkspaceId,
+      )
+      .first<Record<string, unknown>>();
+    if (!row)
+      return Response.json({ error: "Checkout not found" }, { status: 404 });
+    if (!row.grantId) {
+      await this.env.CONCLAVE_DB.prepare(
+        "UPDATE workstream_checkouts SET status = 'stale', updated_at = ?1 WHERE id = ?2",
+      )
+        .bind(new Date().toISOString(), checkoutId)
+        .run();
+      return Response.json(
+        { error: "Workspace Project Grant is not active" },
+        { status: 409 },
+      );
+    }
+    if (row.workspaceStatus !== "online") {
+      return Response.json({ error: "Workspace is offline" }, { status: 503 });
+    }
+    this.send({
+      protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
+      protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
+      messageId: `message-${crypto.randomUUID()}`,
+      correlationId: checkoutId,
+      timestamp: new Date().toISOString(),
+      type: "checkout.provision",
+      executionWorkspaceId: this.executionWorkspaceId ?? undefined,
+      workspaceRuntimeId: this.workspaceRuntimeId ?? undefined,
+      payload: {
+        checkoutId,
+        workstreamId,
+        repositoryId: String(row.repositoryId),
+        revision: String(row.revision),
+      },
+    });
+    return Response.json({ accepted: true, checkoutId, status: row.status });
+  }
+
+  private async sendCheckoutCommand(
+    request: Request,
+    type: "checkout.recover" | "checkout.archive" | "checkout.finalize",
+  ): Promise<Response> {
+    if (!this.socket)
+      return Response.json({ error: "Workspace is offline" }, { status: 503 });
+    const body = (await request.json()) as Record<string, unknown>;
+    if (
+      typeof body.checkoutId !== "string" ||
+      body.checkoutId.trim().length === 0
+    ) {
+      return Response.json(
+        { error: "checkoutId is required" },
+        { status: 400 },
+      );
+    }
+    this.send({
+      protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
+      protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
+      messageId: `message-${crypto.randomUUID()}`,
+      correlationId: body.checkoutId,
+      timestamp: new Date().toISOString(),
+      type,
+      executionWorkspaceId: this.executionWorkspaceId ?? undefined,
+      workspaceRuntimeId: this.workspaceRuntimeId ?? undefined,
+      payload: body,
+    });
+    return Response.json({ accepted: true, checkoutId: body.checkoutId });
+  }
+
+  private async recordCheckoutStatus(payload: unknown): Promise<void> {
+    if (!payload || typeof payload !== "object" || !this.executionWorkspaceId)
+      return;
+    const value = payload as Record<string, unknown>;
+    const checkoutId =
+      typeof value.checkoutId === "string" ? value.checkoutId : null;
+    const status = typeof value.status === "string" ? value.status : null;
+    if (!checkoutId || !status) return;
+    const dbStatus = ["checkpointed", "rolled_back"].includes(status)
+      ? "ready"
+      : status === "recovery_required"
+        ? "stale"
+        : status;
+    if (!["provisioning", "ready", "stale", "deleted"].includes(dbStatus))
+      return;
+    const checkout = await this.env.CONCLAVE_DB.prepare(
+      `SELECT c.id, c.workstream_id AS workstreamId, ws.project_id AS projectId
+       FROM workstream_checkouts c JOIN workstreams ws ON ws.id = c.workstream_id
+       WHERE c.id = ?1 AND c.workspace_id = ?2`,
+    )
+      .bind(checkoutId, this.executionWorkspaceId)
+      .first<Record<string, unknown>>();
+    if (!checkout) return;
+    const now = new Date().toISOString();
+    await this.env.CONCLAVE_DB.prepare(
+      `UPDATE workstream_checkouts
+       SET status = ?1, revision = COALESCE(?2, revision), relative_path = COALESCE(?3, relative_path), updated_at = ?4
+       WHERE id = ?5 AND workspace_id = ?6`,
+    )
+      .bind(
+        dbStatus,
+        typeof value.headRevision === "string" ? value.headRevision : null,
+        typeof value.relativePath === "string" ? value.relativePath : null,
+        now,
+        checkoutId,
+        this.executionWorkspaceId,
+      )
+      .run();
+    const changed = value.changed === true;
+    const revision = typeof value.headRevision === "string" ? value.headRevision : null;
+    const workRequestId = typeof value.workRequestId === "string" ? value.workRequestId : null;
+    if (status === "checkpointed" && changed && revision && workRequestId) {
+      const sequence = await this.env.CONCLAVE_DB.prepare(
+        "SELECT COALESCE(MAX(sequence), 0) + 1 AS nextSequence FROM workstream_checkpoints WHERE checkout_id = ?1",
+      ).bind(checkoutId).first<{ nextSequence: number }>();
+      const checkpointId = `checkpoint-${crypto.randomUUID()}`;
+      await this.env.CONCLAVE_DB.prepare(
+        `INSERT INTO workstream_checkpoints
+         (id, workstream_id, checkout_id, sequence, revision, summary, created_by_work_request_id, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
+      ).bind(
+        checkpointId,
+        String(checkout.workstreamId),
+        checkoutId,
+        sequence?.nextSequence ?? 1,
+        revision,
+        changed ? "Managed Workstream checkpoint" : "No-change Workstream result",
+        workRequestId,
+        now,
+      ).run();
+      await this.env.CONCLAVE_DB.prepare(
+        `INSERT INTO workstream_current_checkpoints (workstream_id, checkpoint_id, updated_at)
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT(workstream_id) DO UPDATE SET checkpoint_id = excluded.checkpoint_id, updated_at = excluded.updated_at`,
+      ).bind(String(checkout.workstreamId), checkpointId, now).run();
+    }
+    if (revision && typeof value.diff === "string" && value.diff.length > 0) {
+      await this.env.CONCLAVE_DB.prepare(
+        `INSERT INTO workstream_diff_artifacts
+         (id, workstream_id, checkout_id, work_request_id, revision, outcome, diff_text, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
+      ).bind(
+        `diff-${crypto.randomUUID()}`,
+        String(checkout.workstreamId),
+        checkoutId,
+        workRequestId,
+        revision,
+        status === "checkpointed" ? "success" : status === "rolled_back" ? "cancelled" : "failure",
+        String(value.diff).slice(0, 64 * 1024),
+        now,
+      ).run();
+    }
+    await createEventPublisher(this.env).publish({
+      type: "workstream.checkout.status",
+      workspaceId: this.executionWorkspaceId,
+      projectId: String(checkout.projectId),
+      payload: {
+        entityId: checkoutId,
+        status: dbStatus,
+        summary:
+          typeof value.error === "string" ? value.error : `Checkout ${status}`,
+      },
+      durable: true,
+      idempotencyKey: `checkout-status:${checkoutId}:${now}`,
+    });
+  }
+
   private async dispatchAssignment(request: Request): Promise<Response> {
-    if (!this.socket) return Response.json({ error: "Workspace is offline" }, { status: 503 });
-    const body = (await request.json()) as WorkspaceAssignmentCorrelation & { payload: unknown };
+    if (!this.socket)
+      return Response.json({ error: "Workspace is offline" }, { status: 503 });
+    const body = (await request.json()) as WorkspaceAssignmentCorrelation & {
+      payload: unknown;
+    };
     const row = await this.env.CONCLAVE_DB.prepare(
       `SELECT wa.id, wa.execution_workspace_id, wa.runtime_identity_id,
               wa.worker_id, wa.run_id, wa.task_id, wa.attempt_id,
@@ -508,8 +756,15 @@ export class WorkspaceGateway implements DurableObject {
     )
       .bind(body.assignmentId, new Date().toISOString())
       .first<Record<string, unknown>>();
-    if (!row || !workspaceAssignmentContextMatches(body, row) || !workspaceAssignmentIsActive(row)) {
-      return Response.json({ error: "Assignment is not valid for this Workspace runtime" }, { status: 409 });
+    if (
+      !row ||
+      !workspaceAssignmentContextMatches(body, row) ||
+      !workspaceAssignmentIsActive(row)
+    ) {
+      return Response.json(
+        { error: "Assignment is not valid for this Workspace runtime" },
+        { status: 409 },
+      );
     }
     this.send({
       protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
@@ -524,8 +779,11 @@ export class WorkspaceGateway implements DurableObject {
   }
 
   private async cancelAssignment(request: Request): Promise<Response> {
-    if (!this.socket) return Response.json({ error: "Workspace is offline" }, { status: 503 });
-    const body = (await request.json()) as WorkspaceAssignmentCorrelation & { payload: unknown };
+    if (!this.socket)
+      return Response.json({ error: "Workspace is offline" }, { status: 503 });
+    const body = (await request.json()) as WorkspaceAssignmentCorrelation & {
+      payload: unknown;
+    };
     this.send({
       protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
       protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,

@@ -236,7 +236,7 @@ void main() {
     final api = StudioApiClient(
       baseUrl: 'https://conclave.test/api',
       client: client,
-    )..setActiveWorkspace('workspace-1');
+    );
 
     final readModel = await api.loadReadModels();
 
@@ -526,10 +526,11 @@ void main() {
     final api = StudioApiClient(
       baseUrl: 'https://conclave.test/api',
       client: client,
-    )..setActiveWorkspace('workspace-2');
+    );
 
     await api.loadSnapshot();
 
-    expect(client.lastRequest?.headers.containsKey('x-conclave-workspace-id'), isFalse);
+    expect(client.lastRequest?.headers.containsKey('x-conclave-workspace-id'),
+        isFalse);
   });
 }

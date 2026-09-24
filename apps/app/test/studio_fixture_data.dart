@@ -10,8 +10,6 @@ class StudioFixtureDataSource implements StudioDataSource {
   final bool authenticated;
 
   @override
-  void setActiveWorkspace(String? workspaceId) {}
-
   @override
   Future<StudioSession> loadSession() async =>
       StudioSession(authenticated: authenticated);
@@ -86,6 +84,12 @@ class StudioFixtureDataSource implements StudioDataSource {
 
   @override
   Future<void> deleteProject({required String projectId}) async {}
+
+  @override
+  Future<void> provisionWorkstreamCheckout({
+    required String workstreamId,
+    String? workspaceId,
+  }) async {}
 
   @override
   Future<List<StudioProjectMember>> loadProjectMembers({

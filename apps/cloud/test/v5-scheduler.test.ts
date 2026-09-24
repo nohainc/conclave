@@ -42,7 +42,11 @@ function candidate(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function db(rows: Record<string, unknown>[], role = "collaborator") {
+function db(
+  rows: Record<string, unknown>[],
+  role = "collaborator",
+  lease: Record<string, unknown> | null = null,
+) {
   return {
     prepare(query: string) {
       return {
@@ -50,6 +54,7 @@ function db(rows: Record<string, unknown>[], role = "collaborator") {
           return this;
         },
         async first<T>() {
+          if (query.includes("workstream_execution_leases")) return lease as T;
           return query.includes("project_memberships") ? ({ role } as T) : null;
         },
         async all<T>() {
@@ -106,6 +111,118 @@ describe("V5 Project execution scheduler", () => {
   it("rejects Project viewers before considering execution capacity", async () => {
     await expect(selectProjectExecutionTarget(db([candidate()], "viewer"), {
       projectId: "project-a", requesterUserId: "user-viewer", role: "reviewer", capabilities: [],
+    })).resolves.toBeNull();
+  });
+
+  it("keeps stateless research eligible for an auxiliary Workspace and binds its revision", async () => {
+    const target = await selectProjectExecutionTarget(db([candidate()]), {
+      projectId: "project-a",
+      requesterUserId: "user-requester",
+      role: "researcher",
+      capabilities: ["repository"],
+      executionClass: "stateless_read",
+      expectedRevision: "checkpoint-42",
+    });
+    expect(target).toMatchObject({
+      workspaceId: "workspace-a",
+      executionClass: "stateless_read",
+      expectedRevision: "checkpoint-42",
+    });
+    expect(target?.permissionSnapshot).toMatchObject({
+      checkpointRevision: "checkpoint-42",
+    });
+  });
+
+  it("forces stateful work through the Primary Workspace active lease", async () => {
+    const lease = {
+      workstreamId: "workstream-1",
+      workRequestId: "work-request-1",
+      workspaceId: "workspace-primary",
+      checkoutId: "checkout-1",
+      leaseId: "lease-1",
+      fencingToken: 9,
+      expectedRevision: "revision-1",
+    };
+    const primary = candidate({ workspace_id: "workspace-primary", grant_id: "grant-primary" });
+    const auxiliary = candidate({ workspace_id: "workspace-auxiliary", grant_id: "grant-auxiliary" });
+    await expect(selectProjectExecutionTarget(db([auxiliary, primary], "collaborator", lease), {
+      projectId: "project-a",
+      requesterUserId: "user-requester",
+      role: "implementer",
+      capabilities: ["repository"],
+      executionClass: "stateful_workstream",
+      workstreamId: "workstream-1",
+      workRequestId: "work-request-1",
+    })).resolves.toMatchObject({
+      workspaceId: "workspace-primary",
+      checkoutId: "checkout-1",
+      leaseId: "lease-1",
+      fencingToken: 9,
+      expectedRevision: "revision-1",
+      executionClass: "stateful_workstream",
+    });
+    await expect(selectProjectExecutionTarget(db([primary], "collaborator", lease), {
+      projectId: "project-a", requesterUserId: "user-requester", role: "implementer",
+      capabilities: ["repository"], executionClass: "stateful_workstream",
+      workstreamId: "workstream-1", workRequestId: "work-request-1",
+      workspaceId: "workspace-auxiliary",
+    })).resolves.toBeNull();
+  });
+
+  it("denies stateful work when the Primary Workspace is offline or its Account is unavailable", async () => {
+    const lease = {
+      workstreamId: "workstream-1",
+      workRequestId: "work-request-1",
+      workspaceId: "workspace-primary",
+      checkoutId: "checkout-1",
+      leaseId: "lease-1",
+      fencingToken: 1,
+      expectedRevision: "revision-1",
+    };
+    await expect(selectProjectExecutionTarget(db([], "collaborator", lease), {
+      projectId: "project-a", requesterUserId: "user-requester", role: "implementer",
+      capabilities: ["repository"], executionClass: "stateful_workstream",
+      workstreamId: "workstream-1", workRequestId: "work-request-1",
+    })).resolves.toBeNull();
+    await expect(selectProjectExecutionTarget(db([candidate({ workspace_id: "workspace-primary", workspace_status: "offline" })], "collaborator", lease), {
+      projectId: "project-a", requesterUserId: "user-requester", role: "implementer",
+      capabilities: ["repository"], executionClass: "stateful_workstream",
+      workstreamId: "workstream-1", workRequestId: "work-request-1",
+    })).resolves.toBeNull();
+    await expect(selectProjectExecutionTarget(db([candidate({ workspace_id: "workspace-primary", account_status: "revoked" })], "collaborator", lease), {
+      projectId: "project-a", requesterUserId: "user-requester", role: "implementer",
+      capabilities: ["repository"], executionClass: "stateful_workstream",
+      workstreamId: "workstream-1", workRequestId: "work-request-1",
+    })).resolves.toBeNull();
+  });
+
+  it("rechecks revoked Workspace and Account grants before dispatch", async () => {
+    await expect(selectProjectExecutionTarget(db([
+      candidate({ grant_status: "revoked" }),
+    ]), {
+      projectId: "project-a", requesterUserId: "user-requester", role: "implementer",
+      capabilities: ["repository"],
+    })).resolves.toBeNull();
+    await expect(selectProjectExecutionTarget(db([
+      candidate({ account_grant_id: "account-grant-1", account_status: "revoked" }),
+    ]), {
+      projectId: "project-a", requesterUserId: "user-requester", role: "implementer",
+      capabilities: ["repository"],
+    })).resolves.toBeNull();
+  });
+
+  it("applies Workspace capacity after the Workstream lease boundary", async () => {
+    const lease = {
+      workstreamId: "workstream-1", workRequestId: "work-request-1",
+      workspaceId: "workspace-primary", checkoutId: "checkout-1",
+      leaseId: "lease-1", fencingToken: 2, expectedRevision: "revision-1",
+    };
+    await expect(selectProjectExecutionTarget(db([
+      candidate({ workspace_id: "workspace-primary", active_assignments: 2 }),
+    ], "collaborator", lease), {
+      projectId: "project-a", requesterUserId: "user-requester", role: "implementer",
+      capabilities: ["repository"], executionClass: "stateful_workstream",
+      workstreamId: "workstream-1", workRequestId: "work-request-1",
     })).resolves.toBeNull();
   });
 });

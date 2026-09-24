@@ -19,7 +19,6 @@ import '../features/chat/prompt_composer.dart';
 import '../features/execution/task_pipeline_dag.dart';
 import '../features/home/home_page.dart';
 import '../features/projects/projects_pages.dart';
-import '../features/workspace/workspace_settings_page.dart';
 import '../features/workspace/workspaces_page.dart';
 import 'studio_models.dart';
 import 'studio_data.dart';
@@ -56,7 +55,6 @@ typedef StudioApp = ConclaveAppShell;
 
 class _StudioAppState extends State<ConclaveAppShell> {
   late StudioSnapshot snapshot;
-  String? selectedWorkspaceId;
   String? selectedProjectId;
   RunStatus? optimisticRunStatus;
   Timer? refreshTimer;
@@ -201,10 +199,14 @@ class _StudioAppState extends State<ConclaveAppShell> {
           .firstOrNull ??
       snapshot.activeChat;
 
-  String? get activeWorkspaceId =>
-      snapshot.workspaceId ??
-      selectedWorkspaceId ??
-      store.workspaces.activeWorkspaceId;
+  StudioWorkstream? get selectedWorkstream {
+    final project = selectedProject;
+    return project?.workstreams
+        .where((workstream) => workstream.id == navigation.workstreamId)
+        .firstOrNull;
+  }
+
+  String? get executionWorkspaceId => snapshot.workspaceId;
 
   int get unreadNotificationCount =>
       notifications.where((notification) => !notification.read).length;
@@ -260,7 +262,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
       if (!mounted) return;
       setState(() {
         snapshot = StudioSnapshot.empty();
-        selectedWorkspaceId = null;
         selectedProjectId = null;
         authRequired = true;
         pendingInvitations = const [];
@@ -377,30 +378,12 @@ class _StudioAppState extends State<ConclaveAppShell> {
 
   Future<void> _loadWorkspaces() async {
     try {
-      final loaded = await store.workspaces.list();
+      await store.workspaces.list();
       if (!mounted) return;
-      setState(() {
-        selectedWorkspaceId ??= loaded.firstOrNull?.id;
-      });
-      widget.dataSource.setActiveWorkspace(selectedWorkspaceId);
       _startRealtime();
     } catch (_) {
       // Snapshot loading remains the primary path for anonymous development.
     }
-  }
-
-  Future<void> _switchWorkspace(String workspaceId) async {
-    if (workspaceId == selectedWorkspaceId) return;
-    setState(() {
-      selectedWorkspaceId = workspaceId;
-      selectedProjectId = null;
-      selectedChatId = null;
-      isLoading = true;
-      loadError = null;
-    });
-    widget.dataSource.setActiveWorkspace(workspaceId);
-    _startRealtime();
-    await _loadSnapshot(workspaceId: workspaceId);
   }
 
   Future<void> _createWorkspace() async {
@@ -444,11 +427,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
       final workspace = await store.workspaces.create(name: name);
       if (!mounted) return;
       setState(() {
-        selectedWorkspaceId = workspace.id;
         selectedProjectId = null;
         selectedChatId = null;
       });
-      widget.dataSource.setActiveWorkspace(workspace.id);
       _startRealtime();
       await _loadSnapshot(workspaceId: workspace.id, showSpinner: false);
       if (mounted) _showSnackBar('Workspace created.');
@@ -456,73 +437,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
       if (mounted) {
         _showSnackBar(error.toString(), type: ToastType.error);
       }
-    }
-  }
-
-  Future<void> _showWorkspaceMenu() async {
-    final sheetContext = navigatorKey.currentState?.overlay?.context ?? context;
-    final action = await showModalBottomSheet<String>(
-      context: sheetContext,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          padding: const EdgeInsets.only(bottom: 12),
-          children: [
-            const ListTile(
-              title: Text('Workspace'),
-              subtitle: Text('Projects, people and execution resources'),
-            ),
-            ...workspaces.map(
-              (workspace) => ListTile(
-                leading: Icon(
-                  workspace.id == selectedWorkspaceId
-                      ? Icons.check_circle
-                      : Icons.circle_outlined,
-                  color: workspace.id == selectedWorkspaceId
-                      ? Theme.of(sheetContext).colorScheme.primary
-                      : null,
-                ),
-                title: Text(workspace.name),
-                subtitle: Text(workspace.role),
-                onTap: () => Navigator.of(sheetContext).pop(workspace.id),
-              ),
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.add_business_outlined),
-              title: const Text('New workspace'),
-              onTap: () => Navigator.of(sheetContext).pop('create'),
-            ),
-            if (pendingInvitations.isNotEmpty)
-              ListTile(
-                leading: const Icon(Icons.mail_outline),
-                title: const Text('Invitations'),
-                trailing: CircleAvatar(
-                  radius: 11,
-                  child: Text('${pendingInvitations.length}',
-                      style: const TextStyle(fontSize: 11)),
-                ),
-                onTap: () => Navigator.of(sheetContext).pop('invitations'),
-              ),
-            ListTile(
-              leading: const Icon(Icons.settings_outlined),
-              title: const Text('Workspace settings'),
-              onTap: () => Navigator.of(sheetContext).pop('settings'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (!mounted || action == null) return;
-    if (action == 'create') {
-      await _createWorkspace();
-    } else if (action == 'settings') {
-      _navigateTo(const StudioNavigation.workspaceSettings());
-    } else if (action == 'invitations') {
-      _navigateTo(const StudioNavigation.workspaceSettings());
-    } else {
-      await _switchWorkspace(action);
     }
   }
 
@@ -584,7 +498,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
   }
 
   Future<void> _refreshRealtimeFeatures(String type) async {
-    final workspaceId = activeWorkspaceId;
+    final workspaceId = executionWorkspaceId;
     if (workspaceId == null || workspaceId.isEmpty) return;
     final eventProjectId = _lastRealtimeProjectId;
     if (eventProjectId != null &&
@@ -756,7 +670,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
       case StudioNotificationTarget.accounts:
         _navigateTo(const StudioNavigation.accounts());
       case StudioNotificationTarget.workspace:
-        _navigateTo(const StudioNavigation.workspaceSettings());
+        _navigateTo(const StudioNavigation.hosts());
       case null:
         break;
     }
@@ -826,7 +740,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
   }
 
   void _startRealtime() {
-    final workspaceId = activeWorkspaceId;
+    final workspaceId = executionWorkspaceId;
     if (workspaceId == null || workspaceId.isEmpty) return;
     if (!realtimeStarted) {
       realtimeStarted = true;
@@ -889,7 +803,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
   }
 
   Future<void> _requestCredentialSetup(StudioCredentialProfile account) async {
-    final workspaceId = activeWorkspaceId;
+    final workspaceId = executionWorkspaceId;
     if (workspaceId == null) return;
     try {
       await widget.dataSource.requestCredentialSetup(
@@ -904,7 +818,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
   }
 
   Future<void> _revokeCredentialProfile(StudioCredentialProfile account) async {
-    final workspaceId = activeWorkspaceId;
+    final workspaceId = executionWorkspaceId;
     if (workspaceId == null) return;
     try {
       await widget.dataSource.revokeCredentialProfile(
@@ -959,13 +873,11 @@ class _StudioAppState extends State<ConclaveAppShell> {
       });
     }
     try {
-      final loaded = await store.reload(
-          projectId: projectId,
-          workspaceId: workspaceId ?? selectedWorkspaceId);
+      final loaded =
+          await store.reload(projectId: projectId, workspaceId: workspaceId);
       if (!mounted) return;
       setState(() {
         snapshot = loaded;
-        selectedWorkspaceId = workspaceId ?? selectedWorkspaceId;
         optimisticRunStatus = null;
         selectedQuality = loaded.policy?.preset ?? selectedQuality;
         selectedProjectId = loaded.projects.any(
@@ -1063,7 +975,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
       projectId: next.projectId ?? selectedProjectId,
       chatId: next.chatId,
       runId: next.runId,
-      executionWorkspaceId: activeWorkspaceId,
+      executionWorkspaceId: executionWorkspaceId,
     ));
   }
 
@@ -1266,7 +1178,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
       }
       return;
     }
-    final workspaceId = activeWorkspaceId;
+    final workspaceId = executionWorkspaceId;
     if (workspaceId == null || workspaceId.isEmpty) {
       if (mounted) {
         setState(() => workerActionMessage =
@@ -2279,8 +2191,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
             {
               StudioRouteKind.home,
               StudioRouteKind.projects,
-              StudioRouteKind.project,
-              StudioRouteKind.chat,
+        StudioRouteKind.project,
+        StudioRouteKind.chat,
+        StudioRouteKind.workstream,
             }.contains(navigation.kind));
   }
 
@@ -2315,7 +2228,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
               ),
             ]),
             const SizedBox(height: 24),
-            _workspaceSelector(),
+            _workspaceSummary(),
             const SizedBox(height: 16),
             _sidebarLabel('WORKSPACE'),
             _navItem(Icons.home_outlined, 'Home', const StudioNavigation.home(),
@@ -2431,42 +2344,35 @@ class _StudioAppState extends State<ConclaveAppShell> {
               fontWeight: FontWeight.w700,
               letterSpacing: 1.0)));
 
-  Widget _workspaceSelector() {
-    final workspace =
-        workspaces.where((item) => item.id == selectedWorkspaceId).firstOrNull;
+  Widget _workspaceSummary() {
+    final workspace = workspaces.firstOrNull;
     return Semantics(
-      button: true,
       label: workspace == null
-          ? 'Select workspace'
-          : 'Current workspace: ${workspace.name}',
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: _showWorkspaceMenu,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: .07),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.white.withValues(alpha: .1)),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.workspaces_outline,
-                  color: Colors.white70, size: 17),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  workspace?.name ?? 'Choose workspace',
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600),
-                ),
+          ? 'Execution workspaces'
+          : 'Owned execution workspaces: ${workspace.name}',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: .07),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white.withValues(alpha: .1)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.workspaces_outline,
+                color: Colors.white70, size: 17),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                workspace?.name ?? 'Execution Workspaces',
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600),
               ),
-              const Icon(Icons.expand_more, color: Colors.white60, size: 18),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -2544,12 +2450,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
             expandedProjectIds.add(project.id);
             selectedChatId = project.chats.firstOrNull?.id;
           });
-          final chat = project.chats.firstOrNull;
-          _navigateTo(
-              chat == null
-                  ? StudioNavigation.project(project.id)
-                  : StudioNavigation.chat(project.id, chat.id),
-              replace: true);
+          _navigateTo(StudioNavigation.project(project.id), replace: true);
           _loadSnapshot(projectId: project.id);
         },
         borderRadius: BorderRadius.circular(9),
@@ -2583,26 +2484,26 @@ class _StudioAppState extends State<ConclaveAppShell> {
         ),
       ),
       if (expanded)
-        ...project.chats.map(
-          (chat) => InkWell(
+        ...project.workstreams.map(
+          (workstream) => InkWell(
             onTap: () {
               setState(() {
                 selectedProjectId = project.id;
-                selectedChatId = chat.id;
+                selectedWorkstreamId = workstream.id;
               });
-              _navigateTo(StudioNavigation.chat(project.id, chat.id));
+              _navigateTo(StudioNavigation.workstream(project.id, workstream.id));
             },
             child: Padding(
               padding: const EdgeInsets.fromLTRB(30, 7, 8, 7),
               child: Row(children: [
-                Icon(Icons.chat_bubble_outline,
+                Icon(Icons.route_outlined,
                     size: 13,
-                    color: selectedChatId == chat.id
+                    color: selectedWorkstreamId == workstream.id
                         ? const Color(0xffbcb3ff)
                         : Colors.white38),
                 const SizedBox(width: 7),
                 Expanded(
-                    child: Text(chat.title,
+                    child: Text(workstream.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -2879,26 +2780,38 @@ class _StudioAppState extends State<ConclaveAppShell> {
     return ProjectPage(
       project: project,
       dataSource: widget.dataSource,
-      onCreateChat: _createChat,
-      onOpenChat: (chatId) =>
-          _navigateTo(StudioNavigation.chat(project.id, chatId)),
+      onOpenWorkstream: (workstreamId) =>
+          _navigateTo(StudioNavigation.workstream(project.id, workstreamId)),
       onEdit: () => _editProject(project),
       onArchive: () => _archiveProject(project),
       onDelete: () => _deleteProject(project.id),
     );
   }
 
-  Widget _workspaceSettingsView() => WorkspaceSettingsPage(
-        workspaceId: activeWorkspaceId ?? snapshot.workspaceId ?? '',
-        workspaceName: workspaces
-                .where((workspace) => workspace.id == activeWorkspaceId)
-                .firstOrNull
-                ?.name ??
-            'Workspace unavailable',
-        dataSource: widget.dataSource,
-        hostCount: snapshot.agents.length,
-        accountCount: snapshot.accounts.length,
-      );
+  Widget _workstreamView() {
+    final project = selectedProject;
+    final workstream = selectedWorkstream;
+    if (project == null || workstream == null) return _projectsView();
+    return WorkstreamPage(
+      project: project,
+      workstream: workstream,
+      onBackToProject: () =>
+          _navigateTo(StudioNavigation.project(project.id)),
+      onArchive: () => _showSnackBar('Workstream archived in the v6 shell.'),
+      onProvisionCheckout: () async {
+        try {
+          await widget.dataSource.provisionWorkstreamCheckout(
+            workstreamId: workstream.id,
+          );
+          if (mounted) {
+            _showSnackBar('Checkout provisioning requested.');
+          }
+        } catch (error) {
+          if (mounted) _showSnackBar(error.toString());
+        }
+      },
+    );
+  }
 
   Widget _runDetailsView(bool compact) {
     switch (navigation.kind) {
@@ -2912,12 +2825,12 @@ class _StudioAppState extends State<ConclaveAppShell> {
         return _usageView();
       case StudioRouteKind.profileSecurity:
         return _profileSecurityView();
-      case StudioRouteKind.workspaceSettings:
-        return _workspaceSettingsView();
       case StudioRouteKind.projects:
         return _projectsView();
       case StudioRouteKind.project:
         return _projectOverviewView();
+      case StudioRouteKind.workstream:
+        return _workstreamView();
       case StudioRouteKind.run:
       case StudioRouteKind.home:
       case StudioRouteKind.chat:
@@ -3153,8 +3066,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
                     fontWeight: FontWeight.w700,
                     color: Color(0xff20202c))),
             const SizedBox(height: 5),
-            const Text(
-                'Chat with Conclave and follow multi-worker execution inline.',
+          const Text(
+                'Historical discussion. Create or open a Workstream for execution.',
                 style: TextStyle(color: Color(0xff777683), fontSize: 13)),
           ]),
         ),
@@ -3165,18 +3078,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
         ),
       ]),
       const SizedBox(height: 22),
-      if (pendingRunPrompt != null) ...[
-        _approvalPromptCard(),
-        const SizedBox(height: 14),
-      ],
-      if (snapshot.run != null && snapshot.tasks.isNotEmpty) ...[
-        _chatExecutionProgress(),
-        const SizedBox(height: 14),
-      ],
       _panel(
         title: 'Conversation',
-        subtitle:
-            '${messages.length} messages · ${_qualityLabel(selectedQuality)} policy',
+          subtitle: '${messages.length} messages · discussion only',
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -3218,6 +3122,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   () => showAdvancedExecution = !showAdvancedExecution),
               snapshot: snapshot,
               isBusy: isSendingChat,
+              discussionOnly: true,
             ),
           ],
         ),
@@ -4587,7 +4492,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
       );
 
   Future<void> _createCredentialProfile() async {
-    final workspaceId = activeWorkspaceId ?? snapshot.workspaceId;
+    final workspaceId = executionWorkspaceId;
     if (workspaceId == null || workspaceId.isEmpty) return;
     if (snapshot.plugins.isEmpty) {
       _showSnackBar('Add a Worker before creating an AI Account.',

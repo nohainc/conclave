@@ -6,6 +6,7 @@ abstract interface class RealtimeClient {
   Future<void> setWorkspace(String workspaceId);
   Future<void> setScopes({
     String? projectId,
+    String? workstreamId,
     String? chatId,
     String? runId,
     String? executionWorkspaceId,
@@ -27,6 +28,7 @@ class _StubRealtimeClient implements RealtimeClient {
   @override
   Future<void> setScopes({
     String? projectId,
+    String? workstreamId,
     String? chatId,
     String? runId,
     String? executionWorkspaceId,

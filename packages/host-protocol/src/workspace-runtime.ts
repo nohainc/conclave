@@ -17,6 +17,11 @@ export const WORKSPACE_RUNTIME_MESSAGE_TYPES = [
   "worker.remove",
   "worker.status",
   "credential.status",
+  "checkout.provision",
+  "checkout.status",
+  "checkout.recover",
+  "checkout.archive",
+  "checkout.finalize",
   "assignment.start",
   "assignment.ack",
   "assignment.progress",
@@ -90,4 +95,3 @@ export function serializeWorkspaceRuntimeMessage(
 ): string {
   return JSON.stringify(workspaceRuntimeEnvelopeSchema.parse(input));
 }
-

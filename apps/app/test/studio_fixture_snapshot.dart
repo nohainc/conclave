@@ -23,6 +23,20 @@ StudioSnapshot studioFixtureSnapshot() => const StudioSnapshot(
           branch: 'main',
           activeGoals: 1,
           lastActivity: '2 min ago',
+          workstreams: [
+            StudioWorkstream(
+              id: 'workstream-auth',
+              projectId: 'forge',
+              name: 'Authentication hardening',
+              lead: 'Vitalii',
+              status: 'active',
+              brief:
+                  'Harden the authentication boundaries before the next release.',
+              primaryWorkspace: 'MacBook Pro',
+              currentCheckpoint: 'Repository review',
+              queueStatus: 'Idle',
+            ),
+          ],
           chats: [
             StudioChat(
               id: 'chat-auth-1',

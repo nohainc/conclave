@@ -42,4 +42,15 @@ describe("Workspace Runtime protocol", () => {
       }).type,
     ).toBe("assignment.start");
   });
+
+  it("accepts checkout control-plane messages", () => {
+    for (const type of [
+      "checkout.provision",
+      "checkout.status",
+      "checkout.recover",
+      "checkout.archive",
+    ]) {
+      expect(parseWorkspaceRuntimeMessage({ ...base, type }).type).toBe(type);
+    }
+  });
 });

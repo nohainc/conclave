@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ConclaveRunWorkflow } from "../src/workflow.js";
+import { BUILT_IN_WORKFLOW_VERSIONS } from "@conclave/core";
 
 function workflow(
   terminalEvents: readonly Record<string, unknown>[],
@@ -36,6 +37,30 @@ const params = {
 };
 
 describe("durable Forge lifecycle", () => {
+  it("runs an immutable WorkflowVersion instead of fixed research/planning stages", async () => {
+    const stepNames: string[] = [];
+    const { instance, step } = workflow(
+      [{
+        eventId: "workflow-terminal-1",
+        runId: "run-1",
+        executionId: "forge-execution-1",
+        status: "completed",
+      }],
+      "forge-execution-1",
+      stepNames,
+    );
+    const result = await instance.run({
+      payload: {
+        ...params,
+        workRequestId: "work-request-1",
+        workflowVersion: BUILT_IN_WORKFLOW_VERSIONS.Research,
+      },
+    } as never, step);
+    expect(result.stage).toBe("completed");
+    expect(stepNames).toContain("workflow:research:execute:1");
+    expect(stepNames).not.toContain("checkpoint:planning");
+  });
+
   it("records durable phases before waiting for Forge terminal state", async () => {
     const stepNames: string[] = [];
     const { instance, step } = workflow(

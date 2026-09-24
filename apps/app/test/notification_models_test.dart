@@ -3,6 +3,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/notifications/notification_models.dart';
 
 void main() {
+  test('only meaningful realtime states create notifications', () {
+    expect(isMeaningfulRealtimeNotification('workstream.needs_input'), isTrue);
+    expect(isMeaningfulRealtimeNotification('workstream.completed'), isTrue);
+    expect(isMeaningfulRealtimeNotification('workstream.recovery.required'), isTrue);
+    expect(isMeaningfulRealtimeNotification('discussion.message.created'), isFalse);
+    expect(isMeaningfulRealtimeNotification('workstream.lease.status'), isFalse);
+  });
   test('maps terminal Run events to an unread notification', () {
     final notification = notificationFromRealtimeEvent({
       'eventId': 'event-1',
