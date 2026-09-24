@@ -70,54 +70,73 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
     final actions = <CommandPaletteAction>[
       // Navigation Actions
       CommandPaletteAction(
-        title: 'Open Workspaces',
-        subtitle: 'Manage local and remote machines',
-        icon: Icons.dns_outlined,
+        title: 'Home',
+        subtitle: 'Overview, recent activity, and system status',
+        icon: Icons.home_outlined,
         category: 'Navigation',
         onSelect: () {
-          Navigator.of(context).pop();
+          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+          widget.onNavigateTo(const StudioNavigation.home());
+        },
+      ),
+      CommandPaletteAction(
+        title: 'Projects',
+        subtitle: 'View all projects and repositories',
+        icon: Icons.folder_outlined,
+        category: 'Navigation',
+        onSelect: () {
+          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+          widget.onNavigateTo(const StudioNavigation.projects());
+        },
+      ),
+      CommandPaletteAction(
+        title: 'Workspaces',
+        subtitle: 'Manage local and remote machines',
+        icon: Icons.computer_outlined,
+        category: 'Navigation',
+        onSelect: () {
+          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
           widget.onNavigateTo(const StudioNavigation.hosts());
         },
       ),
       CommandPaletteAction(
-        title: 'Open Workers',
+        title: 'Workers',
         subtitle: 'View worker catalog and capabilities',
         icon: Icons.extension_outlined,
         category: 'Navigation',
         onSelect: () {
-          Navigator.of(context).pop();
+          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
           widget.onNavigateTo(const StudioNavigation.workers());
         },
       ),
       CommandPaletteAction(
-        title: 'Open Accounts',
+        title: 'AI Accounts',
         subtitle: 'Credential profiles and authorization',
-        icon: Icons.key_outlined,
+        icon: Icons.account_circle_outlined,
         category: 'Navigation',
         onSelect: () {
-          Navigator.of(context).pop();
+          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
           widget.onNavigateTo(const StudioNavigation.accounts());
         },
       ),
       CommandPaletteAction(
-        title: 'Account & Security',
-        subtitle: 'Profile, Passkeys, and MFA settings',
+        title: 'Usage',
+        subtitle: 'Token usage, cost analytics, and quotas',
+        icon: Icons.analytics_outlined,
+        category: 'Navigation',
+        onSelect: () {
+          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+          widget.onNavigateTo(const StudioNavigation.usage());
+        },
+      ),
+      CommandPaletteAction(
+        title: 'Profile & Security',
+        subtitle: 'Profile, passkeys, and account settings',
         icon: Icons.person_outline_rounded,
         category: 'Navigation',
         onSelect: () {
-          Navigator.of(context).pop();
+          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
           widget.onNavigateTo(const StudioNavigation.profileSecurity());
-        },
-      ),
-      // Quick Actions
-      CommandPaletteAction(
-        title: 'New Goal',
-        subtitle: 'Create a new orchestration goal',
-        icon: Icons.add_circle_outline_rounded,
-        category: 'Actions',
-        onSelect: () {
-          Navigator.of(context).pop();
-          widget.onNewGoal();
         },
       ),
       CommandPaletteAction(
@@ -126,13 +145,13 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
         icon: Icons.dark_mode_outlined,
         category: 'Actions',
         onSelect: () {
-          Navigator.of(context).pop();
+          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
           widget.onToggleTheme();
         },
       ),
     ];
 
-    // Add Projects
+    // Add Projects and Workstreams
     for (final project in widget.snapshot.projects) {
       actions.add(CommandPaletteAction(
         title: 'Project: ${project.name}',
@@ -141,12 +160,27 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
         icon: Icons.folder_outlined,
         category: 'Projects',
         onSelect: () {
-          Navigator.of(context).pop();
+          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
           widget.onSelectProject(project.id);
         },
       ));
 
-      // Add Project Chats
+      // Add Workstreams (First-class)
+      for (final workstream in project.workstreams) {
+        actions.add(CommandPaletteAction(
+          title: 'Workstream: ${workstream.name}',
+          subtitle: '${project.name} · ${workstream.status}',
+          icon: Icons.alt_route_rounded,
+          category: 'Workstreams',
+          onSelect: () {
+            if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+            widget.onNavigateTo(
+                StudioNavigation.workstream(project.id, workstream.id));
+          },
+        ));
+      }
+
+      // Add Project Chats (Legacy)
       for (final chat in project.chats) {
         actions.add(CommandPaletteAction(
           title: 'Chat: ${chat.title}',
@@ -154,11 +188,74 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
           icon: Icons.chat_bubble_outline_rounded,
           category: 'Chats',
           onSelect: () {
-            Navigator.of(context).pop();
+            if (Navigator.of(context).canPop()) Navigator.of(context).pop();
             widget.onSelectChat(project.id, chat.id);
           },
         ));
       }
+    }
+
+    // Add Active Run if present
+    final activeRun = widget.snapshot.run;
+    if (activeRun != null) {
+      final projectId = widget.snapshot.projects.firstOrNull?.id ?? '';
+      actions.add(CommandPaletteAction(
+        title: 'Active Run: ${activeRun.objective.isNotEmpty ? activeRun.objective : activeRun.id}',
+        subtitle:
+            '${activeRun.status.name} · ${activeRun.completedTaskCount}/${activeRun.taskCount} tasks',
+        icon: Icons.play_circle_outline_rounded,
+        category: 'Runs',
+        onSelect: () {
+          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+          widget.onNavigateTo(StudioNavigation.run(
+            projectId,
+            activeRun.id,
+            workstreamId: activeRun.workstreamId,
+          ));
+        },
+      ));
+    }
+
+    // Add Workspaces / Agents
+    for (final agent in widget.snapshot.agents) {
+      actions.add(CommandPaletteAction(
+        title: 'Workspace: ${agent.name}',
+        subtitle: '${agent.hostname} · ${agent.status}',
+        icon: Icons.computer_outlined,
+        category: 'Workspaces',
+        onSelect: () {
+          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+          widget.onNavigateTo(const StudioNavigation.hosts());
+        },
+      ));
+    }
+
+    // Add Workers
+    for (final worker in widget.snapshot.workers) {
+      actions.add(CommandPaletteAction(
+        title: 'Worker: ${worker.name}',
+        subtitle: '${worker.provider} · ${worker.role}',
+        icon: Icons.extension_outlined,
+        category: 'Workers',
+        onSelect: () {
+          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+          widget.onNavigateTo(const StudioNavigation.workers());
+        },
+      ));
+    }
+
+    // Add Accounts
+    for (final account in widget.snapshot.accounts) {
+      actions.add(CommandPaletteAction(
+        title: 'Account: ${account.displayName}',
+        subtitle: '${account.worker} · ${account.status}',
+        icon: Icons.account_circle_outlined,
+        category: 'Accounts',
+        onSelect: () {
+          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+          widget.onNavigateTo(const StudioNavigation.accounts());
+        },
+      ));
     }
 
     if (_query.isEmpty) return actions;

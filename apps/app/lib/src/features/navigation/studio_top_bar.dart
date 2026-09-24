@@ -37,6 +37,10 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
     final mutedInk =
         isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted;
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isDesktop = screenWidth >= 800 && !compact;
+    final isMedium = screenWidth >= 600 && screenWidth < 800 && !compact;
+
     return Container(
       height: 60,
       padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 24),
@@ -70,8 +74,8 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
             ),
           ),
 
-          // Search / Jump to bar
-          if (!compact) ...[
+          // Search / Jump to bar responsive affordance
+          if (isDesktop) ...[
             InkWell(
               onTap: onOpenCommandPalette,
               borderRadius: BorderRadius.circular(8),
@@ -119,6 +123,41 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                           fontWeight: FontWeight.w700,
                           color: mutedInk,
                         ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+          ] else if (isMedium) ...[
+            InkWell(
+              onTap: onOpenCommandPalette,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? ConclaveBrand.darkPaper
+                      : ConclaveBrand.lightPaper,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.search_rounded,
+                      size: 16,
+                      color: mutedInk,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Search',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: mutedInk,
                       ),
                     ),
                   ],

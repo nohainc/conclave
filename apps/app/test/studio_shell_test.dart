@@ -341,8 +341,12 @@ void main() {
 
     testWidgets('renders breadcrumbs, search affordance, and workspace status',
         (tester) async {
-      await tester.binding.setSurfaceSize(const Size(1200, 800));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
       StudioNavigation? navigatedTo;
       var commandPaletteOpened = false;
@@ -392,7 +396,7 @@ void main() {
       expect(find.text('Conclave AX'), findsOneWidget);
       expect(find.text('Authentication redesign'), findsOneWidget);
 
-      // Check Search affordance
+      // Check Search affordance (desktop)
       expect(find.text('Search or jump to...'), findsOneWidget);
       expect(find.text('⌘K'), findsOneWidget);
 
@@ -414,8 +418,12 @@ void main() {
 
     testWidgets('renders Run breadcrumbs: Project / Workstream / Run',
         (tester) async {
-      await tester.binding.setSurfaceSize(const Size(1200, 800));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
       StudioNavigation? navigatedTo;
 

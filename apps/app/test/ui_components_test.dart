@@ -143,17 +143,18 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Open Workspaces'), findsOneWidget);
-      expect(find.text('Open Workers'), findsOneWidget);
-      expect(find.text('Open Accounts'), findsOneWidget);
+      expect(find.text('Workspaces'), findsWidgets);
+      expect(find.text('Workers'), findsWidgets);
+      expect(find.text('AI Accounts'), findsWidgets);
 
       await tester.enterText(find.byType(TextField), 'Workspaces');
       await tester.pumpAndSettle();
 
-      expect(find.text('Open Workspaces'), findsOneWidget);
-      expect(find.text('Open Workers'), findsNothing);
+      expect(find.text('Workspaces'), findsWidgets);
+      expect(find.text('Workers'), findsNothing);
 
-      await tester.tap(find.text('Open Workspaces'));
+      await tester.tap(find.byType(ListTile).first);
+      await tester.pumpAndSettle();
       expect(navigatedTo?.kind, StudioRouteKind.hosts);
     });
 
@@ -178,10 +179,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      // Navigate down from Home (index 0) to Projects (index 1)
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
 
-      expect(navigatedTo?.kind, StudioRouteKind.workers);
+      expect(navigatedTo?.kind, StudioRouteKind.projects);
     });
   });
 }
