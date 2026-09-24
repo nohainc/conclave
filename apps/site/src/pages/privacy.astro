@@ -5,22 +5,25 @@ import SectionHeader from "../components/SectionHeader.astro";
 import SiteLayout from "../layouts/SiteLayout.astro";
 ---
 
-<SiteLayout title="Privacy — Conclave AX" description="How Conclave AX approaches privacy for people, Workspaces, Workers, and Accounts.">
+<SiteLayout title="Privacy — Conclave AX" description="How Conclave AX separates identity, Project collaboration, local execution, AI Accounts, and public-site telemetry.">
   <Section>
     <Container>
-      <SectionHeader eyebrow="Privacy" title="Privacy is part of the architecture." description="Conclave AX is architected with strict boundary separation to protect user credentials, source repositories, and execution telemetry." headingLevel={1} />
+      <SectionHeader eyebrow="Privacy" title="Privacy follows the same boundaries as the product." description="Conclave AX is designed so collaboration, execution capacity, and external AI credentials can be authorized independently." headingLevel={1} />
       <div class="legal-content">
-        <h2>Human identity and Workspace data</h2>
-        <p>Conclave Cloud uses human authentication (such as WebAuthn passkeys) to verify identity, then strictly scopes access based on Workspace membership and project permissions. Workspace chats, runs, and artifacts remain confidential to authorized members.</p>
+        <h2>Human identity and Projects</h2>
+        <p>Conclave Cloud authenticates people and applies Project membership and role checks to shared collaboration data such as Workstreams, discussions, Runs, artifacts, and Project settings. Joining a Project does not make another person's execution Workspace or private AI Accounts generally available.</p>
 
-        <h2>Accounts and external AI providers</h2>
-        <p>Accounts represent external AI identities (e.g. OpenAI or Anthropic credentials). They are private by default. When shared within a Workspace, Conclave AX enables authorized execution without exposing plaintext secrets. Usage remains attributable to the requester and Account owner.</p>
+        <h2>Workspaces and local execution</h2>
+        <p>A Workspace represents an execution environment controlled by its owner. A Project can use that environment only through an explicit Workspace grant that defines allowed execution scope. Local repository access and Worker processes remain subject to Workspace runtime controls.</p>
 
-        <h2>Workspaces and Workers</h2>
-        <p>Workspaces are distinct execution identities. Workers execute in supervised processes behind a Workspace daemon and do not receive ambient machine permissions or Conclave Cloud master keys. Source files and build artifacts remain on your Workspace machine unless explicitly exported.</p>
+        <h2>AI Accounts</h2>
+        <p>AI Accounts represent external provider identities. They are private by default and are authorized independently from Workspace access. Sharing an Account authorizes eligible use; it does not expose the underlying plaintext credential to Project collaborators.</p>
 
-        <h2>Telemetry and Public Website</h2>
-        <p>This public website uses minimal, privacy-first, same-origin telemetry without cross-site tracking cookies. No credentials, source code, or private Workspace data are collected through this public site.</p>
+        <h2>Workers and assignment data</h2>
+        <p>Workers receive scoped assignment context needed for their task rather than Conclave user sessions or unrestricted machine credentials. Execution history may include task metadata, results, artifacts, findings, usage, and evidence needed to operate and audit the workflow.</p>
+
+        <h2>Public website</h2>
+        <p>This public website uses minimal, same-origin operational telemetry and does not provide a place to submit AI credentials, private repository content, or Workspace secrets.</p>
       </div>
     </Container>
   </Section>
