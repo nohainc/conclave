@@ -2354,7 +2354,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(selectedProject!.name,
+              Text(selectedProject?.name ?? 'Project',
                   style:
                       const TextStyle(color: Color(0xff777683), fontSize: 12)),
               const SizedBox(height: 7),
