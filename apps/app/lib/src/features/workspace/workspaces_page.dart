@@ -2,27 +2,49 @@ import 'package:flutter/material.dart';
 
 import '../../studio/studio_models.dart';
 
+/// Execution configuration center consolidating Workspaces, Workers, and AI Accounts.
 class WorkspacesPage extends StatefulWidget {
   const WorkspacesPage({
     super.key,
     required this.workspaces,
     required this.workers,
     required this.accounts,
+    this.plugins = const [],
+    this.initialTab = 0,
     required this.onAdd,
     required this.onRename,
     required this.onUpdate,
     required this.onRevoke,
     required this.onGrant,
+    this.onSetWorkerAvailability,
+    this.onShowWorkerDetails,
+    this.onCreateAccount,
+    this.onRequestAccountSetup,
+    this.onRevokeAccount,
+    this.onNavigateToAccounts,
+    this.workerActionMessage,
+    this.onDismissWorkerActionMessage,
   });
 
   final List<StudioAgent> workspaces;
   final List<StudioWorker> workers;
   final List<StudioCredentialProfile> accounts;
+  final List<StudioPlugin> plugins;
+  final int initialTab;
   final VoidCallback onAdd;
   final ValueChanged<StudioAgent> onRename;
   final ValueChanged<StudioAgent> onUpdate;
   final ValueChanged<StudioAgent> onRevoke;
   final ValueChanged<StudioAgent> onGrant;
+  final void Function(StudioPlugin plugin, StudioAgent host, bool desired)?
+      onSetWorkerAvailability;
+  final ValueChanged<StudioPlugin>? onShowWorkerDetails;
+  final VoidCallback? onCreateAccount;
+  final ValueChanged<StudioCredentialProfile>? onRequestAccountSetup;
+  final ValueChanged<StudioCredentialProfile>? onRevokeAccount;
+  final VoidCallback? onNavigateToAccounts;
+  final String? workerActionMessage;
+  final VoidCallback? onDismissWorkerActionMessage;
 
   @override
   State<WorkspacesPage> createState() => _WorkspacesPageState();
@@ -38,23 +60,59 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
         : widget.workspaces
             .where((item) => item.id == selected!.id)
             .firstOrNull;
-    return active == null ? _list(context) : _detail(context, active);
+    return active == null ? _executionCenter(context) : _detail(context, active);
   }
 
-  Widget _list(BuildContext context) => ListView(
+  Widget _executionCenter(BuildContext context) {
+    return DefaultTabController(
+      key: ValueKey('execution_tabs_${widget.initialTab}'),
+      length: 3,
+      initialIndex: widget.initialTab.clamp(0, 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _header(context, 'Workspaces',
-              'Execution environments where your Workers run.', widget.onAdd),
-          const SizedBox(height: 20),
+          _header(
+            context,
+            'Workspaces',
+            'Execution environments, Workers, and AI Accounts.',
+            widget.onAdd,
+          ),
+          const SizedBox(height: 16),
+          const TabBar(
+            isScrollable: true,
+            tabs: [
+              Tab(text: 'Workspaces'),
+              Tab(text: 'Workers'),
+              Tab(text: 'AI Accounts'),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _workspacesTab(context),
+                _workersTab(context),
+                _accountsTab(context),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _workspacesTab(BuildContext context) => ListView(
+        children: [
           if (widget.workspaces.isEmpty)
             _Panel(
               title: 'No Workspaces yet',
               subtitle:
                   'Add a Workspace to provide execution capacity to Projects.',
               child: FilledButton.icon(
-                  onPressed: widget.onAdd,
-                  icon: const Icon(Icons.add_business_outlined),
-                  label: const Text('Add Workspace')),
+                onPressed: widget.onAdd,
+                icon: const Icon(Icons.add_business_outlined),
+                label: const Text('Add Workspace'),
+              ),
             )
           else
             ...widget.workspaces
@@ -105,6 +163,240 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
       ),
     );
   }
+
+  // --- Workers Tab ---
+
+  bool _workerDesiredOn(StudioPlugin plugin, StudioAgent host) =>
+      host.desiredWorkers.any((worker) => worker.workerId == plugin.id);
+
+  bool _workerInstalledOn(StudioPlugin plugin, StudioAgent host) =>
+      host.installedWorkers.any((worker) =>
+          worker.workerId == plugin.id &&
+          worker.status.toLowerCase() != 'failed');
+
+  Widget _workerHostRow(StudioPlugin plugin, StudioAgent host) {
+    final desired = _workerDesiredOn(plugin, host);
+    final installed = _workerInstalledOn(plugin, host);
+    final state = !desired
+        ? 'Not installed'
+        : installed
+            ? 'Installed'
+            : 'Installing';
+    final stateColor = !desired
+        ? const Color(0xff777683)
+        : installed
+            ? const Color(0xff3ca879)
+            : const Color(0xffc1842d);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          Icon(
+            installed ? Icons.check_circle_outline : Icons.circle_outlined,
+            size: 18,
+            color: stateColor,
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Text(host.name)),
+          Text(state, style: TextStyle(color: stateColor)),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: widget.onSetWorkerAvailability != null
+                ? () => widget.onSetWorkerAvailability!(plugin, host, !desired)
+                : null,
+            child: Text(desired ? 'Remove from Workspace' : 'Make available'),
+          ),
+          if (desired)
+            IconButton(
+              tooltip: 'Update Worker',
+              onPressed: widget.onSetWorkerAvailability != null
+                  ? () => widget.onSetWorkerAvailability!(plugin, host, true)
+                  : null,
+              icon: const Icon(Icons.system_update_outlined, size: 19),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _workersTab(BuildContext context) => ListView(
+        children: [
+          if (widget.plugins.isEmpty)
+            const _Panel(
+              title: 'No Workers available',
+              subtitle:
+                  'Workers appear when the catalog has a compatible release.',
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 22),
+                child: Text('Nothing to configure yet.',
+                    style: TextStyle(color: Color(0xff777683))),
+              ),
+            )
+          else
+            ...widget.plugins.map((plugin) {
+              final readyHosts = widget.workspaces
+                  .where((host) => _workerInstalledOn(plugin, host))
+                  .length;
+              return Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          const CircleAvatar(
+                            backgroundColor: Color(0xffeeecff),
+                            child: Icon(Icons.extension_outlined,
+                                color: Color(0xff6254d9)),
+                          ),
+                          const SizedBox(width: 12),
+                          SizedBox(
+                            width: 220,
+                            child: Text(plugin.name,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700, fontSize: 16)),
+                          ),
+                          Text('Ready on $readyHosts Workspaces',
+                              style: const TextStyle(color: Color(0xff777683))),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                          '${plugin.version} · ${plugin.publisher.isEmpty ? 'Unknown publisher' : plugin.publisher} · ${plugin.capabilities.join(' · ')}'),
+                      const SizedBox(height: 6),
+                      Text(plugin.permissions.isEmpty
+                          ? 'No special permissions'
+                          : 'Requirements: ${plugin.permissions.join(', ')}'),
+                      if (widget.workspaces.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        ...widget.workspaces
+                            .map((host) => _workerHostRow(plugin, host)),
+                      ],
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: widget.onShowWorkerDetails != null
+                                ? () => widget.onShowWorkerDetails!(plugin)
+                                : null,
+                            icon: const Icon(Icons.info_outline, size: 18),
+                            label: const Text('View capabilities'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: widget.onShowWorkerDetails != null
+                                ? () => widget.onShowWorkerDetails!(plugin)
+                                : null,
+                            icon: const Icon(Icons.rule_outlined, size: 18),
+                            label: const Text('View requirements'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: widget.onNavigateToAccounts,
+                            icon: const Icon(Icons.account_circle_outlined,
+                                size: 18),
+                            label: const Text('Connect Account'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+        ],
+      );
+
+  // --- AI Accounts Tab ---
+
+  Widget _accountsTab(BuildContext context) => ListView(
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.icon(
+              onPressed: widget.onCreateAccount,
+              icon: const Icon(Icons.add),
+              label: const Text('Add AI Account'),
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (widget.workerActionMessage != null) ...[
+            MaterialBanner(
+              content: Text(widget.workerActionMessage!),
+              leading: const Icon(Icons.info_outline),
+              actions: [
+                TextButton(
+                  onPressed: widget.onDismissWorkerActionMessage,
+                  child: const Text('Dismiss'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+          if (widget.accounts.isEmpty)
+            const _Panel(
+              title: 'No Accounts connected',
+              subtitle:
+                  'Connect an Account to make a Worker ready for execution.',
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 22),
+                child: Text('Nothing to configure yet.',
+                    style: TextStyle(color: Color(0xff777683))),
+              ),
+            )
+          else ...[
+            const Text('Accounts',
+                style: TextStyle(color: Color(0xff777683), fontSize: 13)),
+            const SizedBox(height: 12),
+            ...widget.accounts.map(
+              (account) => Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xffeeecff),
+                    child: Icon(Icons.account_circle_outlined,
+                        color: Color(0xff6254d9), size: 20),
+                  ),
+                  title: Text(account.displayName,
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: Text(
+                      'Owner: ${account.owner}\nWorker: ${account.worker} · Workspace: ${account.host}\nStorage: ${account.storageLocation} · Sharing: ${account.sharing}\nLast used: ${account.lastUsed} · Usage: ${account.usage}'),
+                  isThreeLine: true,
+                  trailing: PopupMenuButton<String>(
+                    tooltip: 'Account actions',
+                    onSelected: (action) {
+                      if (action == 'setup') {
+                        widget.onRequestAccountSetup?.call(account);
+                      } else if (action == 'revoke') {
+                        widget.onRevokeAccount?.call(account);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'setup',
+                        child: Text(account.status.toLowerCase() == 'ready'
+                            ? 'Reconnect / re-authenticate'
+                            : 'Connect Account'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'revoke',
+                        child: Text('Revoke Account'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      );
 
   Widget _detail(BuildContext context, StudioAgent workspace) {
     final localAccounts = widget.accounts

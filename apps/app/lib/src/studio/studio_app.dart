@@ -2336,11 +2336,11 @@ class _StudioAppState extends State<ConclaveAppShell> {
   Widget _runDetailsView(bool compact) {
     switch (navigation.kind) {
       case StudioRouteKind.hosts:
-        return _hostsView();
+        return _hostsView(initialTab: 0);
       case StudioRouteKind.workers:
-        return _catalogView();
+        return _hostsView(initialTab: 1);
       case StudioRouteKind.accounts:
-        return _accountsView();
+        return _hostsView(initialTab: 2);
       case StudioRouteKind.usage:
         return _usageView();
       case StudioRouteKind.profileSecurity:
@@ -3531,36 +3531,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
                 color: color, fontSize: 10, fontWeight: FontWeight.w700))
       ]));
 
-  Widget _fleetHeader(String title, String subtitle, IconData icon) => Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(12)),
-            child: Icon(icon, color: Theme.of(context).colorScheme.primary),
-          ),
-          const SizedBox(width: 13),
-          Expanded(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Semantics(
-                header: true,
-                child: Text(title,
-                    style: const TextStyle(
-                        fontSize: 25, fontWeight: FontWeight.w700)),
-              ),
-              const SizedBox(height: 5),
-              Text(subtitle,
-                  style:
-                      const TextStyle(color: Color(0xff777683), fontSize: 13)),
-            ]),
-          ),
-        ],
-      );
-
   Future<void> _setWorkerAvailability(
       StudioPlugin plugin, StudioAgent host, bool enabled) async {
     final workspaceId = snapshot.workspaceId;
@@ -3615,163 +3585,27 @@ class _StudioAppState extends State<ConclaveAppShell> {
     );
   }
 
-  bool _workerDesiredOn(StudioPlugin plugin, StudioAgent host) =>
-      host.desiredWorkers.any((worker) => worker.workerId == plugin.id);
-
-  bool _workerInstalledOn(StudioPlugin plugin, StudioAgent host) =>
-      host.installedWorkers.any((worker) =>
-          worker.workerId == plugin.id &&
-          worker.status.toLowerCase() != 'failed');
-
-  Widget _workerHostRow(StudioPlugin plugin, StudioAgent host) {
-    final desired = _workerDesiredOn(plugin, host);
-    final installed = _workerInstalledOn(plugin, host);
-    final state = !desired
-        ? 'Not installed'
-        : installed
-            ? 'Installed'
-            : 'Installing';
-    final stateColor = !desired
-        ? const Color(0xff777683)
-        : installed
-            ? const Color(0xff3ca879)
-            : const Color(0xffc1842d);
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Row(
-        children: [
-          Icon(
-            installed ? Icons.check_circle_outline : Icons.circle_outlined,
-            size: 18,
-            color: stateColor,
-          ),
-          const SizedBox(width: 8),
-          Expanded(child: Text(host.name)),
-          Text(state, style: TextStyle(color: stateColor)),
-          const SizedBox(width: 8),
-          TextButton(
-            onPressed: () => _setWorkerAvailability(plugin, host, !desired),
-            child: Text(desired ? 'Remove from Workspace' : 'Make available'),
-          ),
-          if (desired)
-            IconButton(
-              tooltip: 'Update Worker',
-              onPressed: () => _setWorkerAvailability(plugin, host, true),
-              icon: const Icon(Icons.system_update_outlined, size: 19),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _hostsView() => WorkspacesPage(
+  Widget _hostsView({int initialTab = 0}) => WorkspacesPage(
         workspaces: snapshot.agents,
         workers: snapshot.workers,
         accounts: snapshot.accounts,
+        plugins: snapshot.plugins,
+        initialTab: initialTab,
         onAdd: _enrollAgent,
         onRename: _renameHost,
         onUpdate: _announceAgentUpdate,
         onRevoke: (workspace) => _revokeAgent(workspace.id),
         onGrant: _bindHost,
-      );
-
-
-
-  Widget _catalogView() => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _fleetHeader(
-              'Workers',
-              'Capabilities available to your paired Workspaces.',
-              Icons.extension_outlined),
-          const SizedBox(height: 24),
-          if (snapshot.plugins.isEmpty)
-            _emptyFleetCard('No Workers available',
-                'Workers appear when the catalog has a compatible release.')
-          else
-            ...snapshot.plugins.map((plugin) {
-              final readyHosts = snapshot.agents
-                  .where((host) => _workerInstalledOn(plugin, host))
-                  .length;
-              return Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 8,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          const CircleAvatar(
-                            backgroundColor: Color(0xffeeecff),
-                            child: Icon(Icons.extension_outlined,
-                                color: Color(0xff6254d9)),
-                          ),
-                          const SizedBox(width: 12),
-                          SizedBox(
-                            width: 220,
-                            child: Text(plugin.name,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w700, fontSize: 16)),
-                          ),
-                          Text('Ready on $readyHosts Workspaces',
-                              style: const TextStyle(color: Color(0xff777683))),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                          '${plugin.version} · ${plugin.publisher.isEmpty ? 'Unknown publisher' : plugin.publisher} · ${plugin.capabilities.join(' · ')}'),
-                      const SizedBox(height: 6),
-                      Text(plugin.permissions.isEmpty
-                          ? 'No special permissions'
-                          : 'Requirements: ${plugin.permissions.join(', ')}'),
-                      if (snapshot.agents.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        ...snapshot.agents
-                            .map((host) => _workerHostRow(plugin, host)),
-                      ],
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 4,
-                        children: [
-                          OutlinedButton.icon(
-                            onPressed: () => _showWorkerDetails(plugin),
-                            icon: const Icon(Icons.info_outline, size: 18),
-                            label: const Text('View capabilities'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: () => _showWorkerDetails(plugin),
-                            icon: const Icon(Icons.rule_outlined, size: 18),
-                            label: const Text('View requirements'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: () =>
-                                _navigateTo(const StudioNavigation.accounts()),
-                            icon: const Icon(Icons.account_circle_outlined,
-                                size: 18),
-                            label: const Text('Connect Account'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }),
-        ],
-      );
-
-  Widget _emptyFleetCard(String title, String subtitle) => _panel(
-        title: title,
-        subtitle: subtitle,
-        child: const Padding(
-            padding: EdgeInsets.symmetric(vertical: 22),
-            child: Text('Nothing to configure yet.',
-                style: TextStyle(color: Color(0xff777683)))),
+        onSetWorkerAvailability: _setWorkerAvailability,
+        onShowWorkerDetails: _showWorkerDetails,
+        onCreateAccount: _createCredentialProfile,
+        onRequestAccountSetup: _requestCredentialSetup,
+        onRevokeAccount: _revokeCredentialProfile,
+        onNavigateToAccounts: () =>
+            _navigateTo(const StudioNavigation.accounts()),
+        workerActionMessage: workerActionMessage,
+        onDismissWorkerActionMessage: () =>
+            setState(() => workerActionMessage = null),
       );
 
   Future<void> _createCredentialProfile() async {
@@ -3984,88 +3818,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
       }
     }
   }
-
-  Widget _accountsView() => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _fleetHeader(
-              'AI Accounts',
-              'Accounts used by Workers on your Workspaces.',
-              Icons.account_circle_outlined),
-          const SizedBox(height: 24),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FilledButton.icon(
-              onPressed: _createCredentialProfile,
-              icon: const Icon(Icons.add),
-              label: const Text('Add AI Account'),
-            ),
-          ),
-          const SizedBox(height: 20),
-          if (workerActionMessage != null) ...[
-            MaterialBanner(
-              content: Text(workerActionMessage!),
-              leading: const Icon(Icons.info_outline),
-              actions: [
-                TextButton(
-                  onPressed: () => setState(() => workerActionMessage = null),
-                  child: const Text('Dismiss'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-          ],
-          if (snapshot.accounts.isEmpty)
-            _emptyFleetCard('No Accounts connected',
-                'Connect an Account to make a Worker ready for execution.')
-          else ...[
-            const Text('Accounts',
-                style: TextStyle(color: Color(0xff777683), fontSize: 13)),
-            const SizedBox(height: 24),
-            ...snapshot.accounts.map(
-              (account) => Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                child: ListTile(
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-                  leading: const CircleAvatar(
-                    backgroundColor: Color(0xffeeecff),
-                    child: Icon(Icons.account_circle_outlined,
-                        color: Color(0xff6254d9), size: 20),
-                  ),
-                  title: Text(account.displayName,
-                      style: const TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: Text(
-                      'Owner: ${account.owner}\nWorker: ${account.worker} · Workspace: ${account.host}\nStorage: ${account.storageLocation} · Sharing: ${account.sharing}\nLast used: ${account.lastUsed} · Usage: ${account.usage}'),
-                  isThreeLine: true,
-                  trailing: PopupMenuButton<String>(
-                    tooltip: 'Account actions',
-                    onSelected: (action) {
-                      if (action == 'setup') {
-                        _requestCredentialSetup(account);
-                      } else if (action == 'revoke') {
-                        _revokeCredentialProfile(account);
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'setup',
-                        child: Text(account.status.toLowerCase() == 'ready'
-                            ? 'Reconnect / re-authenticate'
-                            : 'Connect Account'),
-                      ),
-                      const PopupMenuItem(
-                        value: 'revoke',
-                        child: Text('Revoke Account'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ],
-      );
 
   Widget _usageView() {
     final report = snapshot.usageReport;
