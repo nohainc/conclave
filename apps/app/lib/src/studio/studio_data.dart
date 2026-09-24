@@ -222,6 +222,7 @@ class StudioApiClient implements StudioDataSource {
   final http.Client client;
   final passkeyBrowser = passkeys.createStudioPasskeyBrowser();
   String? activeWorkspaceId;
+  String? sessionToken;
 
   @override
   void setActiveWorkspace(String? workspaceId) {
@@ -231,6 +232,8 @@ class StudioApiClient implements StudioDataSource {
   Map<String, String> _headers({String? contentType}) => {
         'accept': 'application/json',
         if (contentType != null) 'content-type': contentType,
+        if (sessionToken != null && sessionToken!.isNotEmpty)
+          'authorization': 'Bearer $sessionToken',
         if (activeWorkspaceId != null)
           'x-conclave-workspace-id': activeWorkspaceId!,
       };
@@ -315,6 +318,7 @@ class StudioApiClient implements StudioDataSource {
 
   @override
   Future<void> logout() async {
+    sessionToken = null;
     final response = await client.post(Uri.parse('$baseUrl/auth/sign-out'),
         headers: _headers());
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -342,6 +346,32 @@ class StudioApiClient implements StudioDataSource {
         // Keep the status-based message for non-JSON responses.
       }
       throw StudioApiException(message, statusCode: response.statusCode);
+    }
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map) {
+        if (decoded['token'] is String) {
+          sessionToken = decoded['token'] as String;
+        } else if (decoded['session'] is Map &&
+            decoded['session']['token'] is String) {
+          sessionToken = decoded['session']['token'] as String;
+        }
+      }
+    } catch (_) {
+      // Non-JSON response
+    }
+    try {
+      final setCookie = response.headers['set-cookie'];
+      if (setCookie != null && (sessionToken == null || sessionToken!.isEmpty)) {
+        final match = RegExp(
+                r'(?:better-auth\.session_token|__Secure-better-auth\.session_token)=([^;]+)')
+            .firstMatch(setCookie);
+        if (match != null) {
+          sessionToken = match.group(1);
+        }
+      }
+    } catch (_) {
+      // Ignored
     }
   }
 
