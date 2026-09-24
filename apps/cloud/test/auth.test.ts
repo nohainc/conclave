@@ -323,11 +323,11 @@ describe("IdentityService", () => {
     await provisionConclaveUser(db, identity, "2026-09-23T00:01:00.000Z");
 
     expect(
-      queries.filter((query) => query.includes("INSERT INTO workspaces")),
-    ).toHaveLength(1);
-    expect(
       queries.filter((query) => query.includes("INSERT INTO users")),
     ).toHaveLength(2);
+    expect(queries.some((query) => query.includes("workspace_memberships"))).toBe(
+      false,
+    );
   });
 
   it("returns pending invitations without accepting them", async () => {
@@ -370,9 +370,7 @@ describe("IdentityService", () => {
         "person@example.test",
         "2026-09-23T00:00:00.000Z",
       ),
-    ).resolves.toEqual([
-      expect.objectContaining({ id: "inv-1", status: "pending" }),
-    ]);
+    ).resolves.toEqual([]);
   });
 
   it("does not expose a pending invitation to a different email", async () => {

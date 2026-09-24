@@ -920,11 +920,11 @@ async function handleListWorkspaces(
     });
   }
   const rows = await env.CONCLAVE_DB.prepare(
-    `SELECT w.id, w.name, w.slug, w.status, wm.role, w.created_at AS createdAt, w.updated_at AS updatedAt
-     FROM workspaces w
-     JOIN workspace_memberships wm ON wm.workspace_id = w.id
-     WHERE wm.user_id = ?1 AND w.status = 'active'
-     ORDER BY w.name ASC`,
+    `SELECT id, name, status, 'owner' AS role,
+            created_at AS createdAt, updated_at AS updatedAt
+     FROM execution_workspaces
+     WHERE owner_user_id = ?1
+     ORDER BY name ASC`,
   )
     .bind(context.userId)
     .all<{
@@ -967,15 +967,12 @@ async function handleCreateWorkspace(
 
   await env.CONCLAVE_DB.batch([
     env.CONCLAVE_DB.prepare(
-      "INSERT INTO workspaces (id, name, slug, status, created_at, updated_at) VALUES (?1, ?2, ?3, 'active', ?4, ?4)",
-    ).bind(id, name, slug, now),
-    env.CONCLAVE_DB.prepare(
-      "INSERT INTO workspace_memberships (id, workspace_id, user_id, role, created_at, updated_at) VALUES (?1, ?2, ?3, 'owner', ?4, ?4)",
-    ).bind(`wm-${crypto.randomUUID()}`, id, context.userId, now),
+      "INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at) VALUES (?1, ?2, ?3, 'enrolled', ?4, ?4)",
+    ).bind(id, context.userId, name, now),
   ]);
 
   return json(
-    { workspace: { ...workspace, status: "active", role: "owner" } },
+    { workspace: { ...workspace, status: "enrolled", role: "owner" } },
     { status: 201 },
   );
 }
@@ -6888,13 +6885,37 @@ async function handleStudioSnapshot(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   const securityEnv = env as SecurityEnv;
-  const context = await authorizeRequest(
-    request,
-    securityEnv,
-    "project:read",
-    projectId ?? undefined,
-    accessContext,
-  );
+  const context = projectId
+    ? await authorizeRequest(
+        request,
+        securityEnv,
+        "project:read",
+        projectId,
+        accessContext,
+      )
+    : await securityContext(request, securityEnv, accessContext);
+  if (!projectId && context.authorizedProjectIds.length === 0) {
+    return json({
+      workspaceId: null,
+      viewer: {
+        id: context.userId,
+        displayName: context.user.displayName,
+        email: context.user.email,
+      },
+      activeRunId: null,
+      run: null,
+      projects: [],
+      workers: [],
+      hosts: [],
+      plugins: [],
+      tasks: [],
+      findings: [],
+      events: [],
+      artifacts: [],
+      modelCalls: [],
+      accounts: [],
+    });
+  }
   const testMode = testAuthenticationEnabled(securityEnv);
   const projectFilter =
     projectId === null
