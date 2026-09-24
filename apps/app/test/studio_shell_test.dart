@@ -201,21 +201,19 @@ void main() {
       // Check Header & Main Sections
       expect(find.text('Conclave AX'), findsNWidgets(2)); // Brand & Project
       expect(find.text('Home'), findsOneWidget);
+      expect(find.text('Projects'), findsOneWidget);
       expect(find.text('PROJECTS'), findsOneWidget);
-      expect(find.text('EXECUTION'), findsOneWidget);
-      expect(find.text('Workspaces'), findsOneWidget);
-      expect(find.text('Workers'), findsOneWidget);
-      expect(find.text('AI Accounts'), findsOneWidget);
-      expect(find.text('INSIGHTS'), findsOneWidget);
-      expect(find.text('Usage'), findsOneWidget);
+
+      // Infrequent execution and insights configuration are removed from permanent sidebar
+      expect(find.text('EXECUTION'), findsNothing);
+      expect(find.text('Workers'), findsNothing);
+      expect(find.text('AI Accounts'), findsNothing);
+      expect(find.text('INSIGHTS'), findsNothing);
 
       // Check Project & Workstream tree
       expect(find.text('Authentication redesign'), findsOneWidget);
 
-      // Check Running count badge (1 running workstream) and Workspaces badge (1 workspace)
-      expect(find.text('1'), findsNWidgets(2));
-
-      // Check Viewer Initials & Name
+      // Check Viewer Initials & Name button
       expect(find.text('VN'), findsOneWidget);
       expect(find.text('Vitalii Noha'), findsOneWidget);
 
@@ -251,13 +249,24 @@ void main() {
       await tester.tap(find.byIcon(Icons.expand_more_rounded));
       expect(toggledProjectId, 'project-1');
 
-      // Tap Account menu at bottom of sidebar
-      await tester.tap(find.byTooltip('Account menu'));
+      // Tap User Profile Button at bottom of sidebar -> navigates to /settings/profile
+      await tester.tap(find.text('Vitalii Noha'));
+      expect(navigatedTo?.kind, StudioRouteKind.profileSecurity);
+
+      // Tap ⋯ Application menu at bottom of sidebar
+      await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
-      expect(find.text('Switch to light mode'), findsOneWidget);
+      expect(find.text('Workspaces'), findsOneWidget);
+      expect(find.text('Usage'), findsOneWidget);
+      expect(find.text('Appearance'), findsOneWidget);
       expect(find.text('About Conclave AX'), findsOneWidget);
       expect(find.text('Website'), findsOneWidget);
       expect(find.text('Log out'), findsOneWidget);
+
+      // Tap Workspaces in Application menu
+      await tester.tap(find.text('Workspaces'));
+      await tester.pumpAndSettle();
+      expect(navigatedTo?.kind, StudioRouteKind.hosts);
     });
 
     testWidgets('excludes archived workstreams from sidebar list',
@@ -715,10 +724,9 @@ void main() {
       expect(find.byTooltip('Conclave AX'), findsOneWidget);
       expect(find.byTooltip('Home'), findsOneWidget);
       expect(find.byTooltip('Projects'), findsOneWidget);
-      expect(find.byTooltip('Workspaces'), findsOneWidget);
-      expect(find.byTooltip('Workers'), findsOneWidget);
-      expect(find.byTooltip('AI Accounts'), findsOneWidget);
-      expect(find.byTooltip('Usage'), findsOneWidget);
+      expect(find.byTooltip('Open project tree & menu'), findsOneWidget);
+      expect(find.byTooltip('Vitalii Noha'), findsOneWidget);
+      expect(find.byTooltip('Application menu'), findsOneWidget);
 
       // Tapping Conclave AX brand icon opens about
       var aboutOpened = false;
@@ -751,8 +759,17 @@ void main() {
       await tester.tap(find.byTooltip('Open project tree & menu'));
       expect(drawerOpened, isTrue);
 
-      // Tapping Workspaces navigates to hosts
-      await tester.tap(find.byTooltip('Workspaces'));
+      // Tapping Profile avatar button navigates to profile
+      await tester.tap(find.byTooltip('Vitalii Noha'));
+      expect(navigatedTo?.kind, StudioRouteKind.profileSecurity);
+
+      // Tapping Application menu opens menu with Workspaces
+      await tester.tap(find.byTooltip('Application menu'));
+      await tester.pumpAndSettle();
+      expect(find.text('Workspaces'), findsOneWidget);
+      expect(find.text('Usage'), findsOneWidget);
+      await tester.tap(find.text('Workspaces'));
+      await tester.pumpAndSettle();
       expect(navigatedTo?.kind, StudioRouteKind.hosts);
     });
 

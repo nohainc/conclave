@@ -83,14 +83,20 @@ class StudioSidebar extends StatelessWidget {
             ),
             const SizedBox(height: 18),
 
-            // Top-level Navigation: Home
+            // Top-level Navigation: Home and Projects
             _navItem(
               icon: Icons.home_outlined,
               label: 'Home',
               target: const StudioNavigation.home(),
               context: sidebarContext,
             ),
-            const SizedBox(height: 16),
+            _navItem(
+              icon: Icons.folder_outlined,
+              label: 'Projects',
+              target: const StudioNavigation.projects(),
+              context: sidebarContext,
+            ),
+            const SizedBox(height: 12),
 
             // Navigation Sections
             Expanded(
@@ -205,47 +211,6 @@ class StudioSidebar extends StatelessWidget {
                       ),
                     ...shellContext.projects
                         .map((project) => _projectItem(project, sidebarContext)),
-                    const SizedBox(height: 16),
-
-                    // EXECUTION Section Header
-                    _sectionHeader('EXECUTION'),
-                    _navItem(
-                      icon: Icons.computer_outlined,
-                      label: 'Workspaces',
-                      target: const StudioNavigation.hosts(),
-                      badge: shellContext.workspaces.isNotEmpty
-                          ? '${shellContext.workspaces.length}'
-                          : null,
-                      context: sidebarContext,
-                    ),
-                    _navItem(
-                      icon: Icons.extension_outlined,
-                      label: 'Workers',
-                      target: const StudioNavigation.workers(),
-                      badge: shellContext.workers.isNotEmpty
-                          ? '${shellContext.workers.length}'
-                          : null,
-                      context: sidebarContext,
-                    ),
-                    _navItem(
-                      icon: Icons.account_circle_outlined,
-                      label: 'AI Accounts',
-                      target: const StudioNavigation.accounts(),
-                      badge: shellContext.accounts.isNotEmpty
-                          ? '${shellContext.accounts.length}'
-                          : null,
-                      context: sidebarContext,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // INSIGHTS Section Header
-                    _sectionHeader('INSIGHTS'),
-                    _navItem(
-                      icon: Icons.analytics_outlined,
-                      label: 'Usage',
-                      target: const StudioNavigation.usage(),
-                      context: sidebarContext,
-                    ),
                   ],
                 ),
               ),
@@ -259,104 +224,69 @@ class StudioSidebar extends StatelessWidget {
                 context: sidebarContext,
               ),
 
-            _navItem(
-              icon: Icons.person_outline_rounded,
-              label: 'Profile & Security',
-              target: const StudioNavigation.profileSecurity(),
-              context: sidebarContext,
-            ),
             const SizedBox(height: 6),
 
-            // Viewer / Profile Row
+            // Bottom Profile Button + ⋯ Application Menu
             Row(
               children: [
-                CircleAvatar(
-                  radius: 13,
-                  backgroundColor: const Color(0xffd8d2ff),
-                  child: Text(
-                    shellContext.viewerInitials,
-                    style: const TextStyle(
-                      fontSize: 9,
-                      color: Color(0xff4238a0),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    shellContext.viewerDisplayName ??
-                        shellContext.viewerEmail ??
-                        'Not signed in',
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white70, fontSize: 11),
-                  ),
-                ),
-                PopupMenuButton<String>(
-                  tooltip: 'Account menu',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 190),
-                  onSelected: (value) {
-                    if (value == 'theme') onToggleTheme?.call();
-                    if (value == 'about') onOpenAbout();
-                    if (value == 'website') {
-                      onOpenExternal(Uri.parse('https://conclaveax.com'));
-                    }
-                    if (value == 'logout') onLogout();
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: 'theme',
+                  child: InkWell(
+                    onTap: () {
+                      onNavigateTo(const StudioNavigation.profileSecurity());
+                      if (compact) Scaffold.maybeOf(sidebarContext)?.closeDrawer();
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: shellContext.isNavActive(
+                                const StudioNavigation.profileSecurity())
+                            ? const Color(0xff302d4b)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                       child: Row(
                         children: [
-                          Icon(
-                            shellContext.isDarkTheme
-                                ? Icons.light_mode_outlined
-                                : Icons.dark_mode_outlined,
-                            size: 16,
+                          CircleAvatar(
+                            radius: 13,
+                            backgroundColor: const Color(0xffd8d2ff),
+                            child: Text(
+                              shellContext.viewerInitials,
+                              style: const TextStyle(
+                                fontSize: 9,
+                                color: Color(0xff4238a0),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                           const SizedBox(width: 8),
-                          Text(shellContext.isDarkTheme
-                              ? 'Switch to light mode'
-                              : 'Switch to dark mode'),
+                          Expanded(
+                            child: Text(
+                              shellContext.viewerDisplayName ??
+                                  shellContext.viewerEmail ??
+                                  'Not signed in',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: shellContext.isNavActive(
+                                        const StudioNavigation.profileSecurity())
+                                    ? Colors.white
+                                    : Colors.white70,
+                                fontSize: 11.5,
+                                fontWeight: shellContext.isNavActive(
+                                        const StudioNavigation.profileSecurity())
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                    const PopupMenuItem(
-                      value: 'about',
-                      child: Row(
-                        children: [
-                          Icon(Icons.info_outline_rounded, size: 16),
-                          SizedBox(width: 8),
-                          Text('About Conclave AX'),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'website',
-                      child: Row(
-                        children: [
-                          Icon(Icons.open_in_new_rounded, size: 16),
-                          SizedBox(width: 8),
-                          Text('Website'),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuDivider(),
-                    const PopupMenuItem(
-                      value: 'logout',
-                      child: Row(
-                        children: [
-                          Icon(Icons.logout_rounded, size: 16),
-                          SizedBox(width: 8),
-                          Text('Log out'),
-                        ],
-                      ),
-                    ),
-                  ],
-                  icon: const Icon(Icons.more_horiz,
-                      color: Colors.white38, size: 16),
+                  ),
                 ),
+                const SizedBox(width: 4),
+                _buildApplicationMenu(sidebarContext),
               ],
             ),
           ],
@@ -365,18 +295,90 @@ class StudioSidebar extends StatelessWidget {
     );
   }
 
-  Widget _sectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 4, 0, 6),
-      child: Text(
-        title,
-        style: const TextStyle(
-          color: Colors.white38,
-          fontSize: 9.5,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.0,
+  Widget _buildApplicationMenu(BuildContext context) {
+    return MenuAnchor(
+      builder: (context, controller, child) {
+        return IconButton(
+          tooltip: 'Application menu',
+          icon: const Icon(
+            Icons.more_horiz_rounded,
+            color: Colors.white60,
+            size: 18,
+          ),
+          splashRadius: 14,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+          onPressed: () {
+            if (controller.isOpen) {
+              controller.close();
+            } else {
+              controller.open();
+            }
+          },
+        );
+      },
+      menuChildren: [
+        MenuItemButton(
+          leadingIcon: const Icon(Icons.computer_outlined, size: 16),
+          onPressed: () {
+            onNavigateTo(const StudioNavigation.hosts());
+            if (compact) Scaffold.maybeOf(context)?.closeDrawer();
+          },
+          child: const Text('Workspaces'),
         ),
-      ),
+        MenuItemButton(
+          leadingIcon: const Icon(Icons.analytics_outlined, size: 16),
+          onPressed: () {
+            onNavigateTo(const StudioNavigation.usage());
+            if (compact) Scaffold.maybeOf(context)?.closeDrawer();
+          },
+          child: const Text('Usage'),
+        ),
+        const Divider(height: 1),
+        SubmenuButton(
+          leadingIcon: const Icon(Icons.palette_outlined, size: 16),
+          menuChildren: [
+            MenuItemButton(
+              leadingIcon: Icon(
+                shellContext.isDarkTheme ? Icons.check_rounded : null,
+                size: 16,
+              ),
+              onPressed: () {
+                if (!shellContext.isDarkTheme) onToggleTheme?.call();
+              },
+              child: const Text('Dark'),
+            ),
+            MenuItemButton(
+              leadingIcon: Icon(
+                !shellContext.isDarkTheme ? Icons.check_rounded : null,
+                size: 16,
+              ),
+              onPressed: () {
+                if (shellContext.isDarkTheme) onToggleTheme?.call();
+              },
+              child: const Text('Light'),
+            ),
+          ],
+          child: const Text('Appearance'),
+        ),
+        const Divider(height: 1),
+        MenuItemButton(
+          leadingIcon: const Icon(Icons.info_outline_rounded, size: 16),
+          onPressed: onOpenAbout,
+          child: const Text('About Conclave AX'),
+        ),
+        MenuItemButton(
+          leadingIcon: const Icon(Icons.open_in_new_rounded, size: 16),
+          onPressed: () => onOpenExternal(Uri.parse('https://conclaveax.com')),
+          child: const Text('Website'),
+        ),
+        const Divider(height: 1),
+        MenuItemButton(
+          leadingIcon: const Icon(Icons.logout_rounded, size: 16),
+          onPressed: onLogout,
+          child: const Text('Log out'),
+        ),
+      ],
     );
   }
 
@@ -727,14 +729,6 @@ class StudioIconRail extends StatelessWidget {
           _railItem(Icons.home_outlined, 'Home', const StudioNavigation.home()),
           _railItem(Icons.folder_outlined, 'Projects',
               const StudioNavigation.projects()),
-          _railItem(Icons.computer_outlined, 'Workspaces',
-              const StudioNavigation.hosts()),
-          _railItem(Icons.extension_outlined, 'Workers',
-              const StudioNavigation.workers()),
-          _railItem(Icons.account_circle_outlined, 'AI Accounts',
-              const StudioNavigation.accounts()),
-          _railItem(Icons.analytics_outlined, 'Usage',
-              const StudioNavigation.usage()),
           const Spacer(),
           Tooltip(
             message: 'Open project tree & menu',
@@ -745,85 +739,116 @@ class StudioIconRail extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          _railItem(Icons.person_outline_rounded, 'Profile & Security',
-              const StudioNavigation.profileSecurity()),
-          const SizedBox(height: 6),
-          PopupMenuButton<String>(
-            tooltip: 'Account menu',
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 190),
-            onSelected: (value) {
-              if (value == 'theme') onToggleTheme?.call();
-              if (value == 'about') onOpenAbout();
-              if (value == 'website') {
-                onOpenExternal(Uri.parse('https://conclaveax.com'));
-              }
-              if (value == 'logout') onLogout();
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'theme',
-                child: Row(
-                  children: [
-                    Icon(
-                      shellContext.isDarkTheme
-                          ? Icons.light_mode_outlined
-                          : Icons.dark_mode_outlined,
-                      size: 16,
+          Tooltip(
+            message: shellContext.viewerDisplayName ??
+                shellContext.viewerEmail ??
+                'Profile & Security',
+            child: InkWell(
+              onTap: () =>
+                  onNavigateTo(const StudioNavigation.profileSecurity()),
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: shellContext.isNavActive(
+                          const StudioNavigation.profileSecurity())
+                      ? Border.all(color: const Color(0xffbcb3ff), width: 2)
+                      : null,
+                ),
+                child: CircleAvatar(
+                  radius: 14,
+                  backgroundColor: const Color(0xffd8d2ff),
+                  child: Text(
+                    shellContext.viewerInitials,
+                    style: const TextStyle(
+                      fontSize: 9,
+                      color: Color(0xff4238a0),
+                      fontWeight: FontWeight.bold,
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      shellContext.isDarkTheme
-                          ? 'Switch to light mode'
-                          : 'Switch to dark mode',
-                    ),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'about',
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline_rounded, size: 16),
-                    SizedBox(width: 8),
-                    Text('About Conclave AX'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'website',
-                child: Row(
-                  children: [
-                    Icon(Icons.open_in_new_rounded, size: 16),
-                    SizedBox(width: 8),
-                    Text('Website'),
-                  ],
-                ),
-              ),
-              const PopupMenuDivider(),
-              const PopupMenuItem(
-                value: 'logout',
-                child: Row(
-                  children: [
-                    Icon(Icons.logout_rounded, size: 16),
-                    SizedBox(width: 8),
-                    Text('Log out'),
-                  ],
-                ),
-              ),
-            ],
-            child: CircleAvatar(
-              radius: 14,
-              backgroundColor: const Color(0xffd8d2ff),
-              child: Text(
-                shellContext.viewerInitials,
-                style: const TextStyle(
-                  fontSize: 9,
-                  color: Color(0xff4238a0),
-                  fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
+          ),
+          const SizedBox(height: 6),
+          MenuAnchor(
+            builder: (context, controller, child) {
+              return IconButton(
+                tooltip: 'Application menu',
+                icon: const Icon(
+                  Icons.more_horiz_rounded,
+                  color: Colors.white60,
+                  size: 18,
+                ),
+                splashRadius: 14,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                onPressed: () {
+                  if (controller.isOpen) {
+                    controller.close();
+                  } else {
+                    controller.open();
+                  }
+                },
+              );
+            },
+            menuChildren: [
+              MenuItemButton(
+                leadingIcon: const Icon(Icons.computer_outlined, size: 16),
+                onPressed: () => onNavigateTo(const StudioNavigation.hosts()),
+                child: const Text('Workspaces'),
+              ),
+              MenuItemButton(
+                leadingIcon: const Icon(Icons.analytics_outlined, size: 16),
+                onPressed: () => onNavigateTo(const StudioNavigation.usage()),
+                child: const Text('Usage'),
+              ),
+              const Divider(height: 1),
+              SubmenuButton(
+                leadingIcon: const Icon(Icons.palette_outlined, size: 16),
+                menuChildren: [
+                  MenuItemButton(
+                    leadingIcon: Icon(
+                      shellContext.isDarkTheme ? Icons.check_rounded : null,
+                      size: 16,
+                    ),
+                    onPressed: () {
+                      if (!shellContext.isDarkTheme) onToggleTheme?.call();
+                    },
+                    child: const Text('Dark'),
+                  ),
+                  MenuItemButton(
+                    leadingIcon: Icon(
+                      !shellContext.isDarkTheme ? Icons.check_rounded : null,
+                      size: 16,
+                    ),
+                    onPressed: () {
+                      if (shellContext.isDarkTheme) onToggleTheme?.call();
+                    },
+                    child: const Text('Light'),
+                  ),
+                ],
+                child: const Text('Appearance'),
+              ),
+              const Divider(height: 1),
+              MenuItemButton(
+                leadingIcon: const Icon(Icons.info_outline_rounded, size: 16),
+                onPressed: onOpenAbout,
+                child: const Text('About Conclave AX'),
+              ),
+              MenuItemButton(
+                leadingIcon: const Icon(Icons.open_in_new_rounded, size: 16),
+                onPressed: () =>
+                    onOpenExternal(Uri.parse('https://conclaveax.com')),
+                child: const Text('Website'),
+              ),
+              const Divider(height: 1),
+              MenuItemButton(
+                leadingIcon: const Icon(Icons.logout_rounded, size: 16),
+                onPressed: onLogout,
+                child: const Text('Log out'),
+              ),
+            ],
           ),
         ],
       ),
