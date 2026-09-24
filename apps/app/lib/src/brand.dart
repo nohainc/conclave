@@ -90,10 +90,10 @@ abstract final class ConclaveBrand {
   }
 
   // Responsive Breakpoints (2 modes)
-  // Desktop >= 500
-  // Tablet < 500
-  static const double desktopBreakpoint = 500.0;
-  static const double tabletBreakpoint = 500.0;
+  // Desktop >= 600
+  // Tablet < 600
+  static const double desktopBreakpoint = 600.0;
+  static const double tabletBreakpoint = 600.0;
 
   static bool isDesktop(double width) => width >= desktopBreakpoint;
   static bool isTablet(double width) => width < desktopBreakpoint;

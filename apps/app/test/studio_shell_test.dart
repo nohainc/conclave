@@ -427,7 +427,6 @@ void main() {
       var logoutTriggered = false;
       var aboutTriggered = false;
       Uri? openedExternalUri;
-      var drawerOpened = false;
 
       const shellContext = StudioShellContext(
         navigation: StudioNavigation.home(),
@@ -443,7 +442,7 @@ void main() {
             body: StudioIconRail(
               shellContext: shellContext,
               onNavigateTo: (nav) => navigatedTo = nav,
-              onOpenDrawer: () => drawerOpened = true,
+              onOpenDrawer: () {},
               onSetThemeMode: (mode) => selectedThemeMode = mode,
               onLogout: () => logoutTriggered = true,
               onOpenAbout: () => aboutTriggered = true,
@@ -1966,7 +1965,7 @@ void main() {
                       child: Column(
                         children: [
                           if (!isDesktop)
-                            StudioTopBar(
+                            const StudioTopBar(
                               shellContext: shellContext,
                               onNavigateTo: _dummyNav,
                               onOpenCommandPalette: _dummyAction,

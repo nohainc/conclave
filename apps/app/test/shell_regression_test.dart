@@ -427,7 +427,7 @@ void main() {
                       child: Column(
                         children: [
                           if (!isDesktop)
-                            AppTopHud(
+                            const AppTopHud(
                               shellContext: baseShellContext,
                               onNavigateTo: _dummyNav,
                               onOpenCommandPalette: _dummyAction,
