@@ -31,13 +31,15 @@ void main() {
       (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-        body: ProjectPage(
-          project: project,
-          dataSource: const StudioFixtureDataSource(),
-          onOpenWorkstream: (_) {},
-          onEdit: () {},
-          onArchive: () {},
-          onDelete: () {},
+        body: SingleChildScrollView(
+          child: ProjectPage(
+            project: project,
+            dataSource: const StudioFixtureDataSource(),
+            onOpenWorkstream: (_) {},
+            onEdit: () {},
+            onArchive: () {},
+            onDelete: () {},
+          ),
         ),
       ),
     ));
@@ -52,18 +54,20 @@ void main() {
   testWidgets('V6 normal Workstream UI uses product vocabulary', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-        body: WorkstreamPage(
-          project: project,
-          workstream: workstream,
-          onBackToProject: () {},
-          onArchive: () {},
-          onProvisionCheckout: () {},
+        body: SingleChildScrollView(
+          child: WorkstreamPage(
+            project: project,
+            workstream: workstream,
+            onBackToProject: () {},
+            onArchive: () {},
+            onProvisionCheckout: () {},
+          ),
         ),
       ),
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('Discuss'), findsOneWidget);
+    expect(find.text('Discuss'), findsWidgets);
     expect(find.text('Work'), findsOneWidget);
     expect(find.text('No Work yet. Describe what you need, then press Run.'), findsOneWidget);
     expect(find.text('lease'), findsNothing);

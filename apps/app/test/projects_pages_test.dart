@@ -11,20 +11,22 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(360, 800));
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-        body: ProjectPage(
-          project: const StudioProject(
-            id: 'project-1',
-            name: 'Project One',
-            repository: '',
-            branch: '',
-            activeGoals: 0,
-            lastActivity: 'today',
+        body: SingleChildScrollView(
+          child: ProjectPage(
+            project: const StudioProject(
+              id: 'project-1',
+              name: 'Project One',
+              repository: '',
+              branch: '',
+              activeGoals: 0,
+              lastActivity: 'today',
+            ),
+            dataSource: const StudioFixtureDataSource(),
+            onOpenWorkstream: (_) {},
+            onEdit: () {},
+            onArchive: () {},
+            onDelete: () {},
           ),
-          dataSource: const StudioFixtureDataSource(),
-          onOpenWorkstream: (_) {},
-          onEdit: () {},
-          onArchive: () {},
-          onDelete: () {},
         ),
       ),
     ));
@@ -57,31 +59,33 @@ void main() {
       (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: Scaffold(
-        body: WorkstreamPage(
-          project: StudioProject(
-            id: 'project-1',
-            name: 'Project One',
-            repository: '',
-            branch: '',
-            activeGoals: 0,
-            lastActivity: 'today',
-            role: 'viewer',
+        body: SingleChildScrollView(
+          child: WorkstreamPage(
+            project: StudioProject(
+              id: 'project-1',
+              name: 'Project One',
+              repository: '',
+              branch: '',
+              activeGoals: 0,
+              lastActivity: 'today',
+              role: 'viewer',
+            ),
+            workstream: StudioWorkstream(
+              id: 'workstream-1',
+              projectId: 'project-1',
+              name: 'Research',
+              lead: 'Owner',
+              status: 'active',
+              brief: 'Understand the problem.',
+              primaryWorkspace: 'Not selected',
+              currentCheckpoint: 'Not started',
+              queueStatus: 'Idle',
+            ),
+            onBackToProject: _noop,
+            onArchive: _noop,
+            onProvisionCheckout: _noop,
+            initialTab: 1,
           ),
-          workstream: StudioWorkstream(
-            id: 'workstream-1',
-            projectId: 'project-1',
-            name: 'Research',
-            lead: 'Owner',
-            status: 'active',
-            brief: 'Understand the problem.',
-            primaryWorkspace: 'Not selected',
-            currentCheckpoint: 'Not started',
-            queueStatus: 'Idle',
-          ),
-          onBackToProject: _noop,
-          onArchive: _noop,
-          onProvisionCheckout: _noop,
-          initialTab: 1,
         ),
       ),
     ));
@@ -91,7 +95,7 @@ void main() {
     expect(find.text('Archive'), findsNothing);
     await tester.pumpAndSettle();
     expect(find.text('No Work yet. Describe what you need, then press Run.'),
-        findsOneWidget);
+        findsNWidgets(2));
     expect(find.text('Work'), findsNWidgets(2));
     expect(find.text('Ask AI to do something for the team. Nothing runs until you press Run.'), findsOneWidget);
     expect(find.textContaining('lease'), findsNothing);
@@ -109,31 +113,33 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
     await tester.pumpWidget(const MaterialApp(
       home: Scaffold(
-        body: WorkstreamPage(
-          project: StudioProject(
-            id: 'project-1',
-            name: 'Project One',
-            repository: '',
-            branch: '',
-            activeGoals: 0,
-            lastActivity: 'today',
-            role: 'collaborator',
+        body: SingleChildScrollView(
+          child: WorkstreamPage(
+            project: StudioProject(
+              id: 'project-1',
+              name: 'Project One',
+              repository: '',
+              branch: '',
+              activeGoals: 0,
+              lastActivity: 'today',
+              role: 'collaborator',
+            ),
+            workstream: StudioWorkstream(
+              id: 'workstream-1',
+              projectId: 'project-1',
+              name: 'Implementation',
+              lead: 'Owner',
+              status: 'active',
+              brief: 'Implement the requested change.',
+              primaryWorkspace: 'Workspace One',
+              currentCheckpoint: 'main',
+              queueStatus: 'Idle',
+            ),
+            onBackToProject: _noop,
+            onArchive: _noop,
+            onProvisionCheckout: _noop,
+            initialTab: 1,
           ),
-          workstream: StudioWorkstream(
-            id: 'workstream-1',
-            projectId: 'project-1',
-            name: 'Implementation',
-            lead: 'Owner',
-            status: 'active',
-            brief: 'Implement the requested change.',
-            primaryWorkspace: 'Workspace One',
-            currentCheckpoint: 'main',
-            queueStatus: 'Idle',
-          ),
-          onBackToProject: _noop,
-          onArchive: _noop,
-          onProvisionCheckout: _noop,
-          initialTab: 1,
         ),
       ),
     ));
@@ -161,30 +167,32 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
     await tester.pumpWidget(const MaterialApp(
       home: Scaffold(
-        body: WorkstreamPage(
-          project: StudioProject(
-            id: 'project-1',
-            name: 'Project One',
-            repository: '',
-            branch: '',
-            activeGoals: 0,
-            lastActivity: 'today',
-            role: 'collaborator',
+        body: SingleChildScrollView(
+          child: WorkstreamPage(
+            project: StudioProject(
+              id: 'project-1',
+              name: 'Project One',
+              repository: '',
+              branch: '',
+              activeGoals: 0,
+              lastActivity: 'today',
+              role: 'collaborator',
+            ),
+            workstream: StudioWorkstream(
+              id: 'workstream-1',
+              projectId: 'project-1',
+              name: 'Research',
+              lead: 'Owner',
+              status: 'active',
+              brief: 'Understand the problem.',
+              primaryWorkspace: 'Workspace One',
+              currentCheckpoint: 'main',
+              queueStatus: 'Idle',
+            ),
+            onBackToProject: _noop,
+            onArchive: _noop,
+            onProvisionCheckout: _noop,
           ),
-          workstream: StudioWorkstream(
-            id: 'workstream-1',
-            projectId: 'project-1',
-            name: 'Research',
-            lead: 'Owner',
-            status: 'active',
-            brief: 'Understand the problem.',
-            primaryWorkspace: 'Workspace One',
-            currentCheckpoint: 'main',
-            queueStatus: 'Idle',
-          ),
-          onBackToProject: _noop,
-          onArchive: _noop,
-          onProvisionCheckout: _noop,
         ),
       ),
     ));

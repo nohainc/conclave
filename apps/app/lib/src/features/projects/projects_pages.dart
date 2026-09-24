@@ -118,6 +118,7 @@ class _ProjectWorkspace extends StatefulWidget {
 }
 
 class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
+  int _tabIndex = 0;
   late List<StudioWorkstream> workstreams;
   List<StudioProjectMember> members = const [];
   List<StudioProjectInvitation> invitations = const [];
@@ -352,6 +353,7 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
 
   @override
   Widget build(BuildContext context) => DefaultTabController(
+        initialIndex: _tabIndex,
         length: 7,
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Wrap(
@@ -378,32 +380,40 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
             ],
           ),
           const SizedBox(height: 18),
-          const TabBar(isScrollable: true, tabs: [
-            Tab(text: 'Overview'),
-            Tab(text: 'Workstreams'),
-            Tab(text: 'Runs'),
-            Tab(text: 'Artifacts'),
-            Tab(text: 'Members'),
-            Tab(text: 'Execution'),
-            Tab(text: 'Settings'),
-          ]),
+          TabBar(
+            isScrollable: true,
+            onTap: (index) => setState(() => _tabIndex = index),
+            tabs: const [
+              Tab(text: 'Overview'),
+              Tab(text: 'Workstreams'),
+              Tab(text: 'Runs'),
+              Tab(text: 'Artifacts'),
+              Tab(text: 'Members'),
+              Tab(text: 'Execution'),
+              Tab(text: 'Settings'),
+            ],
+          ),
           const SizedBox(height: 16),
-          Expanded(
-              child: TabBarView(children: [
-            _overview(),
-            _workstreams(),
+          if (_tabIndex == 0)
+            _overview()
+          else if (_tabIndex == 1)
+            _workstreams()
+          else if (_tabIndex == 2)
             _emptySection(
-                'Runs', 'Runs created from this Project appear here.'),
+                'Runs', 'Runs created from this Project appear here.')
+          else if (_tabIndex == 3)
             _emptySection('Artifacts',
-                'Artifacts and findings produced by this Project appear here.'),
-            _members(),
-            _execution(),
+                'Artifacts and findings produced by this Project appear here.')
+          else if (_tabIndex == 4)
+            _members()
+          else if (_tabIndex == 5)
+            _execution()
+          else
             _settings(),
-          ])),
         ]),
       );
 
-  Widget _overview() => ListView(children: [
+  Widget _overview() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _ProjectPanel(
             title: 'Project overview',
             subtitle: widget.project.description.isEmpty
@@ -418,7 +428,7 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
                 'No execution Workspace is required to create this Project. Connect one later from the Execution tab when you are ready to run work.')),
       ]);
 
-  Widget _execution() => ListView(children: [
+  Widget _execution() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _ProjectPanel(
           title: 'Execution Workspaces',
           subtitle:
@@ -454,7 +464,7 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
         ),
       ]);
 
-  Widget _workstreams() => ListView(children: [
+  Widget _workstreams() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _ProjectPanel(
             title: 'Workstreams',
             subtitle: 'One Workstream is one thing your team is working on.',
@@ -482,7 +492,7 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
             ])),
       ]);
 
-  Widget _members() => ListView(children: [
+  Widget _members() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _ProjectPanel(
             title: 'Members',
             subtitle:
@@ -533,7 +543,7 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
                   ])),
       ]);
 
-  Widget _settings() => ListView(children: [
+  Widget _settings() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _ProjectPanel(
             title: 'Project settings',
             subtitle:
@@ -572,7 +582,8 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
         ),
       ]);
 
-  Widget _emptySection(String title, String message) => ListView(children: [
+  Widget _emptySection(String title, String message) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _ProjectPanel(
             title: title,
             subtitle: message,
@@ -707,16 +718,13 @@ class _WorkstreamPageState extends State<WorkstreamPage> {
             tabs: const [Tab(text: 'Discuss'), Tab(text: 'Work')],
           ),
           const SizedBox(height: 16),
-          Expanded(
-            child: IndexedStack(
-              index: _tabIndex,
-              children: [_discuss(context), _work(context)],
-            ),
-          ),
+          if (_tabIndex == 0) _discuss(context) else _work(context),
         ]),
       );
 
-  Widget _discuss(BuildContext context) => ListView(children: [
+  Widget _discuss(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
         _ProjectPanel(
           title: 'Brief',
           subtitle: 'The shared context for this Workstream.',
@@ -826,7 +834,9 @@ class _WorkstreamPageState extends State<WorkstreamPage> {
         ),
       );
 
-  Widget _work(BuildContext context) => ListView(children: [
+  Widget _work(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
         _WorkComposer(
           requestController: _requestController,
           workflow: _workflow,
