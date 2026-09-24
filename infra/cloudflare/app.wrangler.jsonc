@@ -70,9 +70,14 @@
       "new_sqlite_classes": ["RuntimeConnection", "AgentGateway"],
     },
     {
+      "tag": "v2-host-and-realtime-gateway",
+      "deleted_classes": ["RuntimeConnection", "AgentGateway"],
+      "new_sqlite_classes": ["HostGateway", "RealtimeGateway"],
+    },
+    {
       "tag": "v3-workspace-and-realtime-gateway",
-      "deleted_classes": ["RuntimeConnection", "AgentGateway", "HostGateway"],
-      "new_sqlite_classes": ["WorkspaceGateway", "RealtimeGateway"],
+      "deleted_classes": ["HostGateway"],
+      "new_sqlite_classes": ["WorkspaceGateway"],
     },
   ],
   "routes": [
