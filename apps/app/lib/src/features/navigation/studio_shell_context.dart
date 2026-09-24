@@ -68,19 +68,46 @@ class StudioShellContext {
 
   bool isNavActive(StudioNavigation? target) {
     if (target == null) return false;
-    if (target.kind == StudioRouteKind.home) {
-      return navigation.kind == StudioRouteKind.home;
+    switch (target.kind) {
+      case StudioRouteKind.home:
+        return navigation.kind == StudioRouteKind.home;
+      case StudioRouteKind.projects:
+        return navigation.kind == StudioRouteKind.projects ||
+            navigation.kind == StudioRouteKind.project ||
+            navigation.kind == StudioRouteKind.workstream ||
+            navigation.kind == StudioRouteKind.run ||
+            navigation.kind == StudioRouteKind.chat;
+      case StudioRouteKind.project:
+        return (navigation.kind == StudioRouteKind.project ||
+                navigation.kind == StudioRouteKind.workstream ||
+                navigation.kind == StudioRouteKind.run ||
+                navigation.kind == StudioRouteKind.chat) &&
+            target.projectId != null &&
+            navigation.projectId == target.projectId;
+      case StudioRouteKind.workstream:
+        return navigation.kind == StudioRouteKind.workstream &&
+            target.workstreamId != null &&
+            navigation.workstreamId == target.workstreamId;
+      case StudioRouteKind.hosts:
+        return navigation.kind == StudioRouteKind.hosts;
+      case StudioRouteKind.workers:
+        return navigation.kind == StudioRouteKind.workers;
+      case StudioRouteKind.accounts:
+        return navigation.kind == StudioRouteKind.accounts;
+      case StudioRouteKind.usage:
+        return navigation.kind == StudioRouteKind.usage;
+      case StudioRouteKind.profileSecurity:
+        return navigation.kind == StudioRouteKind.profileSecurity;
+      case StudioRouteKind.run:
+        return navigation.kind == StudioRouteKind.run &&
+            target.runId != null &&
+            navigation.runId == target.runId;
+      case StudioRouteKind.chat:
+        return navigation.kind == StudioRouteKind.chat &&
+            target.chatId != null &&
+            navigation.chatId == target.chatId;
+      case StudioRouteKind.login:
+        return navigation.kind == StudioRouteKind.login;
     }
-    if (target.kind == StudioRouteKind.projects) {
-      return navigation.kind == StudioRouteKind.projects;
-    }
-    if (target.kind == StudioRouteKind.project) {
-      return (navigation.kind == StudioRouteKind.project ||
-              navigation.kind == StudioRouteKind.workstream ||
-              navigation.kind == StudioRouteKind.run ||
-              navigation.kind == StudioRouteKind.chat) &&
-          navigation.projectId == target.projectId;
-    }
-    return navigation.kind == target.kind;
   }
 }

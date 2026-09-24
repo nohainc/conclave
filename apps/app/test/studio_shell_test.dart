@@ -16,6 +16,7 @@ void main() {
       );
       expect(homeContext.isNavActive(const StudioNavigation.home()), isTrue);
       expect(homeContext.isNavActive(const StudioNavigation.projects()), isFalse);
+      expect(homeContext.isNavActive(const StudioNavigation.hosts()), isFalse);
 
       const projectContext = StudioShellContext(
         navigation: StudioNavigation.project('project-1'),
@@ -29,6 +30,9 @@ void main() {
       expect(
           projectContext.isNavActive(const StudioNavigation.project('project-2')),
           isFalse);
+      expect(
+          projectContext.isNavActive(const StudioNavigation.projects()),
+          isTrue);
 
       const workstreamContext = StudioShellContext(
         navigation: StudioNavigation.workstream('project-1', 'ws-1'),
@@ -40,6 +44,83 @@ void main() {
           workstreamContext
               .isNavActive(const StudioNavigation.project('project-1')),
           isTrue);
+      expect(
+          workstreamContext.isNavActive(const StudioNavigation.projects()),
+          isTrue);
+    });
+
+    test('isNavActive covers every route kind accurately', () {
+      // Projects section active for projects, project, workstream, run, chat
+      const routesInProjects = [
+        StudioNavigation.projects(),
+        StudioNavigation.project('p-1'),
+        StudioNavigation.workstream('p-1', 'ws-1'),
+        StudioNavigation.run('p-1', 'r-1'),
+        StudioNavigation.chat('p-1', 'c-1'),
+      ];
+
+      for (final nav in routesInProjects) {
+        final ctx = StudioShellContext(navigation: nav, projects: const []);
+        expect(
+          ctx.isNavActive(const StudioNavigation.projects()),
+          isTrue,
+          reason: '$nav should activate Projects group',
+        );
+        expect(
+          ctx.isNavActive(const StudioNavigation.home()),
+          isFalse,
+          reason: '$nav should NOT activate Home',
+        );
+        expect(
+          ctx.isNavActive(const StudioNavigation.hosts()),
+          isFalse,
+          reason: '$nav should NOT activate Workspaces',
+        );
+      }
+
+      // Workspaces route
+      const hostsCtx = StudioShellContext(
+        navigation: StudioNavigation.hosts(),
+        projects: [],
+      );
+      expect(hostsCtx.isNavActive(const StudioNavigation.hosts()), isTrue);
+      expect(hostsCtx.isNavActive(const StudioNavigation.projects()), isFalse);
+      expect(hostsCtx.isNavActive(const StudioNavigation.home()), isFalse);
+
+      // Workers route
+      const workersCtx = StudioShellContext(
+        navigation: StudioNavigation.workers(),
+        projects: [],
+      );
+      expect(workersCtx.isNavActive(const StudioNavigation.workers()), isTrue);
+      expect(workersCtx.isNavActive(const StudioNavigation.hosts()), isFalse);
+      expect(workersCtx.isNavActive(const StudioNavigation.home()), isFalse);
+
+      // AI Accounts route
+      const accountsCtx = StudioShellContext(
+        navigation: StudioNavigation.accounts(),
+        projects: [],
+      );
+      expect(accountsCtx.isNavActive(const StudioNavigation.accounts()), isTrue);
+      expect(accountsCtx.isNavActive(const StudioNavigation.projects()), isFalse);
+
+      // Usage route
+      const usageCtx = StudioShellContext(
+        navigation: StudioNavigation.usage(),
+        projects: [],
+      );
+      expect(usageCtx.isNavActive(const StudioNavigation.usage()), isTrue);
+      expect(usageCtx.isNavActive(const StudioNavigation.home()), isFalse);
+
+      // Profile & Security route
+      const profileCtx = StudioShellContext(
+        navigation: StudioNavigation.profileSecurity(),
+        projects: [],
+      );
+      expect(profileCtx.isNavActive(const StudioNavigation.profileSecurity()),
+          isTrue);
+      expect(profileCtx.isNavActive(const StudioNavigation.home()), isFalse);
+      expect(profileCtx.isNavActive(const StudioNavigation.projects()), isFalse);
     });
   });
 
