@@ -327,7 +327,9 @@ export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
       env.CONCLAVE_E2E === "true"
         ? { database: { validateSchema: false } }
         : {}),
-      useSecureCookies: env.CONCLAVE_ENVIRONMENT === "production",
+      useSecureCookies:
+        env.CONCLAVE_ENVIRONMENT === "production" &&
+        Boolean(env.BETTER_AUTH_URL?.startsWith("https://")),
       defaultCookieAttributes: {
         httpOnly: true,
         sameSite: "Lax" as const,
