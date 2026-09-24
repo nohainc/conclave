@@ -17,7 +17,9 @@ const requiredFiles = [
   "robots.txt",
   "sitemap.xml",
 ];
-const forbidden = /\b(?:studio|plugin|agent)\b/i;
+
+const forbiddenLegacy = /\b(?:studio|plugin|agent)\b/i;
+const forbiddenPublicArchitectureVersion = /\b(?:architecture\s+)?v\d+\b/i;
 const errors = [];
 
 for (const file of requiredFiles) {
@@ -42,28 +44,37 @@ async function htmlFiles(directory) {
 
 for (const file of await htmlFiles(dist)) {
   const source = await readFile(file, "utf8");
-  if (forbidden.test(source)) {
-    errors.push(
-      `${file.replace(`${dist}/`, "")}: legacy product terminology found`,
-    );
+  const relative = file.replace(`${dist}/`, "");
+
+  if (forbiddenLegacy.test(source)) {
+    errors.push(`${relative}: legacy product terminology found`);
+  }
+  if (forbiddenPublicArchitectureVersion.test(source)) {
+    errors.push(`${relative}: public architecture-version terminology found`);
+  }
+  if (/github\.com\/nohainc\/conclave/i.test(source)) {
+    errors.push(`${relative}: public GitHub repository link found`);
+  }
+  if (/shared workspace/i.test(source)) {
+    errors.push(`${relative}: collaborative Workspace terminology found`);
   }
 }
 
 const home = await readFile(join(dist, "index.html"), "utf8");
 const requiredHomepageContent = [
-  "Build with a team of AI Workers.",
-  "Why Conclave AX",
-  "How it works",
-  "Conclave Host",
+  "Turn team decisions into verified AI work.",
+  "Workstreams",
+  "Talk first. Run AI when the team is ready.",
+  "Safe parallel work",
+  "Workspaces",
   "Accounts and privacy",
-  "Quality and verification",
   "Open Conclave AX",
 ];
 for (const content of requiredHomepageContent) {
   if (!home.includes(content))
     errors.push(`homepage: missing release content: ${content}`);
 }
-if ((home.match(/href="https:\/\/app\.conclaveax\.com/g) ?? []).length < 4) {
+if ((home.match(/href="https:\/\/app\.conclaveax\.com/g) ?? []).length < 3) {
   errors.push("homepage: expected direct app CTA links");
 }
 for (const link of ["/privacy/", "/terms/", "/security/"]) {
@@ -87,6 +98,7 @@ for (const marker of [
 
 if (errors.length)
   throw new Error(`Landing-page release gate failed:\n${errors.join("\n")}`);
+
 console.log(
-  "Landing-page release gate passed: required routes, content, terminology, metadata artifacts, and domain redirect contract verified.",
+  "Landing-page release gate passed: routes, Workstream product model, repository privacy posture, terminology, metadata artifacts, and domain redirect contract verified.",
 );
