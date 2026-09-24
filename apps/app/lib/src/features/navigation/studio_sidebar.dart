@@ -495,18 +495,6 @@ class StudioSidebar extends StatelessWidget {
     final visibleWorkstreams = project.workstreams
         .where((w) => w.status.toLowerCase() != 'archived')
         .toList();
-    final runningCount = visibleWorkstreams
-        .where((w) =>
-            w.status.toLowerCase() == 'running' ||
-            w.status.toLowerCase() == 'executing')
-        .length;
-    final attentionCount = visibleWorkstreams
-        .where((w) =>
-            w.status.toLowerCase() == 'blocked' ||
-            w.status.toLowerCase() == 'failed' ||
-            w.status.toLowerCase() == 'attention' ||
-            w.status.toLowerCase() == 'needs_approval')
-        .length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -549,59 +537,19 @@ class StudioSidebar extends StatelessWidget {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 4, vertical: 6),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            project.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: isProjectFocused
-                                  ? Colors.white
-                                  : Colors.white70,
-                              fontSize: 12,
-                              fontWeight: isProjectFocused
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
-                            ),
-                          ),
-                        ),
-                        if (runningCount > 0)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 5, vertical: 1.5),
-                            decoration: BoxDecoration(
-                              color: const Color(0xff6254d9),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              '$runningCount',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          )
-                        else if (attentionCount > 0)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: const Color(0xffd97706),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Text(
-                              '!',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                      ],
+                    child: Text(
+                      project.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isProjectFocused
+                            ? Colors.white
+                            : Colors.white70,
+                        fontSize: 12.5,
+                        fontWeight: isProjectFocused
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                      ),
                     ),
                   ),
                 ),
@@ -626,7 +574,7 @@ class StudioSidebar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(6),
                 child: Container(
                   margin: const EdgeInsets.only(bottom: 1),
-                  padding: const EdgeInsets.fromLTRB(28, 6, 8, 6),
+                  padding: const EdgeInsets.fromLTRB(28, 6, 10, 6),
                   decoration: BoxDecoration(
                     color: isWorkstreamSelected
                         ? const Color(0xff302d4b)
@@ -635,10 +583,6 @@ class StudioSidebar extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      if (statusIndicator != null) ...[
-                        statusIndicator,
-                        const SizedBox(width: 8),
-                      ],
                       Expanded(
                         child: Text(
                           workstream.name,
@@ -655,6 +599,10 @@ class StudioSidebar extends StatelessWidget {
                           ),
                         ),
                       ),
+                      if (statusIndicator != null) ...[
+                        const SizedBox(width: 8),
+                        statusIndicator,
+                      ],
                     ],
                   ),
                 ),
@@ -670,8 +618,8 @@ class StudioSidebar extends StatelessWidget {
       case 'running':
       case 'executing':
         return Container(
-          width: 6,
-          height: 6,
+          width: 6.5,
+          height: 6.5,
           decoration: const BoxDecoration(
             color: Color(0xffa78bfa),
             shape: BoxShape.circle,
@@ -686,12 +634,16 @@ class StudioSidebar extends StatelessWidget {
         );
       case 'queued':
       case 'ready':
+      case 'scheduled':
         return Container(
-          width: 6,
-          height: 6,
-          decoration: const BoxDecoration(
-            color: Color(0xff94a3b8),
+          width: 6.5,
+          height: 6.5,
+          decoration: BoxDecoration(
             shape: BoxShape.circle,
+            border: Border.all(
+              color: const Color(0xff94a3b8),
+              width: 1.2,
+            ),
           ),
         );
       case 'blocked':
@@ -699,8 +651,8 @@ class StudioSidebar extends StatelessWidget {
       case 'attention':
       case 'needs_approval':
         return Container(
-          width: 6,
-          height: 6,
+          width: 6.5,
+          height: 6.5,
           decoration: const BoxDecoration(
             color: Color(0xfff59e0b),
             shape: BoxShape.circle,

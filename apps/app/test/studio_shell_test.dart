@@ -1686,6 +1686,110 @@ void main() {
       // "Workspaces" only appears as the nav section item in sidebar, never as HUD title for Home
       expect(find.text('Workspace'), findsNothing);
     });
+
+    testWidgets(
+        'Phase 8: Project tree centerpiece with trailing meaningful status dots and contextual create',
+        (tester) async {
+      StudioProject? createdWorkstreamProject;
+      var createProjectCalled = false;
+
+      const project = StudioProject(
+        id: 'p-1',
+        name: 'Conclave AX',
+        repository: 'github.com/conclave/ax',
+        branch: 'main',
+        activeGoals: 5,
+        lastActivity: 'today',
+        workstreams: [
+          StudioWorkstream(
+            id: 'ws-1',
+            projectId: 'p-1',
+            name: 'Authentication redesign',
+            lead: 'Vitalii',
+            status: 'running',
+            brief: 'Redesign login flow',
+            primaryWorkspace: 'MacBook Pro',
+            currentCheckpoint: 'main',
+            queueStatus: 'Running',
+          ),
+          StudioWorkstream(
+            id: 'ws-2',
+            projectId: 'p-1',
+            name: 'Landing page',
+            lead: 'Vitalii',
+            status: 'idle',
+            brief: 'Landing page work',
+            primaryWorkspace: 'MacBook Pro',
+            currentCheckpoint: 'main',
+            queueStatus: 'Idle',
+          ),
+          StudioWorkstream(
+            id: 'ws-3',
+            projectId: 'p-1',
+            name: 'Scheduler',
+            lead: 'Vitalii',
+            status: 'queued',
+            brief: 'Scheduler updates',
+            primaryWorkspace: 'MacBook Pro',
+            currentCheckpoint: 'main',
+            queueStatus: 'Queued',
+          ),
+        ],
+      );
+
+      const shellContext = StudioShellContext(
+        navigation: StudioNavigation.home(),
+        projects: [project],
+        selectedProject: project,
+        expandedProjectIds: {'p-1'},
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: StudioSidebar(
+              shellContext: shellContext,
+              onNavigateTo: (_) {},
+              onToggleProjectExpanded: (_) {},
+              onCreateProject: () => createProjectCalled = true,
+              onCreateWorkstream: (proj) => createdWorkstreamProject = proj,
+              onLogout: () {},
+              onOpenAbout: () {},
+              onOpenExternal: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Project row: name is displayed without activeGoals count '5'
+      expect(find.text('Conclave AX'), findsNWidgets(2)); // Brand and Project
+      expect(find.text('5'), findsNothing);
+
+      // Workstream rows are rendered
+      expect(find.text('Authentication redesign'), findsOneWidget);
+      expect(find.text('Landing page'), findsOneWidget);
+      expect(find.text('Scheduler'), findsOneWidget);
+
+      // Verify create menu beside PROJECTS
+      await tester.tap(find.byTooltip('Create...'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('New Project'), findsOneWidget);
+      expect(find.text('New Workstream'), findsOneWidget);
+
+      await tester.tap(find.text('New Workstream'));
+      await tester.pumpAndSettle();
+      expect(createdWorkstreamProject?.id, 'p-1');
+
+      // Test New Project
+      await tester.tap(find.byTooltip('Create...'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('New Project'));
+      await tester.pumpAndSettle();
+      expect(createProjectCalled, isTrue);
+    });
   });
 }
 
