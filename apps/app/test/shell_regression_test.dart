@@ -78,7 +78,7 @@ void main() {
 
   group('Phase 13: Sidebar Content & Isolation Regressions', () {
     testWidgets(
-        'sidebar contains Conclave AX brand (home trigger), PROJECTS section header with +, Project tree, User profile, and Menu',
+        'sidebar contains Conclave AX brand (home trigger), New Project button, Project tree, User profile, and Menu',
         (tester) async {
       await tester.pumpWidget(
         wrapWithMaterial(
@@ -100,7 +100,8 @@ void main() {
 
       // Allowed permanent items:
       expect(find.text('Conclave AX'), findsNWidgets(2)); // Brand Header & Project in tree
-      expect(find.text('PROJECTS'), findsOneWidget); // Header
+      expect(find.byTooltip('New Project'), findsOneWidget); // New Project button before alarm
+      expect(find.byTooltip('Notifications'), findsOneWidget); // Alarm button
       expect(
           find.descendant(
               of: find.byType(ProjectTree),
@@ -115,6 +116,7 @@ void main() {
       // FORBIDDEN permanent sidebar items:
       expect(find.text('Home'), findsNothing);
       expect(find.text('Projects'), findsNothing);
+      expect(find.text('PROJECTS'), findsNothing);
       expect(find.text('Workspaces'), findsNothing);
       expect(find.text('Workers'), findsNothing);
       expect(find.text('AI Accounts'), findsNothing);
@@ -475,7 +477,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(Drawer), findsOneWidget);
       expect(find.byType(AppSidebar), findsOneWidget);
-      expect(find.text('PROJECTS'), findsOneWidget);
+      expect(
+          find.descendant(
+              of: find.byType(Drawer),
+              matching: find.text('Authentication redesign')),
+          findsOneWidget);
 
       // Close drawer
       await tester.tap(find.text('Close menu'));

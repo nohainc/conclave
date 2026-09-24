@@ -87,7 +87,7 @@ class AppSidebar extends StatelessWidget {
             ),
             const SizedBox(height: 10),
 
-            // Search control & Notifications Alarm button
+            // Search control, Add Project icon button & Notifications Alarm button
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2),
               child: Row(
@@ -135,6 +135,29 @@ class AppSidebar extends StatelessWidget {
                               ),
                             ],
                           ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Tooltip(
+                    message: 'New Project',
+                    child: IconButton(
+                      onPressed: onCreateProject,
+                      icon: const Icon(
+                        Icons.add_rounded,
+                        size: 18,
+                        color: Colors.white60,
+                      ),
+                      splashRadius: 14,
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints(minWidth: 32, minHeight: 32),
+                      style: IconButton.styleFrom(
+                        backgroundColor: const Color(0xff181724),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: const BorderSide(color: Color(0xff2d2b40)),
                         ),
                       ),
                     ),

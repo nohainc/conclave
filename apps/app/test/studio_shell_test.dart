@@ -153,7 +153,6 @@ void main() {
       StudioNavigation? navigatedTo;
       String? toggledProjectId;
       var createProjectCalled = false;
-      StudioProject? createdWorkstreamProject;
 
       const shellContext = StudioShellContext(
         navigation: StudioNavigation.home(),
@@ -189,7 +188,6 @@ void main() {
               onNavigateTo: (nav) => navigatedTo = nav,
               onToggleProjectExpanded: (id) => toggledProjectId = id,
               onCreateProject: () => createProjectCalled = true,
-              onCreateWorkstream: (proj) => createdWorkstreamProject = proj,
               onLogout: () {},
               onOpenAbout: () {},
               onOpenExternal: (_) {},
@@ -203,7 +201,7 @@ void main() {
       expect(find.text('Conclave AX'), findsNWidgets(2)); // Brand & Project
       expect(find.text('Home'), findsNothing);
       expect(find.text('Projects'), findsNothing);
-      expect(find.text('PROJECTS'), findsOneWidget);
+      expect(find.text('PROJECTS'), findsNothing);
 
       // Tapping Conclave AX brand navigates to Home
       await tester.tap(find.text('Conclave AX').first);
@@ -223,23 +221,10 @@ void main() {
       expect(find.text('VN'), findsOneWidget);
       expect(find.text('Vitalii Noha'), findsOneWidget);
 
-      // Tap + button for create menu
-      await tester.tap(find.byTooltip('Create...'));
-      await tester.pumpAndSettle();
-      expect(find.text('New Project'), findsOneWidget);
-      expect(find.text('New Workstream'), findsOneWidget);
-
-      // Tap New Project
-      await tester.tap(find.text('New Project'));
+      // Tap New Project button before alarm icon
+      await tester.tap(find.byTooltip('New Project'));
       await tester.pumpAndSettle();
       expect(createProjectCalled, isTrue);
-
-      // Open menu again and tap New Workstream
-      await tester.tap(find.byTooltip('Create...'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('New Workstream'));
-      await tester.pumpAndSettle();
-      expect(createdWorkstreamProject?.id, 'project-1');
 
       // Tap Project row to navigate to /projects/:projectId
       await tester.tap(find.text('Conclave AX').last);
@@ -1684,7 +1669,6 @@ void main() {
     testWidgets(
         'Phase 8: Project tree centerpiece with trailing meaningful status dots and contextual create',
         (tester) async {
-      StudioProject? createdWorkstreamProject;
       var createProjectCalled = false;
 
       const project = StudioProject(
@@ -1747,7 +1731,6 @@ void main() {
               onNavigateTo: (_) {},
               onToggleProjectExpanded: (_) {},
               onCreateProject: () => createProjectCalled = true,
-              onCreateWorkstream: (proj) => createdWorkstreamProject = proj,
               onLogout: () {},
               onOpenAbout: () {},
               onOpenExternal: (_) {},
@@ -1766,21 +1749,8 @@ void main() {
       expect(find.text('Landing page'), findsOneWidget);
       expect(find.text('Scheduler'), findsOneWidget);
 
-      // Verify create menu beside PROJECTS
-      await tester.tap(find.byTooltip('Create...'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('New Project'), findsOneWidget);
-      expect(find.text('New Workstream'), findsOneWidget);
-
-      await tester.tap(find.text('New Workstream'));
-      await tester.pumpAndSettle();
-      expect(createdWorkstreamProject?.id, 'p-1');
-
-      // Test New Project
-      await tester.tap(find.byTooltip('Create...'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('New Project'));
+      // Test New Project button in sidebar header row
+      await tester.tap(find.byTooltip('New Project'));
       await tester.pumpAndSettle();
       expect(createProjectCalled, isTrue);
     });
@@ -2019,7 +1989,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(Drawer), findsOneWidget);
       expect(find.byType(StudioSidebar), findsOneWidget);
-      expect(find.text('PROJECTS'), findsOneWidget);
+      expect(
+          find.descendant(
+              of: find.byType(Drawer),
+              matching: find.text('Authentication redesign')),
+          findsOneWidget);
 
       // Close drawer
       await tester.tap(find.text('Close menu'));
