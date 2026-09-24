@@ -789,7 +789,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
 
   Future<void> _loadSnapshot(
       {String? projectId, String? workspaceId, bool showSpinner = true}) async {
-    if (store.auth.session?.authenticated == false) return;
+    if (store.auth.session?.authenticated != true) return;
     if (showSpinner) {
       final reconnecting = !isLoading && snapshot.projects.isNotEmpty;
       setState(() {
