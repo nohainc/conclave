@@ -71,10 +71,12 @@ void main() {
       StudioNavigation? navigatedTo;
       String? toggledProjectId;
       var createProjectCalled = false;
+      StudioProject? createdWorkstreamProject;
 
       const shellContext = StudioShellContext(
         navigation: StudioNavigation.home(),
         projects: [testProject],
+        selectedProject: testProject,
         workspaces: [
           StudioAgent(
             id: 'agent-1',
@@ -105,6 +107,7 @@ void main() {
               onNavigateTo: (nav) => navigatedTo = nav,
               onToggleProjectExpanded: (id) => toggledProjectId = id,
               onCreateProject: () => createProjectCalled = true,
+              onCreateWorkstream: (proj) => createdWorkstreamProject = proj,
               onLogout: () {},
               onOpenAbout: () {},
               onOpenExternal: (_) {},
@@ -132,9 +135,23 @@ void main() {
       expect(find.text('VN'), findsOneWidget);
       expect(find.text('Vitalii Noha'), findsOneWidget);
 
-      // Tap + button for create project
-      await tester.tap(find.byTooltip('Create Project'));
+      // Tap + button for create menu
+      await tester.tap(find.byTooltip('Create...'));
+      await tester.pumpAndSettle();
+      expect(find.text('New Project'), findsOneWidget);
+      expect(find.text('New Workstream'), findsOneWidget);
+
+      // Tap New Project
+      await tester.tap(find.text('New Project'));
+      await tester.pumpAndSettle();
       expect(createProjectCalled, isTrue);
+
+      // Open menu again and tap New Workstream
+      await tester.tap(find.byTooltip('Create...'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('New Workstream'));
+      await tester.pumpAndSettle();
+      expect(createdWorkstreamProject?.id, 'project-1');
 
       // Tap workstream row
       await tester.tap(find.text('Authentication redesign'));

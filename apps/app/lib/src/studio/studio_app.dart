@@ -1492,6 +1492,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                               onNavigateTo: _navigateTo,
                               onToggleProjectExpanded: _toggleProjectExpanded,
                               onCreateProject: _createProject,
+                              onCreateWorkstream: _createWorkstream,
                               onLogout: () => unawaited(_logout()),
                               onOpenAbout: () =>
                                   unawaited(_showAboutConclave()),
@@ -1504,7 +1505,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                     body: Row(
                       children: [
                         SizedBox(
-                          width: compact ? 56 : 240,
+                          width: compact ? 56 : 248,
                           child: compact
                               ? StudioIconRail(
                                   shellContext: shell,
@@ -1523,6 +1524,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                                   onToggleProjectExpanded:
                                       _toggleProjectExpanded,
                                   onCreateProject: _createProject,
+                                  onCreateWorkstream: _createWorkstream,
                                   onLogout: () => unawaited(_logout()),
                                   onOpenAbout: () =>
                                       unawaited(_showAboutConclave()),
@@ -1883,6 +1885,83 @@ class _StudioAppState extends State<ConclaveAppShell> {
         });
         _showSnackBar(error.toString(), type: ToastType.error);
       }
+    }
+  }
+
+  Future<void> _createWorkstream([StudioProject? targetProject]) async {
+    final project = targetProject ?? selectedProject;
+    if (project == null) return;
+    final nameController = TextEditingController();
+    final created = await showDialog<bool>(
+      context: navigatorKey.currentContext ?? context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Create Workstream'),
+        content: TextField(
+          controller: nameController,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Workstream name',
+            hintText: 'e.g. Authentication redesign',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+    final value = nameController.text.trim();
+    nameController.dispose();
+    if (created != true || value.isEmpty) return;
+
+    final newWorkstreamId =
+        'workstream-${DateTime.now().microsecondsSinceEpoch}';
+    final newWorkstream = StudioWorkstream(
+      id: newWorkstreamId,
+      projectId: project.id,
+      name: value,
+      lead: _shellContext.viewerDisplayName ?? 'You',
+      status: 'active',
+      brief: 'Add a brief so collaborators understand the intended outcome.',
+      primaryWorkspace: _shellContext.workspaces.isNotEmpty
+          ? _shellContext.workspaces.first.name
+          : 'Not selected',
+      currentCheckpoint: 'Not started',
+      queueStatus: 'Idle',
+    );
+
+    final updatedProjects = snapshot.projects.map((p) {
+      if (p.id == project.id) {
+        return StudioProject(
+          id: p.id,
+          name: p.name,
+          repository: p.repository,
+          branch: p.branch,
+          activeGoals: p.activeGoals,
+          lastActivity: 'just now',
+          description: p.description,
+          instructions: p.instructions,
+          workstreams: [...p.workstreams, newWorkstream],
+        );
+      }
+      return p;
+    }).toList();
+
+    if (mounted) {
+      setState(() {
+        snapshot = snapshot.copyWith(projects: updatedProjects);
+        expandedProjectIds.add(project.id);
+      });
+      _navigateTo(
+        StudioNavigation.workstream(project.id, newWorkstreamId),
+      );
+      _showSnackBar('Workstream created.');
     }
   }
 

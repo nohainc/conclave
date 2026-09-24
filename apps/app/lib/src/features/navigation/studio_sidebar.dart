@@ -13,6 +13,7 @@ class StudioSidebar extends StatelessWidget {
     required this.onNavigateTo,
     required this.onToggleProjectExpanded,
     required this.onCreateProject,
+    this.onCreateWorkstream,
     required this.onLogout,
     required this.onOpenAbout,
     required this.onOpenExternal,
@@ -23,6 +24,7 @@ class StudioSidebar extends StatelessWidget {
   final ValueChanged<StudioNavigation> onNavigateTo;
   final ValueChanged<String> onToggleProjectExpanded;
   final VoidCallback onCreateProject;
+  final ValueChanged<StudioProject>? onCreateWorkstream;
   final VoidCallback onLogout;
   final VoidCallback onOpenAbout;
   final ValueChanged<Uri> onOpenExternal;
@@ -32,7 +34,7 @@ class StudioSidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Builder(
       builder: (sidebarContext) => Container(
-        width: compact ? double.infinity : 240,
+        width: compact ? double.infinity : 248,
         color: ConclaveBrand.navigation,
         padding: const EdgeInsets.fromLTRB(10, 16, 10, 14),
         child: Column(
@@ -110,15 +112,79 @@ class StudioSidebar extends StatelessWidget {
                               ),
                             ),
                           ),
-                          IconButton(
-                            tooltip: 'Create Project',
-                            icon: const Icon(Icons.add_rounded, size: 16),
-                            color: Colors.white60,
+                          PopupMenuButton<String>(
+                            tooltip: 'Create...',
                             padding: EdgeInsets.zero,
-                            constraints:
-                                const BoxConstraints(minWidth: 22, minHeight: 22),
+                            constraints: const BoxConstraints(
+                              minWidth: 22,
+                              minHeight: 22,
+                            ),
                             splashRadius: 14,
-                            onPressed: onCreateProject,
+                            icon: const Icon(
+                              Icons.add_rounded,
+                              size: 16,
+                              color: Colors.white60,
+                            ),
+                            onSelected: (value) {
+                              if (value == 'project') {
+                                onCreateProject();
+                              } else if (value == 'workstream') {
+                                final selected = shellContext.selectedProject;
+                                if (selected != null &&
+                                    onCreateWorkstream != null) {
+                                  onCreateWorkstream!(selected);
+                                }
+                              }
+                            },
+                            itemBuilder: (context) {
+                              final hasSelectedProject =
+                                  shellContext.selectedProject != null;
+                              return [
+                                const PopupMenuItem<String>(
+                                  value: 'project',
+                                  height: 36,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.create_new_folder_outlined,
+                                        size: 16,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'New Project',
+                                        style: TextStyle(fontSize: 13),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuItem<String>(
+                                  value: 'workstream',
+                                  enabled: hasSelectedProject,
+                                  height: 36,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.alt_route_rounded,
+                                        size: 16,
+                                        color: hasSelectedProject
+                                            ? null
+                                            : Colors.grey,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'New Workstream',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: hasSelectedProject
+                                              ? null
+                                              : Colors.grey,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ];
+                            },
                           ),
                         ],
                       ),
