@@ -23,6 +23,7 @@ class ProjectPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _ProjectWorkspace(
+        key: ValueKey(project.id),
         project: project,
         dataSource: dataSource,
         onOpenWorkstream: onOpenWorkstream,
@@ -34,6 +35,7 @@ class ProjectPage extends StatelessWidget {
 
 class _ProjectWorkspace extends StatefulWidget {
   const _ProjectWorkspace({
+    super.key,
     required this.project,
     required this.dataSource,
     required this.onOpenWorkstream,
@@ -74,6 +76,19 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
     workstreams = [...widget.project.workstreams];
     _loadCollaboration();
     _loadExecution();
+  }
+
+  @override
+  void didUpdateWidget(_ProjectWorkspace oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.project.id != widget.project.id ||
+        oldWidget.project.workstreams != widget.project.workstreams) {
+      workstreams = [...widget.project.workstreams];
+      loading = true;
+      executionLoading = true;
+      _loadCollaboration();
+      _loadExecution();
+    }
   }
 
   Future<void> _loadExecution() async {
@@ -188,15 +203,16 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
         widget.dataSource.loadProjectInvitations(projectId: widget.project.id),
         widget.dataSource.loadProjectAudit(projectId: widget.project.id),
         widget.dataSource.loadProjectWorkstreams(projectId: widget.project.id),
-        widget.dataSource.loadProjectWorkstreams(projectId: widget.project.id),
       ]);
       if (!mounted) return;
+      final fetchedWorkstreams = loaded[3] as List<StudioWorkstream>;
       setState(() {
         members = loaded[0] as List<StudioProjectMember>;
         invitations = loaded[1] as List<StudioProjectInvitation>;
         audit = loaded[2] as List<StudioAuditEntry>;
-        workstreams = loaded[3] as List<StudioWorkstream>;
-        workstreams = loaded[3] as List<StudioWorkstream>;
+        workstreams = fetchedWorkstreams.isNotEmpty
+            ? fetchedWorkstreams
+            : widget.project.workstreams;
         loading = false;
       });
     } catch (_) {
@@ -287,24 +303,24 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
   @override
   Widget build(BuildContext context) => DefaultTabController(
         initialIndex: _tabIndex,
-        length: 7,
+        length: 6,
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Wrap(
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,
             runSpacing: 10,
             children: [
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(widget.project.name,
-                    style: const TextStyle(
-                        fontSize: 25, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 6),
-                Text(
-                    'Your team\'s shared Project space, organized into focused Workstreams',
+              if (widget.project.description.trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text(
+                    widget.project.description.trim(),
                     style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontSize: 13)),
-              ]),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
               if (isOwner)
                 FilledButton.icon(
                     onPressed: _share,
@@ -317,7 +333,6 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
             isScrollable: true,
             onTap: (index) => setState(() => _tabIndex = index),
             tabs: const [
-              Tab(text: 'Overview'),
               Tab(text: 'Workstreams'),
               Tab(text: 'Runs'),
               Tab(text: 'Artifacts'),
@@ -328,38 +343,20 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
           ),
           const SizedBox(height: 16),
           if (_tabIndex == 0)
-            _overview()
-          else if (_tabIndex == 1)
             _workstreams()
-          else if (_tabIndex == 2)
+          else if (_tabIndex == 1)
             _emptySection('Runs', 'Runs created from this Project appear here.')
-          else if (_tabIndex == 3)
+          else if (_tabIndex == 2)
             _emptySection('Artifacts',
                 'Artifacts and findings produced by this Project appear here.')
-          else if (_tabIndex == 4)
+          else if (_tabIndex == 3)
             _members()
-          else if (_tabIndex == 5)
+          else if (_tabIndex == 4)
             _execution()
           else
             _settings(),
         ]),
       );
-
-  Widget _overview() =>
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _ProjectPanel(
-            title: 'Project overview',
-            subtitle: widget.project.description.isEmpty
-                ? 'A shared home for your team, Workstreams, and results.'
-                : widget.project.description,
-            child: Text('Role: ${widget.project.role}')),
-        const _ProjectPanel(
-            title: 'Execution summary',
-            subtitle:
-                'Execution capacity is configured independently from Project collaboration.',
-            child: Text(
-                'No execution Workspace is required to create this Project. Connect one later from the Execution tab when you are ready to run work.')),
-      ]);
 
   Widget _execution() =>
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1011,6 +1008,7 @@ class _WorkComposer extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
+            isExpanded: true,
             initialValue: workflow,
             decoration: const InputDecoration(labelText: 'Workflow'),
             items: const [

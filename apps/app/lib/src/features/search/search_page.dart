@@ -125,7 +125,9 @@ class SearchPage extends StatelessWidget {
         title: project.name,
         subtitle: project.repository.isNotEmpty
             ? project.repository
-            : (project.description ?? 'Project'),
+            : (project.description.isNotEmpty
+                ? project.description
+                : 'Project'),
         icon: Icons.folder_outlined,
         category: 'Projects',
         onSelect: () {

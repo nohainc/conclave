@@ -12,7 +12,6 @@ import '../realtime/realtime_client.dart';
 import '../brand.dart';
 import '../features/common/toast_overlay.dart';
 import '../features/common/code_block_view.dart';
-import '../features/common/command_palette.dart';
 import '../features/common/diff_viewer.dart';
 import '../features/chat/typing_indicator.dart';
 import '../features/chat/prompt_composer.dart';
@@ -200,8 +199,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
   void _openCommandPalette() {
     _focusSearch();
   }
-
-
 
   StudioProject? get selectedProject => snapshot.projects
       .where((project) => project.id == selectedProjectId)
@@ -443,8 +440,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
       // Snapshot loading remains the primary path for anonymous development.
     }
   }
-
-
 
   void _onRealtimeEvent(Map<String, dynamic> event) {
     final type = event['type'];
@@ -697,8 +692,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
       setState(() => realtimeNotice = summary.trim());
     }
   }
-
-
 
   Future<void> _copyRunDiagnostics() async {
     final run = snapshot.run;
@@ -1108,13 +1101,10 @@ class _StudioAppState extends State<ConclaveAppShell> {
     }
   }
 
-
-
   Future<void> _enrollAgent() async {
-    final workspaceId = snapshot.workspaceId;
-    if (workspaceId == null || workspaceId.isEmpty) return;
+    final nameController = TextEditingController(text: 'My Workspace');
     var platform = 'macOS';
-    final selected = await showDialog<String>(
+    final selected = await showDialog<({String name, String platform})>(
       context: navigatorKey.currentContext ?? context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
@@ -1124,7 +1114,16 @@ class _StudioAppState extends State<ConclaveAppShell> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                  'Choose the machine where Conclave Workspace will run.'),
+                  'Create an execution Workspace, then pair the machine where it will run.'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: nameController,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Workspace name',
+                  hintText: 'e.g. MacBook Pro',
+                ),
+              ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 initialValue: platform,
@@ -1143,22 +1142,30 @@ class _StudioAppState extends State<ConclaveAppShell> {
                 onPressed: () => Navigator.pop(dialogContext),
                 child: const Text('Cancel')),
             FilledButton(
-                onPressed: () => Navigator.pop(dialogContext, platform),
-                child: const Text('Continue')),
+              onPressed: () {
+                final name = nameController.text.trim();
+                if (name.isEmpty) return;
+                Navigator.pop(dialogContext, (name: name, platform: platform));
+              },
+              child: const Text('Create Workspace'),
+            ),
           ],
         ),
       ),
     );
+    nameController.dispose();
     if (selected == null) return;
     try {
-      final enrollment = await store.agents.createEnrollment(workspaceId);
+      final workspace = await store.workspaces.create(name: selected.name);
+      await _loadSnapshot(workspaceId: workspace.id, showSpinner: false);
+      final enrollment = await store.agents.createEnrollment(workspace.id);
       if (!mounted) return;
       setState(() {
         enrollmentResult = enrollment;
         loadError = null;
       });
       _showSnackBar(
-          'Download Conclave Workspace for $selected, then enter the one-time code.');
+          'Download Conclave Workspace for ${selected.platform}, then enter the one-time code.');
     } catch (error) {
       if (mounted) setState(() => loadError = error.toString());
     }
@@ -2222,6 +2229,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
           onNavigateTo: _navigateTo,
           onOpenCommandPalette: _openCommandPalette,
           onOpenNotifications: _showNotifications,
+          searchController: _searchQueryController,
+          searchFocusNode: _searchFocusNode,
+          onClearSearch: _clearSearch,
           onToggleTheme: _toggleTheme,
           onOpenAbout: () => unawaited(_showAboutConclave()),
           onLogout: () => unawaited(_logout()),
@@ -2716,8 +2726,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
     ]);
   }
 
-
-
   Widget _pendingChatMessage(_PendingChatMessage pending) => Align(
         alignment: Alignment.centerRight,
         child: Container(
@@ -2774,8 +2782,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
           ),
         ),
       );
-
-
 
   Widget _chatMessage(StudioChatMessage message) {
     final isDark = Theme.of(context).brightness == Brightness.dark;

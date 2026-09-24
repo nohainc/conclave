@@ -698,6 +698,72 @@ void main() {
       expect(find.byTooltip('Notifications'), findsOneWidget);
     });
 
+    testWidgets(
+        'tablet/compact HUD search icon click displays inline search control and triggers search',
+        (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final controller = TextEditingController();
+      final focusNode = FocusNode();
+      String? searchedText;
+      var clearCalled = false;
+
+      const shellContext = StudioShellContext(
+        navigation: StudioNavigation.home(),
+        projects: [testProject],
+        viewerDisplayName: 'Vitalii Noha',
+        viewerEmail: 'vitalii@example.com',
+        isDarkTheme: true,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: StudioTopBar(
+              shellContext: shellContext,
+              onNavigateTo: (_) {},
+              onOpenCommandPalette: () {},
+              onOpenNotifications: () {},
+              searchController: controller,
+              searchFocusNode: focusNode,
+              onSearchChanged: (val) => searchedText = val,
+              onClearSearch: () => clearCalled = true,
+              compact: true,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Initially search icon is visible and inline TextField is not
+      expect(find.byTooltip('Search (⌘K)'), findsOneWidget);
+      expect(find.byType(TextField), findsNothing);
+
+      // Tap search icon
+      await tester.tap(find.byTooltip('Search (⌘K)'));
+      await tester.pumpAndSettle();
+
+      // Now inline TextField is visible
+      expect(find.byType(TextField), findsOneWidget);
+      expect(find.byIcon(Icons.close_rounded), findsOneWidget);
+
+      // Enter search text
+      await tester.enterText(find.byType(TextField), 'auth workflow');
+      await tester.pumpAndSettle();
+      expect(searchedText, 'auth workflow');
+
+      // Tap clear/close button
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pumpAndSettle();
+      expect(clearCalled, isTrue);
+    });
+
     testWidgets('renders Run breadcrumbs: Project / Workstream / Run',
         (tester) async {
       tester.view.physicalSize = const Size(1200, 800);

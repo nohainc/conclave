@@ -130,7 +130,6 @@ void main() {
     testWidgets('SearchPage filters snapshot and renders categorized results',
         (tester) async {
       StudioNavigation? navigatedTarget;
-      String? selectedProject;
       var searchCleared = false;
 
       await tester.pumpWidget(
@@ -140,7 +139,7 @@ void main() {
               query: 'auth',
               snapshot: sampleSnapshot,
               onNavigateTo: (nav) => navigatedTarget = nav,
-              onSelectProject: (pId) => selectedProject = pId,
+              onSelectProject: (_) {},
               onSelectChat: (_, __) {},
               onClearSearch: () => searchCleared = true,
             ),

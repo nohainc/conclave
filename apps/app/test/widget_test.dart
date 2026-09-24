@@ -45,8 +45,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining("Your team's shared Project space"), findsOneWidget);
-    expect(find.text('Workstreams'), findsOneWidget);
+    expect(find.text('Workstreams'), findsWidgets);
     expect(find.text('Members'), findsOneWidget);
     expect(find.text('Execution'), findsOneWidget);
   });

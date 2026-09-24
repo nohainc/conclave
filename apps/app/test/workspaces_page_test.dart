@@ -115,6 +115,29 @@ void main() {
       expect(find.text('Add AI Account'), findsOneWidget);
     });
 
+    testWidgets('keeps Add Workspace available when none exist',
+        (tester) async {
+      var addWorkspaceCalled = false;
+
+      await tester.pumpWidget(buildTestScaffold(
+        WorkspacesPage(
+          workspaces: const [],
+          workers: const [],
+          accounts: const [],
+          onAdd: () => addWorkspaceCalled = true,
+          onRename: (_) {},
+          onUpdate: (_) {},
+          onRevoke: (_) {},
+          onGrant: (_) {},
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No Workspaces yet'), findsOneWidget);
+      await tester.tap(find.text('Add Workspace'));
+      expect(addWorkspaceCalled, isTrue);
+    });
+
     testWidgets('Workers tab triggers capability and account callbacks',
         (tester) async {
       final snapshot = studioFixtureSnapshot();
@@ -382,5 +405,3 @@ void main() {
     });
   });
 }
-
-

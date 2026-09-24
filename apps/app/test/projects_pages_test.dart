@@ -16,6 +16,7 @@ void main() {
             project: const StudioProject(
               id: 'project-1',
               name: 'Project One',
+              description: 'Shared space for Project One',
               repository: '',
               branch: '',
               activeGoals: 0,
@@ -33,10 +34,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Share Project'), findsOneWidget);
-    expect(find.text("Your team's shared Project space, organized into focused Workstreams"), findsOneWidget);
+    expect(find.text('Shared space for Project One'), findsOneWidget);
+    expect(find.text('Project One'), findsNothing);
     for (final label in [
-      'Overview',
-      'Workstreams',
       'Runs',
       'Artifacts',
       'Members',
@@ -45,13 +45,95 @@ void main() {
     ]) {
       expect(find.text(label), findsOneWidget);
     }
+    expect(find.text('Workstreams'), findsWidgets);
+    expect(find.text('Overview'), findsNothing);
 
     expect(find.text('Members'), findsOneWidget);
-    await tester.tap(find.text('Workstreams'));
-    await tester.pumpAndSettle();
     expect(find.text('No Workstreams yet. Create the first one below.'),
         findsOneWidget);
     await tester.binding.setSurfaceSize(null);
+  });
+
+  testWidgets('Project page updates workstreams when switching projects',
+      (tester) async {
+    const p1 = StudioProject(
+      id: 'project-1',
+      name: 'Project One',
+      repository: '',
+      branch: '',
+      activeGoals: 0,
+      lastActivity: 'today',
+      workstreams: [
+        StudioWorkstream(
+          id: 'ws-1',
+          projectId: 'project-1',
+          name: 'P1 Workstream',
+          lead: 'Owner',
+          status: 'active',
+          brief: 'Brief 1',
+          primaryWorkspace: 'Workspace 1',
+          currentCheckpoint: 'main',
+          queueStatus: 'Idle',
+        ),
+      ],
+    );
+    const p2 = StudioProject(
+      id: 'project-2',
+      name: 'Project Two',
+      repository: '',
+      branch: '',
+      activeGoals: 0,
+      lastActivity: 'today',
+      workstreams: [
+        StudioWorkstream(
+          id: 'ws-2',
+          projectId: 'project-2',
+          name: 'P2 Workstream',
+          lead: 'Owner',
+          status: 'active',
+          brief: 'Brief 2',
+          primaryWorkspace: 'Workspace 2',
+          currentCheckpoint: 'main',
+          queueStatus: 'Idle',
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: ProjectPage(
+            project: p1,
+            dataSource: const StudioFixtureDataSource(),
+            onOpenWorkstream: (_) {},
+            onEdit: () {},
+            onArchive: () {},
+            onDelete: () {},
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('P1 Workstream'), findsOneWidget);
+    expect(find.text('P2 Workstream'), findsNothing);
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: ProjectPage(
+            project: p2,
+            dataSource: const StudioFixtureDataSource(),
+            onOpenWorkstream: (_) {},
+            onEdit: () {},
+            onArchive: () {},
+            onDelete: () {},
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('P1 Workstream'), findsNothing);
+    expect(find.text('P2 Workstream'), findsOneWidget);
   });
 
   testWidgets(
