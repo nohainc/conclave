@@ -34,11 +34,6 @@ class AppBreadcrumb extends StatelessWidget {
           _breadcrumbText('Projects', isCurrent: true),
         ],
       StudioRouteKind.project => [
-          _breadcrumbLink(
-            'Projects',
-            () => onNavigateTo(const StudioNavigation.projects()),
-          ),
-          _divider(),
           _breadcrumbText(project?.name ?? 'Project', isCurrent: true),
         ],
       StudioRouteKind.workstream => [
@@ -47,7 +42,7 @@ class AppBreadcrumb extends StatelessWidget {
               '…',
               () => project != null
                   ? onNavigateTo(StudioNavigation.project(project.id))
-                  : onNavigateTo(const StudioNavigation.projects()),
+                  : onNavigateTo(const StudioNavigation.home()),
               tooltip: project?.name ?? 'Project',
             ),
             _divider(),
@@ -60,8 +55,8 @@ class AppBreadcrumb extends StatelessWidget {
               _divider(),
             ] else ...[
               _breadcrumbLink(
-                'Projects',
-                () => onNavigateTo(const StudioNavigation.projects()),
+                'Home',
+                () => onNavigateTo(const StudioNavigation.home()),
               ),
               _divider(),
             ],

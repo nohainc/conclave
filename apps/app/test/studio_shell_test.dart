@@ -201,9 +201,14 @@ void main() {
 
       // Check Header & Main Sections
       expect(find.text('Conclave AX'), findsNWidgets(2)); // Brand & Project
-      expect(find.text('Home'), findsOneWidget);
-      expect(find.text('Projects'), findsOneWidget);
+      expect(find.text('Home'), findsNothing);
+      expect(find.text('Projects'), findsNothing);
       expect(find.text('PROJECTS'), findsOneWidget);
+
+      // Tapping Conclave AX brand navigates to Home
+      await tester.tap(find.text('Conclave AX').first);
+      expect(navigatedTo?.kind, StudioRouteKind.home);
+      navigatedTo = null;
 
       // Infrequent execution and insights configuration are removed from permanent sidebar
       expect(find.text('EXECUTION'), findsNothing);
@@ -1011,39 +1016,14 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byTooltip('Conclave AX'), findsOneWidget);
-      expect(find.byTooltip('Home'), findsOneWidget);
-      expect(find.byTooltip('Projects'), findsOneWidget);
+      expect(find.byTooltip('Conclave AX — Home'), findsOneWidget);
       expect(find.byTooltip('Open project tree & menu'), findsOneWidget);
       expect(find.byTooltip('Vitalii Noha'), findsOneWidget);
       expect(find.byTooltip('Application menu'), findsOneWidget);
 
-      // Tapping Conclave AX brand icon opens about
-      var aboutOpened = false;
-      // Re-pump with about callback tracking
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
-          home: Scaffold(
-            body: SizedBox(
-              width: 64,
-              child: StudioIconRail(
-                shellContext: shellContext,
-                onNavigateTo: (nav) => navigatedTo = nav,
-                onOpenDrawer: () => drawerOpened = true,
-                onToggleTheme: () {},
-                onLogout: () {},
-                onOpenAbout: () => aboutOpened = true,
-                onOpenExternal: (_) {},
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byTooltip('Conclave AX'));
-      expect(aboutOpened, isTrue);
+      // Tapping Conclave AX brand icon navigates to home
+      await tester.tap(find.byTooltip('Conclave AX — Home'));
+      expect(navigatedTo?.kind, StudioRouteKind.home);
 
       // Tapping Open project tree & menu opens drawer
       await tester.tap(find.byTooltip('Open project tree & menu'));
@@ -1463,12 +1443,36 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Projects'), findsOneWidget);
       expect(find.text('Conclave Core'), findsOneWidget);
 
-      // Tap 'Projects' breadcrumb link
-      await tester.tap(find.text('Projects'));
-      expect(navigatedTo?.kind, StudioRouteKind.projects);
+      // Test 1b: Workstream route -> "Conclave Core / WS"
+      final workstreamContext = StudioShellContext(
+        navigation: const StudioNavigation.workstream('p-1', 'ws-1'),
+        projects: const [projectA],
+        selectedProject: projectA,
+        selectedWorkstream: projectA.workstreams.first,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: StudioTopBar(
+              shellContext: workstreamContext,
+              onNavigateTo: (nav) => navigatedTo = nav,
+              onOpenCommandPalette: () {},
+              onToggleTheme: () {},
+              onOpenNotifications: () {},
+              onOpenAbout: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Conclave Core'), findsOneWidget);
+      await tester.tap(find.text('Conclave Core'));
+      expect(navigatedTo?.kind, StudioRouteKind.project);
 
       // Test 2: AI Accounts route -> "AI Accounts"
       navigatedTo = null;

@@ -2103,7 +2103,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
         );
         selectedProjectId = null;
       });
-      _navigateTo(const StudioNavigation.projects(), replace: true);
+      _navigateTo(const StudioNavigation.home(), replace: true);
       _showSnackBar('Project archived.');
     } catch (error) {
       if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
@@ -2129,7 +2129,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
         selectedProjectId = null;
         selectedChatId = null;
       });
-      _navigateTo(const StudioNavigation.projects(), replace: true);
+      _navigateTo(const StudioNavigation.home(), replace: true);
       _showSnackBar('Project deleted.');
     } catch (error) {
       if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
@@ -2257,14 +2257,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
     });
   }
 
-  Widget _projectsView() => ProjectsPage(
-        projects: snapshot.projects,
-        onCreateProject: _createProject,
-        onOpenProject: (projectId) =>
-            _navigateTo(StudioNavigation.project(projectId)),
-        onDeleteProject: _deleteProject,
-      );
-
   Widget _homeView() => HomePage(
         projects: snapshot.projects,
         hosts: snapshot.agents,
@@ -2291,7 +2283,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
 
   Widget _projectOverviewView() {
     final project = selectedProject;
-    if (project == null) return _projectsView();
+    if (project == null) return _homeView();
     return ProjectPage(
       project: project,
       dataSource: widget.dataSource,
@@ -2306,7 +2298,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
   Widget _workstreamView() {
     final project = selectedProject;
     final workstream = selectedWorkstream;
-    if (project == null || workstream == null) return _projectsView();
+    if (project == null || workstream == null) return _homeView();
     return WorkstreamPage(
       project: project,
       workstream: workstream,
@@ -2341,7 +2333,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
       case StudioRouteKind.profileSecurity:
         return _profileSecurityView();
       case StudioRouteKind.projects:
-        return _projectsView();
+        return _homeView();
       case StudioRouteKind.project:
         return _projectOverviewView();
       case StudioRouteKind.workstream:

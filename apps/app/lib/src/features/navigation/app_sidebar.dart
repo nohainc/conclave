@@ -46,46 +46,40 @@ class AppSidebar extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Brand header
-            InkWell(
-              onTap: onOpenAbout,
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                child: Row(
-                  children: [
-                    ConclaveBrand.logoMark(size: 28),
-                    const SizedBox(width: 8),
-                    const Flexible(
-                      child: Text(
-                        'Conclave AX',
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16,
-                          letterSpacing: -.3,
+            // Brand header — clicking navigates to Home
+            Tooltip(
+              message: 'Conclave AX — Home',
+              child: InkWell(
+                onTap: () {
+                  onNavigateTo(const StudioNavigation.home());
+                  if (compact) {
+                    Scaffold.maybeOf(sidebarContext)?.closeDrawer();
+                  }
+                },
+                borderRadius: BorderRadius.circular(8),
+                hoverColor: const Color(0xff29283c),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                  child: Row(
+                    children: [
+                      ConclaveBrand.logoMark(size: 28),
+                      const SizedBox(width: 10),
+                      const Flexible(
+                        child: Text(
+                          'Conclave AX',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                            letterSpacing: -.3,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 18),
-
-            // Top-level Navigation: Home and Projects
-            _navItem(
-              icon: Icons.home_outlined,
-              label: 'Home',
-              target: const StudioNavigation.home(),
-              context: sidebarContext,
-            ),
-            _navItem(
-              icon: Icons.folder_outlined,
-              label: 'Projects',
-              target: const StudioNavigation.projects(),
-              context: sidebarContext,
             ),
             const SizedBox(height: 12),
 
@@ -297,17 +291,18 @@ class AppIconRail extends StatelessWidget {
       child: Column(
         children: [
           Tooltip(
-            message: 'Conclave AX',
+            message: 'Conclave AX — Home',
             child: InkWell(
-              onTap: onOpenAbout,
+              onTap: () => onNavigateTo(const StudioNavigation.home()),
               borderRadius: BorderRadius.circular(8),
-              child: ConclaveBrand.logoMark(size: 32),
+              hoverColor: const Color(0xff29283c),
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: ConclaveBrand.logoMark(size: 32),
+              ),
             ),
           ),
-          const SizedBox(height: 18),
-          _railItem(Icons.home_outlined, 'Home', const StudioNavigation.home()),
-          _railItem(Icons.folder_outlined, 'Projects',
-              const StudioNavigation.projects()),
+          const SizedBox(height: 12),
           const Spacer(),
           Tooltip(
             message: 'Open project tree & menu',
@@ -360,32 +355,6 @@ class AppIconRail extends StatelessWidget {
             onLogout: onLogout,
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _railItem(IconData icon, String tooltip, StudioNavigation target) {
-    final active = shellContext.isNavActive(target);
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: () => onNavigateTo(target),
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          width: 44,
-          height: 44,
-          margin: const EdgeInsets.symmetric(vertical: 2),
-          decoration: BoxDecoration(
-            color: active ? const Color(0xff302d4b) : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          alignment: Alignment.center,
-          child: Icon(
-            icon,
-            size: 20,
-            color: active ? const Color(0xffbcb3ff) : Colors.white60,
-          ),
-        ),
       ),
     );
   }

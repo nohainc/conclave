@@ -78,7 +78,7 @@ void main() {
 
   group('Phase 13: Sidebar Content & Isolation Regressions', () {
     testWidgets(
-        'sidebar contains only Home, Projects, Project tree, User profile, and Menu',
+        'sidebar contains Conclave AX brand (home trigger), PROJECTS section header with +, Project tree, User profile, and Menu',
         (tester) async {
       await tester.pumpWidget(
         wrapWithMaterial(
@@ -99,8 +99,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Allowed permanent items:
-      expect(find.text('Home'), findsOneWidget);
-      expect(find.text('Projects'), findsOneWidget);
+      expect(find.text('Conclave AX'), findsNWidgets(2)); // Brand Header & Project in tree
       expect(find.text('PROJECTS'), findsOneWidget); // Header
       expect(
           find.descendant(
@@ -114,6 +113,8 @@ void main() {
       expect(find.byTooltip('Application menu'), findsOneWidget); // ⋯ menu
 
       // FORBIDDEN permanent sidebar items:
+      expect(find.text('Home'), findsNothing);
+      expect(find.text('Projects'), findsNothing);
       expect(find.text('Workspaces'), findsNothing);
       expect(find.text('Workers'), findsNothing);
       expect(find.text('AI Accounts'), findsNothing);

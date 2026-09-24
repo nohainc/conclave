@@ -80,16 +80,6 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
         },
       ),
       CommandPaletteAction(
-        title: 'Projects',
-        subtitle: 'View all projects and repositories',
-        icon: Icons.folder_outlined,
-        category: 'Navigation',
-        onSelect: () {
-          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-          widget.onNavigateTo(const StudioNavigation.projects());
-        },
-      ),
-      CommandPaletteAction(
         title: 'Workspaces',
         subtitle: 'Manage local and remote machines',
         icon: Icons.computer_outlined,
