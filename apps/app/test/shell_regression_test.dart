@@ -385,10 +385,9 @@ void main() {
           theme: ConclaveBrand.darkTheme(),
           home: LayoutBuilder(
             builder: (context, constraints) {
-              final isDesktop = constraints.maxWidth >= 1100;
-              final isTablet =
-                  constraints.maxWidth >= 768 && constraints.maxWidth < 1100;
-              final isMobile = constraints.maxWidth < 768;
+              final isDesktop = ConclaveBrand.isDesktop(constraints.maxWidth);
+              final isTablet = ConclaveBrand.isTablet(constraints.maxWidth);
+              final isMobile = ConclaveBrand.isMobile(constraints.maxWidth);
 
               return Scaffold(
                 key: scaffoldKey,
@@ -456,8 +455,8 @@ void main() {
         );
       }
 
-      // 1. Desktop mode
-      tester.view.physicalSize = const Size(1200, 800);
+      // 1. Desktop mode (>= 800)
+      tester.view.physicalSize = const Size(1000, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
         tester.view.resetPhysicalSize();
@@ -470,8 +469,8 @@ void main() {
       expect(find.byType(AppIconRail), findsNothing);
       expect(find.byTooltip('Open menu'), findsNothing);
 
-      // 2. Medium mode (Icon rail)
-      tester.view.physicalSize = const Size(900, 800);
+      // 2. Tablet mode (400 - 799)
+      tester.view.physicalSize = const Size(600, 800);
       await tester.pumpWidget(buildAppScaffold());
       await tester.pumpAndSettle();
       expect(find.byType(AppIconRail), findsOneWidget);
@@ -488,8 +487,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(Drawer), findsNothing);
 
-      // 3. Mobile mode (HUD hamburger)
-      tester.view.physicalSize = const Size(450, 800);
+      // 3. Mobile mode (< 400, e.g. 380)
+      tester.view.physicalSize = const Size(380, 800);
       await tester.pumpWidget(buildAppScaffold());
       await tester.pumpAndSettle();
       expect(find.byType(AppSidebar), findsNothing);

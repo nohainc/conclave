@@ -55,6 +55,18 @@ abstract final class ConclaveBrand {
     borderRadius: BorderRadius.all(Radius.circular(10)),
   );
 
+  // Responsive Breakpoints
+  // Desktop >= 800
+  // Tablet 400-799
+  // Mobile < 400 (399 and below)
+  static const double desktopBreakpoint = 800.0;
+  static const double tabletBreakpoint = 400.0;
+
+  static bool isDesktop(double width) => width >= desktopBreakpoint;
+  static bool isTablet(double width) =>
+      width >= tabletBreakpoint && width < desktopBreakpoint;
+  static bool isMobile(double width) => width < tabletBreakpoint;
+
   /// Builds the light [ThemeData] for Conclave AX.
   static ThemeData lightTheme() {
     const colorScheme = ColorScheme.light(

@@ -1507,10 +1507,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   if (isLoading) return _loadingScaffold();
                   if (authRequired) return _authScaffold();
                   if (loadError != null) return _errorScaffold();
-                  final isDesktop = constraints.maxWidth >= 1100;
-                  final isTablet = constraints.maxWidth >= 768 &&
-                      constraints.maxWidth < 1100;
-                  final isMobile = constraints.maxWidth < 768;
+                  final isDesktop = ConclaveBrand.isDesktop(constraints.maxWidth);
+                  final isTablet = ConclaveBrand.isTablet(constraints.maxWidth);
+                  final isMobile = ConclaveBrand.isMobile(constraints.maxWidth);
                   final shell = _shellContext;
 
                   return Scaffold(

@@ -44,8 +44,8 @@ class AppTopHud extends StatelessWidget implements PreferredSizeWidget {
         isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted;
 
     final screenWidth = MediaQuery.of(context).size.width;
-    final isDesktop = screenWidth >= 800 && !compact;
-    final isMedium = screenWidth >= 600 && screenWidth < 800 && !compact;
+    final isDesktop = ConclaveBrand.isDesktop(screenWidth) && !compact;
+    final isTablet = ConclaveBrand.isTablet(screenWidth) && !compact;
 
     return Container(
       height: 60,
@@ -136,7 +136,7 @@ class AppTopHud extends StatelessWidget implements PreferredSizeWidget {
               ),
             ),
             const SizedBox(width: 14),
-          ] else if (isMedium) ...[
+          ] else if (isTablet) ...[
             InkWell(
               onTap: onOpenCommandPalette,
               borderRadius: BorderRadius.circular(8),

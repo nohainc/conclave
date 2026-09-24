@@ -1930,10 +1930,9 @@ void main() {
           theme: ConclaveBrand.darkTheme(),
           home: LayoutBuilder(
             builder: (context, constraints) {
-              final isDesktop = constraints.maxWidth >= 1100;
-              final isTablet =
-                  constraints.maxWidth >= 768 && constraints.maxWidth < 1100;
-              final isMobile = constraints.maxWidth < 768;
+              final isDesktop = ConclaveBrand.isDesktop(constraints.maxWidth);
+              final isTablet = ConclaveBrand.isTablet(constraints.maxWidth);
+              final isMobile = ConclaveBrand.isMobile(constraints.maxWidth);
 
               return Scaffold(
                 key: scaffoldKey,
@@ -2001,8 +2000,8 @@ void main() {
         );
       }
 
-      // 1. Desktop (1200 x 800)
-      tester.view.physicalSize = const Size(1200, 800);
+      // 1. Desktop (>= 800, test at 1000 x 800)
+      tester.view.physicalSize = const Size(1000, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
         tester.view.resetPhysicalSize();
@@ -2018,8 +2017,8 @@ void main() {
       expect(find.text('Authentication redesign'), findsNWidgets(2)); // sidebar + HUD breadcrumb
       expect(find.byTooltip('Open menu'), findsNothing); // No hamburger on desktop
 
-      // 2. Medium / Tablet (900 x 800)
-      tester.view.physicalSize = const Size(900, 800);
+      // 2. Medium / Tablet (400-799, test at 600 x 800)
+      tester.view.physicalSize = const Size(600, 800);
       await tester.pumpWidget(buildAppScaffold());
       await tester.pumpAndSettle();
 
@@ -2039,8 +2038,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(Drawer), findsNothing);
 
-      // 3. Mobile (450 x 800)
-      tester.view.physicalSize = const Size(450, 800);
+      // 3. Mobile (< 400, test at 380 x 800)
+      tester.view.physicalSize = const Size(380, 800);
       await tester.pumpWidget(buildAppScaffold());
       await tester.pumpAndSettle();
 
