@@ -1888,6 +1888,181 @@ void main() {
       // Home container has transparent background, Projects nav is active
       expect(find.text('Authentication redesign'), findsOneWidget);
     });
+
+    testWidgets(
+        'Phase 11: Responsive layout adapts across Desktop, Medium (Rail), and Mobile',
+        (tester) async {
+      const ws = StudioWorkstream(
+        id: 'ws-1',
+        projectId: 'p-1',
+        name: 'Authentication redesign',
+        lead: 'Vitalii',
+        status: 'running',
+        brief: 'Redesign login flow',
+        primaryWorkspace: 'MacBook Pro',
+        currentCheckpoint: 'main',
+        queueStatus: 'Running',
+      );
+
+      const project = StudioProject(
+        id: 'p-1',
+        name: 'Conclave AX',
+        repository: 'github.com/conclave/ax',
+        branch: 'main',
+        activeGoals: 0,
+        lastActivity: 'today',
+        workstreams: [ws],
+      );
+
+      const shellContext = StudioShellContext(
+        navigation: StudioNavigation.workstream('p-1', 'ws-1'),
+        projects: [project],
+        selectedProject: project,
+        selectedWorkstream: ws,
+        expandedProjectIds: {'p-1'},
+        viewerDisplayName: 'Vitalii Noha',
+        viewerEmail: 'vitalii@example.com',
+      );
+
+      Widget buildAppScaffold() {
+        final scaffoldKey = GlobalKey<ScaffoldState>();
+        return MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: LayoutBuilder(
+            builder: (context, constraints) {
+              final isDesktop = constraints.maxWidth >= 1100;
+              final isTablet =
+                  constraints.maxWidth >= 768 && constraints.maxWidth < 1100;
+              final isMobile = constraints.maxWidth < 768;
+
+              return Scaffold(
+                key: scaffoldKey,
+                drawer: (isTablet || isMobile)
+                    ? Drawer(
+                        child: StudioSidebar(
+                          shellContext: shellContext,
+                          onNavigateTo: (_) {},
+                          onToggleProjectExpanded: (_) {},
+                          onCreateProject: () {},
+                          onLogout: () {},
+                          onOpenAbout: () {},
+                          onOpenExternal: (_) {},
+                          compact: true,
+                        ),
+                      )
+                    : null,
+                body: Row(
+                  children: [
+                    if (isDesktop)
+                      const SizedBox(
+                        width: 248,
+                        child: StudioSidebar(
+                          shellContext: shellContext,
+                          onNavigateTo: _dummyNav,
+                          onToggleProjectExpanded: _dummyToggle,
+                          onCreateProject: _dummyAction,
+                          onLogout: _dummyAction,
+                          onOpenAbout: _dummyAction,
+                          onOpenExternal: _dummyExternal,
+                        ),
+                      )
+                    else if (isTablet)
+                      SizedBox(
+                        width: 64,
+                        child: StudioIconRail(
+                          shellContext: shellContext,
+                          onNavigateTo: _dummyNav,
+                          onOpenDrawer: () =>
+                              scaffoldKey.currentState?.openDrawer(),
+                          onLogout: _dummyAction,
+                          onOpenAbout: _dummyAction,
+                          onOpenExternal: _dummyExternal,
+                        ),
+                      ),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          StudioTopBar(
+                            shellContext: shellContext,
+                            onNavigateTo: _dummyNav,
+                            onOpenCommandPalette: _dummyAction,
+                            onOpenNotifications: _dummyAction,
+                            compact: isMobile,
+                          ),
+                          const Expanded(child: SizedBox()),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      }
+
+      // 1. Desktop (1200 x 800)
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(buildAppScaffold());
+      await tester.pumpAndSettle();
+
+      // Full sidebar visible with project tree
+      expect(find.byType(StudioSidebar), findsOneWidget);
+      expect(find.byType(StudioIconRail), findsNothing);
+      expect(find.text('Authentication redesign'), findsNWidgets(2)); // sidebar + HUD breadcrumb
+      expect(find.byTooltip('Open menu'), findsNothing); // No hamburger on desktop
+
+      // 2. Medium / Tablet (900 x 800)
+      tester.view.physicalSize = const Size(900, 800);
+      await tester.pumpWidget(buildAppScaffold());
+      await tester.pumpAndSettle();
+
+      // Collapsed rail visible, sidebar not on main screen
+      expect(find.byType(StudioIconRail), findsOneWidget);
+      expect(find.byTooltip('Open project tree & menu'), findsOneWidget);
+      expect(find.byTooltip('Open menu'), findsNothing);
+
+      // Open drawer from rail
+      await tester.tap(find.byTooltip('Open project tree & menu'));
+      await tester.pumpAndSettle();
+      expect(find.byType(Drawer), findsOneWidget);
+      expect(find.text('PROJECTS'), findsOneWidget);
+
+      // Close drawer
+      await tester.tap(find.text('Close menu'));
+      await tester.pumpAndSettle();
+      expect(find.byType(Drawer), findsNothing);
+
+      // 3. Mobile (450 x 800)
+      tester.view.physicalSize = const Size(450, 800);
+      await tester.pumpWidget(buildAppScaffold());
+      await tester.pumpAndSettle();
+
+      // No persistent sidebar or icon rail on screen
+      expect(find.byType(StudioSidebar), findsNothing);
+      expect(find.byType(StudioIconRail), findsNothing);
+
+      // Hamburger menu button visible in HUD
+      expect(find.byTooltip('Open menu'), findsOneWidget);
+
+      // Tap hamburger menu to open drawer with full sidebar
+      await tester.tap(find.byTooltip('Open menu'));
+      await tester.pumpAndSettle();
+      expect(find.byType(Drawer), findsOneWidget);
+      expect(find.byType(StudioSidebar), findsOneWidget);
+      expect(find.text('PROJECTS'), findsOneWidget);
+    });
   });
 }
+
+void _dummyNav(StudioNavigation _) {}
+void _dummyToggle(String _) {}
+void _dummyAction() {}
+void _dummyExternal(Uri _) {}
 
