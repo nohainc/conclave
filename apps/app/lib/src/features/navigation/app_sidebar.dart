@@ -54,20 +54,7 @@ class AppSidebar extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                 child: Row(
                   children: [
-                    Container(
-                      width: 28,
-                      height: 28,
-                      decoration: ConclaveBrand.brandMark,
-                      alignment: Alignment.center,
-                      child: const Text(
-                        'C',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 15,
-                        ),
-                      ),
-                    ),
+                    ConclaveBrand.logoMark(size: 28),
                     const SizedBox(width: 8),
                     const Flexible(
                       child: Text(
@@ -314,20 +301,7 @@ class AppIconRail extends StatelessWidget {
             child: InkWell(
               onTap: onOpenAbout,
               borderRadius: BorderRadius.circular(8),
-              child: Container(
-                width: 32,
-                height: 32,
-                decoration: ConclaveBrand.brandMark,
-                alignment: Alignment.center,
-                child: const Text(
-                  'C',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
+              child: ConclaveBrand.logoMark(size: 32),
             ),
           ),
           const SizedBox(height: 18),

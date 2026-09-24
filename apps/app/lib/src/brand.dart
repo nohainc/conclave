@@ -55,6 +55,40 @@ abstract final class ConclaveBrand {
     borderRadius: BorderRadius.all(Radius.circular(10)),
   );
 
+  static const logoAsset = 'assets/branding/conclave_logo.png';
+
+  /// Renders the official Conclave AX logo mark.
+  /// Falls back gracefully to the styled vector mark if asset is not loaded.
+  static Widget logoMark({
+    double size = 28,
+    BorderRadius? borderRadius,
+    BoxFit fit = BoxFit.contain,
+  }) {
+    return ClipRRect(
+      borderRadius: borderRadius ?? BorderRadius.circular(size * (10 / 28)),
+      child: Image.asset(
+        logoAsset,
+        width: size,
+        height: size,
+        fit: fit,
+        errorBuilder: (context, error, stackTrace) => Container(
+          width: size,
+          height: size,
+          decoration: brandMark,
+          alignment: Alignment.center,
+          child: Text(
+            'C',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: size * 0.54,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   // Responsive Breakpoints
   // Desktop >= 800
   // Tablet 400-799

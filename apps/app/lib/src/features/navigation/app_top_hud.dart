@@ -314,13 +314,13 @@ class AppTopHud extends StatelessWidget implements PreferredSizeWidget {
                   ),
                 ),
                 if (onOpenAbout != null)
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'about',
                     child: Row(
                       children: [
-                        Icon(Icons.info_outline_rounded, size: 16),
-                        SizedBox(width: 8),
-                        Text('About Conclave AX'),
+                        ConclaveBrand.logoMark(size: 16),
+                        const SizedBox(width: 8),
+                        const Text('About Conclave AX'),
                       ],
                     ),
                   ),

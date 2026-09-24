@@ -386,7 +386,13 @@ class _StudioAppState extends State<ConclaveAppShell> {
     return showDialog<void>(
         context: dialogContext,
         builder: (dialogContext) => AlertDialog(
-              title: const Text('About Conclave AX'),
+              title: Row(
+                children: [
+                  ConclaveBrand.logoMark(size: 24),
+                  const SizedBox(width: 10),
+                  const Text('About Conclave AX'),
+                ],
+              ),
               content: const Text(
                   'Conclave AX coordinates AI Workers across models and machines to research, implement, review, test, and verify complex work.'),
               actions: [
@@ -1640,17 +1646,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      width: 52,
-                      height: 52,
-                      decoration: ConclaveBrand.brandMark,
-                      alignment: Alignment.center,
-                      child: const Text('C',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 26,
-                              fontWeight: FontWeight.w800)),
-                    ),
+                    ConclaveBrand.logoMark(size: 52),
                     const SizedBox(height: 16),
                     Text(title,
                         textAlign: TextAlign.center,

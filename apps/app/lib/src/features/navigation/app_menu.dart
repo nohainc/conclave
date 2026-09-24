@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../brand.dart';
 import '../../navigation/studio_navigation.dart';
 import 'studio_shell_context.dart';
 
@@ -127,7 +128,7 @@ class GlobalAppMenu extends StatelessWidget {
 
         // 3. Product information
         MenuItemButton(
-          leadingIcon: const Icon(Icons.info_outline_rounded, size: 16),
+          leadingIcon: ConclaveBrand.logoMark(size: 16),
           onPressed: onOpenAbout,
           child: const Text('About Conclave AX'),
         ),
