@@ -11,7 +11,7 @@
     {
       "binding": "CONCLAVE_DB",
       "database_name": "conclave-production",
-      "database_id": "e3729ad9-009a-4626-b401-cd218cdb5885",
+      "database_id": "09b20c15-ba5b-413a-85de-17f3480fd1c2",
       "migrations_dir": "migrations",
     },
   ],
