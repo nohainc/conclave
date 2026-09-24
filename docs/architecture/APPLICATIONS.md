@@ -1,6 +1,6 @@
 # Conclave AX Applications
 
-**Status:** Normative for Architecture v4
+**Status:** Normative for Architecture v5
 
 Conclave AX has three primary applications and one extension type.
 
@@ -16,16 +16,15 @@ Conclave AX has three primary applications and one extension type.
 
 **Purpose**
 - human authentication;
-- Workspaces;
 - Projects and Chats;
 - Goals/Runs;
-- Host management;
+- Workspace management;
 - Worker catalog;
 - Accounts / Credential Profiles;
 - usage/cost;
 - approvals and evidence.
 
-Conclave AX is web-first in v4. Desktop distribution of the main application is not a v4 requirement. Native mobile applications may be added later.
+Conclave AX is web-first in v5. Desktop distribution of the main application is not a v5 requirement. Native mobile applications may be added later.
 
 Conclave AX communicates only with Conclave Cloud.
 
@@ -47,7 +46,7 @@ Conclave AX communicates only with Conclave Cloud.
 - orchestration;
 - human authentication;
 - realtime App connections;
-- Host Gateway;
+- Workspace Gateway;
 - Worker catalog/package registry;
 - Credential Profile authorization;
 - assignment scheduling;
@@ -57,9 +56,9 @@ Conclave AX communicates only with Conclave Cloud.
 
 Conclave Cloud never executes an external AI/model/tool directly.
 
-## 3. Conclave Host
+## 3. Workspace runtime application
 
-**Path:** `apps/host`
+**Path:** `apps/host` (runtime implementation; user-facing product term is Workspace)
 
 **Technology**
 - Flutter;
@@ -72,7 +71,7 @@ Conclave Cloud never executes an external AI/model/tool directly.
 - Linux.
 
 **Purpose**
-- one machine identity;
+- one Workspace runtime identity;
 - pairing;
 - Cloud WebSocket connection;
 - Worker installation/update/removal;
@@ -81,10 +80,10 @@ Conclave Cloud never executes an external AI/model/tool directly.
 - Worker process supervision;
 - repository/filesystem permissions;
 - logs;
-- Host updates;
+- Workspace runtime updates;
 - minimal local UX.
 
-One Host is installed per machine. Humans do not sign into or switch accounts inside the Host; Cloud authorization determines who may use/manage the Host.
+One Workspace runtime is installed per machine. Humans do not sign into or switch accounts inside the runtime; Cloud authorization and Project Workspace Grants determine which Projects may execute through it.
 
 ## 4. Workers
 
@@ -101,9 +100,9 @@ Examples:
 - Web AI;
 - Git/Test.
 
-Workers execute out-of-process under Host supervision.
+Workers execute out-of-process under Workspace runtime supervision.
 
-A Worker does not connect directly to Conclave Cloud and does not hold a Host machine credential.
+A Worker does not connect directly to Conclave Cloud and does not hold a Workspace runtime credential.
 
 Workers are language-independent executable packages. First-party Workers use Dart when practical.
 
@@ -111,7 +110,7 @@ Workers are language-independent executable packages. First-party Workers use Da
 
 Use:
 - Conclave AX;
-- Host;
+- Workspace;
 - Worker;
 - Account.
 
@@ -119,7 +118,7 @@ Use `CredentialProfile` only as the internal/domain term for Account.
 
 ## Removed v4 product concepts
 
-Architecture v4 does not expose:
+Architecture v5 does not expose:
 - Conclave AX Studio as a product name;
 - Agent;
 - Agent Engine;

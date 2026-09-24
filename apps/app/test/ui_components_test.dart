@@ -143,17 +143,17 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Open Hosts'), findsOneWidget);
+      expect(find.text('Open Workspaces'), findsOneWidget);
       expect(find.text('Open Workers'), findsOneWidget);
       expect(find.text('Open Accounts'), findsOneWidget);
 
-      await tester.enterText(find.byType(TextField), 'Hosts');
+      await tester.enterText(find.byType(TextField), 'Workspaces');
       await tester.pumpAndSettle();
 
-      expect(find.text('Open Hosts'), findsOneWidget);
+      expect(find.text('Open Workspaces'), findsOneWidget);
       expect(find.text('Open Workers'), findsNothing);
 
-      await tester.tap(find.text('Open Hosts'));
+      await tester.tap(find.text('Open Workspaces'));
       expect(navigatedTo?.kind, StudioRouteKind.hosts);
     });
 

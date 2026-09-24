@@ -15,6 +15,7 @@
     "production:preflight": "node scripts/verify-production-security.mjs",
     "auth:access-guard": "node scripts/verify-no-access-auth.mjs",
     "v4:architecture-guard": "node scripts/verify-v4-architecture-guard.mjs",
+    "v5:workspace-terminology": "node scripts/verify-v5-workspace-terminology.mjs",
     "site:dev": "cd apps/site && ./node_modules/.bin/astro dev",
     "site:check": "cd apps/site && ./node_modules/.bin/astro check",
     "site:build": "cd apps/site && ./node_modules/.bin/astro build",

@@ -1,6 +1,6 @@
 # Conclave AX Architecture v4 — Host + Worker
 
-**Status:** Normative  
+**Status:** Historical
 **Date:** 2026-09-22  
 **Supersedes:** Architecture v3
 

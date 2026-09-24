@@ -1,12 +1,12 @@
 # Conclave AX Roadmap
 
-Architecture v4 is normative.
+Architecture v5 is normative. Architecture v4 is historical only.
 
-The active next-phase roadmap after the completed authentication migration is:
+The active roadmap is:
 
-[Post-Authentication Architecture v4 Conformance & Realtime Roadmap](docs/roadmaps/POST_AUTH_V4_IMPLEMENTATION.md)
+[Architecture v5 Implementation Roadmap](docs/roadmaps/ARCHITECTURE_V5_IMPLEMENTATION.md)
 
-The original v4 migration roadmap remains useful as implementation history:
+The v4 migration and post-authentication roadmaps remain useful as implementation history:
 
 [Architecture v4 Implementation Roadmap](docs/roadmaps/ARCHITECTURE_V4_IMPLEMENTATION.md)
 
@@ -17,9 +17,9 @@ Track completed v4/authentication work in:
 Current execution model:
 
 ```text
-Conclave AX -> Conclave Cloud -> Conclave Host -> Worker
+Conclave AX -> Conclave Cloud -> Workspace -> Worker
 ```
 
-Accounts are the user-facing representation of Credential Profiles.
+Projects are the collaboration boundary. A Project uses a Workspace only through an explicit Workspace Grant. Accounts are the user-facing representation of Credential Profiles.
 
 Workers never connect directly to Conclave Cloud.

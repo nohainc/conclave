@@ -1,6 +1,6 @@
 # Conclave AX Technology Stack
 
-**Status:** Normative for Architecture v4
+**Status:** Normative for Architecture v5
 
 ## Stack summary
 
@@ -8,13 +8,13 @@
 | --- | --- |
 | Conclave AX | Flutter + Dart, Web |
 | Cloud | TypeScript + Cloudflare |
-| Host | Flutter + Dart desktop |
+| Workspace runtime | Flutter + Dart desktop |
 | Worker protocol | language-independent structured protocol |
 | First-party Workers | Dart where practical |
 | Cloud database | Cloudflare D1 |
 | Artifacts/packages | Cloudflare R2 |
 | Durable orchestration | Cloudflare Workflows |
-| Host connectivity | Durable Objects + WebSocket |
+| Workspace connectivity | Durable Objects + WebSocket |
 | Web hosting | Cloudflare static assets / Worker deployment |
 | TypeScript tests | Vitest |
 | Dart/Flutter tests | dart test / flutter_test |
@@ -29,7 +29,7 @@ Flutter remains appropriate because:
 - consistent design system;
 - good adaptive layout support.
 
-v4 does not require a desktop Conclave AX binary.
+v5 does not require a desktop Conclave AX binary.
 
 ## Cloud
 
@@ -40,17 +40,17 @@ Use:
 - Workflows for durable Run orchestration;
 - D1 for relational control-plane state;
 - R2 for artifacts and signed Worker/release packages;
-- Durable Objects for live Host WebSockets and transient coordination.
+- Durable Objects for live Workspace runtime WebSockets and transient coordination.
 
 Do not add PostgreSQL/Redis/Kafka/Kubernetes without measured need.
 
-## Host
+## Workspace runtime
 
-The Host is one Flutter/Dart desktop application.
+The Workspace runtime is one Flutter/Dart desktop application. Its implementation currently lives under `apps/host` while the runtime migration proceeds.
 
-Unlike v3, there is no separate Host UI and execution runtime product split.
+Unlike v3, there is no separate Workspace UI and execution runtime product split.
 
-The Host process owns:
+The runtime process owns:
 - Cloud WebSocket;
 - journal/reconciliation;
 - Worker manager;
@@ -114,12 +114,12 @@ Prefer:
 - explicit state machines;
 - immutable Assignment snapshots;
 - idempotent commands;
-- desired-state reconciliation for Host Worker installs;
+- desired-state reconciliation for Workspace Worker installs;
 - capability-based scheduling/security;
 - bounded context assembly;
 - durable audit events without full event sourcing.
 
-## Host architecture patterns
+## Workspace runtime architecture patterns
 
 Prefer:
 - supervisor pattern for Worker child processes;
@@ -136,6 +136,6 @@ D1 stores metadata/state.
 
 R2 stores large immutable artifacts and packages.
 
-Local Host secure store stores personal secrets by default.
+Local Workspace secure store stores personal secrets by default.
 
 Do not persist plaintext credentials in D1, assignment payloads, logs, or artifacts.

@@ -5,7 +5,7 @@ import SectionHeader from "../components/SectionHeader.astro";
 import SiteLayout from "../layouts/SiteLayout.astro";
 ---
 
-<SiteLayout title="Privacy — Conclave AX" description="How Conclave AX approaches privacy for people, Workspaces, Hosts, Workers, and Accounts.">
+<SiteLayout title="Privacy — Conclave AX" description="How Conclave AX approaches privacy for people, Workspaces, Workers, and Accounts.">
   <Section>
     <Container>
       <SectionHeader eyebrow="Privacy" title="Privacy is part of the architecture." description="Conclave AX is architected with strict boundary separation to protect user credentials, source repositories, and execution telemetry." headingLevel={1} />
@@ -16,8 +16,8 @@ import SiteLayout from "../layouts/SiteLayout.astro";
         <h2>Accounts and external AI providers</h2>
         <p>Accounts represent external AI identities (e.g. OpenAI or Anthropic credentials). They are private by default. When shared within a Workspace, Conclave AX enables authorized execution without exposing plaintext secrets. Usage remains attributable to the requester and Account owner.</p>
 
-        <h2>Hosts and Workers</h2>
-        <p>Hosts are distinct machine identities. Workers execute in supervised processes behind a Host daemon and do not receive ambient machine permissions or Conclave Cloud master keys. Source files and build artifacts remain on your Host machine unless explicitly exported.</p>
+        <h2>Workspaces and Workers</h2>
+        <p>Workspaces are distinct execution identities. Workers execute in supervised processes behind a Workspace daemon and do not receive ambient machine permissions or Conclave Cloud master keys. Source files and build artifacts remain on your Workspace machine unless explicitly exported.</p>
 
         <h2>Telemetry and Public Website</h2>
         <p>This public website uses minimal, privacy-first, same-origin telemetry without cross-site tracking cookies. No credentials, source code, or private Workspace data are collected through this public site.</p>

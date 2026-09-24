@@ -76,7 +76,10 @@ class StudioNavigation {
       return const StudioNavigation.profileSecurity();
     }
     if (parts case ['projects']) return const StudioNavigation.projects();
-    if (parts case ['hosts']) return const StudioNavigation.hosts();
+    if (parts.length == 1 &&
+        (parts[0] == 'workspaces' || parts[0] == 'hosts')) {
+      return const StudioNavigation.hosts();
+    }
     if (parts case ['workers']) return const StudioNavigation.workers();
     if (parts case ['accounts']) return const StudioNavigation.accounts();
     if (parts case ['usage']) return const StudioNavigation.usage();
@@ -104,7 +107,7 @@ class StudioNavigation {
       StudioRouteKind.project => Uri(path: '/projects/$projectId'),
       StudioRouteKind.chat => Uri(path: '/projects/$projectId/chats/$chatId'),
       StudioRouteKind.run => Uri(path: '/projects/$projectId/runs/$runId'),
-      StudioRouteKind.hosts => Uri(path: '/hosts'),
+      StudioRouteKind.hosts => Uri(path: '/workspaces'),
       StudioRouteKind.workers => Uri(path: '/workers'),
       StudioRouteKind.accounts => Uri(path: '/accounts'),
       StudioRouteKind.usage => Uri(path: '/usage'),

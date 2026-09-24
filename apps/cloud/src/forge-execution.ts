@@ -15,7 +15,7 @@ import type {
   WorkerAssignmentResult,
   WorkerAvailability,
   WorkerCostMetadata,
-  ResolvedExecutionTarget,
+  V4ResolvedExecutionTarget,
 } from "@conclave/core";
 import {
   executeForgeGoal,
@@ -258,7 +258,7 @@ export interface ForgeWorkerBinding {
   readonly worker: Worker;
   readonly agent: ExecutionHost;
   /** v4 immutable target snapshot used by Forge dispatch. */
-  readonly executionTarget?: ResolvedExecutionTarget;
+  readonly executionTarget?: V4ResolvedExecutionTarget;
 }
 
 function workerEntity(row: Record<string, unknown>): Worker {
@@ -679,7 +679,7 @@ class HostGatewayForgeWorker implements ForgeWorker {
     readonly agent: ExecutionHost,
     private readonly env: ForgeExecutionEnv,
     private readonly context: ForgeExecutionContext,
-    private readonly executionTarget?: ResolvedExecutionTarget,
+    private readonly executionTarget?: V4ResolvedExecutionTarget,
   ) {}
 
   async execute(request: ForgeWorkerRequest): Promise<WorkerAssignmentResult> {

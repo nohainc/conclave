@@ -359,6 +359,7 @@ class StudioProject {
     this.instructions = '',
     this.defaultExecutionPolicy = 'balanced',
     this.archived = false,
+    this.role = 'owner',
   });
 
   final String id;
@@ -372,6 +373,7 @@ class StudioProject {
   final String instructions;
   final String defaultExecutionPolicy;
   final bool archived;
+  final String role;
 
   factory StudioProject.fromJson(Map<String, dynamic> json) => StudioProject(
         id: _string(json, 'id'),
@@ -402,6 +404,7 @@ class StudioProject {
         archived: json['archived'] == true ||
             (json['settings'] is Map &&
                 (json['settings'] as Map)['archived'] == true),
+        role: _string(json, 'role', 'owner'),
       );
 }
 
@@ -1223,6 +1226,59 @@ class StudioWorkspaceInvitation {
         id: _string(json, 'id'),
         email: _string(json, 'email'),
         role: _string(json, 'role', 'member'),
+        status: _string(json, 'status', 'pending'),
+        expiresAt: _string(json, 'expiresAt'),
+        createdAt: _string(json, 'createdAt'),
+      );
+}
+
+class StudioProjectMember {
+  const StudioProjectMember({
+    required this.userId,
+    required this.displayName,
+    required this.email,
+    required this.role,
+    required this.createdAt,
+  });
+
+  final String userId;
+  final String displayName;
+  final String email;
+  final String role;
+  final String createdAt;
+
+  factory StudioProjectMember.fromJson(Map<String, dynamic> json) =>
+      StudioProjectMember(
+        userId: _string(json, 'userId'),
+        displayName: _string(json, 'displayName', _string(json, 'email')),
+        email: _string(json, 'email'),
+        role: _string(json, 'role', 'viewer'),
+        createdAt: _string(json, 'createdAt'),
+      );
+}
+
+class StudioProjectInvitation {
+  const StudioProjectInvitation({
+    required this.id,
+    required this.email,
+    required this.role,
+    required this.status,
+    required this.expiresAt,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String email;
+  final String role;
+  final String status;
+  final String expiresAt;
+  final String createdAt;
+
+  factory StudioProjectInvitation.fromJson(Map<String, dynamic> json) =>
+      StudioProjectInvitation(
+        id: _string(json, 'id'),
+        email: _string(json, 'email'),
+        role: _string(json, 'role', 'viewer'),
         status: _string(json, 'status', 'pending'),
         expiresAt: _string(json, 'expiresAt'),
         createdAt: _string(json, 'createdAt'),

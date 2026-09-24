@@ -23,29 +23,29 @@ class HostLifecycleController extends ChangeNotifier {
     if (quitting) {
       return const HostUiSnapshot(
         mode: HostUiMode.stopped,
-        title: 'Stopping Host',
+        title: 'Stopping Workspace',
         detail: 'Active local work is being reconciled safely.',
       );
     }
     if (startupError != null) {
       return HostUiSnapshot(
         mode: HostUiMode.offline,
-        title: 'Host is offline',
-        detail: 'The Host could not connect. It will be safe to retry.',
+        title: 'Workspace is offline',
+        detail: 'The Workspace could not connect. It will be safe to retry.',
         issue: startupError.toString(),
       );
     }
     if (host.config.hostId == null) {
       return const HostUiSnapshot(
         mode: HostUiMode.firstLaunch,
-        title: 'Pair this Host',
+        title: 'Pair this Workspace',
         detail: 'Connect this machine to Conclave to begin.',
       );
     }
     if (!running) {
       return const HostUiSnapshot(
         mode: HostUiMode.starting,
-        title: 'Starting Host',
+        title: 'Starting Workspace',
         detail: 'Checking this machine and reconnecting to Conclave.',
       );
     }
@@ -53,9 +53,9 @@ class HostLifecycleController extends ChangeNotifier {
     final activeAssignments = connection?.activeAssignmentCount ?? 0;
     return HostUiSnapshot(
       mode: activeAssignments > 0 ? HostUiMode.active : HostUiMode.ready,
-      title: activeAssignments > 0 ? 'Work in progress' : 'Host is ready',
+      title: activeAssignments > 0 ? 'Work in progress' : 'Workspace is ready',
       detail: activeAssignments > 0
-          ? 'The Host is running assigned work.'
+          ? 'The Workspace is running assigned work.'
           : 'This machine is paired and ready to run assigned work.',
       hostId: host.config.hostId,
       paired: true,
@@ -188,9 +188,9 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     final shouldQuit = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Quit Conclave Host?'),
+        title: const Text('Quit Conclave Workspace?'),
         content: const Text(
-            'Active work will be reconciled safely before this machine disconnects. You can start Host again later.'),
+            'Active work will be reconciled safely before this machine disconnects. You can start the Workspace again later.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -198,7 +198,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Quit Host'),
+            child: const Text('Quit Workspace'),
           ),
         ],
       ),
@@ -218,7 +218,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
   Widget build(BuildContext context) {
     final lifecycle = widget.lifecycle;
     return MaterialApp(
-      title: 'Conclave Host',
+      title: 'Conclave Workspace',
       theme: ThemeData(
         useMaterial3: true,
         scaffoldBackgroundColor: ConclaveBrand.paper,
@@ -249,7 +249,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
                         fontSize: 17)),
               ),
               const SizedBox(width: 10),
-              const Text('Conclave Host'),
+              const Text('Conclave Workspace'),
             ],
           ),
           actions: [
@@ -262,7 +262,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
               ),
             ),
             IconButton(
-              tooltip: 'Quit Host',
+              tooltip: 'Quit Workspace',
               onPressed: _confirmQuit,
               icon: const Icon(Icons.power_settings_new),
             ),
@@ -270,7 +270,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         ),
         body: Center(
           child: lifecycle.hidden
-              ? const Text('Host is running in the background.')
+              ? const Text('Workspace is running in the background.')
               : HostDashboard(
                   snapshot: lifecycle.uiSnapshot,
                   onPair: lifecycle.restore,
@@ -421,11 +421,11 @@ class HostDashboard extends StatelessWidget {
               leading: const Icon(Icons.tune),
               title: const Text('Advanced details'),
               subtitle: Text(snapshot.paired
-                  ? 'Host ID and connection details'
+                  ? 'Workspace ID and connection details'
                   : 'Diagnostics become available after pairing'),
               children: [
                 ListTile(
-                  title: const Text('Host ID'),
+                  title: const Text('Workspace ID'),
                   subtitle: Text(snapshot.hostId ?? 'Not paired'),
                 ),
                 ListTile(
@@ -439,7 +439,7 @@ class HostDashboard extends StatelessWidget {
             OutlinedButton.icon(
               onPressed: onQuit,
               icon: const Icon(Icons.power_settings_new),
-              label: const Text('Quit Host'),
+              label: const Text('Quit Workspace'),
             ),
           ],
         ),
@@ -522,10 +522,10 @@ class _HostRecoveryPanel extends StatelessWidget {
               style: TextStyle(
                   color: colors.onErrorContainer, fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
-          Text(issue ?? 'The Host needs attention.',
+          Text(issue ?? 'The Workspace needs attention.',
               style: TextStyle(color: colors.onErrorContainer)),
           const SizedBox(height: 8),
-          Text('Your work is safe. The Host will not discard an assignment.',
+          Text('Your work is safe. The Workspace will not discard an assignment.',
               style: TextStyle(color: colors.onErrorContainer)),
           const SizedBox(height: 4),
           Text(

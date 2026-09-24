@@ -4,6 +4,7 @@ export const SENSITIVE_OPERATIONS = {
   hostRevoke: "host.revoke",
   billingSecurityChange: "billing.security.change",
   apiCredentialShare: "api.credential.share",
+  fullWorkspaceGrant: "workspace.project_grant.full_workspace",
 } as const;
 
 export type SensitiveOperation =
@@ -45,6 +46,10 @@ export const STEP_UP_REQUIREMENTS: Record<
     methods: ["passkey", "totp"],
   },
   [SENSITIVE_OPERATIONS.apiCredentialShare]: {
+    maxAgeMs: 10 * 60 * 1000,
+    methods: ["passkey", "totp"],
+  },
+  [SENSITIVE_OPERATIONS.fullWorkspaceGrant]: {
     maxAgeMs: 10 * 60 * 1000,
     methods: ["passkey", "totp"],
   },

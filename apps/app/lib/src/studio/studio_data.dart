@@ -43,6 +43,40 @@ abstract interface class StudioDataSource {
   });
   Future<void> archiveProject({required String projectId});
   Future<void> deleteProject({required String projectId});
+  Future<List<StudioProjectMember>> loadProjectMembers({
+    required String projectId,
+  }) async =>
+      throw UnimplementedError('Project collaboration is not available');
+  Future<List<StudioProjectInvitation>> loadProjectInvitations({
+    required String projectId,
+  }) async =>
+      throw UnimplementedError('Project collaboration is not available');
+  Future<List<StudioAuditEntry>> loadProjectAudit({
+    required String projectId,
+  }) async =>
+      throw UnimplementedError('Project collaboration is not available');
+  Future<void> inviteProjectMember({
+    required String projectId,
+    required String email,
+    required String role,
+  }) async =>
+      throw UnimplementedError('Project collaboration is not available');
+  Future<void> changeProjectMemberRole({
+    required String projectId,
+    required String userId,
+    required String role,
+  }) async =>
+      throw UnimplementedError('Project collaboration is not available');
+  Future<void> removeProjectMember({
+    required String projectId,
+    required String userId,
+  }) async =>
+      throw UnimplementedError('Project collaboration is not available');
+  Future<void> expireProjectInvitation({
+    required String projectId,
+    required String invitationId,
+  }) async =>
+      throw UnimplementedError('Project collaboration is not available');
   Future<StudioAccountSecurity> loadAccountSecurity();
   Future<void> revokeAccountSession(String token);
   Future<Uri> beginAccountLink(String provider, Uri returnTo);
@@ -238,8 +272,6 @@ class StudioApiClient implements StudioDataSource {
         if (contentType != null) 'content-type': contentType,
         if (sessionToken != null && sessionToken!.isNotEmpty)
           'authorization': 'Bearer $sessionToken',
-        if (activeWorkspaceId != null)
-          'x-conclave-workspace-id': activeWorkspaceId!,
       };
 
   Future<Map<String, dynamic>> _getJson(Uri uri) async {
@@ -833,6 +865,107 @@ class StudioApiClient implements StudioDataSource {
     }
   }
 
+  Future<Map<String, dynamic>> _projectJson(Uri uri) async {
+    final response = await client.get(uri, headers: _headers());
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+          'Project collaboration request failed (${response.statusCode})',
+          statusCode: response.statusCode);
+    }
+    final body = jsonDecode(response.body);
+    if (body is! Map) {
+      throw const StudioApiException(
+          'Project collaboration response malformed');
+    }
+    return Map<String, dynamic>.from(body);
+  }
+
+  @override
+  Future<List<StudioProjectMember>> loadProjectMembers({
+    required String projectId,
+  }) async {
+    final body =
+        await _projectJson(Uri.parse('$baseUrl/projects/$projectId/members'));
+    return (body['members'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) =>
+            StudioProjectMember.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
+  @override
+  Future<List<StudioProjectInvitation>> loadProjectInvitations({
+    required String projectId,
+  }) async {
+    final body = await _projectJson(
+        Uri.parse('$baseUrl/projects/$projectId/invitations'));
+    return (body['invitations'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) =>
+            StudioProjectInvitation.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
+  @override
+  Future<List<StudioAuditEntry>> loadProjectAudit({
+    required String projectId,
+  }) async {
+    final body =
+        await _projectJson(Uri.parse('$baseUrl/projects/$projectId/audit'));
+    return (body['entries'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) =>
+            StudioAuditEntry.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
+  Future<void> _projectMutation(Uri uri, Map<String, dynamic> body,
+      {String method = 'POST'}) async {
+    final request = http.Request(method, uri)
+      ..headers.addAll(_headers(contentType: 'application/json'))
+      ..body = jsonEncode(body);
+    final response = await client.send(request);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+          'Project collaboration action failed (${response.statusCode})',
+          statusCode: response.statusCode);
+    }
+  }
+
+  @override
+  Future<void> inviteProjectMember(
+          {required String projectId,
+          required String email,
+          required String role}) =>
+      _projectMutation(Uri.parse('$baseUrl/projects/$projectId/invitations'),
+          {'email': email, 'role': role});
+
+  @override
+  Future<void> changeProjectMemberRole(
+          {required String projectId,
+          required String userId,
+          required String role}) =>
+      _projectMutation(
+          Uri.parse('$baseUrl/projects/$projectId/members/$userId/role'),
+          {'role': role},
+          method: 'PATCH');
+
+  @override
+  Future<void> removeProjectMember(
+          {required String projectId, required String userId}) =>
+      _projectMutation(
+          Uri.parse('$baseUrl/projects/$projectId/members/$userId/remove'), {},
+          method: 'POST');
+
+  @override
+  Future<void> expireProjectInvitation(
+          {required String projectId, required String invitationId}) =>
+      _projectMutation(
+          Uri.parse(
+              '$baseUrl/projects/$projectId/invitations/$invitationId/expire'),
+          {},
+          method: 'POST');
+
   @override
   Future<StudioSnapshot> loadReadModels(
       {String? projectId, String? workspaceId}) async {
@@ -871,7 +1004,6 @@ class StudioApiClient implements StudioDataSource {
       getJson(Uri.parse('$baseUrl/workspaces/$selectedWorkspaceId/hosts')),
       getJson(Uri.parse('$baseUrl/workspaces/$selectedWorkspaceId/workers')),
       getJson(Uri.parse('$baseUrl/workspaces/$selectedWorkspaceId/accounts')),
-      getJson(Uri.parse('$baseUrl/workspaces/$selectedWorkspaceId/usage')),
     ]);
     final projects = (responses[0]['projects'] as List? ?? const [])
         .whereType<Map>()
@@ -882,6 +1014,9 @@ class StudioApiClient implements StudioDataSource {
     final detail = selected == null
         ? <String, dynamic>{}
         : await getJson(Uri.parse('$baseUrl/projects/$selected/read-model'));
+    final usageReport = selected == null
+        ? <String, dynamic>{'usage': const []}
+        : await getJson(Uri.parse('$baseUrl/projects/$selected/usage'));
     final detailProject = detail['project'];
     final mergedProjects = projects.map((project) {
       if (detailProject is Map && project['id'] == detailProject['id']) {
@@ -889,7 +1024,7 @@ class StudioApiClient implements StudioDataSource {
       }
       return project;
     }).toList();
-    final usage = (responses[4]['usage'] as List? ?? const [])
+    final usage = (usageReport['usage'] as List? ?? const [])
         .whereType<Map>()
         .map((value) => Map<String, dynamic>.from(value))
         .toList();
@@ -918,7 +1053,7 @@ class StudioApiClient implements StudioDataSource {
         };
       }).toList(),
       'accounts': responses[3]['accounts'] ?? const [],
-      'usageReport': responses[4],
+      'usageReport': usageReport,
       'run': detail['run'],
       'activeRunId': detail['activeRunId'],
       'tasks': detail['tasks'] ?? const [],
@@ -1160,7 +1295,8 @@ class StudioApiClient implements StudioDataSource {
       headers: _headers(),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StudioApiException('Host revoke failed (${response.statusCode})');
+      throw StudioApiException(
+          'Workspace revoke failed (${response.statusCode})');
     }
   }
 
@@ -1180,7 +1316,8 @@ class StudioApiClient implements StudioDataSource {
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StudioApiException('Host update failed (${response.statusCode})',
+      throw StudioApiException(
+          'Workspace update failed (${response.statusCode})',
           statusCode: response.statusCode);
     }
   }
@@ -1196,7 +1333,8 @@ class StudioApiClient implements StudioDataSource {
       body: jsonEncode({}),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StudioApiException('Host binding failed (${response.statusCode})',
+      throw StudioApiException(
+          'Workspace grant failed (${response.statusCode})',
           statusCode: response.statusCode);
     }
   }
@@ -1218,7 +1356,7 @@ class StudioApiClient implements StudioDataSource {
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StudioApiException(
-          'Host update announcement failed (${response.statusCode})');
+          'Workspace update announcement failed (${response.statusCode})');
     }
   }
 
@@ -1234,7 +1372,7 @@ class StudioApiClient implements StudioDataSource {
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StudioApiException(
-          'Host enrollment failed (${response.statusCode})');
+          'Workspace enrollment failed (${response.statusCode})');
     }
     return StudioHostEnrollment.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>);
@@ -1259,7 +1397,7 @@ class StudioApiClient implements StudioDataSource {
     Map<String, dynamic> costMetadata = const {},
   }) async {
     throw const StudioApiException(
-      'Configured Worker instances were removed. Manage Workers through Host desired state.',
+      'Configured Worker instances were removed. Manage Workers through Workspace desired state.',
     );
   }
 }

@@ -49,7 +49,7 @@ void main() {
         .toList();
 
     expect(notifications.map((item) => item.title), [
-      'Host offline',
+      'Workspace offline',
       'AI Account expired',
       'Worker install failed',
       'Invitation received',

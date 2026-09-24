@@ -1,7 +1,14 @@
-# Workspace UX implementation phases
+# Historical v4 Workspace UX implementation phases
 
-This roadmap keeps Workspace as the security and ownership boundary while
-making the one-Workspace case feel lightweight.
+**Status:** Historical — do not use for new v5 implementation.
+
+This document describes the removed collaborative Workspace model. It is kept
+for migration context only. In v5, Projects are the collaboration boundary,
+and execution Workspaces are used through explicit Workspace Grants.
+
+The v5 replacement is documented in
+[Architecture v5](../architecture/ARCHITECTURE_V5.md) and the
+[v5 implementation roadmap](ARCHITECTURE_V5_IMPLEMENTATION.md).
 
 ## Phase 1 — Complete Workspace UX
 

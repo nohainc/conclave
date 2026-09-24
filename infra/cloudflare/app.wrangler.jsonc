@@ -30,7 +30,7 @@
       "binding": "CONCLAVE_DB",
       "database_name": "conclave-production",
       "database_id": "e3729ad9-009a-4626-b401-cd218cdb5885",
-      "migrations_dir": "../../apps/cloud/migrations-v4",
+      "migrations_dir": "../../apps/cloud/migrations-v5",
     },
   ],
   "r2_buckets": [
@@ -55,8 +55,8 @@
   "durable_objects": {
     "bindings": [
       {
-        "name": "CONCLAVE_HOST_GATEWAY",
-        "class_name": "HostGateway",
+        "name": "CONCLAVE_WORKSPACE_GATEWAY",
+        "class_name": "WorkspaceGateway",
       },
       {
         "name": "CONCLAVE_REALTIME_GATEWAY",
@@ -70,9 +70,9 @@
       "new_sqlite_classes": ["RuntimeConnection", "AgentGateway"],
     },
     {
-      "tag": "v2-host-and-realtime-gateway",
-      "deleted_classes": ["RuntimeConnection", "AgentGateway"],
-      "new_sqlite_classes": ["HostGateway", "RealtimeGateway"],
+      "tag": "v3-workspace-and-realtime-gateway",
+      "deleted_classes": ["RuntimeConnection", "AgentGateway", "HostGateway"],
+      "new_sqlite_classes": ["WorkspaceGateway", "RealtimeGateway"],
     },
   ],
   "routes": [

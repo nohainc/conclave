@@ -78,6 +78,47 @@ describe("realtime gateway contract", () => {
     );
   });
 
+  it("parses v5 user, Project, and execution Workspace scopes", () => {
+    expect(parseRealtimeClientMessage({
+      type: "subscribe",
+      scope: { kind: "user" },
+    })).toEqual({ type: "subscribe", scope: { kind: "user" } });
+    expect(parseRealtimeClientMessage({
+      type: "subscribe",
+      scope: { kind: "project", projectId: "project-1" },
+    })).toEqual({
+      type: "subscribe",
+      scope: { kind: "project", projectId: "project-1" },
+    });
+    expect(parseRealtimeClientMessage({
+      type: "subscribe",
+      scope: { kind: "execution_workspace", executionWorkspaceId: "workspace-1" },
+    })).toEqual({
+      type: "subscribe",
+      scope: { kind: "execution_workspace", executionWorkspaceId: "workspace-1" },
+    });
+    expect(scopeKey({ kind: "project", projectId: "project-1" })).toBe(
+      "project=project-1",
+    );
+  });
+
+  it("matches v5 scopes by Project and execution Workspace identity", () => {
+    const event = {
+      eventId: "event-1",
+      type: "run.completed",
+      version: "1.0",
+      timestamp: "2026-09-23T00:00:00.000Z",
+      workspaceId: "workspace-1",
+      projectId: "project-1",
+      sequence: 1,
+      payload: {},
+    } as const;
+    expect(eventMatchesScope(event, { kind: "user" })).toBe(true);
+    expect(eventMatchesScope(event, { kind: "project", projectId: "project-1" })).toBe(true);
+    expect(eventMatchesScope(event, { kind: "project", projectId: "project-2" })).toBe(false);
+    expect(eventMatchesScope(event, { kind: "execution_workspace", executionWorkspaceId: "workspace-1" })).toBe(true);
+  });
+
   it("uses bounded exponential reconnect backoff with jitter", () => {
     expect(reconnectDelayMs(0, 0)).toBe(375);
     expect(reconnectDelayMs(3, 1)).toBe(5000);

@@ -50,25 +50,8 @@ class _WorkspaceSettingsPageState extends State<WorkspaceSettingsPage> {
       error = null;
     });
     try {
-      final loadedMembers = await widget.dataSource
-          .loadWorkspaceMembers(workspaceId: widget.workspaceId);
-      List<StudioWorkspaceInvitation> loadedInvitations = const [];
-      List<StudioAuditEntry> loadedAudit = const [];
-      // Invitations and audit are intentionally restricted to managers/readers.
-      // A regular member can still use General and see the member directory.
-      try {
-        loadedInvitations = await widget.dataSource
-            .loadWorkspaceInvitations(workspaceId: widget.workspaceId);
-      } catch (_) {}
-      try {
-        loadedAudit = await widget.dataSource
-            .loadWorkspaceAudit(workspaceId: widget.workspaceId);
-      } catch (_) {}
       if (!mounted) return;
       setState(() {
-        members = loadedMembers;
-        invitations = loadedInvitations;
-        audit = loadedAudit;
         loading = false;
       });
     } catch (value) {
@@ -203,24 +186,17 @@ class _WorkspaceSettingsPageState extends State<WorkspaceSettingsPage> {
   }
 
   @override
-  Widget build(BuildContext context) => DefaultTabController(
-        length: 5,
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           const Text('Workspace settings',
               style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
-          Text('Manage Workspace access, sharing, and security.',
+          Text(
+              'Manage this execution Workspace. Project collaboration lives in each Project.',
               style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                   fontSize: 13)),
-          const SizedBox(height: 18),
-          const TabBar(isScrollable: true, tabs: [
-            Tab(text: 'General'),
-            Tab(text: 'Members'),
-            Tab(text: 'Invitations'),
-            Tab(text: 'Permissions'),
-            Tab(text: 'Audit'),
-          ]),
           const SizedBox(height: 18),
           if (loading)
             const LinearProgressIndicator()
@@ -237,17 +213,8 @@ class _WorkspaceSettingsPageState extends State<WorkspaceSettingsPage> {
               ),
             )
           else
-            SizedBox(
-              height: 520,
-              child: TabBarView(children: [
-                _generalTab(),
-                _membersTab(),
-                _invitationsTab(),
-                _permissionsTab(),
-                _auditTab(),
-              ]),
-            ),
-        ]),
+            SizedBox(height: 520, child: _generalTab()),
+        ],
       );
 
   Widget _generalTab() =>
@@ -278,11 +245,11 @@ class _WorkspaceSettingsPageState extends State<WorkspaceSettingsPage> {
             padding: const EdgeInsets.all(18),
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Shared resources',
+              const Text('Execution resources',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               Text(
-                  '${members.length} members can access this Workspace. ${widget.hostCount} Hosts and ${widget.accountCount} AI Accounts are visible to authorized members.'),
+                  'This Workspace runs Workers for explicitly granted Projects. Project collaboration and invitations are managed from each Project.'),
               const SizedBox(height: 8),
               Text(
                   'Private AI Accounts remain private unless explicitly shared.',
@@ -378,11 +345,14 @@ class _WorkspaceSettingsPageState extends State<WorkspaceSettingsPage> {
                   child: Text(
                       'Permissions are enforced by Conclave Cloud on every request. Workspace roles never reveal private AI Account secrets.'))),
           ...const [
-            ('Owner', 'All Workspace, Host, Account, and audit controls.'),
-            ('Admin', 'Members, invitations, Hosts, Workers, and sharing.'),
+            ('Owner', 'All Workspace, Account, and audit controls.'),
+            (
+              'Admin',
+              'Members, invitations, Workspaces, Workers, and sharing.'
+            ),
             (
               'Member',
-              'Projects, execution, Host use, and permitted Accounts.'
+              'Projects, execution, Workspace use, and permitted Accounts.'
             ),
             ('Viewer', 'Read-only access where granted.'),
           ].map((entry) => Card(

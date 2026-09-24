@@ -27,6 +27,7 @@ describe("sensitive operation step-up policy", () => {
       SENSITIVE_OPERATIONS.hostRevoke,
       SENSITIVE_OPERATIONS.billingSecurityChange,
       SENSITIVE_OPERATIONS.apiCredentialShare,
+      SENSITIVE_OPERATIONS.fullWorkspaceGrant,
     ]);
     expect(STEP_UP_REQUIREMENTS[SENSITIVE_OPERATIONS.hostRevoke].maxAgeMs).toBe(
       10 * 60 * 1000,

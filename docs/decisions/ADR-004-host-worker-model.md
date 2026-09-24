@@ -1,6 +1,6 @@
 # ADR-004: Simplify execution to Host + Worker
 
-**Status:** Accepted  
+**Status:** Accepted — historical Architecture v4
 **Date:** 2026-09-22  
 **Supersedes:** ADR-003 execution topology
 

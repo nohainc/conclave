@@ -97,9 +97,9 @@ class _GettingStarted extends StatelessWidget {
           const SizedBox(height: 28),
           _SetupStep(
               number: '1',
-              title: 'Host',
+              title: 'Workspace',
               detail: 'Connect a machine where Workers can run.',
-              action: 'Add Host',
+              action: 'Add Workspace',
               onPressed: onOpenHosts),
           _SetupStep(
               number: '2',
@@ -257,7 +257,7 @@ class _EstablishedHome extends StatelessWidget {
       const SizedBox(height: 16),
       LayoutBuilder(builder: (context, constraints) {
         final cards = [
-          _MetricCard('Hosts', '${hosts.length}', onOpenHosts),
+          _MetricCard('Workspaces', '${hosts.length}', onOpenHosts),
           _MetricCard('Workers', '${workers.length}', onOpenWorkers),
           _MetricCard('Accounts', '${accounts.length}', onOpenAccounts),
           _MetricCard('Usage', _formatTokens(usageTokens), onOpenUsage),

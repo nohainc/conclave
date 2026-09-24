@@ -83,6 +83,55 @@ export async function routeWorkerRequest(
     if (request.method === "POST" && url.pathname === "/api/workspaces") {
       return await handlers.handleCreateWorkspace!(request, env, ctx);
     }
+    // V5 Accounts are User-owned; the Workspace-prefixed routes below remain
+    // compatibility aliases for local setup placement.
+    if (request.method === "GET" && url.pathname === "/api/accounts") {
+      return await handlers.handleListCredentialProfiles!(request, env, "", ctx);
+    }
+    if (request.method === "POST" && url.pathname === "/api/accounts") {
+      return await handlers.handleCreateCredentialProfile!(request, env, "", ctx);
+    }
+    const accountRootMatch = url.pathname.match(/^\/api\/accounts\/([^/]+)$/);
+    if (request.method === "PATCH" && accountRootMatch?.[1]) {
+      return await handlers.handleUpdateCredentialProfile!(request, env, "", accountRootMatch[1], ctx);
+    }
+    if (request.method === "DELETE" && accountRootMatch?.[1]) {
+      return await handlers.handleRevokeCredentialProfile!(request, env, "", accountRootMatch[1], ctx);
+    }
+    const accountRootSetupMatch = url.pathname.match(/^\/api\/accounts\/([^/]+)\/setup-intent$/);
+    if (request.method === "POST" && accountRootSetupMatch?.[1]) {
+      return await handlers.handleCreateCredentialSetupIntent!(request, env, "", accountRootSetupMatch[1], ctx);
+    }
+    const accountRootGrantMatch = url.pathname.match(/^\/api\/accounts\/([^/]+)\/grants$/);
+    if (request.method === "POST" && accountRootGrantMatch?.[1]) {
+      return await handlers.handleCreateCredentialGrant!(request, env, "", accountRootGrantMatch[1], ctx);
+    }
+    const accountRootGrantItemMatch = url.pathname.match(/^\/api\/accounts\/([^/]+)\/grants\/([^/]+)$/);
+    if (request.method === "DELETE" && accountRootGrantItemMatch?.[1] && accountRootGrantItemMatch?.[2]) {
+      return await handlers.handleRevokeCredentialGrant!(request, env, "", accountRootGrantItemMatch[1], accountRootGrantItemMatch[2], ctx);
+    }
+    const workspaceProjectsMatch = url.pathname.match(/^\/api\/workspaces\/([^/]+)\/projects$/);
+    if (request.method === "GET" && workspaceProjectsMatch?.[1]) {
+      return await handlers.handleListWorkspaceProjectGrants!(request, env, workspaceProjectsMatch[1], ctx);
+    }
+    const workspaceProjectGrantMatch = url.pathname.match(/^\/api\/workspaces\/([^/]+)\/projects\/([^/]+)\/grant$/);
+    if (request.method === "POST" && workspaceProjectGrantMatch?.[1] && workspaceProjectGrantMatch?.[2]) {
+      return await handlers.handleCreateWorkspaceProjectGrant!(request, env, workspaceProjectGrantMatch[1], workspaceProjectGrantMatch[2], ctx);
+    }
+    const projectWorkspacesMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/workspaces$/);
+    if (request.method === "GET" && projectWorkspacesMatch?.[1]) {
+      return await handlers.handleListProjectWorkspaces!(request, env, projectWorkspacesMatch[1], ctx);
+    }
+    if (request.method === "POST" && projectWorkspacesMatch?.[1]) {
+      return await handlers.handleRequestProjectWorkspace!(request, env, projectWorkspacesMatch[1], ctx);
+    }
+    const grantItemMatch = url.pathname.match(/^\/api\/workspace-project-grants\/([^/]+)$/);
+    if (request.method === "PATCH" && grantItemMatch?.[1]) {
+      return await handlers.handleUpdateWorkspaceProjectGrant!(request, env, grantItemMatch[1], ctx);
+    }
+    if (request.method === "DELETE" && grantItemMatch?.[1]) {
+      return await handlers.handleRevokeWorkspaceProjectGrant!(request, env, grantItemMatch[1], ctx);
+    }
     const artifactUploadMatch = url.pathname.match(
       /^\/api\/workspaces\/([^/]+)\/artifacts$/,
     );
@@ -228,7 +277,7 @@ export async function routeWorkerRequest(
       );
     }
 
-    // Host Gateway & Protocol routes
+    // Workspace runtime Gateway & Protocol routes
     if (
       request.method === "POST" &&
       url.pathname === "/api/internal/agent-assignments/dispatch"
@@ -237,17 +286,10 @@ export async function routeWorkerRequest(
     }
     if (
       request.method === "GET" &&
-      (url.pathname === "/api/host-gateway/connect" ||
-        url.pathname === "/api/v2/host-gateway/connect")
+      (url.pathname === "/api/workspace-gateway/connect" ||
+        url.pathname === "/api/v2/workspace-gateway/connect")
     ) {
-      return await handlers.handleHostGatewayConnect!(request, env);
-    }
-    if (
-      request.method === "POST" &&
-      (url.pathname === "/api/host-protocol/messages" ||
-        url.pathname === "/api/v2/host-protocol/messages")
-    ) {
-      return await handlers.handleHostProtocolMessage!(request, env);
+      return await handlers.handleWorkspaceGatewayConnect!(request, env);
     }
     if (
       request.method === "POST" &&
@@ -426,7 +468,7 @@ export async function routeWorkerRequest(
       singleWorkerMatch?.[1] &&
       singleWorkerMatch?.[2]
     ) {
-      return await handlers.handleSetWorkspaceWorkerAvailability!(
+      return await handlers.handleSetWorkspaceDesiredWorkerState!(
         request,
         env,
         singleWorkerMatch[1],
@@ -754,6 +796,37 @@ export async function routeWorkerRequest(
     if (request.method === "POST" && url.pathname === "/api/projects") {
       return await handlers.handleCreateProject!(request, env, ctx);
     }
+    const projectMembersMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/members$/);
+    if (request.method === "GET" && projectMembersMatch?.[1]) {
+      return await handlers.handleListProjectMembers!(request, env, projectMembersMatch[1], ctx);
+    }
+    const projectMemberRoleMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/members\/([^/]+)\/role$/);
+    if (request.method === "PATCH" && projectMemberRoleMatch?.[1] && projectMemberRoleMatch[2]) {
+      return await handlers.handleChangeProjectMemberRole!(request, env, projectMemberRoleMatch[1], projectMemberRoleMatch[2], ctx);
+    }
+    const projectMemberRemoveMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/members\/([^/]+)\/remove$/);
+    if (request.method === "POST" && projectMemberRemoveMatch?.[1] && projectMemberRemoveMatch[2]) {
+      return await handlers.handleRemoveProjectMember!(request, env, projectMemberRemoveMatch[1], projectMemberRemoveMatch[2], ctx);
+    }
+    const projectInvitationsMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/invitations$/);
+    if (request.method === "GET" && projectInvitationsMatch?.[1]) {
+      return await handlers.handleListProjectInvitations!(request, env, projectInvitationsMatch[1], ctx);
+    }
+    if (request.method === "POST" && projectInvitationsMatch?.[1]) {
+      return await handlers.handleCreateProjectInvitation!(request, env, projectInvitationsMatch[1], ctx);
+    }
+    const projectAuditMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/audit$/);
+    if (request.method === "GET" && projectAuditMatch?.[1]) {
+      return await handlers.handleListProjectAudit!(request, env, projectAuditMatch[1], ctx);
+    }
+    const projectInvitationExpireMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/invitations\/([^/]+)\/expire$/);
+    if (request.method === "POST" && projectInvitationExpireMatch?.[1] && projectInvitationExpireMatch[2]) {
+      return await handlers.handleExpireProjectInvitation!(request, env, projectInvitationExpireMatch[1], projectInvitationExpireMatch[2], ctx);
+    }
+    const projectInvitationAcceptMatch = url.pathname.match(/^\/api\/project-invitations\/([^/]+)\/accept$/);
+    if (request.method === "POST" && projectInvitationAcceptMatch?.[1]) {
+      return await handlers.handleAcceptProjectInvitation!(request, env, projectInvitationAcceptMatch[1], ctx);
+    }
     const projectChatsMatch = url.pathname.match(
       /^\/api\/projects\/([^/]+)\/chats$/,
     );
@@ -857,6 +930,17 @@ export async function routeWorkerRequest(
         env,
         request,
         projectReadModelMatch[1],
+        ctx,
+      );
+    }
+    const projectUsageMatch = url.pathname.match(
+      /^\/api\/projects\/([^/]+)\/usage$/,
+    );
+    if (request.method === "GET" && projectUsageMatch?.[1]) {
+      return await handlers.handleProjectUsage!(
+        request,
+        env,
+        projectUsageMatch[1],
         ctx,
       );
     }

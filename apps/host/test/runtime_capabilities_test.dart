@@ -3,6 +3,102 @@ import 'package:conclave_host/runtime_capabilities.dart';
 import 'package:test/test.dart';
 
 void main() {
+  Map<String, Object?> scopedPayload({
+    String scope = 'selected_paths',
+    List<Object?>? pathMappings,
+    List<String> permissions = const ['repository:read'],
+    Map<String, Object?>? input,
+    Map<String, Object?>? networkPolicy,
+  }) =>
+      {
+        'projectId': 'project-1',
+        'executionWorkspaceId': 'workspace-1',
+        'permissionSnapshot': {
+          'projectId': 'project-1',
+          'workspaceId': 'workspace-1',
+          'grantId': 'grant-1',
+          'requesterUserId': 'user-1',
+          'scope': scope,
+          'permissions': permissions,
+          'pathMappings': pathMappings ??
+              [
+                {
+                  'projectPath': '/repo',
+                  'workspacePath': '/work/repo',
+                }
+              ],
+          'networkPolicy': networkPolicy ?? {'mode': 'deny_all'},
+        },
+        'input': input ?? <String, Object?>{},
+      };
+
+  test('rejects alternate working directories and traversal mappings', () {
+    expect(
+      () => validateAssignmentScope(
+        scopedPayload(input: {'workingDirectory': '/etc'}),
+        manifestPermissions: {'workspace:read'},
+      ),
+      throwsA(isA<RuntimeViolation>()),
+    );
+    expect(
+      () => validateAssignmentScope(
+        scopedPayload(pathMappings: [
+          {'projectPath': '../outside', 'workspacePath': '/work/repo'}
+        ]),
+        manifestPermissions: {'workspace:read'},
+      ),
+      throwsA(isA<RuntimeViolation>()),
+    );
+  });
+
+  test('rejects undeclared network and credential material', () {
+    expect(
+      () => validateAssignmentScope(
+        scopedPayload(
+          permissions: const ['network:use'],
+          networkPolicy: {'mode': 'deny_all'},
+        ),
+        manifestPermissions: {'network:outbound'},
+      ),
+      throwsA(isA<RuntimeViolation>()),
+    );
+    expect(
+      () => validateAssignmentScope(
+        scopedPayload(input: {'apiKey': 'should-never-cross-runtime'}),
+        manifestPermissions: {'workspace:read'},
+      ),
+      throwsA(isA<RuntimeViolation>()),
+    );
+  });
+
+  test('permits a validated full Workspace grant on declared permissions', () {
+    expect(
+      () => validateAssignmentScope(
+        scopedPayload(
+          scope: 'full_workspace',
+          pathMappings: const [],
+          permissions: const ['repository:read', 'shell:execute'],
+        ),
+        manifestPermissions: {'workspace:read', 'shell'},
+      ),
+      returnsNormally,
+    );
+  });
+
+  test('rejects system administration even when a manifest declares it', () {
+    expect(
+      () => validateAssignmentScope(
+        scopedPayload(
+          scope: 'full_workspace',
+          pathMappings: const [],
+          permissions: const ['system:admin'],
+        ),
+        manifestPermissions: const {'system:admin'},
+      ),
+      throwsA(isA<RuntimeViolation>()),
+    );
+  });
+
   test('blocks traversal and permits contained files', () async {
     final directory =
         await Directory.systemTemp.createTemp('conclave-runtime-');

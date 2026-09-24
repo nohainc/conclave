@@ -1,5 +1,5 @@
 export { ConclaveRunWorkflow } from "./workflow.js";
-export { HostGateway } from "./host-gateway.js";
+export { WorkspaceGateway } from "./workspace-gateway.js";
 export { RealtimeGateway } from "./realtime-gateway.js";
 export {
   CloudEventPublisher,
@@ -85,8 +85,7 @@ const routeHandlers = {
   handleWorkspaceMemberStatus: handlers.handleWorkspaceMemberStatus,
   handleInternalDispatchTaskAssignment:
     handlers.handleInternalDispatchTaskAssignment,
-  handleHostGatewayConnect: handlers.handleHostGatewayConnect,
-  handleHostProtocolMessage: handlers.handleHostProtocolMessage,
+  handleWorkspaceGatewayConnect: handlers.handleWorkspaceGatewayConnect,
   handleEnrollHost: handlers.handleEnrollHost,
   handleBindHostWorkspace: handlers.handleBindHostWorkspace,
   handleListHostEnrollments: handlers.handleListHostEnrollments,
@@ -108,6 +107,14 @@ const routeHandlers = {
   handleRevokeCredentialGrant: handlers.handleRevokeCredentialGrant,
   handleSetWorkspaceWorkerAvailability:
     handlers.handleSetWorkspaceWorkerAvailability,
+  handleSetWorkspaceDesiredWorkerState:
+    handlers.handleSetWorkspaceDesiredWorkerState,
+  handleListWorkspaceProjectGrants: handlers.handleListWorkspaceProjectGrants,
+  handleCreateWorkspaceProjectGrant: handlers.handleCreateWorkspaceProjectGrant,
+  handleListProjectWorkspaces: handlers.handleListProjectWorkspaces,
+  handleRequestProjectWorkspace: handlers.handleRequestProjectWorkspace,
+  handleUpdateWorkspaceProjectGrant: handlers.handleUpdateWorkspaceProjectGrant,
+  handleRevokeWorkspaceProjectGrant: handlers.handleRevokeWorkspaceProjectGrant,
   handleDispatchEnsembleTaskAssignment:
     handlers.handleDispatchEnsembleTaskAssignment,
   handleDispatchTaskAssignment: handlers.handleDispatchTaskAssignment,
@@ -127,6 +134,14 @@ const routeHandlers = {
   handleGetWorkspace: handlers.handleGetWorkspace,
   handleListProjects: handlers.handleListProjects,
   handleCreateProject: handlers.handleCreateProject,
+  handleListProjectMembers: handlers.handleListProjectMembers,
+  handleListProjectInvitations: handlers.handleListProjectInvitations,
+  handleListProjectAudit: handlers.handleListProjectAudit,
+  handleCreateProjectInvitation: handlers.handleCreateProjectInvitation,
+  handleChangeProjectMemberRole: handlers.handleChangeProjectMemberRole,
+  handleRemoveProjectMember: handlers.handleRemoveProjectMember,
+  handleExpireProjectInvitation: handlers.handleExpireProjectInvitation,
+  handleAcceptProjectInvitation: handlers.handleAcceptProjectInvitation,
   handleListChats: handlers.handleListChats,
   handleCreateChat: handlers.handleCreateChat,
   handleGetProject: handlers.handleGetProject,
@@ -199,7 +214,7 @@ export default {
               "GET, POST, PUT, PATCH, DELETE, OPTIONS",
             "access-control-allow-headers":
               request.headers.get("access-control-request-headers") ||
-              "authorization, content-type, accept, x-request-id, x-conclave-workspace-id",
+              "authorization, content-type, accept, x-request-id",
             "access-control-max-age": "86400",
           },
         }),

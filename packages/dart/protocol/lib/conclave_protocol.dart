@@ -3,6 +3,7 @@ import 'dart:convert';
 export 'generated_protocol.dart';
 export 'generated_local_protocols.dart';
 export 'realtime_events.dart';
+export 'workspace_runtime_protocol.dart';
 import 'generated_protocol.dart';
 
 class ProtocolException implements Exception {

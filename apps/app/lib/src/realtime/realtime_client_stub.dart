@@ -4,6 +4,12 @@ abstract interface class RealtimeClient {
   Stream<Map<String, dynamic>> get events;
   Future<void> connect(Uri endpoint, String workspaceId);
   Future<void> setWorkspace(String workspaceId);
+  Future<void> setScopes({
+    String? projectId,
+    String? chatId,
+    String? runId,
+    String? executionWorkspaceId,
+  });
   Future<void> close();
 }
 
@@ -18,6 +24,13 @@ class _StubRealtimeClient implements RealtimeClient {
 
   @override
   Future<void> setWorkspace(String workspaceId) async {}
+  @override
+  Future<void> setScopes({
+    String? projectId,
+    String? chatId,
+    String? runId,
+    String? executionWorkspaceId,
+  }) async {}
 
   @override
   Future<void> close() => _events.close();

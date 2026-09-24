@@ -18,6 +18,7 @@ import {
   AGENT_PROTOCOL_BASE_ENVELOPE_FIELDS,
   AGENT_PROTOCOL_ASSIGNMENT_ENVELOPE_FIELDS,
 } from "./generated.js";
+export * from "./workspace-runtime.js";
 
 export {
   HOST_PROTOCOL_NAME,

@@ -1,9 +1,8 @@
 /**
  * Conclave AX Architecture v2 Security, Authentication & Multi-Tenancy Engine.
  *
- * Enforces:
- * User -> Workspace -> Project hierarchy
- * Roles: owner, admin, member, viewer
+ * v5 enforces User ownership and Project membership. The v4 Workspace
+ * context remains below only as a migration compatibility surface.
  * Secure browser sessions + Desktop OAuth/PKCE authorization code flow.
  */
 
@@ -14,7 +13,12 @@
 export const WORKSPACE_ROLES = ["owner", "admin", "member", "viewer"] as const;
 export type WorkspaceRole = (typeof WORKSPACE_ROLES)[number];
 
-export const PROJECT_ROLES = ["lead", "collaborator", "viewer"] as const;
+export const PROJECT_ROLES = [
+  "owner",
+  "collaborator",
+  "viewer",
+  "lead",
+] as const;
 export type ProjectRole = (typeof PROJECT_ROLES)[number];
 
 // Legacy alias for compatibility
@@ -141,6 +145,20 @@ export const PROJECT_ROLE_PERMISSIONS: Record<
   ProjectRole,
   readonly Permission[]
 > = {
+  owner: [
+    "projects:read",
+    "projects:write",
+    "projects:manage",
+    "chats:create",
+    "chats:read",
+    "goals:create",
+    "run.start",
+    "runs:control",
+    "project:read",
+    "project:write",
+    "run:create",
+    "run:control",
+  ],
   lead: [
     "projects:read",
     "projects:write",
@@ -159,6 +177,7 @@ export const PROJECT_ROLE_PERMISSIONS: Record<
     "chats:create",
     "chats:read",
     "goals:create",
+    "run.start",
     "project:read",
     "project:write",
     "run:create",
@@ -217,6 +236,10 @@ export interface WorkspaceSecurityContext {
   // Backward compatibility fields
   readonly organizationId: string;
   readonly organizationRoles: readonly Role[];
+  /** Active resolver model. v5 contexts never select a Workspace. */
+  readonly authorizationModel?: "v4" | "v5";
+  readonly ownedWorkspaceIds?: readonly string[];
+  readonly ownedAccountIds?: readonly string[];
 }
 
 export type SecurityContext = WorkspaceSecurityContext;
@@ -234,7 +257,10 @@ export function canAccessProject(
   projectId: string,
 ): boolean {
   if (context.suspended || context.user.status !== "active") return false;
-  // Owners and Admins have workspace-wide project access
+  if (context.authorizationModel === "v5") {
+    return context.authorizedProjectIds.includes(projectId);
+  }
+  // Historical v4 owners and admins had workspace-wide project access.
   if (context.workspaceRole === "owner" || context.workspaceRole === "admin") {
     return true;
   }
@@ -248,6 +274,16 @@ export function authorize(
 ): void {
   if (context.suspended || context.user.status !== "active") {
     throw new AuthorizationError(permission, projectId);
+  }
+
+  if (context.authorizationModel === "v5") {
+    if (!projectId) throw new AuthorizationError(permission);
+    const projectRole = context.projectRoles[projectId];
+    if (!projectRole) throw new AuthorizationError(permission, projectId);
+    if (!PROJECT_ROLE_PERMISSIONS[projectRole].includes(permission)) {
+      throw new AuthorizationError(permission, projectId);
+    }
+    return;
   }
 
   if (projectId) {
@@ -282,6 +318,69 @@ export interface CredentialGrantAccessRecord {
   readonly use_permission?: number | boolean | null;
   readonly expires_at?: string | null;
   readonly revoked_at?: string | null;
+}
+
+/** Authorize a current Project membership, re-reading membership state. */
+export async function authorizeProjectMembership(
+  db: DatabaseAdapter,
+  context: Pick<WorkspaceSecurityContext, "userId" | "user" | "suspended">,
+  projectId: string,
+  permission: Permission,
+): Promise<{ role: ProjectRole }> {
+  if (context.suspended || context.user.status !== "active") {
+    throw new AuthorizationError(permission, projectId);
+  }
+  const membership = await db
+    .prepare(
+      `SELECT pm.role
+       FROM project_memberships pm
+       JOIN projects p ON p.id = pm.project_id
+       WHERE pm.project_id = ?1 AND pm.user_id = ?2`,
+    )
+    .bind(projectId, context.userId)
+    .first<{ role: ProjectRole }>();
+  if (
+    !membership ||
+    !PROJECT_ROLE_PERMISSIONS[membership.role]?.includes(permission)
+  ) {
+    throw new AuthorizationError(permission, projectId);
+  }
+  return membership;
+}
+
+/** Workspaces are user-owned resources, never Project-member resources. */
+export async function authorizeWorkspaceOwner(
+  db: DatabaseAdapter,
+  context: Pick<WorkspaceSecurityContext, "userId" | "user" | "suspended">,
+  workspaceId: string,
+  permission: Permission,
+): Promise<void> {
+  if (context.suspended || context.user.status !== "active") {
+    throw new AuthorizationError(permission, workspaceId);
+  }
+  const workspace = await db
+    .prepare(
+      "SELECT id FROM execution_workspaces WHERE id = ?1 AND owner_user_id = ?2 AND status <> 'revoked'",
+    )
+    .bind(workspaceId, context.userId)
+    .first<{ id: string }>();
+  if (!workspace) throw new AuthorizationError(permission, workspaceId);
+}
+
+export async function authorizeProjectOwner(
+  db: DatabaseAdapter,
+  context: Pick<WorkspaceSecurityContext, "userId" | "user" | "suspended">,
+  projectId: string,
+  permission: Permission = "projects:manage",
+): Promise<void> {
+  if (context.suspended || context.user.status !== "active") {
+    throw new AuthorizationError(permission, projectId);
+  }
+  const owner = await db
+    .prepare("SELECT id FROM projects WHERE id = ?1 AND owner_user_id = ?2")
+    .bind(projectId, context.userId)
+    .first<{ id: string }>();
+  if (!owner) throw new AuthorizationError(permission, projectId);
 }
 
 /**
@@ -366,6 +465,75 @@ export async function authorizeCredentialProfileUse(
   if (!canUseCredentialProfile(context, profile, grants.results ?? [], now)) {
     throw new AuthorizationError("credential.use", credentialProfileId);
   }
+}
+
+/**
+ * V5 Account authorization is independent from execution Workspace access.
+ * The secret is never returned; this only proves that the requester may use
+ * the provider identity for the specified Project.
+ */
+export async function authorizeProjectAccountUse(
+  db: DatabaseAdapter,
+  context: Pick<WorkspaceSecurityContext, "userId" | "user" | "suspended">,
+  projectId: string,
+  accountId: string,
+  now = new Date(),
+): Promise<void> {
+  if (context.suspended || context.user.status !== "active") {
+    throw new AuthorizationError("credential.use", accountId);
+  }
+  const account = await db
+    .prepare(
+      `SELECT owner_user_id, status, sharing_mode, provider_metadata_json
+       FROM ai_accounts WHERE id = ?1`,
+    )
+    .bind(accountId)
+    .first<{
+      owner_user_id: string;
+      status: string;
+      sharing_mode: "private_only" | "project_shared";
+      provider_metadata_json: string;
+    }>();
+  if (!account || account.status !== "ready") {
+    throw new AuthorizationError("credential.use", accountId);
+  }
+  if (account.owner_user_id === context.userId) return;
+  let providerMetadata: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = JSON.parse(account.provider_metadata_json || "{}");
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      providerMetadata = parsed as Record<string, unknown>;
+    }
+  } catch {
+    // Invalid metadata is treated as non-shareable.
+    throw new AuthorizationError("credential.use", accountId);
+  }
+  if (
+    account.sharing_mode === "private_only" ||
+    providerMetadata.providerSharingPolicy === "private_only"
+  ) {
+    throw new AuthorizationError("credential.use", accountId);
+  }
+  const membership = await db
+    .prepare(
+      `SELECT role FROM project_memberships
+       WHERE project_id = ?1 AND user_id = ?2`,
+    )
+    .bind(projectId, context.userId)
+    .first<{ role: ProjectRole }>();
+  if (!membership) throw new AuthorizationError("credential.use", accountId);
+  const grant = await db
+    .prepare(
+      `SELECT id FROM project_account_grants
+       WHERE project_id = ?1 AND account_id = ?2 AND status = 'active'
+         AND (grantee_user_id IS NULL OR grantee_user_id = ?3)
+         AND (expires_at IS NULL OR expires_at > ?4)
+       ORDER BY CASE WHEN grantee_user_id = ?3 THEN 0 ELSE 1 END
+       LIMIT 1`,
+    )
+    .bind(projectId, accountId, context.userId, now.toISOString())
+    .first<{ id: string }>();
+  if (!grant) throw new AuthorizationError("credential.use", accountId);
 }
 
 export async function authorizeHostWorkspaceBinding(
@@ -619,6 +787,88 @@ export interface AuthenticatedIdentity {
   readonly email: string;
   readonly name: string;
   readonly sessionId: string;
+}
+
+/**
+ * Resolve the v5 browser context without a Workspace selector. Every request
+ * receives the user's current Project memberships; Workspace ownership is
+ * checked only when a specific execution Workspace is addressed.
+ */
+export async function resolveProjectSecurityContextFromIdentity(
+  db: DatabaseAdapter,
+  identity: AuthenticatedIdentity,
+): Promise<WorkspaceSecurityContext> {
+  const userRow = await db
+    .prepare(
+      `SELECT id, email, display_name, avatar_url, status
+       FROM users WHERE id = ?1`,
+    )
+    .bind(identity.userId)
+    .first<{
+      id: string;
+      email: string;
+      display_name: string;
+      avatar_url: string | null;
+      status: string;
+    }>();
+  if (!userRow) throw new AuthenticationError("Conclave user not found");
+  if (!["active", "suspended", "deactivated"].includes(userRow.status)) {
+    throw new AuthenticationError("Invalid Conclave user status");
+  }
+  if (userRow.status !== "active") {
+    throw new AuthenticationError(`User account is ${userRow.status}`);
+  }
+
+  const user: AuthenticatedUser = {
+    id: userRow.id,
+    email: userRow.email,
+    displayName: userRow.display_name,
+    avatarUrl: userRow.avatar_url,
+    status: userRow.status as AuthenticatedUser["status"],
+  };
+  const memberships = await db
+    .prepare(
+      `SELECT project_id, role
+       FROM project_memberships
+       WHERE user_id = ?1`,
+    )
+    .bind(user.id)
+    .all<{ project_id: string; role: ProjectRole }>();
+  const authorizedProjectIds: string[] = [];
+  const projectRoles: Record<string, ProjectRole> = {};
+  for (const membership of memberships.results ?? []) {
+    authorizedProjectIds.push(membership.project_id);
+    projectRoles[membership.project_id] = membership.role;
+  }
+  const workspaces = await db
+    .prepare(
+      "SELECT id FROM execution_workspaces WHERE owner_user_id = ?1 AND status <> 'revoked'",
+    )
+    .bind(user.id)
+    .all<{ id: string }>();
+  const accounts = await db
+    .prepare("SELECT id FROM ai_accounts WHERE owner_user_id = ?1")
+    .bind(user.id)
+    .all<{ id: string }>();
+
+  return {
+    userId: user.id,
+    user,
+    // Compatibility fields are deliberately empty: v5 has no active browser
+    // Workspace selection or Workspace role inheritance.
+    workspaceId: "",
+    workspaceRole: "viewer",
+    roles: ["viewer"],
+    authorizedProjectIds,
+    projectRoles,
+    sessionId: identity.sessionId,
+    clientType: "web",
+    organizationId: "",
+    organizationRoles: ["viewer"],
+    authorizationModel: "v5",
+    ownedWorkspaceIds: (workspaces.results ?? []).map((row) => row.id),
+    ownedAccountIds: (accounts.results ?? []).map((row) => row.id),
+  };
 }
 
 /**

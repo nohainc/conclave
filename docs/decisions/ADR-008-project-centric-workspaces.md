@@ -1,8 +1,8 @@
 # ADR-008: Project-Centric Workspaces
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-09-24
-**Supersedes when accepted:** ADR-004 multi-Workspace Host sharing decisions
+**Supersedes:** ADR-004 multi-Workspace Host sharing decisions and the collaborative Workspace portions of ADR-007
 
 ## Context
 

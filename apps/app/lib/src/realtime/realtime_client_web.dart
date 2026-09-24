@@ -12,9 +12,14 @@ class _BrowserRealtimeClient implements RealtimeClient {
   html.WebSocket? _socket;
   Uri? _endpoint;
   String? _workspaceId;
+  String? _projectId;
+  String? _chatId;
+  String? _runId;
+  String? _executionWorkspaceId;
   Timer? _reconnectTimer;
   int _attempt = 0;
   int? _lastDurableSequence;
+  final _lastDurableSequences = <String, int>{};
   bool _closed = false;
 
   @override
@@ -31,16 +36,29 @@ class _BrowserRealtimeClient implements RealtimeClient {
 
   @override
   Future<void> setWorkspace(String workspaceId) async {
-    if (_workspaceId == workspaceId) return;
-    _send({
-      'type': 'unsubscribe',
-      'scope': {'workspaceId': _workspaceId},
-    });
-    _workspaceId = workspaceId;
-    _send({
-      'type': 'subscribe',
-      'scope': {'workspaceId': workspaceId},
-    });
+    await setScopes(executionWorkspaceId: workspaceId);
+  }
+
+  @override
+  Future<void> setScopes({
+    String? projectId,
+    String? chatId,
+    String? runId,
+    String? executionWorkspaceId,
+  }) async {
+    final previous = _currentScopes();
+    if (_socket?.readyState == html.WebSocket.OPEN) {
+      for (final scope in previous) {
+        _send({'type': 'unsubscribe', 'scope': scope});
+      }
+    }
+    _projectId = projectId;
+    _chatId = chatId;
+    _runId = runId;
+    _executionWorkspaceId = executionWorkspaceId;
+    if (_socket?.readyState == html.WebSocket.OPEN) {
+      _subscribeCurrentScopes();
+    }
   }
 
   void _open() {
@@ -56,11 +74,14 @@ class _BrowserRealtimeClient implements RealtimeClient {
         'type': 'realtime.hello',
         if (_lastDurableSequence != null)
           'lastDurableSequence': _lastDurableSequence,
+        if (_lastDurableSequences.isNotEmpty)
+          'lastDurableSequences': _lastDurableSequences,
       });
       _send({
         'type': 'subscribe',
-        'scope': {'workspaceId': workspaceId},
+        'scope': {'kind': 'user'}
       });
+      _subscribeCurrentScopes();
     });
     socket.onMessage.listen((event) {
       final data = event.data;
@@ -72,7 +93,22 @@ class _BrowserRealtimeClient implements RealtimeClient {
         if (message['type'] == 'event' && message['event'] is Map) {
           final eventValue = Map<String, dynamic>.from(message['event'] as Map);
           final sequence = eventValue['sequence'];
-          if (sequence is int) _lastDurableSequence = sequence;
+          if (sequence is int) {
+            _lastDurableSequence = sequence;
+            _lastDurableSequences['user='] = sequence;
+            final projectId = eventValue['projectId'];
+            final chatId = eventValue['chatId'];
+            final runId = eventValue['runId'];
+            final workspaceId = eventValue['workspaceId'];
+            if (projectId is String)
+              _lastDurableSequences['project=$projectId'] = sequence;
+            if (chatId is String)
+              _lastDurableSequences['chat=$chatId'] = sequence;
+            if (runId is String) _lastDurableSequences['run=$runId'] = sequence;
+            if (workspaceId is String)
+              _lastDurableSequences['execution_workspace=$workspaceId'] =
+                  sequence;
+          }
           _events.add(eventValue);
         } else if (message['type'] == 'reconnect.required') {
           // The App performs an authenticated HTTP snapshot resync before
@@ -86,6 +122,23 @@ class _BrowserRealtimeClient implements RealtimeClient {
     socket.onClose.listen((_) => _scheduleReconnect());
     socket.onError.listen((_) => _scheduleReconnect());
   }
+
+  void _subscribeCurrentScopes() {
+    for (final scope in _currentScopes()) {
+      _send({'type': 'subscribe', 'scope': scope});
+    }
+  }
+
+  List<Map<String, dynamic>> _currentScopes() => [
+        if (_projectId != null) {'kind': 'project', 'projectId': _projectId},
+        if (_chatId != null) {'kind': 'chat', 'chatId': _chatId},
+        if (_runId != null) {'kind': 'run', 'runId': _runId},
+        if (_executionWorkspaceId != null)
+          {
+            'kind': 'execution_workspace',
+            'executionWorkspaceId': _executionWorkspaceId
+          },
+      ];
 
   void _scheduleReconnect() {
     if (_closed || _reconnectTimer?.isActive == true) return;

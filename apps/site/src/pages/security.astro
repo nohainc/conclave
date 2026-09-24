@@ -7,20 +7,20 @@ import SecurityTopology from "../components/SecurityTopology.astro";
 import SiteLayout from "../layouts/SiteLayout.astro";
 ---
 
-<SiteLayout title="Security — Conclave AX" description="Conclave AX security boundaries for people, Hosts, Workers, and Accounts.">
+<SiteLayout title="Security — Conclave AX" description="Conclave AX security boundaries for people, Workspaces, Workers, and Accounts.">
   <Section>
     <Container>
-      <SectionHeader eyebrow="Architecture and security" title="Clear boundaries are a feature." description="Conclave AX, Cloud, Host, Workers, and Accounts each have a distinct role. That separation keeps authorization and credentials in the right place." headingLevel={1} />
+      <SectionHeader eyebrow="Architecture and security" title="Clear boundaries are a feature." description="Conclave AX, Cloud, Workspace, Workers, and Accounts each have a distinct role. That separation keeps authorization and credentials in the right place." headingLevel={1} />
       <div class="security-overview">
         <SecurityTopology />
         <div class="security-boundaries">
           <FeatureCard title="Cloud" headingLevel={2}><p>Coordinates work, authorizes Workspace access, and stores control-plane state.</p></FeatureCard>
-          <FeatureCard title="Host" headingLevel={2}><p>Provides machine execution, protects local credentials, and supervises Workers.</p></FeatureCard>
+          <FeatureCard title="Workspace" headingLevel={2}><p>Provides machine execution, protects local credentials, and supervises Workers.</p></FeatureCard>
           <FeatureCard title="Worker" headingLevel={2}><p>Talks to an AI model, CLI, or tool. It does not authenticate directly to Conclave Cloud.</p></FeatureCard>
           <FeatureCard title="Account" headingLevel={2}><p>Determines whose AI credentials are used for an authorized assignment.</p></FeatureCard>
         </div>
       </div>
-      <div class="security-callout"><strong>Workers do not receive Conclave user sessions or Host machine credentials.</strong><span>Workers operate behind the Host boundary and receive only the scoped assignment context they need.</span></div>
+      <div class="security-callout"><strong>Workers do not receive Conclave user sessions or Workspace machine credentials.</strong><span>Workers operate behind the Workspace boundary and receive only the scoped assignment context they need.</span></div>
     </Container>
   </Section>
 </SiteLayout>

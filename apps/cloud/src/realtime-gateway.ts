@@ -14,14 +14,16 @@ import {
 } from "./realtime-queue.js";
 
 export interface RealtimeScope {
-  workspaceId: string;
+  kind?: "user" | "project" | "chat" | "run" | "execution_workspace";
+  executionWorkspaceId?: string;
+  workspaceId?: string;
   projectId?: string;
   chatId?: string;
   runId?: string;
 }
 
 export type RealtimeClientMessage =
-  | { type: "realtime.hello"; lastDurableSequence?: number }
+  | { type: "realtime.hello"; lastDurableSequence?: number; lastDurableSequences?: Record<string, number> }
   | { type: "subscribe"; scope: RealtimeScope }
   | { type: "unsubscribe"; scope: RealtimeScope }
   | { type: "ping" };
@@ -35,6 +37,7 @@ interface ConnectedClient {
   readonly identity: AuthenticatedIdentity;
   readonly subscriptions: Map<string, RealtimeScope>;
   lastDurableSequence: number | null;
+  readonly lastDurableSequences: Map<string, number>;
   readonly queue: BoundedRealtimeQueue;
   flushScheduled: boolean;
 }
@@ -52,10 +55,13 @@ export interface RealtimeGatewayMetrics {
 
 const MAX_SOCKET_BUFFERED_BYTES = 256 * 1024;
 
-const scopeFields = ["workspaceId", "projectId", "chatId", "runId"] as const;
-
 export function scopeKey(scope: RealtimeScope): string {
-  return scopeFields.map((field) => `${field}=${scope[field] ?? ""}`).join("&");
+  if (scope.kind) {
+    return `${scope.kind}=${scope.executionWorkspaceId ?? scope.projectId ?? scope.chatId ?? scope.runId ?? ""}`;
+  }
+  return ["workspaceId", "projectId", "chatId", "runId"]
+    .map((field) => `${field}=${scope[field as keyof RealtimeScope] ?? ""}`)
+    .join("&");
 }
 
 export function parseRealtimeClientMessage(
@@ -84,6 +90,9 @@ export function parseRealtimeClientMessage(
       ...(sequence === undefined || typeof sequence !== "number"
         ? {}
         : { lastDurableSequence: sequence }),
+      ...(value.lastDurableSequences && typeof value.lastDurableSequences === "object"
+        ? { lastDurableSequences: value.lastDurableSequences as Record<string, number> }
+        : {}),
     };
   }
   if (value.type !== "subscribe" && value.type !== "unsubscribe") {
@@ -98,6 +107,24 @@ export function parseRealtimeClientMessage(
     throw new Error("Realtime subscription scope is required");
   }
   const scope = rawScope as Record<string, unknown>;
+  if (scope.kind === "user") return { type: value.type, scope: { kind: "user" } };
+  if (scope.kind === "project" || scope.kind === "chat" || scope.kind === "run") {
+    const idField = `${scope.kind}Id`;
+    if (typeof scope[idField] !== "string" || (scope[idField] as string).length === 0) {
+      throw new Error(`Realtime ${scope.kind} scope id is required`);
+    }
+    return {
+      type: value.type,
+      scope: { kind: scope.kind, [idField]: scope[idField] },
+    } as RealtimeClientMessage;
+  }
+  if (scope.kind === "execution_workspace") {
+    if (typeof scope.executionWorkspaceId !== "string" || scope.executionWorkspaceId.length === 0) {
+      throw new Error("Realtime execution Workspace scope id is required");
+    }
+    return { type: value.type, scope: { kind: "execution_workspace", executionWorkspaceId: scope.executionWorkspaceId } };
+  }
+  const scopeFields = ["workspaceId", "projectId", "chatId", "runId"] as const;
   if (typeof scope.workspaceId !== "string" || scope.workspaceId.length === 0) {
     throw new Error("Realtime subscription workspaceId is required");
   }
@@ -141,6 +168,13 @@ export function eventMatchesScope(
   event: RealtimeEventEnvelope,
   scope: RealtimeScope,
 ): boolean {
+  if (scope.kind === "user") return true;
+  if (scope.kind === "project") return event.projectId === scope.projectId;
+  if (scope.kind === "chat") return event.chatId === scope.chatId;
+  if (scope.kind === "run") return event.runId === scope.runId;
+  if (scope.kind === "execution_workspace") {
+    return event.workspaceId === scope.executionWorkspaceId;
+  }
   return (
     event.workspaceId === scope.workspaceId &&
     (!scope.projectId || event.projectId === scope.projectId) &&
@@ -164,6 +198,27 @@ export async function authorizeRealtimeScope(
   userId: string,
   scope: RealtimeScope,
 ): Promise<{ allowed: true } | { allowed: false; reason: string }> {
+  if (scope.kind === "user") return { allowed: true };
+  if (scope.kind === "project") {
+    const member = await db.prepare(
+      "SELECT 1 AS member FROM project_memberships WHERE project_id = ?1 AND user_id = ?2",
+    ).bind(scope.projectId, userId).first<{ member: number }>();
+    return member ? { allowed: true } : { allowed: false, reason: "project_access_denied" };
+  }
+  if (scope.kind === "execution_workspace") {
+    const owner = await db.prepare(
+      "SELECT 1 AS owner FROM execution_workspaces WHERE id = ?1 AND owner_user_id = ?2 AND status <> 'revoked'",
+    ).bind(scope.executionWorkspaceId, userId).first<{ owner: number }>();
+    return owner ? { allowed: true } : { allowed: false, reason: "execution_workspace_access_denied" };
+  }
+  if (scope.kind === "chat" || scope.kind === "run") {
+    const row = await db.prepare(
+      `SELECT pm.user_id FROM project_memberships pm
+       JOIN ${scope.kind === "chat" ? "chats" : "runs"} resource ON resource.project_id = pm.project_id
+       WHERE resource.id = ?1 AND pm.user_id = ?2`,
+    ).bind(scope[`${scope.kind}Id` as "chatId" | "runId"], userId).first<{ user_id: string }>();
+    return row ? { allowed: true } : { allowed: false, reason: `${scope.kind}_access_denied` };
+  }
   const membership = await db
     .prepare(
       "SELECT 1 AS member FROM workspace_memberships WHERE workspace_id = ?1 AND user_id = ?2 AND status = 'active'",
@@ -292,6 +347,7 @@ export class RealtimeGateway implements DurableObject {
       identity,
       subscriptions: new Map(),
       lastDurableSequence: null,
+      lastDurableSequences: new Map(),
       queue: new BoundedRealtimeQueue(),
       flushScheduled: false,
     };
@@ -346,6 +402,9 @@ export class RealtimeGateway implements DurableObject {
       }
       if (message.type === "realtime.hello") {
         connected.lastDurableSequence = message.lastDurableSequence ?? null;
+        for (const [key, value] of Object.entries(message.lastDurableSequences ?? {})) {
+          if (Number.isInteger(value) && value >= 0) connected.lastDurableSequences.set(key, value);
+        }
         this.sendRaw(connected.socket, {
           type: "realtime.ready",
           connectionId,
@@ -415,22 +474,26 @@ export class RealtimeGateway implements DurableObject {
           this.metrics.activeAppSockets = this.clients.size;
           continue;
         }
-        const matches = [...connected.subscriptions.values()].some((scope) =>
+        const matchingScopes = [...connected.subscriptions.values()].filter((scope) =>
           eventMatchesScope(event, scope),
         );
-        if (!matches) continue;
-        if (
-          isDurableRealtimeEventType(event.type) &&
-          requiresRealtimeReconnect(
-            connected.lastDurableSequence,
-            event.sequence,
-          )
-        ) {
+        if (matchingScopes.length === 0) continue;
+        const gapScope = isDurableRealtimeEventType(event.type)
+          ? matchingScopes.find((scope) => requiresRealtimeReconnect(
+              connected.lastDurableSequences.get(scopeKey(scope)) ??
+                (scope.kind ? null : connected.lastDurableSequence),
+              event.sequence,
+            ))
+          : undefined;
+        if (gapScope) {
           this.metrics.reconnects += 1;
           this.sendRaw(connected.socket, {
             type: "reconnect.required",
             reason: "durable_event_gap",
-            lastDurableSequence: connected.lastDurableSequence,
+            scope: gapScope,
+            lastDurableSequence:
+              connected.lastDurableSequences.get(scopeKey(gapScope)) ??
+              connected.lastDurableSequence,
             nextSequence: event.sequence,
           });
           continue;
@@ -438,6 +501,9 @@ export class RealtimeGateway implements DurableObject {
         const result = this.enqueueEvent(connected, event);
         this.recordQueueResult(result);
         if (isDurableRealtimeEventType(event.type)) {
+          for (const scope of matchingScopes) {
+            connected.lastDurableSequences.set(scopeKey(scope), event.sequence);
+          }
           connected.lastDurableSequence = event.sequence;
         }
       }

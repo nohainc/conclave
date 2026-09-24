@@ -102,7 +102,7 @@ class HostCloudConnection {
     required this.workspaceId,
     required this.factory,
     Set<String>? authorizedWorkspaceIds,
-    this.name = 'Conclave Host',
+    this.name = 'Conclave Workspace',
     String? hostname,
     this.hostVersion = '0.1.0',
     Map<String, Object?>? capabilities,
@@ -121,6 +121,8 @@ class HostCloudConnection {
           workspaceId,
           ...?authorizedWorkspaceIds,
         },
+        legacyProtocol = uri.path.contains('/host') &&
+            !uri.path.contains('workspace-gateway'),
         hostname = hostname ?? Platform.localHostname,
         capabilities = capabilities ?? _defaultCapabilities();
 
@@ -128,6 +130,7 @@ class HostCloudConnection {
   final String hostId;
   final String workspaceId;
   final Set<String> authorizedWorkspaceIds;
+  final bool legacyProtocol;
   final HostCloudSocketFactory factory;
   final String name;
   final String hostname;
@@ -166,7 +169,7 @@ class HostCloudConnection {
       'workers': workers
           .map((worker) => {
                 ...worker,
-                'hostId': hostId,
+                'workspaceRuntimeId': hostId,
               })
           .toList(),
     });
@@ -181,7 +184,7 @@ class HostCloudConnection {
   }) {
     _sendIfConnected('worker.status', {
       'workerId': workerId,
-      'hostId': hostId,
+      'workspaceRuntimeId': hostId,
       'status': status,
       'activeAssignments': activeAssignments,
       if (healthDetail != null) 'healthDetail': healthDetail,
@@ -285,8 +288,8 @@ class HostCloudConnection {
     socket.send(jsonEncode(_envelope(type, payload)));
   }
 
-  static const protocol = hostProtocolName;
-  static const protocolVersion = hostProtocolVersion;
+  static const protocol = workspaceRuntimeProtocolName;
+  static const protocolVersion = workspaceRuntimeProtocolVersion;
 
   static bool _isCompatibleProtocolVersion(String remote) {
     final localParts = protocolVersion.split('.').map(int.parse).toList();
@@ -329,9 +332,9 @@ class HostCloudConnection {
       onDone: () => unawaited(_reconnect()),
       onError: (_) => unawaited(_reconnect()),
     );
-    socket.send(jsonEncode(_envelope('host.hello', {
-      'hostId': hostId,
-      'workspaceId': workspaceId,
+    socket.send(jsonEncode(_envelope('workspace.hello', {
+      'workspaceRuntimeId': hostId,
+      'executionWorkspaceId': workspaceId,
       'name': name,
       'hostname': hostname,
       'hostVersion': hostVersion,
@@ -346,9 +349,9 @@ class HostCloudConnection {
         unawaited(_socket?.close());
       });
       socket.send(jsonEncode({
-        ..._envelope('host.heartbeat', {
-          'hostId': hostId,
-          'workspaceId': workspaceId,
+        ..._envelope('workspace.heartbeat', {
+          'workspaceRuntimeId': hostId,
+          'executionWorkspaceId': workspaceId,
           'sessionId': currentSessionId,
           'status': 'online',
           'activeWorkers': activeWorkerIds.length,
@@ -358,7 +361,8 @@ class HostCloudConnection {
     });
   }
 
-  Map<String, Object?> _envelope(String type, Map<String, Object?> payload) => {
+  Map<String, Object?> _envelope(String type, Map<String, Object?> payload) =>
+      _legacyMap({
         'protocol': protocol,
         'protocolVersion': protocolVersion,
         'messageId':
@@ -366,7 +370,71 @@ class HostCloudConnection {
         'timestamp': DateTime.now().toUtc().toIso8601String(),
         'type': type,
         'payload': payload,
-      };
+      });
+
+  Map<String, Object?> _legacyMap(Map<String, Object?> message) {
+    if (!legacyProtocol) return message;
+    Object? translate(Object? value) {
+      if (value is! Map) return value;
+      final result = <String, Object?>{};
+      for (final entry in value.entries) {
+        final key = switch (entry.key) {
+          'executionWorkspaceId' => 'workspaceId',
+          'workspaceRuntimeId' => 'hostId',
+          _ => entry.key.toString(),
+        };
+        result[key] = translate(entry.value);
+      }
+      return result;
+    }
+    final translated = Map<String, Object?>.from(translate(message) as Map);
+    translated['protocol'] = 'conclave.host-protocol';
+    translated['protocolVersion'] = '4.0';
+    if (translated['type'] is String) {
+      translated['type'] = (translated['type'] as String)
+          .replaceFirst('workspace.', 'host.');
+      if (translated['type'] == 'host.sync.result') {
+        translated['type'] = 'host.sync.response';
+      }
+    }
+    return translated;
+  }
+
+  static Map<String, dynamic> _normalizeLegacyMessage(
+    Map<String, dynamic> message,
+  ) {
+    Object? translate(Object? value) {
+      if (value is! Map) return value;
+      final result = <String, dynamic>{};
+      for (final entry in value.entries) {
+        final key = switch (entry.key) {
+          'workspaceId' => 'executionWorkspaceId',
+          'hostId' => 'workspaceRuntimeId',
+          _ => entry.key.toString(),
+        };
+        result[key] = translate(entry.value);
+      }
+      return result;
+    }
+    final normalized = Map<String, dynamic>.from(translate(message) as Map);
+    normalized['protocol'] = workspaceRuntimeProtocolName;
+    final legacyVersion = message['protocolVersion'];
+    if (legacyVersion is String && legacyVersion.startsWith('4.')) {
+      final versionParts = legacyVersion.split('.');
+      final minor = versionParts.length > 1 ? versionParts[1] : '0';
+      normalized['protocolVersion'] = '5.$minor';
+    } else {
+      normalized['protocolVersion'] = legacyVersion;
+    }
+    if (normalized['type'] is String) {
+      normalized['type'] = (normalized['type'] as String)
+          .replaceFirst('host.', 'workspace.');
+      if (normalized['type'] == 'workspace.sync.response') {
+        normalized['type'] = 'workspace.sync.result';
+      }
+    }
+    return normalized;
+  }
 
   void _handleMessage(Object? raw) {
     if (raw is! String) return;
@@ -377,30 +445,33 @@ class HostCloudConnection {
       return;
     }
     if (decoded is! Map<String, dynamic>) return;
+    if (legacyProtocol) decoded = _normalizeLegacyMessage(decoded);
     final remoteProtocolVersion = decoded['protocolVersion'];
     if (remoteProtocolVersion is! String ||
         !_isCompatibleProtocolVersion(remoteProtocolVersion)) {
       return;
     }
     try {
-      HostProtocolMessage.parse(decoded);
+      WorkspaceRuntimeMessage.parse(decoded);
     } on ProtocolException {
       return;
     }
-    if (decoded['type'] == 'host.hello.ack') {
+    if (decoded['type'] == 'workspace.hello.ack') {
       final payload = decoded['payload'];
       if (payload is Map<String, dynamic> && payload['sessionId'] is String) {
         sessionId = payload['sessionId'] as String;
-        final bindings = payload['activeWorkspaceBindings'];
-        if (bindings is List && bindings.every((value) => value is String)) {
-          authorizedWorkspaceIds
-            ..clear()
-            ..addAll(bindings.cast<String>())
-            ..add(workspaceId);
+        authorizedWorkspaceIds
+          ..clear()
+          ..add(workspaceId);
+        if (legacyProtocol) {
+          final bindings = payload['activeWorkspaceBindings'];
+          if (bindings is List && bindings.every((value) => value is String)) {
+            authorizedWorkspaceIds.addAll(bindings.cast<String>());
+          }
         }
         unawaited(_sendSyncRequest());
       }
-    } else if (decoded['type'] == 'host.sync.result') {
+    } else if (decoded['type'] == 'workspace.sync.result') {
       final payload = decoded['payload'];
       if (payload is Map<String, dynamic>) {
         syncResponse = Map<String, Object?>.from(payload);
@@ -410,7 +481,7 @@ class HostCloudConnection {
           unawaited(handler(syncResponse!).catchError((_) {}));
         }
       }
-    } else if (decoded['type'] == 'host.update') {
+    } else if (decoded['type'] == 'workspace.update') {
       final payload = decoded['payload'];
       final handler = hostUpdateAvailableHandler;
       if (payload is Map<String, dynamic> && handler != null) {
@@ -418,7 +489,7 @@ class HostCloudConnection {
           handler(Map<String, Object?>.from(payload)).catchError((_) {}),
         );
       }
-    } else if (decoded['type'] == 'host.heartbeat.ack') {
+    } else if (decoded['type'] == 'workspace.heartbeat.ack') {
       _heartbeatTimeoutTimer?.cancel();
       _heartbeatTimeoutTimer = null;
     } else if (decoded['type'] == 'assignment.start') {
@@ -432,8 +503,8 @@ class HostCloudConnection {
     final socket = _socket;
     final payload = message['payload'];
     final requiredFields = [
-      'workspaceId',
-      'hostId',
+      'executionWorkspaceId',
+      'workspaceRuntimeId',
       'workerId',
       'runId',
       'taskId',
@@ -447,8 +518,8 @@ class HostCloudConnection {
       return;
     }
 
-    if (!authorizedWorkspaceIds.contains(message['workspaceId']) ||
-        message['hostId'] != hostId) {
+    if (!authorizedWorkspaceIds.contains(message['executionWorkspaceId']) ||
+        message['workspaceRuntimeId'] != hostId) {
       _sendAssignmentError(
         socket,
         message,
@@ -479,8 +550,8 @@ class HostCloudConnection {
     }
 
     final context = HostAssignmentContext(
-      workspaceId: message['workspaceId'] as String,
-      hostId: message['hostId'] as String,
+      workspaceId: message['executionWorkspaceId'] as String,
+      hostId: message['workspaceRuntimeId'] as String,
       workerId: message['workerId'] as String,
       runId: message['runId'] as String,
       taskId: message['taskId'] as String,
@@ -609,8 +680,8 @@ class HostCloudConnection {
     final socket = _socket;
     if (socket == null ||
         message['assignmentId'] is! String ||
-        message['workspaceId'] != workspaceId ||
-        message['hostId'] != hostId) {
+        message['executionWorkspaceId'] != workspaceId ||
+        message['workspaceRuntimeId'] != hostId) {
       return;
     }
     final assignmentId = message['assignmentId'] as String;
@@ -643,13 +714,13 @@ class HostCloudConnection {
         rawPayload['role'] == null) {
       for (final field in [
         'assignmentId',
-        'workspaceId',
+        'executionWorkspaceId',
         'projectId',
         'runId',
         'taskId',
         'attemptId',
         'requestedByUserId',
-        'hostId',
+        'workspaceRuntimeId',
         'workerId',
         'resolvedWorkerVersion',
         'credentialProfileId',
@@ -822,7 +893,7 @@ class HostCloudConnection {
           correlation,
           {
             'status': 'cancelled',
-            'reason': 'Assignment was cancelled while the Host was offline',
+            'reason': 'Assignment was cancelled while the Workspace was offline',
           },
         )));
       }
@@ -832,8 +903,8 @@ class HostCloudConnection {
   }
 
   Map<String, Object?> _recordCorrelation(AssignmentRecord record) => {
-        'workspaceId': record.workspaceId,
-        'hostId': record.hostId,
+      'executionWorkspaceId': record.workspaceId,
+      'workspaceRuntimeId': record.hostId,
         'workerId': record.workerId,
         'runId': record.runId,
         'taskId': record.taskId,
@@ -843,8 +914,8 @@ class HostCloudConnection {
       };
 
   Map<String, Object?> _assignmentCorrelation(Map<String, dynamic> message) => {
-        'workspaceId': message['workspaceId'],
-        'hostId': message['hostId'],
+        'executionWorkspaceId': message['executionWorkspaceId'],
+        'workspaceRuntimeId': message['workspaceRuntimeId'],
         'workerId': message['workerId'],
         'runId': message['runId'],
         'taskId': message['taskId'],
@@ -858,10 +929,10 @@ class HostCloudConnection {
     Map<String, Object?> correlation,
     Map<String, Object?> payload,
   ) =>
-      {
+      _legacyMap({
         ..._envelope(type, payload),
         ...correlation,
-      };
+      });
 
   Future<void> _sendSyncRequest() async {
     final socket = _socket;
@@ -879,9 +950,9 @@ class HostCloudConnection {
         }
       }
     }
-    socket.send(jsonEncode(_envelope('host.sync.request', {
-      'hostId': hostId,
-      'workspaceId': workspaceId,
+    socket.send(jsonEncode(_envelope('workspace.sync.request', {
+      'workspaceRuntimeId': hostId,
+      'executionWorkspaceId': workspaceId,
       'installedWorkerVersions': installedWorkerVersions,
       'activeWorkerIds': activeWorkerIds,
       if (recoveredAssignmentIds.isNotEmpty)

@@ -35,13 +35,14 @@ export interface Project {
   readonly updatedAt: string;
 }
 
-export type ProjectRole = "lead" | "collaborator" | "viewer";
+export type LegacyProjectRole = "lead" | "collaborator" | "viewer";
 
-export interface ProjectMembership {
+/** @deprecated Historical pre-v5 Project membership shape. */
+export interface LegacyProjectMembership {
   readonly id: string;
   readonly projectId: string;
   readonly userId: string;
-  readonly role: ProjectRole;
+  readonly role: LegacyProjectRole;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -220,7 +221,7 @@ export interface Worker {
   readonly updatedAt: string;
 }
 
-export type WorkerAssignmentStatus =
+export type LegacyWorkerAssignmentStatus =
   | "created"
   | "dispatched"
   | "acknowledged"
@@ -230,7 +231,8 @@ export type WorkerAssignmentStatus =
   | "cancelled"
   | "timed_out";
 
-export interface WorkerAssignment {
+/** @deprecated Historical pre-v5 assignment shape. */
+export interface LegacyWorkerAssignment {
   readonly id: string;
   readonly workspaceId: string;
   readonly runId: string;
@@ -240,7 +242,7 @@ export interface WorkerAssignment {
   readonly workerId: string;
   readonly workerCatalogId: string;
   readonly resolvedWorkerVersion?: string;
-  readonly status: WorkerAssignmentStatus;
+  readonly status: LegacyWorkerAssignmentStatus;
   readonly input: Record<string, unknown>;
   readonly idempotencyKey: string;
   readonly timeoutMs: number;
@@ -637,7 +639,7 @@ export function validateWorker(
  * - Assignment must match Worker's workspace and host Agent
  */
 export function validateAssignment(
-  assignment: WorkerAssignment,
+  assignment: LegacyWorkerAssignment,
   context?: { worker?: Worker; attemptId?: string },
 ): void {
   if (!assignment.id || assignment.id.trim().length === 0) {
@@ -720,7 +722,7 @@ export function validateAssignment(
  */
 export function validateAssignmentResult(
   result: WorkerAssignmentResult,
-  assignment?: WorkerAssignment,
+  assignment?: LegacyWorkerAssignment,
 ): void {
   if (!result.assignmentId || result.assignmentId.trim().length === 0) {
     throw new DomainInvariantError("Result assignmentId is required");

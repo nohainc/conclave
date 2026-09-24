@@ -30,7 +30,7 @@ void main() {
       tester,
       const HostUiSnapshot(
         mode: HostUiMode.firstLaunch,
-        title: 'Pair this Host',
+        title: 'Pair this Workspace',
         detail: 'Connect this machine to Conclave to begin.',
       ),
       onPair: () => paired = true,
@@ -43,13 +43,13 @@ void main() {
     expect(paired, isTrue);
   });
 
-  testWidgets('paired Host shows machine controls, not orchestration',
+    testWidgets('paired Workspace shows machine controls, not orchestration',
       (tester) async {
     await pumpDashboard(
       tester,
       const HostUiSnapshot(
         mode: HostUiMode.ready,
-        title: 'Host is ready',
+        title: 'Workspace is ready',
         detail: 'This machine is paired and ready to run assigned work.',
         paired: true,
         cloudConnected: true,
@@ -66,8 +66,8 @@ void main() {
     expect(find.text('Worker diagnostics'), findsOneWidget);
     expect(find.text('Logs'), findsOneWidget);
     expect(find.text('Updates'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Quit Host'), 300);
-    expect(find.text('Quit Host'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Quit Workspace'), 300);
+    expect(find.text('Quit Workspace'), findsOneWidget);
     expect(find.text('Projects'), findsNothing);
     expect(find.text('Workspace management'), findsNothing);
     expect(find.text('New Worker'), findsNothing);
@@ -80,7 +80,7 @@ void main() {
       const HostUiSnapshot(
         mode: HostUiMode.authNeeded,
         title: 'Account action needed',
-        detail: 'Sign in locally before this Host can run work.',
+        detail: 'Sign in locally before this Workspace can run work.',
         accountsNeedingAction: ['Personal Codex'],
       ),
       onAccountAction: () => opened = true,
@@ -99,7 +99,7 @@ void main() {
       const HostUiSnapshot(
         mode: HostUiMode.active,
         title: 'Work in progress',
-        detail: 'The Host is running assigned work.',
+        detail: 'The Workspace is running assigned work.',
         activeAssignments: 2,
       ),
     );
@@ -109,8 +109,8 @@ void main() {
       tester,
       const HostUiSnapshot(
         mode: HostUiMode.offline,
-        title: 'Host is offline',
-        detail: 'The Host could not connect.',
+        title: 'Workspace is offline',
+        detail: 'The Workspace could not connect.',
         issue: 'Network unavailable',
       ),
     );
@@ -147,7 +147,7 @@ void main() {
     expect(find.text('What happened'), findsOneWidget);
     expect(
         find.text(
-            'Your work is safe. The Host will not discard an assignment.'),
+            'Your work is safe. The Workspace will not discard an assignment.'),
         findsOneWidget);
     await tester.tap(find.text('Retry update'));
     expect(retried, isTrue);
@@ -159,7 +159,7 @@ void main() {
       tester,
       const HostUiSnapshot(
         mode: HostUiMode.ready,
-        title: 'Host is ready',
+        title: 'Workspace is ready',
         detail: 'Ready',
         paired: true,
         cloudConnected: true,
@@ -172,7 +172,7 @@ void main() {
     expect(find.text('Advanced details'), findsOneWidget);
     await tester.tap(find.text('Advanced details'));
     await tester.pumpAndSettle();
-    expect(find.text('Host ID'), findsOneWidget);
+    expect(find.text('Workspace ID'), findsOneWidget);
     expect(find.text('Connected'), findsOneWidget);
   });
 }

@@ -1,5 +1,5 @@
 export { ConclaveRunWorkflow } from "../workflow.js";
-export { HostGateway } from "../host-gateway.js";
+export { WorkspaceGateway } from "../workspace-gateway.js";
 export {
   selectWorkerForTask,
   dispatchTaskAssignment,
@@ -46,7 +46,11 @@ import {
   computePackageDigest,
   signPackageDigest,
   verifyPackageDigestSignature,
-  resolveSecurityContextFromIdentity,
+  resolveProjectSecurityContextFromIdentity,
+  authorizeProjectMembership,
+  authorizeWorkspaceOwner,
+  authorizeProjectOwner,
+  authorizeProjectAccountUse,
   authorizeCredentialProfileUse,
   type Permission,
   type SecurityContext,
@@ -218,7 +222,7 @@ type SecurityEnv = Env & {
   ) => Promise<SecurityContext>;
   readonly CONCLAVE_CI_INGEST_TOKEN?: string;
   readonly CONCLAVE_FORGE_CALLBACK_TOKEN?: string;
-  readonly CONCLAVE_HOST_GATEWAY: DurableObjectNamespace;
+  readonly CONCLAVE_WORKSPACE_GATEWAY?: DurableObjectNamespace;
   readonly CONCLAVE_REALTIME_GATEWAY?: DurableObjectNamespace;
   readonly CONCLAVE_CONNECTOR_REGISTRATION_TOKEN?: string;
 };
@@ -281,17 +285,10 @@ async function securityContext(
     const identity = await identityService.resolve(request, env);
     if (!identity) throw new HttpError(401, "Authentication required");
     try {
-      const requestedWorkspaceId =
-        request.headers.get("x-conclave-workspace-id") ??
-        new URL(request.url).searchParams.get("workspaceId") ??
-        undefined;
       await provisionConclaveUser(env.CONCLAVE_DB, identity);
-      return await resolveSecurityContextFromIdentity(
+      return await resolveProjectSecurityContextFromIdentity(
         env.CONCLAVE_DB,
         identity,
-        {
-          requestedWorkspaceId,
-        },
       );
     } catch (err: unknown) {
       if (
@@ -324,24 +321,37 @@ async function authorizeRequest(
 ): Promise<SecurityContext> {
   const context = await securityContext(request, env, accessContext);
   if (projectId && !testAuthenticationEnabled(env)) {
-    const project = await env.CONCLAVE_DB.prepare(
-      "SELECT workspace_id FROM projects WHERE id = ?1",
-    )
-      .bind(projectId)
-      .first<{
-        workspace_id?: string | null;
-      }>();
-    const ownerWorkspace = project?.workspace_id;
-    if (!project || ownerWorkspace !== context.workspaceId) {
-      await recordAuthAuditEvent(env.CONCLAVE_DB, {
-        action: "auth.authorization.denied",
-        outcome: "denied",
-        userId: context.userId,
-        sessionId: context.sessionId,
-        workspaceId: context.workspaceId,
-        reason: "invalid_project",
-      }).catch(() => undefined);
-      throw new HttpError(404, "Resource not found");
+    if (context.authorizationModel === "v5") {
+      try {
+        await authorizeProjectMembership(
+          env.CONCLAVE_DB,
+          context,
+          projectId,
+          permission,
+        );
+      } catch {
+        throw new HttpError(404, "Resource not found");
+      }
+    } else {
+      const project = await env.CONCLAVE_DB.prepare(
+        "SELECT workspace_id FROM projects WHERE id = ?1",
+      )
+        .bind(projectId)
+        .first<{
+          workspace_id?: string | null;
+        }>();
+      const ownerWorkspace = project?.workspace_id;
+      if (!project || ownerWorkspace !== context.workspaceId) {
+        await recordAuthAuditEvent(env.CONCLAVE_DB, {
+          action: "auth.authorization.denied",
+          outcome: "denied",
+          userId: context.userId,
+          sessionId: context.sessionId,
+          workspaceId: context.workspaceId,
+          reason: "invalid_project",
+        }).catch(() => undefined);
+        throw new HttpError(404, "Resource not found");
+      }
     }
   }
   try {
@@ -524,11 +534,24 @@ async function handleRunRequest(
     projectId,
     accessContext,
   );
-  if (typeof body.credentialProfileId === "string") {
+  const requestedAccountId =
+    typeof body.accountId === "string"
+      ? body.accountId
+      : typeof body.credentialProfileId === "string"
+        ? body.credentialProfileId
+        : null;
+  if (context.authorizationModel === "v5" && requestedAccountId && projectId) {
+    await authorizeProjectAccountUse(
+      securityEnv.CONCLAVE_DB,
+      context,
+      projectId,
+      requestedAccountId,
+    );
+  } else if (requestedAccountId) {
     await authorizeCredentialProfileUse(
       securityEnv.CONCLAVE_DB,
       context,
-      body.credentialProfileId,
+      requestedAccountId,
     );
   }
   const expectedCommitSha =
@@ -1618,6 +1641,20 @@ async function workspaceMemberContext(
   accessContext?: ExecutionContext,
 ): Promise<SecurityContext> {
   const context = await securityContext(request, env, accessContext);
+  if (context.authorizationModel === "v5") {
+    await authorizeWorkspaceOwner(
+      env.CONCLAVE_DB,
+      context,
+      workspaceId,
+      permission,
+    ).catch((error: unknown) => {
+      throw new HttpError(
+        404,
+        error instanceof Error ? "Workspace not found" : "Workspace not found",
+      );
+    });
+    return context;
+  }
   if (!testAuthenticationEnabled(env) && context.workspaceId !== workspaceId) {
     throw new HttpError(404, "Workspace not found");
   }
@@ -2229,6 +2266,21 @@ async function handleDeleteProject(
     projectId,
     accessContext,
   );
+  if (context.authorizationModel === "v5") {
+    try {
+      await authorizeProjectOwner(
+        env.CONCLAVE_DB,
+        context,
+        projectId,
+        "projects:manage",
+      );
+    } catch (error) {
+      throw new HttpError(
+        403,
+        error instanceof Error ? error.message : "Forbidden",
+      );
+    }
+  }
   const result = await env.CONCLAVE_DB.prepare(
     "DELETE FROM projects WHERE id = ?1 AND workspace_id = ?2",
   )
@@ -2238,6 +2290,116 @@ async function handleDeleteProject(
     throw new HttpError(404, "Project not found");
   }
   return json({ projectId, deleted: true });
+}
+
+async function authorizeProjectOwnerOrThrow(request: Request, env: SecurityEnv, projectId: string, accessContext?: ExecutionContext): Promise<SecurityContext> {
+  const context = await authorizeRequest(request, env, "project:read", projectId, accessContext);
+  if (context.authorizationModel === "v5") {
+    try { await authorizeProjectOwner(env.CONCLAVE_DB, context, projectId, "projects:manage"); }
+    catch { throw new HttpError(403, "Only the Project owner can manage collaboration"); }
+  }
+  return context;
+}
+
+async function handleListProjectMembers(request: Request, env: SecurityEnv, projectId: string, accessContext?: ExecutionContext): Promise<Response> {
+  await authorizeRequest(request, env, "project:read", projectId, accessContext);
+  const rows = await env.CONCLAVE_DB.prepare(
+    `SELECT pm.user_id AS userId, u.display_name AS displayName, u.email, pm.role, pm.created_at AS createdAt
+     FROM project_memberships pm JOIN users u ON u.id = pm.user_id
+     WHERE pm.project_id = ?1 ORDER BY CASE pm.role WHEN 'owner' THEN 0 WHEN 'collaborator' THEN 1 ELSE 2 END, u.display_name`,
+  ).bind(projectId).all();
+  return json({ members: rows.results ?? [] });
+}
+
+async function handleListProjectInvitations(request: Request, env: SecurityEnv, projectId: string, accessContext?: ExecutionContext): Promise<Response> {
+  await authorizeProjectOwnerOrThrow(request, env, projectId, accessContext);
+  const rows = await env.CONCLAVE_DB.prepare(
+    `SELECT id, email, role, status, expires_at AS expiresAt, created_at AS createdAt
+     FROM project_invitations WHERE project_id = ?1 AND status = 'pending' ORDER BY created_at DESC`,
+  ).bind(projectId).all();
+  return json({ invitations: rows.results ?? [] });
+}
+
+async function handleListProjectAudit(request: Request, env: SecurityEnv, projectId: string, accessContext?: ExecutionContext): Promise<Response> {
+  await authorizeRequest(request, env, "project:read", projectId, accessContext);
+  const rows = await env.CONCLAVE_DB.prepare(
+    `SELECT id, action, target_type AS targetType, target_id AS targetId, created_at AS createdAt
+     FROM project_audit_log WHERE project_id = ?1 ORDER BY created_at DESC LIMIT 100`,
+  ).bind(projectId).all();
+  return json({ entries: rows.results ?? [] });
+}
+
+async function handleCreateProjectInvitation(request: Request, env: SecurityEnv, projectId: string, accessContext?: ExecutionContext): Promise<Response> {
+  const context = await authorizeProjectOwnerOrThrow(request, env, projectId, accessContext);
+  const body = (await request.json()) as Record<string, unknown>;
+  const email = requiredString(body.email, "email").trim().toLowerCase();
+  const role = body.role === "viewer" || body.role === "collaborator" ? body.role : null;
+  if (!role || !email.includes("@")) throw new HttpError(400, "Valid email and Project role are required");
+  const now = new Date();
+  const id = `pinv-${crypto.randomUUID()}`;
+  const token = `project_invite_${crypto.randomUUID()}_${crypto.randomUUID()}`;
+  await env.CONCLAVE_DB.prepare(
+    `INSERT INTO project_invitations (id, project_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'pending', ?7, ?8, ?8)`,
+  ).bind(id, projectId, email, role, await hashToken(token), context.userId, new Date(now.getTime() + 7 * 86400000).toISOString(), now.toISOString()).run();
+  await env.CONCLAVE_DB.prepare(
+    `INSERT INTO project_audit_log (id, project_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
+     VALUES (?1, ?2, 'user', ?3, 'project.invitation.created', 'invitation', ?4, ?5, ?6)`,
+  ).bind(`pa-${crypto.randomUUID()}`, projectId, context.userId, id, JSON.stringify({ email, role }), now.toISOString()).run();
+  return json({ invitation: { id, projectId, email, role, status: "pending" }, token }, { status: 201 });
+}
+
+async function handleChangeProjectMemberRole(request: Request, env: SecurityEnv, projectId: string, userId: string, accessContext?: ExecutionContext): Promise<Response> {
+  const context = await authorizeProjectOwnerOrThrow(request, env, projectId, accessContext);
+  const body = (await request.json()) as Record<string, unknown>;
+  const role = body.role === "viewer" || body.role === "collaborator" ? body.role : null;
+  if (!role) throw new HttpError(400, "Project role must be collaborator or viewer");
+  const result = await env.CONCLAVE_DB.prepare(`UPDATE project_memberships SET role = ?1, updated_at = ?2 WHERE project_id = ?3 AND user_id = ?4 AND role <> 'owner'`).bind(role, new Date().toISOString(), projectId, userId).run();
+  if (!result.success || (result.meta?.changes ?? 0) === 0) throw new HttpError(404, "Project member not found");
+  await env.CONCLAVE_DB.prepare(`INSERT INTO project_audit_log (id, project_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at) VALUES (?1, ?2, 'user', ?3, 'project.member.role_changed', 'user', ?4, ?5, ?6)`).bind(`pa-${crypto.randomUUID()}`, projectId, context.userId, userId, JSON.stringify({ role }), new Date().toISOString()).run();
+  return json({ projectId, userId, role });
+}
+
+async function handleRemoveProjectMember(request: Request, env: SecurityEnv, projectId: string, userId: string, accessContext?: ExecutionContext): Promise<Response> {
+  const context = await authorizeProjectOwnerOrThrow(request, env, projectId, accessContext);
+  const result = await env.CONCLAVE_DB.prepare(`DELETE FROM project_memberships WHERE project_id = ?1 AND user_id = ?2 AND role <> 'owner'`).bind(projectId, userId).run();
+  if (!result.success || (result.meta?.changes ?? 0) === 0) throw new HttpError(404, "Project member not found");
+  // A contributed execution Workspace is owned by the departing user. Revoke
+  // that user's Project Grants with the membership removal so the scheduler
+  // cannot continue using infrastructure after collaboration ends.
+  await env.CONCLAVE_DB.prepare(
+    `UPDATE workspace_project_grants
+        SET status = 'revoked', updated_at = ?1
+      WHERE project_id = ?2 AND granted_by_user_id = ?3 AND status = 'active'`,
+  ).bind(new Date().toISOString(), projectId, userId).run();
+  await env.CONCLAVE_DB.prepare(`INSERT INTO project_audit_log (id, project_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at) VALUES (?1, ?2, 'user', ?3, 'project.member.removed', 'user', ?4, '{}', ?5)`).bind(`pa-${crypto.randomUUID()}`, projectId, context.userId, userId, new Date().toISOString()).run();
+  return json({ projectId, userId, removed: true });
+}
+
+async function handleExpireProjectInvitation(request: Request, env: SecurityEnv, projectId: string, invitationId: string, accessContext?: ExecutionContext): Promise<Response> {
+  const context = await authorizeProjectOwnerOrThrow(request, env, projectId, accessContext);
+  const result = await env.CONCLAVE_DB.prepare(`UPDATE project_invitations SET status = 'expired', updated_at = ?1 WHERE id = ?2 AND project_id = ?3 AND status = 'pending'`).bind(new Date().toISOString(), invitationId, projectId).run();
+  if (!result.success || (result.meta?.changes ?? 0) === 0) throw new HttpError(404, "Pending invitation not found");
+  await env.CONCLAVE_DB.prepare(`INSERT INTO project_audit_log (id, project_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at) VALUES (?1, ?2, 'user', ?3, 'project.invitation.expired', 'invitation', ?4, '{}', ?5)`).bind(`pa-${crypto.randomUUID()}`, projectId, context.userId, invitationId, new Date().toISOString()).run();
+  return json({ id: invitationId, status: "expired" });
+}
+
+async function handleAcceptProjectInvitation(request: Request, env: SecurityEnv, invitationId: string, accessContext?: ExecutionContext): Promise<Response> {
+  const context = await securityContext(request, env, accessContext);
+  const invitation = await env.CONCLAVE_DB.prepare(
+    `SELECT id, project_id AS projectId, email, role, status, expires_at AS expiresAt
+     FROM project_invitations WHERE id = ?1`,
+  ).bind(invitationId).first<{ id: string; projectId: string; email: string; role: "collaborator" | "viewer"; status: string; expiresAt: string }>();
+  if (!invitation || invitation.status !== "pending") throw new HttpError(404, "Project invitation not found");
+  if (new Date(invitation.expiresAt).getTime() <= Date.now()) throw new HttpError(410, "Project invitation expired");
+  if (context.user.email.toLowerCase() !== invitation.email.toLowerCase()) throw new HttpError(403, "Invitation email does not match signed-in user");
+  const now = new Date().toISOString();
+  await env.CONCLAVE_DB.batch([
+    env.CONCLAVE_DB.prepare(`INSERT INTO project_memberships (id, project_id, user_id, role, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5) ON CONFLICT(project_id, user_id) DO UPDATE SET role = excluded.role, updated_at = excluded.updated_at`).bind(`pm-${crypto.randomUUID()}`, invitation.projectId, context.userId, invitation.role, now),
+    env.CONCLAVE_DB.prepare(`UPDATE project_invitations SET status = 'accepted', accepted_by_user_id = ?1, accepted_at = ?2, updated_at = ?2 WHERE id = ?3 AND status = 'pending'`).bind(context.userId, now, invitation.id),
+    env.CONCLAVE_DB.prepare(`INSERT INTO project_audit_log (id, project_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at) VALUES (?1, ?2, 'user', ?3, 'project.invitation.accepted', 'invitation', ?4, '{}', ?5)`).bind(`pa-${crypto.randomUUID()}`, invitation.projectId, context.userId, invitation.id, now),
+  ]);
+  return json({ projectId: invitation.projectId, role: invitation.role, accepted: true });
 }
 
 // =========================================================================
@@ -3808,6 +3970,71 @@ export async function handleSetWorkspaceWorkerAvailability(
   });
 }
 
+/** V5 Worker lifecycle boundary: only the execution Workspace owner may mutate it. */
+export async function handleSetWorkspaceDesiredWorkerState(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  workerId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  await authorizeWorkspaceOwner(
+    env.CONCLAVE_DB,
+    context,
+    workspaceId,
+    "workers:manage",
+  );
+  const body = (await request.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
+  if (typeof body.enabled !== "boolean") {
+    throw new HttpError(400, "enabled must be a boolean");
+  }
+  const requestedVersion =
+    typeof body.version === "string" ? body.version : undefined;
+  const worker = await env.CONCLAVE_DB.prepare(
+    `SELECT w.id, wv.id AS workerVersionId, wv.version
+     FROM workers w
+     JOIN worker_versions wv ON wv.worker_id = w.id AND wv.is_revoked = 0
+     WHERE w.id = ?1 AND w.status = 'active'
+       AND (?2 IS NULL OR wv.version = ?2)
+     ORDER BY wv.created_at DESC LIMIT 1`,
+  )
+    .bind(workerId, requestedVersion ?? null)
+    .first<{ id: string; workerVersionId: string; version: string }>();
+  if (!worker) {
+    throw new HttpError(409, `Worker ${workerId} has no available version`);
+  }
+
+  const now = new Date().toISOString();
+  await env.CONCLAVE_DB.prepare(
+    `INSERT INTO workspace_worker_desired_state
+       (workspace_id, worker_id, version_policy, enabled, updated_at)
+     VALUES (?1, ?2, ?3, ?4, ?5)
+     ON CONFLICT(workspace_id, worker_id) DO UPDATE SET
+       version_policy = excluded.version_policy,
+       enabled = excluded.enabled,
+       updated_at = excluded.updated_at`,
+  )
+    .bind(workspaceId, workerId, worker.version, body.enabled ? 1 : 0, now)
+    .run();
+
+  await recordAudit(env, context, "workspace.worker.desired_state.updated", "worker", workerId, {
+    workspaceId,
+    enabled: body.enabled,
+    version: worker.version,
+  });
+  return json({
+    workspaceId,
+    workerId,
+    version: worker.version,
+    enabled: body.enabled,
+    updatedAt: now,
+  });
+}
+
 type CredentialProfileRow = {
   id: string;
   workspaceId: string;
@@ -3924,6 +4151,425 @@ async function authorizeCredentialProfileOwner(
   return profile;
 }
 
+function v5AccountMetadata(row: Record<string, unknown>): Record<string, unknown> {
+  return {
+    id: String(row.id),
+    ownerUserId: String(row.owner_user_id),
+    workerId: String(row.worker_id),
+    executionWorkspaceId: row.execution_workspace_id ?? null,
+    displayName: String(row.display_name),
+    authType: String(row.auth_type),
+    status: String(row.status),
+    sharingMode: String(row.sharing_mode),
+    providerMetadata: parseJson(String(row.provider_metadata_json ?? "{}"), {}),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+async function loadV5Account(
+  env: SecurityEnv,
+  accountId: string,
+): Promise<Record<string, unknown> | null> {
+  return env.CONCLAVE_DB.prepare(
+    `SELECT id, owner_user_id, worker_id, execution_workspace_id, display_name,
+            auth_type, status, sharing_mode, provider_metadata_json,
+            created_at, updated_at
+     FROM ai_accounts WHERE id = ?1`,
+  )
+    .bind(accountId)
+    .first<Record<string, unknown>>();
+}
+
+async function authorizeV5AccountOwner(
+  env: SecurityEnv,
+  context: SecurityContext,
+  accountId: string,
+): Promise<Record<string, unknown>> {
+  const account = await loadV5Account(env, accountId);
+  if (!account || String(account.owner_user_id) !== context.userId) {
+    throw new HttpError(404, "Account not found");
+  }
+  return account;
+}
+
+async function handleListV5Accounts(
+  request: Request,
+  env: SecurityEnv,
+  context: SecurityContext,
+): Promise<Response> {
+  const projectId = new URL(request.url).searchParams.get("projectId");
+  let rows;
+  if (projectId) {
+    await authorizeProjectMembership(env.CONCLAVE_DB, context, projectId, "projects:read");
+    rows = await env.CONCLAVE_DB.prepare(
+      `SELECT DISTINCT a.* FROM ai_accounts a
+       LEFT JOIN project_account_grants pag ON pag.account_id = a.id
+        AND pag.project_id = ?1 AND pag.status = 'active'
+        AND (pag.grantee_user_id IS NULL OR pag.grantee_user_id = ?2)
+       WHERE a.owner_user_id = ?2 OR pag.id IS NOT NULL
+       ORDER BY a.display_name`,
+    )
+      .bind(projectId, context.userId)
+      .all<Record<string, unknown>>();
+  } else {
+    rows = await env.CONCLAVE_DB.prepare(
+      `SELECT * FROM ai_accounts WHERE owner_user_id = ?1 ORDER BY display_name`,
+    )
+      .bind(context.userId)
+      .all<Record<string, unknown>>();
+  }
+  return json({ accounts: (rows.results ?? []).map(v5AccountMetadata) });
+}
+
+async function handleCreateV5Account(
+  request: Request,
+  env: SecurityEnv,
+  context: SecurityContext,
+  workspaceId: string,
+): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const displayName = requiredString(body.displayName, "displayName");
+  const workerId = requiredString(body.workerId, "workerId");
+  const authType = String(body.authType ?? "none");
+  const sharingMode = String(body.sharingMode ?? "private_only");
+  if (!["none", "api_key", "oauth", "session_token", "local"].includes(authType)) {
+    throw new HttpError(400, "Unsupported Account authentication type");
+  }
+  if (!["private_only", "project_shared"].includes(sharingMode)) {
+    throw new HttpError(400, "Unsupported Account sharing mode");
+  }
+  const providerMetadata = assertSafeProviderMetadata(body.providerMetadata);
+  if (sharingMode === "project_shared" && providerMetadata.providerSharingPolicy === "private_only") {
+    throw new HttpError(409, "Provider policy does not allow Account sharing");
+  }
+  if (workspaceId) {
+    await authorizeWorkspaceOwner(env.CONCLAVE_DB, context, workspaceId, "workspace:manage");
+  }
+  const worker = await env.CONCLAVE_DB.prepare(
+    "SELECT id FROM workers WHERE id = ?1 AND status <> 'revoked'",
+  ).bind(workerId).first<{ id: string }>();
+  if (!worker) throw new HttpError(404, "Worker not found");
+  const id = `account-${crypto.randomUUID().slice(0, 16)}`;
+  const now = new Date().toISOString();
+  await env.CONCLAVE_DB.prepare(
+    `INSERT INTO ai_accounts
+       (id, owner_user_id, worker_id, execution_workspace_id, display_name,
+        auth_type, secret_location, secret_reference, status, sharing_mode,
+        provider_metadata_json, created_at, updated_at)
+     VALUES (?1, ?2, ?3, NULLIF(?4, ''), ?5, ?6,
+        CASE WHEN ?6 = 'none' THEN 'none' ELSE 'workspace_secure_store' END,
+        NULL, CASE WHEN ?6 = 'none' THEN 'ready' ELSE 'setup_required' END,
+        ?7, ?8, ?9, ?9)`,
+  ).bind(id, context.userId, workerId, workspaceId, displayName, authType, sharingMode, JSON.stringify(providerMetadata), now).run();
+  await recordAudit(env, context, "ai_account.created", "ai_account", id, {
+    workerId,
+    executionWorkspaceId: workspaceId || null,
+    sharingMode,
+  });
+  const account = await loadV5Account(env, id);
+  return json({ account: account ? v5AccountMetadata(account) : { id } }, { status: 201 });
+}
+
+async function handleUpdateV5Account(
+  request: Request,
+  env: SecurityEnv,
+  context: SecurityContext,
+  accountId: string,
+): Promise<Response> {
+  const account = await authorizeV5AccountOwner(env, context, accountId);
+  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const displayName = body.displayName;
+  const sharingMode = body.sharingMode;
+  if (displayName !== undefined && typeof displayName !== "string") throw new HttpError(400, "displayName must be a string");
+  if (sharingMode !== undefined && !["private_only", "project_shared"].includes(String(sharingMode))) throw new HttpError(400, "Unsupported Account sharing mode");
+  const metadata = assertSafeProviderMetadata(body.providerMetadata);
+  const currentMetadata = parseJson<Record<string, unknown>>(String(account.provider_metadata_json ?? "{}"), {});
+  const mergedMetadata = { ...currentMetadata, ...metadata };
+  if (sharingMode === "project_shared" && mergedMetadata.providerSharingPolicy === "private_only") throw new HttpError(409, "Provider policy does not allow Account sharing");
+  const now = new Date().toISOString();
+  await env.CONCLAVE_DB.prepare(
+    `UPDATE ai_accounts SET display_name = COALESCE(?1, display_name),
+       sharing_mode = COALESCE(?2, sharing_mode), provider_metadata_json = ?3,
+       updated_at = ?4 WHERE id = ?5 AND owner_user_id = ?6`,
+  ).bind(displayName ?? null, sharingMode ?? null, JSON.stringify(mergedMetadata), now, accountId, context.userId).run();
+  return json({ account: v5AccountMetadata((await loadV5Account(env, accountId)) ?? account) });
+}
+
+async function handleRevokeV5Account(env: SecurityEnv, context: SecurityContext, accountId: string): Promise<Response> {
+  await authorizeV5AccountOwner(env, context, accountId);
+  const now = new Date().toISOString();
+  await env.CONCLAVE_DB.prepare("UPDATE ai_accounts SET status = 'revoked', updated_at = ?1 WHERE id = ?2 AND owner_user_id = ?3").bind(now, accountId, context.userId).run();
+  await env.CONCLAVE_DB.prepare("UPDATE project_account_grants SET status = 'revoked' WHERE account_id = ?1 AND status = 'active'").bind(accountId).run();
+  return json({ ok: true, revokedAt: now });
+}
+
+async function handleCreateV5AccountSetupIntent(
+  request: Request,
+  env: SecurityEnv,
+  context: SecurityContext,
+  workspaceId: string,
+  accountId: string,
+): Promise<Response> {
+  const account = await loadV5Account(env, accountId);
+  if (!account) throw new HttpError(404, "Account not found");
+  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const targetWorkspaceId = workspaceId || requiredString(body.executionWorkspaceId, "executionWorkspaceId");
+  const action = String(body.action ?? "setup");
+  if (action === "approve") {
+    const intentId = requiredString(body.intentId, "intentId");
+    await authorizeWorkspaceOwner(env.CONCLAVE_DB, context, targetWorkspaceId, "workspace:manage");
+    const now = new Date().toISOString();
+    await env.CONCLAVE_DB.prepare(
+      `UPDATE ai_account_setup_intents SET status = 'approved', approved_by_user_id = ?1, approved_at = ?2
+       WHERE id = ?3 AND account_id = ?4 AND execution_workspace_id = ?5 AND status = 'requested'`,
+    ).bind(context.userId, now, intentId, accountId, targetWorkspaceId).run();
+    await env.CONCLAVE_DB.prepare(
+      "UPDATE ai_accounts SET execution_workspace_id = ?1, updated_at = ?2 WHERE id = ?3",
+    ).bind(targetWorkspaceId, now, accountId).run();
+    return json({ setupIntent: { id: intentId, accountId, workspaceId: targetWorkspaceId, status: "approved", approvedAt: now } });
+  }
+  if (String(account.owner_user_id) !== context.userId) throw new HttpError(404, "Account not found");
+  const workspace = await env.CONCLAVE_DB.prepare(
+    "SELECT id FROM execution_workspaces WHERE id = ?1 AND status <> 'revoked'",
+  ).bind(targetWorkspaceId).first();
+  if (!workspace) throw new HttpError(404, "Workspace not found");
+  if (!["setup", "reauthenticate", "clear"].includes(action)) throw new HttpError(400, "Unsupported Account setup action");
+  const id = `account-setup-${crypto.randomUUID().slice(0, 16)}`;
+  const now = new Date().toISOString();
+  await env.CONCLAVE_DB.prepare(
+    `INSERT INTO ai_account_setup_intents
+       (id, account_id, execution_workspace_id, requested_by_user_id, action, requested_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
+  ).bind(id, accountId, targetWorkspaceId, context.userId, action, now).run();
+  return json({ setupIntent: { id, accountId, workspaceId: targetWorkspaceId, action, status: "requested", requestedAt: now } }, { status: 202 });
+}
+
+async function handleCreateV5AccountGrant(request: Request, env: SecurityEnv, context: SecurityContext, accountId: string): Promise<Response> {
+  await authorizeV5AccountOwner(env, context, accountId);
+  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const projectId = requiredString(body.projectId, "projectId");
+  const granteeUserId = body.granteeUserId == null ? null : requiredString(body.granteeUserId, "granteeUserId");
+  await authorizeProjectOwner(env.CONCLAVE_DB, context, projectId);
+  if (granteeUserId) {
+    const member = await env.CONCLAVE_DB.prepare("SELECT user_id FROM project_memberships WHERE project_id = ?1 AND user_id = ?2").bind(projectId, granteeUserId).first();
+    if (!member) throw new HttpError(404, "Selected user is not a Project member");
+  }
+  const id = `account-grant-${crypto.randomUUID().slice(0, 16)}`;
+  const now = new Date().toISOString();
+  const expiresAt = typeof body.expiresAt === "string" ? body.expiresAt : null;
+  await env.CONCLAVE_DB.prepare(
+    `INSERT INTO project_account_grants (id, project_id, account_id, granted_by_user_id, grantee_user_id, expires_at, created_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+     ON CONFLICT(project_id, account_id, grantee_user_id) DO UPDATE SET status = 'active', granted_by_user_id = excluded.granted_by_user_id, expires_at = excluded.expires_at`,
+  ).bind(id, projectId, accountId, context.userId, granteeUserId, expiresAt, now).run();
+  return json({ grant: { id, projectId, accountId, granteeUserId, expiresAt, status: "active" } }, { status: 201 });
+}
+
+async function handleRevokeV5AccountGrant(env: SecurityEnv, context: SecurityContext, accountId: string, grantId: string): Promise<Response> {
+  await authorizeV5AccountOwner(env, context, accountId);
+  const now = new Date().toISOString();
+  await env.CONCLAVE_DB.prepare("UPDATE project_account_grants SET status = 'revoked' WHERE id = ?1 AND account_id = ?2").bind(grantId, accountId).run();
+  return json({ ok: true, revokedAt: now });
+}
+
+function v5GrantMetadata(row: Record<string, unknown>): Record<string, unknown> {
+  return {
+    id: String(row.id),
+    projectId: String(row.project_id),
+    workspaceId: String(row.workspace_id),
+    workspaceName: row.workspace_name == null ? null : String(row.workspace_name),
+    workspaceOwnerUserId: row.owner_user_id == null ? null : String(row.owner_user_id),
+    grantedByUserId: String(row.granted_by_user_id),
+    status: String(row.status),
+    scope: String(row.scope),
+    repositoryMappings: parseJson(row.repository_mappings_json, []),
+    pathMappings: parseJson(row.path_mappings_json, []),
+    allowedWorkerIds: parseJson(row.allowed_worker_ids_json, []),
+    allowedWorkerCapabilities: parseJson(row.allowed_worker_capabilities_json, []),
+    allowedPermissions: parseJson(row.allowed_permissions_json, []),
+    networkPolicy: parseJson(row.network_policy_json, {}),
+    concurrency: parseJson(row.concurrency_json, {}),
+    budget: parseJson(row.budget_json, null),
+    requiresStepUp: Boolean(row.requires_step_up),
+    expiresAt: row.expires_at ?? null,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
+async function loadV5Grant(env: SecurityEnv, grantId: string): Promise<Record<string, unknown> | null> {
+  return env.CONCLAVE_DB.prepare(
+    `SELECT g.*, ew.name AS workspace_name, ew.owner_user_id
+     FROM workspace_project_grants g
+     JOIN execution_workspaces ew ON ew.id = g.workspace_id
+     WHERE g.id = ?1`,
+  ).bind(grantId).first<Record<string, unknown>>();
+}
+
+function grantJsonArray(value: unknown, field: string): string {
+  if (value === undefined) return "[]";
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "object" || item === null)) {
+    throw new HttpError(400, `${field} must be an array of objects`);
+  }
+  return JSON.stringify(value);
+}
+
+function grantStringArray(value: unknown, field: string): string {
+  if (value === undefined) return "[]";
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new HttpError(400, `${field} must be an array of strings`);
+  }
+  return JSON.stringify(value);
+}
+
+async function grantStepUpIfRequired(
+  env: SecurityEnv,
+  context: SecurityContext,
+  scope: string,
+  body: Record<string, unknown>,
+): Promise<number> {
+  if (scope !== "full_workspace") return 0;
+  if (body.confirmFullWorkspace !== true) {
+    throw new HttpError(400, "Full Workspace access requires explicit confirmation");
+  }
+  const verified = await hasRecentStepUp(
+    env.CONCLAVE_DB,
+    context.userId,
+    context.sessionId,
+    SENSITIVE_OPERATIONS.fullWorkspaceGrant,
+  );
+  if (!verified) throw new HttpError(428, "Recent step-up authentication is required");
+  return 1;
+}
+
+async function createV5WorkspaceProjectGrant(
+  request: Request,
+  env: SecurityEnv,
+  context: SecurityContext,
+  projectId: string,
+  workspaceId: string,
+): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const scope = String(body.scope ?? "project_repository");
+  if (!["project_repository", "selected_paths", "full_workspace"].includes(scope)) {
+    throw new HttpError(400, "Unsupported Workspace Project Grant scope");
+  }
+  let membership: { role: string } | null = null;
+  try {
+    membership = await authorizeProjectMembership(env.CONCLAVE_DB, context, projectId, "projects:write");
+  } catch {
+    // A Workspace owner may grant their own Workspace to a Project without
+    // becoming a Project collaborator; the Project still controls use.
+  }
+  await authorizeWorkspaceOwner(env.CONCLAVE_DB, context, workspaceId, "workspace:manage");
+  if (membership?.role === "collaborator" && body.confirmContribution !== true) {
+    throw new HttpError(400, "Collaborators must explicitly confirm Workspace contribution");
+  }
+  const requiresStepUp = await grantStepUpIfRequired(env, context, scope, body);
+  const repositoryMappings = grantJsonArray(body.repositoryMappings, "repositoryMappings");
+  const pathMappings = grantJsonArray(body.pathMappings, "pathMappings");
+  const allowedWorkerIds = grantStringArray(body.allowedWorkerIds, "allowedWorkerIds");
+  const allowedWorkerCapabilities = grantStringArray(body.allowedWorkerCapabilities, "allowedWorkerCapabilities");
+  const allowedPermissions = grantStringArray(body.allowedPermissions, "allowedPermissions");
+  const networkPolicy = body.networkPolicy === undefined ? '{"mode":"deny_all","allowedHosts":[]}' : JSON.stringify(body.networkPolicy);
+  const concurrency = body.concurrency === undefined ? '{"maxConcurrentAssignments":1}' : JSON.stringify(body.concurrency);
+  const budget = body.budget === undefined ? null : JSON.stringify(body.budget);
+  const expiresAt = typeof body.expiresAt === "string" ? body.expiresAt : null;
+  const now = new Date().toISOString();
+  const id = `workspace-project-grant-${crypto.randomUUID().slice(0, 16)}`;
+  await env.CONCLAVE_DB.prepare(
+    `INSERT INTO workspace_project_grants
+       (id, project_id, workspace_id, granted_by_user_id, status, scope,
+        repository_mappings_json, path_mappings_json, allowed_worker_ids_json,
+        allowed_worker_capabilities_json, allowed_permissions_json,
+        network_policy_json, concurrency_json, budget_json, requires_step_up,
+        expires_at, created_at, updated_at)
+     VALUES (?1, ?2, ?3, ?4, 'active', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?16)
+     ON CONFLICT(id, project_id, workspace_id) DO NOTHING`,
+  ).bind(id, projectId, workspaceId, context.userId, scope, repositoryMappings, pathMappings, allowedWorkerIds, allowedWorkerCapabilities, allowedPermissions, networkPolicy, concurrency, budget, requiresStepUp, expiresAt, now).run();
+  await recordAudit(env, context, "workspace.project_grant.created", "workspace_project_grant", id, {
+    projectId,
+    workspaceId,
+    scope,
+    requiresStepUp: Boolean(requiresStepUp),
+  });
+  const grant = await loadV5Grant(env, id);
+  return json({ grant: grant ? v5GrantMetadata(grant) : { id, projectId, workspaceId, scope } }, { status: 201 });
+}
+
+export async function handleListWorkspaceProjectGrants(request: Request, env: SecurityEnv, workspaceId: string, ctx?: ExecutionContext): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  await authorizeWorkspaceOwner(env.CONCLAVE_DB, context, workspaceId, "workspace:manage");
+  const rows = await env.CONCLAVE_DB.prepare(
+    `SELECT g.*, ew.name AS workspace_name, ew.owner_user_id
+     FROM workspace_project_grants g JOIN execution_workspaces ew ON ew.id = g.workspace_id
+     WHERE g.workspace_id = ?1 ORDER BY g.created_at DESC`,
+  ).bind(workspaceId).all<Record<string, unknown>>();
+  return json({ grants: (rows.results ?? []).map(v5GrantMetadata) });
+}
+
+export async function handleCreateWorkspaceProjectGrant(request: Request, env: SecurityEnv, workspaceId: string, projectId: string, ctx?: ExecutionContext): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  return createV5WorkspaceProjectGrant(request, env, context, projectId, workspaceId);
+}
+
+export async function handleListProjectWorkspaces(request: Request, env: SecurityEnv, projectId: string, ctx?: ExecutionContext): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  await authorizeProjectMembership(env.CONCLAVE_DB, context, projectId, "projects:read");
+  const rows = await env.CONCLAVE_DB.prepare(
+    `SELECT g.*, ew.name AS workspace_name, ew.owner_user_id
+     FROM workspace_project_grants g JOIN execution_workspaces ew ON ew.id = g.workspace_id
+     WHERE g.project_id = ?1 AND g.status IN ('active', 'suspended')
+       AND (g.expires_at IS NULL OR g.expires_at > ?2)
+     ORDER BY ew.name`,
+  ).bind(projectId, new Date().toISOString()).all<Record<string, unknown>>();
+  return json({ workspaces: (rows.results ?? []).map(v5GrantMetadata) });
+}
+
+export async function handleRequestProjectWorkspace(request: Request, env: SecurityEnv, projectId: string, ctx?: ExecutionContext): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  await authorizeProjectMembership(env.CONCLAVE_DB, context, projectId, "projects:write");
+  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const workspaceId = requiredString(body.workspaceId, "workspaceId");
+  const replayableRequest = new Request(request, { body: JSON.stringify(body) });
+  return createV5WorkspaceProjectGrant(replayableRequest, env, context, projectId, workspaceId);
+}
+
+export async function handleUpdateWorkspaceProjectGrant(request: Request, env: SecurityEnv, grantId: string, ctx?: ExecutionContext): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  const existing = await loadV5Grant(env, grantId);
+  if (!existing) throw new HttpError(404, "Workspace Project Grant not found");
+  await authorizeWorkspaceOwner(env.CONCLAVE_DB, context, String(existing.workspace_id), "workspace:manage");
+  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const scope = body.scope === undefined ? String(existing.scope) : String(body.scope);
+  if (!["project_repository", "selected_paths", "full_workspace"].includes(scope)) throw new HttpError(400, "Unsupported Workspace Project Grant scope");
+  const requiresStepUp = await grantStepUpIfRequired(env, context, scope, body);
+  const now = new Date().toISOString();
+  await env.CONCLAVE_DB.prepare(
+    `UPDATE workspace_project_grants SET scope = ?1, requires_step_up = ?2,
+       status = COALESCE(?3, status), expires_at = COALESCE(?4, expires_at), updated_at = ?5
+     WHERE id = ?6`,
+  ).bind(scope, requiresStepUp, body.status === undefined ? null : String(body.status), typeof body.expiresAt === "string" ? body.expiresAt : null, now, grantId).run();
+  await recordAudit(env, context, "workspace.project_grant.updated", "workspace_project_grant", grantId, { scope, status: body.status ?? existing.status });
+  const updated = await loadV5Grant(env, grantId);
+  return json({ grant: updated ? v5GrantMetadata(updated) : null });
+}
+
+export async function handleRevokeWorkspaceProjectGrant(request: Request, env: SecurityEnv, grantId: string, ctx?: ExecutionContext): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  const existing = await loadV5Grant(env, grantId);
+  if (!existing) throw new HttpError(404, "Workspace Project Grant not found");
+  await authorizeWorkspaceOwner(env.CONCLAVE_DB, context, String(existing.workspace_id), "workspace:manage");
+  const now = new Date().toISOString();
+  await env.CONCLAVE_DB.batch([
+    env.CONCLAVE_DB.prepare("UPDATE workspace_project_grants SET status = 'revoked', updated_at = ?1 WHERE id = ?2").bind(now, grantId),
+    env.CONCLAVE_DB.prepare("UPDATE worker_assignments SET status = 'cancelled', error_json = ?1, updated_at = ?2 WHERE workspace_project_grant_id = ?3 AND status IN ('created', 'dispatched')").bind(JSON.stringify({ code: "workspace_project_grant_revoked", cancelledAt: now }), now, grantId),
+  ]);
+  await recordAudit(env, context, "workspace.project_grant.revoked", "workspace_project_grant", grantId, { projectId: existing.project_id, workspaceId: existing.workspace_id });
+  return json({ ok: true, revokedAt: now });
+}
+
 function assertSafeProviderMetadata(value: unknown): Record<string, unknown> {
   if (value === undefined) return {};
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -3944,6 +4590,9 @@ async function handleListCredentialProfiles(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
+  if (context.authorizationModel === "v5") {
+    return handleListV5Accounts(request, env, context);
+  }
   authorize(context, "credential.use");
   requireWorkspaceContext(context, env, workspaceId);
   const rows = await env.CONCLAVE_DB.prepare(
@@ -3974,6 +4623,9 @@ async function handleCreateCredentialProfile(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
+  if (context.authorizationModel === "v5") {
+    return handleCreateV5Account(request, env, context, workspaceId);
+  }
   authorize(context, "credential.create");
   requireWorkspaceContext(context, env, workspaceId);
   const body = (await request.json().catch(() => ({}))) as Record<
@@ -4081,6 +4733,9 @@ async function handleUpdateCredentialProfile(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
+  if (context.authorizationModel === "v5") {
+    return handleUpdateV5Account(request, env, context, profileId);
+  }
   requireWorkspaceContext(context, env, workspaceId);
   const profile = await authorizeCredentialProfileOwner(
     env,
@@ -4142,6 +4797,9 @@ async function handleRevokeCredentialProfile(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
+  if (context.authorizationModel === "v5") {
+    return handleRevokeV5Account(env, context, profileId);
+  }
   requireWorkspaceContext(context, env, workspaceId);
   await authorizeCredentialProfileOwner(
     env,
@@ -4173,6 +4831,9 @@ async function handleCreateCredentialSetupIntent(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
+  if (context.authorizationModel === "v5") {
+    return handleCreateV5AccountSetupIntent(request, env, context, workspaceId, profileId);
+  }
   requireWorkspaceContext(context, env, workspaceId);
   const profile = await authorizeCredentialProfileOwner(
     env,
@@ -4245,6 +4906,9 @@ async function handleCreateCredentialGrant(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
+  if (context.authorizationModel === "v5") {
+    return handleCreateV5AccountGrant(request, env, context, profileId);
+  }
   requireWorkspaceContext(context, env, workspaceId);
   const profile = await authorizeCredentialProfileOwner(
     env,
@@ -4331,6 +4995,9 @@ async function handleRevokeCredentialGrant(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
+  if (context.authorizationModel === "v5") {
+    return handleRevokeV5AccountGrant(env, context, profileId, grantId);
+  }
   requireWorkspaceContext(context, env, workspaceId);
   await authorizeCredentialProfileOwner(
     env,
@@ -4366,14 +5033,51 @@ async function handleDispatchTaskAssignment(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  authorize(context, "runs:control");
-  authorize(context, "host.use");
-  requireWorkspaceContext(context, env, workspaceId);
-
   const body = ((await request.json().catch(() => ({}))) || {}) as Record<
     string,
     unknown
   >;
+
+  if (context.authorizationModel === "v5") {
+    const taskRow = await env.CONCLAVE_DB.prepare(
+      `SELECT t.id, t.phase_id as phaseId, t.role, t.objective,
+              t.capabilities_json as capabilitiesJson,
+              ph.run_id as runId, r.project_id as projectId
+       FROM tasks t JOIN phases ph ON ph.id = t.phase_id
+       JOIN runs r ON r.id = ph.run_id WHERE t.id = ?1`,
+    ).bind(taskId).first<Record<string, unknown>>();
+    if (!taskRow) return json({ error: "Task not found" }, { status: 404 });
+    const projectId = String(taskRow.projectId);
+    await authorizeProjectMembership(env.CONCLAVE_DB, context, projectId, "runs:control");
+    const task: TaskToDispatch = {
+      id: String(taskRow.id),
+      role: typeof body.role === "string" ? body.role : String(taskRow.role ?? "implementer"),
+      objective: typeof body.objective === "string" ? body.objective : String(taskRow.objective ?? ""),
+      capabilities: Array.isArray(body.capabilities) ? body.capabilities.filter((value): value is string => typeof value === "string") : parseJson(taskRow.capabilitiesJson, []),
+      input: typeof body.input === "object" && body.input !== null ? body.input as Record<string, unknown> : undefined,
+      contextArtifactIds: Array.isArray(body.contextArtifactIds) ? body.contextArtifactIds.filter((value): value is string => typeof value === "string") : undefined,
+      timeoutMs: typeof body.timeoutMs === "number" ? body.timeoutMs : undefined,
+      projectId,
+      requestedByUserId: context.userId,
+      accountId: typeof body.accountId === "string" ? body.accountId : undefined,
+      model: typeof body.model === "string" ? body.model : undefined,
+    };
+    const result = await dispatchTaskAssignment(env as unknown as AssignmentDispatcherEnv, {
+      workspaceId: typeof body.workspaceId === "string" ? body.workspaceId : workspaceId,
+      runId: String(taskRow.runId),
+      taskId,
+      task,
+      explicitWorkerId: typeof body.workerId === "string" ? body.workerId : undefined,
+      excludeIndependenceKeys: Array.isArray(body.excludeIndependenceKeys) ? body.excludeIndependenceKeys.filter((value): value is string => typeof value === "string") : undefined,
+    });
+    return result.status === "failed"
+      ? json({ error: result.error || "Failed to dispatch task assignment", assignment: result }, { status: 422 })
+      : json({ assignment: result });
+  }
+
+  authorize(context, "runs:control");
+  authorize(context, "host.use");
+  requireWorkspaceContext(context, env, workspaceId);
 
   const taskRow = await env.CONCLAVE_DB.prepare(
     `SELECT t.id, t.phase_id as phaseId, t.role, t.objective, t.capabilities_json as capabilitiesJson,
@@ -4608,7 +5312,7 @@ async function handleDispatchEnsembleTaskAssignment(
   }
 }
 
-async function handleHostGatewayConnect(
+async function handleWorkspaceGatewayConnect(
   request: Request,
   env: SecurityEnv,
 ): Promise<Response> {
@@ -4617,40 +5321,45 @@ async function handleHostGatewayConnect(
   }
 
   const url = new URL(request.url);
-  const hostId = url.searchParams.get("hostId");
+  const workspaceRuntimeId = url.searchParams.get("workspaceRuntimeId");
   const authToken =
     extractBearerToken(request.headers) ??
     url.searchParams.get("token") ??
     url.searchParams.get("authToken");
 
-  if (!hostId || !authToken) {
+  if (!workspaceRuntimeId || !authToken) {
     return json(
-      { error: "hostId and authToken are required" },
+      { error: "workspaceRuntimeId and authToken are required" },
       { status: 401 },
     );
   }
 
   const tokenHash = await hashToken(authToken);
-  const host = await env.CONCLAVE_DB.prepare(
-    `SELECT h.id, b.workspace_id, h.status FROM hosts h
-     JOIN host_workspace_bindings b ON b.host_id = h.id
-     WHERE h.id = ?1 AND h.auth_token_hash = ?2 AND b.status = 'active' AND h.revoked_at IS NULL`,
+  const workspace = await env.CONCLAVE_DB.prepare(
+    `SELECT wri.workspace_id AS workspaceId
+     FROM workspace_runtime_identities wri
+     JOIN execution_workspaces ew ON ew.id = wri.workspace_id
+     WHERE wri.id = ?1 AND wri.credential_token_hash = ?2
+       AND wri.revoked_at IS NULL AND ew.status <> 'revoked'`,
   )
-    .bind(hostId, tokenHash)
-    .first<{ id: string; workspace_id: string; status: string }>();
+    .bind(workspaceRuntimeId, tokenHash)
+    .first<{ workspaceId: string }>();
 
-  if (!host) {
+  if (!workspace) {
     return json(
-      { error: "Invalid host credentials or host is revoked" },
+      { error: "Invalid or revoked Workspace runtime credential" },
       { status: 401 },
     );
   }
 
   const targetUrl = new URL(request.url);
-  targetUrl.searchParams.set("workspaceId", host.workspace_id);
+  targetUrl.searchParams.set("workspaceRuntimeId", workspaceRuntimeId);
   const upgradedRequest = new Request(targetUrl.toString(), request);
 
-  const stub = env.CONCLAVE_HOST_GATEWAY.getByName(hostId);
+  if (!env.CONCLAVE_WORKSPACE_GATEWAY) {
+    return json({ error: "Workspace Gateway is not configured" }, { status: 503 });
+  }
+  const stub = env.CONCLAVE_WORKSPACE_GATEWAY.getByName(workspace.workspaceId);
   return stub.fetch(upgradedRequest);
 }
 
@@ -5602,6 +6311,63 @@ async function handleWorkspaceUsage(
       durationMs: summary.durationMs,
     },
     usage,
+  });
+}
+
+async function handleProjectUsage(
+  request: Request,
+  env: SecurityEnv,
+  projectId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  await authorizeRequest(request, env, "project:read", projectId, accessContext);
+  const search = new URL(request.url).searchParams;
+  const from = search.get("from") ?? "";
+  const to = search.get("to") ?? "";
+  const conditions = ["u.project_id = ?1"];
+  const bindings: unknown[] = [projectId];
+  if (from) { conditions.push("u.recorded_at >= ?" + (bindings.length + 1)); bindings.push(from); }
+  if (to) { conditions.push("u.recorded_at <= ?" + (bindings.length + 1)); bindings.push(to); }
+  const rows = await env.CONCLAVE_DB.prepare(
+    `SELECT u.id, u.project_id AS projectId, u.run_id AS runId,
+            u.requester_user_id AS requesterUserId, requester.display_name AS requesterName,
+            u.execution_workspace_id AS executionWorkspaceId, ew.name AS executionWorkspaceName,
+            u.workspace_owner_user_id AS workspaceOwnerUserId, workspaceOwner.display_name AS workspaceOwnerName,
+            u.worker_id AS workerId, worker.name AS workerName,
+            u.account_id AS accountId, u.account_owner_user_id AS accountOwnerUserId,
+            accountOwner.display_name AS accountOwnerName,
+            u.provider, u.model, u.billing_category AS billingCategory,
+            u.input_tokens AS inputTokens, u.output_tokens AS outputTokens,
+            (u.input_tokens + u.output_tokens) AS tokens,
+            u.cost_micros AS costMicros, u.duration_ms AS durationMs, u.recorded_at AS recordedAt
+       FROM usage u
+       JOIN execution_workspaces ew ON ew.id = u.execution_workspace_id
+       JOIN workers worker ON worker.id = u.worker_id
+       LEFT JOIN users requester ON requester.id = u.requester_user_id
+       LEFT JOIN users workspaceOwner ON workspaceOwner.id = u.workspace_owner_user_id
+       LEFT JOIN users accountOwner ON accountOwner.id = u.account_owner_user_id
+      WHERE ${conditions.join(" AND ")}
+      ORDER BY u.recorded_at DESC LIMIT 1000`,
+  ).bind(...bindings).all<Record<string, unknown>>();
+  const usage = rows.results ?? [];
+  const total = (key: string) => usage.reduce((sum, row) => sum + Number(row[key] ?? 0), 0);
+  const budgets = await env.CONCLAVE_DB.prepare(
+    `SELECT id, run_id AS runId, account_id AS accountId,
+            max_input_tokens AS maxInputTokens, max_output_tokens AS maxOutputTokens,
+            max_cost_micros AS maxCostMicros, used_input_tokens AS usedInputTokens,
+            used_output_tokens AS usedOutputTokens, used_cost_micros AS usedCostMicros, status
+       FROM budgets WHERE project_id = ?1 ORDER BY created_at DESC`,
+  ).bind(projectId).all<Record<string, unknown>>();
+  return json({
+    projectId,
+    filters: { from, to },
+    summary: {
+      tokens: total("tokens"), inputTokens: total("inputTokens"),
+      outputTokens: total("outputTokens"), costMicros: total("costMicros"),
+      durationMs: total("durationMs"), runs: new Set(usage.map((row) => String(row.runId))).size,
+    },
+    usage,
+    budgets: budgets.results ?? [],
   });
 }
 
@@ -6906,8 +7672,7 @@ export {
   handleChangeWorkspaceMemberRole,
   handleWorkspaceMemberStatus,
   handleInternalDispatchTaskAssignment,
-  handleHostGatewayConnect,
-  handleHostProtocolMessage,
+  handleWorkspaceGatewayConnect,
   handleEnrollHost,
   handleBindHostWorkspace,
   handleListHostEnrollments,
@@ -6948,6 +7713,14 @@ export {
   handleCreateProject,
   handleUpdateProject,
   handleDeleteProject,
+  handleListProjectMembers,
+  handleListProjectInvitations,
+  handleListProjectAudit,
+  handleCreateProjectInvitation,
+  handleChangeProjectMemberRole,
+  handleRemoveProjectMember,
+  handleExpireProjectInvitation,
+  handleAcceptProjectInvitation,
   handleListChats,
   handleCreateChat,
   handleGetProject,
@@ -6960,6 +7733,7 @@ export {
   handleGoalRequest,
   handleStudioSnapshot,
   handleProjectReadModel,
+  handleProjectUsage,
   handleWorkspaceUsage,
   handleRunCommand,
 };

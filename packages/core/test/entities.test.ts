@@ -8,7 +8,7 @@ import {
   type WorkerCatalog,
   type WorkerChannel,
   type Worker,
-  type WorkerAssignment,
+  type LegacyWorkerAssignment,
   type WorkerAssignmentResult,
   type ExecutionHostRelease,
   DomainInvariantError,
@@ -86,7 +86,7 @@ describe("Architecture v2 Core Domain Entities and Invariants", () => {
     updatedAt: "2026-09-21T10:10:00Z",
   };
 
-  const sampleAssignment: WorkerAssignment = {
+  const sampleAssignment: LegacyWorkerAssignment = {
     id: "asgn-001",
     workspaceId: "ws-primary",
     runId: "run-100",

@@ -13,6 +13,173 @@ class RuntimeViolation implements Exception {
   String toString() => 'RuntimeViolation: $message';
 }
 
+/// Validates the immutable Project/Workspace scope before a Worker process is
+/// launched. Runtime code treats this snapshot as untrusted input even though
+/// Cloud produced it, because a Worker must not be able to widen its own scope.
+void validateAssignmentScope(
+  Map<String, Object?> payload, {
+  required Set<String> manifestPermissions,
+}) {
+  final snapshot = payload['permissionSnapshot'];
+  if (snapshot is! Map) {
+    throw const RuntimeViolation('assignment permission snapshot is required');
+  }
+  final scope = snapshot['scope'];
+  if (scope is! String ||
+      !const {'project_repository', 'selected_paths', 'full_workspace'}
+          .contains(scope)) {
+    throw const RuntimeViolation('assignment scope is invalid');
+  }
+  for (final field in [
+    'projectId',
+    'workspaceId',
+    'grantId',
+    'requesterUserId'
+  ]) {
+    final value = snapshot[field];
+    if (value is! String || value.trim().isEmpty) {
+      throw RuntimeViolation('assignment snapshot field $field is required');
+    }
+  }
+  if (snapshot['projectId'] != payload['projectId'] ||
+      snapshot['workspaceId'] != payload['executionWorkspaceId']) {
+    throw const RuntimeViolation('assignment scope identity mismatch');
+  }
+  final permissions = snapshot['permissions'];
+  if (permissions is! List || permissions.any((value) => value is! String)) {
+    throw const RuntimeViolation(
+        'assignment effective permissions are invalid');
+  }
+  for (final permission in permissions.cast<String>()) {
+    if (_isSystemAdministration(permission)) {
+      throw RuntimeViolation(
+          'system administration is never available to Project assignments: $permission');
+    }
+    if (!runtimePermissionAllowed(permission, manifestPermissions)) {
+      throw RuntimeViolation(
+          'assignment permission is not declared by Worker: $permission');
+    }
+    if (permission == 'network:use' &&
+        _networkMode(snapshot['networkPolicy']) == 'deny_all') {
+      throw const RuntimeViolation(
+          'network permission is denied by Workspace policy');
+    }
+  }
+  _validatePathMappings(snapshot['pathMappings']);
+  _rejectWorkerControlledPaths(payload);
+  _rejectCredentialMaterial(payload);
+}
+
+bool _isSystemAdministration(String permission) => const {
+      'system:admin',
+      'system:administration',
+      'host:admin',
+      'process:admin',
+    }.contains(permission);
+
+bool runtimePermissionAllowed(String permission, Set<String> manifest) {
+  final aliases = <String>{permission};
+  if (permission == 'repository:read') {
+    aliases.addAll({'workspace:read', 'fs:read'});
+  } else if (permission == 'repository:write') {
+    aliases.addAll({'workspace:write', 'fs:write'});
+  } else if (permission == 'network:use') {
+    aliases.addAll({'network:outbound', 'network', 'net:http'});
+  } else if (permission == 'shell:execute') {
+    aliases.addAll({'shell', 'process:spawn'});
+  }
+  return aliases.any(manifest.contains);
+}
+
+String _networkMode(Object? value) {
+  if (value is Map && value['mode'] is String) return value['mode'] as String;
+  return 'deny_all';
+}
+
+void _validatePathMappings(Object? value) {
+  if (value is! List)
+    throw const RuntimeViolation('assignment path mappings are invalid');
+  for (final mapping in value) {
+    if (mapping is! Map ||
+        mapping['projectPath'] is! String ||
+        mapping['workspacePath'] is! String) {
+      throw const RuntimeViolation('assignment path mapping is invalid');
+    }
+    _validateRelativePath(mapping['projectPath'] as String);
+    _validateRelativePath(mapping['workspacePath'] as String);
+  }
+}
+
+void _rejectWorkerControlledPaths(Map<String, Object?> value) {
+  const forbidden = {
+    'workingDirectory',
+    'working_directory',
+    'cwd',
+    'workdir',
+    'workspacePath'
+  };
+  void visit(Object? current) {
+    if (current is Map) {
+      for (final entry in current.entries) {
+        if (forbidden.contains(entry.key.toString())) {
+          throw const RuntimeViolation(
+              'Worker cannot choose an alternate working directory');
+        }
+        visit(entry.value);
+      }
+    } else if (current is List) {
+      for (final item in current) visit(item);
+    }
+  }
+
+  visit(value);
+}
+
+void _rejectCredentialMaterial(Map<String, Object?> value) {
+  const forbidden = {
+    'secret',
+    'secrets',
+    'token',
+    'password',
+    'apiKey',
+    'privateKey'
+  };
+  void visit(Object? current) {
+    if (current is Map) {
+      for (final entry in current.entries) {
+        final key = entry.key.toString().replaceAll('_', '').toLowerCase();
+        if (forbidden.any((part) => key == part.toLowerCase())) {
+          throw const RuntimeViolation(
+              'Assignment payload contains credential material');
+        }
+        visit(entry.value);
+      }
+    } else if (current is List) {
+      for (final item in current) visit(item);
+    }
+  }
+
+  visit(value);
+}
+
+void _validateRelativePath(String value) {
+  if (value.isEmpty || value.contains('\u0000') || value.contains(':')) {
+    throw const RuntimeViolation('assignment path must be relative');
+  }
+  final segments = value.replaceAll('\\', '/').split('/');
+  var depth = 0;
+  for (final segment in segments) {
+    if (segment.isEmpty || segment == '.') continue;
+    if (segment == '..') {
+      if (depth == 0)
+        throw const RuntimeViolation('assignment path escapes its grant');
+      depth -= 1;
+    } else {
+      depth += 1;
+    }
+  }
+}
+
 class SafeWorkspace {
   SafeWorkspace(Directory root) : root = root.absolute;
   final Directory root;

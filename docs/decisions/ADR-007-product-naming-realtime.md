@@ -1,6 +1,6 @@
 # ADR-007: Final product naming and realtime connection topology
 
-**Status:** Accepted for post-authentication Architecture v4 work  
+**Status:** Accepted for post-authentication Architecture v4 work — historical
 **Date:** 2026-09-23
 
 ## Decision

@@ -20,6 +20,7 @@ import '../features/execution/task_pipeline_dag.dart';
 import '../features/home/home_page.dart';
 import '../features/projects/projects_pages.dart';
 import '../features/workspace/workspace_settings_page.dart';
+import '../features/workspace/workspaces_page.dart';
 import 'studio_models.dart';
 import 'studio_data.dart';
 import 'studio_stores.dart';
@@ -543,16 +544,25 @@ class _StudioAppState extends State<ConclaveAppShell> {
       return;
     }
     if (type == 'reconnect.required') {
-      // A cursor gap invalidates only the active project read model.
+      final scope = event['scope'];
+      final scopeMap = scope is Map
+          ? Map<String, dynamic>.from(scope)
+          : const <String, dynamic>{};
       setState(() {
         realtimeStale = true;
-        realtimeNotice = 'Some live updates were missed. Refreshing this Run.';
+        realtimeNotice =
+            'Some live updates were missed. Refreshing the affected view.';
       });
-      unawaited(
-          _loadSnapshot(projectId: selectedProjectId, showSpinner: false));
+      if (scopeMap['kind'] == 'execution_workspace') {
+        unawaited(_refreshRealtimeFeatures('worker.status'));
+      } else {
+        unawaited(_loadSnapshot(
+            projectId: (scopeMap['projectId'] as String?) ?? selectedProjectId,
+            showSpinner: false));
+      }
       return;
     }
-    if (event['workspaceId'] != activeWorkspaceId) return;
+    _lastRealtimeProjectId = event['projectId'] as String?;
     _recordNotification(event);
     if (type is String && type.startsWith('typing')) return;
     if (type is String &&
@@ -576,6 +586,12 @@ class _StudioAppState extends State<ConclaveAppShell> {
   Future<void> _refreshRealtimeFeatures(String type) async {
     final workspaceId = activeWorkspaceId;
     if (workspaceId == null || workspaceId.isEmpty) return;
+    final eventProjectId = _lastRealtimeProjectId;
+    if (eventProjectId != null &&
+        selectedProjectId != null &&
+        eventProjectId != selectedProjectId) {
+      return;
+    }
     try {
       if (type.startsWith('host.') || type.startsWith('desired_state.')) {
         final hosts = await store.agents.refresh(workspaceId);
@@ -618,6 +634,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
       if (mounted) _showSnackBar('Live update refresh failed: $error');
     }
   }
+
+  String? _lastRealtimeProjectId;
 
   void _recordNotification(Map<String, dynamic> event) {
     final notification = notificationFromRealtimeEvent(event);
@@ -822,9 +840,13 @@ class _StudioAppState extends State<ConclaveAppShell> {
           workspaceId,
         ),
       );
-    } else {
-      unawaited(realtimeClient.setWorkspace(workspaceId));
     }
+    unawaited(realtimeClient.setScopes(
+      projectId: selectedProjectId,
+      chatId: selectedChatId,
+      runId: navigation.runId,
+      executionWorkspaceId: workspaceId,
+    ));
   }
 
   Future<void> _loadAccountSecurity() async {
@@ -874,7 +896,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
         workspaceId: workspaceId,
         profileId: account.id,
       );
-      if (mounted) _showSnackBar('Local Account setup requested on the Host.');
+      if (mounted)
+        _showSnackBar('Local Account setup requested on the Workspace.');
     } catch (error) {
       if (mounted) _showSnackBar(error.toString());
     }
@@ -1036,6 +1059,12 @@ class _StudioAppState extends State<ConclaveAppShell> {
     if (projectChanged) {
       unawaited(_loadSnapshot(projectId: next.projectId));
     }
+    unawaited(realtimeClient.setScopes(
+      projectId: next.projectId ?? selectedProjectId,
+      chatId: next.chatId,
+      runId: next.runId,
+      executionWorkspaceId: activeWorkspaceId,
+    ));
   }
 
   void _navigateTo(StudioNavigation next, {bool replace = false}) {
@@ -1088,7 +1117,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
       );
       await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
       if (!mounted) return;
-      _showSnackBar('Update announced to the Host.');
+      _showSnackBar('Update announced to the Workspace.');
     } catch (error) {
       if (mounted) setState(() => loadError = error.toString());
     }
@@ -1099,11 +1128,11 @@ class _StudioAppState extends State<ConclaveAppShell> {
     final name = await showDialog<String>(
       context: navigatorKey.currentContext ?? context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Rename Host'),
+        title: const Text('Rename Workspace'),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(labelText: 'Host name'),
+          decoration: const InputDecoration(labelText: 'Workspace name'),
         ),
         actions: [
           TextButton(
@@ -1121,7 +1150,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
     try {
       await store.agents.updateHost(workspaceId, host.id, name: name.trim());
       await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
-      if (mounted) _showSnackBar('Host renamed.');
+      if (mounted) _showSnackBar('Workspace renamed.');
     } catch (error) {
       if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
     }
@@ -1133,7 +1162,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
     try {
       await store.agents.bindWorkspace(workspaceId, host.id);
       await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
-      if (mounted) _showSnackBar('Host Workspace binding saved.');
+      if (mounted) _showSnackBar('Workspace grant saved.');
     } catch (error) {
       if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
     }
@@ -1153,7 +1182,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
       'activeTaskCount': host.activeTaskCount,
       'workspaceBindings': host.workspaceBindings,
     })));
-    if (mounted) _showSnackBar('Host diagnostics copied without secrets.');
+    if (mounted) _showSnackBar('Workspace diagnostics copied without secrets.');
   }
 
   Future<void> _enrollAgent() async {
@@ -1164,12 +1193,13 @@ class _StudioAppState extends State<ConclaveAppShell> {
       context: navigatorKey.currentContext ?? context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Add Host'),
+          title: const Text('Add Workspace'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Choose the machine where Conclave Host will run.'),
+              const Text(
+                  'Choose the machine where Conclave Workspace will run.'),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 initialValue: platform,
@@ -1203,7 +1233,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
         loadError = null;
       });
       _showSnackBar(
-          'Download Conclave Host for $selected, then enter the one-time code.');
+          'Download Conclave Workspace for $selected, then enter the one-time code.');
     } catch (error) {
       if (mounted) setState(() => loadError = error.toString());
     }
@@ -1216,14 +1246,14 @@ class _StudioAppState extends State<ConclaveAppShell> {
     if (snapshot.agents.isEmpty || snapshot.plugins.isEmpty) {
       if (mounted) {
         setState(() => workerActionMessage =
-            'Connect a Host and make a Worker available before starting work.');
+            'Connect a Workspace and make a Worker available before starting work.');
         await showDialog<void>(
           context: navigatorKey.currentContext ?? context,
           builder: (dialogContext) => AlertDialog(
             title: const Text('Worker prerequisites missing'),
             content: const Text(
-                'A Worker needs one connected Host and an available Worker package. '
-                'Open Hosts or Workers in the navigation to finish setup, then '
+                'A Worker needs one connected Workspace and an available Worker package. '
+                'Open Workspaces or Workers in the navigation to finish setup, then '
                 'return here.'),
             actions: [
               FilledButton(
@@ -1308,7 +1338,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   initialValue: agentId,
-                  decoration: const InputDecoration(labelText: 'Host'),
+                  decoration: const InputDecoration(labelText: 'Workspace'),
                   items: snapshot.agents
                       .map((agent) => DropdownMenuItem(
                           value: agent.id, child: Text(agent.name)))
@@ -1683,7 +1713,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                                 ? 'Enter your email and we will send a reset link if an account exists.'
                                 : authSignUp
                                     ? 'Create an account to start using Conclave AX.'
-                                    : 'Sign in securely to access your Projects, Hosts, Workers, and Accounts.',
+                                    : 'Sign in securely to access your Projects, Workspaces, Workers, and Accounts.',
                         textAlign: TextAlign.center),
                     const SizedBox(height: 20),
                     if (!resetPassword && authSignUp) ...[
@@ -2159,8 +2189,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
           _railItem(Icons.home_outlined, 'Home', const StudioNavigation.home()),
           _railItem(Icons.folder_outlined, 'Projects',
               const StudioNavigation.projects()),
-          _railItem(
-              Icons.computer_outlined, 'Hosts', const StudioNavigation.hosts()),
+          _railItem(Icons.computer_outlined, 'Workspaces',
+              const StudioNavigation.hosts()),
           _railItem(Icons.extension_outlined, 'Workers',
               const StudioNavigation.workers()),
           _railItem(Icons.account_circle_outlined, 'AI Accounts',
@@ -2293,7 +2323,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
             _navItem(Icons.folder_outlined, 'Projects',
                 const StudioNavigation.projects(),
                 compact: compact, navigationContext: sidebarContext),
-            _navItem(Icons.computer_outlined, 'Hosts',
+            _navItem(Icons.computer_outlined, 'Workspaces',
                 const StudioNavigation.hosts(),
                 compact: compact, navigationContext: sidebarContext),
             _navItem(Icons.extension_outlined, 'Workers',
@@ -2798,7 +2828,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
             icon:
                 const Icon(Icons.circle, size: 8, color: ConclaveBrand.success),
             label: Text(
-              '${snapshot.agents.where((host) => host.status.toLowerCase() == 'online').length} hosts online',
+              '${snapshot.agents.where((host) => host.status.toLowerCase() == 'online').length} workspaces online',
             ),
             style: OutlinedButton.styleFrom(
               foregroundColor: inkColor,
@@ -2848,6 +2878,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
     if (project == null) return _projectsView();
     return ProjectPage(
       project: project,
+      dataSource: widget.dataSource,
       onCreateChat: _createChat,
       onOpenChat: (chatId) =>
           _navigateTo(StudioNavigation.chat(project.id, chatId)),
@@ -3620,7 +3651,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
           _contextLine(Icons.extension_outlined, 'Worker', worker),
           _contextLine(
               Icons.account_circle_outlined, 'Account', account ?? 'Auto'),
-          _contextLine(Icons.computer_outlined, 'Host', host ?? 'Auto'),
+          _contextLine(Icons.computer_outlined, 'Workspace', host ?? 'Auto'),
           _contextLine(Icons.smart_toy_outlined, 'Model', model),
         ],
       ),
@@ -4230,7 +4261,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
             'Platforms: ${[
               ...plugin.supportedOS,
               ...plugin.supportedArchitecture
-            ].isEmpty ? 'Any compatible Host' : [
+            ].isEmpty ? 'Any compatible Workspace' : [
                 ...plugin.supportedOS,
                 ...plugin.supportedArchitecture
               ].join(', ')}',
@@ -4282,7 +4313,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
           const SizedBox(width: 8),
           TextButton(
             onPressed: () => _setWorkerAvailability(plugin, host, !desired),
-            child: Text(desired ? 'Remove from Host' : 'Make available'),
+            child: Text(desired ? 'Remove from Workspace' : 'Make available'),
           ),
           if (desired)
             IconButton(
@@ -4295,7 +4326,18 @@ class _StudioAppState extends State<ConclaveAppShell> {
     );
   }
 
-  Widget _hostsView() => Column(
+  Widget _hostsView() => WorkspacesPage(
+        workspaces: snapshot.agents,
+        workers: snapshot.workers,
+        accounts: snapshot.accounts,
+        onAdd: _enrollAgent,
+        onRename: _renameHost,
+        onUpdate: _announceAgentUpdate,
+        onRevoke: (workspace) => _revokeAgent(workspace.id),
+        onGrant: _bindHost,
+      );
+
+  Widget _legacyHostsView() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Wrap(
@@ -4303,12 +4345,14 @@ class _StudioAppState extends State<ConclaveAppShell> {
             runSpacing: 12,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              _fleetHeader('Hosts', 'Machines connected to this workspace.',
+              _fleetHeader(
+                  'Workspaces',
+                  'Machines connected to this workspace.',
                   Icons.computer_outlined),
               FilledButton.icon(
                 onPressed: snapshot.workspaceId == null ? null : _enrollAgent,
                 icon: const Icon(Icons.add_link),
-                label: const Text('Add Host'),
+                label: const Text('Add Workspace'),
               ),
             ],
           ),
@@ -4323,7 +4367,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   children: [
                     Row(children: [
                       const Expanded(
-                        child: Text('Host pairing token',
+                        child: Text('Workspace pairing token',
                             style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
                       IconButton(
@@ -4335,13 +4379,13 @@ class _StudioAppState extends State<ConclaveAppShell> {
                     ]),
                     const SizedBox(height: 8),
                     const Text(
-                        '1. Download and open Conclave Host. 2. Enter this one-time code. 3. Keep this page open until the Host is online.'),
+                        '1. Download and open Conclave Workspace. 2. Enter this one-time code. 3. Keep this page open until the Workspace is online.'),
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
                       onPressed: () => browserNavigation
                           .openExternal(Uri.parse('https://conclaveax.com')),
                       icon: const Icon(Icons.download_outlined),
-                      label: const Text('Download Conclave Host'),
+                      label: const Text('Download Conclave Workspace'),
                     ),
                     const SizedBox(height: 12),
                     SelectableText(enrollmentResult!.token,
@@ -4355,8 +4399,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
           ],
           const SizedBox(height: 24),
           if (snapshot.agents.isEmpty)
-            _emptyFleetCard('No Hosts paired',
-                'Pair a Host to run Workers on a local machine.')
+            _emptyFleetCard('No Workspaces paired',
+                'Pair a Workspace to run Workers on a local machine.')
           else
             ...snapshot.agents.map((agent) => Card(
                   margin: const EdgeInsets.only(bottom: 12),
@@ -4384,12 +4428,12 @@ class _StudioAppState extends State<ConclaveAppShell> {
                                       ? const Color(0xff3ca879)
                                       : const Color(0xff9a98a5)),
                               IconButton(
-                                tooltip: 'Rename Host',
+                                tooltip: 'Rename Workspace',
                                 onPressed: () => _renameHost(agent),
                                 icon: const Icon(Icons.edit_outlined),
                               ),
                               PopupMenuButton<String>(
-                                tooltip: 'Host actions',
+                                tooltip: 'Workspace actions',
                                 onSelected: (action) {
                                   switch (action) {
                                     case 'bind':
@@ -4417,14 +4461,14 @@ class _StudioAppState extends State<ConclaveAppShell> {
                                 icon: const Icon(Icons.system_update_outlined),
                               ),
                               IconButton(
-                                tooltip: 'Revoke Host',
+                                tooltip: 'Revoke Workspace',
                                 onPressed: () => _revokeAgent(agent.id),
                                 icon: const Icon(Icons.link_off_outlined),
                               ),
                             ],
                           ),
                           const SizedBox(height: 8),
-                          Text('${agent.hostname} · Host ${agent.version}',
+                          Text('${agent.hostname} · Workspace ${agent.version}',
                               style: const TextStyle(color: Color(0xff777683))),
                           const SizedBox(height: 14),
                           Wrap(spacing: 20, runSpacing: 8, children: [
@@ -4450,7 +4494,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
         children: [
           _fleetHeader(
               'Workers',
-              'Capabilities available to your paired Hosts.',
+              'Capabilities available to your paired Workspaces.',
               Icons.extension_outlined),
           const SizedBox(height: 24),
           if (snapshot.plugins.isEmpty)
@@ -4485,7 +4529,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                                 style: const TextStyle(
                                     fontWeight: FontWeight.w700, fontSize: 16)),
                           ),
-                          Text('Ready on $readyHosts Hosts',
+                          Text('Ready on $readyHosts Workspaces',
                               style: const TextStyle(color: Color(0xff777683))),
                         ],
                       ),
@@ -4572,7 +4616,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                        'Connect an AI identity to a Worker. Secrets stay on the selected Host.'),
+                        'Connect an AI identity to a Worker. Secrets stay on the selected Workspace.'),
                     const SizedBox(height: 16),
                     TextField(
                       controller: nameController,
@@ -4605,10 +4649,11 @@ class _StudioAppState extends State<ConclaveAppShell> {
                             value: 'oauth_browser',
                             child: Text('Browser OAuth')),
                         DropdownMenuItem(
-                            value: 'api_key', child: Text('API key on Host')),
+                            value: 'api_key',
+                            child: Text('API key on Workspace')),
                         DropdownMenuItem(
                             value: 'local_cli_session',
-                            child: Text('CLI login on Host')),
+                            child: Text('CLI login on Workspace')),
                         DropdownMenuItem(
                             value: 'none', child: Text('No authentication')),
                       ],
@@ -4626,8 +4671,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
                         initialValue: hostId,
-                        decoration:
-                            const InputDecoration(labelText: 'Host storage'),
+                        decoration: const InputDecoration(
+                            labelText: 'Workspace storage'),
                         items: snapshot.agents
                             .map((host) => DropdownMenuItem(
                                   value: host.id,
@@ -4639,7 +4684,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                       ),
                       const SizedBox(height: 6),
                       const Text(
-                          'The Host will show the local authentication action. Conclave AX never receives the secret.',
+                          'The Workspace will show the local authentication action. Conclave AX never receives the secret.',
                           style: TextStyle(
                               color: Color(0xff777683), fontSize: 12)),
                     ],
@@ -4715,7 +4760,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
     final selectedAuthType = values['authType'] as String;
     final selectedHostId = values['hostId'] as String?;
     if (selectedAuthType != 'none' && selectedHostId == null) {
-      _showSnackBar('Choose a Host for local authentication.',
+      _showSnackBar('Choose a Workspace for local authentication.',
           type: ToastType.error);
       return;
     }
@@ -4742,7 +4787,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
         setState(() => workerActionMessage = null);
         _showSnackBar(selectedHostId == null
             ? 'AI Account created.'
-            : 'AI Account created. Complete setup on the Host.');
+            : 'AI Account created. Complete setup on the Workspace.');
       }
     } catch (error) {
       if (mounted) {
@@ -4755,7 +4800,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
   Widget _accountsView() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _fleetHeader('AI Accounts', 'Accounts used by Workers on your Hosts.',
+          _fleetHeader(
+              'AI Accounts',
+              'Accounts used by Workers on your Workspaces.',
               Icons.account_circle_outlined),
           const SizedBox(height: 24),
           Align(
@@ -4801,7 +4848,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   title: Text(account.displayName,
                       style: const TextStyle(fontWeight: FontWeight.w700)),
                   subtitle: Text(
-                      'Owner: ${account.owner}\nWorker: ${account.worker} · Host: ${account.host}\nStorage: ${account.storageLocation} · Sharing: ${account.sharing}\nLast used: ${account.lastUsed} · Usage: ${account.usage}'),
+                      'Owner: ${account.owner}\nWorker: ${account.worker} · Workspace: ${account.host}\nStorage: ${account.storageLocation} · Sharing: ${account.sharing}\nLast used: ${account.lastUsed} · Usage: ${account.usage}'),
                   isThreeLine: true,
                   trailing: PopupMenuButton<String>(
                     tooltip: 'Account actions',

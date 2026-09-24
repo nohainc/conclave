@@ -1,6 +1,6 @@
 # Architecture v5 Implementation Roadmap — Project-Centric Workspaces
 
-**Status:** Proposed
+**Status:** Active
 **Architecture:** [ARCHITECTURE_V5.md](../architecture/ARCHITECTURE_V5.md)
 **Date:** 2026-09-24
 

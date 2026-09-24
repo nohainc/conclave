@@ -136,7 +136,7 @@ void main() {
         find.text('Compare the migration rollback strategies.'), findsWidgets);
   });
 
-  testWidgets('opens Hosts, Workers, and Accounts without v3 terminology',
+  testWidgets('opens Workspaces, Workers, and Accounts without v3 terminology',
       (WidgetTester tester) async {
     await tester
         .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
@@ -144,10 +144,10 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.menu_rounded));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Hosts').last);
+    await tester.tap(find.text('Workspaces').last);
     await tester.pumpAndSettle();
-    expect(find.text('Development Host'), findsOneWidget);
-    expect(find.text('Add Host'), findsOneWidget);
+    expect(find.text('Development Workspace'), findsOneWidget);
+    expect(find.text('Add Workspace'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.menu_rounded));
     await tester.pumpAndSettle();
@@ -169,7 +169,7 @@ void main() {
     expect(find.text('Plugins'), findsNothing);
   });
 
-  testWidgets('opens Workspace Settings with team management tabs',
+  testWidgets('opens Workspace Settings without Project collaboration tabs',
       (WidgetTester tester) async {
     await tester
         .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
@@ -182,13 +182,9 @@ void main() {
 
     expect(find.text('Workspace settings'), findsOneWidget);
     expect(find.text('General'), findsWidgets);
-    expect(find.text('Members'), findsOneWidget);
-    expect(find.text('Invitations'), findsOneWidget);
-    expect(find.text('Permissions'), findsOneWidget);
-    expect(find.text('Audit'), findsOneWidget);
-    await tester.tap(find.text('Members'));
-    await tester.pumpAndSettle();
-    expect(find.text('Invite member'), findsOneWidget);
+    expect(find.text('Project collaboration lives in each Project.'), findsOneWidget);
+    expect(find.text('Members'), findsNothing);
+    expect(find.text('Invitations'), findsNothing);
   });
 
   testWidgets(
@@ -207,7 +203,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Model'), findsOneWidget);
     expect(find.text('Account'), findsOneWidget);
-    expect(find.text('Host'), findsOneWidget);
+    expect(find.text('Workspace'), findsOneWidget);
     expect(find.text('Candidates'), findsOneWidget);
     expect(find.text('Cost'), findsOneWidget);
   });
@@ -218,7 +214,7 @@ void main() {
     await tester
         .pumpWidget(const ConclaveApp(dataSource: StudioFixtureDataSource()));
     await tester.pumpAndSettle();
-    expect(find.text('Hosts').first, findsOneWidget);
+    expect(find.text('Workspaces').first, findsOneWidget);
     expect(find.text('Accounts').first, findsOneWidget);
 
     await tester.binding.setSurfaceSize(const Size(540, 900));
@@ -226,7 +222,7 @@ void main() {
     expect(find.byIcon(Icons.menu_rounded).first, findsOneWidget);
     await tester.tap(find.byIcon(Icons.menu_rounded).first);
     await tester.pumpAndSettle();
-    expect(find.text('Hosts', skipOffstage: false).last, findsOneWidget);
+    expect(find.text('Workspaces', skipOffstage: false).last, findsOneWidget);
     expect(find.text('Accounts', skipOffstage: false).last, findsOneWidget);
     await tester.binding.setSurfaceSize(null);
   });

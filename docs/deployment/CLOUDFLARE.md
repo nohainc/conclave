@@ -108,14 +108,14 @@ The custom-domain route in `infra/cloudflare/app.wrangler.jsonc` targets `app.co
 ## Durable Objects & Database Migrations
 
 ### Durable Object Migration Tags
-Architecture v4 uses `HostGateway` and `RealtimeGateway` Durable Objects. The migration chain in `infra/cloudflare/app.wrangler.jsonc` includes:
+Architecture v5 retains the `HostGateway` and `RealtimeGateway` Durable Object migration history while the runtime surface migrates to Workspace terminology. The migration chain in `infra/cloudflare/app.wrangler.jsonc` includes:
 - `v1-runtime-connection`: Legacy initial deployment tag.
 - `v2-host-and-realtime-gateway`: Removes `RuntimeConnection` and `AgentGateway`, registers `HostGateway` and `RealtimeGateway`.
 
 When deploying through Wrangler, migration tags are applied automatically. If re-provisioning or updating Durable Objects, retain all migration tags in sequence so Cloudflare Workers can reconcile schema history.
 
 ### D1 Database Provisioning
-The production D1 database `conclave-production` applies migrations from `apps/cloud/migrations-v4`:
+The production D1 database `conclave-production` applies the clean v5 baseline from `apps/cloud/migrations-v5`. The v4 migration directory is historical and is not a compatibility chain:
 ```bash
 pnpm exec wrangler d1 migrations apply conclave-production --remote --config infra/cloudflare/app.wrangler.jsonc
 ```

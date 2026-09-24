@@ -84,7 +84,7 @@ class StudioSidebar extends StatelessWidget {
                 ),
                 _NavItem(
                   icon: Icons.dns_outlined,
-                  label: 'Hosts',
+                  label: 'Workspaces',
                   isSelected: routeKind == StudioRouteKind.hosts,
                   badge: '${snapshot.hosts.length}',
                   onTap: () => onNavigateTo(const StudioNavigation.hosts()),

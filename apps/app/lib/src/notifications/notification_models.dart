@@ -98,11 +98,11 @@ StudioNotification? notificationFromRealtimeEvent(
         StudioNotificationKind.approvalRequired =>
           'A response is needed before the Run can continue.',
         StudioNotificationKind.hostOffline =>
-          'A Host is offline and may need to reconnect.',
+          'A Workspace is offline and may need to reconnect.',
         StudioNotificationKind.accountExpired =>
           'An AI Account needs to be re-authenticated.',
         StudioNotificationKind.workerInstallFailed =>
-          'A Worker could not be installed on a Host.',
+          'A Worker could not be installed on a Workspace.',
         StudioNotificationKind.invitationReceived =>
           'You received a Workspace invitation.',
       };
@@ -131,7 +131,7 @@ StudioNotification? notificationFromRealtimeEvent(
       StudioNotificationKind.completed => 'Run completed',
       StudioNotificationKind.failed => 'Run failed',
       StudioNotificationKind.approvalRequired => 'Action needed',
-      StudioNotificationKind.hostOffline => 'Host offline',
+    StudioNotificationKind.hostOffline => 'Workspace offline',
       StudioNotificationKind.accountExpired => 'AI Account expired',
       StudioNotificationKind.workerInstallFailed => 'Worker install failed',
       StudioNotificationKind.invitationReceived => 'Invitation received',

@@ -12,6 +12,7 @@ export * from "./verification.js";
 export * from "./completion.js";
 export * from "./entities.js";
 export * from "./v4-entities.js";
+export * from "./v5-entities.js";
 export * from "./v4-scheduler.js";
 export * from "./multi-worker-ensemble.js";
 export * from "./chat-lifecycle.js";

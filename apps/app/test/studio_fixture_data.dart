@@ -88,6 +88,58 @@ class StudioFixtureDataSource implements StudioDataSource {
   Future<void> deleteProject({required String projectId}) async {}
 
   @override
+  Future<List<StudioProjectMember>> loadProjectMembers({
+    required String projectId,
+  }) async =>
+      const [
+        StudioProjectMember(
+          userId: 'user-owner',
+          displayName: 'Vitalii',
+          email: 'owner@example.com',
+          role: 'owner',
+          createdAt: 'today',
+        ),
+      ];
+
+  @override
+  Future<List<StudioProjectInvitation>> loadProjectInvitations({
+    required String projectId,
+  }) async =>
+      const [];
+
+  @override
+  Future<List<StudioAuditEntry>> loadProjectAudit({
+    required String projectId,
+  }) async =>
+      const [];
+
+  @override
+  Future<void> inviteProjectMember({
+    required String projectId,
+    required String email,
+    required String role,
+  }) async {}
+
+  @override
+  Future<void> changeProjectMemberRole({
+    required String projectId,
+    required String userId,
+    required String role,
+  }) async {}
+
+  @override
+  Future<void> removeProjectMember({
+    required String projectId,
+    required String userId,
+  }) async {}
+
+  @override
+  Future<void> expireProjectInvitation({
+    required String projectId,
+    required String invitationId,
+  }) async {}
+
+  @override
   Future<StudioAccountSecurity> loadAccountSecurity() async =>
       const StudioAccountSecurity(
         accounts: [

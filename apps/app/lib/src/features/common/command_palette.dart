@@ -70,7 +70,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
     final actions = <CommandPaletteAction>[
       // Navigation Actions
       CommandPaletteAction(
-        title: 'Open Hosts',
+        title: 'Open Workspaces',
         subtitle: 'Manage local and remote machines',
         icon: Icons.dns_outlined,
         category: 'Navigation',

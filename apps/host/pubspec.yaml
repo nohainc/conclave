@@ -1,5 +1,5 @@
 name: conclave_host
-description: Conclave AX Host desktop application and runtime.
+description: Conclave AX Workspace desktop application and runtime.
 publish_to: none
 version: 0.1.0
 

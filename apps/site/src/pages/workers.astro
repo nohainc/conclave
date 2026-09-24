@@ -6,12 +6,12 @@ import SectionHeader from "../components/SectionHeader.astro";
 import SiteLayout from "../layouts/SiteLayout.astro";
 ---
 
-<SiteLayout title="Workers — Conclave AX" description="Workers are installable AI and tool capabilities managed by Conclave Host.">
+<SiteLayout title="Workers — Conclave AX" description="Workers are installable AI and tool capabilities managed by Conclave Workspace.">
   <Section>
     <Container>
-      <SectionHeader eyebrow="Workers" title="Choose capability, not a permanent machine identity." description="A Worker is an integration that lets Conclave AX use an AI model, CLI, or tool. Workers are installed on Hosts and selected for individual assignments." headingLevel={1} />
+      <SectionHeader eyebrow="Workers" title="Choose capability, not a permanent machine identity." description="A Worker is an integration that lets Conclave AX use an AI model, CLI, or tool. Workers are installed on Workspaces and selected for individual assignments." headingLevel={1} />
       <div class="cards worker-catalog" data-site-event="section.workers_reached">
-        <FeatureCard title="Codex" headingLevel={2}><p>AI coding and repository work through a Host-managed Worker.</p></FeatureCard>
+        <FeatureCard title="Codex" headingLevel={2}><p>AI coding and repository work through a Workspace-managed Worker.</p></FeatureCard>
         <FeatureCard title="Claude Code" headingLevel={2}><p>AI-assisted coding and review for focused implementation work.</p></FeatureCard>
         <FeatureCard title="OpenAI" headingLevel={2}><p>API-backed model execution for structured assignments.</p></FeatureCard>
         <FeatureCard title="Anthropic" headingLevel={2}><p>API-backed model execution for structured assignments.</p></FeatureCard>
@@ -19,7 +19,7 @@ import SiteLayout from "../layouts/SiteLayout.astro";
       <p class="catalog-note">More Workers coming as integrations become ready for the catalog.</p>
       <div class="worker-account-model">
         <div>
-          <SectionHeader eyebrow="One installation, many assignments" title="Software is shared. Accounts stay separate." description="A Worker is installed once on a Host and can serve different user Accounts without turning the installation into an identity." />
+          <SectionHeader eyebrow="One installation, many assignments" title="Software is shared. Accounts stay separate." description="A Worker is installed once on a Workspace and can serve different user Accounts without turning the installation into an identity." />
         </div>
         <div class="account-tree" aria-label="Codex Worker connected to separate Accounts">
           <strong>Codex Worker</strong>

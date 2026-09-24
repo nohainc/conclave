@@ -62,8 +62,9 @@ class HostConfig {
         credentialStore ?? const PlatformSecureCredentialStore();
     final storedToken = hostId == null ? null : secureStore.readSync(hostId);
     final configuredCloudUrl = cloudUrl ?? registration?.cloudUrl;
-    final configuredCloudUri =
-        configuredCloudUrl == null ? null : _cloudSocketUri(configuredCloudUrl);
+    final configuredCloudUri = configuredCloudUrl == null
+        ? null
+        : _cloudSocketUri(configuredCloudUrl, workspaceRuntimeId: hostId);
     return HostConfig(
       dataDirectory: dataDirectory,
       cloudUri: configuredCloudUri,
@@ -74,7 +75,7 @@ class HostConfig {
     );
   }
 
-  static Uri? _cloudSocketUri(String value) {
+  static Uri? _cloudSocketUri(String value, {String? workspaceRuntimeId}) {
     final uri = Uri.tryParse(value);
     if (uri == null) return null;
     if (uri.scheme == 'ws' || uri.scheme == 'wss') return uri;
@@ -82,7 +83,12 @@ class HostConfig {
     return uri.replace(
       scheme: uri.scheme == 'https' ? 'wss' : 'ws',
       path:
-          '${uri.path.replaceFirst(RegExp(r'/$'), '')}/api/host-gateway/connect',
+          '${uri.path.replaceFirst(RegExp(r'/$'), '')}/api/workspace-gateway/connect',
+      queryParameters: {
+        ...uri.queryParameters,
+        if (workspaceRuntimeId != null)
+          'workspaceRuntimeId': workspaceRuntimeId,
+      },
     );
   }
 }

@@ -1,6 +1,6 @@
 # Authentication, Multi-User, and Tenancy
 
-**Status:** Proposed architecture  
+**Status:** Historical v4 architecture; v5 authorization is normative
 **Scope:** Conclave AX, Conclave Cloud, Hosts, Projects, API
 
 ## 1. Principle

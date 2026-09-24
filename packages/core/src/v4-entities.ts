@@ -334,7 +334,7 @@ export function canUseCredentialProfile(
  * This is NOT persisted as a long-lived entity. Its fields are embedded
  * directly into V4WorkerAssignment for immutable historical evidence.
  */
-export interface ResolvedExecutionTarget {
+export interface V4ResolvedExecutionTarget {
   readonly hostId: string;
   readonly workerId: string;
   readonly credentialProfileId: string;

@@ -21,7 +21,7 @@
       "binding": "CONCLAVE_DB",
       "database_name": "conclave-development",
       "database_id": "local",
-      "migrations_dir": "migrations-v4",
+      "migrations_dir": "migrations-v5",
     },
   ],
   "r2_buckets": [
@@ -46,8 +46,8 @@
   "durable_objects": {
     "bindings": [
       {
-        "name": "CONCLAVE_HOST_GATEWAY",
-        "class_name": "HostGateway",
+        "name": "CONCLAVE_WORKSPACE_GATEWAY",
+        "class_name": "WorkspaceGateway",
       },
       {
         "name": "CONCLAVE_REALTIME_GATEWAY",
@@ -57,8 +57,8 @@
   },
   "migrations": [
     {
-      "tag": "v1-host-gateway",
-      "new_sqlite_classes": ["HostGateway"],
+      "tag": "v3-workspace-gateway",
+      "new_sqlite_classes": ["WorkspaceGateway"],
     },
     {
       "tag": "v2-realtime-gateway",

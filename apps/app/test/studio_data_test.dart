@@ -207,7 +207,7 @@ void main() {
       '/api/workspaces/workspace-1/hosts': {'hosts': []},
       '/api/workspaces/workspace-1/workers': {'workers': []},
       '/api/workspaces/workspace-1/accounts': {'accounts': []},
-      '/api/workspaces/workspace-1/usage': {'usage': []},
+      '/api/projects/project-1/usage': {'usage': []},
       '/api/projects/project-1/read-model': {
         'workspaceId': 'workspace-1',
         'project': {
@@ -243,7 +243,7 @@ void main() {
     expect(readModel.projects.single.chats.single.id, 'chat-1');
     expect(client.requests, isNot(contains('/api/studio/snapshot')));
     expect(client.requests, contains('/api/projects/project-1/read-model'));
-    expect(client.requests, contains('/api/workspaces/workspace-1/usage'));
+    expect(client.requests, contains('/api/projects/project-1/usage'));
   });
 
   test('normalizes the Cloud chat creation wrapper', () async {
@@ -510,7 +510,7 @@ void main() {
     expect(jsonDecode(client.lastBody!)['email'], 'member@example.test');
   });
 
-  test('sends the explicitly selected Workspace on scoped requests', () async {
+  test('does not send obsolete Workspace security headers', () async {
     final client = _JsonClient({
       'workspaceId': 'workspace-2',
       'projects': [],
@@ -530,7 +530,6 @@ void main() {
 
     await api.loadSnapshot();
 
-    expect(
-        client.lastRequest?.headers['x-conclave-workspace-id'], 'workspace-2');
+    expect(client.lastRequest?.headers.containsKey('x-conclave-workspace-id'), isFalse);
   });
 }

@@ -1,8 +1,8 @@
 # Conclave AX Architecture v5 — Project-Centric Workspaces
 
-**Status:** Proposed
+**Status:** Normative
 **Date:** 2026-09-24
-**Supersedes when accepted:** Architecture v4 Host + Worker model
+**Supersedes:** Architecture v4 Host + Worker model
 
 ## 1. Executive decision
 

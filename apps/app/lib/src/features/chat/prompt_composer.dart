@@ -128,7 +128,7 @@ class _PromptComposerState extends State<PromptComposer> {
                     onChanged: (val) => widget.onAccountChanged(val ?? 'Auto'),
                   ),
                   _DropdownSelector(
-                    label: 'Host',
+                    label: 'Workspace',
                     value: widget.selectedHost,
                     options: [
                       'Auto',

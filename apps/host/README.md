@@ -1,6 +1,6 @@
-# Conclave Host
+# Conclave Workspace
 
-The Conclave Host is the machine-side desktop application. Its local UI is
+The Conclave Workspace is the machine-side desktop application. Its local UI is
 intentionally focused on pairing, machine health, local account actions,
 repository permissions, Worker diagnostics, logs, updates, and quitting.
 Projects, Chats, Workspace administration, orchestration, and Worker catalog

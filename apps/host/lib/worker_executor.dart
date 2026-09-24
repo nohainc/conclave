@@ -5,6 +5,7 @@ import 'dart:io';
 import 'cloud_connection.dart';
 import 'worker_protocol.dart';
 import 'process_tree.dart';
+import 'runtime_capabilities.dart';
 import 'worker_trust_policy.dart';
 
 Object? _redactValue(Object? value, Iterable<String> secrets) {
@@ -319,16 +320,22 @@ class WorkerAssignmentHandler {
     }
     final spec = await resolve(workerId);
     if (spec == null) throw StateError('worker is not installed: $workerId');
+    final allowed =
+        await resolvePermissions?.call(workerId) ?? const <String>{};
+    if (context.payload['permissionSnapshot'] != null) {
+      validateAssignmentScope(
+        context.payload,
+        manifestPermissions: allowed,
+      );
+    }
     final requestedPermissions = context.payload['permissions'];
     if (requestedPermissions != null) {
       if (requestedPermissions is! List ||
           requestedPermissions.any((item) => item is! String)) {
         throw StateError('assignment permissions must be a list of strings');
       }
-      final allowed =
-          await resolvePermissions?.call(workerId) ?? const <String>{};
       final denied = requestedPermissions.whereType<String>().firstWhere(
-          (permission) => !allowed.contains(permission),
+          (permission) => !runtimePermissionAllowed(permission, allowed),
           orElse: () => '');
       if (denied.isNotEmpty) {
         throw StateError('assignment permission is not allowed: $denied');

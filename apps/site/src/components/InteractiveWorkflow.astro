@@ -68,18 +68,18 @@
     >
       <div class="run-card__header">
         <span>Assignment Resolver</span>
-        <strong>Target Resolved: Codex Worker on MacBook Host</strong>
+        <strong>Target Resolved: Codex Worker on MacBook Workspace</strong>
       </div>
       <div class="terminal-panel">
-<code is:raw>// Cloud evaluates task requirements and routes to authorized Host
+<code is:raw>// Cloud evaluates task requirements and routes to authorized Workspace
 const target = await scheduler.resolveTarget({
   task: "Implement D1 durable transaction adapter",
   workspace: "ws_production",
   requiredCapabilities: ["filesystem", "d1_sqlite"]
 });
-// → Dispatched to MacBook Host (Status: Ready, Verified capability: filesystem)</code>
+// → Dispatched to MacBook Workspace (Status: Ready, Verified capability: filesystem)</code>
       </div>
-      <p>Tasks declare execution requirements. Conclave Cloud matches them against online Hosts, installed Workers, and authorized Accounts without hardcoding model locations.</p>
+      <p>Tasks declare execution requirements. Conclave Cloud matches them against online Workspaces, installed Workers, and authorized Accounts without hardcoding model locations.</p>
     </div>
 
     <div

@@ -38,6 +38,13 @@ void main() {
     }
   });
 
+  test('uses the Workspace route while accepting legacy Host links', () {
+    const workspace = StudioNavigation.hosts();
+    expect(workspace.toUri().path, '/workspaces');
+    expect(StudioNavigation.fromUri(Uri.parse('/workspaces')), workspace);
+    expect(StudioNavigation.fromUri(Uri.parse('/hosts')), workspace);
+  });
+
   test('each browser tab can own an independent navigation state', () {
     final firstTab =
         StudioNavigation.fromUri(Uri.parse('/projects/project-1/chats/chat-a'));
