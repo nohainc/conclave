@@ -44,7 +44,8 @@ Conclave AX -> Conclave Cloud -> Workspace -> Worker
 - **Worker** — one configured AI/tool identity with a Worker Type, logical external connection, defaults, capabilities, and Workspace bindings.
 - **Workspace Grant** — explicit permission for a Project to use a Workspace.
 - **Credential state** — internal authentication metadata/readiness for a Worker on a Workspace; provider secrets remain local to the Workspace secure store.
-- **Assignment** — one immutable execution snapshot resolving Project + Workspace + configured Worker + Worker Type + model/config and authorized credential state.
+- **Workstream working directory** — one persistent local directory resolved as `<work-root>/<project-id>/<workstream-id>`; names and Workspace ID never participate in path identity.
+- **Assignment** — one immutable execution snapshot resolving Project + Workstream + Workspace + configured Worker + Worker Type + model/config and authorized credential state.
 
 Worker processes run as separate child processes under Workspace runtime supervision. Workers do not authenticate directly to Conclave Cloud.
 
@@ -57,6 +58,8 @@ Worker processes run as separate child processes under Workspace runtime supervi
 - [v5 implementation roadmap](docs/roadmaps/ARCHITECTURE_V5_IMPLEMENTATION.md)
 - [Configured Worker model](docs/decisions/ADR-010-configured-worker-execution-model.md)
 - [Configured Worker implementation roadmap](docs/roadmaps/CONFIGURED_WORKER_EXECUTION.md)
+- [Workstream working-directory decision](docs/decisions/ADR-011-workstream-working-directories.md)
+- [Workstream working-directory roadmap](docs/roadmaps/WORKSTREAM_WORKING_DIRECTORIES.md)
 - [AI Development Rules](AGENTS.md)
 
 Deployment guidance is in [docs/deployment/CLOUDFLARE.md](docs/deployment/CLOUDFLARE.md).
