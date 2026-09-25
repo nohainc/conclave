@@ -183,6 +183,10 @@ class _AppTopHudState extends State<AppTopHud> {
                               cursorColor: ConclaveBrand.accent,
                               cursorHeight: 14,
                               decoration: InputDecoration(
+                                filled: true,
+                                fillColor: Colors.transparent,
+                                hoverColor: Colors.transparent,
+                                focusColor: Colors.transparent,
                                 hintText: 'Search...',
                                 hintStyle: TextStyle(
                                   fontSize: 13,

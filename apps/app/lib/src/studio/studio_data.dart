@@ -402,8 +402,17 @@ class StudioApiClient implements StudioDataSource {
       body: jsonEncode({'name': name}),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      var detail = '';
+      try {
+        final errorBody = jsonDecode(response.body);
+        if (errorBody is Map && errorBody['error'] is String) {
+          detail = ': ${errorBody['error']}';
+        }
+      } on Object {
+        // Keep the status-only message when the server response is not JSON.
+      }
       throw StudioApiException(
-        'Workstream creation failed (${response.statusCode})',
+        'Workstream creation failed (${response.statusCode})$detail',
         statusCode: response.statusCode,
       );
     }
@@ -431,8 +440,17 @@ class StudioApiClient implements StudioDataSource {
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      var detail = '';
+      try {
+        final errorBody = jsonDecode(response.body);
+        if (errorBody is Map && errorBody['error'] is String) {
+          detail = ': ${errorBody['error']}';
+        }
+      } on Object {
+        // Keep the status-only message when the server response is not JSON.
+      }
       throw StudioApiException(
-        'Workstream update failed (${response.statusCode})',
+        'Workstream update failed (${response.statusCode})$detail',
         statusCode: response.statusCode,
       );
     }
@@ -1029,8 +1047,17 @@ class StudioApiClient implements StudioDataSource {
     final response = await client
         .delete(Uri.parse('$baseUrl/projects/$projectId'), headers: _headers());
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      var detail = '';
+      try {
+        final body = jsonDecode(response.body);
+        if (body is Map && body['error'] is String) {
+          detail = ': ${body['error']}';
+        }
+      } catch (_) {
+        // Keep the status-only message when the server returned non-JSON.
+      }
       throw StudioApiException(
-          'Project deletion failed (${response.statusCode})',
+          'Project deletion failed (${response.statusCode})$detail',
           statusCode: response.statusCode);
     }
   }
@@ -1096,8 +1123,18 @@ class StudioApiClient implements StudioDataSource {
       ..body = jsonEncode(body);
     final response = await client.send(request);
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      final responseBody = await response.stream.bytesToString();
+      var detail = '';
+      try {
+        final errorBody = jsonDecode(responseBody);
+        if (errorBody is Map && errorBody['error'] is String) {
+          detail = ': ${errorBody['error']}';
+        }
+      } on Object {
+        // Keep the status-only message when the server response is not JSON.
+      }
       throw StudioApiException(
-          'Project collaboration action failed (${response.statusCode})',
+          'Project collaboration action failed (${response.statusCode})$detail',
           statusCode: response.statusCode);
     }
   }

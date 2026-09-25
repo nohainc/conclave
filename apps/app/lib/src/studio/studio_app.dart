@@ -1670,6 +1670,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                                   unawaited(_showAboutConclave()),
                               onOpenExternal: (uri) =>
                                   browserNavigation.openExternal(uri),
+                              onOpenArchivedProjects: _showArchivedProjects,
                               compact: true,
                             ),
                           )
@@ -1698,6 +1699,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                                       unawaited(_showAboutConclave()),
                                   onOpenExternal: (uri) =>
                                       browserNavigation.openExternal(uri),
+                                  onOpenArchivedProjects: _showArchivedProjects,
                                   onToggleCollapse: () => setState(
                                       () => _desktopSidebarCollapsed = false),
                                 )
@@ -1722,6 +1724,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
                                         unawaited(_showAboutConclave()),
                                     onOpenExternal: (uri) =>
                                         browserNavigation.openExternal(uri),
+                                    onOpenArchivedProjects:
+                                        _showArchivedProjects,
                                     onToggleCollapse: () => setState(
                                         () => _desktopSidebarCollapsed = true),
                                   ),
@@ -2212,11 +2216,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
           FilledButton(
             onPressed: () => Navigator.pop(
               dialogContext,
-              (
-                name.trim(),
-                description.trim(),
-                instructions.trim()
-              ),
+              (name.trim(), description.trim(), instructions.trim()),
             ),
             child: const Text('Save'),
           ),
@@ -2449,53 +2449,78 @@ class _StudioAppState extends State<ConclaveAppShell> {
     try {
       final archived =
           await widget.dataSource.loadProjects(includeArchived: true);
-      final inactive = archived.where((project) => project.archived).toList();
+      var inactive = archived.where((project) => project.archived).toList();
+      String? restoringProjectId;
       if (!mounted) return;
       await showDialog<void>(
         context: navigatorKey.currentContext ?? context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Archived Projects'),
-          content: SizedBox(
-            width: 520,
-            child: inactive.isEmpty
-                ? const Text('No archived Projects.')
-                : ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: inactive.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (_, index) {
-                      final project = inactive[index];
-                      return ListTile(
-                        title: Text(project.name),
-                        subtitle: Text(project.description.isEmpty
-                            ? 'No description'
-                            : project.description),
-                        trailing: FilledButton.tonal(
-                          onPressed: () async {
-                            await widget.dataSource.updateProject(
-                              projectId: project.id,
-                              settings: const {'archived': false},
-                            );
-                            if (dialogContext.mounted) {
-                              Navigator.pop(dialogContext);
-                            }
-                            await _loadSnapshot(showSpinner: false);
-                            if (mounted) {
-                              _showSnackBar('Project restored.');
-                            }
-                          },
-                          child: const Text('Restore'),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Close'),
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
+            title: const Text('Archived Projects'),
+            content: SizedBox(
+              width: 520,
+              child: inactive.isEmpty
+                  ? const Text('No archived Projects.')
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: inactive.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (_, index) {
+                        final project = inactive[index];
+                        final restoring = restoringProjectId == project.id;
+                        return ListTile(
+                          title: Text(project.name),
+                          subtitle: Text(project.description.isEmpty
+                              ? 'No description'
+                              : project.description),
+                          trailing: FilledButton.tonal(
+                            onPressed: restoring
+                                ? null
+                                : () async {
+                                    setDialogState(
+                                        () => restoringProjectId = project.id);
+                                    try {
+                                      await widget.dataSource.updateProject(
+                                        projectId: project.id,
+                                        settings: const {'archived': false},
+                                      );
+                                      if (dialogContext.mounted) {
+                                        setDialogState(() {
+                                          inactive = inactive
+                                              .where((item) =>
+                                                  item.id != project.id)
+                                              .toList();
+                                          restoringProjectId = null;
+                                        });
+                                      }
+                                      await _loadSnapshot(showSpinner: false);
+                                      if (mounted) {
+                                        _showSnackBar('Project restored.');
+                                      }
+                                    } catch (error) {
+                                      if (dialogContext.mounted) {
+                                        setDialogState(
+                                            () => restoringProjectId = null);
+                                      }
+                                      if (mounted) {
+                                        _showSnackBar(error.toString(),
+                                            type: ToastType.error);
+                                      }
+                                    }
+                                  },
+                            child: Text(restoring ? 'Restoring…' : 'Restore'),
+                          ),
+                        );
+                      },
+                    ),
             ),
-          ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
         ),
       );
     } catch (error) {
@@ -2511,6 +2536,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
       dataSource: widget.dataSource,
       onOpenWorkstream: (workstreamId) =>
           _openWorkstream(project.id, workstreamId),
+      onOpenWorkspace: (workspaceId) =>
+          _navigateTo(const StudioNavigation.hosts()),
       onEdit: () => _editProject(project),
       onArchive: () => _archiveProject(project),
       onDelete: () => _deleteProject(project.id),

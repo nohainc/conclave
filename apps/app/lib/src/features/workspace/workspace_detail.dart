@@ -38,8 +38,8 @@ class _WorkspaceDetailViewState extends State<WorkspaceDetailView>
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 7,
-      initialIndex: widget.initialTab.clamp(0, 6),
+      length: 6,
+      initialIndex: widget.initialTab.clamp(0, 5),
       vsync: this,
     );
   }
@@ -48,7 +48,7 @@ class _WorkspaceDetailViewState extends State<WorkspaceDetailView>
   void didUpdateWidget(WorkspaceDetailView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.initialTab != widget.initialTab) {
-      _tabController.animateTo(widget.initialTab.clamp(0, 6));
+      _tabController.animateTo(widget.initialTab.clamp(0, 5));
     }
   }
 
@@ -121,7 +121,6 @@ class _WorkspaceDetailViewState extends State<WorkspaceDetailView>
                 Tab(text: 'Workers'),
                 Tab(text: 'AI Accounts'),
                 Tab(text: 'Project access'),
-                Tab(text: 'Repositories & permissions'),
                 Tab(text: 'Activity'),
                 Tab(text: 'Settings'),
               ],
@@ -132,8 +131,7 @@ class _WorkspaceDetailViewState extends State<WorkspaceDetailView>
               1 => _workers(),
               2 => _accountsTab(localAccounts),
               3 => _projectAccess(),
-              4 => _repositories(),
-              5 => _activity(),
+              4 => _activity(),
               _ => _settings(),
             },
           ],
@@ -241,22 +239,6 @@ class _WorkspaceDetailViewState extends State<WorkspaceDetailView>
                   label: const Text('Grant to Project'),
                 ),
               ],
-            ),
-          ),
-        ],
-      );
-
-  Widget _repositories() => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _Panel(
-            title: 'Repositories and permissions for ${widget.workspace.name}',
-            subtitle:
-                'Repository mappings and effective filesystem permissions on this Workspace.',
-            child: Text(
-              widget.workspace.workspaceBindings.isEmpty
-                  ? 'No Project Grant mappings yet.'
-                  : 'Review repository paths and permissions from the connected Project Grants.',
             ),
           ),
         ],

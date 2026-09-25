@@ -55,7 +55,7 @@ v6 removes that ambiguity. Discuss never executes. Work always executes explicit
 
 ### 2.2 Multiple Runs can mutate one checkout
 
-v5 scopes execution to Projects and Workspace Grants, but repository resolution still points assignments at registered repository paths. Two people can start mutating Runs against the same machine and same checkout.
+v5 scopes execution to Projects and Workspace Grants, but repository selection is still modeled as a Project-level setting. That cannot represent Projects spanning multiple repositories or Projects with no repository at all, and it encourages the collaboration model to own execution details.
 
 That can cause:
 - overlapping edits;
@@ -746,7 +746,7 @@ Run snapshots the exact Workflow version.
 - project_id;
 - workspace_id;
 - workspace_project_grant_id;
-- repository_id;
+- opaque source/checkout reference;
 - checkout_key;
 - branch_name;
 - base_revision;
@@ -755,7 +755,7 @@ Run snapshots the exact Workflow version.
 - created_at;
 - updated_at.
 
-One active primary checkout per Workstream/repository in v6.
+Repository selection is an execution concern. An AI Worker or an authorized Workspace Project Grant may provide the source mapping; the Project and Workstream do not own a repository field. The checkout record may retain an opaque runtime source reference and revision for fencing, recovery, and audit. A repository-free Workstream can remain discussion-only or use stateless work that does not require a checkout.
 
 ### workstream_execution_leases
 

@@ -127,6 +127,28 @@ async function recordAudit(
   resourceWorkspaceId?: string,
 ): Promise<void> {
   const auditWorkspaceId = resourceWorkspaceId ?? context.workspaceId;
+  if (!auditWorkspaceId) {
+    const projectId =
+      typeof details.projectId === "string" ? details.projectId : null;
+    if (!projectId) return;
+    await env.CONCLAVE_DB.prepare(
+      `INSERT INTO project_audit_log
+         (id, project_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
+       VALUES (?1, ?2, 'user', ?3, ?4, ?5, ?6, ?7, ?8)`,
+    )
+      .bind(
+        `audit-${crypto.randomUUID()}`,
+        projectId,
+        context.userId,
+        action,
+        targetType,
+        targetId,
+        JSON.stringify(details),
+        new Date().toISOString(),
+      )
+      .run();
+    return;
+  }
   const values = [
     `audit-${crypto.randomUUID()}`,
     auditWorkspaceId,
@@ -2115,14 +2137,23 @@ async function handleListProjects(
         updatedAt: string;
       }>();
 
-    const projects = (rows.results ?? []).map((row) => ({
-      id: row.id,
-      name: row.name,
-      description: row.description,
-      settings: parseJson(row.settingsJson),
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-    }));
+    const projects = (rows.results ?? []).map((row) => {
+      const settings = parseJson(row.settingsJson);
+      return {
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        instructions:
+          typeof settings.instructions === "string" ? settings.instructions : "",
+        defaultExecutionPolicy:
+          typeof settings.defaultExecutionPolicy === "string"
+            ? settings.defaultExecutionPolicy
+            : "balanced",
+        settings,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      };
+    });
     return json({ projects });
   }
 
@@ -2208,6 +2239,16 @@ async function handleCreateProject(
   const id = `proj-${crypto.randomUUID()}`;
 
   if (context.authorizationModel === "v5") {
+    const duplicate = await env.CONCLAVE_DB.prepare(
+      `SELECT id FROM projects
+       WHERE owner_user_id = ?1 AND LOWER(TRIM(name)) = LOWER(TRIM(?2))
+       LIMIT 1`,
+    )
+      .bind(context.userId, name)
+      .first<{ id: string }>();
+    if (duplicate) {
+      throw new HttpError(409, "You already have a Project with this name");
+    }
     // v5/v6 Projects are collaboration resources and deliberately have no
     // Workspace foreign key. Execution is attached later through an explicit
     // WorkspaceProjectGrant. Do not construct or validate the legacy Project
@@ -2233,13 +2274,19 @@ async function handleCreateProject(
     ]);
     return json(
       {
-        project: {
-          id,
-          name,
-          description,
-          settings,
-          createdAt: now,
-          updatedAt: now,
+      project: {
+        id,
+        name,
+        description,
+        instructions:
+          typeof settings.instructions === "string" ? settings.instructions : "",
+        defaultExecutionPolicy:
+          typeof settings.defaultExecutionPolicy === "string"
+            ? settings.defaultExecutionPolicy
+            : "balanced",
+        settings,
+        createdAt: now,
+        updatedAt: now,
         },
       },
       { status: 201 },
@@ -2250,7 +2297,6 @@ async function handleCreateProject(
       workspaceId: context.workspaceId,
       name,
       description,
-      repositoryId: null,
       settings,
       createdAt: now,
       updatedAt: now,
@@ -2306,12 +2352,19 @@ async function handleGetProject(
       updatedAt: string;
     }>();
   if (!row) throw new HttpError(404, "Project not found");
+  const settings = parseJson(row.settingsJson);
   return json({
     project: {
       id: row.id,
       name: row.name,
       description: row.description,
-      settings: parseJson(row.settingsJson),
+      instructions:
+        typeof settings.instructions === "string" ? settings.instructions : "",
+      defaultExecutionPolicy:
+        typeof settings.defaultExecutionPolicy === "string"
+          ? settings.defaultExecutionPolicy
+          : "balanced",
+      settings,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     },
@@ -2332,7 +2385,7 @@ async function handleUpdateProject(
     accessContext,
   );
   const existing = await env.CONCLAVE_DB.prepare(
-    `SELECT id, name, description,
+    `SELECT id, owner_user_id AS ownerUserId, name, description,
             settings_json AS settingsJson,
             created_at AS createdAt, updated_at AS updatedAt
      FROM projects WHERE id = ?1`,
@@ -2340,6 +2393,7 @@ async function handleUpdateProject(
     .bind(projectId)
     .first<{
       id: string;
+      ownerUserId: string;
       name: string;
       description: string | null;
       settingsJson: string;
@@ -2380,6 +2434,19 @@ async function handleUpdateProject(
     createdAt: existing.createdAt,
     updatedAt: now,
   };
+  if (project.name.trim().toLowerCase() !== existing.name.trim().toLowerCase()) {
+    const duplicate = await env.CONCLAVE_DB.prepare(
+      `SELECT id FROM projects
+       WHERE owner_user_id = ?1 AND id <> ?2
+         AND LOWER(TRIM(name)) = LOWER(TRIM(?3))
+       LIMIT 1`,
+    )
+      .bind(existing.ownerUserId, projectId, project.name)
+      .first<{ id: string }>();
+    if (duplicate) {
+      throw new HttpError(409, "You already have a Project with this name");
+    }
+  }
   await env.CONCLAVE_DB.prepare(
     `UPDATE projects SET name = ?1, description = ?2,
        settings_json = ?3, updated_at = ?4
@@ -2435,12 +2502,63 @@ async function handleDeleteProject(
         error instanceof Error ? error.message : "Forbidden",
       );
     }
-    const result = await env.CONCLAVE_DB.prepare(
+    const workstreamFilter =
+      "SELECT id FROM workstreams WHERE project_id = ?1";
+    const workRequestFilter =
+      `SELECT id FROM work_requests WHERE workstream_id IN (${workstreamFilter})`;
+    const workflowTaskFilter =
+      `SELECT id FROM workflow_tasks WHERE work_request_id IN (${workRequestFilter})`;
+    // D1 batches do not make the failing statement obvious to the client. Keep
+    // this order explicit and execute each statement in sequence so restrictive
+    // v6 foreign keys are removed before their parents.
+    const cleanupStatements = [
+      `DELETE FROM workflow_task_dependencies
+       WHERE task_id IN (${workflowTaskFilter})
+          OR depends_on_task_id IN (${workflowTaskFilter})`,
+      `DELETE FROM workflow_tasks
+       WHERE work_request_id IN (${workRequestFilter})`,
+      `DELETE FROM workstream_current_checkpoints
+       WHERE workstream_id IN (${workstreamFilter})`,
+      `DELETE FROM workstream_diff_artifacts
+       WHERE workstream_id IN (${workstreamFilter})`,
+      "DELETE FROM workstream_integrations WHERE project_id = ?1",
+      `DELETE FROM workstream_checkpoints
+       WHERE workstream_id IN (${workstreamFilter})`,
+      `DELETE FROM workstream_execution_leases
+       WHERE workstream_id IN (${workstreamFilter})`,
+      "DELETE FROM worker_assignments WHERE project_id = ?1",
+      "DELETE FROM runs WHERE project_id = ?1",
+      `DELETE FROM work_requests
+       WHERE workstream_id IN (${workstreamFilter})`,
+      `DELETE FROM workstream_checkouts
+       WHERE workstream_id IN (${workstreamFilter})`,
+      `DELETE FROM workstream_execution_policies
+       WHERE workstream_id IN (${workstreamFilter})`,
+      `DELETE FROM workstream_memberships
+       WHERE workstream_id IN (${workstreamFilter})`,
+      `DELETE FROM discussion_messages
+       WHERE workstream_id IN (${workstreamFilter})`,
+      "DELETE FROM workstream_audit_log WHERE project_id = ?1",
+      "DELETE FROM workstream_observability_metrics WHERE project_id = ?1",
+      "DELETE FROM workstreams WHERE project_id = ?1",
+      "DELETE FROM workspace_project_grants WHERE project_id = ?1",
+      "DELETE FROM project_account_grants WHERE project_id = ?1",
+      "DELETE FROM project_invitations WHERE project_id = ?1",
+      "DELETE FROM project_audit_log WHERE project_id = ?1",
+      "DELETE FROM project_memberships WHERE project_id = ?1",
+      "DELETE FROM artifacts WHERE project_id = ?1",
+      "DELETE FROM usage WHERE project_id = ?1",
       "DELETE FROM projects WHERE id = ?1",
+    ];
+    for (const sql of cleanupStatements) {
+      await env.CONCLAVE_DB.prepare(sql).bind(projectId).run();
+    }
+    const result = await env.CONCLAVE_DB.prepare(
+      "SELECT id FROM projects WHERE id = ?1",
     )
       .bind(projectId)
-      .run();
-    if (!result.success || (result.meta?.changes ?? 0) === 0) {
+      .first<{ id: string }>();
+    if (result) {
       throw new HttpError(404, "Project not found");
     }
     return json({ projectId, deleted: true });
@@ -2566,6 +2684,27 @@ async function handleCreateProjectInvitation(
     body.role === "viewer" || body.role === "collaborator" ? body.role : null;
   if (!role || !email.includes("@"))
     throw new HttpError(400, "Valid email and Project role are required");
+  const existingMember = await env.CONCLAVE_DB.prepare(
+    `SELECT pm.user_id FROM project_memberships pm
+     JOIN users u ON u.id = pm.user_id
+     WHERE pm.project_id = ?1 AND LOWER(u.email) = LOWER(?2)
+     LIMIT 1`,
+  )
+    .bind(projectId, email)
+    .first<{ user_id: string }>();
+  if (existingMember) {
+    throw new HttpError(409, "This user is already a Project member");
+  }
+  const existingInvitation = await env.CONCLAVE_DB.prepare(
+    `SELECT id FROM project_invitations
+     WHERE project_id = ?1 AND status = 'pending' AND LOWER(email) = LOWER(?2)
+     LIMIT 1`,
+  )
+    .bind(projectId, email)
+    .first<{ id: string }>();
+  if (existingInvitation) {
+    throw new HttpError(409, "A pending invitation already exists for this user");
+  }
   const now = new Date();
   const id = `pinv-${crypto.randomUUID()}`;
   const token = `project_invite_${crypto.randomUUID()}_${crypto.randomUUID()}`;
@@ -3298,6 +3437,19 @@ export async function handleCreateWorkstream(
     unknown
   >;
   const name = requiredString(body.name, "name");
+  const duplicate = await env.CONCLAVE_DB.prepare(
+    `SELECT id FROM workstreams
+     WHERE project_id = ?1 AND LOWER(TRIM(name)) = LOWER(TRIM(?2))
+     LIMIT 1`,
+  )
+    .bind(projectId, name)
+    .first<{ id: string }>();
+  if (duplicate) {
+    throw new HttpError(
+      409,
+      "This Project already has a Workstream with this name",
+    );
+  }
   const id = `workstream-${crypto.randomUUID()}`;
   const now = new Date().toISOString();
   const accessPolicy =
@@ -3363,6 +3515,22 @@ export async function handleUpdateWorkstream(
       : body.accessPolicy;
   if (typeof accessPolicy !== "object" || accessPolicy === null) {
     throw new HttpError(400, "accessPolicy must be an object");
+  }
+  if (name.trim().toLowerCase() !== workstream.name.trim().toLowerCase()) {
+    const duplicate = await env.CONCLAVE_DB.prepare(
+      `SELECT id FROM workstreams
+       WHERE project_id = ?1 AND id <> ?2
+         AND LOWER(TRIM(name)) = LOWER(TRIM(?3))
+       LIMIT 1`,
+    )
+      .bind(workstream.projectId, workstreamId, name)
+      .first<{ id: string }>();
+    if (duplicate) {
+      throw new HttpError(
+        409,
+        "This Project already has a Workstream with this name",
+      );
+    }
   }
   const now = new Date().toISOString();
   await env.CONCLAVE_DB.prepare(
@@ -5817,6 +5985,20 @@ async function createV5WorkspaceProjectGrant(
     workspaceId,
     "workspace:manage",
   );
+  const existingGrant = await env.CONCLAVE_DB.prepare(
+    `SELECT id FROM workspace_project_grants
+     WHERE project_id = ?1 AND workspace_id = ?2
+       AND status IN ('active', 'suspended')
+     LIMIT 1`,
+  )
+    .bind(projectId, workspaceId)
+    .first<{ id: string }>();
+  if (existingGrant) {
+    throw new HttpError(
+      409,
+      "This Workspace is already connected to the Project",
+    );
+  }
   if (
     membership?.role === "collaborator" &&
     body.confirmContribution !== true
@@ -7384,6 +7566,13 @@ async function handleStudioSnapshot(
           id: project.id,
           name: project.name,
           description: project.description,
+          instructions:
+            typeof settings.instructions === "string" ? settings.instructions : "",
+          defaultExecutionPolicy:
+            typeof settings.defaultExecutionPolicy === "string"
+              ? settings.defaultExecutionPolicy
+              : "balanced",
+          settings,
           branch: "",
           activeGoals: 0,
           chats: [],
@@ -7761,7 +7950,6 @@ async function handleProjectReadModel(
   );
   const projectRow = await env.CONCLAVE_DB.prepare(
     `SELECT p.id, p.workspace_id AS workspaceId, p.name,
-            '' AS repository,
             p.description, p.settings_json AS settings,
             p.created_at AS createdAt, p.updated_at AS updatedAt
      FROM projects p
@@ -7772,7 +7960,6 @@ async function handleProjectReadModel(
       id: string;
       workspaceId: string;
       name: string;
-      repository: string;
       description: string | null;
       settings: string;
       createdAt: string;

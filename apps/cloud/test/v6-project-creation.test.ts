@@ -18,6 +18,9 @@ describe("v6 Project creation", () => {
           bind() {
             return this;
           },
+          async first() {
+            return null;
+          },
         };
       },
       async batch(statements: readonly unknown[]) {
@@ -78,6 +81,9 @@ describe("v6 Project creation", () => {
         return {
           bind() {
             return this;
+          },
+          async first() {
+            return null;
           },
           async all() {
             return {
@@ -212,6 +218,9 @@ describe("v6 Project creation", () => {
           bind() {
             return this;
           },
+          async first() {
+            return null;
+          },
         };
       },
       async batch(statements: readonly unknown[]) {
@@ -272,6 +281,16 @@ describe("v6 Project creation", () => {
     let updatedBindings: unknown[] = [];
     const db = {
       prepare(query: string) {
+        if (query.includes("owner_user_id = ?1") && query.includes("id <> ?2")) {
+          return {
+            bind() {
+              return this;
+            },
+            async first() {
+              return null;
+            },
+          };
+        }
         if (query.includes("SELECT") && query.includes("FROM projects")) {
           return {
             bind() {
@@ -348,8 +367,17 @@ describe("v6 Project creation", () => {
       "project-1",
     );
     expect(getRes.status).toBe(200);
-    const getBody = (await getRes.json()) as { project: { name: string; settings: { workstreamOrder: string[] } } };
+    const getBody = (await getRes.json()) as {
+      project: {
+        name: string;
+        instructions: string;
+        defaultExecutionPolicy: string;
+        settings: { workstreamOrder: string[] };
+      };
+    };
     expect(getBody.project.name).toBe("Original Name");
+    expect(getBody.project.instructions).toBe("");
+    expect(getBody.project.defaultExecutionPolicy).toBe("balanced");
     expect(getBody.project.settings.workstreamOrder).toEqual(["ws-1", "ws-2"]);
 
     const updateRes = await handleUpdateProject(
@@ -365,11 +393,15 @@ describe("v6 Project creation", () => {
       "project-1",
     );
     expect(updateRes.status).toBe(200);
-    const updateBody = (await updateRes.json()) as { project: { name: string; settings: { workstreamOrder: string[] } } };
+    const updateBody = (await updateRes.json()) as {
+      project: {
+        name: string;
+        settings: { workstreamOrder: string[] };
+      };
+    };
     expect(updateBody.project.name).toBe("Updated Name");
     expect(updateBody.project.settings.workstreamOrder).toEqual(["ws-2", "ws-1"]);
     expect(updatedQuery).toContain("UPDATE projects SET name = ?1");
     expect(updatedBindings[0]).toBe("Updated Name");
   });
 });
-

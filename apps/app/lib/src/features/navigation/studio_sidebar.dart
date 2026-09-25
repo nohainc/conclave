@@ -24,6 +24,7 @@ class StudioSidebar extends AppSidebar {
     required super.onLogout,
     required super.onOpenAbout,
     required super.onOpenExternal,
+    super.onOpenArchivedProjects,
     super.onToggleCollapse,
     super.compact = false,
   });
@@ -49,6 +50,7 @@ class StudioIconRail extends AppIconRail {
     required super.onLogout,
     required super.onOpenAbout,
     required super.onOpenExternal,
+    super.onOpenArchivedProjects,
     super.onToggleCollapse,
   });
 }

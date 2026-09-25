@@ -267,7 +267,6 @@ void main() {
         'Workers',
         'AI Accounts',
         'Project access',
-        'Repositories & permissions',
         'Activity',
         'Settings',
       ]) {
@@ -398,8 +397,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
 
-      await tester.ensureVisible(find.widgetWithText(Tab, 'Repositories & permissions'));
-      await tester.tap(find.widgetWithText(Tab, 'Repositories & permissions'));
+      await tester.ensureVisible(find.widgetWithText(Tab, 'Activity'));
+      await tester.tap(find.widgetWithText(Tab, 'Activity'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     });

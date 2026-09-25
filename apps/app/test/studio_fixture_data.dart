@@ -73,6 +73,7 @@ class StudioFixtureDataSource implements StudioDataSource {
       activeGoals: project?.activeGoals ?? 0,
       lastActivity: 'Just now',
       description: description ?? project?.description ?? '',
+      instructions: instructions ?? project?.instructions ?? '',
       settings: settings ?? project?.settings ?? const {},
     );
   }

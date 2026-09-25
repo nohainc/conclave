@@ -34,6 +34,7 @@
     "check": "prettier --check . && eslint . && tsc -p packages/protocol/tsconfig.json && tsc -p packages/host-protocol/tsconfig.json && tsc -p packages/worker-manifest/tsconfig.json && tsc -p packages/persistence/tsconfig.json && tsc -p packages/security/tsconfig.json && tsc -p packages/sdk/tsconfig.json && tsc -p packages/core/tsconfig.json && tsc -p packages/orchestration/tsconfig.json && tsc -p apps/cloud/tsconfig.json && vitest run packages/protocol/test packages/host-protocol/test packages/worker-manifest/test packages/persistence/test packages/security/test packages/sdk/test packages/core/test packages/orchestration/test apps/cloud/test",
     "start:local": "./scripts/start-local.sh",
     "dev:local": "./scripts/start-local.sh",
+    "db:migrate:production": "./scripts/migrate-production-d1.sh",
     "protocol:generate": "node scripts/generate-protocol-bindings.mjs",
     "protocol:check": "node scripts/generate-protocol-bindings.mjs && node scripts/verify-protocol-bindings.mjs && git diff --exit-code -- packages/protocol/src/generated.ts packages/host-protocol/src/generated.ts packages/dart/protocol/lib/generated_protocol.dart"
   },

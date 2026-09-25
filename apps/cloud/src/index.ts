@@ -136,6 +136,7 @@ const routeHandlers = {
   handleListProjects: handlers.handleListProjects,
   handleCreateProject: handlers.handleCreateProject,
   handleUpdateProject: handlers.handleUpdateProject,
+  handleDeleteProject: handlers.handleDeleteProject,
   handleListProjectMembers: handlers.handleListProjectMembers,
   handleListProjectInvitations: handlers.handleListProjectInvitations,
   handleListProjectAudit: handlers.handleListProjectAudit,

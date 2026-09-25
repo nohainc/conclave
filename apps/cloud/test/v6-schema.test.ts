@@ -113,6 +113,13 @@ describe("v6 D1 schema", () => {
     );
   });
 
+  it("does not retain a Project repository column", () => {
+    const result = JSON.parse(apply("PRAGMA table_info(projects);")) as Array<{
+      name: string;
+    }>;
+    expect(result.map((column) => column.name)).not.toContain("repository_id");
+  });
+
   it("enforces checkpoint parents and foreign keys", () => {
     expect(() =>
       apply(

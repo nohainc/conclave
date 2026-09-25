@@ -98,17 +98,20 @@ void main() {
       await tester.pumpAndSettle();
 
       // Allowed permanent items:
-      expect(find.text('Conclave AX'), findsNWidgets(2)); // Brand Header & Project in tree
-      expect(find.byTooltip('New Project'), findsOneWidget); // New Project button before alarm
+      expect(find.text('Conclave AX'),
+          findsNWidgets(2)); // Brand Header & Project in tree
+      expect(find.byTooltip('New Project'),
+          findsOneWidget); // New Project button before alarm
       expect(find.byTooltip('Notifications'), findsOneWidget); // Alarm button
       expect(
           find.descendant(
-              of: find.byType(ProjectTree),
-              matching: find.text('Conclave AX')),
+              of: find.byType(ProjectTree), matching: find.text('Conclave AX')),
           findsOneWidget); // Project name in tree
-      expect(find.text('Authentication redesign'), findsOneWidget); // Workstream in tree
+      expect(find.text('Authentication redesign'),
+          findsOneWidget); // Workstream in tree
       expect(find.text('Scheduler'), findsOneWidget); // Workstream in tree
-      expect(find.text('Vitalii Noha'), findsOneWidget); // User footer display name
+      expect(find.text('Vitalii Noha'),
+          findsOneWidget); // User footer display name
       expect(find.text('VN'), findsOneWidget); // User avatar initials
       expect(find.byTooltip('Application menu'), findsOneWidget); // ⋯ menu
 
@@ -173,6 +176,7 @@ void main() {
                 onLogout: () => loggedOut = true,
                 onOpenAbout: () => aboutOpened = true,
                 onOpenExternal: (uri) => openedUrl = uri,
+                onOpenArchivedProjects: () {},
               ),
             ],
           ),
@@ -187,6 +191,7 @@ void main() {
       // Verify all required items are present in the menu
       expect(find.text('Workspaces'), findsOneWidget);
       expect(find.text('Usage'), findsOneWidget);
+      expect(find.text('Archived Projects'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
       expect(find.text('About Conclave AX'), findsOneWidget);
       expect(find.text('Documentation'), findsOneWidget);
@@ -258,6 +263,7 @@ void main() {
                 onLogout: () {},
                 onOpenAbout: () {},
                 onOpenExternal: (_) {},
+                onOpenArchivedProjects: () {},
               ),
             ],
           ),
@@ -475,8 +481,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(AppSidebar), findsOneWidget);
       expect(find.byType(AppTopHud), findsNothing); // Top HUD hidden on desktop
-      expect(find.byTooltip('Search or jump to...'), findsOneWidget); // Search on sidebar
-      expect(find.byTooltip('Notifications'), findsOneWidget); // Alarm on sidebar
+      expect(find.byTooltip('Search or jump to...'),
+          findsOneWidget); // Search on sidebar
+      expect(
+          find.byTooltip('Notifications'), findsOneWidget); // Alarm on sidebar
       expect(find.byTooltip('Open menu'), findsNothing);
 
       // 2. Tablet mode (< 500)
@@ -484,7 +492,8 @@ void main() {
       await tester.pumpWidget(buildAppScaffold());
       await tester.pumpAndSettle();
       expect(find.byType(AppSidebar), findsNothing);
-      expect(find.byType(AppTopHud), findsOneWidget); // Top HUD visible on tablet
+      expect(
+          find.byType(AppTopHud), findsOneWidget); // Top HUD visible on tablet
       expect(find.byTooltip('Open menu'), findsOneWidget);
 
       // Open tablet drawer
@@ -506,7 +515,8 @@ void main() {
   });
 
   group('Phase 13: Keyboard Focus & Menu Navigation', () {
-    testWidgets('global app menu opens and closes via toggle tap or outside tap',
+    testWidgets(
+        'global app menu opens and closes via toggle tap or outside tap',
         (tester) async {
       await tester.pumpWidget(
         wrapWithMaterial(
@@ -518,6 +528,7 @@ void main() {
                 onLogout: () {},
                 onOpenAbout: () {},
                 onOpenExternal: (_) {},
+                onOpenArchivedProjects: () {},
               ),
             ],
           ),

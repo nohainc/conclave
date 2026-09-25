@@ -56,13 +56,18 @@ void main() {
     // Switch to Workspaces Tab
     await tester.tap(find.text('Workspaces'));
     await tester.pumpAndSettle();
-    expect(find.text('Execution Workspaces'), findsOneWidget);
-    expect(find.text('Connect Workspace'), findsOneWidget);
+    expect(
+        find.text('Workspaces provide execution capacity for your project.'),
+        findsOneWidget);
+    expect(find.byTooltip('Connect Workspace'), findsOneWidget);
 
     // Switch to Members Tab
     await tester.tap(find.text('Members'));
     await tester.pumpAndSettle();
-    expect(find.text('Share Project'), findsOneWidget);
+    expect(
+        find.text('Project roles control collaboration across team members.'),
+        findsOneWidget);
+    expect(find.byTooltip('Share Project'), findsOneWidget);
 
     await tester.binding.setSurfaceSize(null);
   });
@@ -382,6 +387,125 @@ void main() {
 
     await tester.binding.setSurfaceSize(null);
   });
+
+  testWidgets('Workspaces tab renders workspace items and invokes onOpenWorkspace',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    String? openedWorkspaceId;
+
+    final customDataSource = _WorkspaceTestDataSource();
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: ProjectPage(
+            project: const StudioProject(
+              id: 'p-1',
+              name: 'Test Project',
+              branch: 'main',
+              activeGoals: 0,
+              lastActivity: 'today',
+            ),
+            dataSource: customDataSource,
+            onOpenWorkstream: (_) {},
+            onOpenWorkspace: (id) => openedWorkspaceId = id,
+            onEdit: () {},
+            onArchive: () {},
+            onDelete: () {},
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Switch to Workspaces Tab
+    await tester.tap(find.text('Workspaces'));
+    await tester.pumpAndSettle();
+
+    // Check workspace title displayed cleanly without icons or status chips
+    expect(find.text('Production Host'), findsOneWidget);
+    expect(find.byIcon(Icons.computer_outlined), findsNothing);
+
+    // Tap on workspace
+    await tester.tap(find.text('Production Host'));
+    await tester.pumpAndSettle();
+
+    expect(openedWorkspaceId, 'ws-prod');
+
+    await tester.binding.setSurfaceSize(null);
+  });
+
+  testWidgets('Project instructions can be edited and saved without error',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    StudioProject? updatedProject;
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: ProjectPage(
+            project: const StudioProject(
+              id: 'p-1',
+              name: 'Test Project',
+              description: 'Initial description',
+              instructions: 'Initial instructions',
+              branch: 'main',
+              activeGoals: 0,
+              lastActivity: 'today',
+            ),
+            dataSource: const StudioFixtureDataSource(),
+            onOpenWorkstream: (_) {},
+            onEdit: () {},
+            onArchive: () {},
+            onDelete: () {},
+            onProjectUpdated: (p) => updatedProject = p,
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Initial instructions'), findsOneWidget);
+
+    // Tap edit button for instructions (the 3rd edit icon in header)
+    final editIcons = find.byIcon(Icons.edit_outlined);
+    expect(editIcons, findsNWidgets(3));
+    await tester.tap(editIcons.at(2));
+    await tester.pumpAndSettle();
+
+    // Enter new instructions
+    final textField = find.byType(TextField);
+    expect(textField, findsOneWidget);
+    await tester.enterText(textField, 'Updated engineering guidelines');
+
+    // Click Save (green check icon)
+    final saveButton = find.byIcon(Icons.check);
+    expect(saveButton, findsOneWidget);
+    await tester.tap(saveButton);
+    await tester.pumpAndSettle();
+
+    // Verify update occurred and no LateInitializationError was thrown
+    expect(find.text('Project updated.'), findsOneWidget);
+    expect(updatedProject, isNotNull);
+    expect(updatedProject!.instructions, 'Updated engineering guidelines');
+
+    await tester.pumpAndSettle(const Duration(seconds: 5));
+    await tester.binding.setSurfaceSize(null);
+  });
+}
+
+class _WorkspaceTestDataSource extends StudioFixtureDataSource {
+  @override
+  Future<List<Map<String, dynamic>>> loadProjectWorkspaces({
+    required String projectId,
+  }) async =>
+      [
+        {
+          'id': 'grant-1',
+          'workspaceId': 'ws-prod',
+          'workspaceName': 'Production Host',
+        }
+      ];
 }
 
 void _noop() {}

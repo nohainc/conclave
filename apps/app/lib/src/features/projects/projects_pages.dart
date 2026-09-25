@@ -10,6 +10,7 @@ class ProjectPage extends StatelessWidget {
     required this.project,
     required this.dataSource,
     required this.onOpenWorkstream,
+    this.onOpenWorkspace,
     this.onEdit,
     required this.onArchive,
     required this.onDelete,
@@ -19,6 +20,7 @@ class ProjectPage extends StatelessWidget {
   final StudioProject project;
   final StudioDataSource dataSource;
   final ValueChanged<String> onOpenWorkstream;
+  final ValueChanged<String>? onOpenWorkspace;
   final VoidCallback? onEdit;
   final VoidCallback onArchive;
   final VoidCallback onDelete;
@@ -30,6 +32,7 @@ class ProjectPage extends StatelessWidget {
         project: project,
         dataSource: dataSource,
         onOpenWorkstream: onOpenWorkstream,
+        onOpenWorkspace: onOpenWorkspace,
         onEdit: onEdit,
         onArchive: onArchive,
         onDelete: onDelete,
@@ -43,6 +46,7 @@ class _ProjectWorkspace extends StatefulWidget {
     required this.project,
     required this.dataSource,
     required this.onOpenWorkstream,
+    this.onOpenWorkspace,
     this.onEdit,
     required this.onArchive,
     required this.onDelete,
@@ -52,6 +56,7 @@ class _ProjectWorkspace extends StatefulWidget {
   final StudioProject project;
   final StudioDataSource dataSource;
   final ValueChanged<String> onOpenWorkstream;
+  final ValueChanged<String>? onOpenWorkspace;
   final VoidCallback? onEdit;
   final VoidCallback onArchive;
   final VoidCallback onDelete;
@@ -77,7 +82,6 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
 
   late TextEditingController _nameController;
   late TextEditingController _descriptionController;
-  late TextEditingController _repositoryController;
   late TextEditingController _instructionsController;
 
   bool get canManage =>
@@ -143,10 +147,7 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
         name: name,
         description: _descriptionController.text.trim(),
         instructions: _instructionsController.text.trim(),
-        settings: {
-          ...widget.project.settings,
-          'repository': _repositoryController.text.trim(),
-        },
+        settings: widget.project.settings,
       );
       if (!mounted) return;
       setState(() {
@@ -187,7 +188,6 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
       return;
     }
     var selectedId = ownedWorkspaces.first.id;
-    var repositoryMappings = '';
     final accepted = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -209,16 +209,6 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
                   if (value != null) setDialogState(() => selectedId = value);
                 },
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                onChanged: (value) => repositoryMappings = value,
-                decoration: const InputDecoration(
-                  labelText: 'Repository IDs (optional)',
-                  hintText: 'repo-a, repo-b',
-                  helperText:
-                      'Required only for stateful Workstream checkouts.',
-                ),
-              ),
             ],
           ),
           actions: [
@@ -239,11 +229,6 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
       await widget.dataSource.requestProjectWorkspace(
         projectId: widget.project.id,
         workspaceId: selectedId,
-        repositoryMappings: repositoryMappings
-            .split(',')
-            .map((value) => value.trim())
-            .where((value) => value.isNotEmpty)
-            .toList(),
       );
       await _loadExecution();
       _message('Workspace connected to this Project.');
@@ -254,7 +239,9 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
 
   Future<void> _revokeWorkspaceGrant(Map<String, dynamic> workspace) async {
     final grantId = (workspace['id'] ?? workspace['grantId'] ?? '').toString();
-    final name = (workspace['workspaceName'] ?? workspace['name'] ?? 'Workspace').toString();
+    final name =
+        (workspace['workspaceName'] ?? workspace['name'] ?? 'Workspace')
+            .toString();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -365,7 +352,11 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
         ],
       ),
     );
-    if (updatedName == null || updatedName.isEmpty || updatedName == workstream.name) return;
+    if (updatedName == null ||
+        updatedName.isEmpty ||
+        updatedName == workstream.name) {
+      return;
+    }
     try {
       final updated = await widget.dataSource.updateWorkstream(
         workstreamId: workstream.id,
@@ -413,6 +404,28 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
             workstreams.where((item) => item.id != workstream.id).toList();
       });
       _message('Workstream deleted.');
+      widget.onProjectUpdated?.call(widget.project);
+    } catch (error) {
+      _message(error.toString());
+    }
+  }
+
+  Future<void> _setWorkstreamArchived(
+    StudioWorkstream workstream,
+    bool archived,
+  ) async {
+    try {
+      final updated = await widget.dataSource.updateWorkstream(
+        workstreamId: workstream.id,
+        status: archived ? 'archived' : 'active',
+      );
+      if (!mounted) return;
+      setState(() {
+        workstreams = workstreams
+            .map((item) => item.id == updated.id ? updated : item)
+            .toList();
+      });
+      _message(archived ? 'Workstream archived.' : 'Workstream restored.');
       widget.onProjectUpdated?.call(widget.project);
     } catch (error) {
       _message(error.toString());
@@ -696,8 +709,9 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
                 controller: controller,
                 autofocus: true,
                 maxLines: maxLines,
-                textInputAction:
-                    maxLines == 1 ? TextInputAction.done : TextInputAction.newline,
+                textInputAction: maxLines == 1
+                    ? TextInputAction.done
+                    : TextInputAction.newline,
                 onSubmitted: (_) {
                   if (!_savingField) _saveField(fieldKey);
                 },
@@ -947,62 +961,177 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
               )
             else
               Column(
-                children: workstreams.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final workstream = entry.value;
+                children: [
+                  ...workstreams
+                      .asMap()
+                      .entries
+                      .where((entry) => entry.value.status != 'archived')
+                      .map((entry) {
+                    final index = entry.key;
+                    final workstream = entry.value;
+                    return _workstreamListTile(workstream, index);
+                  }),
+                  if (workstreams.any((item) => item.status == 'archived')) ...[
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Archived Workstreams',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    ...workstreams
+                        .where((item) => item.status == 'archived')
+                        .map((workstream) => _workstreamListTile(
+                              workstream,
+                              workstreams.indexOf(workstream),
+                            )),
+                  ],
+                ],
+              ),
+          ],
+        ),
+      );
+
+  Widget _workstreamListTile(StudioWorkstream workstream, int index) {
+    final archived = workstream.status == 'archived';
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(
+        workstream.name,
+        style: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      onTap: archived ? null : () => widget.onOpenWorkstream(workstream.id),
+      trailing: canManage
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!archived)
+                  IconButton(
+                    icon: const Icon(Icons.keyboard_arrow_up_rounded),
+                    tooltip: 'Move up',
+                    iconSize: 20,
+                    splashRadius: 16,
+                    onPressed:
+                        index > 0 ? () => _moveWorkstream(index, -1) : null,
+                  ),
+                if (!archived)
+                  IconButton(
+                    icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                    tooltip: 'Move down',
+                    iconSize: 20,
+                    splashRadius: 16,
+                    onPressed: index < workstreams.length - 1
+                        ? () => _moveWorkstream(index, 1)
+                        : null,
+                  ),
+                PopupMenuButton<String>(
+                  tooltip: 'Workstream actions',
+                  onSelected: (action) {
+                    if (action == 'edit') {
+                      _editWorkstream(workstream);
+                    } else if (action == 'archive') {
+                      _setWorkstreamArchived(workstream, true);
+                    } else if (action == 'restore') {
+                      _setWorkstreamArchived(workstream, false);
+                    } else if (action == 'delete') {
+                      _deleteWorkstream(workstream);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    if (!archived)
+                      const PopupMenuItem(
+                        value: 'edit',
+                        child: Text('Rename'),
+                      ),
+                    PopupMenuItem(
+                      value: archived ? 'restore' : 'archive',
+                      child: Text(archived ? 'Restore' : 'Archive'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Text('Delete'),
+                    ),
+                  ],
+                ),
+              ],
+            )
+          : null,
+    );
+  }
+
+  Widget _workspacesTab() => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
+                    'Workspaces provide execution capacity for your project.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                if (canManage)
+                  IconButton(
+                    icon: const Icon(Icons.add),
+                    tooltip: 'Connect Workspace',
+                    splashRadius: 20,
+                    onPressed: _connectWorkspace,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (executionLoading)
+              const LinearProgressIndicator()
+            else if (projectWorkspaces.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Text('No execution workspaces connected yet.'),
+              )
+            else
+              Column(
+                children: projectWorkspaces.map((workspace) {
+                  final workspaceName = (workspace['workspaceName'] ??
+                          workspace['name'] ??
+                          workspace['workspaceId'] ??
+                          'Workspace')
+                      .toString();
+                  final workspaceId =
+                      (workspace['workspaceId'] ?? workspace['id'] ?? '')
+                          .toString();
                   return ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: Text(
-                      workstream.name,
+                      workspaceName,
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    onTap: () => widget.onOpenWorkstream(workstream.id),
-                    trailing: canManage
-                        ? Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.keyboard_arrow_up_rounded),
-                                tooltip: 'Move up',
-                                iconSize: 20,
-                                splashRadius: 16,
-                                onPressed: index > 0
-                                    ? () => _moveWorkstream(index, -1)
-                                    : null,
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.keyboard_arrow_down_rounded),
-                                tooltip: 'Move down',
-                                iconSize: 20,
-                                splashRadius: 16,
-                                onPressed: index < workstreams.length - 1
-                                    ? () => _moveWorkstream(index, 1)
-                                    : null,
-                              ),
-                              PopupMenuButton<String>(
-                                tooltip: 'Workstream actions',
-                                onSelected: (action) {
-                                  if (action == 'edit') {
-                                    _editWorkstream(workstream);
-                                  } else if (action == 'delete') {
-                                    _deleteWorkstream(workstream);
-                                  }
-                                },
-                                itemBuilder: (context) => const [
-                                  PopupMenuItem(
-                                    value: 'edit',
-                                    child: Text('Edit / Rename'),
-                                  ),
-                                  PopupMenuItem(
-                                    value: 'delete',
-                                    child: Text('Delete Workstream'),
-                                  ),
-                                ],
-                              ),
-                            ],
+                    onTap: () {
+                      if (widget.onOpenWorkspace != null) {
+                        widget.onOpenWorkspace!(workspaceId);
+                      }
+                    },
+                    trailing: isOwner
+                        ? IconButton(
+                            icon: const Icon(Icons.link_off, size: 18),
+                            tooltip: 'Revoke grant',
+                            onPressed: () => _revokeWorkspaceGrant(workspace),
                           )
                         : null,
                   );
@@ -1012,92 +1141,66 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
         ),
       );
 
-  Widget _workspacesTab() => _ProjectPanel(
-        title: 'Execution Workspaces',
-        subtitle:
-            'Workspaces provide execution capacity. They are optional and can be connected or changed after Project creation.',
-        child: executionLoading
-            ? const LinearProgressIndicator()
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (canManage) ...[
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: FilledButton.icon(
-                        onPressed: _connectWorkspace,
-                        icon: const Icon(Icons.add_link),
-                        label: const Text('Connect Workspace'),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  if (projectWorkspaces.isEmpty)
-                    const Text(
-                        'No execution Workspace is connected. Collaboration and discussion continue to work normally.')
-                  else
-                    ...projectWorkspaces.map((workspace) => ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.computer_outlined),
-                          title: Text((workspace['workspaceName'] ??
-                                  workspace['name'] ??
-                                  workspace['workspaceId'] ??
-                                  'Workspace')
-                              .toString()),
-                          subtitle: Text(
-                              '${workspace['status'] ?? 'active'} · ${workspace['scope'] ?? 'project_repository'}'),
-                          trailing: isOwner
-                              ? OutlinedButton.icon(
-                                  onPressed: () =>
-                                      _revokeWorkspaceGrant(workspace),
-                                  icon: const Icon(Icons.link_off, size: 16),
-                                  label: const Text('Revoke'),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: Colors.red.shade700,
-                                    visualDensity: VisualDensity.compact,
-                                  ),
-                                )
-                              : null,
-                        )),
-                ],
-              ),
-      );
-
-  Widget _membersTab() => _ProjectPanel(
-        title: 'Members',
-        subtitle:
-            'Project roles control collaboration. They do not grant Workspace access.',
+  Widget _membersTab() => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (isOwner) ...[
-              Align(
-                alignment: Alignment.centerLeft,
-                child: FilledButton.icon(
-                  onPressed: _share,
-                  icon: const Icon(Icons.person_add_alt_1),
-                  label: const Text('Share Project'),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
+                    'Project roles control collaboration across team members.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-            ],
+                if (isOwner)
+                  IconButton(
+                    icon: const Icon(Icons.add),
+                    tooltip: 'Share Project',
+                    splashRadius: 20,
+                    onPressed: _share,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
             if (loading)
               const LinearProgressIndicator()
+            else if (members.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Text('No members found.'),
+              )
             else
               Column(
                 children: [
-                  if (members.isEmpty)
-                    const ListTile(title: Text('No members found')),
                   ...members.map((member) => ListTile(
-                        leading: CircleAvatar(
-                            child: Text(member.displayName.isEmpty
-                                ? '?'
-                                : member.displayName[0].toUpperCase())),
-                        title: Text(member.displayName),
-                        subtitle: Text(member.email),
-                        trailing: member.role == 'owner' || !isOwner
-                            ? Chip(label: Text(member.role))
-                            : PopupMenuButton<String>(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          member.displayName.isNotEmpty
+                              ? member.displayName
+                              : member.email,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        subtitle: member.displayName.isNotEmpty &&
+                                member.email.isNotEmpty &&
+                                member.displayName != member.email
+                            ? Text(member.email)
+                            : null,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Chip(label: Text(member.role)),
+                            if (isOwner && member.role != 'owner') ...[
+                              const SizedBox(width: 4),
+                              PopupMenuButton<String>(
                                 tooltip: 'Member actions',
                                 onSelected: (action) {
                                   if (action == 'role') {
@@ -1108,29 +1211,45 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
                                 },
                                 itemBuilder: (context) => const [
                                   PopupMenuItem(
-                                      value: 'role',
-                                      child: Text('Change role')),
+                                    value: 'role',
+                                    child: Text('Change role'),
+                                  ),
                                   PopupMenuItem(
-                                      value: 'remove',
-                                      child: Text('Remove from Project')),
+                                    value: 'remove',
+                                    child: Text('Remove from Project'),
+                                  ),
                                 ],
                               ),
+                            ],
+                          ],
+                        ),
                       )),
                   if (invitations.isNotEmpty) ...[
-                    const Divider(),
-                    const Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text('Pending invitations',
-                            style: TextStyle(fontWeight: FontWeight.w700))),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Pending invitations',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
                     ...invitations.map((invite) => ListTile(
-                          title: Text(invite.email),
-                          subtitle: Text(invite.role),
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            invite.email,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               const Chip(label: Text('Pending')),
                               if (isOwner) ...[
-                                const SizedBox(width: 8),
+                                const SizedBox(width: 4),
                                 IconButton(
                                   icon: const Icon(Icons.cancel_outlined,
                                       size: 18),

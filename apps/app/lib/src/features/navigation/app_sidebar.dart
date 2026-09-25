@@ -28,6 +28,7 @@ class AppSidebar extends StatelessWidget {
     required this.onLogout,
     required this.onOpenAbout,
     required this.onOpenExternal,
+    this.onOpenArchivedProjects,
     this.onToggleCollapse,
     this.compact = false,
   });
@@ -48,6 +49,7 @@ class AppSidebar extends StatelessWidget {
   final VoidCallback onLogout;
   final VoidCallback onOpenAbout;
   final ValueChanged<Uri> onOpenExternal;
+  final VoidCallback? onOpenArchivedProjects;
   final VoidCallback? onToggleCollapse;
   final bool compact;
 
@@ -145,7 +147,7 @@ class AppSidebar extends StatelessWidget {
                       child: Container(
                         height: 32,
                         decoration: BoxDecoration(
-                          color: const Color(0xff181724),
+                          color: ConclaveBrand.navigation,
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: const Color(0xff2d2b40)),
                         ),
@@ -155,76 +157,81 @@ class AppSidebar extends StatelessWidget {
                           builder: (context, _) {
                             final hasText =
                                 searchController?.text.isNotEmpty ?? false;
-                          return Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              const Padding(
-                                padding: EdgeInsets.only(left: 8, right: 4),
-                                child: Icon(
-                                  Icons.search_rounded,
-                                  size: 15,
-                                  color: Colors.white54,
+                            return Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                const Padding(
+                                  padding: EdgeInsets.only(left: 8, right: 4),
+                                  child: Icon(
+                                    Icons.search_rounded,
+                                    size: 15,
+                                    color: Colors.white54,
+                                  ),
                                 ),
-                              ),
-                              Expanded(
-                                child: CallbackShortcuts(
-                                  bindings: {
-                                    const SingleActivator(LogicalKeyboardKey.escape): () {
-                                      searchController?.clear();
-                                      onSearchChanged?.call('');
-                                      onClearSearch?.call();
+                                Expanded(
+                                  child: CallbackShortcuts(
+                                    bindings: {
+                                      const SingleActivator(
+                                          LogicalKeyboardKey.escape): () {
+                                        searchController?.clear();
+                                        onSearchChanged?.call('');
+                                        onClearSearch?.call();
+                                      },
                                     },
-                                  },
-                                  child: TextField(
-                                    controller: searchController,
-                                    focusNode: searchFocusNode,
-                                    onChanged: onSearchChanged,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.white,
-                                    ),
-                                    cursorColor: ConclaveBrand.accent,
-                                    cursorHeight: 14,
-                                    decoration: const InputDecoration(
-                                      hintText: 'Search...',
-                                      hintStyle: TextStyle(
+                                    child: TextField(
+                                      controller: searchController,
+                                      focusNode: searchFocusNode,
+                                      onChanged: onSearchChanged,
+                                      style: const TextStyle(
                                         fontSize: 12,
-                                        color: Colors.white38,
+                                        color: Colors.white,
                                       ),
-                                      isDense: true,
-                                      contentPadding:
-                                          EdgeInsets.symmetric(vertical: 7),
-                                      border: InputBorder.none,
-                                      focusedBorder: InputBorder.none,
-                                      enabledBorder: InputBorder.none,
-                                      errorBorder: InputBorder.none,
-                                      disabledBorder: InputBorder.none,
+                                      cursorColor: ConclaveBrand.accent,
+                                      cursorHeight: 14,
+                                      decoration: const InputDecoration(
+                                        filled: true,
+                                        fillColor: Colors.transparent,
+                                        hoverColor: Colors.transparent,
+                                        focusColor: Colors.transparent,
+                                        hintText: 'Search...',
+                                        hintStyle: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.white38,
+                                        ),
+                                        isDense: true,
+                                        contentPadding:
+                                            EdgeInsets.symmetric(vertical: 7),
+                                        border: InputBorder.none,
+                                        focusedBorder: InputBorder.none,
+                                        enabledBorder: InputBorder.none,
+                                        errorBorder: InputBorder.none,
+                                        disabledBorder: InputBorder.none,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                              if (hasText)
-                                InkWell(
-                                  onTap: onClearSearch,
-                                  borderRadius: BorderRadius.circular(10),
-                                  child: const Padding(
-                                    padding: EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 4),
-                                    child: Icon(
-                                      Icons.close_rounded,
-                                      size: 14,
-                                      color: Colors.white54,
+                                if (hasText)
+                                  InkWell(
+                                    onTap: onClearSearch,
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: const Padding(
+                                      padding: EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 4),
+                                      child: Icon(
+                                        Icons.close_rounded,
+                                        size: 14,
+                                        color: Colors.white54,
+                                      ),
                                     ),
                                   ),
-                                ),
-                            ],
-                          );
-                        },
+                              ],
+                            );
+                          },
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 6),
+                  const SizedBox(width: 6),
                   Tooltip(
                     message: 'New Project',
                     child: IconButton(
@@ -239,10 +246,9 @@ class AppSidebar extends StatelessWidget {
                       constraints:
                           const BoxConstraints(minWidth: 32, minHeight: 32),
                       style: IconButton.styleFrom(
-                        backgroundColor: const Color(0xff181724),
+                        hoverColor: const Color(0xff29283c),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
-                          side: const BorderSide(color: Color(0xff2d2b40)),
                         ),
                       ),
                     ),
@@ -262,10 +268,9 @@ class AppSidebar extends StatelessWidget {
                       constraints:
                           const BoxConstraints(minWidth: 32, minHeight: 32),
                       style: IconButton.styleFrom(
-                        backgroundColor: const Color(0xff181724),
+                        hoverColor: const Color(0xff29283c),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
-                          side: const BorderSide(color: Color(0xff2d2b40)),
                         ),
                       ),
                     ),
@@ -349,12 +354,14 @@ class AppSidebar extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   color: shellContext.isNavActive(
-                                          const StudioNavigation.profileSecurity())
+                                          const StudioNavigation
+                                              .profileSecurity())
                                       ? Colors.white
                                       : Colors.white70,
                                   fontSize: 11.5,
                                   fontWeight: shellContext.isNavActive(
-                                          const StudioNavigation.profileSecurity())
+                                          const StudioNavigation
+                                              .profileSecurity())
                                       ? FontWeight.w600
                                       : FontWeight.w400,
                                 ),
@@ -375,6 +382,7 @@ class AppSidebar extends StatelessWidget {
                   onOpenAbout: onOpenAbout,
                   onOpenExternal: onOpenExternal,
                   onLogout: onLogout,
+                  onOpenArchivedProjects: onOpenArchivedProjects,
                   compact: compact,
                 ),
               ],
@@ -471,6 +479,7 @@ class AppIconRail extends StatelessWidget {
     required this.onLogout,
     required this.onOpenAbout,
     required this.onOpenExternal,
+    this.onOpenArchivedProjects,
     this.onToggleCollapse,
   });
 
@@ -490,6 +499,7 @@ class AppIconRail extends StatelessWidget {
   final VoidCallback onLogout;
   final VoidCallback onOpenAbout;
   final ValueChanged<Uri> onOpenExternal;
+  final VoidCallback? onOpenArchivedProjects;
   final VoidCallback? onToggleCollapse;
 
   Widget _railIconButton({
@@ -555,9 +565,7 @@ class AppIconRail extends StatelessWidget {
         overlayColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.hovered) ||
               states.contains(WidgetState.focused)) {
-            return isDark
-                ? const Color(0xff2a2840)
-                : const Color(0xfff0effa);
+            return isDark ? const Color(0xff2a2840) : const Color(0xfff0effa);
           }
           return null;
         }),
@@ -672,8 +680,8 @@ class AppIconRail extends StatelessWidget {
                     leadingIcon: Icon(
                       Icons.folder_outlined,
                       size: 16,
-                      color: shellContext.isNavActive(
-                              StudioNavigation.project(project.id))
+                      color: shellContext
+                              .isNavActive(StudioNavigation.project(project.id))
                           ? const Color(0xffbcb3ff)
                           : (isDark ? Colors.white70 : Colors.black87),
                     ),
@@ -709,9 +717,8 @@ class AppIconRail extends StatelessWidget {
                               : (isDark ? Colors.white54 : Colors.black54),
                         ),
                       ),
-                      onPressed: () => onNavigateTo(
-                          StudioNavigation.workstream(
-                              project.id, workstream.id)),
+                      onPressed: () => onNavigateTo(StudioNavigation.workstream(
+                          project.id, workstream.id)),
                       child: Padding(
                         padding: const EdgeInsets.only(left: 12),
                         child: Text(
@@ -747,6 +754,7 @@ class AppIconRail extends StatelessWidget {
             onOpenAbout: onOpenAbout,
             onOpenExternal: onOpenExternal,
             onLogout: onLogout,
+            onOpenArchivedProjects: onOpenArchivedProjects,
           ),
           const SizedBox(height: 8),
 
@@ -762,8 +770,8 @@ class AppIconRail extends StatelessWidget {
               child: Container(
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: shellContext.isNavActive(
-                          const StudioNavigation.profileSecurity())
+                  border: shellContext
+                          .isNavActive(const StudioNavigation.profileSecurity())
                       ? Border.all(color: const Color(0xffbcb3ff), width: 2)
                       : null,
                 ),
@@ -928,7 +936,8 @@ class _RailSearchMenuAnchorState extends State<_RailSearchMenuAnchor> {
                         Expanded(
                           child: CallbackShortcuts(
                             bindings: {
-                              const SingleActivator(LogicalKeyboardKey.escape): _handleClearAndClose,
+                              const SingleActivator(LogicalKeyboardKey.escape):
+                                  _handleClearAndClose,
                             },
                             child: TextField(
                               controller: _controller,
@@ -948,6 +957,10 @@ class _RailSearchMenuAnchorState extends State<_RailSearchMenuAnchor> {
                               cursorColor: ConclaveBrand.accent,
                               cursorHeight: 14,
                               decoration: InputDecoration(
+                                filled: true,
+                                fillColor: Colors.transparent,
+                                hoverColor: Colors.transparent,
+                                focusColor: Colors.transparent,
                                 hintText: 'Search or jump to...',
                                 hintStyle: TextStyle(
                                   fontSize: 12,

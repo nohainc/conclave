@@ -16,6 +16,7 @@ class GlobalAppMenu extends StatelessWidget {
     required this.onOpenAbout,
     required this.onOpenExternal,
     required this.onLogout,
+    this.onOpenArchivedProjects,
     this.compact = false,
   });
 
@@ -26,6 +27,7 @@ class GlobalAppMenu extends StatelessWidget {
   final VoidCallback onOpenAbout;
   final ValueChanged<Uri> onOpenExternal;
   final VoidCallback onLogout;
+  final VoidCallback? onOpenArchivedProjects;
   final bool compact;
 
   @override
@@ -71,9 +73,7 @@ class GlobalAppMenu extends StatelessWidget {
             if (isDestructive) {
               return const Color(0xffef4444).withValues(alpha: 0.12);
             }
-            return isDark
-                ? const Color(0xff2a2840)
-                : const Color(0xfff0effa);
+            return isDark ? const Color(0xff2a2840) : const Color(0xfff0effa);
           }
           return null;
         }),
@@ -126,6 +126,19 @@ class GlobalAppMenu extends StatelessWidget {
           },
           child: const Text(
             'Workspaces',
+            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
+          ),
+        ),
+        MenuItemButton(
+          style: itemStyle(),
+          leadingIcon: const Icon(
+            Icons.archive_outlined,
+            size: 16,
+            color: Color(0xffa78bfa),
+          ),
+          onPressed: onOpenArchivedProjects,
+          child: const Text(
+            'Archived Projects',
             style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
           ),
         ),
