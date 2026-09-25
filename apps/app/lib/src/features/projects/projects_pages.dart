@@ -472,9 +472,22 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
 
   void _message(String message) => ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(message),
+          content: Text(
+            message,
+            style: const TextStyle(
+              color: Color(0xfff4f4f6),
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          backgroundColor: const Color(0xff20202a),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
           action: SnackBarAction(
             label: 'Copy',
+            textColor: const Color(0xffb8a9fe),
             onPressed: () {
               Clipboard.setData(ClipboardData(text: message));
             },

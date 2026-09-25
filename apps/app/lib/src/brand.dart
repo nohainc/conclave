@@ -158,6 +158,18 @@ abstract final class ConclaveBrand {
       filledButtonTheme: _filledButtonTheme(),
       outlinedButtonTheme: _outlinedButtonTheme(lightLine),
       chipTheme: _chipTheme(lightSurfaceHover, lightInk),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: const Color(0xff20202a),
+        contentTextStyle: const TextStyle(
+          color: Color(0xfff4f4f6),
+          fontSize: 13,
+          fontFamily: 'Inter',
+        ),
+        actionTextColor: const Color(0xffb8a9fe),
+        disabledActionTextColor: const Color(0xff6e6e7c),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
     );
   }
 
@@ -220,6 +232,21 @@ abstract final class ConclaveBrand {
       filledButtonTheme: _filledButtonTheme(),
       outlinedButtonTheme: _outlinedButtonTheme(darkLine),
       chipTheme: _chipTheme(darkSurfaceHover, darkInk),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: const Color(0xff24242f),
+        contentTextStyle: const TextStyle(
+          color: Color(0xfff4f4f6),
+          fontSize: 13,
+          fontFamily: 'Inter',
+        ),
+        actionTextColor: const Color(0xffb8a9fe),
+        disabledActionTextColor: const Color(0xff9e9eaf),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          side: const BorderSide(color: Color(0xff3e3e4f)),
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
     );
   }
 
