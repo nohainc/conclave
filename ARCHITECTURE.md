@@ -6,7 +6,7 @@ Architecture v6 is the proposed next architecture for collaborative Workstreams 
 
 ## Current v5 model
 
-> **Projects are collaboration. Workspaces provide execution. Workers provide AI/tool capabilities. Accounts provide external AI identity.**
+> **Projects are collaboration. Workspaces provide execution. Workers are configured AI/tool identities. Credential state remains an internal security concern beneath Workers.**
 
 Read:
 - [Architecture v5](docs/architecture/ARCHITECTURE_V5.md)
@@ -24,5 +24,7 @@ Read v6 before new collaboration/execution architecture work:
 - [v6 source audit](docs/architecture/V6_SOURCE_AUDIT.md)
 - [v6 implementation roadmap](docs/roadmaps/ARCHITECTURE_V6_IMPLEMENTATION.md)
 - [ADR-009](docs/decisions/ADR-009-workstreams-isolated-execution.md)
+- [ADR-010](docs/decisions/ADR-010-configured-worker-execution-model.md)
+- [Configured Worker implementation roadmap](docs/roadmaps/CONFIGURED_WORKER_EXECUTION.md)
 
 Architecture v4 and earlier are historical only.

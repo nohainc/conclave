@@ -52,7 +52,7 @@ These are not reasons to rewrite. They identify the safest v6 migration order.
 ### Scheduler
 - `apps/cloud/src/v5-scheduler.ts`;
 - Project-first resource selection;
-- Account authorization independence;
+- configured Worker authorization independence, with credential authorization enforced internally;
 - capacity filtering;
 - Workspace Grant filtering;
 - selection explanation snapshots.
@@ -354,7 +354,7 @@ Do not create an independent ACL universe.
 Use:
 1. Project role as outer bound.
 2. Workstream policy as narrowing.
-3. Account grants remain separate.
+3. Configured Worker authorization remains separate from Workspace Grants; credential authorization remains an internal boundary.
 4. Workspace Grants remain separate.
 
 Recommended checks:
@@ -386,7 +386,7 @@ For stateful_workstream:
 - Workspace is fixed to Workstream Primary Workspace;
 - grant is fixed;
 - checkout/lease required;
-- only Worker/Account/model selection remains dynamic.
+- only configured Worker/model selection remains dynamic; credential readiness is validated beneath the Worker.
 
 ## 12. Concurrency
 
@@ -512,7 +512,7 @@ If clean reset is simpler, prefer clean v6 fixtures.
 7. execution lease/coordinator.
 8. scheduler integration.
 9. checkpoint/recovery.
-10. Account/sponsor policy.
+10. configured Worker/sponsor policy.
 11. Workstream UI.
 12. migration/cleanup.
 13. acceptance.

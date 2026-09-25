@@ -14,14 +14,14 @@ Architecture v5 is normative. Architecture v4 is historical only.
 Conclave AX -> Conclave Cloud -> Workspace -> Worker
 ```
 
-> **Projects are collaboration. Workspaces provide execution. Workers provide AI/tool capabilities. Accounts decide whose external AI credentials are used.**
+> **Projects are collaboration. Workspaces provide execution. Workers are configured AI/tool identities. Credential/package state is managed beneath Workers.**
 
 ## Applications
 
 - **Conclave AX** — the primary Flutter Web application.
 - **Conclave Cloud** — TypeScript control plane on Cloudflare.
 - **Workspace** — one execution environment backed by one enrolled machine/runtime.
-- **Workers** — installable AI/tool integrations such as Codex, Claude Code, OpenAI and Anthropic.
+- **Workers** — configured executable AI/tool identities such as “Codex Personal” or “Claude Review”; each selects a Worker Type and connection and may run on one or more Workspaces.
 - **Conclave AX Forge** — AI-assisted software-development workflow built on the platform.
 
 ## Technology stack
@@ -40,10 +40,11 @@ Conclave AX -> Conclave Cloud -> Workspace -> Worker
 
 - **Project** — the collaboration, history, and authorization boundary.
 - **Workspace** — one machine-backed execution environment owned by one User.
-- **Worker** — one installable AI/tool integration. Installed once per Workspace and usable by eligible assignments.
+- **Worker Type** — installable integration/catalog definition such as Codex or Claude Code.
+- **Worker** — one configured AI/tool identity with a Worker Type, logical external connection, defaults, capabilities, and Workspace bindings.
 - **Workspace Grant** — explicit permission for a Project to use a Workspace.
-- **Account** — user-facing name for a Credential Profile: whose external AI account/API key/subscription is used.
-- **Assignment** — one immutable execution snapshot resolving Project + Workspace + Worker + Account + model/config.
+- **Credential state** — internal authentication metadata/readiness for a Worker on a Workspace; provider secrets remain local to the Workspace secure store.
+- **Assignment** — one immutable execution snapshot resolving Project + Workspace + configured Worker + Worker Type + model/config and authorized credential state.
 
 Worker processes run as separate child processes under Workspace runtime supervision. Workers do not authenticate directly to Conclave Cloud.
 
@@ -54,6 +55,8 @@ Worker processes run as separate child processes under Workspace runtime supervi
 - [Technology Stack](docs/architecture/TECH_STACK.md)
 - [Applications](docs/architecture/APPLICATIONS.md)
 - [v5 implementation roadmap](docs/roadmaps/ARCHITECTURE_V5_IMPLEMENTATION.md)
+- [Configured Worker model](docs/decisions/ADR-010-configured-worker-execution-model.md)
+- [Configured Worker implementation roadmap](docs/roadmaps/CONFIGURED_WORKER_EXECUTION.md)
 - [AI Development Rules](AGENTS.md)
 
 Deployment guidance is in [docs/deployment/CLOUDFLARE.md](docs/deployment/CLOUDFLARE.md).
