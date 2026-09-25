@@ -1,6 +1,6 @@
 # Conclave AX Applications
 
-**Status:** Normative for Architecture v5 and EW-0 execution vocabulary
+**Status:** v6 baseline with proposed v7 execution/runtime changes
 
 Conclave AX has three primary applications and one extension type.
 
@@ -16,12 +16,11 @@ Conclave AX has three primary applications and one extension type.
 
 **Purpose**
 - human authentication;
-- Projects and Chats;
-- Goals/Runs;
+- Projects and Workstreams;
+- Discuss/Work;
 - Workspace management;
-- configured Workers;
-- usage/cost;
-- approvals and evidence.
+- remote Worker inventory and scheduling controls;
+- approvals, evidence and artifacts.
 
 Conclave AX is web-first in v5. Desktop distribution of the main application is not a v5 requirement. Native mobile applications may be added later.
 
@@ -46,67 +45,80 @@ Conclave AX communicates only with Conclave Cloud.
 - human authentication;
 - realtime App connections;
 - Workspace Gateway;
-- Worker catalog/package registry;
-- configured Worker and internal credential authorization;
+- Worker Type/adapter catalog and signed package registry;
+- synchronized configured Worker inventory;
+- Project/Workstream Worker authorization;
 - assignment scheduling;
 - audit/evidence;
-- artifacts;
-- budgets/usage.
+- artifacts.
 
 Conclave Cloud never executes an external AI/model/tool directly.
 
-## 3. Workspace runtime application
+## 3. Conclave Workspace
 
-**Path:** `apps/host` (runtime implementation; user-facing product term is Workspace)
+**Path:** `apps/host`  
+**User-facing product name:** Conclave Workspace
 
 **Technology**
 - Flutter;
 - Dart;
-- native desktop application.
+- native desktop application/runtime.
 
 **Targets**
 - macOS first;
 - Windows;
-- Linux.
+- Linux;
+- headless Linux/server later using the same runtime model.
 
 **Purpose**
-- one Workspace runtime identity;
-- pairing;
-- Cloud WebSocket connection;
-- Worker installation/update/removal;
-- secure local credentials;
-- assignment journal;
-- Worker process supervision;
-- repository/filesystem permissions;
-- logs;
-- Workspace runtime updates;
+- one machine runtime/security identity;
+- pairing and persistent Cloud connection;
+- platform/architecture/runtime reporting;
+- local Work Root and Workstream directories;
+- local configured Worker registry;
+- local provider authentication/secure credentials;
+- Worker adapter install/update/rollback;
+- local permission approval;
+- child-process supervision;
+- assignment execution/cancellation;
+- logs, diagnostics and updates;
 - minimal local UX.
 
-One Workspace runtime is installed per machine. Humans do not sign into or switch accounts inside the runtime; Cloud authorization and Project Workspace Grants determine which Projects may execute through it.
+One normal Conclave Workspace installation runs per machine/OS-user installation.
 
-## 4. Workers
+Configured Workers are created/authenticated locally and belong to exactly one Workspace. Safe Worker inventory is synchronized to Cloud for scheduling and remote control.
 
-**Path:** `workers/<worker-id>`
+Conclave Workspace is background-first. Its GUI is intentionally limited to local concerns such as pairing, Workers, authentication, permissions, current local work, diagnostics and updates.
 
-A Worker is a user-managed configured execution identity. It selects one
-Worker Type, one logical external AI identity, defaults/capabilities, and one
-or more Workspace bindings. Worker Types and local credential state are
-infrastructure/security details beneath the Worker.
+Projects, Workstreams, Discuss, Work orchestration and Project administration remain in Conclave AX.
+
+## 4. Worker Types / adapter packages
+
+**Suggested path:** `workers/<worker-type-id>`
+
+A Worker Type is a signed integration adapter definition, not a user-installed application and not an AI model.
 
 Examples:
 - Codex;
+- Antigravity;
 - Claude Code;
-- OpenAI;
-- Anthropic;
-- Ollama;
-- Web AI;
-- Git/Test.
+- OpenAI API;
+- Gemini API;
+- Anthropic API;
+- Ollama.
 
-Workers execute out-of-process under Workspace runtime supervision.
+Adapter packages are installed/verified by Conclave Workspace and execute out-of-process as child processes.
 
-A Worker does not connect directly to Conclave Cloud and does not hold a Workspace runtime credential.
+One adapter package/version may serve many local configured Workers of the same Worker Type.
 
-Workers are language-independent executable packages. First-party Workers use Dart when practical.
+A configured Worker:
+- belongs to exactly one Workspace;
+- has one local authentication/configuration context;
+- may define default/allowed models;
+- is synchronized to Cloud as safe metadata/readiness;
+- does not connect directly to Conclave Cloud.
+
+Models such as GPT, Gemini Pro/Flash or Claude Sonnet/Opus are configuration, not separate Worker Types.
 
 ## Product vocabulary
 
@@ -115,8 +127,9 @@ Use:
 - Execution;
 - Workspace;
 - Worker;
-- Worker Type when referring to catalog/infrastructure;
-- credential state when referring to internal authentication/readiness.
+- Worker Type when referring to adapter/catalog infrastructure;
+- Conclave Workspace for the machine-side application/runtime;
+- credential state when referring to local authentication/readiness.
 
 Do not expose AI Account or Credential Profile as a peer product resource.
 Those terms may remain in internal/domain code while the migration is in
