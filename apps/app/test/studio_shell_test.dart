@@ -13,13 +13,15 @@ import 'studio_fixture_data.dart';
 
 void main() {
   group('StudioShellContext and isNavActive', () {
-    test('isNavActive correctly isolates Home from projects and workstreams', () {
+    test('isNavActive correctly isolates Home from projects and workstreams',
+        () {
       const homeContext = StudioShellContext(
         navigation: StudioNavigation.home(),
         projects: [],
       );
       expect(homeContext.isNavActive(const StudioNavigation.home()), isTrue);
-      expect(homeContext.isNavActive(const StudioNavigation.projects()), isFalse);
+      expect(
+          homeContext.isNavActive(const StudioNavigation.projects()), isFalse);
       expect(homeContext.isNavActive(const StudioNavigation.hosts()), isFalse);
 
       const projectContext = StudioShellContext(
@@ -27,15 +29,17 @@ void main() {
         projects: [],
       );
       // Home must NOT be active when on a project page
-      expect(projectContext.isNavActive(const StudioNavigation.home()), isFalse);
       expect(
-          projectContext.isNavActive(const StudioNavigation.project('project-1')),
+          projectContext.isNavActive(const StudioNavigation.home()), isFalse);
+      expect(
+          projectContext
+              .isNavActive(const StudioNavigation.project('project-1')),
           isTrue);
       expect(
-          projectContext.isNavActive(const StudioNavigation.project('project-2')),
+          projectContext
+              .isNavActive(const StudioNavigation.project('project-2')),
           isFalse);
-      expect(
-          projectContext.isNavActive(const StudioNavigation.projects()),
+      expect(projectContext.isNavActive(const StudioNavigation.projects()),
           isTrue);
 
       const workstreamContext = StudioShellContext(
@@ -43,13 +47,13 @@ void main() {
         projects: [],
       );
       // Home must NOT be active when on a workstream page
-      expect(workstreamContext.isNavActive(const StudioNavigation.home()), isFalse);
+      expect(workstreamContext.isNavActive(const StudioNavigation.home()),
+          isFalse);
       expect(
           workstreamContext
               .isNavActive(const StudioNavigation.project('project-1')),
           isTrue);
-      expect(
-          workstreamContext.isNavActive(const StudioNavigation.projects()),
+      expect(workstreamContext.isNavActive(const StudioNavigation.projects()),
           isTrue);
     });
 
@@ -105,9 +109,11 @@ void main() {
         navigation: StudioNavigation.accounts(),
         projects: [],
       );
-      expect(accountsCtx.isNavActive(const StudioNavigation.accounts()), isTrue);
+      expect(
+          accountsCtx.isNavActive(const StudioNavigation.accounts()), isTrue);
       expect(accountsCtx.isNavActive(const StudioNavigation.hosts()), isTrue);
-      expect(accountsCtx.isNavActive(const StudioNavigation.projects()), isFalse);
+      expect(
+          accountsCtx.isNavActive(const StudioNavigation.projects()), isFalse);
 
       // Usage route
       const usageCtx = StudioShellContext(
@@ -125,7 +131,8 @@ void main() {
       expect(profileCtx.isNavActive(const StudioNavigation.profileSecurity()),
           isTrue);
       expect(profileCtx.isNavActive(const StudioNavigation.home()), isFalse);
-      expect(profileCtx.isNavActive(const StudioNavigation.projects()), isFalse);
+      expect(
+          profileCtx.isNavActive(const StudioNavigation.projects()), isFalse);
     });
   });
 
@@ -269,7 +276,8 @@ void main() {
       expect(navigatedTo?.kind, StudioRouteKind.hosts);
     });
 
-    testWidgets('Phase 2: bottom user/profile control and separate ⋯ menu hit target',
+    testWidgets(
+        'Phase 2: bottom user/profile control and separate ⋯ menu hit target',
         (tester) async {
       StudioNavigation? navigatedTo;
 
@@ -403,7 +411,8 @@ void main() {
       // Test 4: Documentation
       await tester.tap(find.text('Documentation'));
       await tester.pumpAndSettle();
-      expect(openedExternalUri, Uri.parse('https://conclaveax.com/how-it-works/'));
+      expect(
+          openedExternalUri, Uri.parse('https://conclaveax.com/how-it-works/'));
 
       // Re-open menu
       await tester.tap(find.byTooltip('Application menu'));
@@ -412,7 +421,8 @@ void main() {
       // Test 5: GitHub repository
       await tester.tap(find.text('GitHub repository'));
       await tester.pumpAndSettle();
-      expect(openedExternalUri, Uri.parse('https://github.com/nohainc/conclave'));
+      expect(
+          openedExternalUri, Uri.parse('https://github.com/nohainc/conclave'));
 
       // Re-open menu
       await tester.tap(find.byTooltip('Application menu'));
@@ -507,14 +517,16 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Documentation'));
       await tester.pumpAndSettle();
-      expect(openedExternalUri, Uri.parse('https://conclaveax.com/how-it-works/'));
+      expect(
+          openedExternalUri, Uri.parse('https://conclaveax.com/how-it-works/'));
 
       // Reopen and check GitHub repository
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('GitHub repository'));
       await tester.pumpAndSettle();
-      expect(openedExternalUri, Uri.parse('https://github.com/nohainc/conclave'));
+      expect(
+          openedExternalUri, Uri.parse('https://github.com/nohainc/conclave'));
 
       // Reopen and check Website
       await tester.tap(find.byTooltip('Application menu'));
@@ -868,7 +880,8 @@ void main() {
       expect(navigatedTo?.workstreamId, 'ws-1');
     });
 
-    testWidgets('compact HUD prioritizes leaf entity in breadcrumbs for workstream',
+    testWidgets(
+        'compact HUD prioritizes leaf entity in breadcrumbs for workstream',
         (tester) async {
       tester.view.physicalSize = const Size(500, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -1030,16 +1043,17 @@ void main() {
       // Tapping parent workstream navigates to parent Workstream
       await tester.ensureVisible(find.text('Authentication redesign'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Authentication redesign'), warnIfMissed: false);
+      await tester.tap(find.text('Authentication redesign'),
+          warnIfMissed: false);
       expect(navigatedTo?.kind, StudioRouteKind.workstream);
       expect(navigatedTo?.projectId, 'project-1');
       expect(navigatedTo?.workstreamId, 'ws-1');
     });
 
-    testWidgets('StudioIconRail has 64px width and renders navigation icons and controls',
+    testWidgets(
+        'StudioIconRail has 64px width and renders navigation icons and controls',
         (tester) async {
       StudioNavigation? navigatedTo;
-      var commandPaletteOpened = false;
       var notificationsOpened = false;
       var createProjectOpened = false;
       var collapseToggled = false;
@@ -1063,7 +1077,7 @@ void main() {
                 onNavigateTo: (nav) => navigatedTo = nav,
                 onOpenDrawer: () {},
                 onCreateProject: () => createProjectOpened = true,
-                onOpenCommandPalette: () => commandPaletteOpened = true,
+                onOpenCommandPalette: () {},
                 onOpenNotifications: () => notificationsOpened = true,
                 onToggleTheme: () {},
                 onLogout: () {},
@@ -1136,7 +1150,8 @@ void main() {
       expect(navigatedTo?.kind, StudioRouteKind.hosts);
     });
 
-    testWidgets('Execution status popover opens and displays workspaces and workers',
+    testWidgets(
+        'Execution status popover opens and displays workspaces and workers',
         (tester) async {
       tester.view.physicalSize = const Size(1200, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -1422,7 +1437,8 @@ void main() {
       }
     });
 
-    testWidgets('Project click opens project and toggles expansion only when clicking active project',
+    testWidgets(
+        'Project click opens project and toggles expansion only when clicking active project',
         (tester) async {
       StudioNavigation? navigatedTo;
       String? toggledProjectId;
@@ -1537,7 +1553,8 @@ void main() {
       expect(find.text('Buggy patch'), findsOneWidget);
     });
 
-    testWidgets('Breadcrumb generation and segment navigation across all routes',
+    testWidgets(
+        'Breadcrumb generation and segment navigation across all routes',
         (tester) async {
       tester.view.physicalSize = const Size(1200, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -1630,7 +1647,8 @@ void main() {
       expect(find.text('AI Accounts'), findsOneWidget);
     });
 
-    testWidgets('Execution status popover shows degraded/reconnecting and failed status',
+    testWidgets(
+        'Execution status popover shows degraded/reconnecting and failed status',
         (tester) async {
       tester.view.physicalSize = const Size(1200, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -1690,7 +1708,8 @@ void main() {
       expect(find.text('Offline'), findsOneWidget);
     });
 
-    testWidgets('Command Palette HUD control responds to click in desktop, tablet, and mobile',
+    testWidgets(
+        'Command Palette HUD control responds to click in desktop, tablet, and mobile',
         (tester) async {
       var commandPaletteOpened = false;
 
@@ -1950,7 +1969,8 @@ void main() {
         expandedProjectIds: {'p-1'},
       );
       expect(projectsCtx.isNavActive(const StudioNavigation.home()), isFalse);
-      expect(projectsCtx.isNavActive(const StudioNavigation.projects()), isTrue);
+      expect(
+          projectsCtx.isNavActive(const StudioNavigation.projects()), isTrue);
 
       // 3. On Project detail (/projects/p-1)
       const projectDetailCtx = StudioShellContext(
@@ -1959,8 +1979,10 @@ void main() {
         selectedProject: project,
         expandedProjectIds: {'p-1'},
       );
-      expect(projectDetailCtx.isNavActive(const StudioNavigation.home()), isFalse);
-      expect(projectDetailCtx.isNavActive(const StudioNavigation.projects()), isTrue);
+      expect(
+          projectDetailCtx.isNavActive(const StudioNavigation.home()), isFalse);
+      expect(projectDetailCtx.isNavActive(const StudioNavigation.projects()),
+          isTrue);
 
       // 4. On Workstream detail (/projects/p-1/workstreams/ws-1)
       const workstreamCtx = StudioShellContext(
@@ -1971,7 +1993,8 @@ void main() {
         expandedProjectIds: {'p-1'},
       );
       expect(workstreamCtx.isNavActive(const StudioNavigation.home()), isFalse);
-      expect(workstreamCtx.isNavActive(const StudioNavigation.projects()), isTrue);
+      expect(
+          workstreamCtx.isNavActive(const StudioNavigation.projects()), isTrue);
 
       // 5. On Run detail (/projects/p-1/workstreams/ws-1/runs/r-1)
       const runCtx = StudioShellContext(
@@ -2121,11 +2144,16 @@ void main() {
 
       // Full sidebar visible with project tree, search & alarm button
       expect(find.byType(StudioSidebar), findsOneWidget);
-      expect(find.byType(StudioTopBar), findsNothing); // Top HUD hidden on desktop
-      expect(find.text('Authentication redesign'), findsOneWidget); // sidebar item
-      expect(find.byTooltip('Search or jump to...'), findsOneWidget); // Search on sidebar
-      expect(find.byTooltip('Notifications'), findsOneWidget); // Alarm on sidebar
-      expect(find.byTooltip('Open menu'), findsNothing); // No hamburger on desktop
+      expect(
+          find.byType(StudioTopBar), findsNothing); // Top HUD hidden on desktop
+      expect(
+          find.text('Authentication redesign'), findsOneWidget); // sidebar item
+      expect(find.byTooltip('Search or jump to...'),
+          findsOneWidget); // Search on sidebar
+      expect(
+          find.byTooltip('Notifications'), findsOneWidget); // Alarm on sidebar
+      expect(
+          find.byTooltip('Open menu'), findsNothing); // No hamburger on desktop
 
       // 2. Tablet mode (< 500, test at 400 x 800)
       tester.view.physicalSize = const Size(400, 800);
@@ -2136,7 +2164,8 @@ void main() {
       expect(find.byType(StudioTopBar), findsOneWidget);
       expect(find.byTooltip('Open menu'), findsOneWidget);
       expect(find.text('Conclave AX'), findsOneWidget); // breadcrumb project
-      expect(find.text('Authentication redesign'), findsOneWidget); // breadcrumb workstream
+      expect(find.text('Authentication redesign'),
+          findsOneWidget); // breadcrumb workstream
 
       // Tap hamburger menu to open drawer with full sidebar
       await tester.tap(find.byTooltip('Open menu'));
@@ -2155,7 +2184,8 @@ void main() {
       expect(find.byType(Drawer), findsNothing);
     });
 
-    testWidgets('About dialog displays title, version badge, description, and link action chips',
+    testWidgets(
+        'About dialog displays title, version badge, description, and link action chips',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -2180,10 +2210,12 @@ void main() {
 
       // Assert modal dialog contents
       expect(find.byType(AlertDialog), findsOneWidget);
-      expect(find.text('Conclave AX v0.4.0 • Provider-Independent Core'), findsOneWidget);
+      expect(find.text('Conclave AX v0.4.0 • Provider-Independent Core'),
+          findsOneWidget);
       expect(find.text('Docs'), findsOneWidget);
       expect(find.text('GitHub'), findsOneWidget);
-      expect(find.text('Website'), findsWidgets); // chip + button + menu item if visible
+      expect(find.text('Website'),
+          findsWidgets); // chip + button + menu item if visible
       expect(find.text('Close'), findsOneWidget);
       expect(find.text('Visit website'), findsOneWidget);
 
@@ -2199,4 +2231,3 @@ void _dummyNav(StudioNavigation _) {}
 void _dummyToggle(String _) {}
 void _dummyAction() {}
 void _dummyExternal(Uri _) {}
-
