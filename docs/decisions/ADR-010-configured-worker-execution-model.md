@@ -1,6 +1,6 @@
 # ADR-010: Configured Worker as the User-Facing Execution Identity
 
-**Status:** Accepted
+**Status:** Accepted for v6; ownership/cardinality superseded by ADR-012 for v7
 **Date:** 2026-09-25  
 **Builds on:** ADR-008, ADR-009, Architecture v6
 
@@ -126,7 +126,9 @@ The credential implementation may continue to use internal records during migrat
 
 ### Workspace binding
 
-A Worker may be bound to one or more Workspaces.
+**v6 rule:** A Worker may be bound to one or more Workspaces.
+
+**v7 note:** ADR-012 supersedes this. In v7, a configured Worker belongs to exactly one Conclave Workspace and is created/authenticated locally.
 
 Binding a Worker to a Workspace causes Conclave to converge the required runtime state automatically:
 
@@ -141,8 +143,10 @@ Users should not normally perform a separate "install Worker package" step.
 
 - one Worker Type -> many configured Workers;
 - one configured Worker -> exactly one logical AI identity;
-- one configured Worker -> one or more Workspaces;
+- v6: one configured Worker -> one or more Workspaces;
 - one Workspace -> many configured Workers;
+
+For v7, see ADR-012: configured Worker -> exactly one Workspace.
 - one Project/Workstream may be authorized to use a subset of configured Workers.
 
 ### Roles and workflows
@@ -286,3 +290,17 @@ The previous ADR-004 choice remains valid historical context, but v6 product nee
 - Credential material remains local to each Workspace where required.
 - A Worker has no single mandatory role; Workflows select Workers by role and
   capability.
+
+
+## v7 supersession note
+
+ADR-012 preserves the useful v6 product vocabulary—Workspace, Worker Type, configured Worker, local credential state—but changes configured Worker ownership.
+
+v7 target:
+- configured Worker is created/authenticated locally in Conclave Workspace;
+- configured Worker belongs to exactly one Workspace;
+- Worker Type is a managed adapter;
+- model is configuration;
+- Conclave AX consumes synchronized Worker inventory and controls remote scheduling/use.
+
+The v6 multi-Workspace binding model remains historical migration context only once v7 lands.
