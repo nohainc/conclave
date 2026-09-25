@@ -45,12 +45,12 @@ void main() {
     expect(find.text('Delete'), findsOneWidget);
 
     // Verify 3 Tabs
-    expect(find.text('Workstreams'), findsNWidgets(2)); // Tab and panel title
+    expect(find.text('Workstreams'), findsOneWidget);
     expect(find.text('Workspaces'), findsOneWidget);
     expect(find.text('Members'), findsOneWidget);
 
     // Verify Workstreams Tab contents
-    expect(find.text('Create Workstream'), findsOneWidget);
+    expect(find.byTooltip('Create Workstream'), findsOneWidget);
 
     // Switch to Workspaces Tab
     await tester.tap(find.text('Workspaces'));

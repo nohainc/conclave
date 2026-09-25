@@ -47,10 +47,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Authentication'), findsOneWidget);
-    expect(find.text('Workstreams'), findsNWidgets(2));
+    expect(find.text('Workstreams'), findsOneWidget);
     expect(find.text('Workspaces'), findsOneWidget);
     expect(find.text('Members'), findsOneWidget);
-    expect(find.text('Create Workstream'), findsOneWidget);
+    expect(find.byTooltip('Create Workstream'), findsOneWidget);
     expect(find.text('Overview'), findsNothing);
     expect(find.text('Runs'), findsNothing);
     expect(find.text('Artifacts'), findsNothing);

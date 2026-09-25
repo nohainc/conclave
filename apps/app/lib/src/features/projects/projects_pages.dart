@@ -573,6 +573,7 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
     int maxLines = 1,
     TextStyle? textStyle,
     IconData? prefixIcon,
+    Widget? trailingAction,
   }) {
     final isEditing = _editingField == fieldKey;
     if (isEditing) {
@@ -695,6 +696,10 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
                 });
               },
             ),
+          if (trailingAction != null) ...[
+            const SizedBox(width: 4),
+            trailingAction,
+          ],
         ],
       ),
     );
@@ -704,86 +709,93 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
   Widget build(BuildContext context) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Project Header card with Name, Description, Repository, Instructions and Archive/Delete
-          Card(
-            margin: const EdgeInsets.only(bottom: 18),
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Line 1: Project Name
-                  _buildEditableField(
-                    label: 'Project Name',
-                    fieldKey: 'name',
-                    value: widget.project.name,
-                    placeholder: 'Untitled Project',
-                    controller: _nameController,
-                    textStyle: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.3,
-                    ),
+          // Project Data directly without group control card or horizontal lines
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Line 1: Project Name
+                _buildEditableField(
+                  label: 'Project Name',
+                  fieldKey: 'name',
+                  value: widget.project.name,
+                  placeholder: 'Untitled Project',
+                  controller: _nameController,
+                  textStyle: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
                   ),
-                  const Divider(height: 16),
-                  // Line 2: Description
-                  _buildEditableField(
-                    label: 'Description',
-                    fieldKey: 'description',
-                    value: widget.project.description,
-                    placeholder: 'No project description provided.',
-                    controller: _descriptionController,
-                    maxLines: 2,
+                ),
+                const SizedBox(height: 6),
+                // Line 2: Description with big plus icon on the right
+                _buildEditableField(
+                  label: 'Description',
+                  fieldKey: 'description',
+                  value: widget.project.description,
+                  placeholder: 'No project description provided.',
+                  controller: _descriptionController,
+                  maxLines: 2,
+                  trailingAction: canManage
+                      ? Tooltip(
+                          message: 'Create Workstream',
+                          child: IconButton(
+                            icon: const Icon(Icons.add_circle_outline_rounded, size: 28),
+                            splashRadius: 20,
+                            onPressed: _createWorkstream,
+                          ),
+                        )
+                      : null,
+                ),
+                const SizedBox(height: 6),
+                // Line 3: Repository
+                _buildEditableField(
+                  label: 'Repository',
+                  fieldKey: 'repository',
+                  value: widget.project.repository,
+                  placeholder: 'No repository configured.',
+                  controller: _repositoryController,
+                  prefixIcon: Icons.code_rounded,
+                ),
+                const SizedBox(height: 6),
+                // Line 4: Instructions
+                _buildEditableField(
+                  label: 'Project Instructions',
+                  fieldKey: 'instructions',
+                  value: widget.project.instructions,
+                  placeholder: 'No instructions configured.',
+                  controller: _instructionsController,
+                  maxLines: 3,
+                  prefixIcon: Icons.description_outlined,
+                ),
+                if (isOwner) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: widget.onArchive,
+                        icon: const Icon(Icons.archive_outlined),
+                        label: const Text('Archive'),
+                      ),
+                      TextButton.icon(
+                        onPressed: widget.onDelete,
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('Delete'),
+                        style: TextButton.styleFrom(
+                            foregroundColor: Colors.red.shade700),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  // Line 3: Repository
-                  _buildEditableField(
-                    label: 'Repository',
-                    fieldKey: 'repository',
-                    value: widget.project.repository,
-                    placeholder: 'No repository configured.',
-                    controller: _repositoryController,
-                    prefixIcon: Icons.code_rounded,
-                  ),
-                  const SizedBox(height: 4),
-                  // Line 4: Instructions
-                  _buildEditableField(
-                    label: 'Project Instructions',
-                    fieldKey: 'instructions',
-                    value: widget.project.instructions,
-                    placeholder: 'No instructions configured.',
-                    controller: _instructionsController,
-                    maxLines: 3,
-                    prefixIcon: Icons.description_outlined,
-                  ),
-                  if (isOwner) ...[
-                    const Divider(height: 24),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 8,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        OutlinedButton.icon(
-                          onPressed: widget.onArchive,
-                          icon: const Icon(Icons.archive_outlined),
-                          label: const Text('Archive'),
-                        ),
-                        TextButton.icon(
-                          onPressed: widget.onDelete,
-                          icon: const Icon(Icons.delete_outline),
-                          label: const Text('Delete'),
-                          style: TextButton.styleFrom(
-                              foregroundColor: Colors.red.shade700),
-                        ),
-                      ],
-                    ),
-                  ],
                 ],
-              ),
+              ],
             ),
           ),
 
-          // 3 Tabs: Workstreams, Workspaces, Members
+          // 3 Tabs: Workstreams, Workspaces, Members aligned by center
           DefaultTabController(
             initialIndex: _tabIndex,
             length: 3,
@@ -791,14 +803,17 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
               builder: (tabContext) => Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TabBar(
-                    isScrollable: true,
-                    onTap: (index) => setState(() => _tabIndex = index),
-                    tabs: const [
-                      Tab(text: 'Workstreams'),
-                      Tab(text: 'Workspaces'),
-                      Tab(text: 'Members'),
-                    ],
+                  Center(
+                    child: TabBar(
+                      isScrollable: true,
+                      tabAlignment: TabAlignment.center,
+                      onTap: (index) => setState(() => _tabIndex = index),
+                      tabs: const [
+                        Tab(text: 'Workstreams'),
+                        Tab(text: 'Workspaces'),
+                        Tab(text: 'Members'),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 16),
                   if (_tabIndex == 0)
@@ -814,27 +829,18 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
         ],
       );
 
-  Widget _workstreamsTab() => _ProjectPanel(
-        title: 'Workstreams',
-        subtitle: 'Each Workstream is one focused area of team work.',
+  Widget _workstreamsTab() => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (canManage) ...[
-              Align(
-                alignment: Alignment.centerLeft,
-                child: FilledButton.icon(
-                  onPressed: _createWorkstream,
-                  icon: const Icon(Icons.add),
-                  label: const Text('Create Workstream'),
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
             if (loading)
               const LinearProgressIndicator()
             else if (workstreams.isEmpty)
-              const Text('No Workstreams yet.')
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Text('No workstreams yet.'),
+              )
             else
               Column(
                 children: workstreams.asMap().entries.map((entry) {
@@ -842,10 +848,13 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
                   final workstream = entry.value;
                   return ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.account_tree_outlined),
-                    title: Text(workstream.name),
-                    subtitle: Text(
-                        '${workstream.status} · Lead: ${workstream.lead} · ${workstream.queueStatus}'),
+                    title: Text(
+                      workstream.name,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                     onTap: () => widget.onOpenWorkstream(workstream.id),
                     trailing: canManage
                         ? Row(
