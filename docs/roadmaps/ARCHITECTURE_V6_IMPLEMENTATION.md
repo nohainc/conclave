@@ -17,7 +17,7 @@ For every phase:
 7. remove replaced paths once the new path is proven;
 8. Discuss may never execute;
 9. stateful execution may never use an unleased shared checkout;
-10. AI Account and Workspace Grants remain independent.
+10. Configured Worker authorization and Workspace Grants remain independent; credential security remains enforced beneath Workers.
 
 ---
 
@@ -603,34 +603,37 @@ AI context remains deterministic over long-lived team work.
 
 ---
 
-## V6-17 — Account policy / sponsor mode
+## V6-17 — Configured Worker policy / sponsor mode
 
 ### Workstream policy
-Modes:
-- requester;
-- sponsor;
-- project_shared;
-- explicit_accounts;
-- auto_authorized.
+Operate on configured Workers, not standalone AI Account resources.
+
+Modes may include:
+- requester-owned Workers;
+- sponsor-authorized Workers;
+- Project-shared Workers;
+- explicit Workers;
+- auto-authorized Workers.
 
 ### Sponsor
-- sponsor must authorize Accounts via existing ProjectAccountGrant;
+- sponsor must explicitly authorize configured Worker use;
 - Workstream policy only narrows;
-- usage stores requester and Account owner.
+- underlying provider/credential sharing policy remains authoritative;
+- usage stores requester, Worker owner and credential-owner attribution where required.
 
 ### Budgets
 Optional Workstream budget and per-request estimate.
 
 ### Tests
-- requester own account;
-- sponsor account;
-- revoked grant;
+- requester-owned Worker;
+- sponsor Worker;
+- revoked Worker grant;
 - provider private-only;
 - budget exceeded;
-- Account not installed on Primary Workspace.
+- Worker not ready on Primary Workspace.
 
 ### Exit
-Team execution cost/identity is explicit.
+Team execution cost/identity is explicit through configured Workers.
 
 ---
 
@@ -737,7 +740,7 @@ No polling/full snapshot reload needed for active team work.
 - discussion moderation if needed;
 - Work Request creation;
 - workflow selection;
-- Account selection;
+- Worker selection;
 - checkout provision/recovery;
 - lease;
 - checkpoint;
@@ -799,7 +802,7 @@ One coherent v6 architecture.
 
 1. sign in;
 2. add execution Workspace;
-3. connect Worker/Account;
+3. create/configure Worker and bind it to the Workspace;
 4. create Project;
 5. grant Workspace;
 6. create Workstream;
@@ -831,7 +834,7 @@ Verify:
 - checkout paths never overlap;
 - failed Workstream A Run does not affect B;
 - viewer cannot execute;
-- Account sponsor attribution correct;
+- configured Worker sponsor attribution correct;
 - removal from Project immediately blocks new work.
 
 ### Exit
@@ -851,7 +854,7 @@ Test:
 - Workspace crash during mutation;
 - Cloud/DO restart;
 - failed rollback/quarantine;
-- Account grant revocation;
+- configured Worker/credential authorization revocation;
 - Workspace Grant revocation;
 - malicious Worker permission request;
 - secret redaction.
