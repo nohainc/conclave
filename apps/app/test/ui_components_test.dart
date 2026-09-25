@@ -37,7 +37,7 @@ void main() {
       expect(find.text('Copied'), findsOneWidget);
     });
 
-    testWidgets('renders ToastOverlay and triggers dismiss',
+    testWidgets('renders ToastOverlay and triggers dismiss and copy',
         (WidgetTester tester) async {
       String? dismissedId;
 
@@ -65,6 +65,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Goal created successfully'), findsOneWidget);
+      expect(find.byIcon(Icons.copy_rounded), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.copy_rounded));
+      await tester.pumpAndSettle();
+
       await tester.tap(find.byIcon(Icons.close_rounded));
       expect(dismissedId, 'toast-1');
     });

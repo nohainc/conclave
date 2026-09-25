@@ -135,7 +135,17 @@ class _StudioAppState extends State<ConclaveAppShell> {
 
   void _showSnackBar(String message, {ToastType type = ToastType.info}) {
     _showToast(message, type: type);
-    messengerKey.currentState?.showSnackBar(SnackBar(content: Text(message)));
+    messengerKey.currentState?.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        action: SnackBarAction(
+          label: 'Copy',
+          onPressed: () {
+            Clipboard.setData(ClipboardData(text: message));
+          },
+        ),
+      ),
+    );
   }
 
   void _showToast(String message, {ToastType type = ToastType.info}) {
@@ -1980,67 +1990,74 @@ class _StudioAppState extends State<ConclaveAppShell> {
     var description = '';
     var repository = '';
     var instructions = '';
+
     final values = await showDialog<(String, String?, String?, String?)>(
       context: navigatorKey.currentContext ?? context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Create project'),
-        content: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                autofocus: true,
-                onChanged: (value) => name = value,
-                decoration: const InputDecoration(labelText: 'Project name'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                onChanged: (value) => description = value,
-                decoration: const InputDecoration(
-                  labelText: 'Description (optional)',
+      builder: (dialogContext) {
+        void submit() {
+          Navigator.pop(
+            dialogContext,
+            (
+              name.isEmpty ? 'My first project' : name,
+              description.trim().isEmpty ? null : description.trim(),
+              repository.trim().isEmpty ? null : repository.trim(),
+              instructions.trim().isEmpty ? null : instructions.trim(),
+            ),
+          );
+        }
+
+        return AlertDialog(
+          title: const Text('Create project'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  autofocus: true,
+                  onChanged: (value) => name = value,
+                  onSubmitted: (_) => submit(),
+                  decoration: const InputDecoration(labelText: 'Project name'),
                 ),
-                maxLines: 2,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                onChanged: (value) => repository = value,
-                decoration: const InputDecoration(
-                  labelText: 'Repository (optional)',
+                const SizedBox(height: 12),
+                TextField(
+                  onChanged: (value) => description = value,
+                  decoration: const InputDecoration(
+                    labelText: 'Description (optional)',
+                  ),
+                  maxLines: 2,
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                onChanged: (value) => instructions = value,
-                decoration: const InputDecoration(
-                  labelText: 'Project instructions (optional)',
+                const SizedBox(height: 12),
+                TextField(
+                  onChanged: (value) => repository = value,
+                  onSubmitted: (_) => submit(),
+                  decoration: const InputDecoration(
+                    labelText: 'Repository (optional)',
+                  ),
                 ),
-                maxLines: 2,
-              ),
-            ],
+                const SizedBox(height: 12),
+                TextField(
+                  onChanged: (value) => instructions = value,
+                  decoration: const InputDecoration(
+                    labelText: 'Project instructions (optional)',
+                  ),
+                  maxLines: 2,
+                ),
+              ],
+            ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(
-                dialogContext,
-                (
-                  name.isEmpty ? 'My first project' : name,
-                  description.trim(),
-                  repository.trim(),
-                  instructions.trim(),
-                ),
-              );
-            },
-            child: const Text('Create'),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: submit,
+              child: const Text('Create'),
+            ),
+          ],
+        );
+      },
     );
     if (values == null) return;
     if (mounted) {
@@ -2089,6 +2106,11 @@ class _StudioAppState extends State<ConclaveAppShell> {
         content: TextField(
           controller: nameController,
           autofocus: true,
+          onSubmitted: (_) {
+            if (nameController.text.trim().isNotEmpty) {
+              Navigator.pop(dialogContext, true);
+            }
+          },
           decoration: const InputDecoration(
             labelText: 'Workstream name',
             hintText: 'e.g. Authentication redesign',

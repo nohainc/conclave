@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../studio/studio_data.dart';
 import '../../studio/studio_models.dart';
@@ -273,6 +274,11 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
           controller: name,
           autofocus: true,
           decoration: const InputDecoration(labelText: 'Workstream name'),
+          onSubmitted: (_) {
+            if (name.text.trim().isNotEmpty) {
+              Navigator.pop(dialogContext, true);
+            }
+          },
         ),
         actions: [
           TextButton(
@@ -310,6 +316,11 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
           controller: nameCtrl,
           autofocus: true,
           decoration: const InputDecoration(labelText: 'Workstream name'),
+          onSubmitted: (_) {
+            if (nameCtrl.text.trim().isNotEmpty) {
+              Navigator.pop(dialogContext, true);
+            }
+          },
         ),
         actions: [
           TextButton(
@@ -459,8 +470,17 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
     }
   }
 
-  void _message(String message) => ScaffoldMessenger.of(context)
-      .showSnackBar(SnackBar(content: Text(message)));
+  void _message(String message) => ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          action: SnackBarAction(
+            label: 'Copy',
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: message));
+            },
+          ),
+        ),
+      );
 
   Future<void> _share() async {
     final email = TextEditingController();

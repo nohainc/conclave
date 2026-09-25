@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../brand.dart';
 
 /// Type of Toast notification
@@ -111,6 +112,18 @@ class ToastOverlay extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.copy_rounded, size: 15),
+                    tooltip: 'Copy message',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                    splashRadius: 14,
+                    color: isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted,
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: toast.message));
+                    },
+                  ),
+                  const SizedBox(width: 4),
                   IconButton(
                     icon: const Icon(Icons.close_rounded, size: 16),
                     padding: EdgeInsets.zero,

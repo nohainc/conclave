@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:conclave_app/src/features/navigation/app_sidebar.dart';
@@ -122,6 +123,15 @@ void main() {
 
       expect(controller.text, isEmpty);
       expect(find.byIcon(Icons.close_rounded), findsNothing);
+
+      // Enter text and press Escape
+      await tester.enterText(find.byType(TextField), 'testing escape');
+      await tester.pumpAndSettle();
+      expect(controller.text, 'testing escape');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(controller.text, isEmpty);
     });
 
     testWidgets('SearchPage filters snapshot and renders categorized results',

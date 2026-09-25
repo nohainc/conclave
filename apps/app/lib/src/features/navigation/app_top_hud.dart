@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../brand.dart';
 import '../../navigation/studio_navigation.dart';
@@ -161,31 +162,41 @@ class _AppTopHudState extends State<AppTopHud> {
                           ),
                         ),
                         Expanded(
-                          child: TextField(
-                            controller: widget.searchController,
-                            focusNode: widget.searchFocusNode,
-                            onChanged: widget.onSearchChanged,
-                            autofocus: true,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: inkColor,
-                            ),
-                            cursorColor: ConclaveBrand.accent,
-                            cursorHeight: 14,
-                            decoration: InputDecoration(
-                              hintText: 'Search...',
-                              hintStyle: TextStyle(
+                          child: CallbackShortcuts(
+                            bindings: {
+                              const SingleActivator(LogicalKeyboardKey.escape): () {
+                                widget.onClearSearch?.call();
+                                widget.searchController?.clear();
+                                setState(() => _isSearchExpanded = false);
+                                widget.searchFocusNode?.unfocus();
+                              },
+                            },
+                            child: TextField(
+                              controller: widget.searchController,
+                              focusNode: widget.searchFocusNode,
+                              onChanged: widget.onSearchChanged,
+                              autofocus: true,
+                              style: TextStyle(
                                 fontSize: 13,
-                                color: mutedInk,
+                                color: inkColor,
                               ),
-                              isDense: true,
-                              contentPadding:
-                                  const EdgeInsets.symmetric(vertical: 8),
-                              border: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              errorBorder: InputBorder.none,
-                              disabledBorder: InputBorder.none,
+                              cursorColor: ConclaveBrand.accent,
+                              cursorHeight: 14,
+                              decoration: InputDecoration(
+                                hintText: 'Search...',
+                                hintStyle: TextStyle(
+                                  fontSize: 13,
+                                  color: mutedInk,
+                                ),
+                                isDense: true,
+                                contentPadding:
+                                    const EdgeInsets.symmetric(vertical: 8),
+                                border: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                errorBorder: InputBorder.none,
+                                disabledBorder: InputBorder.none,
+                              ),
                             ),
                           ),
                         ),

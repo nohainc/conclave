@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../brand.dart';
 import '../../navigation/studio_navigation.dart';
@@ -166,30 +167,39 @@ class AppSidebar extends StatelessWidget {
                                 ),
                               ),
                               Expanded(
-                                child: TextField(
-                                  controller: searchController,
-                                  focusNode: searchFocusNode,
-                                  onChanged: onSearchChanged,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.white,
-                                  ),
-                                  cursorColor: ConclaveBrand.accent,
-                                  cursorHeight: 14,
-                                  decoration: const InputDecoration(
-                                    hintText: 'Search...',
-                                    hintStyle: TextStyle(
+                                child: CallbackShortcuts(
+                                  bindings: {
+                                    const SingleActivator(LogicalKeyboardKey.escape): () {
+                                      searchController?.clear();
+                                      onSearchChanged?.call('');
+                                      onClearSearch?.call();
+                                    },
+                                  },
+                                  child: TextField(
+                                    controller: searchController,
+                                    focusNode: searchFocusNode,
+                                    onChanged: onSearchChanged,
+                                    style: const TextStyle(
                                       fontSize: 12,
-                                      color: Colors.white38,
+                                      color: Colors.white,
                                     ),
-                                    isDense: true,
-                                    contentPadding:
-                                        EdgeInsets.symmetric(vertical: 7),
-                                    border: InputBorder.none,
-                                    focusedBorder: InputBorder.none,
-                                    enabledBorder: InputBorder.none,
-                                    errorBorder: InputBorder.none,
-                                    disabledBorder: InputBorder.none,
+                                    cursorColor: ConclaveBrand.accent,
+                                    cursorHeight: 14,
+                                    decoration: const InputDecoration(
+                                      hintText: 'Search...',
+                                      hintStyle: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.white38,
+                                      ),
+                                      isDense: true,
+                                      contentPadding:
+                                          EdgeInsets.symmetric(vertical: 7),
+                                      border: InputBorder.none,
+                                      focusedBorder: InputBorder.none,
+                                      enabledBorder: InputBorder.none,
+                                      errorBorder: InputBorder.none,
+                                      disabledBorder: InputBorder.none,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -916,39 +926,44 @@ class _RailSearchMenuAnchorState extends State<_RailSearchMenuAnchor> {
                           ),
                         ),
                         Expanded(
-                          child: TextField(
-                            controller: _controller,
-                            focusNode: _focusNode,
-                            onChanged: widget.onSearchChanged,
-                            onSubmitted: (text) {
-                              widget.onNavigateTo(
-                                  const StudioNavigation.search());
-                              _menuController.close();
+                          child: CallbackShortcuts(
+                            bindings: {
+                              const SingleActivator(LogicalKeyboardKey.escape): _handleClearAndClose,
                             },
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: widget.isDark
-                                  ? Colors.white
-                                  : Colors.black87,
-                            ),
-                            cursorColor: ConclaveBrand.accent,
-                            cursorHeight: 14,
-                            decoration: InputDecoration(
-                              hintText: 'Search or jump to...',
-                              hintStyle: TextStyle(
+                            child: TextField(
+                              controller: _controller,
+                              focusNode: _focusNode,
+                              onChanged: widget.onSearchChanged,
+                              onSubmitted: (text) {
+                                widget.onNavigateTo(
+                                    const StudioNavigation.search());
+                                _menuController.close();
+                              },
+                              style: TextStyle(
                                 fontSize: 12,
                                 color: widget.isDark
-                                    ? Colors.white38
-                                    : Colors.black38,
+                                    ? Colors.white
+                                    : Colors.black87,
                               ),
-                              isDense: true,
-                              contentPadding:
-                                  const EdgeInsets.symmetric(vertical: 8),
-                              border: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              errorBorder: InputBorder.none,
-                              disabledBorder: InputBorder.none,
+                              cursorColor: ConclaveBrand.accent,
+                              cursorHeight: 14,
+                              decoration: InputDecoration(
+                                hintText: 'Search or jump to...',
+                                hintStyle: TextStyle(
+                                  fontSize: 12,
+                                  color: widget.isDark
+                                      ? Colors.white38
+                                      : Colors.black38,
+                                ),
+                                isDense: true,
+                                contentPadding:
+                                    const EdgeInsets.symmetric(vertical: 8),
+                                border: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                errorBorder: InputBorder.none,
+                                disabledBorder: InputBorder.none,
+                              ),
                             ),
                           ),
                         ),
