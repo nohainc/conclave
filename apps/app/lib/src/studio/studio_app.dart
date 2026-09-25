@@ -117,6 +117,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
   StudioAccountSecurity? accountSecurity;
   bool accountSecurityLoading = false;
   ThemeMode _themeMode = ThemeMode.system;
+  bool _desktopSidebarCollapsed = false;
   final List<ToastMessage> activeToasts = [];
   String usageRange = '30d';
   String usageProjectFilter = 'all';
@@ -243,8 +244,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
         themeMode: _themeMode,
         realtimeStale: realtimeStale,
         realtimeNotice: realtimeNotice,
-        viewerDisplayName: store.auth.viewer?.displayName ??
-            snapshot.viewer?.displayName,
+        viewerDisplayName:
+            store.auth.viewer?.displayName ?? snapshot.viewer?.displayName,
         viewerEmail: store.auth.viewer?.email ?? snapshot.viewer?.email,
         expandedProjectIds: expandedProjectIds,
       );
@@ -403,32 +404,114 @@ class _StudioAppState extends State<ConclaveAppShell> {
   Future<void> _showAboutConclave() {
     final dialogContext = navigatorKey.currentState?.context ?? context;
     return showDialog<void>(
-        context: dialogContext,
-        builder: (dialogContext) => AlertDialog(
-              title: Row(
+      context: dialogContext,
+      builder: (dialogContext) => AlertDialog(
+        title: Row(
+          children: [
+            ConclaveBrand.logoMark(size: 26),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'About Conclave AX',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Conclave AX coordinates AI Workers across models and machines to research, implement, review, test, and verify complex work.',
+                style: TextStyle(fontSize: 13.5, height: 1.45),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xff7c6cf0).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.verified_outlined,
+                      size: 14,
+                      color: Color(0xff9e95ff),
+                    ),
+                    SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        'Conclave AX v0.4.0 • Provider-Independent Core',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xff9e95ff),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Divider(height: 1),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
                 children: [
-                  ConclaveBrand.logoMark(size: 24),
-                  const SizedBox(width: 10),
-                  const Text('About Conclave AX'),
+                  ActionChip(
+                    avatar: const Icon(Icons.menu_book_rounded, size: 14),
+                    label: const Text('Docs', style: TextStyle(fontSize: 12)),
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop();
+                      browserNavigation.openExternal(
+                          Uri.parse('https://conclaveax.com/how-it-works/'));
+                    },
+                  ),
+                  ActionChip(
+                    avatar: const Icon(Icons.code_rounded, size: 14),
+                    label: const Text('GitHub', style: TextStyle(fontSize: 12)),
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop();
+                      browserNavigation.openExternal(
+                          Uri.parse('https://github.com/nohainc/conclave'));
+                    },
+                  ),
+                  ActionChip(
+                    avatar: const Icon(Icons.public_rounded, size: 14),
+                    label: const Text('Website', style: TextStyle(fontSize: 12)),
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop();
+                      browserNavigation
+                          .openExternal(Uri.parse('https://conclaveax.com'));
+                    },
+                  ),
                 ],
               ),
-              content: const Text(
-                  'Conclave AX coordinates AI Workers across models and machines to research, implement, review, test, and verify complex work.'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Close'),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    Navigator.of(dialogContext).pop();
-                    browserNavigation
-                        .openExternal(Uri.parse('https://conclaveax.com'));
-                  },
-                  child: const Text('Visit website'),
-                ),
-              ],
-            ));
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Close'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              browserNavigation
+                  .openExternal(Uri.parse('https://conclaveax.com'));
+            },
+            child: const Text('Visit website'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadWorkspaces() async {
@@ -968,8 +1051,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
     setState(() {
       navigation = next;
       selectedProjectId = next.projectId ?? selectedProjectId;
-      selectedChatId =
-          next.kind == StudioRouteKind.chat ? next.chatId : null;
+      selectedChatId = next.kind == StudioRouteKind.chat ? next.chatId : null;
       if (next.kind == StudioRouteKind.workstream && next.projectId != null) {
         expandedProjectIds.add(next.projectId!);
       }
@@ -1000,8 +1082,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
     setState(() {
       navigation = next;
       selectedProjectId = next.projectId ?? selectedProjectId;
-      selectedChatId =
-          next.kind == StudioRouteKind.chat ? next.chatId : null;
+      selectedChatId = next.kind == StudioRouteKind.chat ? next.chatId : null;
       if (next.kind == StudioRouteKind.workstream && next.projectId != null) {
         expandedProjectIds.add(next.projectId!);
       }
@@ -1535,10 +1616,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
       themeMode: _themeMode,
       home: CallbackShortcuts(
         bindings: <ShortcutActivator, VoidCallback>{
-          const SingleActivator(LogicalKeyboardKey.keyK, meta: true):
-              _focusSearch,
-          const SingleActivator(LogicalKeyboardKey.keyK, control: true):
-              _focusSearch,
           const SingleActivator(LogicalKeyboardKey.keyN, meta: true):
               _handleContextualCreate,
           const SingleActivator(LogicalKeyboardKey.keyN, control: true):
@@ -1553,7 +1630,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   if (isLoading) return _loadingScaffold();
                   if (authRequired) return _authScaffold();
                   if (loadError != null) return _errorScaffold();
-                  final isDesktop = ConclaveBrand.isDesktop(constraints.maxWidth);
+                  final isDesktop =
+                      ConclaveBrand.isDesktop(constraints.maxWidth);
                   final shell = _shellContext;
 
                   return Scaffold(
@@ -1584,29 +1662,55 @@ class _StudioAppState extends State<ConclaveAppShell> {
                     body: Row(
                       children: [
                         if (isDesktop)
-                          SizedBox(
-                            width: 248,
-                            child: StudioSidebar(
-                              shellContext: shell,
-                              onNavigateTo: _navigateTo,
-                              onToggleProjectExpanded:
-                                  _toggleProjectExpanded,
-                              onCreateProject: _createProject,
-                              onCreateWorkstream: _createWorkstream,
-                              searchController: _searchQueryController,
-                              searchFocusNode: _searchFocusNode,
-                              onClearSearch: _clearSearch,
-                              onOpenCommandPalette: _openCommandPalette,
-                              onOpenNotifications: _showNotifications,
-                              onToggleTheme: _toggleTheme,
-                              onSetThemeMode: _setThemeMode,
-                              onLogout: () => unawaited(_logout()),
-                              onOpenAbout: () =>
-                                  unawaited(_showAboutConclave()),
-                              onOpenExternal: (uri) =>
-                                  browserNavigation.openExternal(uri),
-                            ),
-                          ),
+                          _desktopSidebarCollapsed
+                              ? StudioIconRail(
+                                  shellContext: shell,
+                                  onNavigateTo: _navigateTo,
+                                  onOpenDrawer: () {},
+                                  onCreateProject: _createProject,
+                                  onCreateWorkstream: _createWorkstream,
+                                  searchController: _searchQueryController,
+                                  searchFocusNode: _searchFocusNode,
+                                  onSearchChanged: (_) =>
+                                      _onSearchQueryChanged(),
+                                  onClearSearch: _clearSearch,
+                                  onOpenCommandPalette: _openCommandPalette,
+                                  onOpenNotifications: _showNotifications,
+                                  onToggleTheme: _toggleTheme,
+                                  onSetThemeMode: _setThemeMode,
+                                  onLogout: () => unawaited(_logout()),
+                                  onOpenAbout: () =>
+                                      unawaited(_showAboutConclave()),
+                                  onOpenExternal: (uri) =>
+                                      browserNavigation.openExternal(uri),
+                                  onToggleCollapse: () => setState(() =>
+                                      _desktopSidebarCollapsed = false),
+                                )
+                              : SizedBox(
+                                  width: 248,
+                                  child: StudioSidebar(
+                                    shellContext: shell,
+                                    onNavigateTo: _navigateTo,
+                                    onToggleProjectExpanded:
+                                        _toggleProjectExpanded,
+                                    onCreateProject: _createProject,
+                                    onCreateWorkstream: _createWorkstream,
+                                    searchController: _searchQueryController,
+                                    searchFocusNode: _searchFocusNode,
+                                    onClearSearch: _clearSearch,
+                                    onOpenCommandPalette: _openCommandPalette,
+                                    onOpenNotifications: _showNotifications,
+                                    onToggleTheme: _toggleTheme,
+                                    onSetThemeMode: _setThemeMode,
+                                    onLogout: () => unawaited(_logout()),
+                                    onOpenAbout: () =>
+                                        unawaited(_showAboutConclave()),
+                                    onOpenExternal: (uri) =>
+                                        browserNavigation.openExternal(uri),
+                                    onToggleCollapse: () => setState(() =>
+                                        _desktopSidebarCollapsed = true),
+                                  ),
+                                ),
                         Expanded(
                           child: _content(
                             compact: !isDesktop,
@@ -1702,6 +1806,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                     if (!resetPassword && authSignUp) ...[
                       TextField(
                         controller: authNameController,
+                        autofocus: true,
                         textInputAction: TextInputAction.next,
                         decoration: const InputDecoration(labelText: 'Name'),
                       ),
@@ -1710,8 +1815,15 @@ class _StudioAppState extends State<ConclaveAppShell> {
                     if (!resetPassword) ...[
                       TextField(
                         controller: authEmailController,
+                        autofocus: !authSignUp,
                         keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.next,
+                        textInputAction:
+                            authResetRequest ? TextInputAction.done : TextInputAction.next,
+                        onSubmitted: (_) {
+                          if (authResetRequest) {
+                            _submitEmailAuth();
+                          }
+                        },
                         decoration: const InputDecoration(labelText: 'Email'),
                       ),
                       if (!authResetRequest) const SizedBox(height: 10),
@@ -1719,8 +1831,15 @@ class _StudioAppState extends State<ConclaveAppShell> {
                     if (resetPassword || !authResetRequest) ...[
                       TextField(
                         controller: authPasswordController,
+                        autofocus: resetPassword,
                         obscureText: true,
-                        textInputAction: TextInputAction.next,
+                        textInputAction:
+                            (!authSignUp && !resetPassword) ? TextInputAction.done : TextInputAction.next,
+                        onSubmitted: (_) {
+                          if (!authSignUp && !resetPassword) {
+                            _submitEmailAuth();
+                          }
+                        },
                         decoration:
                             const InputDecoration(labelText: 'Password'),
                       ),
@@ -2332,6 +2451,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
       onEdit: () => _editProject(project),
       onArchive: () => _archiveProject(project),
       onDelete: () => _deleteProject(project.id),
+      onProjectUpdated: (updated) async {
+        await _loadSnapshot(projectId: project.id, showSpinner: false);
+      },
     );
   }
 
@@ -2347,8 +2469,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
     return WorkstreamPage(
       project: project,
       workstream: workstream,
-      onBackToProject: () =>
-          _navigateTo(StudioNavigation.project(project.id)),
+      onBackToProject: () => _navigateTo(StudioNavigation.project(project.id)),
       onArchive: () async {
         try {
           await widget.dataSource.deleteWorkstream(workstreamId: workstream.id);
@@ -2662,7 +2783,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                     fontWeight: FontWeight.w700,
                     color: Color(0xff20202c))),
             const SizedBox(height: 5),
-          const Text(
+            const Text(
                 'Historical discussion. Create or open a Workstream for execution.',
                 style: TextStyle(color: Color(0xff777683), fontSize: 13)),
           ]),
@@ -2676,7 +2797,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
       const SizedBox(height: 22),
       _panel(
         title: 'Conversation',
-          subtitle: '${messages.length} messages · discussion only',
+        subtitle: '${messages.length} messages · discussion only',
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -3658,8 +3779,25 @@ class _StudioAppState extends State<ConclaveAppShell> {
     );
   }
 
+  List<StudioAgent> _workspaceCards() => store.workspaces.items
+      .map(
+        (workspace) => StudioAgent(
+          id: workspace.id,
+          name: workspace.name,
+          hostname: '—',
+          status: workspace.status,
+          version: '—',
+          pluginCount: 0,
+          workerCount: 0,
+          activeTaskCount: 0,
+          lastSeen: '—',
+        ),
+      )
+      .toList(growable: false);
+
   Widget _hostsView({int initialTab = 0}) => WorkspacesPage(
-        workspaces: snapshot.agents,
+        workspaces:
+            _workspaceCards().isNotEmpty ? _workspaceCards() : snapshot.agents,
         workers: snapshot.workers,
         accounts: snapshot.accounts,
         plugins: snapshot.plugins,

@@ -63,6 +63,7 @@ class StudioFixtureDataSource implements StudioDataSource {
     String? repository,
     String? instructions,
     String? defaultExecutionPolicy,
+    Map<String, dynamic>? settings,
   }) async {
     final project = studioFixtureSnapshot()
         .projects
@@ -76,6 +77,7 @@ class StudioFixtureDataSource implements StudioDataSource {
       activeGoals: project?.activeGoals ?? 0,
       lastActivity: 'Just now',
       description: description ?? project?.description ?? '',
+      settings: settings ?? project?.settings ?? const {},
     );
   }
 
@@ -141,6 +143,11 @@ class StudioFixtureDataSource implements StudioDataSource {
   Future<void> expireProjectInvitation({
     required String projectId,
     required String invitationId,
+  }) async {}
+
+  @override
+  Future<void> revokeWorkspaceProjectGrant({
+    required String grantId,
   }) async {}
 
   @override

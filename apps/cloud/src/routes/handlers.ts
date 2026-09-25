@@ -124,23 +124,36 @@ async function recordAudit(
   targetType: string,
   targetId: string,
   details: Record<string, unknown> = {},
+  resourceWorkspaceId?: string,
 ): Promise<void> {
-  await env.CONCLAVE_DB.prepare(
-    `INSERT INTO audit_log
-       (id, workspace_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
-     VALUES (?1, ?2, 'user', ?3, ?4, ?5, ?6, ?7, ?8)`,
-  )
-    .bind(
-      `audit-${crypto.randomUUID()}`,
-      context.workspaceId,
-      context.userId,
-      action,
-      targetType,
-      targetId,
-      JSON.stringify(details),
-      new Date().toISOString(),
+  const auditWorkspaceId = resourceWorkspaceId ?? context.workspaceId;
+  const values = [
+    `audit-${crypto.randomUUID()}`,
+    auditWorkspaceId,
+    context.userId,
+    action,
+    targetType,
+    targetId,
+    JSON.stringify(details),
+    new Date().toISOString(),
+  ] as const;
+  try {
+    await env.CONCLAVE_DB.prepare(
+      `INSERT INTO audit_log
+         (id, workspace_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
+       VALUES (?1, ?2, 'user', ?3, ?4, ?5, ?6, ?7, ?8)`,
     )
-    .run();
+      .bind(...values)
+      .run();
+  } catch {
+    await env.CONCLAVE_DB.prepare(
+      `INSERT INTO workspace_audit_log
+         (id, workspace_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
+       VALUES (?1, ?2, 'user', ?3, ?4, ?5, ?6, ?7, ?8)`,
+    )
+      .bind(...values)
+      .run();
+  }
 }
 
 function errorMessage(error: unknown): string {
@@ -946,44 +959,45 @@ async function handleListWorkspaces(
       ],
     });
   }
-  const rows = await env.CONCLAVE_DB.prepare(
-    `SELECT id, name, status, 'owner' AS role,
-            created_at AS createdAt, updated_at AS updatedAt
-     FROM execution_workspaces
-     WHERE owner_user_id = ?1
-     ORDER BY name ASC`,
-  )
-    .bind(context.userId)
-    .all<{
-      id: string;
-      name: string;
-      slug: string;
-      status: string;
-      role: string;
-      createdAt: string;
-      updatedAt: string;
-    }>()
-    .catch(async () => {
-      return await env.CONCLAVE_DB.prepare(
-        `SELECT w.id, w.name, w.status, wm.role,
-                w.created_at AS createdAt, w.updated_at AS updatedAt
-         FROM workspaces w
-         JOIN workspace_memberships wm ON wm.workspace_id = w.id
-         WHERE wm.user_id = ?1
-         ORDER BY w.name ASC`,
-      )
-        .bind(context.userId)
-        .all<{
-          id: string;
-          name: string;
-          slug: string;
-          status: string;
-          role: string;
-          createdAt: string;
-          updatedAt: string;
-        }>()
-        .catch(() => ({ results: [] }));
-    });
+  const rows =
+    context.authorizationModel === "v5"
+      ? await env.CONCLAVE_DB.prepare(
+          `SELECT id, name, status, 'owner' AS role,
+                  created_at AS createdAt, updated_at AS updatedAt
+           FROM execution_workspaces
+           WHERE owner_user_id = ?1
+           ORDER BY name ASC`,
+        )
+          .bind(context.userId)
+          .all<{
+            id: string;
+            name: string;
+            slug: string;
+            status: string;
+            role: string;
+            createdAt: string;
+            updatedAt: string;
+          }>()
+          .catch(() => ({ results: [] }))
+      : await env.CONCLAVE_DB.prepare(
+          `SELECT w.id, w.name, w.status, wm.role,
+                  w.created_at AS createdAt, w.updated_at AS updatedAt
+           FROM workspaces w
+           JOIN workspace_memberships wm ON wm.workspace_id = w.id
+           WHERE wm.user_id = ?1
+           ORDER BY w.name ASC`,
+        )
+          .bind(context.userId)
+          .all<{
+            id: string;
+            name: string;
+            slug: string;
+            status: string;
+            role: string;
+            createdAt: string;
+            updatedAt: string;
+          }>()
+          .catch(() => ({ results: [] }));
   return json({ workspaces: rows.results ?? [] });
 }
 
@@ -2285,6 +2299,35 @@ async function handleGetProject(
     projectId,
     accessContext,
   );
+  if (context.authorizationModel === "v5") {
+    const row = await env.CONCLAVE_DB.prepare(
+      `SELECT p.id, p.name, p.description, p.repository_id AS repositoryId,
+              p.settings_json AS settingsJson, p.created_at AS createdAt, p.updated_at AS updatedAt
+       FROM projects p WHERE p.id = ?1`,
+    )
+      .bind(projectId)
+      .first<{
+        id: string;
+        name: string;
+        description: string | null;
+        repositoryId: string | null;
+        settingsJson: string;
+        createdAt: string;
+        updatedAt: string;
+      }>();
+    if (!row) throw new HttpError(404, "Project not found");
+    return json({
+      project: {
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        repositoryId: row.repositoryId,
+        settings: parseJson(row.settingsJson),
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      },
+    });
+  }
   const row = await env.CONCLAVE_DB.prepare(
     `SELECT p.id, p.workspace_id AS workspaceId, p.name, p.description, p.repository_id AS repositoryId,
             p.settings_json AS settingsJson, p.created_at AS createdAt, p.updated_at AS updatedAt
@@ -2329,6 +2372,74 @@ async function handleUpdateProject(
     projectId,
     accessContext,
   );
+  if (context.authorizationModel === "v5") {
+    const existing = await env.CONCLAVE_DB.prepare(
+      `SELECT id, name, description,
+              repository_id AS repositoryId, settings_json AS settingsJson,
+              created_at AS createdAt, updated_at AS updatedAt
+       FROM projects WHERE id = ?1`,
+    )
+      .bind(projectId)
+      .first<{
+        id: string;
+        name: string;
+        description: string | null;
+        repositoryId: string | null;
+        settingsJson: string;
+        createdAt: string;
+        updatedAt: string;
+      }>();
+    if (!existing) throw new HttpError(404, "Project not found");
+
+    const body = (await request.json()) as Record<string, unknown>;
+    const settings = {
+      ...parseJson(existing.settingsJson),
+      ...(typeof body.settings === "object" && body.settings !== null
+        ? (body.settings as Record<string, unknown>)
+        : {}),
+    };
+    if (body.archived === true) settings.archived = true;
+    if (body.archived === false) settings.archived = false;
+    const now = new Date().toISOString();
+    const project = {
+      id: existing.id,
+      name:
+        typeof body.name === "string"
+          ? requiredString(body.name, "name")
+          : existing.name,
+      description:
+        body.description === null
+          ? null
+          : typeof body.description === "string"
+            ? body.description
+            : existing.description,
+      repositoryId:
+        body.repositoryId === null
+          ? null
+          : typeof body.repositoryId === "string"
+            ? body.repositoryId
+            : existing.repositoryId,
+      settings,
+      createdAt: existing.createdAt,
+      updatedAt: now,
+    };
+    await env.CONCLAVE_DB.prepare(
+      `UPDATE projects SET name = ?1, description = ?2, repository_id = ?3,
+         settings_json = ?4, updated_at = ?5
+       WHERE id = ?6`,
+    )
+      .bind(
+        project.name,
+        project.description,
+        project.repositoryId,
+        JSON.stringify(project.settings),
+        now,
+        projectId,
+      )
+      .run();
+    return json({ project });
+  }
+
   const existing = await env.CONCLAVE_DB.prepare(
     `SELECT id, workspace_id AS workspaceId, name, description,
             repository_id AS repositoryId, settings_json AS settingsJson,
@@ -2427,6 +2538,15 @@ async function handleDeleteProject(
         error instanceof Error ? error.message : "Forbidden",
       );
     }
+    const result = await env.CONCLAVE_DB.prepare(
+      "DELETE FROM projects WHERE id = ?1",
+    )
+      .bind(projectId)
+      .run();
+    if (!result.success || (result.meta?.changes ?? 0) === 0) {
+      throw new HttpError(404, "Project not found");
+    }
+    return json({ projectId, deleted: true });
   }
   const result = await env.CONCLAVE_DB.prepare(
     "DELETE FROM projects WHERE id = ?1 AND workspace_id = ?2",
@@ -3206,6 +3326,34 @@ function workstreamMetadata(row: Record<string, unknown>): Record<string, unknow
   };
 }
 
+export function sortWorkstreams<T extends Record<string, unknown>>(
+  workstreams: T[],
+  workstreamOrder?: unknown,
+): T[] {
+  const hasCustomOrder =
+    Array.isArray(workstreamOrder) && workstreamOrder.length > 0;
+  const orderMap = new Map<string, number>();
+  if (hasCustomOrder) {
+    (workstreamOrder as unknown[]).forEach((id, index) => {
+      if (typeof id === "string") orderMap.set(id, index);
+    });
+  }
+  return [...workstreams].sort((a, b) => {
+    const aId = String(a.id ?? "");
+    const bId = String(b.id ?? "");
+    if (hasCustomOrder) {
+      const aIndex = orderMap.has(aId) ? orderMap.get(aId)! : 999999;
+      const bIndex = orderMap.has(bId) ? orderMap.get(bId)! : 999999;
+      if (aIndex !== bIndex) {
+        return aIndex - bIndex;
+      }
+    }
+    const aCreated = String(a.createdAt ?? a.created_at ?? "");
+    const bCreated = String(b.createdAt ?? b.created_at ?? "");
+    return aCreated.localeCompare(bCreated);
+  });
+}
+
 export async function handleListProjectWorkstreams(
   request: Request,
   env: SecurityEnv,
@@ -3213,16 +3361,26 @@ export async function handleListProjectWorkstreams(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   await authorizeRequest(request, env, "project:read", projectId, accessContext);
+  const projectRow = await env.CONCLAVE_DB.prepare(
+    `SELECT settings_json AS settingsJson FROM projects WHERE id = ?1`,
+  )
+    .bind(projectId)
+    .first<{ settingsJson: string | null }>();
+  const settings = parseJson(projectRow?.settingsJson);
+
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT id, project_id AS projectId, name, status,
             access_policy_json AS accessPolicyJson,
             lead_user_id AS leadUserId,
             created_at AS createdAt, updated_at AS updatedAt
-     FROM workstreams WHERE project_id = ?1 ORDER BY updated_at DESC`,
+     FROM workstreams WHERE project_id = ?1 ORDER BY created_at ASC`,
   )
     .bind(projectId)
     .all<Record<string, unknown>>();
-  return json({ workstreams: (rows.results ?? []).map(workstreamMetadata) });
+
+  const raw = (rows.results ?? []).map(workstreamMetadata);
+  const workstreams = sortWorkstreams(raw, settings.workstreamOrder);
+  return json({ workstreams });
 }
 
 export async function handleCreateWorkstream(
@@ -4023,6 +4181,7 @@ async function handleCreateHostEnrollment(
     "workspace_enrollment",
     enrollmentId,
     { expiresAt, oneTime: true },
+    workspaceId,
   );
 
   return json(
@@ -4240,6 +4399,43 @@ async function handleListHosts(
   const context = await securityContext(request, env, ctx);
   authorize(context, "host.view");
   await requireWorkspaceContext(context, env, workspaceId);
+
+  if (context.authorizationModel === "v5") {
+    const workspace = await env.CONCLAVE_DB.prepare(
+      `SELECT id, name, status, created_at AS createdAt, updated_at AS updatedAt
+       FROM execution_workspaces
+       WHERE id = ?1 AND owner_user_id = ?2`,
+    )
+      .bind(workspaceId, context.userId)
+      .first<{
+        id: string;
+        name: string;
+        status: string;
+        createdAt: string;
+        updatedAt: string;
+      }>();
+    if (!workspace) throw new HttpError(404, "Workspace not found");
+    return json({
+      hosts: [
+        {
+          id: workspace.id,
+          workspaceId: workspace.id,
+          name: workspace.name,
+          hostname: "—",
+          status: workspace.status,
+          version: "—",
+          capabilitiesJson: "[]",
+          enrolledAt: workspace.createdAt,
+          lastHeartbeatAt: null,
+          revokedAt: workspace.status === "revoked" ? workspace.updatedAt : null,
+          createdAt: workspace.createdAt,
+          updatedAt: workspace.updatedAt,
+          desiredWorkers: [],
+          installedWorkers: [],
+        },
+      ],
+    });
+  }
 
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT h.id, b.workspace_id as workspaceId, h.name, h.hostname, h.status, h.version, h.capabilities_json as capabilitiesJson, h.enrolled_at as enrolledAt, h.last_heartbeat_at as lastHeartbeatAt, h.revoked_at as revokedAt, h.created_at as createdAt, h.updated_at as updatedAt,
@@ -4784,6 +4980,20 @@ export async function handleListWorkerCatalog(
   const context = await securityContext(request, env, ctx);
   authorize(context, "host.view");
   await requireWorkspaceContext(context, env, workspaceId);
+  if (context.authorizationModel === "v5") {
+    const rows = await env.CONCLAVE_DB.prepare(
+      `SELECT id, display_name AS displayName, description, publisher, status
+       FROM workers WHERE status <> 'revoked' ORDER BY display_name, id`,
+    ).all<Record<string, unknown>>();
+    return json({
+      workers: (rows.results ?? []).map((row) => ({
+        ...row,
+        latestVersion: null,
+        capabilities: [],
+        credentialRequirements: [],
+      })),
+    });
+  }
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT w.id, w.display_name, w.description, w.publisher, w.status,
             wv.version, wv.capabilities_json, wv.credential_requirements_json
@@ -7193,6 +7403,7 @@ async function handleStudioSnapshot(
     const rows = await env.CONCLAVE_DB.prepare(
       `SELECT p.id, p.name, p.description,
               p.repository_id AS repository,
+              p.settings_json AS settingsJson,
               p.updated_at AS lastActivity
        FROM projects p
        JOIN project_memberships pm ON pm.project_id = p.id
@@ -7206,6 +7417,7 @@ async function handleStudioSnapshot(
         name: string;
         description: string | null;
         repository: string | null;
+        settingsJson: string | null;
         lastActivity: string;
       }>();
     const workstreamRows = await env.CONCLAVE_DB.prepare(
@@ -7216,7 +7428,7 @@ async function handleStudioSnapshot(
        FROM workstreams ws
        JOIN project_memberships pm ON pm.project_id = ws.project_id
        WHERE pm.user_id = ?1
-       ORDER BY ws.updated_at DESC`,
+       ORDER BY ws.created_at ASC`,
     )
       .bind(context.userId)
       .all<Record<string, unknown>>();
@@ -7236,14 +7448,20 @@ async function handleStudioSnapshot(
       },
       activeRunId: null,
       run: null,
-      projects: (rows.results ?? []).map((project) => ({
-        ...project,
-        repository: project.repository ?? "",
-        branch: "",
-        activeGoals: 0,
-        chats: [],
-        workstreams: workstreamsByProject.get(String(project.id)) ?? [],
-      })),
+      projects: (rows.results ?? []).map((project) => {
+        const settings = parseJson(project.settingsJson);
+        const rawWorkstreams = workstreamsByProject.get(String(project.id)) ?? [];
+        return {
+          id: project.id,
+          name: project.name,
+          description: project.description,
+          repository: project.repository ?? "",
+          branch: "",
+          activeGoals: 0,
+          chats: [],
+          workstreams: sortWorkstreams(rawWorkstreams, settings.workstreamOrder),
+        };
+      }),
       workers: [],
       hosts: [],
       plugins: [],

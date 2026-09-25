@@ -157,7 +157,7 @@ void main() {
 
   group('Phase 13: Global Application Menu Regressions', () {
     testWidgets(
-        'menu contains Workspaces, Usage, Appearance, About, Website, Log out in correct order',
+        'menu contains Workspaces, Usage, Appearance, About, Documentation, GitHub, Website, Log out in correct order',
         (tester) async {
       StudioNavigation? navigated;
       bool aboutOpened = false;
@@ -190,6 +190,8 @@ void main() {
       expect(find.text('Usage'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
       expect(find.text('About Conclave AX'), findsOneWidget);
+      expect(find.text('Documentation'), findsOneWidget);
+      expect(find.text('GitHub repository'), findsOneWidget);
       expect(find.text('Website'), findsOneWidget);
       expect(find.text('Log out'), findsOneWidget);
 
@@ -212,6 +214,20 @@ void main() {
       await tester.tap(find.text('About Conclave AX'));
       await tester.pumpAndSettle();
       expect(aboutOpened, isTrue);
+
+      // Re-open and test Documentation
+      await tester.tap(find.byTooltip('Application menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Documentation'));
+      await tester.pumpAndSettle();
+      expect(openedUrl, Uri.parse('https://conclaveax.com/how-it-works/'));
+
+      // Re-open and test GitHub repository
+      await tester.tap(find.byTooltip('Application menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('GitHub repository'));
+      await tester.pumpAndSettle();
+      expect(openedUrl, Uri.parse('https://github.com/nohainc/conclave'));
 
       // Re-open and test Website
       await tester.tap(find.byTooltip('Application menu'));
@@ -460,7 +476,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(AppSidebar), findsOneWidget);
       expect(find.byType(AppTopHud), findsNothing); // Top HUD hidden on desktop
-      expect(find.byTooltip('Search or jump to... (⌘K)'), findsOneWidget); // Search on sidebar
+      expect(find.byTooltip('Search or jump to...'), findsOneWidget); // Search on sidebar
       expect(find.byTooltip('Notifications'), findsOneWidget); // Alarm on sidebar
       expect(find.byTooltip('Open menu'), findsNothing);
 

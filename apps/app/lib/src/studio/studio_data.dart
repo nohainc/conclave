@@ -39,6 +39,7 @@ abstract interface class StudioDataSource {
     String? repository,
     String? instructions,
     String? defaultExecutionPolicy,
+    Map<String, dynamic>? settings,
   });
   Future<void> archiveProject({required String projectId});
   Future<void> deleteProject({required String projectId});
@@ -94,6 +95,9 @@ abstract interface class StudioDataSource {
   Future<void> requestProjectWorkspace({
     required String projectId,
     required String workspaceId,
+  });
+  Future<void> revokeWorkspaceProjectGrant({
+    required String grantId,
   });
   Future<List<StudioWorkstream>> loadProjectWorkstreams({
     required String projectId,
@@ -340,8 +344,25 @@ class StudioApiClient implements StudioDataSource {
       body: jsonEncode({'workspaceId': workspaceId}),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      final detail = response.body.trim();
       throw StudioApiException(
-        'Workspace grant failed (${response.statusCode})',
+        'Workspace grant failed (${response.statusCode})${detail.isEmpty ? '' : ': $detail'}',
+        statusCode: response.statusCode,
+      );
+    }
+  }
+
+  @override
+  Future<void> revokeWorkspaceProjectGrant({
+    required String grantId,
+  }) async {
+    final response = await client.delete(
+      Uri.parse('$baseUrl/workspace-project-grants/$grantId'),
+      headers: _headers(),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+        'Workspace grant revoke failed (${response.statusCode})',
         statusCode: response.statusCode,
       );
     }
@@ -935,6 +956,7 @@ class StudioApiClient implements StudioDataSource {
     String? repository,
     String? instructions,
     String? defaultExecutionPolicy,
+    Map<String, dynamic>? settings,
   }) async {
     final response = await client.patch(
       Uri.parse('$baseUrl/projects/$projectId'),
@@ -943,8 +965,11 @@ class StudioApiClient implements StudioDataSource {
         if (name != null) 'name': name,
         if (description != null) 'description': description,
         if (repository != null) 'repositoryId': repository,
-        if (instructions != null || defaultExecutionPolicy != null)
+        if (instructions != null ||
+            defaultExecutionPolicy != null ||
+            settings != null)
           'settings': {
+            if (settings != null) ...settings,
             if (instructions != null) 'instructions': instructions,
             if (defaultExecutionPolicy != null)
               'defaultExecutionPolicy': defaultExecutionPolicy,

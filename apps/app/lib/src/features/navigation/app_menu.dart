@@ -95,7 +95,7 @@ class GlobalAppMenu extends StatelessWidget {
         return IconButton(
           tooltip: 'Application menu',
           icon: const Icon(
-            Icons.more_horiz_rounded,
+            Icons.menu_rounded,
             color: Colors.white60,
             size: 18,
           ),
@@ -247,7 +247,35 @@ class GlobalAppMenu extends StatelessWidget {
         MenuItemButton(
           style: itemStyle(),
           leadingIcon: Icon(
-            Icons.open_in_new_rounded,
+            Icons.menu_book_rounded,
+            size: 16,
+            color: isDark ? Colors.white54 : Colors.black54,
+          ),
+          onPressed: () =>
+              onOpenExternal(Uri.parse('https://conclaveax.com/how-it-works/')),
+          child: const Text(
+            'Documentation',
+            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
+          ),
+        ),
+        MenuItemButton(
+          style: itemStyle(),
+          leadingIcon: Icon(
+            Icons.code_rounded,
+            size: 16,
+            color: isDark ? Colors.white54 : Colors.black54,
+          ),
+          onPressed: () =>
+              onOpenExternal(Uri.parse('https://github.com/nohainc/conclave')),
+          child: const Text(
+            'GitHub repository',
+            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
+          ),
+        ),
+        MenuItemButton(
+          style: itemStyle(),
+          leadingIcon: Icon(
+            Icons.public_rounded,
             size: 16,
             color: isDark ? Colors.white54 : Colors.black54,
           ),

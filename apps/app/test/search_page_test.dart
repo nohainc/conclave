@@ -105,25 +105,22 @@ void main() {
         ),
       );
 
-      // Initially empty -> shows ⌘K shortcut hint, no clear button
+      // Initially empty -> no clear button
       expect(find.byType(TextField), findsOneWidget);
-      expect(find.text('⌘K'), findsOneWidget);
       expect(find.byIcon(Icons.close_rounded), findsNothing);
 
       // User types query
       await tester.enterText(find.byType(TextField), 'auth');
       await tester.pumpAndSettle();
 
-      // Non-empty -> clear button appears, ⌘K hidden
+      // Non-empty -> clear button appears
       expect(find.byIcon(Icons.close_rounded), findsOneWidget);
-      expect(find.text('⌘K'), findsNothing);
 
       // Tap clear button
       await tester.tap(find.byIcon(Icons.close_rounded));
       await tester.pumpAndSettle();
 
       expect(controller.text, isEmpty);
-      expect(find.text('⌘K'), findsOneWidget);
       expect(find.byIcon(Icons.close_rounded), findsNothing);
     });
 

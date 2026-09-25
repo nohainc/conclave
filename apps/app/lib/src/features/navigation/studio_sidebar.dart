@@ -24,6 +24,7 @@ class StudioSidebar extends AppSidebar {
     required super.onLogout,
     required super.onOpenAbout,
     required super.onOpenExternal,
+    super.onToggleCollapse,
     super.compact = false,
   });
 }
@@ -35,10 +36,19 @@ class StudioIconRail extends AppIconRail {
     required super.shellContext,
     required super.onNavigateTo,
     required super.onOpenDrawer,
+    super.onCreateProject,
+    super.onCreateWorkstream,
+    super.searchController,
+    super.searchFocusNode,
+    super.onSearchChanged,
+    super.onClearSearch,
+    super.onOpenCommandPalette,
+    super.onOpenNotifications,
     super.onToggleTheme,
     super.onSetThemeMode,
     required super.onLogout,
     required super.onOpenAbout,
     required super.onOpenExternal,
+    super.onToggleCollapse,
   });
 }

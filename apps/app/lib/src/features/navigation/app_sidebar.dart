@@ -27,6 +27,7 @@ class AppSidebar extends StatelessWidget {
     required this.onLogout,
     required this.onOpenAbout,
     required this.onOpenExternal,
+    this.onToggleCollapse,
     this.compact = false,
   });
 
@@ -46,6 +47,7 @@ class AppSidebar extends StatelessWidget {
   final VoidCallback onLogout;
   final VoidCallback onOpenAbout;
   final ValueChanged<Uri> onOpenExternal;
+  final VoidCallback? onToggleCollapse;
   final bool compact;
 
   @override
@@ -58,41 +60,76 @@ class AppSidebar extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Brand header — clicking navigates to Home
-            Tooltip(
-              message: 'Conclave AX — Home',
-              child: InkWell(
-                onTap: () {
-                  onNavigateTo(const StudioNavigation.home());
-                  if (compact) {
-                    Scaffold.maybeOf(sidebarContext)?.closeDrawer();
-                  }
-                },
-                borderRadius: BorderRadius.circular(8),
-                hoverColor: const Color(0xff29283c),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      ConclaveBrand.logoMark(size: 28),
-                      const SizedBox(width: 10),
-                      const Flexible(
-                        child: Text(
-                          'Conclave AX',
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 16,
-                            letterSpacing: -.3,
-                          ),
+            // Brand header — clicking navigates to Home, with toggle sidebar icon on the right
+            Row(
+              children: [
+                Expanded(
+                  child: Tooltip(
+                    message: 'Conclave AX — Home',
+                    child: InkWell(
+                      onTap: () {
+                        onNavigateTo(const StudioNavigation.home());
+                        if (compact) {
+                          Scaffold.maybeOf(sidebarContext)?.closeDrawer();
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      hoverColor: const Color(0xff29283c),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 6),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.start,
+                          children: [
+                            ConclaveBrand.logoMark(size: 28),
+                            const SizedBox(width: 10),
+                            const Flexible(
+                              child: Text(
+                                'Conclave AX',
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 16,
+                                  letterSpacing: -.3,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
+                const SizedBox(width: 4),
+                Tooltip(
+                  message: compact ? 'Close sidebar' : 'Hide sidebar',
+                  child: IconButton(
+                    onPressed: () {
+                      if (compact) {
+                        Scaffold.maybeOf(sidebarContext)?.closeDrawer();
+                      } else if (onToggleCollapse != null) {
+                        onToggleCollapse!();
+                      }
+                    },
+                    icon: const Icon(
+                      Icons.menu_open_rounded,
+                      size: 20,
+                      color: Colors.white70,
+                    ),
+                    splashRadius: 16,
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints(minWidth: 32, minHeight: 32),
+                    style: IconButton.styleFrom(
+                      hoverColor: const Color(0xff29283c),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 10),
 
@@ -103,7 +140,7 @@ class AppSidebar extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Tooltip(
-                      message: 'Search or jump to... (⌘K)',
+                      message: 'Search or jump to...',
                       child: Container(
                         height: 32,
                         decoration: BoxDecoration(
@@ -167,18 +204,6 @@ class AppSidebar extends StatelessWidget {
                                       Icons.close_rounded,
                                       size: 14,
                                       color: Colors.white54,
-                                    ),
-                                  ),
-                                )
-                              else
-                                const Padding(
-                                  padding: EdgeInsets.only(right: 8),
-                                  child: Text(
-                                    '⌘K',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.white24,
                                     ),
                                   ),
                                 ),
@@ -423,34 +448,131 @@ class AppIconRail extends StatelessWidget {
     required this.shellContext,
     required this.onNavigateTo,
     required this.onOpenDrawer,
+    this.onCreateProject,
+    this.onCreateWorkstream,
+    this.searchController,
+    this.searchFocusNode,
+    this.onSearchChanged,
+    this.onClearSearch,
+    this.onOpenCommandPalette,
+    this.onOpenNotifications,
     this.onToggleTheme,
     this.onSetThemeMode,
     required this.onLogout,
     required this.onOpenAbout,
     required this.onOpenExternal,
+    this.onToggleCollapse,
   });
 
   final StudioShellContext shellContext;
   final ValueChanged<StudioNavigation> onNavigateTo;
   final VoidCallback onOpenDrawer;
+  final VoidCallback? onCreateProject;
+  final ValueChanged<StudioProject>? onCreateWorkstream;
+  final TextEditingController? searchController;
+  final FocusNode? searchFocusNode;
+  final ValueChanged<String>? onSearchChanged;
+  final VoidCallback? onClearSearch;
+  final VoidCallback? onOpenCommandPalette;
+  final VoidCallback? onOpenNotifications;
   final VoidCallback? onToggleTheme;
   final ValueChanged<ThemeMode>? onSetThemeMode;
   final VoidCallback onLogout;
   final VoidCallback onOpenAbout;
   final ValueChanged<Uri> onOpenExternal;
+  final VoidCallback? onToggleCollapse;
+
+  Widget _railIconButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback? onPressed,
+    Widget? iconWidget,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: IconButton(
+        onPressed: onPressed,
+        icon: iconWidget ?? Icon(icon, size: 20, color: Colors.white70),
+        splashRadius: 16,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        style: IconButton.styleFrom(
+          hoverColor: const Color(0xff29283c),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final menuStyle = MenuStyle(
+      backgroundColor: WidgetStatePropertyAll(
+        isDark ? const Color(0xff181726) : Colors.white,
+      ),
+      surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+      elevation: const WidgetStatePropertyAll(12),
+      shadowColor: WidgetStatePropertyAll(
+        Colors.black.withValues(alpha: isDark ? 0.7 : 0.18),
+      ),
+      shape: WidgetStatePropertyAll(
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(
+            color: isDark ? const Color(0xff2d2b42) : const Color(0xffe5e3f0),
+            width: 1,
+          ),
+        ),
+      ),
+      padding: const WidgetStatePropertyAll(
+        EdgeInsets.symmetric(vertical: 6, horizontal: 6),
+      ),
+    );
+
+    ButtonStyle itemStyle() {
+      return ButtonStyle(
+        padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        ),
+        minimumSize: const WidgetStatePropertyAll(Size(200, 36)),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        overlayColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.hovered) ||
+              states.contains(WidgetState.focused)) {
+            return isDark
+                ? const Color(0xff2a2840)
+                : const Color(0xfff0effa);
+          }
+          return null;
+        }),
+      );
+    }
+
     return Container(
       width: 64,
       color: ConclaveBrand.navigation,
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 4),
       child: Column(
         children: [
+          // Logo acts as the expand button when collapsed
           Tooltip(
-            message: 'Conclave AX — Home',
+            message: onToggleCollapse != null
+                ? 'Expand sidebar'
+                : 'Conclave AX — Home',
             child: InkWell(
-              onTap: () => onNavigateTo(const StudioNavigation.home()),
+              onTap: () {
+                if (onToggleCollapse != null) {
+                  onToggleCollapse!();
+                } else {
+                  onNavigateTo(const StudioNavigation.home());
+                }
+              },
               borderRadius: BorderRadius.circular(8),
               hoverColor: const Color(0xff29283c),
               child: Padding(
@@ -459,8 +581,166 @@ class AppIconRail extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
+
+          // Search popup control that opens an input popup and closes on focus loss
+          _RailSearchMenuAnchor(
+            menuStyle: menuStyle,
+            searchController: searchController,
+            searchFocusNode: searchFocusNode,
+            onSearchChanged: onSearchChanged,
+            onClearSearch: onClearSearch,
+            onNavigateTo: onNavigateTo,
+            isDark: isDark,
+          ),
+          const SizedBox(height: 6),
+
+          // Add Project icon
+          if (onCreateProject != null) ...[
+            _railIconButton(
+              icon: Icons.add_rounded,
+              tooltip: 'Add Project',
+              onPressed: onCreateProject,
+            ),
+            const SizedBox(height: 6),
+          ],
+
+          // Notifications Alarm icon
+          _railIconButton(
+            icon: Icons.notifications_outlined,
+            tooltip: 'Notifications',
+            onPressed: onOpenNotifications,
+            iconWidget: shellContext.unreadNotificationCount > 0
+                ? Badge.count(
+                    count: shellContext.unreadNotificationCount,
+                    child: const Icon(
+                      Icons.notifications_outlined,
+                      size: 20,
+                      color: Colors.white70,
+                    ),
+                  )
+                : const Icon(
+                    Icons.notifications_outlined,
+                    size: 20,
+                    color: Colors.white70,
+                  ),
+          ),
+          const SizedBox(height: 6),
+
+          // Project & Workstream Switcher MenuAnchor using matching popup style
+          MenuAnchor(
+            style: menuStyle,
+            builder: (context, controller, child) {
+              return _railIconButton(
+                icon: Icons.folder_outlined,
+                tooltip: 'Projects & Workstreams',
+                onPressed: () {
+                  if (controller.isOpen) {
+                    controller.close();
+                  } else {
+                    controller.open();
+                  }
+                },
+              );
+            },
+            menuChildren: [
+              if (shellContext.projects.isEmpty)
+                MenuItemButton(
+                  style: itemStyle(),
+                  child: Text(
+                    'No projects yet',
+                    style: TextStyle(
+                      fontStyle: FontStyle.italic,
+                      color: isDark ? Colors.white54 : Colors.black54,
+                    ),
+                  ),
+                )
+              else
+                for (final project in shellContext.projects) ...[
+                  MenuItemButton(
+                    style: itemStyle(),
+                    leadingIcon: Icon(
+                      Icons.folder_outlined,
+                      size: 16,
+                      color: shellContext.isNavActive(
+                              StudioNavigation.project(project.id))
+                          ? const Color(0xffbcb3ff)
+                          : (isDark ? Colors.white70 : Colors.black87),
+                    ),
+                    onPressed: () =>
+                        onNavigateTo(StudioNavigation.project(project.id)),
+                    child: Text(
+                      project.name,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: shellContext.isNavActive(
+                                StudioNavigation.project(project.id))
+                            ? FontWeight.bold
+                            : FontWeight.w600,
+                        color: shellContext.isNavActive(
+                                StudioNavigation.project(project.id))
+                            ? const Color(0xffbcb3ff)
+                            : (isDark ? Colors.white : Colors.black87),
+                      ),
+                    ),
+                  ),
+                  for (final workstream in project.workstreams)
+                    MenuItemButton(
+                      style: itemStyle(),
+                      leadingIcon: Padding(
+                        padding: const EdgeInsets.only(left: 12),
+                        child: Icon(
+                          Icons.account_tree_outlined,
+                          size: 14,
+                          color: shellContext.isNavActive(
+                                  StudioNavigation.workstream(
+                                      project.id, workstream.id))
+                              ? const Color(0xffbcb3ff)
+                              : (isDark ? Colors.white54 : Colors.black54),
+                        ),
+                      ),
+                      onPressed: () => onNavigateTo(
+                          StudioNavigation.workstream(
+                              project.id, workstream.id)),
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 12),
+                        child: Text(
+                          workstream.name,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: shellContext.isNavActive(
+                                    StudioNavigation.workstream(
+                                        project.id, workstream.id))
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                            color: shellContext.isNavActive(
+                                    StudioNavigation.workstream(
+                                        project.id, workstream.id))
+                                ? const Color(0xffbcb3ff)
+                                : (isDark ? Colors.white70 : Colors.black87),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+            ],
+          ),
+
           const Spacer(),
+
+          // Application menu icon above user avatar
+          GlobalAppMenu(
+            shellContext: shellContext,
+            onNavigateTo: onNavigateTo,
+            onToggleTheme: onToggleTheme,
+            onSetThemeMode: onSetThemeMode,
+            onOpenAbout: onOpenAbout,
+            onOpenExternal: onOpenExternal,
+            onLogout: onLogout,
+          ),
+          const SizedBox(height: 8),
+
+          // User Profile & Security avatar
           Tooltip(
             message: shellContext.viewerDisplayName ??
                 shellContext.viewerEmail ??
@@ -492,18 +772,215 @@ class AppIconRail extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 6),
-          GlobalAppMenu(
-            shellContext: shellContext,
-            onNavigateTo: onNavigateTo,
-            onToggleTheme: onToggleTheme,
-            onSetThemeMode: onSetThemeMode,
-            onOpenAbout: onOpenAbout,
-            onOpenExternal: onOpenExternal,
-            onLogout: onLogout,
-          ),
         ],
       ),
+    );
+  }
+}
+
+/// Popover Search field anchored to the Search icon button in collapsed rail.
+class _RailSearchMenuAnchor extends StatefulWidget {
+  const _RailSearchMenuAnchor({
+    required this.menuStyle,
+    required this.searchController,
+    required this.searchFocusNode,
+    required this.onSearchChanged,
+    required this.onClearSearch,
+    required this.onNavigateTo,
+    required this.isDark,
+  });
+
+  final MenuStyle menuStyle;
+  final TextEditingController? searchController;
+  final FocusNode? searchFocusNode;
+  final ValueChanged<String>? onSearchChanged;
+  final VoidCallback? onClearSearch;
+  final ValueChanged<StudioNavigation> onNavigateTo;
+  final bool isDark;
+
+  @override
+  State<_RailSearchMenuAnchor> createState() => _RailSearchMenuAnchorState();
+}
+
+class _RailSearchMenuAnchorState extends State<_RailSearchMenuAnchor> {
+  final MenuController _menuController = MenuController();
+  late final TextEditingController _controller;
+  late final FocusNode _focusNode;
+  bool _ownsController = false;
+  bool _ownsFocusNode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.searchController != null) {
+      _controller = widget.searchController!;
+    } else {
+      _controller = TextEditingController();
+      _ownsController = true;
+    }
+    if (widget.searchFocusNode != null) {
+      _focusNode = widget.searchFocusNode!;
+    } else {
+      _focusNode = FocusNode();
+      _ownsFocusNode = true;
+    }
+    _focusNode.addListener(_handleFocusChange);
+  }
+
+  void _handleFocusChange() {
+    if (!_focusNode.hasFocus && _menuController.isOpen) {
+      _menuController.close();
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_handleFocusChange);
+    if (_ownsController) _controller.dispose();
+    if (_ownsFocusNode) _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _openSearchMenu() {
+    if (_menuController.isOpen) {
+      _menuController.close();
+    } else {
+      _menuController.open();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _focusNode.requestFocus();
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MenuAnchor(
+      controller: _menuController,
+      style: widget.menuStyle,
+      builder: (context, controller, child) {
+        return Tooltip(
+          message: 'Search...',
+          child: IconButton(
+            onPressed: _openSearchMenu,
+            icon: const Icon(
+              Icons.search_rounded,
+              size: 20,
+              color: Colors.white70,
+            ),
+            splashRadius: 16,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            style: IconButton.styleFrom(
+              hoverColor: const Color(0xff29283c),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+        );
+      },
+      menuChildren: [
+        Container(
+          width: 260,
+          padding: const EdgeInsets.all(8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                height: 36,
+                decoration: BoxDecoration(
+                  color: widget.isDark
+                      ? const Color(0xff181724)
+                      : const Color(0xfff5f4fa),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: widget.isDark
+                        ? const Color(0xff2d2b40)
+                        : const Color(0xffdedbe8),
+                  ),
+                ),
+                child: ListenableBuilder(
+                  listenable: _controller,
+                  builder: (context, _) {
+                    final hasText = _controller.text.isNotEmpty;
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.only(left: 8, right: 4),
+                          child: Icon(
+                            Icons.search_rounded,
+                            size: 16,
+                            color: Colors.white54,
+                          ),
+                        ),
+                        Expanded(
+                          child: TextField(
+                            controller: _controller,
+                            focusNode: _focusNode,
+                            onChanged: widget.onSearchChanged,
+                            onSubmitted: (text) {
+                              widget.onNavigateTo(
+                                  const StudioNavigation.search());
+                              _menuController.close();
+                            },
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: widget.isDark
+                                  ? Colors.white
+                                  : Colors.black87,
+                            ),
+                            cursorColor: ConclaveBrand.accent,
+                            cursorHeight: 14,
+                            decoration: InputDecoration(
+                              hintText: 'Search or jump to...',
+                              hintStyle: TextStyle(
+                                fontSize: 12,
+                                color: widget.isDark
+                                    ? Colors.white38
+                                    : Colors.black38,
+                              ),
+                              isDense: true,
+                              contentPadding:
+                                  const EdgeInsets.symmetric(vertical: 8),
+                              border: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              errorBorder: InputBorder.none,
+                              disabledBorder: InputBorder.none,
+                            ),
+                          ),
+                        ),
+                        if (hasText)
+                          InkWell(
+                            onTap: () {
+                              _controller.clear();
+                              widget.onSearchChanged?.call('');
+                              widget.onClearSearch?.call();
+                              _menuController.close();
+                            },
+                            borderRadius: BorderRadius.circular(10),
+                            child: const Padding(
+                              padding: EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 4),
+                              child: Icon(
+                                Icons.close_rounded,
+                                size: 14,
+                                color: Colors.white54,
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

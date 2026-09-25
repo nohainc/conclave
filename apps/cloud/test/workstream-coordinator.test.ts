@@ -73,4 +73,24 @@ describe("Workstream execution coordinator", () => {
       ),
     ).toBe(false);
   });
+
+  it("maintains deterministic creation order and respects custom workstreamOrder", async () => {
+    const { sortWorkstreams } = await import("../src/routes/handlers.js");
+    const ws1 = { id: "ws-1", name: "Alpha", createdAt: "2026-09-24T00:00:01.000Z" };
+    const ws2 = { id: "ws-2", name: "Beta", createdAt: "2026-09-24T00:00:02.000Z" };
+    const ws3 = { id: "ws-3", name: "Gamma", createdAt: "2026-09-24T00:00:03.000Z" };
+
+    // Default order is created_at ASC
+    const defaultSorted = sortWorkstreams([ws3, ws1, ws2]);
+    expect(defaultSorted.map((w) => w.id)).toEqual(["ws-1", "ws-2", "ws-3"]);
+
+    // Custom order moves beta to first, gamma to second, alpha to third
+    const customSorted = sortWorkstreams([ws1, ws2, ws3], ["ws-2", "ws-3", "ws-1"]);
+    expect(customSorted.map((w) => w.id)).toEqual(["ws-2", "ws-3", "ws-1"]);
+
+    // When a workstream is updated/renamed, its position is not altered
+    const renamedWs2 = { ...ws2, name: "Beta Renamed", updatedAt: "2026-09-25T12:00:00.000Z" };
+    const updatedSorted = sortWorkstreams([ws1, renamedWs2, ws3]);
+    expect(updatedSorted.map((w) => w.id)).toEqual(["ws-1", "ws-2", "ws-3"]);
+  });
 });

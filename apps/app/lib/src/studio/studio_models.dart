@@ -401,6 +401,7 @@ class StudioProject {
     this.defaultExecutionPolicy = 'balanced',
     this.archived = false,
     this.role = 'owner',
+    this.settings = const {},
   });
 
   final String id;
@@ -416,6 +417,7 @@ class StudioProject {
   final String defaultExecutionPolicy;
   final bool archived;
   final String role;
+  final Map<String, dynamic> settings;
 
   factory StudioProject.fromJson(Map<String, dynamic> json) => StudioProject(
         id: _string(json, 'id'),
@@ -451,6 +453,9 @@ class StudioProject {
             (json['settings'] is Map &&
                 (json['settings'] as Map)['archived'] == true),
         role: _string(json, 'role', 'owner'),
+        settings: json['settings'] is Map
+            ? Map<String, dynamic>.from(json['settings'] as Map)
+            : const {},
       );
 }
 

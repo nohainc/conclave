@@ -9,17 +9,19 @@ class ProjectPage extends StatelessWidget {
     required this.project,
     required this.dataSource,
     required this.onOpenWorkstream,
-    required this.onEdit,
+    this.onEdit,
     required this.onArchive,
     required this.onDelete,
+    this.onProjectUpdated,
   });
 
   final StudioProject project;
   final StudioDataSource dataSource;
   final ValueChanged<String> onOpenWorkstream;
-  final VoidCallback onEdit;
+  final VoidCallback? onEdit;
   final VoidCallback onArchive;
   final VoidCallback onDelete;
+  final ValueChanged<StudioProject>? onProjectUpdated;
 
   @override
   Widget build(BuildContext context) => _ProjectWorkspace(
@@ -30,6 +32,7 @@ class ProjectPage extends StatelessWidget {
         onEdit: onEdit,
         onArchive: onArchive,
         onDelete: onDelete,
+        onProjectUpdated: onProjectUpdated,
       );
 }
 
@@ -39,17 +42,19 @@ class _ProjectWorkspace extends StatefulWidget {
     required this.project,
     required this.dataSource,
     required this.onOpenWorkstream,
-    required this.onEdit,
+    this.onEdit,
     required this.onArchive,
     required this.onDelete,
+    this.onProjectUpdated,
   });
 
   final StudioProject project;
   final StudioDataSource dataSource;
   final ValueChanged<String> onOpenWorkstream;
-  final VoidCallback onEdit;
+  final VoidCallback? onEdit;
   final VoidCallback onArchive;
   final VoidCallback onDelete;
+  final ValueChanged<StudioProject>? onProjectUpdated;
 
   @override
   State<_ProjectWorkspace> createState() => _ProjectWorkspaceState();
@@ -65,6 +70,13 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
   List<Map<String, dynamic>> projectWorkspaces = const [];
   bool loading = true;
   bool executionLoading = true;
+  bool _savingField = false;
+  String? _editingField;
+
+  late TextEditingController _nameController;
+  late TextEditingController _descriptionController;
+  late TextEditingController _repositoryController;
+  late TextEditingController _instructionsController;
 
   bool get canManage =>
       widget.project.role == 'owner' || widget.project.role == 'collaborator';
@@ -73,6 +85,13 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
   @override
   void initState() {
     super.initState();
+    _nameController = TextEditingController(text: widget.project.name);
+    _descriptionController =
+        TextEditingController(text: widget.project.description);
+    _repositoryController =
+        TextEditingController(text: widget.project.repository);
+    _instructionsController =
+        TextEditingController(text: widget.project.instructions);
     workstreams = [...widget.project.workstreams];
     _loadCollaboration();
     _loadExecution();
@@ -82,12 +101,63 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
   void didUpdateWidget(_ProjectWorkspace oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.project.id != widget.project.id ||
+        oldWidget.project.name != widget.project.name ||
+        oldWidget.project.description != widget.project.description ||
+        oldWidget.project.repository != widget.project.repository ||
+        oldWidget.project.instructions != widget.project.instructions) {
+      if (_editingField == null) {
+        _nameController.text = widget.project.name;
+        _descriptionController.text = widget.project.description;
+        _repositoryController.text = widget.project.repository;
+        _instructionsController.text = widget.project.instructions;
+      }
+    }
+    if (oldWidget.project.id != widget.project.id ||
         oldWidget.project.workstreams != widget.project.workstreams) {
       workstreams = [...widget.project.workstreams];
       loading = true;
       executionLoading = true;
       _loadCollaboration();
       _loadExecution();
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
+    _repositoryController.dispose();
+    _instructionsController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveField(String field) async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      _message('Project name cannot be empty.');
+      return;
+    }
+    setState(() => _savingField = true);
+    try {
+      final updated = await widget.dataSource.updateProject(
+        projectId: widget.project.id,
+        name: name,
+        description: _descriptionController.text.trim(),
+        repository: _repositoryController.text.trim(),
+        instructions: _instructionsController.text.trim(),
+      );
+      if (!mounted) return;
+      setState(() {
+        _editingField = null;
+        _savingField = false;
+      });
+      _message('Project updated.');
+      widget.onProjectUpdated?.call(updated);
+    } catch (error) {
+      if (mounted) {
+        setState(() => _savingField = false);
+        _message(error.toString());
+      }
     }
   }
 
@@ -159,6 +229,40 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
     }
   }
 
+  Future<void> _revokeWorkspaceGrant(Map<String, dynamic> workspace) async {
+    final grantId = (workspace['id'] ?? workspace['grantId'] ?? '').toString();
+    final name = (workspace['workspaceName'] ?? workspace['name'] ?? 'Workspace').toString();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Revoke "$name"?'),
+        content: const Text(
+            'Disconnecting this Workspace will revoke execution capacity for this Project.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            child: const Text('Revoke'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      if (grantId.isNotEmpty) {
+        await widget.dataSource.revokeWorkspaceProjectGrant(grantId: grantId);
+      }
+      await _loadExecution();
+      _message('Workspace grant revoked.');
+    } catch (error) {
+      _message(error.toString());
+    }
+  }
+
   Future<void> _createWorkstream() async {
     final name = TextEditingController();
     final created = await showDialog<bool>(
@@ -191,6 +295,114 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
       if (!mounted) return;
       setState(() => workstreams = [...workstreams, workstream]);
       widget.onOpenWorkstream(workstream.id);
+    } catch (error) {
+      _message(error.toString());
+    }
+  }
+
+  Future<void> _editWorkstream(StudioWorkstream workstream) async {
+    final nameCtrl = TextEditingController(text: workstream.name);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Edit Workstream'),
+        content: TextField(
+          controller: nameCtrl,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Workstream name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    final newName = nameCtrl.text.trim();
+    nameCtrl.dispose();
+    if (confirmed != true || newName.isEmpty || newName == workstream.name) return;
+    try {
+      final updated = await widget.dataSource.updateWorkstream(
+        workstreamId: workstream.id,
+        name: newName,
+      );
+      if (!mounted) return;
+      setState(() {
+        workstreams = workstreams
+            .map((item) => item.id == updated.id ? updated : item)
+            .toList();
+      });
+      _message('Workstream updated.');
+      widget.onProjectUpdated?.call(widget.project);
+    } catch (error) {
+      _message(error.toString());
+    }
+  }
+
+  Future<void> _deleteWorkstream(StudioWorkstream workstream) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Delete "${workstream.name}"?'),
+        content: const Text(
+            'Are you sure you want to delete this Workstream? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await widget.dataSource.deleteWorkstream(workstreamId: workstream.id);
+      if (!mounted) return;
+      setState(() {
+        workstreams =
+            workstreams.where((item) => item.id != workstream.id).toList();
+      });
+      _message('Workstream deleted.');
+      widget.onProjectUpdated?.call(widget.project);
+    } catch (error) {
+      _message(error.toString());
+    }
+  }
+
+  Future<void> _moveWorkstream(int index, int delta) async {
+    final targetIndex = index + delta;
+    if (targetIndex < 0 || targetIndex >= workstreams.length) return;
+    final updatedList = List<StudioWorkstream>.from(workstreams);
+    final item = updatedList.removeAt(index);
+    updatedList.insert(targetIndex, item);
+    setState(() {
+      workstreams = updatedList;
+    });
+    try {
+      final orderIds = updatedList.map((w) => w.id).toList();
+      final updatedProject = await widget.dataSource.updateProject(
+        projectId: widget.project.id,
+        name: widget.project.name,
+        description: widget.project.description,
+        repository: widget.project.repository,
+        instructions: widget.project.instructions,
+        defaultExecutionPolicy: widget.project.defaultExecutionPolicy,
+        settings: {
+          ...widget.project.settings,
+          'workstreamOrder': orderIds,
+        },
+      );
+      widget.onProjectUpdated?.call(updatedProject);
     } catch (error) {
       _message(error.toString());
     }
@@ -294,87 +506,423 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
   }
 
   Future<void> _removeMember(StudioProjectMember member) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Remove "${member.displayName}"?'),
+        content: const Text(
+            'Are you sure you want to remove this member from the Project?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
     await widget.dataSource.removeProjectMember(
         projectId: widget.project.id, userId: member.userId);
     _message('${member.displayName} was removed from the Project.');
     await _loadCollaboration();
   }
 
-  @override
-  Widget build(BuildContext context) => DefaultTabController(
-        initialIndex: _tabIndex,
-        length: 5,
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          if (widget.project.description.trim().isNotEmpty) ...[
-            Text(
-              widget.project.description.trim(),
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                fontSize: 14,
+  Future<void> _revokeInvitation(StudioProjectInvitation invite) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Revoke invitation?'),
+        content: Text('Cancel pending invitation for ${invite.email}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            child: const Text('Revoke'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await widget.dataSource.expireProjectInvitation(
+        projectId: widget.project.id,
+        invitationId: invite.id,
+      );
+      _message('Invitation revoked.');
+      await _loadCollaboration();
+    } catch (error) {
+      _message(error.toString());
+    }
+  }
+
+  Widget _buildEditableField({
+    required String label,
+    required String fieldKey,
+    required String value,
+    required String placeholder,
+    required TextEditingController controller,
+    int maxLines = 1,
+    TextStyle? textStyle,
+    IconData? prefixIcon,
+  }) {
+    final isEditing = _editingField == fieldKey;
+    if (isEditing) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: TextField(
+                controller: controller,
+                autofocus: true,
+                maxLines: maxLines,
+                textInputAction:
+                    maxLines == 1 ? TextInputAction.done : TextInputAction.newline,
+                onSubmitted: (_) {
+                  if (!_savingField) _saveField(fieldKey);
+                },
+                decoration: InputDecoration(
+                  labelText: label,
+                  isDense: true,
+                  border: const OutlineInputBorder(),
+                  prefixIcon:
+                      prefixIcon != null ? Icon(prefixIcon, size: 18) : null,
+                ),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(width: 8),
+            IconButton(
+              tooltip: 'Save',
+              icon: _savingField
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.check, color: Colors.green),
+              onPressed: _savingField ? null : () => _saveField(fieldKey),
+            ),
+            IconButton(
+              tooltip: 'Cancel',
+              icon: const Icon(Icons.close),
+              onPressed: _savingField
+                  ? null
+                  : () {
+                      setState(() {
+                        switch (fieldKey) {
+                          case 'name':
+                            controller.text = widget.project.name;
+                            break;
+                          case 'description':
+                            controller.text = widget.project.description;
+                            break;
+                          case 'repository':
+                            controller.text = widget.project.repository;
+                            break;
+                          case 'instructions':
+                            controller.text = widget.project.instructions;
+                            break;
+                        }
+                        _editingField = null;
+                      });
+                    },
+            ),
           ],
-          Wrap(
-            spacing: 12,
-            runSpacing: 10,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              if (canManage)
-                FilledButton.icon(
+        ),
+      );
+    }
+
+    final hasValue = value.trim().isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          if (prefixIcon != null) ...[
+            Icon(prefixIcon,
+                size: 16,
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
+            const SizedBox(width: 8),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (label.isNotEmpty && fieldKey != 'name')
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                Text(
+                  hasValue ? value.trim() : placeholder,
+                  style: textStyle ??
+                      TextStyle(
+                        fontSize: 14,
+                        color: hasValue
+                            ? null
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontStyle:
+                            hasValue ? FontStyle.normal : FontStyle.italic,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          if (isOwner)
+            IconButton(
+              icon: const Icon(Icons.edit_outlined, size: 16),
+              tooltip: 'Edit $label',
+              splashRadius: 16,
+              visualDensity: VisualDensity.compact,
+              onPressed: () {
+                setState(() {
+                  _editingField = fieldKey;
+                });
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Project Header card with Name, Description, Repository, Instructions and Archive/Delete
+          Card(
+            margin: const EdgeInsets.only(bottom: 18),
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Line 1: Project Name
+                  _buildEditableField(
+                    label: 'Project Name',
+                    fieldKey: 'name',
+                    value: widget.project.name,
+                    placeholder: 'Untitled Project',
+                    controller: _nameController,
+                    textStyle: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  const Divider(height: 16),
+                  // Line 2: Description
+                  _buildEditableField(
+                    label: 'Description',
+                    fieldKey: 'description',
+                    value: widget.project.description,
+                    placeholder: 'No project description provided.',
+                    controller: _descriptionController,
+                    maxLines: 2,
+                  ),
+                  const SizedBox(height: 4),
+                  // Line 3: Repository
+                  _buildEditableField(
+                    label: 'Repository',
+                    fieldKey: 'repository',
+                    value: widget.project.repository,
+                    placeholder: 'No repository configured.',
+                    controller: _repositoryController,
+                    prefixIcon: Icons.code_rounded,
+                  ),
+                  const SizedBox(height: 4),
+                  // Line 4: Instructions
+                  _buildEditableField(
+                    label: 'Project Instructions',
+                    fieldKey: 'instructions',
+                    value: widget.project.instructions,
+                    placeholder: 'No instructions configured.',
+                    controller: _instructionsController,
+                    maxLines: 3,
+                    prefixIcon: Icons.description_outlined,
+                  ),
+                  if (isOwner) ...[
+                    const Divider(height: 24),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: widget.onArchive,
+                          icon: const Icon(Icons.archive_outlined),
+                          label: const Text('Archive'),
+                        ),
+                        TextButton.icon(
+                          onPressed: widget.onDelete,
+                          icon: const Icon(Icons.delete_outline),
+                          label: const Text('Delete'),
+                          style: TextButton.styleFrom(
+                              foregroundColor: Colors.red.shade700),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+
+          // 3 Tabs: Workstreams, Workspaces, Members
+          DefaultTabController(
+            initialIndex: _tabIndex,
+            length: 3,
+            child: Builder(
+              builder: (tabContext) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TabBar(
+                    isScrollable: true,
+                    onTap: (index) => setState(() => _tabIndex = index),
+                    tabs: const [
+                      Tab(text: 'Workstreams'),
+                      Tab(text: 'Workspaces'),
+                      Tab(text: 'Members'),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  if (_tabIndex == 0)
+                    _workstreamsTab()
+                  else if (_tabIndex == 1)
+                    _workspacesTab()
+                  else
+                    _membersTab(),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+
+  Widget _workstreamsTab() => _ProjectPanel(
+        title: 'Workstreams',
+        subtitle: 'Each Workstream is one focused area of team work.',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (canManage) ...[
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.icon(
                   onPressed: _createWorkstream,
                   icon: const Icon(Icons.add),
                   label: const Text('Create Workstream'),
                 ),
-              if (isOwner)
-                OutlinedButton.icon(
-                  onPressed: _share,
-                  icon: const Icon(Icons.person_add_alt_1),
-                  label: const Text('Share Project'),
-                ),
+              ),
+              const SizedBox(height: 12),
             ],
-          ),
-          const SizedBox(height: 18),
-          TabBar(
-            isScrollable: true,
-            onTap: (index) => setState(() => _tabIndex = index),
-            tabs: const [
-              Tab(text: 'Runs'),
-              Tab(text: 'Artifacts'),
-              Tab(text: 'Members'),
-              Tab(text: 'Execution'),
-              Tab(text: 'Settings'),
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (_tabIndex == 0)
-            _emptySection('Runs', 'Runs created from this Project appear here.')
-          else if (_tabIndex == 1)
-            _emptySection('Artifacts',
-                'Artifacts and findings produced by this Project appear here.')
-          else if (_tabIndex == 2)
-            _members()
-          else if (_tabIndex == 3)
-            _execution()
-          else
-            _settings(),
-        ]),
+            if (loading)
+              const LinearProgressIndicator()
+            else if (workstreams.isEmpty)
+              const Text('No Workstreams yet.')
+            else
+              Column(
+                children: workstreams.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final workstream = entry.value;
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.account_tree_outlined),
+                    title: Text(workstream.name),
+                    subtitle: Text(
+                        '${workstream.status} · Lead: ${workstream.lead} · ${workstream.queueStatus}'),
+                    onTap: () => widget.onOpenWorkstream(workstream.id),
+                    trailing: canManage
+                        ? Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.keyboard_arrow_up_rounded),
+                                tooltip: 'Move up',
+                                iconSize: 20,
+                                splashRadius: 16,
+                                onPressed: index > 0
+                                    ? () => _moveWorkstream(index, -1)
+                                    : null,
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                                tooltip: 'Move down',
+                                iconSize: 20,
+                                splashRadius: 16,
+                                onPressed: index < workstreams.length - 1
+                                    ? () => _moveWorkstream(index, 1)
+                                    : null,
+                              ),
+                              PopupMenuButton<String>(
+                                tooltip: 'Workstream actions',
+                                onSelected: (action) {
+                                  if (action == 'edit') {
+                                    _editWorkstream(workstream);
+                                  } else if (action == 'delete') {
+                                    _deleteWorkstream(workstream);
+                                  }
+                                },
+                                itemBuilder: (context) => const [
+                                  PopupMenuItem(
+                                    value: 'edit',
+                                    child: Text('Edit / Rename'),
+                                  ),
+                                  PopupMenuItem(
+                                    value: 'delete',
+                                    child: Text('Delete Workstream'),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          )
+                        : null,
+                  );
+                }).toList(),
+              ),
+          ],
+        ),
       );
 
-  Widget _execution() =>
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _ProjectPanel(
-          title: 'Execution Workspaces',
-          subtitle:
-              'Workspaces provide execution capacity. They are optional and can be connected or changed after Project creation.',
-          child: executionLoading
-              ? const LinearProgressIndicator()
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (projectWorkspaces.isEmpty)
-                      const Text(
-                          'No execution Workspace is connected. Collaboration and discussion continue to work normally.'),
+  Widget _workspacesTab() => _ProjectPanel(
+        title: 'Execution Workspaces',
+        subtitle:
+            'Workspaces provide execution capacity. They are optional and can be connected or changed after Project creation.',
+        child: executionLoading
+            ? const LinearProgressIndicator()
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (canManage) ...[
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: FilledButton.icon(
+                        onPressed: _connectWorkspace,
+                        icon: const Icon(Icons.add_link),
+                        label: const Text('Connect Workspace'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  if (projectWorkspaces.isEmpty)
+                    const Text(
+                        'No execution Workspace is connected. Collaboration and discussion continue to work normally.')
+                  else
                     ...projectWorkspaces.map((workspace) => ListTile(
                           contentPadding: EdgeInsets.zero,
                           leading: const Icon(Icons.computer_outlined),
@@ -385,31 +933,49 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
                               .toString()),
                           subtitle: Text(
                               '${workspace['status'] ?? 'active'} · ${workspace['scope'] ?? 'project_repository'}'),
+                          trailing: isOwner
+                              ? OutlinedButton.icon(
+                                  onPressed: () =>
+                                      _revokeWorkspaceGrant(workspace),
+                                  icon: const Icon(Icons.link_off, size: 16),
+                                  label: const Text('Revoke'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.red.shade700,
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                )
+                              : null,
                         )),
-                    const SizedBox(height: 8),
-                    if (canManage)
-                      FilledButton.icon(
-                        onPressed: _connectWorkspace,
-                        icon: const Icon(Icons.add_link),
-                        label: const Text('Connect Workspace'),
-                      ),
-                  ],
-                ),
-        ),
-      ]);
+                ],
+              ),
+      );
 
-  Widget _members() =>
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _ProjectPanel(
-            title: 'Members',
-            subtitle:
-                'Project roles control collaboration. They do not grant Workspace access.',
-            child: loading
-                ? const LinearProgressIndicator()
-                : Column(children: [
-                    if (members.isEmpty)
-                      const ListTile(title: Text('No members found')),
-                    ...members.map((member) => ListTile(
+  Widget _membersTab() => _ProjectPanel(
+        title: 'Members',
+        subtitle:
+            'Project roles control collaboration. They do not grant Workspace access.',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isOwner) ...[
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.icon(
+                  onPressed: _share,
+                  icon: const Icon(Icons.person_add_alt_1),
+                  label: const Text('Share Project'),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (loading)
+              const LinearProgressIndicator()
+            else
+              Column(
+                children: [
+                  if (members.isEmpty)
+                    const ListTile(title: Text('No members found')),
+                  ...members.map((member) => ListTile(
                         leading: CircleAvatar(
                             child: Text(member.displayName.isEmpty
                                 ? '?'
@@ -435,68 +1001,39 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
                                       value: 'remove',
                                       child: Text('Remove from Project')),
                                 ],
-                              ))),
-                    if (invitations.isNotEmpty) ...[
-                      const Divider(),
-                      const Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text('Pending invitations',
-                              style: TextStyle(fontWeight: FontWeight.w700))),
-                      ...invitations.map((invite) => ListTile(
+                              ),
+                      )),
+                  if (invitations.isNotEmpty) ...[
+                    const Divider(),
+                    const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text('Pending invitations',
+                            style: TextStyle(fontWeight: FontWeight.w700))),
+                    ...invitations.map((invite) => ListTile(
                           title: Text(invite.email),
                           subtitle: Text(invite.role),
-                          trailing: const Chip(label: Text('Pending')))),
-                    ],
-                  ])),
-      ]);
-
-  Widget _settings() =>
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _ProjectPanel(
-            title: 'Project settings',
-            subtitle:
-                'Only the Project owner can change settings or delete the Project.',
-            child: Wrap(spacing: 8, runSpacing: 8, children: [
-              OutlinedButton.icon(
-                  onPressed: isOwner ? widget.onEdit : null,
-                  icon: const Icon(Icons.edit_outlined),
-                  label: const Text('Edit settings')),
-              OutlinedButton.icon(
-                  onPressed: isOwner ? widget.onArchive : null,
-                  icon: const Icon(Icons.archive_outlined),
-                  label: const Text('Archive')),
-              TextButton.icon(
-                  onPressed: isOwner ? widget.onDelete : null,
-                  icon: const Icon(Icons.delete_outline),
-                  label: const Text('Delete')),
-            ])),
-        _ProjectPanel(
-          title: 'Project audit',
-          subtitle:
-              'Membership and sharing changes are recorded for this Project.',
-          child: audit.isEmpty
-              ? const Text('No audit events yet.')
-              : Column(
-                  children: audit
-                      .take(8)
-                      .map((entry) => ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: Text(entry.action),
-                            subtitle: Text(
-                                '${entry.targetType} · ${entry.createdAt}'),
-                          ))
-                      .toList(),
-                ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Chip(label: Text('Pending')),
+                              if (isOwner) ...[
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  icon: const Icon(Icons.cancel_outlined,
+                                      size: 18),
+                                  tooltip: 'Revoke invitation',
+                                  onPressed: () => _revokeInvitation(invite),
+                                ),
+                              ],
+                            ],
+                          ),
+                        )),
+                  ],
+                ],
+              ),
+          ],
         ),
-      ]);
-
-  Widget _emptySection(String title, String message) =>
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _ProjectPanel(
-            title: title,
-            subtitle: message,
-            child: const Text('Nothing to show yet.'))
-      ]);
+      );
 }
 
 class WorkstreamPage extends StatefulWidget {

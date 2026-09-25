@@ -29,6 +29,7 @@ void main() {
 
   testWidgets('V6 Project explains team collaboration and Workstreams',
       (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: SingleChildScrollView(
@@ -45,12 +46,20 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('Create Workstream'), findsOneWidget);
+    expect(find.text('Authentication'), findsOneWidget);
+    expect(find.text('Workstreams'), findsNWidgets(2));
+    expect(find.text('Workspaces'), findsOneWidget);
     expect(find.text('Members'), findsOneWidget);
-    expect(find.text('Execution'), findsOneWidget);
+    expect(find.text('Create Workstream'), findsOneWidget);
+    expect(find.text('Overview'), findsNothing);
+    expect(find.text('Runs'), findsNothing);
+    expect(find.text('Artifacts'), findsNothing);
+    expect(find.text('Execution'), findsNothing);
+    await tester.binding.setSurfaceSize(null);
   });
 
-  testWidgets('V6 normal Workstream UI uses product vocabulary', (tester) async {
+  testWidgets('V6 normal Workstream UI uses product vocabulary',
+      (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: SingleChildScrollView(
@@ -68,7 +77,8 @@ void main() {
 
     expect(find.text('Discuss'), findsWidgets);
     expect(find.text('Work'), findsOneWidget);
-    expect(find.text('No Work yet. Describe what you need, then press Run.'), findsOneWidget);
+    expect(find.text('No Work yet. Describe what you need, then press Run.'),
+        findsOneWidget);
     expect(find.text('lease'), findsNothing);
     expect(find.text('fencing token'), findsNothing);
     expect(find.text('Durable Object'), findsNothing);

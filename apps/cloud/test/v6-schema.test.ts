@@ -27,10 +27,18 @@ const projectSettingsSchema = readFileSync(
   fileURLToPath(new URL("../migrations-v6/0007_project_settings.sql", import.meta.url)),
   "utf8",
 );
+const grantPolicySchema = readFileSync(
+  fileURLToPath(new URL("../migrations-v6/0010_workspace_project_grant_policy.sql", import.meta.url)),
+  "utf8",
+);
+const invitationsSchema = readFileSync(
+  fileURLToPath(new URL("../migrations-v6/0011_project_invitations.sql", import.meta.url)),
+  "utf8",
+);
 
 function apply(sql: string): string {
   return execFileSync("sqlite3", ["-json", ":memory:"], {
-    input: `${schema}\n${integrationSchema}\n${observabilitySchema}\n${chatMigrationSchema}\n${executionFoundationSchema}\n${projectSettingsSchema}\n${sql}`,
+    input: `${schema}\n${integrationSchema}\n${observabilitySchema}\n${chatMigrationSchema}\n${executionFoundationSchema}\n${projectSettingsSchema}\n${grantPolicySchema}\n${invitationsSchema}\n${sql}`,
     encoding: "utf8",
   });
 }
@@ -84,6 +92,21 @@ describe("v6 D1 schema", () => {
         `${fixture}\nINSERT INTO workstream_execution_leases VALUES ('lease2', 'stream1', 'checkout1', 'request1', 'ws1', 2, 'active', '2026-01-01', '2026-01-02', NULL);`,
       ),
     ).toThrow();
+  });
+
+  it("includes the complete Workspace Project Grant policy contract", () => {
+    const result = JSON.parse(
+      apply("PRAGMA table_info(workspace_project_grants);")
+    ) as Array<{ name: string }>;
+    expect(result.map((column) => column.name)).toEqual(
+      expect.arrayContaining([
+        "allowed_worker_capabilities_json",
+        "network_policy_json",
+        "concurrency_json",
+        "budget_json",
+        "requires_step_up",
+      ]),
+    );
   });
 
   it("enforces checkpoint parents and foreign keys", () => {

@@ -6,9 +6,10 @@ import 'package:conclave_app/src/studio/studio_models.dart';
 import 'studio_fixture_data.dart';
 
 void main() {
-  testWidgets('Project page exposes Create Workstream and collaboration areas',
+  testWidgets(
+      'Project page exposes editable header, Archive/Delete, and 3 tabs',
       (tester) async {
-    await tester.binding.setSurfaceSize(const Size(800, 800));
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: SingleChildScrollView(
@@ -17,8 +18,9 @@ void main() {
               id: 'project-1',
               name: 'Project One',
               description: 'Shared space for Project One',
-              repository: '',
-              branch: '',
+              repository: 'conclave/project-one',
+              instructions: 'Follow standard engineering practices.',
+              branch: 'main',
               activeGoals: 0,
               lastActivity: 'today',
             ),
@@ -33,25 +35,34 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('Create Workstream'), findsOneWidget);
-    expect(find.text('Share Project'), findsOneWidget);
+    // Verify Header items
+    expect(find.text('Project One'), findsOneWidget);
     expect(find.text('Shared space for Project One'), findsOneWidget);
-    expect(find.text('Project One'), findsNothing);
-    for (final label in [
-      'Artifacts',
-      'Members',
-      'Execution',
-      'Settings',
-    ]) {
-      expect(find.text(label), findsOneWidget);
-    }
-    expect(find.text('Runs'), findsWidgets);
-    expect(find.text('Workstreams'), findsNothing);
-    expect(find.text('Overview'), findsNothing);
+    expect(find.text('conclave/project-one'), findsOneWidget);
+    expect(find.text('Follow standard engineering practices.'), findsOneWidget);
+    expect(find.byIcon(Icons.edit_outlined), findsNWidgets(4));
+    expect(find.text('Archive'), findsOneWidget);
+    expect(find.text('Delete'), findsOneWidget);
 
+    // Verify 3 Tabs
+    expect(find.text('Workstreams'), findsNWidgets(2)); // Tab and panel title
+    expect(find.text('Workspaces'), findsOneWidget);
+    expect(find.text('Members'), findsOneWidget);
+
+    // Verify Workstreams Tab contents
+    expect(find.text('Create Workstream'), findsOneWidget);
+
+    // Switch to Workspaces Tab
+    await tester.tap(find.text('Workspaces'));
+    await tester.pumpAndSettle();
+    expect(find.text('Execution Workspaces'), findsOneWidget);
+    expect(find.text('Connect Workspace'), findsOneWidget);
+
+    // Switch to Members Tab
     await tester.tap(find.text('Members'));
     await tester.pumpAndSettle();
-    expect(find.text('user-owner'), findsNothing);
+    expect(find.text('Share Project'), findsOneWidget);
+
     await tester.binding.setSurfaceSize(null);
   });
 
@@ -156,7 +167,10 @@ void main() {
     expect(find.text('No Work yet. Describe what you need, then press Run.'),
         findsNWidgets(2));
     expect(find.text('Work'), findsNWidgets(2));
-    expect(find.text('Ask AI to do something for the team. Nothing runs until you press Run.'), findsOneWidget);
+    expect(
+        find.text(
+            'Ask AI to do something for the team. Nothing runs until you press Run.'),
+        findsOneWidget);
     expect(find.textContaining('lease'), findsNothing);
     expect(find.textContaining('fencing'), findsNothing);
     expect(find.textContaining('Durable Object'), findsNothing);
@@ -212,7 +226,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Account policy'), findsOneWidget);
     expect(find.text('Workstream budget'), findsOneWidget);
-    await tester.enterText(find.byType(TextField).first, 'Add the missing tests');
+    await tester.enterText(
+        find.byType(TextField).first, 'Add the missing tests');
     await tester.ensureVisible(find.text('Run'));
     await tester.tap(find.text('Run'));
     await tester.pumpAndSettle();
@@ -274,6 +289,102 @@ void main() {
     expect(find.text('No Work yet. Describe what you need, then press Run.'),
         findsNWidgets(2));
     expect(find.text('queued'), findsNothing);
+    await tester.binding.setSurfaceSize(null);
+  });
+
+  testWidgets(
+      'Workstream rename keeps its position and Move Up/Down reorders correctly',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    const ws1 = StudioWorkstream(
+      id: 'ws-1',
+      projectId: 'p-1',
+      name: 'Alpha Workstream',
+      lead: 'Vitalii',
+      status: 'active',
+      brief: '',
+      primaryWorkspace: 'MacBook',
+      currentCheckpoint: 'main',
+      queueStatus: 'Idle',
+    );
+    const ws2 = StudioWorkstream(
+      id: 'ws-2',
+      projectId: 'p-1',
+      name: 'Beta Workstream',
+      lead: 'Vitalii',
+      status: 'active',
+      brief: '',
+      primaryWorkspace: 'MacBook',
+      currentCheckpoint: 'main',
+      queueStatus: 'Idle',
+    );
+    const ws3 = StudioWorkstream(
+      id: 'ws-3',
+      projectId: 'p-1',
+      name: 'Gamma Workstream',
+      lead: 'Vitalii',
+      status: 'active',
+      brief: '',
+      primaryWorkspace: 'MacBook',
+      currentCheckpoint: 'main',
+      queueStatus: 'Idle',
+    );
+
+    const project = StudioProject(
+      id: 'p-1',
+      name: 'Test Project',
+      repository: '',
+      branch: 'main',
+      activeGoals: 0,
+      lastActivity: 'today',
+      workstreams: [ws1, ws2, ws3],
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: ProjectPage(
+            project: project,
+            dataSource: const StudioFixtureDataSource(),
+            onOpenWorkstream: (_) {},
+            onEdit: () {},
+            onArchive: () {},
+            onDelete: () {},
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Verify initial ordering: Alpha (0), Beta (1), Gamma (2)
+    final listTiles = find.byType(ListTile);
+    expect(listTiles, findsNWidgets(3));
+
+    // Verify Move up and Move down icons
+    expect(find.byTooltip('Move up'), findsNWidgets(3));
+    expect(find.byTooltip('Move down'), findsNWidgets(3));
+
+    // Move Beta (index 1) down -> should become index 2 (Alpha, Gamma, Beta)
+    await tester.tap(find.byTooltip('Move down').at(1));
+    await tester.pumpAndSettle();
+
+    // Verify order after moving Beta down
+    final tilesAfterDown =
+        tester.widgetList<ListTile>(find.byType(ListTile)).toList();
+    expect((tilesAfterDown[0].title as Text).data, 'Alpha Workstream');
+    expect((tilesAfterDown[1].title as Text).data, 'Gamma Workstream');
+    expect((tilesAfterDown[2].title as Text).data, 'Beta Workstream');
+
+    // Move Gamma (now index 1) up -> should become index 0 (Gamma, Alpha, Beta)
+    await tester.tap(find.byTooltip('Move up').at(1));
+    await tester.pumpAndSettle();
+
+    final tilesAfterUp =
+        tester.widgetList<ListTile>(find.byType(ListTile)).toList();
+    expect((tilesAfterUp[0].title as Text).data, 'Gamma Workstream');
+    expect((tilesAfterUp[1].title as Text).data, 'Alpha Workstream');
+    expect((tilesAfterUp[2].title as Text).data, 'Beta Workstream');
+
     await tester.binding.setSurfaceSize(null);
   });
 }

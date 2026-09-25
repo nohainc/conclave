@@ -304,20 +304,6 @@ class SearchPage extends StatelessWidget {
                 ],
               ),
             ),
-            OutlinedButton.icon(
-              onPressed: onClearSearch,
-              icon: const Icon(Icons.close_rounded, size: 16),
-              label: const Text('Clear Search'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: isDark ? Colors.white70 : const Color(0xff475569),
-                side: BorderSide(
-                  color: isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
           ],
         ),
         const SizedBox(height: 24),

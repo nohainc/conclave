@@ -84,10 +84,13 @@ class ProjectTree extends StatelessWidget {
                 constraints:
                     const BoxConstraints(minWidth: 24, minHeight: 24),
               ),
-              // Project title row: navigates to /projects/:projectId
+              // Project title row: navigates to /projects/:projectId; toggles expansion only when clicking again on the current active project
               Expanded(
                 child: InkWell(
                   onTap: () {
+                    if (isProjectFocused) {
+                      onToggleProjectExpanded(project.id);
+                    }
                     onNavigateTo(StudioNavigation.project(project.id));
                     if (compact) Scaffold.maybeOf(context)?.closeDrawer();
                   },

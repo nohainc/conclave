@@ -51,7 +51,39 @@ class _AppTopHudState extends State<AppTopHud> {
   final TextEditingController _fallbackController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    widget.searchFocusNode?.addListener(_onFocusChange);
+  }
+
+  @override
+  void didUpdateWidget(AppTopHud oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.searchFocusNode != widget.searchFocusNode) {
+      oldWidget.searchFocusNode?.removeListener(_onFocusChange);
+      widget.searchFocusNode?.addListener(_onFocusChange);
+    }
+    if (widget.shellContext.navigation.kind != StudioRouteKind.search) {
+      if (_isSearchExpanded) {
+        _isSearchExpanded = false;
+      }
+    }
+  }
+
+  void _onFocusChange() {
+    if (widget.searchFocusNode != null && !widget.searchFocusNode!.hasFocus) {
+      if (widget.shellContext.navigation.kind != StudioRouteKind.search ||
+          (widget.searchController?.text.isEmpty ?? true)) {
+        if (_isSearchExpanded && mounted) {
+          setState(() => _isSearchExpanded = false);
+        }
+      }
+    }
+  }
+
+  @override
   void dispose() {
+    widget.searchFocusNode?.removeListener(_onFocusChange);
     _fallbackController.dispose();
     super.dispose();
   }
@@ -67,15 +99,16 @@ class _AppTopHudState extends State<AppTopHud> {
 
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = ConclaveBrand.isDesktop(screenWidth) && !widget.compact;
-    final isTablet = ConclaveBrand.isTablet(screenWidth) && !widget.compact;
 
     final controller = widget.searchController ?? _fallbackController;
 
     return ListenableBuilder(
       listenable: controller,
       builder: (context, _) {
-        final hasSearchText = controller.text.isNotEmpty;
-        final showInlineSearch = _isSearchExpanded || hasSearchText;
+        final isSearchRoute =
+            widget.shellContext.navigation.kind == StudioRouteKind.search;
+        final showInlineSearch =
+            _isSearchExpanded || (isSearchRoute && controller.text.isNotEmpty);
 
         return Container(
           height: 60,
@@ -220,61 +253,6 @@ class _AppTopHudState extends State<AppTopHud> {
                           color: mutedInk,
                         ),
                       ),
-                      const SizedBox(width: 14),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? ConclaveBrand.darkSurface
-                              : ConclaveBrand.lightSurface,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: borderColor),
-                        ),
-                        child: Text(
-                          '⌘K',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: mutedInk,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 14),
-            ] else if (isTablet) ...[
-              InkWell(
-                onTap: widget.onOpenCommandPalette,
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? ConclaveBrand.darkPaper
-                        : ConclaveBrand.lightPaper,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: borderColor),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.search_rounded,
-                        size: 16,
-                        color: mutedInk,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Search',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: mutedInk,
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -283,7 +261,7 @@ class _AppTopHudState extends State<AppTopHud> {
             ] else ...[
               IconButton(
                 icon: Icon(Icons.search_rounded, size: 20, color: mutedInk),
-                tooltip: 'Search (⌘K)',
+                tooltip: 'Search',
                 onPressed: () {
                   if (widget.searchController != null ||
                       widget.searchFocusNode != null) {

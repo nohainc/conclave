@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   handleCreateProject,
   handleCreateWorkstream,
+  handleGetProject,
   handleStudioSnapshot,
+  handleUpdateProject,
 } from "../src/routes/handlers.js";
 
 describe("v6 Project creation", () => {
@@ -264,4 +266,110 @@ describe("v6 Project creation", () => {
     expect(prepared).toContainEqual(expect.stringContaining("INSERT INTO workstream_memberships"));
     expect(batchSize).toBe(2);
   });
+
+  it("gets and updates a v6 project with custom settings", async () => {
+    let updatedQuery = "";
+    let updatedBindings: unknown[] = [];
+    const db = {
+      prepare(query: string) {
+        if (query.includes("SELECT") && query.includes("FROM projects")) {
+          return {
+            bind() {
+              return this;
+            },
+            async first() {
+              return {
+                id: "project-1",
+                name: "Original Name",
+                description: "Original Desc",
+                repositoryId: null,
+                settingsJson: JSON.stringify({ workstreamOrder: ["ws-1", "ws-2"] }),
+                createdAt: "2026-01-01T00:00:00Z",
+                updatedAt: "2026-01-01T00:00:00Z",
+              };
+            },
+          };
+        }
+        if (query.includes("UPDATE projects")) {
+          return {
+            bind(...args: unknown[]) {
+              updatedQuery = query;
+              updatedBindings = args;
+              return this;
+            },
+            async run() {
+              return { success: true, meta: { changes: 1 } };
+            },
+          };
+        }
+        if (query.includes("project_memberships")) {
+          return {
+            bind() {
+              return this;
+            },
+            async first() {
+              return { role: "owner" };
+            },
+          };
+        }
+        return {
+          bind() {
+            return this;
+          },
+        };
+      },
+    };
+
+    const auth = async () => ({
+      userId: "user-1",
+      user: {
+        id: "user-1",
+        email: "owner@example.test",
+        displayName: "Owner",
+        status: "active",
+      },
+      workspaceId: "",
+      workspaceRole: "viewer",
+      roles: ["viewer"],
+      authorizedProjectIds: ["project-1"],
+      projectRoles: { "project-1": "owner" },
+      sessionId: "session-1",
+      clientType: "web",
+      organizationId: "",
+      organizationRoles: ["viewer"],
+      authorizationModel: "v5" as const,
+      ownedWorkspaceIds: [],
+      ownedAccountIds: [],
+    });
+
+    const getRes = await handleGetProject(
+      new Request("https://conclave.test/api/projects/project-1"),
+      { CONCLAVE_ENVIRONMENT: "development", CONCLAVE_DB: db, TEST_AUTHENTICATION: auth } as never,
+      "project-1",
+    );
+    expect(getRes.status).toBe(200);
+    const getBody = (await getRes.json()) as { project: { name: string; settings: { workstreamOrder: string[] } } };
+    expect(getBody.project.name).toBe("Original Name");
+    expect(getBody.project.settings.workstreamOrder).toEqual(["ws-1", "ws-2"]);
+
+    const updateRes = await handleUpdateProject(
+      new Request("https://conclave.test/api/projects/project-1", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "Updated Name",
+          settings: { workstreamOrder: ["ws-2", "ws-1"] },
+        }),
+      }),
+      { CONCLAVE_ENVIRONMENT: "development", CONCLAVE_DB: db, TEST_AUTHENTICATION: auth } as never,
+      "project-1",
+    );
+    expect(updateRes.status).toBe(200);
+    const updateBody = (await updateRes.json()) as { project: { name: string; settings: { workstreamOrder: string[] } } };
+    expect(updateBody.project.name).toBe("Updated Name");
+    expect(updateBody.project.settings.workstreamOrder).toEqual(["ws-2", "ws-1"]);
+    expect(updatedQuery).toContain("UPDATE projects SET name = ?1");
+    expect(updatedBindings[0]).toBe("Updated Name");
+  });
 });
+

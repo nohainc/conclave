@@ -5,7 +5,11 @@ import 'package:conclave_app/src/features/navigation/studio_shell_context.dart';
 import 'package:conclave_app/src/features/navigation/studio_sidebar.dart';
 import 'package:conclave_app/src/features/navigation/studio_top_bar.dart';
 import 'package:conclave_app/src/navigation/studio_navigation.dart';
+import 'package:conclave_app/src/platform/platform_services.dart';
+import 'package:conclave_app/src/studio/studio_app.dart';
 import 'package:conclave_app/src/studio/studio_models.dart';
+
+import 'studio_fixture_data.dart';
 
 void main() {
   group('StudioShellContext and isNavActive', () {
@@ -208,6 +212,9 @@ void main() {
       expect(navigatedTo?.kind, StudioRouteKind.home);
       navigatedTo = null;
 
+      // Check sidebar collapse button with menu_open icon
+      expect(find.byIcon(Icons.menu_open_rounded), findsOneWidget);
+
       // Infrequent execution and insights configuration are removed from permanent sidebar
       expect(find.text('EXECUTION'), findsNothing);
       expect(find.text('Workers'), findsNothing);
@@ -251,6 +258,8 @@ void main() {
       expect(find.text('Usage'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
       expect(find.text('About Conclave AX'), findsOneWidget);
+      expect(find.text('Documentation'), findsOneWidget);
+      expect(find.text('GitHub repository'), findsOneWidget);
       expect(find.text('Website'), findsOneWidget);
       expect(find.text('Log out'), findsOneWidget);
 
@@ -313,6 +322,8 @@ void main() {
       expect(find.text('Usage'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
       expect(find.text('About Conclave AX'), findsOneWidget);
+      expect(find.text('Documentation'), findsOneWidget);
+      expect(find.text('GitHub repository'), findsOneWidget);
       expect(find.text('Website'), findsOneWidget);
       expect(find.text('Log out'), findsOneWidget);
     });
@@ -389,7 +400,25 @@ void main() {
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
 
-      // Test 4: Website
+      // Test 4: Documentation
+      await tester.tap(find.text('Documentation'));
+      await tester.pumpAndSettle();
+      expect(openedExternalUri, Uri.parse('https://conclaveax.com/how-it-works/'));
+
+      // Re-open menu
+      await tester.tap(find.byTooltip('Application menu'));
+      await tester.pumpAndSettle();
+
+      // Test 5: GitHub repository
+      await tester.tap(find.text('GitHub repository'));
+      await tester.pumpAndSettle();
+      expect(openedExternalUri, Uri.parse('https://github.com/nohainc/conclave'));
+
+      // Re-open menu
+      await tester.tap(find.byTooltip('Application menu'));
+      await tester.pumpAndSettle();
+
+      // Test 6: Website
       await tester.tap(find.text('Website'));
       await tester.pumpAndSettle();
       expect(openedExternalUri, Uri.parse('https://conclaveax.com'));
@@ -398,7 +427,7 @@ void main() {
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
 
-      // Test 5: Log out
+      // Test 7: Log out
       await tester.tap(find.text('Log out'));
       await tester.pumpAndSettle();
       expect(logoutTriggered, isTrue);
@@ -447,6 +476,8 @@ void main() {
       expect(find.text('Usage'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
       expect(find.text('About Conclave AX'), findsOneWidget);
+      expect(find.text('Documentation'), findsOneWidget);
+      expect(find.text('GitHub repository'), findsOneWidget);
       expect(find.text('Website'), findsOneWidget);
       expect(find.text('Log out'), findsOneWidget);
 
@@ -470,6 +501,20 @@ void main() {
       await tester.tap(find.text('About Conclave AX'));
       await tester.pumpAndSettle();
       expect(aboutTriggered, isTrue);
+
+      // Reopen and check Documentation
+      await tester.tap(find.byTooltip('Application menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Documentation'));
+      await tester.pumpAndSettle();
+      expect(openedExternalUri, Uri.parse('https://conclaveax.com/how-it-works/'));
+
+      // Reopen and check GitHub repository
+      await tester.tap(find.byTooltip('Application menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('GitHub repository'));
+      await tester.pumpAndSettle();
+      expect(openedExternalUri, Uri.parse('https://github.com/nohainc/conclave'));
 
       // Reopen and check Website
       await tester.tap(find.byTooltip('Application menu'));
@@ -632,7 +677,6 @@ void main() {
 
       // Check Search affordance (desktop)
       expect(find.text('Search or jump to...'), findsOneWidget);
-      expect(find.text('⌘K'), findsOneWidget);
 
       // Check Workspace status button
       expect(find.text('MacBook Pro · Online'), findsOneWidget);
@@ -694,7 +738,7 @@ void main() {
       expect(find.byTooltip('Account menu'), findsNothing);
 
       // Search and Notifications should be present
-      expect(find.byTooltip('Search (⌘K)'), findsOneWidget);
+      expect(find.byTooltip('Search'), findsOneWidget);
       expect(find.byTooltip('Notifications'), findsOneWidget);
     });
 
@@ -742,11 +786,11 @@ void main() {
       await tester.pumpAndSettle();
 
       // Initially search icon is visible and inline TextField is not
-      expect(find.byTooltip('Search (⌘K)'), findsOneWidget);
+      expect(find.byTooltip('Search'), findsOneWidget);
       expect(find.byType(TextField), findsNothing);
 
       // Tap search icon
-      await tester.tap(find.byTooltip('Search (⌘K)'));
+      await tester.tap(find.byTooltip('Search'));
       await tester.pumpAndSettle();
 
       // Now inline TextField is visible
@@ -992,15 +1036,20 @@ void main() {
       expect(navigatedTo?.workstreamId, 'ws-1');
     });
 
-    testWidgets('StudioIconRail has 64px width and renders navigation icons',
+    testWidgets('StudioIconRail has 64px width and renders navigation icons and controls',
         (tester) async {
       StudioNavigation? navigatedTo;
+      var commandPaletteOpened = false;
+      var notificationsOpened = false;
+      var createProjectOpened = false;
+      var collapseToggled = false;
 
       const shellContext = StudioShellContext(
         navigation: StudioNavigation.home(),
         projects: [testProject],
         viewerDisplayName: 'Vitalii Noha',
         viewerEmail: 'vitalii@example.com',
+        unreadNotificationCount: 2,
       );
 
       await tester.pumpWidget(
@@ -1013,10 +1062,14 @@ void main() {
                 shellContext: shellContext,
                 onNavigateTo: (nav) => navigatedTo = nav,
                 onOpenDrawer: () {},
+                onCreateProject: () => createProjectOpened = true,
+                onOpenCommandPalette: () => commandPaletteOpened = true,
+                onOpenNotifications: () => notificationsOpened = true,
                 onToggleTheme: () {},
                 onLogout: () {},
                 onOpenAbout: () {},
                 onOpenExternal: (_) {},
+                onToggleCollapse: () => collapseToggled = true,
               ),
             ),
           ),
@@ -1024,13 +1077,50 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byTooltip('Conclave AX — Home'), findsOneWidget);
+      expect(find.byTooltip('Expand sidebar'), findsOneWidget);
+      expect(find.byTooltip('Search...'), findsOneWidget);
+      expect(find.byTooltip('Add Project'), findsOneWidget);
+      expect(find.byTooltip('Notifications'), findsOneWidget);
+      expect(find.byTooltip('Projects & Workstreams'), findsOneWidget);
       expect(find.byTooltip('Vitalii Noha'), findsOneWidget);
       expect(find.byTooltip('Application menu'), findsOneWidget);
 
-      // Tapping Conclave AX brand icon navigates to home
-      await tester.tap(find.byTooltip('Conclave AX — Home'));
-      expect(navigatedTo?.kind, StudioRouteKind.home);
+      // Tapping Conclave AX brand logo toggles collapse / expands sidebar
+      await tester.tap(find.byTooltip('Expand sidebar'));
+      expect(collapseToggled, isTrue);
+
+      // Tapping Search icon opens the search popup control
+      await tester.tap(find.byTooltip('Search...'));
+      await tester.pumpAndSettle();
+      expect(find.text('Search or jump to...'), findsOneWidget);
+      expect(find.text('Open Command Palette'), findsNothing);
+
+      // Typing and tapping clear icon clears search text and closes the popup form
+      await tester.enterText(find.byType(TextField), 'test query');
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.close_rounded), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pumpAndSettle();
+      expect(find.text('Search or jump to...'), findsNothing); // popup closed
+
+      // Tapping Add Project icon
+      await tester.tap(find.byTooltip('Add Project'));
+      expect(createProjectOpened, isTrue);
+
+      // Tapping Notifications icon
+      await tester.tap(find.byTooltip('Notifications'));
+      expect(notificationsOpened, isTrue);
+
+      // Tapping Projects & Workstreams popup menu
+      await tester.tap(find.byTooltip('Projects & Workstreams'));
+      await tester.pumpAndSettle();
+      expect(find.text(testProject.name), findsOneWidget);
+      expect(find.text(testProject.workstreams.first.name), findsOneWidget);
+      expect(find.text('Create Project'), findsNothing); // Removed from menu
+      await tester.tap(find.text(testProject.workstreams.first.name));
+      await tester.pumpAndSettle();
+      expect(navigatedTo?.kind, StudioRouteKind.workstream);
+      expect(navigatedTo?.workstreamId, testProject.workstreams.first.id);
 
       // Tapping Profile avatar button navigates to profile
       await tester.tap(find.byTooltip('Vitalii Noha'));
@@ -1332,13 +1422,13 @@ void main() {
       }
     });
 
-    testWidgets('Project click vs chevron click separation and expand/collapse',
+    testWidgets('Project click opens project and toggles expansion only when clicking active project',
         (tester) async {
       StudioNavigation? navigatedTo;
       String? toggledProjectId;
 
-      // 1. Initially collapsed
-      const collapsedContext = StudioShellContext(
+      // 1. Initially on Home (not active project)
+      const homeContext = StudioShellContext(
         navigation: StudioNavigation.home(),
         projects: [projectA],
         expandedProjectIds: {},
@@ -1349,7 +1439,7 @@ void main() {
           theme: ConclaveBrand.darkTheme(),
           home: Scaffold(
             body: StudioSidebar(
-              shellContext: collapsedContext,
+              shellContext: homeContext,
               onNavigateTo: (nav) => navigatedTo = nav,
               onToggleProjectExpanded: (id) => toggledProjectId = id,
               onCreateProject: () {},
@@ -1365,7 +1455,7 @@ void main() {
       // Workstreams should not be visible when collapsed
       expect(find.text('Engine optimization'), findsNothing);
 
-      // Tap the project title text -> should navigate to project, NOT toggle expand
+      // Tap the project title text when not active -> should navigate to project without changing expansion
       await tester.tap(find.text('Conclave Core'));
       expect(navigatedTo?.kind, StudioRouteKind.project);
       expect(navigatedTo?.projectId, 'p-1');
@@ -1373,6 +1463,42 @@ void main() {
 
       // Reset
       navigatedTo = null;
+      toggledProjectId = null;
+
+      // 2. When already on the active project
+      const activeProjectContext = StudioShellContext(
+        navigation: StudioNavigation.project('p-1'),
+        projects: [projectA],
+        selectedProject: projectA,
+        expandedProjectIds: {},
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: StudioSidebar(
+              shellContext: activeProjectContext,
+              onNavigateTo: (nav) => navigatedTo = nav,
+              onToggleProjectExpanded: (id) => toggledProjectId = id,
+              onCreateProject: () {},
+              onLogout: () {},
+              onOpenAbout: () {},
+              onOpenExternal: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap the project title text again on current active project -> should toggle expand
+      await tester.tap(find.text('Conclave Core'));
+      expect(navigatedTo?.kind, StudioRouteKind.project);
+      expect(toggledProjectId, 'p-1');
+
+      // Reset
+      navigatedTo = null;
+      toggledProjectId = null;
 
       // Tap the chevron icon -> should toggle expand, NOT navigate
       await tester.tap(find.byIcon(Icons.chevron_right_rounded));
@@ -1622,7 +1748,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Search (⌘K)'));
+      await tester.tap(find.byTooltip('Search'));
       expect(commandPaletteOpened, isTrue);
     });
 
@@ -1997,7 +2123,7 @@ void main() {
       expect(find.byType(StudioSidebar), findsOneWidget);
       expect(find.byType(StudioTopBar), findsNothing); // Top HUD hidden on desktop
       expect(find.text('Authentication redesign'), findsOneWidget); // sidebar item
-      expect(find.byTooltip('Search or jump to... (⌘K)'), findsOneWidget); // Search on sidebar
+      expect(find.byTooltip('Search or jump to...'), findsOneWidget); // Search on sidebar
       expect(find.byTooltip('Notifications'), findsOneWidget); // Alarm on sidebar
       expect(find.byTooltip('Open menu'), findsNothing); // No hamburger on desktop
 
@@ -2027,6 +2153,44 @@ void main() {
       await tester.tap(find.text('Close menu'));
       await tester.pumpAndSettle();
       expect(find.byType(Drawer), findsNothing);
+    });
+
+    testWidgets('About dialog displays title, version badge, description, and link action chips',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: const Scaffold(
+            body: StudioApp(
+              services: DefaultPlatformServices(),
+              dataSource: StudioFixtureDataSource(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open application menu
+      await tester.tap(find.byTooltip('Application menu'));
+      await tester.pumpAndSettle();
+
+      // Tap About Conclave AX to trigger dialog
+      await tester.tap(find.text('About Conclave AX'));
+      await tester.pumpAndSettle();
+
+      // Assert modal dialog contents
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.text('Conclave AX v0.4.0 • Provider-Independent Core'), findsOneWidget);
+      expect(find.text('Docs'), findsOneWidget);
+      expect(find.text('GitHub'), findsOneWidget);
+      expect(find.text('Website'), findsWidgets); // chip + button + menu item if visible
+      expect(find.text('Close'), findsOneWidget);
+      expect(find.text('Visit website'), findsOneWidget);
+
+      // Close dialog
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
     });
   });
 }
