@@ -180,17 +180,18 @@ class _StudioAppState extends State<ConclaveAppShell> {
   }
 
   void _clearSearch() {
-    if (_searchQueryController.text.isNotEmpty) {
-      _searchQueryController.clear();
-    } else if (navigation.kind == StudioRouteKind.search) {
-      final restoreNav =
-          _navigationBeforeSearch ?? const StudioNavigation.home();
-      _navigationBeforeSearch = null;
-      setState(() {
-        _searchQuery = '';
+    setState(() {
+      _searchQuery = '';
+      if (_searchQueryController.text.isNotEmpty) {
+        _searchQueryController.clear();
+      }
+      if (navigation.kind == StudioRouteKind.search) {
+        final restoreNav =
+            _navigationBeforeSearch ?? const StudioNavigation.home();
+        _navigationBeforeSearch = null;
         navigation = restoreNav;
-      });
-    }
+      }
+    });
   }
 
   void _focusSearch() {

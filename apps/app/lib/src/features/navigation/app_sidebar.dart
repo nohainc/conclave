@@ -824,18 +824,10 @@ class _RailSearchMenuAnchorState extends State<_RailSearchMenuAnchor> {
       _focusNode = FocusNode();
       _ownsFocusNode = true;
     }
-    _focusNode.addListener(_handleFocusChange);
-  }
-
-  void _handleFocusChange() {
-    if (!_focusNode.hasFocus && _menuController.isOpen) {
-      _menuController.close();
-    }
   }
 
   @override
   void dispose() {
-    _focusNode.removeListener(_handleFocusChange);
     if (_ownsController) _controller.dispose();
     if (_ownsFocusNode) _focusNode.dispose();
     super.dispose();
@@ -852,6 +844,13 @@ class _RailSearchMenuAnchorState extends State<_RailSearchMenuAnchor> {
         }
       });
     }
+  }
+
+  void _handleClearAndClose() {
+    _controller.clear();
+    widget.onSearchChanged?.call('');
+    widget.onClearSearch?.call();
+    _menuController.close();
   }
 
   @override
@@ -954,23 +953,18 @@ class _RailSearchMenuAnchorState extends State<_RailSearchMenuAnchor> {
                           ),
                         ),
                         if (hasText)
-                          InkWell(
-                            onTap: () {
-                              _controller.clear();
-                              widget.onSearchChanged?.call('');
-                              widget.onClearSearch?.call();
-                              _menuController.close();
-                            },
-                            borderRadius: BorderRadius.circular(10),
-                            child: const Padding(
-                              padding: EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 4),
-                              child: Icon(
-                                Icons.close_rounded,
-                                size: 14,
-                                color: Colors.white54,
-                              ),
+                          IconButton(
+                            onPressed: _handleClearAndClose,
+                            tooltip: 'Clear and close',
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              size: 14,
+                              color: Colors.white54,
                             ),
+                            splashRadius: 14,
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            constraints: const BoxConstraints(
+                                minWidth: 24, minHeight: 24),
                           ),
                       ],
                     );
