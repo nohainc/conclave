@@ -23,7 +23,7 @@ Project
        -> Work
        -> Primary Workspace
        -> Workflow
-       -> isolated checkout
+       -> isolated working directory
 ~~~
 
 A Workstream is one topic, feature, problem, investigation, or delivery thread that humans and AI work on together.
@@ -66,11 +66,11 @@ That can cause:
 - unfinished Runs;
 - difficult recovery.
 
-v6 makes mutable state a first-class resource.
+v6 makes mutable local state a first-class Workstream resource.
 
-Each Workstream has one persistent isolated checkout on one Primary Workspace. Mutating Work Requests are serialized against that checkout.
+Each Workstream uses one persistent isolated local working directory on its Primary Workspace. Mutating Work Requests are serialized against that directory.
 
-Different Workstreams may run concurrently on the same Workspace because their checkouts are isolated.
+Different Workstreams may run concurrently on the same Workspace because their working directories are isolated. Workers may clone and manage zero, one, or many repositories inside the directory.
 
 ## 3. Product vocabulary
 
@@ -91,10 +91,10 @@ Different Workstreams may run concurrently on the same Workspace because their c
 - **Work** — execution lane of a Workstream.
 - **Work Request** — explicit human request to run AI work.
 - **Workflow Definition** — versioned declarative execution plan.
-- **Primary Workspace** — Workspace that owns the Workstream's persistent mutable checkout.
-- **Workstream Checkout** — isolated repository worktree used for stateful execution.
-- **Checkpoint** — immutable Git revision recorded after successful stateful work.
-- **Execution Lease** — exclusive right to mutate a Workstream Checkout.
+- **Primary Workspace** — Workspace currently selected for the Workstream's stateful execution.
+- **Work Root** — local Workspace root beneath which Workstream working directories are resolved.
+- **Workstream Working Directory** — persistent local directory resolved only from immutable Project ID + Workstream ID.
+- **Execution Lease** — exclusive right to perform stateful mutation in a Workstream working directory.
 - **Execution Sponsor** — optional user/account policy that pays/authenticates Workstream execution.
 
 ## 4. Product topology
@@ -113,8 +113,7 @@ Project
 |    +-- Default Workflow
 |    +-- Primary Workspace
 |    +-- Account Policy
-|    +-- Checkout
-|    +-- Checkpoints
+|    +-- Working Directory
 |
 +-- Workstream: Scheduler
      |
@@ -138,13 +137,10 @@ Workflow version snapshot
    +-- stateful steps -> Primary Workspace
                            |
                            v
-                    Workstream Checkout
+                 Workstream Working Directory
                            |
                            v
                         Workers
-                           |
-                           v
-                       Checkpoint
 ~~~
 
 ## 5. Workstream model
@@ -161,8 +157,7 @@ A Workstream contains:
 - execution policy;
 - discussion history;
 - Work Request history;
-- current checkpoint;
-- execution checkout metadata.
+- working-directory execution state.
 
 Recommended statuses:
 - active;
@@ -174,7 +169,7 @@ A Workstream is not a generic folder. It is the stable unit that ties together:
 - people;
 - context;
 - execution;
-- mutable repository state;
+- mutable local working state;
 - AI history;
 - integration status.
 
@@ -334,7 +329,7 @@ Examples:
 - comparison.
 
 **stateful_workstream**
-- operates on the persistent Workstream Checkout;
+- operates in the persistent Workstream Working Directory;
 - must execute on the Primary Workspace;
 - participates in the Workstream's exclusive Execution Lease.
 
@@ -369,117 +364,107 @@ A Workstream with mutable work has one Primary Workspace.
 The Primary Workspace:
 - must have an active WorkspaceProjectGrant for the Project;
 - must contain or be able to install required Workers;
-- owns the persistent Workstream Checkout;
+- resolves the Workstream's persistent local Working Directory;
 - executes all stateful_workstream steps.
 
 A Workstream may use additional Project Workspaces for stateless_read steps.
 
-Changing Primary Workspace is an explicit migration operation, not a dropdown change during a running Work Request.
+Changing Primary Workspace is not allowed during an active stateful Work Request. Local files are not transferred automatically; the destination Workspace resolves the same Project-ID/Workstream-ID relative path under its own Work Root and may need to reconstruct repository state through Git or explicit user instructions.
 
-## 14. Workstream Checkout
+## 14. Workstream Working Directory
 
-For Git Projects, v6 uses one persistent Git worktree per Workstream.
+Conclave does not require a Source/repository registry for the initial v6 execution model.
 
-Recommended managed runtime path:
-
-~~~text
-<conclave-data>/
-  checkouts/
-    <project-id>/
-      <workstream-id>/
-        <repository-id>/
-~~~
-
-Cloud stores only an opaque checkout key and repository/revision metadata. It does not instruct the runtime to use an arbitrary absolute path.
-
-The runtime resolves the checkout key under its managed data directory.
-
-### 14.1 Branch
-
-Each Workstream gets a generated branch, for example:
+Each Workspace runtime has one local Work Root. For a Workstream, the runtime resolves:
 
 ~~~text
-conclave/workstream/<short-workstream-id>
+<work-root>/
+  <project-id>/
+    <workstream-id>/
 ~~~
 
-Names are generated by Conclave, not accepted as arbitrary shell input.
+Only immutable IDs participate in path identity.
 
-The branch begins at the Project's selected base revision.
+Do not include:
+- Project name;
+- Workstream name;
+- user email/name;
+- Workspace ID;
+- Worker name;
+- repository name.
 
-### 14.2 Existing runtime primitive
+Project and Workstream renames therefore have zero effect on active or future execution paths.
 
-The current GitRepository worktree implementation is retained and extended to support managed named branches and v6 checkout metadata.
+The Workstream directory is created lazily when executable Work first reaches that Workspace. It persists across Work Requests and Workspace re-enrollment on the same local installation when the Work Root is preserved.
 
-## 15. Checkout lifecycle
+The runtime stores a small identity marker such as `.conclave-workstream.json` containing stable non-secret metadata (schema version, Project ID, Workstream ID, creation timestamp). Existing directories are reused only after marker validation.
 
-States:
-- provisioning;
+Cloud never supplies an arbitrary absolute working directory. Assignments carry Project/Workstream identity; the Workspace runtime resolves the local path and launches each Worker with the Workstream directory as its CWD.
+
+### 14.1 Repository behavior
+
+Repositories inside the directory are Worker-managed.
+
+A Worker may:
+- clone public/private repositories;
+- use multiple repositories;
+- create branches;
+- fetch/pull;
+- merge/rebase;
+- commit/push;
+- generate non-repository files.
+
+Conclave does not initially provision repositories, create branches, or guarantee automatic Git rollback/checkpoint commits.
+
+Two Workstreams may independently clone the same repository into their separate directories and work in parallel. Git is the synchronization/integration mechanism between them.
+
+### 14.2 Re-enrollment and machine changes
+
+Workspace ID is runtime enrollment identity, not Workstream storage identity.
+
+If a Workspace is deleted/revoked and the same local installation is paired again with a new Workspace ID, the runtime resolves the same `<project-id>/<workstream-id>` path and reuses it after marker validation.
+
+If execution moves to another physical machine, the same relative path may be created under that machine's Work Root, but local files are not automatically transferred.
+
+## 15. Working-directory lifecycle
+
+States can remain minimal:
+- absent;
 - ready;
-- leased;
-- dirty;
-- recovery_required;
-- archived;
-- error.
+- conflict;
+- unavailable.
 
-Before stateful execution:
-1. checkout must exist;
-2. current revision must equal expected checkpoint;
-3. checkout must be clean;
-4. valid Execution Lease must exist.
+Defaults:
+- active Workstream: retain;
+- completed: retain;
+- archived: retain;
+- Cloud-deleted: retain locally until explicit cleanup.
 
-After successful stateful execution:
-1. collect diff;
-2. run required verification;
-3. create Conclave-managed checkpoint commit if changes exist;
-4. record Checkpoint;
-5. update Workstream current checkpoint;
-6. release lease.
+Conclave should fail closed on marker/path conflicts rather than overwrite unknown local data.
 
-After failed stateful execution:
-1. capture bounded diff/diagnostic artifact;
-2. reset managed checkout to previous checkpoint;
-3. clean generated/untracked state according to policy;
-4. release lease;
-5. mark Work Request failed.
+## 16. Git state and recovery
 
-Because the checkout is Conclave-managed, rollback is safe and does not destroy the user's normal repository checkout.
+Conclave's initial filesystem guarantee is Workstream isolation and serialized stateful mutation, not Git checkpoint management.
 
-## 16. Checkpoints
+Workers/users are responsible for Git-level recovery and synchronization.
 
-A Checkpoint records:
-- Workstream;
-- sequence;
-- Work Request;
-- Run;
-- parent Checkpoint;
-- repository revision;
-- base revision;
-- diff artifact;
-- verification summary;
-- created timestamp.
+A future observability layer may discover repositories under the Workstream directory and report:
+- remote;
+- branch;
+- HEAD;
+- dirty state;
 
-A successful mutating Work Request advances the Workstream branch to a new Checkpoint.
-
-The Workstream history is therefore:
-
-~~~text
-Checkpoint 0
-  -> Work Request 1 -> Checkpoint 1
-  -> Work Request 2 -> Checkpoint 2
-  -> Work Request 3 -> Checkpoint 3
-~~~
-
-Users may inspect or revert to previous Checkpoints through an explicit action.
+without making repository registration a prerequisite for execution.
 
 ## 17. Mutation concurrency
 
 The invariant:
 
-> One Workstream Checkout has at most one active stateful execution lease.
+> One Workstream Working Directory has at most one active stateful execution lease.
 
-Different Workstreams may execute stateful work concurrently, even on the same Workspace, because their checkouts are separate.
+Different Workstreams may execute stateful work concurrently, even on the same Workspace, because their directories are separate.
 
-Read-only Work Requests may run concurrently from a stable Checkpoint.
+Read-only/stateless work may run concurrently when its workflow and permissions allow it.
 
 ## 18. Workstream Execution Coordinator
 
@@ -500,10 +485,8 @@ Each new exclusive lease receives a monotonically increasing fencing token.
 Assignments for stateful steps carry:
 - workstreamId;
 - workRequestId;
-- checkoutId;
 - leaseId;
-- fencingToken;
-- expectedRevision.
+- fencingToken.
 
 The Workspace runtime rejects stale or mismatched fencing tokens.
 
@@ -531,7 +514,6 @@ Work Request
   -> Project
   -> Workstream access
   -> Workflow step
-  -> current Checkpoint/revision
   -> eligible Project Workspace Grants
   -> ready Workers
   -> authorized configured Workers
@@ -546,11 +528,11 @@ For stateful_workstream:
 Work Request
   -> Workstream
   -> Primary Workspace Grant
-  -> active Checkout
+  -> ready Workstream Working Directory
   -> exclusive Lease
   -> ready Worker
   -> authorized configured Worker
-  -> Assignment bound to Checkout + fencing token
+  -> Assignment bound to Workstream directory identity + fencing token
 ~~~
 
 The scheduler may never route a stateful step to an auxiliary Workspace.
@@ -590,7 +572,7 @@ A Work Request receives bounded context:
 
 - Project instructions;
 - Workstream Brief;
-- current Checkpoint metadata;
+- relevant Workstream/local-state metadata when available;
 - current request;
 - explicitly referenced Discuss messages;
 - explicitly referenced artifacts/findings;
@@ -641,18 +623,17 @@ A future optimization may snapshot-and-release paused state, but v6 should not i
 
 ## 26. Integration back to Project
 
-A Workstream branch does not automatically mutate the Project's base branch.
+Conclave does not initially own repository branches or base-branch integration.
 
-Integration actions are explicit:
-- publish branch;
-- create pull request;
-- merge when authorized;
-- export patch;
-- mark Workstream completed.
+Workers/users use normal repository workflows inside the Workstream directory:
+- branch;
+- commit;
+- fetch/pull;
+- merge/rebase;
+- push;
+- pull request.
 
-For GitHub-backed Projects, Create PR is the preferred integration path.
-
-Project owner policy controls who may integrate.
+GitHub integration may later provide convenience actions, but repository registration is not required for Workstream execution.
 
 ## 27. Data model
 
@@ -743,53 +724,21 @@ Run snapshots the exact Workflow version.
 - started_at;
 - finished_at.
 
-### workstream_checkouts
+### local Workstream working-directory state
 
-- id;
-- workstream_id;
-- project_id;
-- workspace_id;
-- workspace_project_grant_id;
-- opaque source/checkout reference;
-- checkout_key;
-- branch_name;
-- base_revision;
-- head_revision;
-- status;
-- created_at;
-- updated_at.
+The canonical directory path is runtime-derived and does not require a Cloud checkout table:
 
-Repository selection is an execution concern. An AI Worker or an authorized Workspace Project Grant may provide the source mapping; the Project and Workstream do not own a repository field. The checkout record may retain an opaque runtime source reference and revision for fencing, recovery, and audit. A repository-free Workstream can remain discussion-only or use stateless work that does not require a checkout.
+~~~text
+<work-root>/<project-id>/<workstream-id>
+~~~
 
-### workstream_execution_leases
+Cloud may keep only coarse runtime state when useful:
+- absent;
+- ready;
+- conflict;
+- unavailable.
 
-- id;
-- workstream_id;
-- checkout_id;
-- work_request_id;
-- run_id;
-- fencing_token;
-- status;
-- acquired_at;
-- heartbeat_at;
-- expires_at;
-- released_at.
-
-### workstream_checkpoints
-
-- id;
-- workstream_id;
-- checkout_id;
-- sequence;
-- work_request_id;
-- run_id;
-- parent_checkpoint_id nullable;
-- base_revision;
-- revision;
-- diff_artifact_id nullable;
-- verification_json;
-- status;
-- created_at.
+Absolute local paths are not required in Cloud.
 
 ### Existing execution tables
 
@@ -797,7 +746,6 @@ Add to Goal/Run/Assignment/Artifact/Usage where useful:
 - workstream_id;
 - work_request_id;
 - workflow_version_id;
-- checkout_id;
 - execution_lease_id;
 - fencing_token;
 - expected_revision.
@@ -877,8 +825,8 @@ Header:
 - title;
 - status;
 - Lead;
-- current Checkpoint;
 - Primary Workspace;
+- Working Directory readiness;
 - active/queued Work state.
 
 Primary tabs:
@@ -924,13 +872,13 @@ Primary button is **Run**, not Send.
 10. Stateful Assignments carry a fencing token and expected revision.
 11. Runtime rejects stale lease tokens and revision mismatches.
 12. Worker cannot choose an arbitrary working directory.
-13. Different Workstreams never share the same managed checkout path.
-14. Failed stateful Runs cannot leave the next Run starting from unknown dirty state.
-15. Successful stateful Runs create an immutable Checkpoint.
+13. Different Workstreams never share the same working-directory path.
+14. Project/Workstream renames never alter working-directory identity.
+15. Workspace re-enrollment does not alter working-directory identity.
 16. Workflow version is snapshotted into each Work Request/Run.
-17. Account policy cannot grant credentials beyond Account owner's explicit authorization.
+17. Configured Worker policy cannot grant credentials beyond existing authorization.
 18. Workstream context is bounded and explicit.
-19. Integration into the Project base branch is explicit.
+19. Repository operations remain Worker/user responsibilities unless an explicit future integration is invoked.
 20. Legacy Chat intent inference is not an execution authority.
 
 ## 32. What v6 keeps from v5
@@ -946,7 +894,7 @@ Keep:
 - Worker package signing;
 - runtime permission enforcement;
 - SafeWorkspace;
-- GitRepository worktree primitive;
+- Git/GitHub tooling as Worker-accessible local capabilities;
 - assignment journal/reconciliation;
 - Goal/Run/Task/Attempt;
 - artifacts/findings/verifications;
@@ -958,9 +906,9 @@ Keep:
 Replace:
 - Chat as the main collaboration/execution object -> Workstream;
 - implicit Chat intent execution -> explicit Work Request;
-- shared registered repository checkout -> managed Workstream Checkout for stateful work;
+- shared registered repository checkout -> ID-based isolated Workstream Working Directory;
 - hard-coded workflow progression -> versioned Workflow Definition;
-- generic concurrent mutation -> Workstream lease + queue;
+- generic concurrent mutation -> Workstream directory lease + queue;
 - per-message execution controls in normal discussion -> Work lane execution composer.
 
 ## 34. Migration stance
