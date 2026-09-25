@@ -574,6 +574,7 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
     TextStyle? textStyle,
     IconData? prefixIcon,
     Widget? trailingAction,
+    bool showLabel = false,
   }) {
     final isEditing = _editingField == fieldKey;
     if (isEditing) {
@@ -659,7 +660,7 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (label.isNotEmpty && fieldKey != 'name')
+                if (showLabel && label.isNotEmpty && fieldKey != 'name')
                   Text(
                     label,
                     style: TextStyle(
@@ -746,7 +747,6 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
                   value: widget.project.repository,
                   placeholder: 'No repository configured.',
                   controller: _repositoryController,
-                  prefixIcon: Icons.code_rounded,
                 ),
                 const SizedBox(height: 6),
                 // Line 4: Instructions
@@ -757,7 +757,6 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
                   placeholder: 'No instructions configured.',
                   controller: _instructionsController,
                   maxLines: 3,
-                  prefixIcon: Icons.description_outlined,
                 ),
                 if (isOwner) ...[
                   const SizedBox(height: 12),
