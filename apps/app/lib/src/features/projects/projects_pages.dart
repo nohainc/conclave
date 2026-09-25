@@ -61,8 +61,9 @@ class _ProjectWorkspace extends StatefulWidget {
   State<_ProjectWorkspace> createState() => _ProjectWorkspaceState();
 }
 
-class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
-  int _tabIndex = 0;
+class _ProjectWorkspaceState extends State<_ProjectWorkspace>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
   late List<StudioWorkstream> workstreams;
   List<StudioProjectMember> members = const [];
   List<StudioProjectInvitation> invitations = const [];
@@ -86,6 +87,7 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
     _nameController = TextEditingController(text: widget.project.name);
     _descriptionController =
         TextEditingController(text: widget.project.description);
@@ -125,6 +127,7 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
 
   @override
   void dispose() {
+    _tabController.dispose();
     _nameController.dispose();
     _descriptionController.dispose();
     _repositoryController.dispose();
@@ -859,34 +862,31 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
           ),
 
           // 3 Tabs: Workstreams, Workspaces, Members aligned by center
-          DefaultTabController(
-            initialIndex: _tabIndex,
-            length: 3,
-            child: Builder(
-              builder: (tabContext) => Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: TabBar(
-                      isScrollable: true,
-                      tabAlignment: TabAlignment.center,
-                      onTap: (index) => setState(() => _tabIndex = index),
-                      tabs: const [
-                        Tab(text: 'Workstreams'),
-                        Tab(text: 'Workspaces'),
-                        Tab(text: 'Members'),
-                      ],
-                    ),
+          AnimatedBuilder(
+            animation: _tabController,
+            builder: (context, _) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: TabBar(
+                    controller: _tabController,
+                    isScrollable: true,
+                    tabAlignment: TabAlignment.center,
+                    tabs: const [
+                      Tab(text: 'Workstreams'),
+                      Tab(text: 'Workspaces'),
+                      Tab(text: 'Members'),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                  if (_tabIndex == 0)
-                    _workstreamsTab()
-                  else if (_tabIndex == 1)
-                    _workspacesTab()
-                  else
-                    _membersTab(),
-                ],
-              ),
+                ),
+                const SizedBox(height: 16),
+                if (_tabController.index == 0)
+                  _workstreamsTab()
+                else if (_tabController.index == 1)
+                  _workspacesTab()
+                else
+                  _membersTab(),
+              ],
             ),
           ),
         ],
@@ -1156,7 +1156,9 @@ class WorkstreamPage extends StatefulWidget {
   State<WorkstreamPage> createState() => _WorkstreamPageState();
 }
 
-class _WorkstreamPageState extends State<WorkstreamPage> {
+class _WorkstreamPageState extends State<WorkstreamPage>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
   final _requestController = TextEditingController();
   final _discussionController = TextEditingController();
   final _briefPurposeController = TextEditingController();
@@ -1172,7 +1174,6 @@ class _WorkstreamPageState extends State<WorkstreamPage> {
   String _model = 'Auto';
   bool _advanced = false;
   bool _references = false;
-  late int _tabIndex = widget.initialTab;
   final List<_WorkTimelineItem> _timeline = [];
   final List<_DiscussionItem> _discussion = [];
   final Set<String> _selectedDiscussionIds = <String>{};
@@ -1182,12 +1183,25 @@ class _WorkstreamPageState extends State<WorkstreamPage> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(
+      length: 2,
+      initialIndex: widget.initialTab.clamp(0, 1),
+      vsync: this,
+    );
     _briefPurposeController.text = widget.workstream.brief;
     _briefStateController.text = widget.workstream.status;
     _briefConstraintsController.text =
         'Use the Project policy and the Workstream Primary Workspace.';
     _briefOutcomeController.text =
         'A verified result with an understandable checkpoint and evidence.';
+  }
+
+  @override
+  void didUpdateWidget(WorkstreamPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialTab != widget.initialTab) {
+      _tabController.animateTo(widget.initialTab.clamp(0, 1));
+    }
   }
 
   bool get _canExecute =>
@@ -1200,10 +1214,15 @@ class _WorkstreamPageState extends State<WorkstreamPage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Rename Workstream'),
-        content: TextField(
+        content: TextFormField(
           autofocus: true,
-          controller: TextEditingController(text: name),
+          initialValue: name,
           onChanged: (value) => name = value,
+          onFieldSubmitted: (_) {
+            if (name.trim().isNotEmpty) {
+              Navigator.pop(dialogContext, true);
+            }
+          },
           decoration: const InputDecoration(labelText: 'Workstream name'),
         ),
         actions: [
@@ -1225,6 +1244,7 @@ class _WorkstreamPageState extends State<WorkstreamPage> {
 
   @override
   void dispose() {
+    _tabController.dispose();
     _requestController.dispose();
     _discussionController.dispose();
     _briefPurposeController.dispose();
@@ -1235,69 +1255,74 @@ class _WorkstreamPageState extends State<WorkstreamPage> {
   }
 
   @override
-  Widget build(BuildContext context) => DefaultTabController(
-        initialIndex: _tabIndex,
-        length: 2,
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            runSpacing: 10,
-            children: [
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(widget.project.name,
-                    style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontSize: 12)),
-                const SizedBox(height: 5),
-                Text(widget.workstream.name,
-                    style: const TextStyle(
-                        fontSize: 25, fontWeight: FontWeight.w700)),
-              ]),
-              Wrap(spacing: 8, children: [
-                OutlinedButton.icon(
-                  onPressed: widget.onBackToProject,
-                  icon: const Icon(Icons.arrow_back),
-                  label: const Text('Project'),
-                ),
-                if (widget.project.role == 'owner' ||
-                    widget.project.role == 'collaborator')
-                  TextButton.icon(
-                    onPressed: _rename,
-                    icon: const Icon(Icons.edit_outlined),
-                    label: const Text('Rename'),
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: _tabController,
+        builder: (context, _) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              runSpacing: 10,
+              children: [
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(widget.project.name,
+                      style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 12)),
+                  const SizedBox(height: 5),
+                  Text(widget.workstream.name,
+                      style: const TextStyle(
+                          fontSize: 25, fontWeight: FontWeight.w700)),
+                ]),
+                Wrap(spacing: 8, children: [
+                  OutlinedButton.icon(
+                    onPressed: widget.onBackToProject,
+                    icon: const Icon(Icons.arrow_back),
+                    label: const Text('Project'),
                   ),
-                if (widget.project.role == 'owner' ||
-                    widget.project.role == 'collaborator')
-                  TextButton.icon(
-                    onPressed: widget.onArchive,
-                    icon: const Icon(Icons.archive_outlined),
-                    label: const Text('Archive'),
-                  ),
-              ]),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Wrap(spacing: 8, runSpacing: 8, children: [
-            Chip(label: Text(widget.workstream.status)),
-            Chip(label: Text('Lead: ${widget.workstream.lead}')),
-            Chip(label: Text('Queue: ${widget.workstream.queueStatus}')),
-          ]),
-          const SizedBox(height: 8),
-          Text(_timeline.isEmpty
-              ? 'No Work yet. Describe what you need, then press Run.'
-              : 'Latest Work: ${_timeline.first.status}'),
-          if (!_canExecute)
-            const Text(
-                'Viewer access can read the timeline but cannot run Work.'),
-          const SizedBox(height: 12),
-          TabBar(
-            onTap: (index) => setState(() => _tabIndex = index),
-            tabs: const [Tab(text: 'Discuss'), Tab(text: 'Work')],
-          ),
-          const SizedBox(height: 16),
-          if (_tabIndex == 0) _discuss(context) else _work(context),
-        ]),
+                  if (widget.project.role == 'owner' ||
+                      widget.project.role == 'collaborator')
+                    TextButton.icon(
+                      onPressed: _rename,
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Rename'),
+                    ),
+                  if (widget.project.role == 'owner' ||
+                      widget.project.role == 'collaborator')
+                    TextButton.icon(
+                      onPressed: widget.onArchive,
+                      icon: const Icon(Icons.archive_outlined),
+                      label: const Text('Archive'),
+                    ),
+                ]),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              Chip(label: Text(widget.workstream.status)),
+              Chip(label: Text('Lead: ${widget.workstream.lead}')),
+              Chip(label: Text('Queue: ${widget.workstream.queueStatus}')),
+            ]),
+            const SizedBox(height: 8),
+            Text(_timeline.isEmpty
+                ? 'No Work yet. Describe what you need, then press Run.'
+                : 'Latest Work: ${_timeline.first.status}'),
+            if (!_canExecute)
+              const Text(
+                  'Viewer access can read the timeline but cannot run Work.'),
+            const SizedBox(height: 12),
+            TabBar(
+              controller: _tabController,
+              tabs: const [Tab(text: 'Discuss'), Tab(text: 'Work')],
+            ),
+            const SizedBox(height: 16),
+            if (_tabController.index == 0)
+              _discuss(context)
+            else
+              _work(context),
+          ],
+        ),
       );
 
   Widget _discuss(BuildContext context) =>
@@ -1367,7 +1392,7 @@ class _WorkstreamPageState extends State<WorkstreamPage> {
             title: 'Work completed',
             subtitle: 'A compact activity notification from the Work timeline.',
             child: TextButton.icon(
-              onPressed: () => setState(() => _tabIndex = 1),
+              onPressed: () => _tabController.animateTo(1),
               icon: const Icon(Icons.open_in_new),
               label: const Text('View Work result'),
             ),
@@ -1519,8 +1544,8 @@ class _WorkstreamPageState extends State<WorkstreamPage> {
       _draftReferences = messages.map((item) => item.text).toList();
       _references = true;
       _selectedDiscussionIds.clear();
-      _tabIndex = 1;
     });
+    _tabController.animateTo(1);
   }
 
   _WorkstreamContext _buildContext() => _WorkstreamContext.build(
