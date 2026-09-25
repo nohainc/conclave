@@ -1989,10 +1989,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
   Future<void> _createProject() async {
     var name = '';
     var description = '';
-    var repository = '';
     var instructions = '';
 
-    final values = await showDialog<(String, String?, String?, String?)>(
+    final values = await showDialog<(String, String?, String?)>(
       context: navigatorKey.currentContext ?? context,
       builder: (dialogContext) {
         void submit() {
@@ -2001,7 +2000,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
             (
               name.isEmpty ? 'My first project' : name,
               description.trim().isEmpty ? null : description.trim(),
-              repository.trim().isEmpty ? null : repository.trim(),
               instructions.trim().isEmpty ? null : instructions.trim(),
             ),
           );
@@ -2027,14 +2025,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
                     labelText: 'Description (optional)',
                   ),
                   maxLines: 2,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  onChanged: (value) => repository = value,
-                  onSubmitted: (_) => submit(),
-                  decoration: const InputDecoration(
-                    labelText: 'Repository (optional)',
-                  ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -2071,8 +2061,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
       final project = await widget.dataSource.createProject(
         name: values.$1,
         description: values.$2,
-        repository: values.$3,
-        instructions: values.$4,
+        instructions: values.$3,
       );
       if (!mounted) return;
       setState(() {
@@ -2156,7 +2145,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
         return StudioProject(
           id: p.id,
           name: p.name,
-          repository: p.repository,
           branch: p.branch,
           activeGoals: p.activeGoals,
           lastActivity: 'just now',
@@ -2183,9 +2171,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
   Future<void> _editProject(StudioProject project) async {
     var name = project.name;
     var description = project.description;
-    var repository = project.repository;
     var instructions = project.instructions;
-    final values = await showDialog<(String, String, String, String)?>(
+    final values = await showDialog<(String, String, String)?>(
       context: navigatorKey.currentContext ?? context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Project settings'),
@@ -2205,13 +2192,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
                 onChanged: (value) => description = value,
                 decoration: const InputDecoration(labelText: 'Description'),
                 maxLines: 2,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                initialValue: project.repository,
-                onChanged: (value) => repository = value,
-                decoration:
-                    const InputDecoration(labelText: 'Repository (optional)'),
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -2235,7 +2215,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
               (
                 name.trim(),
                 description.trim(),
-                repository.trim(),
                 instructions.trim()
               ),
             ),
@@ -2250,8 +2229,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
         projectId: project.id,
         name: values.$1,
         description: values.$2,
-        repository: values.$3,
-        instructions: values.$4,
+        instructions: values.$3,
       );
       if (!mounted) return;
       setState(() {

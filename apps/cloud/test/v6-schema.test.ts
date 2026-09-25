@@ -35,18 +35,22 @@ const invitationsSchema = readFileSync(
   fileURLToPath(new URL("../migrations-v6/0011_project_invitations.sql", import.meta.url)),
   "utf8",
 );
+const repositoryRemovalSchema = readFileSync(
+  fileURLToPath(new URL("../migrations-v6/0012_remove_project_repository.sql", import.meta.url)),
+  "utf8",
+);
 
 function apply(sql: string): string {
   return execFileSync("sqlite3", ["-json", ":memory:"], {
-    input: `${schema}\n${integrationSchema}\n${observabilitySchema}\n${chatMigrationSchema}\n${executionFoundationSchema}\n${projectSettingsSchema}\n${grantPolicySchema}\n${invitationsSchema}\n${sql}`,
+    input: `${schema}\n${integrationSchema}\n${observabilitySchema}\n${chatMigrationSchema}\n${executionFoundationSchema}\n${projectSettingsSchema}\n${grantPolicySchema}\n${invitationsSchema}\n${repositoryRemovalSchema}\n${sql}`,
     encoding: "utf8",
   });
 }
 
 const fixture = `
 INSERT INTO users VALUES ('u1', 'owner@example.test', 'Owner', 'active', '2026-01-01', '2026-01-01');
-INSERT INTO projects (id, owner_user_id, name, description, repository_id, created_at, updated_at)
-  VALUES ('p1', 'u1', 'Project', NULL, NULL, '2026-01-01', '2026-01-01');
+INSERT INTO projects (id, owner_user_id, name, description, created_at, updated_at)
+  VALUES ('p1', 'u1', 'Project', NULL, '2026-01-01', '2026-01-01');
 INSERT INTO project_memberships VALUES ('pm1', 'p1', 'u1', 'owner', '2026-01-01', '2026-01-01');
 INSERT INTO execution_workspaces VALUES ('ws1', 'u1', 'Workspace', 'online', '2026-01-01', '2026-01-01');
 INSERT INTO workspace_runtime_identities VALUES ('runtime1', 'ws1', 'key-ref', '2026-01-01', NULL);

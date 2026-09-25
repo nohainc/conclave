@@ -28,7 +28,6 @@ abstract interface class StudioDataSource {
   Future<StudioProject> createProject({
     required String name,
     String? description,
-    String? repository,
     String? instructions,
     String? defaultExecutionPolicy,
   });
@@ -36,7 +35,6 @@ abstract interface class StudioDataSource {
     required String projectId,
     String? name,
     String? description,
-    String? repository,
     String? instructions,
     String? defaultExecutionPolicy,
     Map<String, dynamic>? settings,
@@ -95,6 +93,7 @@ abstract interface class StudioDataSource {
   Future<void> requestProjectWorkspace({
     required String projectId,
     required String workspaceId,
+    List<String> repositoryMappings = const [],
   });
   Future<void> revokeWorkspaceProjectGrant({
     required String grantId,
@@ -341,11 +340,18 @@ class StudioApiClient implements StudioDataSource {
   Future<void> requestProjectWorkspace({
     required String projectId,
     required String workspaceId,
+    List<String> repositoryMappings = const [],
   }) async {
     final response = await client.post(
       Uri.parse('$baseUrl/projects/$projectId/workspaces'),
       headers: _headers(contentType: 'application/json'),
-      body: jsonEncode({'workspaceId': workspaceId}),
+      body: jsonEncode({
+        'workspaceId': workspaceId,
+        if (repositoryMappings.isNotEmpty)
+          'repositoryMappings': repositoryMappings
+              .map((value) => {'repositoryId': value})
+              .toList(),
+      }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final detail = response.body.trim();
@@ -898,7 +904,6 @@ class StudioApiClient implements StudioDataSource {
   Future<StudioProject> createProject(
       {required String name,
       String? description,
-      String? repository,
       String? instructions,
       String? defaultExecutionPolicy}) async {
     final response = await client.post(
@@ -908,8 +913,6 @@ class StudioApiClient implements StudioDataSource {
         'name': name,
         if (description != null && description.trim().isNotEmpty)
           'description': description.trim(),
-        if (repository != null && repository.trim().isNotEmpty)
-          'repositoryId': repository.trim(),
         if (instructions != null && instructions.trim().isNotEmpty ||
             defaultExecutionPolicy != null)
           'settings': {
@@ -943,7 +946,6 @@ class StudioApiClient implements StudioDataSource {
     final value = Map<String, dynamic>.from(project);
     return StudioProject.fromJson({
       ...value,
-      'repository': value['repository'] ?? value['repositoryId'] ?? '',
       'branch': value['branch'] ?? '',
       'activeGoals': value['activeGoals'] ?? 0,
       'lastActivity': value['lastActivity'] ?? value['updatedAt'] ?? '',
@@ -957,7 +959,6 @@ class StudioApiClient implements StudioDataSource {
     required String projectId,
     String? name,
     String? description,
-    String? repository,
     String? instructions,
     String? defaultExecutionPolicy,
     Map<String, dynamic>? settings,
@@ -968,7 +969,6 @@ class StudioApiClient implements StudioDataSource {
       body: jsonEncode({
         if (name != null) 'name': name,
         if (description != null) 'description': description,
-        if (repository != null) 'repositoryId': repository,
         if (instructions != null) 'instructions': instructions,
         if (defaultExecutionPolicy != null)
           'defaultExecutionPolicy': defaultExecutionPolicy,
@@ -1005,7 +1005,6 @@ class StudioApiClient implements StudioDataSource {
     final value = Map<String, dynamic>.from(project);
     return StudioProject.fromJson({
       ...value,
-      'repository': value['repository'] ?? value['repositoryId'] ?? '',
       'lastActivity': value['lastActivity'] ?? value['updatedAt'] ?? '',
       'settings': value['settings'] ?? const {},
     });

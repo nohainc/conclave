@@ -40,7 +40,6 @@ void main() {
   const testProject = StudioProject(
     id: 'p-1',
     name: 'Conclave AX',
-    repository: 'github.com/conclave/ax',
     branch: 'main',
     activeGoals: 0,
     lastActivity: 'today',

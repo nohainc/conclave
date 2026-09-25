@@ -46,7 +46,7 @@ describe("v6 Discuss / Work boundary", () => {
     expect(handlers).toContain("handleProvisionWorkstreamCheckout");
     expect(handlers).toContain("Workspace Project Grant is not active");
     expect(handlers).toContain(
-      "Project repository is required before provisioning a checkout",
+      "Add at least one repository mapping to the Workspace Project Grant before provisioning a checkout",
     );
     expect(handlers).toContain("Primary Workspace is offline");
     expect(handlers).toContain("provision-checkout");

@@ -145,8 +145,9 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
     for (final project in widget.snapshot.projects) {
       actions.add(CommandPaletteAction(
         title: 'Project: ${project.name}',
-        subtitle:
-            project.repository.isNotEmpty ? project.repository : project.branch,
+        subtitle: project.description.isNotEmpty
+            ? project.description
+            : 'Project',
         icon: Icons.folder_outlined,
         category: 'Projects',
         onSelect: () {

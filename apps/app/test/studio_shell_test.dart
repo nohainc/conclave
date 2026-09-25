@@ -140,7 +140,6 @@ void main() {
     const testProject = StudioProject(
       id: 'project-1',
       name: 'Conclave AX',
-      repository: 'github.com/conclave/ax',
       branch: 'main',
       activeGoals: 0,
       lastActivity: 'today',
@@ -548,7 +547,6 @@ void main() {
       const projectWithArchived = StudioProject(
         id: 'project-2',
         name: 'Conclave Core',
-        repository: 'github.com/conclave/core',
         branch: 'main',
         activeGoals: 0,
         lastActivity: 'today',
@@ -611,7 +609,6 @@ void main() {
     const testProject = StudioProject(
       id: 'project-1',
       name: 'Conclave AX',
-      repository: 'github.com/conclave/ax',
       branch: 'main',
       activeGoals: 0,
       lastActivity: 'today',
@@ -1350,7 +1347,6 @@ void main() {
     const projectA = StudioProject(
       id: 'p-1',
       name: 'Conclave Core',
-      repository: 'github.com/conclave/core',
       branch: 'main',
       activeGoals: 0,
       lastActivity: 'today',
@@ -1847,7 +1843,6 @@ void main() {
       const project = StudioProject(
         id: 'p-1',
         name: 'Conclave AX',
-        repository: 'github.com/conclave/ax',
         branch: 'main',
         activeGoals: 5,
         lastActivity: 'today',
@@ -1946,7 +1941,6 @@ void main() {
       const project = StudioProject(
         id: 'p-1',
         name: 'Conclave AX',
-        repository: 'github.com/conclave/ax',
         branch: 'main',
         activeGoals: 0,
         lastActivity: 'today',
@@ -2048,7 +2042,6 @@ void main() {
       const project = StudioProject(
         id: 'p-1',
         name: 'Conclave AX',
-        repository: 'github.com/conclave/ax',
         branch: 'main',
         activeGoals: 0,
         lastActivity: 'today',

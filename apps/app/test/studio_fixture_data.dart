@@ -43,13 +43,11 @@ class StudioFixtureDataSource implements StudioDataSource {
   Future<StudioProject> createProject(
           {required String name,
           String? description,
-          String? repository,
           String? instructions,
           String? defaultExecutionPolicy}) async =>
       StudioProject(
         id: 'project-created',
         name: name,
-        repository: '',
         branch: '',
         activeGoals: 0,
         lastActivity: 'Just now',
@@ -60,7 +58,6 @@ class StudioFixtureDataSource implements StudioDataSource {
     required String projectId,
     String? name,
     String? description,
-    String? repository,
     String? instructions,
     String? defaultExecutionPolicy,
     Map<String, dynamic>? settings,
@@ -72,7 +69,6 @@ class StudioFixtureDataSource implements StudioDataSource {
     return StudioProject(
       id: projectId,
       name: name ?? project?.name ?? 'Updated project',
-      repository: repository ?? project?.repository ?? '',
       branch: project?.branch ?? '',
       activeGoals: project?.activeGoals ?? 0,
       lastActivity: 'Just now',
@@ -226,6 +222,7 @@ class StudioFixtureDataSource implements StudioDataSource {
   Future<void> requestProjectWorkspace({
     required String projectId,
     required String workspaceId,
+    List<String> repositoryMappings = const [],
   }) async {}
 
   @override
@@ -531,14 +528,12 @@ class EmptyWorkspaceFixtureDataSource extends StudioFixtureDataSource {
   Future<StudioProject> createProject(
       {required String name,
       String? description,
-      String? repository,
       String? instructions,
       String? defaultExecutionPolicy}) async {
     hasProject = true;
     return StudioProject(
       id: 'project-created',
       name: name,
-      repository: '',
       branch: '',
       activeGoals: 0,
       lastActivity: 'Just now',
@@ -558,7 +553,6 @@ class EmptyWorkspaceFixtureDataSource extends StudioFixtureDataSource {
     final project = StudioProject(
       id: 'project-created',
       name: 'My first project',
-      repository: '',
       branch: '',
       activeGoals: 0,
       lastActivity: 'Just now',

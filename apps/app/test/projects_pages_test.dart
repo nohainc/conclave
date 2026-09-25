@@ -18,7 +18,6 @@ void main() {
               id: 'project-1',
               name: 'Project One',
               description: 'Shared space for Project One',
-              repository: 'conclave/project-one',
               instructions: 'Follow standard engineering practices.',
               branch: 'main',
               activeGoals: 0,
@@ -38,9 +37,8 @@ void main() {
     // Verify Header items
     expect(find.text('Project One'), findsOneWidget);
     expect(find.text('Shared space for Project One'), findsOneWidget);
-    expect(find.text('conclave/project-one'), findsOneWidget);
     expect(find.text('Follow standard engineering practices.'), findsOneWidget);
-    expect(find.byIcon(Icons.edit_outlined), findsNWidgets(4));
+    expect(find.byIcon(Icons.edit_outlined), findsNWidgets(3));
     expect(find.text('Archive'), findsOneWidget);
     expect(find.text('Delete'), findsOneWidget);
 
@@ -75,7 +73,6 @@ void main() {
       id: 'project-1',
       name: 'Project One',
       description: 'First project description',
-      repository: '',
       branch: '',
       activeGoals: 0,
       lastActivity: 'today',
@@ -84,7 +81,6 @@ void main() {
       id: 'project-2',
       name: 'Project Two',
       description: 'Second project description',
-      repository: '',
       branch: '',
       activeGoals: 0,
       lastActivity: 'today',
@@ -137,7 +133,6 @@ void main() {
             project: StudioProject(
               id: 'project-1',
               name: 'Project One',
-              repository: '',
               branch: '',
               activeGoals: 0,
               lastActivity: 'today',
@@ -168,7 +163,7 @@ void main() {
     expect(find.text('Archive'), findsNothing);
     await tester.pumpAndSettle();
     expect(find.text('No Work yet. Describe what you need, then press Run.'),
-        findsNWidgets(2));
+        findsOneWidget);
     expect(find.text('Work'), findsNWidgets(2));
     expect(
         find.text(
@@ -180,7 +175,7 @@ void main() {
     expect(find.textContaining('checkout key'), findsNothing);
     expect(
         find.text('Viewer access can read the timeline but cannot run Work.'),
-        findsNWidgets(2));
+        findsOneWidget);
     expect(find.text('Run'), findsOneWidget);
   });
 
@@ -194,7 +189,6 @@ void main() {
             project: StudioProject(
               id: 'project-1',
               name: 'Project One',
-              repository: '',
               branch: '',
               activeGoals: 0,
               lastActivity: 'today',
@@ -235,7 +229,7 @@ void main() {
     await tester.tap(find.text('Run'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Latest Work: queued'), findsOneWidget);
+    expect(find.text('queued'), findsOneWidget);
     await tester.binding.setSurfaceSize(null);
   });
 
@@ -249,7 +243,6 @@ void main() {
             project: StudioProject(
               id: 'project-1',
               name: 'Project One',
-              repository: '',
               branch: '',
               activeGoals: 0,
               lastActivity: 'today',
@@ -290,7 +283,7 @@ void main() {
     expect(find.text('What should Conclave do?'), findsOneWidget);
     expect(find.text('References added'), findsOneWidget);
     expect(find.text('No Work yet. Describe what you need, then press Run.'),
-        findsNWidgets(2));
+        findsOneWidget);
     expect(find.text('queued'), findsNothing);
     await tester.binding.setSurfaceSize(null);
   });
@@ -336,7 +329,6 @@ void main() {
     const project = StudioProject(
       id: 'p-1',
       name: 'Test Project',
-      repository: '',
       branch: 'main',
       activeGoals: 0,
       lastActivity: 'today',

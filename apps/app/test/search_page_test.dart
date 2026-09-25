@@ -18,7 +18,6 @@ void main() {
           const StudioProject(
             id: 'proj-1',
             name: 'Conclave Core',
-            repository: 'nohainc/conclave',
             branch: 'main',
             activeGoals: 1,
             lastActivity: 'now',
@@ -50,7 +49,6 @@ void main() {
           const StudioProject(
             id: 'proj-2',
             name: 'Data Pipeline',
-            repository: 'nohainc/pipeline',
             branch: 'develop',
             activeGoals: 0,
             lastActivity: 'yesterday',

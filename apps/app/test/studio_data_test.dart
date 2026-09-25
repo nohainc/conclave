@@ -200,7 +200,6 @@ void main() {
           {
             'id': 'project-1',
             'name': 'Project One',
-            'repository': 'repo',
             'activeGoals': 0,
             'lastActivity': 'today',
           },
@@ -215,7 +214,6 @@ void main() {
         'project': {
           'id': 'project-1',
           'name': 'Project One',
-          'repository': 'repo',
           'activeGoals': 0,
           'lastActivity': 'today',
           'workstreams': [
@@ -282,7 +280,6 @@ void main() {
         'workspaceId': 'workspace-1',
         'name': 'Authentication redesign',
         'description': 'Improve the sign-in flow',
-        'repositoryId': 'repo-1',
         'updatedAt': '2026-09-23T00:00:00Z',
       },
     });

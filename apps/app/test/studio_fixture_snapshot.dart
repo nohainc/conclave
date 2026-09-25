@@ -19,7 +19,6 @@ StudioSnapshot studioFixtureSnapshot() => const StudioSnapshot(
         StudioProject(
           id: 'forge',
           name: 'Forge',
-          repository: 'nohainc/conclave',
           branch: 'main',
           activeGoals: 1,
           lastActivity: '2 min ago',
@@ -113,7 +112,6 @@ StudioSnapshot studioFixtureSnapshot() => const StudioSnapshot(
         StudioProject(
           id: 'atlas',
           name: 'Atlas API',
-          repository: 'nohainc/atlas-api',
           branch: 'develop',
           activeGoals: 0,
           lastActivity: 'Yesterday',

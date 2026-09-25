@@ -390,7 +390,6 @@ class StudioProject {
   const StudioProject({
     required this.id,
     required this.name,
-    required this.repository,
     required this.branch,
     required this.activeGoals,
     required this.lastActivity,
@@ -406,7 +405,6 @@ class StudioProject {
 
   final String id;
   final String name;
-  final String repository;
   final String branch;
   final int activeGoals;
   final String lastActivity;
@@ -422,7 +420,6 @@ class StudioProject {
   factory StudioProject.fromJson(Map<String, dynamic> json) => StudioProject(
         id: _string(json, 'id'),
         name: _string(json, 'name'),
-        repository: _string(json, 'repository'),
         branch: _string(json, 'branch'),
         activeGoals: json['activeGoals'] as int? ?? 0,
         lastActivity: _string(json, 'lastActivity'),
@@ -456,6 +453,38 @@ class StudioProject {
         settings: json['settings'] is Map
             ? Map<String, dynamic>.from(json['settings'] as Map)
             : const {},
+      );
+
+  StudioProject copyWith({
+    String? id,
+    String? name,
+    String? branch,
+    int? activeGoals,
+    String? lastActivity,
+    List<StudioChat>? chats,
+    List<StudioWorkstream>? workstreams,
+    String? description,
+    String? instructions,
+    String? defaultExecutionPolicy,
+    bool? archived,
+    String? role,
+    Map<String, dynamic>? settings,
+  }) =>
+      StudioProject(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        branch: branch ?? this.branch,
+        activeGoals: activeGoals ?? this.activeGoals,
+        lastActivity: lastActivity ?? this.lastActivity,
+        chats: chats ?? this.chats,
+        workstreams: workstreams ?? this.workstreams,
+        description: description ?? this.description,
+        instructions: instructions ?? this.instructions,
+        defaultExecutionPolicy:
+            defaultExecutionPolicy ?? this.defaultExecutionPolicy,
+        archived: archived ?? this.archived,
+        role: role ?? this.role,
+        settings: settings ?? this.settings,
       );
 }
 

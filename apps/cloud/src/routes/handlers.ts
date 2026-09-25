@@ -2097,7 +2097,7 @@ async function handleListProjects(
     const includeArchived =
       new URL(request.url).searchParams.get("archived") === "true";
     const rows = await env.CONCLAVE_DB.prepare(
-      `SELECT p.id, p.name, p.description, p.repository_id AS repositoryId,
+      `SELECT p.id, p.name, p.description,
               p.settings_json AS settingsJson, p.created_at AS createdAt, p.updated_at AS updatedAt
        FROM projects p
        JOIN project_memberships pm ON pm.project_id = p.id
@@ -2110,7 +2110,6 @@ async function handleListProjects(
         id: string;
         name: string;
         description: string | null;
-        repositoryId: string | null;
         settingsJson: string;
         createdAt: string;
         updatedAt: string;
@@ -2120,7 +2119,6 @@ async function handleListProjects(
       id: row.id,
       name: row.name,
       description: row.description,
-      repositoryId: row.repositoryId,
       settings: parseJson(row.settingsJson),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
@@ -2134,7 +2132,7 @@ async function handleListProjects(
     testAuthenticationEnabled(env);
   const rows = isOwnerOrAdmin
     ? await env.CONCLAVE_DB.prepare(
-        `SELECT p.id, p.workspace_id AS workspaceId, p.name, p.description, p.repository_id AS repositoryId,
+        `SELECT p.id, p.workspace_id AS workspaceId, p.name, p.description,
                 p.settings_json AS settingsJson, p.created_at AS createdAt, p.updated_at AS updatedAt
          FROM projects p WHERE p.workspace_id = ?1
            AND COALESCE(json_extract(p.settings_json, '$.archived'), 0) = 0
@@ -2146,13 +2144,12 @@ async function handleListProjects(
           workspaceId: string;
           name: string;
           description: string | null;
-          repositoryId: string | null;
           settingsJson: string;
           createdAt: string;
           updatedAt: string;
         }>()
     : await env.CONCLAVE_DB.prepare(
-        `SELECT p.id, p.workspace_id AS workspaceId, p.name, p.description, p.repository_id AS repositoryId,
+        `SELECT p.id, p.workspace_id AS workspaceId, p.name, p.description,
                 p.settings_json AS settingsJson, p.created_at AS createdAt, p.updated_at AS updatedAt
          FROM projects p
          JOIN project_memberships pm ON pm.project_id = p.id
@@ -2166,7 +2163,6 @@ async function handleListProjects(
           workspaceId: string;
           name: string;
           description: string | null;
-          repositoryId: string | null;
           settingsJson: string;
           createdAt: string;
           updatedAt: string;
@@ -2177,7 +2173,6 @@ async function handleListProjects(
     workspaceId: row.workspaceId,
     name: row.name,
     description: row.description,
-    repositoryId: row.repositoryId,
     settings: parseJson(row.settingsJson),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -2205,8 +2200,6 @@ async function handleCreateProject(
   const name = requiredString(body.name, "name");
   const description =
     typeof body.description === "string" ? body.description : null;
-  const repositoryId =
-    typeof body.repositoryId === "string" ? body.repositoryId : null;
   const settings =
     typeof body.settings === "object" && body.settings !== null
       ? (body.settings as Record<string, unknown>)
@@ -2222,14 +2215,13 @@ async function handleCreateProject(
     // model and would reject a valid zero-Workspace Project.
     await env.CONCLAVE_DB.batch([
       env.CONCLAVE_DB.prepare(
-        `INSERT INTO projects (id, owner_user_id, name, description, repository_id, settings_json, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)`,
+        `INSERT INTO projects (id, owner_user_id, name, description, settings_json, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)`,
       ).bind(
         id,
         context.userId,
         name,
         description,
-        repositoryId,
         JSON.stringify(settings),
         now,
       ),
@@ -2245,7 +2237,6 @@ async function handleCreateProject(
           id,
           name,
           description,
-          repositoryId,
           settings,
           createdAt: now,
           updatedAt: now,
@@ -2259,7 +2250,7 @@ async function handleCreateProject(
       workspaceId: context.workspaceId,
       name,
       description,
-      repositoryId,
+      repositoryId: null,
       settings,
       createdAt: now,
       updatedAt: now,
@@ -2267,14 +2258,13 @@ async function handleCreateProject(
     validateProject(project);
     await env.CONCLAVE_DB.batch([
       env.CONCLAVE_DB.prepare(
-        `INSERT INTO projects (id, workspace_id, name, description, repository_id, settings_json, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)`,
+        `INSERT INTO projects (id, workspace_id, name, description, settings_json, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)`,
       ).bind(
         id,
         context.workspaceId,
         name,
         description,
-        repositoryId,
         JSON.stringify(settings),
         now,
       ),
@@ -2302,7 +2292,7 @@ async function handleGetProject(
     accessContext,
   );
   const row = await env.CONCLAVE_DB.prepare(
-    `SELECT p.id, p.name, p.description, p.repository_id AS repositoryId,
+    `SELECT p.id, p.name, p.description,
             p.settings_json AS settingsJson, p.created_at AS createdAt, p.updated_at AS updatedAt
      FROM projects p WHERE p.id = ?1`,
   )
@@ -2311,7 +2301,6 @@ async function handleGetProject(
       id: string;
       name: string;
       description: string | null;
-      repositoryId: string | null;
       settingsJson: string;
       createdAt: string;
       updatedAt: string;
@@ -2322,7 +2311,6 @@ async function handleGetProject(
       id: row.id,
       name: row.name,
       description: row.description,
-      repositoryId: row.repositoryId,
       settings: parseJson(row.settingsJson),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
@@ -2345,7 +2333,7 @@ async function handleUpdateProject(
   );
   const existing = await env.CONCLAVE_DB.prepare(
     `SELECT id, name, description,
-            repository_id AS repositoryId, settings_json AS settingsJson,
+            settings_json AS settingsJson,
             created_at AS createdAt, updated_at AS updatedAt
      FROM projects WHERE id = ?1`,
   )
@@ -2354,7 +2342,6 @@ async function handleUpdateProject(
       id: string;
       name: string;
       description: string | null;
-      repositoryId: string | null;
       settingsJson: string;
       createdAt: string;
       updatedAt: string;
@@ -2389,25 +2376,18 @@ async function handleUpdateProject(
         : typeof body.description === "string"
           ? body.description
           : existing.description,
-    repositoryId:
-      body.repositoryId === null
-        ? null
-        : typeof body.repositoryId === "string"
-          ? body.repositoryId
-          : existing.repositoryId,
     settings,
     createdAt: existing.createdAt,
     updatedAt: now,
   };
   await env.CONCLAVE_DB.prepare(
-    `UPDATE projects SET name = ?1, description = ?2, repository_id = ?3,
-       settings_json = ?4, updated_at = ?5
-     WHERE id = ?6`,
+    `UPDATE projects SET name = ?1, description = ?2,
+       settings_json = ?3, updated_at = ?4
+     WHERE id = ?5`,
   )
     .bind(
       project.name,
       project.description,
-      project.repositoryId,
       JSON.stringify(project.settings),
       now,
       projectId,
@@ -3089,10 +3069,10 @@ async function handleCreateChatMessage(
       : {};
 
   const projectRow = await env.CONCLAVE_DB.prepare(
-    "SELECT repository_id AS repositoryId, settings_json AS settingsJson FROM projects WHERE id = ?1",
+    "SELECT settings_json AS settingsJson FROM projects WHERE id = ?1",
   )
     .bind(chatRow.projectId)
-    .first<{ repositoryId: string | null; settingsJson: string }>();
+    .first<{ settingsJson: string }>();
   const projectSettings = parseJson<Record<string, unknown>>(
     projectRow?.settingsJson,
   );
@@ -3590,15 +3570,15 @@ export async function handleProvisionWorkstreamCheckout(
   const requestedWorkspaceId =
     typeof body.workspaceId === "string" ? body.workspaceId : null;
   const workstream = await env.CONCLAVE_DB.prepare(
-    `SELECT p.repository_id AS repositoryId,
+    `SELECT ws.project_id AS projectId,
             ep.primary_workspace_id AS primaryWorkspaceId
-     FROM workstreams ws JOIN projects p ON p.id = ws.project_id
+     FROM workstreams ws
      LEFT JOIN workstream_execution_policies ep ON ep.workstream_id = ws.id
      WHERE ws.id = ?1`,
   )
     .bind(workstreamId)
     .first<{
-      repositoryId: string | null;
+      projectId: string;
       primaryWorkspaceId: string | null;
     }>();
   if (!workstream) throw new HttpError(404, "Workstream not found");
@@ -3607,21 +3587,40 @@ export async function handleProvisionWorkstreamCheckout(
   }
   const workspaceId = requestedWorkspaceId ?? workstream.primaryWorkspaceId;
   if (!workspaceId) throw new HttpError(422, "A Primary Workspace is required");
-  if (!workstream.repositoryId) {
-    throw new HttpError(
-      422,
-      "Project repository is required before provisioning a checkout",
-    );
-  }
   const now = new Date().toISOString();
   const grant = await env.CONCLAVE_DB.prepare(
-    `SELECT id FROM workspace_project_grants
+    `SELECT id, repository_mappings_json AS repositoryMappingsJson
+     FROM workspace_project_grants
      WHERE project_id = ?1 AND workspace_id = ?2 AND status = 'active'
        AND (expires_at IS NULL OR expires_at > ?3)`,
   )
-    .bind(projectId, workspaceId, now)
-    .first<{ id: string }>();
+    .bind(workstream.projectId, workspaceId, now)
+    .first<{ id: string; repositoryMappingsJson: string }>();
   if (!grant) throw new HttpError(409, "Workspace Project Grant is not active");
+  const repositoryMappings = parseJson<unknown[]>(
+    grant.repositoryMappingsJson,
+    [],
+  );
+  const repositoryId = repositoryMappings.reduce<string | null>(
+    (resolved, mapping) => {
+      if (resolved) return resolved;
+      if (typeof mapping === "string" && mapping.trim()) return mapping.trim();
+      if (typeof mapping === "object" && mapping !== null) {
+        const candidate = (mapping as Record<string, unknown>).repositoryId;
+        if (typeof candidate === "string" && candidate.trim()) {
+          return candidate.trim();
+        }
+      }
+      return null;
+    },
+    null,
+  );
+  if (!repositoryId) {
+    throw new HttpError(
+      422,
+      "Add at least one repository mapping to the Workspace Project Grant before provisioning a checkout",
+    );
+  }
   const workspace = await env.CONCLAVE_DB.prepare(
     "SELECT status FROM execution_workspaces WHERE id = ?1",
   )
@@ -3659,7 +3658,7 @@ export async function handleProvisionWorkstreamCheckout(
         checkoutId,
         workstreamId,
         workspaceId,
-        workstream.repositoryId,
+        repositoryId,
         typeof body.revision === "string" ? body.revision : "HEAD",
         `runtime_pending:${checkoutId}`,
         now,
@@ -3684,7 +3683,7 @@ export async function handleProvisionWorkstreamCheckout(
         body: JSON.stringify({
           checkoutId,
           workstreamId,
-          repositoryId: workstream.repositoryId,
+          repositoryId,
         }),
       },
     );
@@ -7334,7 +7333,6 @@ async function handleStudioSnapshot(
     // this compatibility response only needs the user's Project list.
     const rows = await env.CONCLAVE_DB.prepare(
       `SELECT p.id, p.name, p.description,
-              p.repository_id AS repository,
               p.settings_json AS settingsJson,
               p.updated_at AS lastActivity
        FROM projects p
@@ -7348,7 +7346,6 @@ async function handleStudioSnapshot(
         id: string;
         name: string;
         description: string | null;
-        repository: string | null;
         settingsJson: string | null;
         lastActivity: string;
       }>();
@@ -7387,7 +7384,6 @@ async function handleStudioSnapshot(
           id: project.id,
           name: project.name,
           description: project.description,
-          repository: project.repository ?? "",
           branch: "",
           activeGoals: 0,
           chats: [],
@@ -7481,7 +7477,7 @@ async function handleStudioSnapshot(
     latestRun,
   ] = await Promise.all([
     env.CONCLAVE_DB.prepare(
-      `SELECT p.id, p.name, COALESCE(p.repository_id, '') AS repository, '' AS branch, (SELECT COUNT(*) FROM goals g WHERE g.project_id = p.id AND g.status IN ('running', 'waiting')) AS activeGoals, p.updated_at AS lastActivity FROM projects p${projectListFilter} ORDER BY p.updated_at DESC`,
+      `SELECT p.id, p.name, '' AS repository, '' AS branch, (SELECT COUNT(*) FROM goals g WHERE g.project_id = p.id AND g.status IN ('running', 'waiting')) AS activeGoals, p.updated_at AS lastActivity FROM projects p${projectListFilter} ORDER BY p.updated_at DESC`,
     )
       .bind(...projectListBind)
       .all(),
@@ -7765,7 +7761,7 @@ async function handleProjectReadModel(
   );
   const projectRow = await env.CONCLAVE_DB.prepare(
     `SELECT p.id, p.workspace_id AS workspaceId, p.name,
-            COALESCE(p.repository_id, '') AS repository,
+            '' AS repository,
             p.description, p.settings_json AS settings,
             p.created_at AS createdAt, p.updated_at AS updatedAt
      FROM projects p
@@ -8082,14 +8078,13 @@ async function validateAndClaimCiEvidence(
   if (evidence.runId !== runId)
     throw new HttpError(409, "CI evidence does not belong to this run");
   const expected = await env.CONCLAVE_DB.prepare(
-    `SELECT r.policy_snapshot_json, p.repository_id, p.workspace_id
+    `SELECT r.policy_snapshot_json, p.workspace_id
      FROM runs r JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id
      WHERE r.id = ?1`,
   )
     .bind(runId)
     .first<{
       policy_snapshot_json: string;
-      repository_id: string | null;
       workspace_id: string | null;
     }>();
   if (!expected) throw new HttpError(404, "Run not found");
@@ -8104,7 +8099,7 @@ async function validateAndClaimCiEvidence(
   const expectedRepository =
     typeof policy.repositoryId === "string"
       ? policy.repositoryId
-      : expected.repository_id;
+      : undefined;
   const expectedCommitSha =
     typeof policy.expectedCommitSha === "string"
       ? policy.expectedCommitSha

@@ -123,11 +123,9 @@ class SearchPage extends StatelessWidget {
     for (final project in snapshot.projects) {
       actions.add(CommandPaletteAction(
         title: project.name,
-        subtitle: project.repository.isNotEmpty
-            ? project.repository
-            : (project.description.isNotEmpty
-                ? project.description
-                : 'Project'),
+        subtitle: project.description.isNotEmpty
+            ? project.description
+            : 'Project',
         icon: Icons.folder_outlined,
         category: 'Projects',
         onSelect: () {

@@ -1092,7 +1092,7 @@ export async function readExecutionContext(
     );
   }
   const project = await env.CONCLAVE_DB.prepare(
-    `SELECT p.id AS project_id, p.repository_id,
+    `SELECT p.id AS project_id,
             g.id AS goal_id, g.created_by_user_id,
             r.goal_id AS run_goal_id,
             r.project_id AS run_project_id
@@ -1104,7 +1104,6 @@ export async function readExecutionContext(
     .bind(goalId, runId, organizationId)
     .first<{
       project_id: string;
-      repository_id: string | null;
       goal_id: string;
       run_goal_id: string | null;
       run_project_id: string | null;
@@ -1126,11 +1125,10 @@ export async function readExecutionContext(
     throw new Error("Forge project does not match the Goal project");
   }
   if (
-    typeof params.repositoryId === "string" &&
-    params.repositoryId.length > 0 &&
-    params.repositoryId !== project.repository_id
+    typeof params.repositoryId !== "string" ||
+    params.repositoryId.trim().length === 0
   ) {
-    throw new Error("Forge repository does not match the Project repository");
+    throw new Error("Forge execution requires a repository mapping");
   }
   return {
     executionId,
@@ -1141,7 +1139,7 @@ export async function readExecutionContext(
     requestedByUserId:
       requestedByUserId || String(project.created_by_user_id ?? ""),
     projectId: String(params.projectId ?? project.project_id),
-    repositoryId: String(params.repositoryId ?? project.repository_id ?? ""),
+    repositoryId: params.repositoryId.trim(),
     revision: String(params.revision ?? "HEAD"),
   };
 }

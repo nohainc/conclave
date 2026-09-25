@@ -91,8 +91,6 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
     _nameController = TextEditingController(text: widget.project.name);
     _descriptionController =
         TextEditingController(text: widget.project.description);
-    _repositoryController =
-        TextEditingController(text: widget.project.repository);
     _instructionsController =
         TextEditingController(text: widget.project.instructions);
     workstreams = [...widget.project.workstreams];
@@ -106,12 +104,10 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
     if (oldWidget.project.id != widget.project.id ||
         oldWidget.project.name != widget.project.name ||
         oldWidget.project.description != widget.project.description ||
-        oldWidget.project.repository != widget.project.repository ||
         oldWidget.project.instructions != widget.project.instructions) {
       if (_editingField == null) {
         _nameController.text = widget.project.name;
         _descriptionController.text = widget.project.description;
-        _repositoryController.text = widget.project.repository;
         _instructionsController.text = widget.project.instructions;
       }
     }
@@ -130,7 +126,6 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
     _tabController.dispose();
     _nameController.dispose();
     _descriptionController.dispose();
-    _repositoryController.dispose();
     _instructionsController.dispose();
     super.dispose();
   }
@@ -147,8 +142,11 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
         projectId: widget.project.id,
         name: name,
         description: _descriptionController.text.trim(),
-        repository: _repositoryController.text.trim(),
         instructions: _instructionsController.text.trim(),
+        settings: {
+          ...widget.project.settings,
+          'repository': _repositoryController.text.trim(),
+        },
       );
       if (!mounted) return;
       setState(() {
@@ -189,23 +187,39 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
       return;
     }
     var selectedId = ownedWorkspaces.first.id;
+    var repositoryMappings = '';
     final accepted = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('Connect Workspace'),
-          content: DropdownButtonFormField<String>(
-            initialValue: selectedId,
-            decoration: const InputDecoration(labelText: 'Workspace'),
-            items: ownedWorkspaces
-                .map((workspace) => DropdownMenuItem(
-                      value: workspace.id,
-                      child: Text(workspace.name),
-                    ))
-                .toList(),
-            onChanged: (value) {
-              if (value != null) setDialogState(() => selectedId = value);
-            },
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: selectedId,
+                decoration: const InputDecoration(labelText: 'Workspace'),
+                items: ownedWorkspaces
+                    .map((workspace) => DropdownMenuItem(
+                          value: workspace.id,
+                          child: Text(workspace.name),
+                        ))
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) setDialogState(() => selectedId = value);
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                onChanged: (value) => repositoryMappings = value,
+                decoration: const InputDecoration(
+                  labelText: 'Repository IDs (optional)',
+                  hintText: 'repo-a, repo-b',
+                  helperText:
+                      'Required only for stateful Workstream checkouts.',
+                ),
+              ),
+            ],
           ),
           actions: [
             TextButton(
@@ -225,6 +239,11 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
       await widget.dataSource.requestProjectWorkspace(
         projectId: widget.project.id,
         workspaceId: selectedId,
+        repositoryMappings: repositoryMappings
+            .split(',')
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty)
+            .toList(),
       );
       await _loadExecution();
       _message('Workspace connected to this Project.');
@@ -416,7 +435,6 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
         projectId: widget.project.id,
         name: widget.project.name,
         description: widget.project.description,
-        repository: widget.project.repository,
         instructions: widget.project.instructions,
         defaultExecutionPolicy: widget.project.defaultExecutionPolicy,
         settings: {
@@ -428,7 +446,6 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
       final mergedProject = StudioProject(
         id: updatedProject.id,
         name: updatedProject.name,
-        repository: updatedProject.repository,
         branch: updatedProject.branch,
         activeGoals: updatedProject.activeGoals,
         lastActivity: updatedProject.lastActivity,
@@ -719,9 +736,6 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
                           case 'description':
                             controller.text = widget.project.description;
                             break;
-                          case 'repository':
-                            controller.text = widget.project.repository;
-                            break;
                           case 'instructions':
                             controller.text = widget.project.instructions;
                             break;
@@ -831,16 +845,7 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
                   maxLines: 2,
                 ),
                 const SizedBox(height: 6),
-                // Line 3: Repository
-                _buildEditableField(
-                  label: 'Repository',
-                  fieldKey: 'repository',
-                  value: widget.project.repository,
-                  placeholder: 'No repository configured.',
-                  controller: _repositoryController,
-                ),
-                const SizedBox(height: 6),
-                // Line 4: Instructions
+                // Project instructions
                 _buildEditableField(
                   label: 'Project Instructions',
                   fieldKey: 'instructions',
@@ -1221,41 +1226,6 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   bool get _canExecute =>
       widget.project.role == 'owner' || widget.project.role == 'collaborator';
 
-  Future<void> _rename() async {
-    if (widget.onRename == null) return;
-    var name = widget.workstream.name;
-    final accepted = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Rename Workstream'),
-        content: TextFormField(
-          autofocus: true,
-          initialValue: name,
-          onChanged: (value) => name = value,
-          onFieldSubmitted: (_) {
-            if (name.trim().isNotEmpty) {
-              Navigator.pop(dialogContext, true);
-            }
-          },
-          decoration: const InputDecoration(labelText: 'Workstream name'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    if (accepted == true && name.trim().isNotEmpty) {
-      await widget.onRename!(name.trim());
-    }
-  }
-
   @override
   void dispose() {
     _tabController.dispose();
@@ -1274,61 +1244,16 @@ class _WorkstreamPageState extends State<WorkstreamPage>
         builder: (context, _) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              runSpacing: 10,
-              children: [
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(widget.project.name,
-                      style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          fontSize: 12)),
-                  const SizedBox(height: 5),
-                  Text(widget.workstream.name,
-                      style: const TextStyle(
-                          fontSize: 25, fontWeight: FontWeight.w700)),
-                ]),
-                Wrap(spacing: 8, children: [
-                  OutlinedButton.icon(
-                    onPressed: widget.onBackToProject,
-                    icon: const Icon(Icons.arrow_back),
-                    label: const Text('Project'),
-                  ),
-                  if (widget.project.role == 'owner' ||
-                      widget.project.role == 'collaborator')
-                    TextButton.icon(
-                      onPressed: _rename,
-                      icon: const Icon(Icons.edit_outlined),
-                      label: const Text('Rename'),
-                    ),
-                  if (widget.project.role == 'owner' ||
-                      widget.project.role == 'collaborator')
-                    TextButton.icon(
-                      onPressed: widget.onArchive,
-                      icon: const Icon(Icons.archive_outlined),
-                      label: const Text('Archive'),
-                    ),
-                ]),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              Chip(label: Text(widget.workstream.status)),
-              Chip(label: Text('Lead: ${widget.workstream.lead}')),
-              Chip(label: Text('Queue: ${widget.workstream.queueStatus}')),
-            ]),
-            const SizedBox(height: 8),
-            Text(_timeline.isEmpty
-                ? 'No Work yet. Describe what you need, then press Run.'
-                : 'Latest Work: ${_timeline.first.status}'),
-            if (!_canExecute)
-              const Text(
-                  'Viewer access can read the timeline but cannot run Work.'),
-            const SizedBox(height: 12),
-            TabBar(
-              controller: _tabController,
-              tabs: const [Tab(text: 'Discuss'), Tab(text: 'Work')],
+            Center(
+              child: TabBar(
+                controller: _tabController,
+                isScrollable: true,
+                tabAlignment: TabAlignment.center,
+                tabs: const [
+                  Tab(text: 'Discuss'),
+                  Tab(text: 'Work'),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             if (_tabController.index == 0)

@@ -9,7 +9,6 @@ void main() {
   const project = StudioProject(
     id: 'project-1',
     name: 'Authentication',
-    repository: 'repo',
     branch: 'main',
     activeGoals: 0,
     lastActivity: 'today',
@@ -80,6 +79,9 @@ void main() {
 
     expect(find.text('Discuss'), findsWidgets);
     expect(find.text('Work'), findsOneWidget);
+    expect(find.text('Brief'), findsOneWidget);
+    await tester.tap(find.text('Work'));
+    await tester.pumpAndSettle();
     expect(find.text('No Work yet. Describe what you need, then press Run.'),
         findsOneWidget);
     expect(find.text('lease'), findsNothing);
