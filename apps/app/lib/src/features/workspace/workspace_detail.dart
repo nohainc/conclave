@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../studio/studio_models.dart';
+import '../common/workspace_release.dart';
 
 /// Contextual Workspace detail view for runtime state and configured Workers.
 class WorkspaceDetailView extends StatefulWidget {
@@ -13,6 +14,8 @@ class WorkspaceDetailView extends StatefulWidget {
     required this.onUpdate,
     required this.onRevoke,
     required this.onGrant,
+    required this.onConnect,
+    this.onOpenDownloads,
     this.initialTab = 0,
     this.onOpenConfiguredWorker,
     this.onSetupConfiguredWorkerWorkspace,
@@ -26,6 +29,8 @@ class WorkspaceDetailView extends StatefulWidget {
   final ValueChanged<StudioAgent> onUpdate;
   final ValueChanged<StudioAgent> onRevoke;
   final ValueChanged<StudioAgent> onGrant;
+  final Future<void> Function(StudioAgent) onConnect;
+  final VoidCallback? onOpenDownloads;
   final int initialTab;
   final ValueChanged<StudioConfiguredWorker>? onOpenConfiguredWorker;
   final Future<void> Function(
@@ -110,7 +115,7 @@ class _WorkspaceDetailViewState extends State<WorkspaceDetailView>
               ],
             ),
             Text(
-              '${widget.workspace.os} · ${widget.workspace.architecture} · ${widget.workspace.status}',
+              '${widget.workspace.os} · ${widget.workspace.architecture} · ${_statusLabel(widget.workspace.status)}',
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
@@ -152,23 +157,110 @@ class _WorkspaceDetailViewState extends State<WorkspaceDetailView>
               spacing: 24,
               runSpacing: 12,
               children: [
-                Text('Status: ${widget.workspace.status}'),
+                Text('Status: ${_statusLabel(widget.workspace.status)}'),
+                Text(
+                    'Machine: ${_machineLabel(widget.workspace.os, widget.workspace.architecture)}'),
+                Text('Hostname: ${widget.workspace.hostname}'),
+                Text('Conclave Workspace: ${widget.workspace.appVersion}'),
+                if (widget.workspace.runtimeCapabilities.isNotEmpty)
+                  Text(
+                      'Runtime capabilities: ${widget.workspace.runtimeCapabilities.join(', ')}'),
                 Text(
                     'Current load: ${widget.workspace.activeTaskCount} active tasks'),
                 Text('Last seen: ${widget.workspace.lastSeen}'),
-                Text('Runtime: ${widget.workspace.version}')
+                Text('Runtime: ${widget.workspace.version}'),
+                if (!_isInstalled) ...[
+                  const Text('No machine is connected to this Workspace yet.'),
+                  FilledButton.icon(
+                    onPressed: () => widget.onConnect(widget.workspace),
+                    icon: const Icon(Icons.link_outlined),
+                    label: const Text('Connect machine'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: widget.onOpenDownloads,
+                    icon: const Icon(Icons.download_outlined),
+                    label: const Text('Download Conclave Workspace'),
+                  ),
+                ],
               ],
             ),
           ),
-          _Panel(
-            title: 'Update state',
-            subtitle: 'Signed Workspace runtime release information.',
-            child: Text(
-              'Channel: ${widget.workspace.updateChannel}\nApplication version: ${widget.workspace.appVersion}',
-            ),
-          ),
+          _workspaceReleasePanel(),
         ],
       );
+
+  bool get _isInstalled =>
+      widget.workspace.appVersion.trim().isNotEmpty &&
+      widget.workspace.appVersion != '—';
+
+  Widget _workspaceReleasePanel() => _Panel(
+        title: 'Conclave Workspace',
+        subtitle: 'Runtime installation and release status.',
+        child: _isInstalled
+            ? Wrap(
+                spacing: 24,
+                runSpacing: 12,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text('Installed\n${widget.workspace.appVersion}'),
+                  const Text('Latest\n$conclaveWorkspaceLatestVersion'),
+                  if (workspaceUpdateAvailable(widget.workspace.appVersion))
+                    FilledButton.icon(
+                      onPressed: widget.onOpenDownloads,
+                      icon: const Icon(Icons.system_update_outlined),
+                      label: const Text('Update available'),
+                    )
+                  else
+                    const Text('Up to date'),
+                ],
+              )
+            : Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  const Text('Not installed'),
+                  OutlinedButton.icon(
+                    onPressed: widget.onOpenDownloads,
+                    icon: const Icon(Icons.download_outlined),
+                    label: const Text('Download Conclave Workspace'),
+                  ),
+                ],
+              ),
+      );
+
+  String _statusLabel(String status) => switch (status.toLowerCase()) {
+        'enrolled' || 'not_connected' => 'Not connected',
+        'pairing' => 'Pairing',
+        'online' => 'Online',
+        'offline' => 'Offline',
+        'busy' => 'Busy',
+        'draining' => 'Draining',
+        'revoked' => 'Revoked',
+        _ => status,
+      };
+
+  String _platformLabel(String value) => switch (value.toLowerCase()) {
+        'macos' => 'macOS',
+        'windows' => 'Windows',
+        'linux' => 'Linux',
+        _ => value,
+      };
+
+  String _architectureLabel(String value) => switch (value.toLowerCase()) {
+        'arm64' => 'Apple Silicon',
+        'x64' => 'x64',
+        _ => value,
+      };
+
+  String _machineLabel(String os, String arch) {
+    final p = _platformLabel(os);
+    final a = _architectureLabel(arch);
+    if ((p == '—' || p.isEmpty) && (a == '—' || a.isEmpty)) return '—';
+    if (p == '—' || p.isEmpty) return a;
+    if (a == '—' || a.isEmpty) return p;
+    return '$p · $a';
+  }
 
   Widget _workers() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,

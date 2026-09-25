@@ -713,22 +713,10 @@ class AppIconRail extends StatelessWidget {
                   for (final workstream in project.workstreams)
                     MenuItemButton(
                       style: itemStyle(),
-                      leadingIcon: Padding(
-                        padding: const EdgeInsets.only(left: 12),
-                        child: Icon(
-                          Icons.account_tree_outlined,
-                          size: 14,
-                          color: shellContext.isNavActive(
-                                  StudioNavigation.workstream(
-                                      project.id, workstream.id))
-                              ? const Color(0xffbcb3ff)
-                              : (isDark ? Colors.white54 : Colors.black54),
-                        ),
-                      ),
                       onPressed: () => onNavigateTo(StudioNavigation.workstream(
                           project.id, workstream.id)),
                       child: Padding(
-                        padding: const EdgeInsets.only(left: 12),
+                        padding: const EdgeInsets.only(left: 24),
                         child: Text(
                           workstream.name,
                           style: TextStyle(

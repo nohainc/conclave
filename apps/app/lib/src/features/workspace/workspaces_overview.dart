@@ -9,143 +9,215 @@ class WorkspacesOverview extends StatelessWidget {
     required this.workspaces,
     required this.onAdd,
     required this.onSelectWorkspace,
+    this.onOpenDownloads,
   });
 
   final List<StudioAgent> workspaces;
   final VoidCallback onAdd;
   final ValueChanged<StudioAgent> onSelectWorkspace;
+  final VoidCallback? onOpenDownloads;
 
   @override
   Widget build(BuildContext context) {
-    if (workspaces.isEmpty) {
-      return Column(
+    final theme = Theme.of(context);
+    final mutedStyle = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Card(
-            margin: const EdgeInsets.only(bottom: 14),
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'No Workspaces yet',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    'Add a Workspace to provide execution capacity to Projects.',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  FilledButton.icon(
-                    onPressed: onAdd,
-                    icon: const Icon(Icons.add_business_outlined),
-                    label: const Text('Add Workspace'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Align(
-          alignment: Alignment.centerRight,
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: FilledButton.icon(
-              onPressed: onAdd,
-              icon: const Icon(Icons.add_business_outlined),
-              label: const Text('Add Workspace'),
-            ),
-          ),
-        ),
-        ...workspaces.map((ws) => _WorkspaceCard(
-              workspace: ws,
-              onSelect: () => onSelectWorkspace(ws),
-            )),
-      ],
-    );
-  }
-}
-
-class _WorkspaceCard extends StatelessWidget {
-  const _WorkspaceCard({
-    required this.workspace,
-    required this.onSelect,
-  });
-
-  final StudioAgent workspace;
-  final VoidCallback onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    final online = workspace.status.toLowerCase() == 'online';
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        onTap: onSelect,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Wrap(
-                spacing: 10,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(
-                    workspace.name,
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                    ),
+              Expanded(
+                child: Text(
+                  'Workspaces provide execution capacity for AI workloads and Workers.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
-                  Chip(
-                    avatar: Icon(
-                      Icons.circle,
-                      size: 9,
-                      color: online ? Colors.green : Colors.grey,
-                    ),
-                    label: Text(online ? 'Online' : workspace.status),
-                  ),
-                  Text('${workspace.os} · ${workspace.architecture}'),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 20,
-                runSpacing: 8,
-                children: [
-                  Text('${workspace.workerCount} Workers'),
-                  Text('${workspace.activeTaskCount} active tasks'),
-                  Text('${workspace.workspaceBindings.length} Project Grants'),
-                  Text('Last seen: ${workspace.lastSeen}'),
-                  Text('Update: ${workspace.updateChannel}'),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(
-                  onPressed: onSelect,
-                  icon: const Icon(Icons.open_in_new),
-                  label: const Text('View Workspace'),
                 ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.add),
+                tooltip: 'Add Workspace',
+                splashRadius: 20,
+                onPressed: onAdd,
               ),
             ],
           ),
-        ),
+          const SizedBox(height: 8),
+          if (workspaces.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('No workspaces yet.'),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: onOpenDownloads,
+                    icon: const Icon(Icons.download_outlined),
+                    label: const Text('Download Conclave Workspace'),
+                  ),
+                ],
+              ),
+            )
+          else ...[
+            Padding(
+              padding:
+                  const EdgeInsets.only(top: 6, bottom: 4, left: 4, right: 4),
+              child: Row(
+                children: [
+                  const Expanded(
+                    flex: 5,
+                    child: SizedBox.shrink(),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Text('Workers',
+                        textAlign: TextAlign.center, style: mutedStyle),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Text('Projects',
+                        textAlign: TextAlign.center, style: mutedStyle),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Icon(
+                          Icons.sensors_rounded,
+                          size: 13,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 4),
+                        Text('Connected', style: mutedStyle),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              children: workspaces.map((workspace) {
+                final online = workspace.status.toLowerCase() == 'online';
+                return InkWell(
+                  onTap: () => onSelectWorkspace(workspace),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 5,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                workspace.name,
+                                style: const TextStyle(
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              if (workspace.os != '—' ||
+                                  workspace.architecture != '—')
+                                Text(
+                                  '${workspace.os} · ${workspace.architecture}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            '${workspace.workerCount}',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            '${workspace.workspaceBindings.length}',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.circle,
+                                  size: 7,
+                                  color: online
+                                      ? const Color(0xff3ca879)
+                                      : Colors.grey,
+                                ),
+                                const SizedBox(width: 5),
+                                Flexible(
+                                  child: Text(
+                                    online
+                                        ? 'Online'
+                                        : _statusLabel(workspace.status),
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                      color: online
+                                          ? const Color(0xff3ca879)
+                                          : theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ],
       ),
     );
   }
+
+  String _statusLabel(String status) => switch (status.toLowerCase()) {
+        'enrolled' || 'not_connected' => 'Not connected',
+        'pairing' => 'Pairing',
+        'online' => 'Online',
+        'offline' => 'Offline',
+        'busy' => 'Busy',
+        'draining' => 'Draining',
+        'revoked' => 'Revoked',
+        _ => status,
+      };
 }

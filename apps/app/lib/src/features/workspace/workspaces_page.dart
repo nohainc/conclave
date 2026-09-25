@@ -23,6 +23,8 @@ class WorkspacesPage extends StatefulWidget {
     required this.onUpdate,
     required this.onRevoke,
     required this.onGrant,
+    this.onOpenDownloads,
+    this.onConnect,
     this.workerActionMessage,
     this.onDismissWorkerActionMessage,
     this.onAddConfiguredWorker,
@@ -41,6 +43,8 @@ class WorkspacesPage extends StatefulWidget {
   final ValueChanged<StudioAgent> onUpdate;
   final ValueChanged<StudioAgent> onRevoke;
   final ValueChanged<StudioAgent> onGrant;
+  final VoidCallback? onOpenDownloads;
+  final Future<void> Function(StudioAgent)? onConnect;
   final String? workerActionMessage;
   final VoidCallback? onDismissWorkerActionMessage;
   final VoidCallback? onAddConfiguredWorker;
@@ -101,6 +105,8 @@ class _WorkspacesPageState extends State<WorkspacesPage>
         onUpdate: widget.onUpdate,
         onRevoke: widget.onRevoke,
         onGrant: widget.onGrant,
+        onConnect: widget.onConnect ?? (_) async {},
+        onOpenDownloads: widget.onOpenDownloads,
         configuredWorkers: widget.configuredWorkers,
         onOpenConfiguredWorker: widget.onOpenConfiguredWorker,
         onSetupConfiguredWorkerWorkspace:
@@ -144,6 +150,7 @@ class _WorkspacesPageState extends State<WorkspacesPage>
                 workspaces: widget.workspaces,
                 onAdd: widget.onAdd,
                 onSelectWorkspace: (ws) => setState(() => selected = ws),
+                onOpenDownloads: widget.onOpenDownloads,
               )
             else if (activeIndex == 1)
               WorkersTab(
@@ -170,8 +177,9 @@ class _WorkspacesPageState extends State<WorkspacesPage>
           Text(
             title,
             style: const TextStyle(
-              fontSize: 25,
+              fontSize: 22,
               fontWeight: FontWeight.w700,
+              letterSpacing: -0.3,
             ),
           ),
           const SizedBox(height: 6),

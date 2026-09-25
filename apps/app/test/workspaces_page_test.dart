@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/features/workspace/workspaces_page.dart';
+import 'package:conclave_app/src/features/common/workspace_release.dart';
 import 'package:conclave_app/src/studio/studio_models.dart';
 
 import 'studio_fixture_snapshot.dart';
@@ -15,6 +16,35 @@ void main() {
   }
 
   group('Execution page', () {
+    test('detects an available Workspace update', () {
+      expect(workspaceUpdateAvailable('1.0.2'), isTrue);
+      expect(workspaceUpdateAvailable('1.0.3'), isFalse);
+      expect(workspaceUpdateAvailable('not-installed'), isFalse);
+    });
+
+    test('parses runtime-reported machine facts', () {
+      final workspace = StudioWorkspace.fromJson({
+        'id': 'workspace-1',
+        'name': 'MacBook Pro',
+        'slug': 'macbook-pro',
+        'status': 'online',
+        'lifecycleStatus': 'pairing',
+        'role': 'owner',
+        'platform': 'macos',
+        'architecture': 'arm64',
+        'hostname': 'Vitalii-MacBook-Pro',
+        'appVersion': '1.0.3',
+        'runtimeCapabilitiesJson': '["dart", "shell"]',
+      });
+
+      expect(workspace.platform, 'macos');
+      expect(workspace.status, 'pairing');
+      expect(workspace.architecture, 'arm64');
+      expect(workspace.hostname, 'Vitalii-MacBook-Pro');
+      expect(workspace.appVersion, '1.0.3');
+      expect(workspace.runtimeCapabilities, ['dart', 'shell']);
+    });
+
     testWidgets('explains the execution model in product language',
         (tester) async {
       final snapshot = studioFixtureSnapshot();
@@ -66,7 +96,7 @@ void main() {
       expect(find.widgetWithText(Tab, 'Workers'), findsOneWidget);
       expect(find.widgetWithText(Tab, 'AI Accounts'), findsNothing);
 
-      await tester.tap(find.text('Add Workspace').first);
+      await tester.tap(find.byTooltip('Add Workspace'));
       expect(addWorkspaceCalled, isTrue);
 
       await tester.tap(find.widgetWithText(Tab, 'Workers'));
@@ -151,10 +181,12 @@ void main() {
     testWidgets('keeps Add Workspace available when none exist',
         (tester) async {
       var addWorkspaceCalled = false;
+      var downloadsOpened = false;
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: const [],
         workers: const [],
         onAdd: () => addWorkspaceCalled = true,
+        onOpenDownloads: () => downloadsOpened = true,
         onRename: (_) {},
         onUpdate: (_) {},
         onRevoke: (_) {},
@@ -162,9 +194,11 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      expect(find.text('No Workspaces yet'), findsOneWidget);
-      await tester.tap(find.text('Add Workspace'));
+      expect(find.text('No workspaces yet.'), findsOneWidget);
+      await tester.tap(find.byTooltip('Add Workspace'));
       expect(addWorkspaceCalled, isTrue);
+      await tester.tap(find.text('Download Conclave Workspace'));
+      expect(downloadsOpened, isTrue);
     });
 
     testWidgets(
@@ -183,7 +217,7 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('View Workspace').first);
+      await tester.tap(find.text(snapshot.agents.first.name).first);
       await tester.pumpAndSettle();
       expect(find.text('Workspace overview'), findsOneWidget);
       expect(find.text('Project access'), findsOneWidget);
@@ -226,7 +260,7 @@ void main() {
         onGrant: (_) {},
       )));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('View Workspace').first);
+      await tester.tap(find.text(snapshot.agents.first.name).first);
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(Tab, 'Workers'));
       await tester.pumpAndSettle();

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 enum RunStatus {
   active,
   running,
@@ -168,6 +170,18 @@ String _string(Map<String, dynamic> json, String key, [String fallback = '—'])
 
 List<String> _strings(Map<String, dynamic> json, String key) =>
     List<String>.from(json[key] as List? ?? const []);
+
+List<String> _jsonStrings(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value is List) return value.whereType<String>().toList();
+  if (value is! String) return const [];
+  try {
+    final decoded = jsonDecode(value);
+    return decoded is List ? decoded.whereType<String>().toList() : const [];
+  } catch (_) {
+    return const [];
+  }
+}
 
 Map<String, dynamic> _map(Map<String, dynamic> json, String key) {
   final value = json[key];
@@ -666,6 +680,7 @@ class StudioAgent {
     this.appVersion = '—',
     this.updateChannel = '—',
     this.lastSeen = '—',
+    this.runtimeCapabilities = const [],
     this.workspaceBindings = const [],
     this.desiredWorkers = const [],
     this.installedWorkers = const [],
@@ -684,6 +699,7 @@ class StudioAgent {
   final String appVersion;
   final String updateChannel;
   final String lastSeen;
+  final List<String> runtimeCapabilities;
   final List<String> workspaceBindings;
   final List<StudioDesiredWorker> desiredWorkers;
   final List<StudioInstalledWorker> installedWorkers;
@@ -692,7 +708,7 @@ class StudioAgent {
         id: _string(json, 'id'),
         name: _string(json, 'name'),
         hostname: _string(json, 'hostname'),
-        status: _string(json, 'status'),
+        status: _string(json, 'lifecycleStatus', _string(json, 'status')),
         version: _string(json, 'version'),
         pluginCount: json['pluginCount'] as int? ?? 0,
         workerCount: json['workerCount'] as int? ?? 0,
@@ -702,6 +718,7 @@ class StudioAgent {
         appVersion: _string(json, 'appVersion'),
         updateChannel: _string(json, 'updateChannel'),
         lastSeen: _string(json, 'lastSeen'),
+        runtimeCapabilities: _jsonStrings(json, 'runtimeCapabilitiesJson'),
         workspaceBindings: _strings(json, 'workspaceBindings'),
         desiredWorkers: (json['desiredWorkers'] as List? ?? const [])
             .whereType<Map>()
@@ -1182,6 +1199,12 @@ class StudioWorkspace {
     required this.slug,
     required this.status,
     required this.role,
+    this.platform = '—',
+    this.architecture = '—',
+    this.hostname = '—',
+    this.appVersion = '—',
+    this.runtimeCapabilities = const [],
+    this.factsUpdatedAt,
   });
 
   final String id;
@@ -1189,14 +1212,27 @@ class StudioWorkspace {
   final String slug;
   final String status;
   final String role;
+  final String platform;
+  final String architecture;
+  final String hostname;
+  final String appVersion;
+  final List<String> runtimeCapabilities;
+  final String? factsUpdatedAt;
 
   factory StudioWorkspace.fromJson(Map<String, dynamic> json) =>
       StudioWorkspace(
         id: _string(json, 'id'),
         name: _string(json, 'name'),
         slug: _string(json, 'slug'),
-        status: _string(json, 'status', 'active'),
+        status:
+            _string(json, 'lifecycleStatus', _string(json, 'status', 'active')),
         role: _string(json, 'role', 'viewer'),
+        platform: _string(json, 'platform'),
+        architecture: _string(json, 'architecture'),
+        hostname: _string(json, 'hostname'),
+        appVersion: _string(json, 'appVersion'),
+        runtimeCapabilities: _jsonStrings(json, 'runtimeCapabilitiesJson'),
+        factsUpdatedAt: json['factsUpdatedAt']?.toString(),
       );
 }
 

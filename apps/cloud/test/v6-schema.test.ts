@@ -130,10 +130,19 @@ const workerAssignmentRequesterSchema = readFileSync(
   ),
   "utf8",
 );
+const workspaceRuntimeFactsSchema = readFileSync(
+  fileURLToPath(
+    new URL(
+      "../migrations-v6/0020_workspace_runtime_facts.sql",
+      import.meta.url,
+    ),
+  ),
+  "utf8",
+);
 
 function apply(sql: string): string {
   return execFileSync("sqlite3", ["-json", ":memory:"], {
-    input: `${schema}\n${integrationSchema}\n${observabilitySchema}\n${chatMigrationSchema}\n${executionFoundationSchema}\n${projectSettingsSchema}\n${grantPolicySchema}\n${invitationsSchema}\n${repositoryRemovalSchema}\n${configuredWorkerSchema}\n${configuredWorkerRuntimeSchema}\n${configuredWorkerAssignmentsSchema}\n${workerFirstExecutionPolicySchema}\n${configuredWorkerObservabilitySchema}\n${legacyAccountConversionSchema}\n${workerAssignmentRequesterSchema}\n${sql}`,
+    input: `${schema}\n${integrationSchema}\n${observabilitySchema}\n${chatMigrationSchema}\n${executionFoundationSchema}\n${projectSettingsSchema}\n${grantPolicySchema}\n${invitationsSchema}\n${repositoryRemovalSchema}\n${configuredWorkerSchema}\n${configuredWorkerRuntimeSchema}\n${configuredWorkerAssignmentsSchema}\n${workerFirstExecutionPolicySchema}\n${configuredWorkerObservabilitySchema}\n${legacyAccountConversionSchema}\n${workerAssignmentRequesterSchema}\n${workspaceRuntimeFactsSchema}\n${sql}`,
     encoding: "utf8",
   });
 }
@@ -185,6 +194,7 @@ describe("v6 D1 schema", () => {
         { name: "configured_worker_installations" },
         { name: "configured_worker_audit_log" },
         { name: "configured_worker_observability_metrics" },
+        { name: "workspace_runtime_facts" },
       ]),
     );
   });

@@ -1025,13 +1025,30 @@ async function handleListWorkspaces(
   const rows =
     context.authorizationModel === "v5"
       ? await env.CONCLAVE_DB.prepare(
-           `SELECT id, name, status, 'owner' AS role,
-                  created_at AS createdAt, updated_at AS updatedAt
+           `SELECT id, name,
+                  CASE
+                    WHEN status IN ('enrolled', 'offline') AND EXISTS (
+                      SELECT 1 FROM workspace_enrollments e
+                      WHERE e.workspace_id = execution_workspaces.id
+                        AND e.used_at IS NULL AND e.revoked_at IS NULL
+                        AND e.expires_at > ?2
+                    ) THEN 'pairing'
+                    WHEN status = 'enrolled' THEN 'not_connected'
+                    ELSE status
+                  END AS lifecycleStatus,
+                  status, 'owner' AS role,
+                  f.platform, f.architecture, f.hostname,
+                  f.app_version AS appVersion,
+                  f.runtime_capabilities_json AS runtimeCapabilitiesJson,
+                  f.updated_at AS factsUpdatedAt,
+                  execution_workspaces.created_at AS createdAt,
+                  execution_workspaces.updated_at AS updatedAt
            FROM execution_workspaces
+           LEFT JOIN workspace_runtime_facts f ON f.workspace_id = execution_workspaces.id
            WHERE owner_user_id = ?1 AND status <> 'revoked'
            ORDER BY name ASC`,
         )
-          .bind(context.userId)
+          .bind(context.userId, new Date().toISOString())
           .all<{
             id: string;
             name: string;
@@ -4659,15 +4676,38 @@ async function handleListHosts(
 
   if (context.authorizationModel === "v5") {
     const workspace = await env.CONCLAVE_DB.prepare(
-      `SELECT id, name, status, created_at AS createdAt, updated_at AS updatedAt
-       FROM execution_workspaces
-       WHERE id = ?1 AND owner_user_id = ?2`,
+      `SELECT ew.id, ew.name,
+              CASE
+                WHEN ew.status IN ('enrolled', 'offline') AND EXISTS (
+                  SELECT 1 FROM workspace_enrollments e
+                  WHERE e.workspace_id = ew.id
+                    AND e.used_at IS NULL AND e.revoked_at IS NULL
+                    AND e.expires_at > ?3
+                ) THEN 'pairing'
+                WHEN ew.status = 'enrolled' THEN 'not_connected'
+                ELSE ew.status
+              END AS lifecycleStatus,
+              ew.status, f.platform, f.architecture, f.hostname,
+              f.app_version AS appVersion,
+              f.runtime_capabilities_json AS runtimeCapabilitiesJson,
+              f.updated_at AS factsUpdatedAt,
+              ew.created_at AS createdAt, ew.updated_at AS updatedAt
+       FROM execution_workspaces ew
+       LEFT JOIN workspace_runtime_facts f ON f.workspace_id = ew.id
+       WHERE ew.id = ?1 AND ew.owner_user_id = ?2`,
     )
-      .bind(workspaceId, context.userId)
+      .bind(workspaceId, context.userId, new Date().toISOString())
       .first<{
         id: string;
         name: string;
         status: string;
+        lifecycleStatus: string;
+        platform: string | null;
+        architecture: string | null;
+        hostname: string | null;
+        appVersion: string | null;
+        runtimeCapabilitiesJson: string | null;
+        factsUpdatedAt: string | null;
         createdAt: string;
         updatedAt: string;
       }>();
@@ -4678,10 +4718,15 @@ async function handleListHosts(
           id: workspace.id,
           workspaceId: workspace.id,
           name: workspace.name,
-          hostname: "—",
-          status: workspace.status,
-          version: "—",
-          capabilitiesJson: "[]",
+          hostname: workspace.hostname ?? "—",
+          status: workspace.lifecycleStatus,
+          lifecycleStatus: workspace.lifecycleStatus,
+          version: workspace.appVersion ?? "—",
+          appVersion: workspace.appVersion ?? "—",
+          os: workspace.platform ?? "—",
+          architecture: workspace.architecture ?? "—",
+          runtimeCapabilitiesJson: workspace.runtimeCapabilitiesJson ?? "[]",
+          capabilitiesJson: workspace.runtimeCapabilitiesJson ?? "[]",
           enrolledAt: workspace.createdAt,
           lastHeartbeatAt: null,
           revokedAt:

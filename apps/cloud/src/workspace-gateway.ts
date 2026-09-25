@@ -28,6 +28,41 @@ const jsonArray = (value: unknown): string[] => {
   }
 };
 
+function runtimeFacts(payload: unknown): {
+  platform: string | null;
+  architecture: string | null;
+  hostname: string | null;
+  appVersion: string | null;
+  capabilities: string[];
+} {
+  if (!payload || typeof payload !== "object") {
+    return { platform: null, architecture: null, hostname: null, appVersion: null, capabilities: [] };
+  }
+  const value = payload as Record<string, unknown>;
+  const rawCapabilities =
+    value.capabilities && typeof value.capabilities === "object"
+      ? (value.capabilities as Record<string, unknown>)
+      : {};
+  const text = (candidate: unknown): string | null => {
+    if (typeof candidate !== "string") return null;
+    const normalized = candidate.trim();
+    return normalized.length > 0 && normalized.length <= 200 ? normalized : null;
+  };
+  const capabilities = Array.isArray(value.runtimeCapabilities)
+    ? value.runtimeCapabilities.filter((item): item is string => typeof item === "string").slice(0, 100)
+    : [
+        ...jsonArray(JSON.stringify(rawCapabilities.supportedRuntimes)),
+        ...jsonArray(JSON.stringify(rawCapabilities.customCapabilities)),
+      ];
+  return {
+    platform: text(value.platform ?? rawCapabilities.os),
+    architecture: text(value.architecture ?? rawCapabilities.arch),
+    hostname: text(value.hostname),
+    appVersion: text(value.appVersion ?? value.hostVersion ?? rawCapabilities.version),
+    capabilities: [...new Set(capabilities.map((item) => item.trim()).filter(Boolean))],
+  };
+}
+
 export function normalizeWorkspaceWorkerInstallationStatus(
   status: string,
 ):
@@ -331,6 +366,32 @@ export class WorkspaceGateway implements DurableObject {
     const now = new Date().toISOString();
     switch (message.type) {
       case "workspace.hello":
+        {
+          const facts = runtimeFacts(message.payload);
+          await this.env.CONCLAVE_DB.prepare(
+            `INSERT INTO workspace_runtime_facts
+             (workspace_id, platform, architecture, hostname, app_version,
+              runtime_capabilities_json, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT(workspace_id) DO UPDATE SET
+               platform = excluded.platform,
+               architecture = excluded.architecture,
+               hostname = excluded.hostname,
+               app_version = excluded.app_version,
+               runtime_capabilities_json = excluded.runtime_capabilities_json,
+               updated_at = excluded.updated_at`,
+          )
+            .bind(
+              this.executionWorkspaceId,
+              facts.platform,
+              facts.architecture,
+              facts.hostname,
+              facts.appVersion,
+              JSON.stringify(facts.capabilities),
+              now,
+            )
+            .run();
+        }
         this.send({
           protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
           protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,

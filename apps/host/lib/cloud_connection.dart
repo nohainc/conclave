@@ -121,7 +121,7 @@ class HostCloudConnection {
     Set<String>? authorizedWorkspaceIds,
     this.name = 'Conclave Workspace',
     String? hostname,
-    this.hostVersion = '0.1.0',
+    this.hostVersion = '1.0.3',
     Map<String, Object?>? capabilities,
     this.installedWorkerVersions = const {},
     this.activeWorkerIds = const [],
@@ -346,11 +346,18 @@ class HostCloudConnection {
     };
     return {
       'os': operatingSystem,
-      'arch': 'x64',
-      'hostVersion': '0.1.0',
+      'arch': _architecture(),
+      'hostVersion': '1.0.3',
       'supportedRuntimes': <String>['dart'],
       'maxConcurrentWorkers': 1,
     };
+  }
+
+  static String _architecture() {
+    final hint =
+        '${Platform.environment['PROCESSOR_ARCHITECTURE'] ?? ''} ${Platform.environment['HOSTTYPE'] ?? ''} ${Platform.version}'
+            .toLowerCase();
+    return hint.contains('arm64') || hint.contains('aarch64') ? 'arm64' : 'x64';
   }
 
   Future<void> connect() async {

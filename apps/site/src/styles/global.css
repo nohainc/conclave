@@ -478,6 +478,56 @@ h3 {
 .worker-catalog {
   grid-template-columns: repeat(4, 1fr);
 }
+.downloads-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-6);
+  margin-top: var(--space-10);
+}
+.downloads-card {
+  display: grid;
+  gap: var(--space-5);
+  padding: var(--space-8);
+  background: var(--color-surface);
+  border: var(--border-thin);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
+}
+.downloads-card--recommended {
+  border-color: var(--color-line-glow);
+  box-shadow: 0 0 28px -10px rgba(99, 102, 241, 0.6), var(--shadow-card);
+}
+.downloads-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.downloads-card h2 {
+  margin: 0;
+  color: var(--color-ink);
+  font-size: var(--text-lg);
+}
+.downloads-card__header p,
+.downloads-card__version,
+.downloads-card__architecture {
+  margin: 6px 0 0;
+  color: var(--color-muted);
+}
+.downloads-card__recommended {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+.downloads-card .button {
+  justify-self: start;
+}
+@media (max-width: 860px) {
+  .downloads-grid {
+    grid-template-columns: 1fr;
+  }
+}
 .catalog-note {
   margin-top: var(--space-5);
   color: var(--color-muted);

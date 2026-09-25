@@ -217,6 +217,15 @@ Credential ownership, provider sharing policy, secure secret location and billin
 
 The architecture must not weaken these existing security boundaries merely to simplify the UX.
 
+### Runtime-reported machine facts
+
+Workspace machine information is runtime state, not Workspace configuration. When
+the Conclave Workspace application connects, it reports its platform,
+architecture, hostname, application version, and runtime capabilities. Cloud
+stores these facts separately from the logical execution Workspace identity and
+the UI presents them as read-only diagnostics. Users configure only the
+Workspace display name; they do not enter or edit machine identity facts.
+
 ## Usage and audit
 
 Usage should remain attributable to:

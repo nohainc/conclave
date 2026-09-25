@@ -159,7 +159,7 @@ void main() {
 
   group('Phase 13: Global Application Menu Regressions', () {
     testWidgets(
-        'menu contains Execution, Archived Projects, Appearance, Documentation, About Conclave AX, Log out in correct order',
+        'menu contains Execution, Archived Projects, Appearance, Downloads, Documentation, About Conclave AX, Log out in correct order',
         (tester) async {
       StudioNavigation? navigated;
       bool aboutOpened = false;
@@ -193,6 +193,7 @@ void main() {
       expect(find.text('Execution'), findsOneWidget);
       expect(find.text('Archived Projects'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
+      expect(find.text('Downloads'), findsOneWidget);
       expect(find.text('Documentation'), findsOneWidget);
       expect(find.text('About Conclave AX'), findsOneWidget);
       expect(find.text('Log out'), findsOneWidget);
@@ -214,6 +215,13 @@ void main() {
       await tester.tap(find.text('Archived Projects'));
       await tester.pumpAndSettle();
       expect(archivedProjectsOpened, isTrue);
+
+      // Re-open and test Downloads
+      await tester.tap(find.byTooltip('Application menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Downloads'));
+      await tester.pumpAndSettle();
+      expect(openedUrl, Uri.parse('https://conclaveax.com/downloads/'));
 
       // Re-open and test Documentation
       await tester.tap(find.byTooltip('Application menu'));

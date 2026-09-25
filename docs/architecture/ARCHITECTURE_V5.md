@@ -53,6 +53,13 @@ The safer product model is:
 - **Conclave AX** — main Flutter Web application.
 - **Conclave Cloud** — cloud control plane, normally not emphasized in UI.
 - **Workspace** — one execution environment backed by one enrolled machine/runtime.
+
+Workspace runtime lifecycle is communicated explicitly: `Not connected` when a
+Workspace exists without an active enrollment, `Pairing` while an enrollment
+code is active, `Online` while the runtime is connected, and `Offline` after a
+previously connected runtime disconnects. `Busy`, `Draining`, and `Revoked`
+remain operational states. Machine facts are reported by the runtime and are
+not Workspace configuration.
 - **Worker** — an installed AI/tool integration inside a Workspace.
 - **AI Account** — external AI/provider identity usable by a Worker.
 - **Project** — persistent work and collaboration boundary.

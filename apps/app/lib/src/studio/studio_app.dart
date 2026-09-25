@@ -11,6 +11,7 @@ import '../platform/platform_services.dart';
 import '../realtime/realtime_client.dart';
 import '../brand.dart';
 import '../features/common/toast_overlay.dart';
+import '../features/common/external_links.dart';
 import '../features/common/code_block_view.dart';
 import '../features/common/diff_viewer.dart';
 import '../features/chat/typing_indicator.dart';
@@ -1135,79 +1136,160 @@ class _StudioAppState extends State<ConclaveAppShell> {
 
   Future<void> _enrollAgent() async {
     var name = 'My Workspace';
-    var platform = 'macOS';
-    final selected = await showDialog<({String name, String platform})>(
+    final selected = await showDialog<String>(
       context: navigatorKey.currentContext ?? context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Add Workspace'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                  'Create an execution Workspace, then pair the machine where it will run.'),
-              const SizedBox(height: 16),
-              TextFormField(
-                initialValue: name,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'Workspace name',
-                  hintText: 'e.g. MacBook Pro',
-                ),
-                onChanged: (value) => name = value,
-                onFieldSubmitted: (value) {
-                  if (value.trim().isNotEmpty) {
-                    Navigator.pop(dialogContext,
-                        (name: value.trim(), platform: platform));
-                  }
-                },
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: platform,
-                decoration: const InputDecoration(labelText: 'Platform'),
-                items: const ['macOS', 'Windows', 'Linux']
-                    .map((value) =>
-                        DropdownMenuItem(value: value, child: Text(value)))
-                    .toList(),
-                onChanged: (value) =>
-                    setDialogState(() => platform = value ?? platform),
-              ),
-            ],
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Add Workspace'),
+        content: TextFormField(
+          initialValue: name,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Workspace name',
+            hintText: 'e.g. MacBook Pro',
           ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Cancel')),
-            FilledButton(
-              onPressed: () {
-                final trimmed = name.trim();
-                if (trimmed.isEmpty) return;
-                Navigator.pop(
-                    dialogContext, (name: trimmed, platform: platform));
-              },
-              child: const Text('Create Workspace'),
-            ),
-          ],
+          onChanged: (value) => name = value,
+          onFieldSubmitted: (value) {
+            if (value.trim().isNotEmpty) {
+              Navigator.pop(dialogContext, value.trim());
+            }
+          },
         ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              final trimmed = name.trim();
+              if (trimmed.isEmpty) return;
+              Navigator.pop(dialogContext, trimmed);
+            },
+            child: const Text('Create Workspace'),
+          ),
+        ],
       ),
     );
     if (selected == null) return;
     try {
-      final workspace = await store.workspaces.create(name: selected.name);
+      final workspace = await store.workspaces.create(name: selected);
+      await _loadWorkspaces();
       await _loadSnapshot(workspaceId: workspace.id, showSpinner: false);
-      final enrollment = await store.agents.createEnrollment(workspace.id);
-      if (!mounted) return;
-      setState(() {
-        enrollmentResult = enrollment;
-        loadError = null;
-      });
-      _showSnackBar(
-          'Download Conclave Workspace for ${selected.platform}, then enter the one-time code.');
+      if (mounted) {
+        _showSnackBar('Workspace created. Connect a machine when ready.');
+      }
     } catch (error) {
       if (mounted) setState(() => loadError = error.toString());
     }
+  }
+
+  Future<void> _connectWorkspace(StudioAgent workspace) async {
+    try {
+      var enrollment = await store.agents.createEnrollment(workspace.id);
+      if (!mounted) return;
+      setState(() => enrollmentResult = enrollment);
+      await showDialog<void>(
+        context: navigatorKey.currentContext ?? context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) {
+            final currentEnrollment = enrollment;
+            return AlertDialog(
+              title: Text('Connect ${workspace.name}'),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '1. Install Conclave Workspace',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: () => browserNavigation.openExternal(
+                        Uri.parse(conclaveDownloadsUrl),
+                      ),
+                      icon: const Icon(Icons.download_outlined),
+                      label: const Text('Download Conclave Workspace'),
+                    ),
+                    const SizedBox(height: 18),
+                    const Text('2. Open the application.'),
+                    const SizedBox(height: 18),
+                    const Text(
+                      '3. Enter this pairing code:',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SelectableText(
+                            currentEnrollment.token,
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Copy code',
+                          onPressed: () async {
+                            await Clipboard.setData(
+                                ClipboardData(text: currentEnrollment.token));
+                            if (context.mounted) {
+                              _showSnackBar('Pairing code copied.');
+                            }
+                          },
+                          icon: const Icon(Icons.copy_rounded),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(_enrollmentExpiryLabel(currentEnrollment.expiresAt)),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () async {
+                    try {
+                      final refreshed =
+                          await store.agents.createEnrollment(workspace.id);
+                      if (dialogContext.mounted) {
+                        setDialogState(() => enrollment = refreshed);
+                        setState(() => enrollmentResult = refreshed);
+                      }
+                    } catch (error) {
+                      if (dialogContext.mounted) {
+                        _showSnackBar('$error', type: ToastType.error);
+                      }
+                    }
+                  },
+                  child: const Text('Generate new code'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Done'),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+      await _loadWorkspaces();
+    } catch (error) {
+      if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
+    }
+  }
+
+  String _enrollmentExpiryLabel(String value) {
+    final expiresAt = DateTime.tryParse(value)?.toLocal();
+    if (expiresAt == null) return 'Expiration: $value';
+    final remaining = expiresAt.difference(DateTime.now());
+    if (remaining.isNegative) return 'Expired';
+    final hours = (remaining.inMinutes / 60).ceil();
+    return 'Expires in ${hours == 1 ? '1 hour' : '$hours hours'}';
   }
 
   // Retained only while the legacy data adapter is being retired. It
@@ -3682,12 +3764,16 @@ class _StudioAppState extends State<ConclaveAppShell> {
         (workspace) => StudioAgent(
           id: workspace.id,
           name: workspace.name,
-          hostname: '—',
+          hostname: workspace.hostname,
           status: workspace.status,
-          version: '—',
+          version: workspace.appVersion,
           pluginCount: 0,
           workerCount: 0,
           activeTaskCount: 0,
+          os: workspace.platform,
+          architecture: workspace.architecture,
+          appVersion: workspace.appVersion,
+          runtimeCapabilities: workspace.runtimeCapabilities,
           lastSeen: '—',
         ),
       )
@@ -4043,6 +4129,10 @@ class _StudioAppState extends State<ConclaveAppShell> {
         onRename: _renameHost,
         onUpdate: _announceAgentUpdate,
         onRevoke: (workspace) => _revokeWorkspace(workspace.id),
+        onConnect: _connectWorkspace,
+        onOpenDownloads: () => browserNavigation.openExternal(
+          Uri.parse(conclaveDownloadsUrl),
+        ),
         onGrant: _bindHost,
         onAddConfiguredWorker: _addConfiguredWorker,
         onOpenConfiguredWorker: _openConfiguredWorker,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../brand.dart';
+import '../common/external_links.dart';
 import '../../navigation/studio_navigation.dart';
 import 'studio_shell_context.dart';
 
@@ -234,12 +235,24 @@ class GlobalAppMenu extends StatelessWidget {
         MenuItemButton(
           style: itemStyle(),
           leadingIcon: Icon(
+            Icons.download_outlined,
+            size: 16,
+            color: menuIconColor,
+          ),
+          onPressed: () => onOpenExternal(Uri.parse(conclaveDownloadsUrl)),
+          child: const Text(
+            'Downloads',
+            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
+          ),
+        ),
+        MenuItemButton(
+          style: itemStyle(),
+          leadingIcon: Icon(
             Icons.menu_book_rounded,
             size: 16,
             color: menuIconColor,
           ),
-          onPressed: () =>
-              onOpenExternal(Uri.parse('https://conclaveax.com/how-it-works/')),
+          onPressed: () => onOpenExternal(Uri.parse(conclaveDocumentationUrl)),
           child: const Text(
             'Documentation',
             style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),

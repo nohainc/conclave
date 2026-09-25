@@ -1,0 +1,61 @@
+---
+import Container from "../components/Container.astro";
+import Section from "../components/Section.astro";
+import SectionHeader from "../components/SectionHeader.astro";
+import SiteLayout from "../layouts/SiteLayout.astro";
+import { workspaceRelease } from "../data/workspace-release";
+---
+
+<SiteLayout title="Downloads — Conclave AX" description="Download Conclave Workspace for macOS, Windows, or Linux.">
+  <Section>
+    <Container>
+      <SectionHeader
+        eyebrow="Downloads"
+        title="Run Conclave Workers on your computer."
+        description={`Download ${workspaceRelease.productName} for the machine you want to connect to your execution Workspace.`}
+        headingLevel={1}
+      />
+
+      <div class="downloads-grid" data-downloads-platforms>
+        {workspaceRelease.targets.map((target) => (
+          <article class="downloads-card" data-platform={target.platform}>
+            <div class="downloads-card__header">
+              <div>
+                <h2>{workspaceRelease.productName}</h2>
+                <p>{target.label}</p>
+              </div>
+              <span class="badge downloads-card__recommended" hidden>Recommended for this device</span>
+            </div>
+            <p class="downloads-card__version">Version {workspaceRelease.version}</p>
+            <p class="downloads-card__architecture">{target.architectures.join(" / ")}</p>
+            <a class="button button--primary" href={target.downloadUrl} target="_blank" rel="noreferrer">Download <span aria-hidden="true">↗</span></a>
+          </article>
+        ))}
+      </div>
+    </Container>
+  </Section>
+</SiteLayout>
+
+<script>
+  const browserNavigator = navigator as Navigator & {
+    userAgentData?: { platform?: string };
+  };
+  const platform = browserNavigator.userAgentData?.platform ?? navigator.userAgent;
+  const normalized = platform.toLowerCase();
+  const currentPlatform = normalized.includes("mac")
+    ? "macos"
+    : normalized.includes("win")
+      ? "windows"
+      : normalized.includes("linux")
+        ? "linux"
+        : null;
+
+  if (currentPlatform) {
+    const card = document.querySelector(`[data-platform="${currentPlatform}"]`);
+    const badge = card?.querySelector(".downloads-card__recommended");
+    if (card && badge instanceof HTMLElement) {
+      card.classList.add("downloads-card--recommended");
+      badge.hidden = false;
+    }
+  }
+</script>
