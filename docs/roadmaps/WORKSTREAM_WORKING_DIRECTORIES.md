@@ -1,6 +1,6 @@
 # Workstream Working Directories — Implementation Roadmap
 
-**Status:** Proposed  
+**Status:** WD-0 accepted; implementation in progress
 **Architecture:** [ADR-011](../decisions/ADR-011-workstream-working-directories.md)  
 **Builds on:** Architecture v6  
 **Date:** 2026-09-25
@@ -91,6 +91,13 @@ Workspace diagnostics/settings may expose:
 
 Workspace always has one safe Work Root.
 
+### Implementation note
+
+The Workspace runtime now resolves the platform default or the advanced
+`--work-root` / `CONCLAVE_HOST_WORK_ROOT` override at startup, creates the root,
+canonicalizes it, and applies local directory permissions. The Work Root is
+separate from enrollment configuration and is not derived from Workspace ID.
+
 ---
 
 ## WD-2 — Deterministic ID-only path resolver
@@ -141,6 +148,14 @@ Resolver API must not accept:
 ### Exit
 
 One pure resolver defines all Workstream local paths.
+
+### Implementation note
+
+`apps/host/lib/workstream_path.dart` is the sole WD-2 resolver. It accepts only
+`projectId` and `workstreamId`, returns a non-created path beneath the
+canonical Work Root, and fails closed for unsafe IDs or filesystem escapes.
+Display names, email addresses, Workspace IDs, and Cloud-supplied relative
+paths are intentionally absent from its API.
 
 ---
 
@@ -205,6 +220,14 @@ If path contains unknown/conflicting data:
 
 Reusing existing work directories is safe and deterministic.
 
+### Implementation note
+
+`apps/host/lib/workstream_marker.dart` creates the v1 identity marker with a
+temporary file and atomic rename under a creation lock. Reuse requires a valid
+schema, UTC creation timestamp, and exact Project/Workstream ID match. Missing,
+corrupt, mismatched, non-empty-adoption, and interrupted-creation states fail
+closed without overwriting local data.
+
 ---
 
 ## WD-4 — Lazy Workstream directory lifecycle
@@ -250,6 +273,14 @@ Directory remains after a Run completes.
 ### Exit
 
 Local storage follows execution, not Cloud object creation.
+
+### Implementation note
+
+`apps/host/lib/workstream_directory.dart` exposes the execution-only
+`ensureForExecution` entry point. It creates the ID-derived directory lazily,
+writes the marker before returning it, and validates the marker on every later
+use or runtime restart. Discussion and Cloud object lifecycle code do not call
+this service.
 
 ---
 
@@ -298,6 +329,15 @@ Do not require the Worker to reconstruct the path itself.
 ### Exit
 
 CWD is a runtime guarantee, not a Worker convention.
+
+### Implementation note
+
+`WorkerAssignmentHandler.prepareProcessSpec` now resolves scoped assignment
+CWD through `WorkstreamDirectoryLifecycle` and replaces any package-default
+working directory before launch. Stateful assignments require Project and
+Workstream IDs; Cloud-supplied `cwd`, `workdir`, and working-directory fields
+are rejected. The Worker receives logical Project/Workstream/Work Request
+correlation in its execution payload, not a path-construction contract.
 
 ---
 
@@ -349,6 +389,15 @@ Workstream A -> two simultaneous mutators of directory A
 
 Filesystem simplicity does not create race conditions.
 
+### Implementation note
+
+`WorkstreamMutationCoordinator` serializes stateful Worker execution by the
+Project/Workstream directory, with an in-process queue and an OS file lock for
+cross-process protection. It persists a Workstream fencing token and rejects
+older or conflicting leases after restart/reconnect. Different Workstream
+directories remain independent; the existing assignment journal and checkout
+fencing continue to protect replay and checkout-specific recovery paths.
+
 ---
 
 ## WD-7 — Remove Source/checkout provisioning from the required flow
@@ -382,6 +431,13 @@ Because Conclave is pre-production, prefer removing obsolete schema/flows once t
 ### Exit
 
 "Run work in this Workstream" does not require repository configuration.
+
+### Implementation note
+
+Stateful assignment dispatch now falls back to the marker-backed Workstream
+directory when no complete checkout snapshot is present. Checkout provisioning
+and checkout fencing remain optional compatibility/recovery layers; they are no
+longer prerequisites for executing Work in an empty Workstream directory.
 
 ---
 
@@ -423,6 +479,14 @@ Prompt/context tests only where applicable; do not implement a Git orchestration
 
 Workers know how to use the persistent directory safely.
 
+### Implementation note
+
+The Host adds provider-independent `workstreamExecutionGuidance` to the
+logical Worker context. It explains persistence, reuse, cloning, normal Git
+safety, parallel Workstream branches, and Workspace-local authentication. No
+repository path, credential, branch lifecycle, or Git orchestration is added
+to the Cloud contract.
+
 ---
 
 ## WD-9 — Workspace revoke/re-enrollment continuity
@@ -459,6 +523,14 @@ Do not add device serial/MAC/motherboard matching for this feature.
 ### Exit
 
 Workspace identity can change without orphaning local Workstream data.
+
+### Implementation note
+
+Continuity is provided by the Work Root plus Project/Workstream IDs only.
+Re-pairing with a new Workspace runtime identity reuses the same marker-backed
+directory without any old-to-new Workspace mapping or hardware fingerprint.
+Worker package and credential readiness may require setup again independently;
+local Workstream files remain available.
 
 ---
 
@@ -499,6 +571,14 @@ Worker may reconstruct state by:
 ### Exit
 
 Cross-machine behavior is explicit rather than magical.
+
+### Implementation note
+
+`WorkstreamDirectoryLifecycle` resolves the same Project/Workstream relative
+location under each destination Work Root. A destination with no existing
+directory receives only a new empty directory and identity marker; local files
+are never represented as migrated. `WorkstreamWorkspaceChangePolicy` exposes
+the required warning when mutable local state exists.
 
 ---
 
@@ -575,6 +655,16 @@ Repositories
 
 Observability improves without adding setup burden.
 
+### Implementation note
+
+`apps/host/lib/workstream_repository_observability.dart` provides the
+read-only `WorkstreamRepositoryDiscovery` service. It accepts only a directory
+already resolved by the runtime and reports repository-relative path, remotes,
+branch, HEAD and dirty-file count. Remote locations are sanitized so userinfo,
+query parameters and fragments are not exposed. Discovery skips symlinked
+directories outside the Workstream and has no effect on execution, branches,
+remotes or Cloud persistence.
+
 ---
 
 ## WD-13 — Local cleanup lifecycle
@@ -610,6 +700,18 @@ Before deletion:
 
 Conclave never silently deletes meaningful local work.
 
+### Implementation note
+
+`apps/host/lib/workstream_cleanup.dart` provides an explicit local cleanup
+review and deletion service. It discovers only marker-backed ID-derived
+Workstream directories, reports best-effort disk usage, and accepts an
+optional Cloud/read-model classification such as archived or Workspace
+revoked. Deletion requires the exact Workstream confirmation text, an active
+assignment check, marker revalidation, and an exclusive Workstream lock. The
+locked directory is moved aside before the lock is released, then removed;
+normal execution, archive, revoke and app-update paths never call this
+service.
+
 ---
 
 ## WD-14 — Rename stress acceptance
@@ -638,6 +740,15 @@ While one Worker is actively editing files:
 
 Display names are proven independent from execution identity.
 
+### Implementation note
+
+`apps/host/test/workstream_rename_acceptance_test.dart` exercises the rename
+scenario with two real local Worker processes. The first Worker edits the
+persistent directory while Project and Workstream display names change; the
+second Worker resolves the same CWD and continues from the same files. The
+test also verifies that the identity marker and directory topology remain
+unchanged.
+
 ---
 
 ## WD-15 — Parallel same-repository acceptance
@@ -665,6 +776,15 @@ Verify:
 
 Parallel feature work needs no Source/worktree subsystem.
 
+### Implementation note
+
+`apps/host/test/workstream_parallel_repository_acceptance_test.dart` creates
+two independent `conclave` repositories under separate ID-derived Workstream
+directories in one Project. Two Worker processes edit them concurrently,
+then commit and push separate branches to a local bare remote. The acceptance
+asserts distinct runtime CWDs, non-overlapping files and ordinary Git branch
+integration without Source registration or Conclave-managed worktrees.
+
 ---
 
 ## WD-16 — Security acceptance
@@ -685,6 +805,15 @@ Test:
 ### Exit
 
 ID-only path resolution is safe against traversal, confusion and accidental reuse.
+
+### Implementation note
+
+`apps/host/test/workstream_security_acceptance_test.dart` covers traversal and
+separator IDs, escaping symlinks, marker adoption failures, arbitrary CWD
+injection, rename/re-enrollment continuity, stale mutation replay and active
+cleanup protection. Existing Work Root tests cover permission hardening and
+newly-created root behavior; the runtime CWD tests cover assignment-level
+path rejection.
 
 ---
 
@@ -709,6 +838,16 @@ Retain:
 ### Exit
 
 One filesystem model remains active in v6 docs and source.
+
+### Implementation note
+
+The active architecture now treats Checkout provisioning, repository-required
+Work, automatic checkpoint commits and automatic rollback as historical
+compatibility behavior. The canonical execution path is the ID-derived
+Workstream directory, Workstream mutation lease, explicit Work Request and
+Worker-managed repository state. Legacy checkout types and protocol names are
+annotated as compatibility-only while their removal is coordinated with the
+next clean schema reset.
 
 ---
 
@@ -739,6 +878,17 @@ The complete flow proves the three-line model:
 > Workspace = machine.  
 > Workstream = isolated persistent work directory.  
 > Workers manage repositories inside it.
+
+### Implementation note
+
+`apps/host/test/workstream_end_to_end_acceptance_test.dart` exercises the
+clean-room local runtime path with a temporary Work Root and a local Git
+remote. It verifies repository cloning by one Worker, continuation by a second
+Worker, isolation for a parallel Workstream, display-name renames, and reuse
+after a new Workspace runtime identity is enrolled. The test intentionally
+keeps sign-in, Cloud Project creation, and Worker configuration at the
+acceptance boundary; those are control-plane prerequisites, while the
+filesystem guarantee is owned by the runtime.
 
 ## Recommended delivery order
 

@@ -1,4 +1,11 @@
-# Architecture v6 Implementation Roadmap — Collaborative Workstreams
+# Architecture v6 Implementation Roadmap — Historical Checkout Draft
+
+> **Historical / superseded:** Checkout-provisioning portions of this
+> document describe an earlier v6 design. The active filesystem model is
+> defined by [ADR-011](../decisions/ADR-011-workstream-working-directories.md)
+> and [WORKSTREAM_WORKING_DIRECTORIES.md](./WORKSTREAM_WORKING_DIRECTORIES.md):
+> a Workstream directory is resolved from Project ID + Workstream ID, and
+> repositories are Worker-managed. This document is retained for history only.
 
 **Status:** Proposed  
 **Architecture:** [ARCHITECTURE_V6.md](../architecture/ARCHITECTURE_V6.md)  

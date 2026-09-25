@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:conclave_host/cloud_connection.dart';
 import 'package:conclave_host/worker_executor.dart';
 import 'package:conclave_host/repository_registry.dart';
+import 'package:conclave_host/workstream_directory.dart';
+import 'package:conclave_host/workstream_path.dart';
 import 'package:test/test.dart';
 import 'fixture_copy.dart';
 
@@ -93,8 +95,131 @@ void main() {
       payload: {'workerId': 'conclave.echo'},
     ));
     expect(result.summary, contains('echo worker'));
-    expect((result.output?['input'] as Map)['conclave']['assignmentId'],
-        'assignment-1');
+    final conclave = (result.output?['input'] as Map)['conclave'] as Map;
+    expect(conclave['assignmentId'], 'assignment-1');
+    expect(conclave['workstreamExecutionGuidance'],
+        anyElement(contains('persistent isolated working area')));
+    expect(conclave['workstreamExecutionGuidance'],
+        anyElement(contains('Fetch before integrating remote changes.')));
+  });
+
+  test('resolves process CWD from Project and Workstream IDs', () async {
+    final root = await Directory.systemTemp.createTemp('cwd-root-');
+    addTearDown(() => root.delete(recursive: true));
+    final handler = WorkerAssignmentHandler(
+      executor: WorkerProcessExecutor(),
+      workstreamDirectoryLifecycle: WorkstreamDirectoryLifecycle(
+        pathResolver: WorkstreamPathResolver(root),
+      ),
+      resolve: (_) => const WorkerProcessSpec(
+        workerId: 'cwd-worker',
+        executable: 'worker',
+        workingDirectory: '/cloud-supplied-path-must-not-be-used',
+      ),
+    );
+    final context = const HostAssignmentContext(
+      workspaceId: 'workspace-1',
+      hostId: 'runtime-1',
+      workerId: 'cwd-worker',
+      runId: 'run-1',
+      taskId: 'task-1',
+      attemptId: 'attempt-1',
+      assignmentId: 'assignment-cwd-1',
+      idempotencyKey: 'idem-cwd-1',
+      payload: {
+        'workerId': 'cwd-worker',
+        'projectId': 'project-1',
+        'workstreamId': 'workstream-1',
+        'workRequestId': 'request-1',
+        'executionClass': 'stateless_read',
+      },
+    );
+
+    final spec = await handler.prepareProcessSpec(context);
+    final expected = await Directory(
+      '${root.path}${Platform.pathSeparator}project-1${Platform.pathSeparator}workstream-1',
+    ).resolveSymbolicLinks();
+    expect(spec.workingDirectory, expected);
+
+    final sameWorkstream = await handler.prepareProcessSpec(
+      context.copyWith(
+        workerId: 'claude-worker',
+        payload: {
+          ...context.payload,
+          'workerId': 'claude-worker',
+        },
+      ),
+    );
+    final otherWorkstream = await handler.prepareProcessSpec(
+      context.copyWith(
+        payload: {
+          ...context.payload,
+          'workstreamId': 'workstream-2',
+        },
+      ),
+    );
+    expect(sameWorkstream.workingDirectory, expected);
+    expect(otherWorkstream.workingDirectory, isNot(expected));
+  });
+
+  test('requires Workstream identity for stateful process CWD', () async {
+    final handler = WorkerAssignmentHandler(
+      executor: WorkerProcessExecutor(),
+      resolve: (_) => const WorkerProcessSpec(
+        workerId: 'worker',
+        executable: 'worker',
+      ),
+    );
+
+    await expectLater(
+      handler.prepareProcessSpec(const HostAssignmentContext(
+        workspaceId: 'workspace-1',
+        hostId: 'runtime-1',
+        workerId: 'worker',
+        runId: 'run-1',
+        taskId: 'task-1',
+        attemptId: 'attempt-1',
+        assignmentId: 'assignment-stateful-cwd',
+        idempotencyKey: 'idem-stateful-cwd',
+        payload: {
+          'workerId': 'worker',
+          'executionClass': 'stateful_workstream',
+        },
+      )),
+      throwsA(predicate(
+          (error) => error.toString().contains('projectId is required'))),
+    );
+  });
+
+  test('rejects a Cloud-supplied CWD', () async {
+    final handler = WorkerAssignmentHandler(
+      executor: WorkerProcessExecutor(),
+      resolve: (_) => const WorkerProcessSpec(
+        workerId: 'cwd-worker',
+        executable: 'missing-worker',
+      ),
+    );
+
+    await expectLater(
+      handler.call(const HostAssignmentContext(
+        workspaceId: 'workspace-1',
+        hostId: 'runtime-1',
+        workerId: 'cwd-worker',
+        runId: 'run-1',
+        taskId: 'task-1',
+        attemptId: 'attempt-1',
+        assignmentId: 'assignment-cwd-rejected',
+        idempotencyKey: 'idem-cwd-rejected',
+        payload: {
+          'workerId': 'cwd-worker',
+          'projectId': 'project-1',
+          'workstreamId': 'workstream-1',
+          'cwd': '/tmp/escape',
+        },
+      )),
+      throwsA(predicate(
+          (error) => error.toString().contains('alternate working directory'))),
+    );
   });
 
   test('rejects assignment permissions not declared by the installed Worker',

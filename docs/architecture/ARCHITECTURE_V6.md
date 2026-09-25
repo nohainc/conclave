@@ -1,6 +1,6 @@
 # Conclave AX Architecture v6 — Collaborative Workstreams and Isolated Execution
 
-**Status:** Proposed  
+**Status:** Proposed — WD-0 filesystem invariants accepted
 **Date:** 2026-09-24  
 **Builds on:** Architecture v5 Project-Centric Workspaces
 
@@ -53,7 +53,7 @@ For a multi-person Project this creates ambiguity:
 
 v6 removes that ambiguity. Discuss never executes. Work always executes explicitly.
 
-### 2.2 Multiple Runs can mutate one checkout
+### 2.2 Multiple Runs can mutate one Workstream directory
 
 v5 scopes execution to Projects and Workspace Grants, but repository selection is still modeled as a Project-level setting. That cannot represent Projects spanning multiple repositories or Projects with no repository at all, and it encourages the collaboration model to own execution details.
 
@@ -71,6 +71,26 @@ v6 makes mutable local state a first-class Workstream resource.
 Each Workstream uses one persistent isolated local working directory on its Primary Workspace. Mutating Work Requests are serialized against that directory.
 
 Different Workstreams may run concurrently on the same Workspace because their working directories are isolated. Workers may clone and manage zero, one, or many repositories inside the directory.
+
+### 2.3 WD-0 filesystem invariants
+
+ADR-011 freezes the filesystem ownership model before runtime path work begins:
+
+- one normal Workspace runtime exists per OS-user installation;
+- each Workspace runtime owns one local Work Root;
+- a Workstream directory is identified only by Project ID + Workstream ID;
+- Project/Workstream names, user identity, Workspace ID, Worker names, and
+  repository names are never path identity;
+- the directory is persistent local state and Workers receive a runtime-resolved
+  CWD;
+- repositories inside it are Worker-managed;
+- one Workstream mutation runs at a time, while different Workstreams may run
+  in parallel.
+
+The canonical contract is represented in
+`packages/core/src/workstream-filesystem.ts` and
+`apps/host/lib/workstream_filesystem.dart`. WD-1 and later phases may add path
+resolution and lifecycle behavior, but may not redefine these identity rules.
 
 ## 3. Product vocabulary
 
@@ -373,7 +393,7 @@ Changing Primary Workspace is not allowed during an active stateful Work Request
 
 ## 14. Workstream Working Directory
 
-Conclave does not require a Source/repository registry for the initial v6 execution model.
+Conclave does not require a repository registry for the v6 execution model.
 
 Each Workspace runtime has one local Work Root. For a Workstream, the runtime resolves:
 
@@ -490,7 +510,7 @@ Assignments for stateful steps carry:
 
 The Workspace runtime rejects stale or mismatched fencing tokens.
 
-A local checkout lock provides a second line of defense.
+A local Workstream mutation lock provides a second line of defense.
 
 ## 19. Queue behavior
 
@@ -726,7 +746,7 @@ Run snapshots the exact Workflow version.
 
 ### local Workstream working-directory state
 
-The canonical directory path is runtime-derived and does not require a Cloud checkout table:
+The canonical directory path is runtime-derived and does not require a legacy Cloud checkout table:
 
 ~~~text
 <work-root>/<project-id>/<workstream-id>
@@ -778,7 +798,6 @@ POST       /api/work-requests/:id/cancel
 
 GET/PATCH  /api/workstreams/:workstreamId/execution
 GET        /api/workstreams/:workstreamId/checkpoints
-POST       /api/workstreams/:workstreamId/checkouts/provision
 ~~~
 
 Discuss message creation has no orchestration side effect.
@@ -791,7 +810,7 @@ Events:
 - workstream.updated;
 - discussion.message.created/edited;
 - work_request.queued/started/completed/failed/cancelled/needs_input;
-- checkout.provisioning/ready/dirty/recovered;
+- working-directory absent/ready/conflict/unavailable;
 - lease.acquired/released/expired;
 - checkpoint.created/reverted;
 - integration.updated.
@@ -867,8 +886,8 @@ Primary button is **Run**, not Send.
 5. Workspace access still requires v5 Workspace Grants.
 6. Configured Worker authorization remains independent from Workspace access; underlying credential authorization remains an internal security boundary.
 7. Stateful execution uses only the Workstream Primary Workspace.
-8. Stateful execution uses only the managed Workstream Checkout.
-9. At most one active stateful lease exists per Checkout.
+8. Stateful execution uses only the runtime-resolved Workstream directory.
+9. At most one active stateful lease exists per Workstream directory.
 10. Stateful Assignments carry a fencing token and expected revision.
 11. Runtime rejects stale lease tokens and revision mismatches.
 12. Worker cannot choose an arbitrary working directory.
@@ -936,5 +955,5 @@ The v6 mental model should be explainable in six lines:
 > People talk in Discuss.  
 > AI work starts only from Work.  
 > A Workstream has one Primary Workspace for mutable state.  
-> Each Workstream has its own isolated checkout.  
+> Each Workstream has its own isolated persistent working directory.
 > Mutating work is serialized; read-only work may run in parallel.

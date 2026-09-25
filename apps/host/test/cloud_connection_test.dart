@@ -60,6 +60,42 @@ void main() {
     await connection.close();
   });
 
+  test('reports Workstream readiness without a local path', () async {
+    final socket = FakeSocket();
+    final connection = HostCloudConnection(
+      uri: Uri.parse('wss://cloud.test/workspace-gateway'),
+      hostId: 'runtime-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      heartbeat: const Duration(hours: 1),
+    );
+    await connection.connect();
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': '5.0',
+      'messageId': 'server-hello-ack',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'workspace.hello.ack',
+      'payload': {'sessionId': 'session-1'},
+    }));
+    await waitFor(() => connection.isConnected);
+
+    connection.reportWorkstreamStatus(
+      projectId: 'project-1',
+      workstreamId: 'workstream-1',
+      workingDirectoryState: 'ready',
+    );
+    final status = socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .firstWhere((message) => message['type'] == 'workstream.status');
+    final payload = status['payload'] as Map<String, dynamic>;
+    expect(payload['projectId'], 'project-1');
+    expect(payload['workstreamId'], 'workstream-1');
+    expect(payload.containsKey('path'), isFalse);
+    expect(payload.containsKey('relativePath'), isFalse);
+    await connection.close();
+  });
+
   test('uses the Gateway session for protocol heartbeats', () async {
     final socket = FakeSocket();
     final connection = HostCloudConnection(
@@ -467,6 +503,59 @@ void main() {
     expect(records['assignment-1']!.status, AssignmentStatus.completed);
     await connection.close();
     await directory.delete(recursive: true);
+  });
+
+  test('allows stateful Work without checkout provisioning', () async {
+    final socket = FakeSocket();
+    var executed = false;
+    final connection = HostCloudConnection(
+      uri: Uri.parse('wss://cloud.test/host'),
+      hostId: 'host-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      assignmentHandler: (context) async {
+        executed = true;
+        expect(context.payload['projectId'], 'project-1');
+        expect(context.payload['workstreamId'], 'workstream-1');
+        return const HostAssignmentResult(summary: 'empty directory work');
+      },
+    );
+    await connection.connect();
+
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.host-protocol',
+      'protocolVersion': '4.0',
+      'messageId': 'server-empty-work-1',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'assignment.start',
+      'workspaceId': 'workspace-1',
+      'hostId': 'host-1',
+      'workerId': 'worker-1',
+      'runId': 'run-empty-1',
+      'taskId': 'task-empty-1',
+      'attemptId': 'attempt-empty-1',
+      'assignmentId': 'assignment-empty-1',
+      'idempotencyKey': 'idem-empty-1',
+      'payload': {
+        'objective': 'work without a repository',
+        'role': 'implementer',
+        'workerId': 'worker-1',
+        'resolvedWorkerVersion': '1.0.0',
+        'projectId': 'project-1',
+        'workstreamId': 'workstream-1',
+        'executionClass': 'stateful_workstream',
+        'input': {},
+        'contextArtifactIds': [],
+        'timeoutMs': 1000,
+      },
+    }));
+    await waitFor(() => socket.sent.any((message) {
+          final decoded = jsonDecode(message as String) as Map<String, dynamic>;
+          return decoded['type'] == 'assignment.result';
+        }));
+
+    expect(executed, isTrue);
+    await connection.close();
   });
 
   test('replays a terminal journal result when Cloud still has it active',

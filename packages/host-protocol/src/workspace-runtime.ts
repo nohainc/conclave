@@ -4,6 +4,9 @@ export const WORKSPACE_RUNTIME_PROTOCOL_NAME =
   "conclave.workspace-runtime-protocol" as const;
 export const WORKSPACE_RUNTIME_PROTOCOL_VERSION = "5.0" as const;
 
+// The checkout message names remain parseable for pre-WD-17 runtimes only.
+// They are not part of the active Workstream execution flow; runtime CWD is
+// resolved from Project ID + Workstream ID.
 export const WORKSPACE_RUNTIME_MESSAGE_TYPES = [
   "workspace.hello",
   "workspace.hello.ack",
@@ -17,6 +20,7 @@ export const WORKSPACE_RUNTIME_MESSAGE_TYPES = [
   "worker.remove",
   "worker.status",
   "credential.status",
+  "workstream.status",
   "checkout.provision",
   "checkout.status",
   "checkout.recover",

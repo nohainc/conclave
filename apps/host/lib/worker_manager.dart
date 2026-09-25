@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'worker_executor.dart';
 import 'worker_trust_policy.dart';
+import 'workstream_directory.dart';
 
 class WorkerManifest {
   const WorkerManifest({
@@ -660,6 +661,8 @@ class WorkerManager {
   WorkerAssignmentHandler assignmentHandler(
     WorkerProcessExecutor executor, {
     Future<String?> Function(String repositoryId)? resolveRepositoryPath,
+    WorkstreamDirectoryLifecycle? workstreamDirectoryLifecycle,
+    WorkstreamMutationCoordinator? workstreamMutationCoordinator,
     WorkerNotificationRelay? onNotification,
   }) =>
       WorkerAssignmentHandler(
@@ -667,6 +670,8 @@ class WorkerManager {
         resolve: activeProcessSpec,
         resolveRepositoryPath: resolveRepositoryPath,
         resolvePermissions: activePermissions,
+        workstreamDirectoryLifecycle: workstreamDirectoryLifecycle,
+        workstreamMutationCoordinator: workstreamMutationCoordinator,
         onNotification: onNotification,
       );
 

@@ -6,6 +6,7 @@ import 'cloud_connection.dart';
 import 'host_configuration.dart';
 import 'secure_credentials.dart';
 import 'platform_runtime.dart';
+import 'work_root.dart';
 
 typedef HostStatusProvider = Future<Map<String, Object?>> Function();
 typedef HostUpdateHandler = Future<Map<String, Object?>> Function(
@@ -20,6 +21,7 @@ class HostConfig {
     this.workspaceId,
     this.repositoriesFile,
     this.authToken,
+    this.workRootPath,
   });
 
   final Directory dataDirectory;
@@ -28,6 +30,10 @@ class HostConfig {
   final String? workspaceId;
   final String? repositoriesFile;
   final String? authToken;
+  final String? workRootPath;
+
+  WorkRootResolver get workRootResolver =>
+      WorkRootResolver(overridePath: workRootPath);
 
   factory HostConfig.fromArgs(
     List<String> args, {
@@ -38,6 +44,7 @@ class HostConfig {
     final hostIndex = args.indexOf('--host-id');
     final workspaceIndex = args.indexOf('--workspace-id');
     final repositoriesIndex = args.indexOf('--repositories');
+    final workRootIndex = args.indexOf('--work-root');
     final path = index >= 0 && index + 1 < args.length
         ? args[index + 1]
         : Platform.environment['CONCLAVE_HOST_DATA_DIR'];
@@ -58,6 +65,9 @@ class HostConfig {
         repositoriesIndex >= 0 && repositoriesIndex + 1 < args.length
             ? args[repositoriesIndex + 1]
             : Platform.environment['CONCLAVE_HOST_REPOSITORIES'];
+    final workRootPath = workRootIndex >= 0 && workRootIndex + 1 < args.length
+        ? args[workRootIndex + 1]
+        : Platform.environment['CONCLAVE_HOST_WORK_ROOT'];
     final secureStore =
         credentialStore ?? const PlatformSecureCredentialStore();
     final storedToken = hostId == null ? null : secureStore.readSync(hostId);
@@ -72,6 +82,7 @@ class HostConfig {
       workspaceId: workspaceId,
       repositoriesFile: repositoriesFile,
       authToken: Platform.environment['CONCLAVE_HOST_TOKEN'] ?? storedToken,
+      workRootPath: workRootPath,
     );
   }
 
@@ -168,12 +179,15 @@ class Host {
   final HostLogger _log;
   IOSink? _ownedLogOutput;
   RandomAccessFile? _lock;
+  Directory? _workRoot;
   bool _running = false;
   final List<StreamSubscription<ProcessSignal>> _signalSubscriptions = [];
 
   bool get isRunning => _running;
+  Directory? get workRoot => _workRoot;
   Future<void> start() async {
     if (_running) return;
+    _workRoot = await config.workRootResolver.resolve();
     await config.dataDirectory.create(recursive: true);
     await currentPlatformRuntime.restrictPermissions(
       config.dataDirectory.path,
@@ -208,7 +222,10 @@ class Host {
       await stop();
       rethrow;
     }
-    _log.info('Host started', {'dataDirectory': config.dataDirectory.path});
+    _log.info('Host started', {
+      'dataDirectory': config.dataDirectory.path,
+      'workRoot': _workRoot!.path,
+    });
   }
 
   Future<void> stop() async {

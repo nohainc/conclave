@@ -1,6 +1,6 @@
 # ADR-011: ID-Based Workstream Working Directories
 
-**Status:** Proposed  
+**Status:** Accepted
 **Date:** 2026-09-25  
 **Builds on:** ADR-008, ADR-009, ADR-010, Architecture v6  
 **Supersedes:** the Conclave-managed repository checkout/worktree portions of ADR-009 and Architecture v6

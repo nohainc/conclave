@@ -6,7 +6,23 @@ import 'cloud_connection.dart';
 import 'worker_protocol.dart';
 import 'process_tree.dart';
 import 'runtime_capabilities.dart';
+import 'workstream_directory.dart';
 import 'worker_trust_policy.dart';
+
+/// Provider-independent guidance attached to every Workstream execution.
+/// It describes the local directory contract without exposing paths or
+/// turning Git operations into a Conclave-managed subsystem.
+const workstreamExecutionGuidance = <String>[
+  'This directory is the Workstream persistent isolated working area.',
+  'Reuse existing files and repositories when they are present.',
+  'Clone repositories here when the requested work needs one.',
+  'Do not assume this directory is disposable; preserve useful local state.',
+  'Use normal Git safety practices for fetch, branch, commit, and push.',
+  'For parallel Workstreams using one repository, prefer a dedicated branch per Workstream.',
+  'Fetch before integrating remote changes.',
+  'Commit and push meaningful state before moving work to another physical Workspace.',
+  'Use Workspace-local Git, SSH, or provider CLI authentication for private repositories.',
+];
 
 Object? _redactValue(Object? value, Iterable<String> secrets) {
   if (value is String) return redactSecrets(value, secrets);
@@ -40,6 +56,16 @@ class WorkerProcessSpec {
   final Map<String, String> environment;
   final Set<String> allowedEnvironmentVariables;
   final Set<String> secretValues;
+
+  WorkerProcessSpec copyWith({String? workingDirectory}) => WorkerProcessSpec(
+        workerId: workerId,
+        executable: executable,
+        arguments: arguments,
+        workingDirectory: workingDirectory ?? this.workingDirectory,
+        environment: environment,
+        allowedEnvironmentVariables: allowedEnvironmentVariables,
+        secretValues: secretValues,
+      );
 }
 
 typedef WorkerProcessLauncher = Future<Process> Function(
@@ -304,6 +330,8 @@ class WorkerAssignmentHandler {
     required this.resolve,
     this.resolveRepositoryPath,
     this.resolvePermissions,
+    this.workstreamDirectoryLifecycle,
+    this.workstreamMutationCoordinator,
     this.onNotification,
   });
 
@@ -311,15 +339,50 @@ class WorkerAssignmentHandler {
   final WorkerProcessResolver resolve;
   final Future<String?> Function(String repositoryId)? resolveRepositoryPath;
   final Future<Set<String>> Function(String workerId)? resolvePermissions;
+  final WorkstreamDirectoryLifecycle? workstreamDirectoryLifecycle;
+  final WorkstreamMutationCoordinator? workstreamMutationCoordinator;
   final WorkerNotificationRelay? onNotification;
 
-  Future<HostAssignmentResult> call(HostAssignmentContext context) async {
+  /// Resolves the local process specification for an assignment.
+  ///
+  /// When Project/Workstream identity is present, the returned CWD is always
+  /// resolved locally from those IDs. Cloud-supplied CWD fields are rejected.
+  Future<WorkerProcessSpec> prepareProcessSpec(
+      HostAssignmentContext context) async {
     final workerId = context.payload['workerId'];
     if (workerId is! String || workerId.isEmpty) {
       throw StateError('assignment workerId is required');
     }
     final spec = await resolve(workerId);
     if (spec == null) throw StateError('worker is not installed: $workerId');
+    rejectWorkerControlledPaths(context.payload);
+    final executionClass = context.payload['executionClass'];
+    final projectId = _requiredStringForWorkstream(
+        context.payload['projectId'], 'projectId', executionClass);
+    final workstreamId = _requiredStringForWorkstream(
+        context.payload['workstreamId'], 'workstreamId', executionClass);
+    var runtimeSpec = spec;
+    if (projectId != null && workstreamId != null) {
+      final lifecycle = workstreamDirectoryLifecycle;
+      if (lifecycle == null) {
+        throw const RuntimeViolation(
+            'Workstream directory lifecycle is required for scoped execution');
+      }
+      final directory = await lifecycle.ensureForExecution(
+        projectId: projectId,
+        workstreamId: workstreamId,
+      );
+      runtimeSpec = spec.copyWith(workingDirectory: directory.path);
+    }
+    return runtimeSpec;
+  }
+
+  Future<HostAssignmentResult> call(HostAssignmentContext context) async {
+    final workerId = context.payload['workerId'];
+    if (workerId is! String || workerId.isEmpty) {
+      throw StateError('assignment workerId is required');
+    }
+    final runtimeSpec = await prepareProcessSpec(context);
     final allowed =
         await resolvePermissions?.call(workerId) ?? const <String>{};
     if (context.payload['permissionSnapshot'] != null) {
@@ -341,32 +404,71 @@ class WorkerAssignmentHandler {
         throw StateError('assignment permission is not allowed: $denied');
       }
     }
-    final workerPayload =
-        await _repositoryScopedPayload(context.payload, context);
-    final output = await executor.execute(
-      spec,
-      workerPayload,
-      operationId: context.assignmentId,
-      onNotification: onNotification == null
-          ? null
-          : (notification) => onNotification!(
-                context,
-                _redactNotification(notification, spec.secretValues),
-              ),
+    Future<HostAssignmentResult> execute() async {
+      final workerPayload =
+          await _repositoryScopedPayload(context.payload, context);
+      final output = await executor.execute(
+        runtimeSpec,
+        workerPayload,
+        operationId: context.assignmentId,
+        onNotification: onNotification == null
+            ? null
+            : (notification) => onNotification!(
+                  context,
+                  _redactNotification(notification, runtimeSpec.secretValues),
+                ),
+      );
+      final summary = output['summary'];
+      final nestedOutput = output['output'];
+      return HostAssignmentResult(
+        summary: summary is String && summary.isNotEmpty
+            ? summary
+            : 'Worker $workerId completed assignment',
+        output: nestedOutput is Map
+            ? Map<String, Object?>.from(nestedOutput)
+            : output,
+        artifactIds: output['artifactIds'] is List
+            ? (output['artifactIds'] as List).whereType<String>().toList()
+            : const [],
+      );
+    }
+
+    if (context.payload['executionClass'] != 'stateful_workstream') {
+      return execute();
+    }
+    final projectId = context.payload['projectId'];
+    final workstreamId = context.payload['workstreamId'];
+    final leaseId = context.payload['leaseId'];
+    final fencingToken = context.payload['fencingToken'];
+    final coordinator = workstreamMutationCoordinator;
+    if (projectId is! String ||
+        workstreamId is! String ||
+        leaseId is! String ||
+        fencingToken is! int) {
+      throw const RuntimeViolation(
+          'stateful assignment requires Workstream lease identity');
+    }
+    if (coordinator == null) {
+      throw const RuntimeViolation(
+          'Workstream mutation coordinator is required for stateful execution');
+    }
+    return coordinator.withMutation(
+      projectId: projectId,
+      workstreamId: workstreamId,
+      leaseId: leaseId,
+      fencingToken: fencingToken,
+      action: (_) => execute(),
     );
-    final summary = output['summary'];
-    final nestedOutput = output['output'];
-    return HostAssignmentResult(
-      summary: summary is String && summary.isNotEmpty
-          ? summary
-          : 'Worker $workerId completed assignment',
-      output: nestedOutput is Map
-          ? Map<String, Object?>.from(nestedOutput)
-          : output,
-      artifactIds: output['artifactIds'] is List
-          ? (output['artifactIds'] as List).whereType<String>().toList()
-          : const [],
-    );
+  }
+
+  String? _requiredStringForWorkstream(
+      Object? value, String field, Object? executionClass) {
+    if (value == null && executionClass != 'stateful_workstream') return null;
+    if (value is! String || value.trim().isEmpty) {
+      throw RuntimeViolation(
+          'execution assignment field $field is required for Workstream CWD');
+    }
+    return value;
   }
 
   WorkerRpcNotification _redactNotification(
@@ -449,6 +551,12 @@ class WorkerAssignmentHandler {
           'attemptId': context.attemptId,
           'assignmentId': context.assignmentId,
           'idempotencyKey': context.idempotencyKey,
+          if (payload['projectId'] is String) 'projectId': payload['projectId'],
+          if (payload['workstreamId'] is String)
+            'workstreamId': payload['workstreamId'],
+          if (payload['workRequestId'] is String)
+            'workRequestId': payload['workRequestId'],
+          'workstreamExecutionGuidance': workstreamExecutionGuidance,
         },
       };
 

@@ -372,6 +372,10 @@ export class WorkspaceGateway implements DurableObject {
       case "credential.status":
         await this.recordCredentialStatus(message.payload);
         return;
+      case "workstream.status":
+        // Runtime readiness is logical-only. Never persist or relay a local
+        // absolute path, repository clone path, or checkout path.
+        return;
       case "checkout.status":
         await this.recordCheckoutStatus(message.payload);
         return;
@@ -903,13 +907,12 @@ export class WorkspaceGateway implements DurableObject {
     const now = new Date().toISOString();
     await this.env.CONCLAVE_DB.prepare(
       `UPDATE workstream_checkouts
-       SET status = ?1, revision = COALESCE(?2, revision), relative_path = COALESCE(?3, relative_path), updated_at = ?4
-       WHERE id = ?5 AND workspace_id = ?6`,
+       SET status = ?1, revision = COALESCE(?2, revision), updated_at = ?3
+       WHERE id = ?4 AND workspace_id = ?5`,
     )
       .bind(
         dbStatus,
         typeof value.headRevision === "string" ? value.headRevision : null,
-        typeof value.relativePath === "string" ? value.relativePath : null,
         now,
         checkoutId,
         this.executionWorkspaceId,

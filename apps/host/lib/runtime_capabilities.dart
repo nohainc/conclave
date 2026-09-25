@@ -135,6 +135,13 @@ void _rejectWorkerControlledPaths(Map<String, Object?> value) {
   visit(value);
 }
 
+/// Rejects Cloud/Worker payloads that attempt to choose a process CWD.
+///
+/// The Host must resolve the Workstream directory locally from immutable IDs.
+void rejectWorkerControlledPaths(Map<String, Object?> value) {
+  _rejectWorkerControlledPaths(value);
+}
+
 void _rejectCredentialMaterial(Map<String, Object?> value) {
   const forbidden = {
     'secret',
@@ -613,6 +620,9 @@ void _validateGitValue(String value, String field) {
   }
 }
 
+/// @deprecated Historical compatibility model. Active execution uses the
+/// ID-derived Workstream directory and mutation coordinator.
+@Deprecated('Use the Workstream directory lifecycle instead')
 class WorkstreamCheckout {
   const WorkstreamCheckout({
     required this.id,
@@ -665,8 +675,9 @@ class WorkstreamCheckoutLifecycleResult {
   final String? recoveryStatus;
 }
 
-/// Owns the only runtime mapping from an opaque Cloud checkout ID to a local
-/// path. Callers never provide a filesystem path or branch name.
+/// @deprecated Historical checkout control plane retained for compatibility
+/// fixtures. Active assignments use the ID-derived Workstream directory.
+@Deprecated('Use WorkstreamDirectoryLifecycle and WorkstreamMutationCoordinator')
 class WorkstreamCheckoutManager {
   WorkstreamCheckoutManager(Directory repositoryRoot)
       : _repositoryRoot = SafeWorkspace(repositoryRoot),

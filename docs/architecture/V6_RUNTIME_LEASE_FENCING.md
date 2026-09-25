@@ -1,4 +1,9 @@
-# V6 runtime lease fencing
+# V6 runtime lease fencing — Historical Checkout Draft
+
+> **Historical / superseded:** This document describes fencing tied to the
+> former Workstream Checkout control plane. Active fencing is per Workstream
+> directory and is implemented by the Workstream execution coordinator and
+> local mutation lock.
 
 Stateful assignment snapshots carry the complete Workstream execution lease:
 `workstreamId`, `workRequestId`, `checkoutId`, `leaseId`, `fencingToken`,

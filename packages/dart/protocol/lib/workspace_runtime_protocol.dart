@@ -19,6 +19,7 @@ const workspaceRuntimeMessageTypes = <String>{
   'worker.remove',
   'worker.status',
   'credential.status',
+  'workstream.status',
   'checkout.provision',
   'checkout.status',
   'checkout.recover',

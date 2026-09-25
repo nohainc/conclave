@@ -3765,7 +3765,7 @@ export async function handleListWorkstreamCheckouts(
   );
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT id, workstream_id AS workstreamId, workspace_id AS workspaceId,
-            repository_id AS repositoryId, revision, relative_path AS relativePath,
+            repository_id AS repositoryId, revision,
             status, created_at AS createdAt, updated_at AS updatedAt
      FROM workstream_checkouts WHERE workstream_id = ?1 ORDER BY created_at DESC`,
   )
@@ -3774,6 +3774,8 @@ export async function handleListWorkstreamCheckouts(
   return json({ checkouts: rows.results ?? [] });
 }
 
+/** @deprecated Historical compatibility endpoint. WD-17 execution resolves
+ * the local Workstream directory from immutable Project/Workstream IDs. */
 export async function handleProvisionWorkstreamCheckout(
   request: Request,
   env: SecurityEnv,
@@ -3867,7 +3869,7 @@ export async function handleProvisionWorkstreamCheckout(
   }
   const existing = await env.CONCLAVE_DB.prepare(
     `SELECT id, workstream_id AS workstreamId, workspace_id AS workspaceId,
-            repository_id AS repositoryId, revision, relative_path AS relativePath,
+            repository_id AS repositoryId, revision,
             status, created_at AS createdAt, updated_at AS updatedAt
      FROM workstream_checkouts
      WHERE workstream_id = ?1 AND status IN ('provisioning', 'ready', 'stale')
@@ -4154,7 +4156,9 @@ async function handleCreateWorkRequest(
       typeof body.primaryWorkspaceId === "string"
         ? body.primaryWorkspaceId
         : null,
-    requireCheckout: mode === "stateful",
+    // WD-17: stateful Work resolves the local ID-derived Workstream directory;
+    // legacy checkout provisioning is not part of the active request path.
+    requireCheckout: false,
     maxConcurrentWorkRequests: 1,
   };
   const now = new Date().toISOString();
@@ -4171,7 +4175,9 @@ async function handleCreateWorkRequest(
       typeof body.primaryWorkspaceId === "string"
         ? body.primaryWorkspaceId
         : null,
-    checkoutId: typeof body.checkoutId === "string" ? body.checkoutId : null,
+    // Ignore the historical client field. Runtime CWD is derived from the
+    // immutable Project/Workstream IDs on the Workspace.
+    checkoutId: null,
     input:
       body.input && typeof body.input === "object"
         ? (body.input as Record<string, unknown>)

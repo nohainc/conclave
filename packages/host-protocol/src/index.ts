@@ -318,6 +318,7 @@ export const AssignmentSnapshotSchema = z
     assignmentId: nonEmptyStr,
     workstreamId: nonEmptyStr.optional(),
     workRequestId: nonEmptyStr.optional(),
+    /** Historical compatibility field; active runtime uses Workstream IDs. */
     checkoutId: nonEmptyStr.optional(),
     leaseId: nonEmptyStr.optional(),
     fencingToken: z.number().int().positive().optional(),

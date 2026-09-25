@@ -3,6 +3,8 @@
  *
  * D1 is the source of truth. The object only serializes mutations, fences
  * workers, and schedules reconciliation after a restart or lease timeout.
+ * Checkout columns in the current D1 compatibility schema are historical;
+ * active filesystem identity is the Workstream directory.
  */
 
 export interface WorkstreamCoordinatorEnv {

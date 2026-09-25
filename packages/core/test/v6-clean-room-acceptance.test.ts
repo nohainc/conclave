@@ -10,7 +10,7 @@ describe("V6 solo clean-room acceptance contract", () => {
     workspaceId: "workspace-1",
     projectId: "project-1",
     workstreamId: "workstream-1",
-    checkoutId: "checkout-1",
+    workingDirectoryReady: true,
     firstCheckpointRevision: "checkpoint-sha-1",
     secondRequestBaseCheckpointRevision: "checkpoint-sha-1",
     pullRequestUrl: "https://github.test/org/repo/pull/1",

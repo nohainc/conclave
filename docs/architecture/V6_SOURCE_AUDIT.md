@@ -1,4 +1,9 @@
-# Architecture v6 Source Audit
+# Architecture v6 Source Audit — Historical Checkout Draft
+
+> **Historical / superseded:** This audit predates the WD-7 through WD-17
+> filesystem model. References to Source registration, managed checkouts and
+> checkout provisioning are retained as historical findings, not normative
+> architecture.
 
 **Repository:** `nohainc/conclave`  
 **Reviewed:** 2026-09-24  

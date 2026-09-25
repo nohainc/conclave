@@ -7,7 +7,7 @@ export const V6_SOLO_ACCEPTANCE_PHASES = [
   "project_created",
   "workspace_granted",
   "workstream_created",
-  "checkout_ready",
+  "working_directory_ready",
   "discussion_recorded",
   "work_request_created",
   "workflow_completed",
@@ -23,7 +23,7 @@ export interface V6SoloAcceptanceRun {
   readonly workspaceId: string;
   readonly projectId: string;
   readonly workstreamId: string;
-  readonly checkoutId: string;
+  readonly workingDirectoryReady: boolean;
   readonly firstCheckpointRevision: string;
   readonly secondRequestBaseCheckpointRevision: string;
   readonly pullRequestUrl: string;
@@ -36,7 +36,7 @@ export function validateV6SoloAcceptance(run: V6SoloAcceptanceRun): void {
     [run.workspaceId, "workspace"],
     [run.projectId, "project"],
     [run.workstreamId, "workstream"],
-    [run.checkoutId, "checkout"],
+    [run.workingDirectoryReady ? "ready" : "", "working directory"],
     [run.firstCheckpointRevision, "first checkpoint revision"],
     [run.pullRequestUrl, "pull request URL"],
   ] as const;

@@ -53,4 +53,18 @@ describe("Workspace Runtime protocol", () => {
       expect(parseWorkspaceRuntimeMessage({ ...base, type }).type).toBe(type);
     }
   });
+
+  it("accepts logical Workstream readiness without a local path", () => {
+    expect(
+      parseWorkspaceRuntimeMessage({
+        ...base,
+        type: "workstream.status",
+        payload: {
+          projectId: "project-1",
+          workstreamId: "workstream-1",
+          workingDirectoryState: "ready",
+        },
+      }).type,
+    ).toBe("workstream.status");
+  });
 });

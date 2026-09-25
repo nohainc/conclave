@@ -73,7 +73,11 @@ export interface WorkRequest {
   readonly workflowVersionSnapshot: WorkflowVersion;
   readonly status: WorkRequestStatus;
   readonly primaryWorkspaceId: string | null;
-  readonly checkoutId: string | null;
+  /**
+   * Historical compatibility field. New Work Requests resolve their local
+   * directory from Project ID + Workstream ID and must leave this null.
+   */
+  readonly checkoutId?: string | null;
   readonly input: Readonly<Record<string, unknown>>;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -235,6 +239,7 @@ export const BUILT_IN_WORKFLOW_VERSIONS: Readonly<
 export interface WorkstreamExecutionPolicy {
   readonly mode: WorkRequestMode;
   readonly primaryWorkspaceId: string | null;
+  /** @deprecated Checkout provisioning is no longer part of active v6. */
   readonly requireCheckout: boolean;
   readonly maxConcurrentWorkRequests: number;
 }
@@ -243,6 +248,7 @@ export type WorkstreamCheckoutStatus =
   "provisioning" | "ready" | "stale" | "deleted";
 
 export interface WorkstreamCheckout {
+  /** @deprecated Historical v6 control-plane entity; not an execution path. */
   readonly id: string;
   readonly workstreamId: string;
   readonly workspaceId: string;
@@ -452,19 +458,18 @@ export function validateWorkRequest(
         "Stateful WorkRequest requires a Primary Workspace",
       );
     }
-    if (!request.primaryWorkspaceId || !request.checkoutId) {
-      throw new DomainInvariantError(
-        "Stateful WorkRequest requires a Primary Workspace and Checkout",
-      );
+    if (!request.primaryWorkspaceId) {
+      throw new DomainInvariantError("Stateful WorkRequest requires a Primary Workspace");
     }
     if (request.primaryWorkspaceId !== policy.primaryWorkspaceId) {
       throw new DomainInvariantError(
         "Stateful WorkRequest must use the Workstream Primary Workspace",
       );
     }
-  } else if (request.checkoutId !== null) {
+  }
+  if (request.checkoutId) {
     throw new DomainInvariantError(
-      "Stateless WorkRequest cannot pin a Workstream Checkout",
+      "WorkRequest cannot use the historical Checkout control plane",
     );
   }
 }
@@ -589,11 +594,6 @@ export function validateWorkstreamExecutionPolicy(
   if (policy.mode === "stateless" && policy.primaryWorkspaceId) {
     throw new DomainInvariantError(
       "Stateless Workstream execution cannot define a Primary Workspace",
-    );
-  }
-  if (policy.requireCheckout && policy.mode !== "stateful") {
-    throw new DomainInvariantError(
-      "Only stateful Workstreams can require a Checkout",
     );
   }
   positive(policy.maxConcurrentWorkRequests, "maxConcurrentWorkRequests");

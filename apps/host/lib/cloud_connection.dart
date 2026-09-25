@@ -38,6 +38,22 @@ class HostAssignmentContext {
   final String assignmentId;
   final String idempotencyKey;
   final Map<String, Object?> payload;
+
+  HostAssignmentContext copyWith({
+    String? workerId,
+    Map<String, Object?>? payload,
+  }) =>
+      HostAssignmentContext(
+        workspaceId: workspaceId,
+        hostId: hostId,
+        workerId: workerId ?? this.workerId,
+        runId: runId,
+        taskId: taskId,
+        attemptId: attemptId,
+        assignmentId: assignmentId,
+        idempotencyKey: idempotencyKey,
+        payload: payload ?? this.payload,
+      );
 }
 
 class HostAssignmentResult {
@@ -198,6 +214,24 @@ class HostCloudConnection {
   /// Reports credential metadata only. Raw secrets never cross this boundary.
   void reportCredentialStatus(CredentialProfile profile) {
     _sendIfConnected('credential.status', profile.toCloudMetadata());
+  }
+
+  /// Reports only logical Workstream readiness. Local absolute paths and
+  /// repository locations never cross the runtime boundary.
+  void reportWorkstreamStatus({
+    required String projectId,
+    required String workstreamId,
+    required String workingDirectoryState,
+  }) {
+    if (!const {'absent', 'ready', 'conflict', 'unavailable'}
+        .contains(workingDirectoryState)) {
+      throw ArgumentError.value(workingDirectoryState, 'workingDirectoryState');
+    }
+    _sendIfConnected('workstream.status', {
+      'projectId': projectId,
+      'workstreamId': workstreamId,
+      'workingDirectoryState': workingDirectoryState,
+    });
   }
 
   /// Relays validated Worker facts using the trusted Assignment correlation.
@@ -497,6 +531,9 @@ class HostCloudConnection {
     } else if (decoded['type'] == 'workspace.heartbeat.ack') {
       _heartbeatTimeoutTimer?.cancel();
       _heartbeatTimeoutTimer = null;
+    } else if (decoded['type'] == 'workstream.status') {
+      // Runtime readiness is currently informational. The payload is not
+      // persisted here and contains no local path.
     } else if (decoded['type'] == 'assignment.start') {
       unawaited(_handleAssignmentStart(decoded));
     } else if (decoded['type'] == 'assignment.cancel') {
@@ -541,7 +578,6 @@ class HostCloudConnection {
         _sendCheckoutStatus(
           message,
           status: 'ready',
-          relativePath: status.checkout.relativePath,
           headRevision: status.currentRevision,
         );
       } else if (type == 'checkout.recover') {
@@ -555,7 +591,6 @@ class HostCloudConnection {
         _sendCheckoutStatus(
           message,
           status: 'ready',
-          relativePath: status.checkout.relativePath,
           headRevision: status.currentRevision,
         );
       } else if (type == 'checkout.finalize') {
@@ -601,7 +636,6 @@ class HostCloudConnection {
   void _sendCheckoutStatus(
     Map<String, dynamic> message, {
     required String status,
-    String? relativePath,
     String? headRevision,
     String? error,
     String? diff,
@@ -613,7 +647,6 @@ class HostCloudConnection {
       if ((message['payload'] as Map?)?['workRequestId'] is String)
         'workRequestId': (message['payload'] as Map?)?['workRequestId'],
       'status': status,
-      if (relativePath != null) 'relativePath': relativePath,
       if (headRevision != null) 'headRevision': headRevision,
       if (diff != null) 'diff': diff,
       if (changed != null) 'changed': changed,
@@ -806,9 +839,15 @@ class HostCloudConnection {
       return handler(context);
     }
     final manager = workstreamCheckoutManager;
-    if (manager == null) {
-      throw const RuntimeViolation(
-          'stateful assignment requires a checkout manager');
+    final hasCompleteCheckoutSnapshot =
+        context.payload['checkoutId'] is String &&
+            context.payload['leaseId'] is String &&
+            context.payload['expectedRevision'] is String &&
+            context.payload['fencingToken'] is int;
+    if (manager == null || !hasCompleteCheckoutSnapshot) {
+      // WD-7: a Workstream may execute in its empty, marker-backed directory.
+      // Checkout metadata remains an optional compatibility/recovery layer.
+      return handler(context);
     }
     return manager.withStatefulLease(
       snapshot: context.payload,

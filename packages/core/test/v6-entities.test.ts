@@ -199,10 +199,12 @@ describe("v6 Workstream domain", () => {
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
-    expect(() => validateWorkRequest(request, statefulPolicy)).not.toThrow();
+    expect(() => validateWorkRequest(request, statefulPolicy)).toThrow(
+      /historical Checkout control plane/,
+    );
     expect(() =>
       validateWorkRequest({ ...request, checkoutId: null }, statefulPolicy),
-    ).toThrow(/requires a Primary Workspace and Checkout/);
+    ).not.toThrow();
   });
 
   it("enforces one active lease and linear checkpoints per Checkout", () => {
