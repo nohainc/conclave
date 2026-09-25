@@ -16,7 +16,7 @@ For every phase:
 6. tests land with the behavior;
 7. remove replaced paths once the new path is proven;
 8. Discuss may never execute;
-9. stateful execution may never use an unleased shared checkout;
+9. stateful execution may never mutate an unleased shared Workstream directory;
 10. Configured Worker authorization and Workspace Grants remain independent; credential security remains enforced beneath Workers.
 
 ---
@@ -77,17 +77,16 @@ One active architecture remains before v6 features.
 - WorkflowVersion;
 - WorkflowStep;
 - WorkstreamExecutionPolicy;
-- WorkstreamCheckout;
-- WorkstreamCheckpoint;
+- WorkstreamWorkingDirectoryState;
 - WorkstreamExecutionLease.
 
 ### Invariants
 - Workstream belongs to Project;
 - Lead must be owner/collaborator;
 - Workstream permission can only narrow Project permission;
-- stateful Work Request requires Primary Workspace/Checkout;
-- one active stateful lease per Checkout;
-- Checkpoint sequence linear per Workstream checkout.
+- stateful Work Request requires a Primary Workspace and resolvable Workstream directory;
+- one active stateful lease per Workstream directory;
+- Project/Workstream names never affect local path identity.
 
 ### Tests
 Domain invariants and serialization.
@@ -148,16 +147,14 @@ Workflow runner can execute data, not hardcoded stage names.
 - workflow_versions;
 - workstream_execution_policies;
 - work_requests;
-- workstream_checkouts;
 - workstream_execution_leases;
-- workstream_checkpoints.
+- optional Workstream working-directory readiness metadata.
 
 ### Add correlation
 To Runs/Assignments/Artifacts/Usage:
 - workstream_id;
 - work_request_id;
 - workflow_version_id;
-- checkout_id;
 - execution_lease_id where stateful.
 
 ### Strategy
@@ -169,9 +166,8 @@ Pre-production:
 ### Tests
 - SQLite clean apply;
 - FK/unique constraints;
-- one active checkout;
 - lease uniqueness;
-- checkpoint parent constraints.
+- ID-only path invariants represented in runtime tests.
 
 ### Exit
 Persistence matches v6 directly.
@@ -271,74 +267,83 @@ Users understand Workstream before execution complexity lands.
 
 ---
 
-## V6-7 — Runtime managed checkout manager
+## V6-7 — Runtime Workstream directory manager
 
 ### Goal
-Turn existing Git worktree primitive into production Workstream state.
+Provide one stable persistent local directory per Project + Workstream without managing repositories.
 
 ### Add runtime service
-`WorkstreamCheckoutManager`.
+`WorkstreamDirectoryManager`.
 
 Responsibilities:
-- managed root;
-- provision checkout;
-- generated branch;
-- resolve checkout ID;
-- verify branch/revision;
-- local lock;
-- status/diff;
-- reset/recover;
-- checkpoint commit;
-- archive/remove.
+- resolve local Work Root;
+- derive `<project-id>/<workstream-id>`;
+- validate ID path components;
+- enforce containment beneath Work Root;
+- create directory lazily;
+- create/validate `.conclave-workstream.json`;
+- report absent/ready/conflict/unavailable;
+- expose local lock primitive;
+- retain directory across Runs/re-enrollment.
 
 ### Security
-- Cloud sends opaque checkout ID;
-- runtime generates/resolves path;
-- no arbitrary absolute path from assignment;
-- reuse SafeWorkspace and GitRepository.
+- Cloud sends Project/Workstream IDs, never arbitrary path;
+- names and Workspace ID are not path inputs;
+- runtime resolves path locally;
+- marker mismatch fails closed;
+- symlink/path traversal defenses required.
 
 ### Tests
-- idempotent provisioning;
-- two Workstreams isolated;
+- deterministic path;
+- rename independence;
+- Workspace-ID independence;
+- re-enrollment reuse;
 - path traversal;
-- symlink;
-- branch validation;
-- dirty recovery;
-- crash/reopen.
+- symlink containment;
+- marker conflict;
+- restart/reopen.
 
 ### Exit
-A Workstream has a safe persistent checkout.
+Every Workstream can acquire a safe persistent CWD.
 
 ---
 
-## V6-8 — Checkout provisioning control plane
+## V6-8 — Assignment CWD control plane
 
 ### Cloud
-When Primary Workspace selected:
+For stateful Work:
 - validate active WorkspaceProjectGrant;
-- create checkout record;
-- send provision command;
-- record ready/head revision.
+- dispatch Project ID + Workstream ID;
+- do not require repository registration or checkout provisioning.
 
 ### Protocol
-Add:
-- checkout.provision;
-- checkout.status;
-- checkout.recover;
-- checkout.archive.
+Assignment carries:
+- projectId;
+- workstreamId;
+- Work Request/Run context;
+- lease/fencing where stateful.
+
+### Runtime
+Before Worker launch:
+- ensure Workstream directory;
+- validate marker;
+- set process CWD;
+- report readiness/conflict.
 
 ### Realtime
-Expose provisioning state.
+Expose coarse directory readiness when useful.
 
 ### Tests
 - Workspace offline;
-- repository missing;
-- wrong base revision;
-- retry/idempotency;
-- grant revoked.
+- first-run directory creation;
+- existing directory reuse;
+- rename during active work;
+- Workspace re-enrollment;
+- marker mismatch;
+- arbitrary path injection rejected.
 
 ### Exit
-UI can reliably create the Workstream checkout.
+UI can run Work without repository/source configuration.
 
 ---
 
@@ -348,7 +353,7 @@ UI can reliably create the Workstream checkout.
 
 Responsibilities:
 - FIFO stateful queue;
-- active lease;
+- active Workstream-directory lease;
 - fencing token;
 - heartbeat/expiry;
 - cancellation;
@@ -389,11 +394,9 @@ Stateful concurrency is deterministic.
 
 ### Runtime
 Before stateful Worker launch:
-- checkout exists;
+- Workstream directory resolves and marker matches;
 - lease matches;
-- token >= local last-seen fencing token;
-- expected revision matches;
-- checkout clean.
+- token >= local last-seen fencing token.
 
 Reject otherwise.
 
@@ -403,7 +406,7 @@ OS/file lock per checkout.
 ### Tests
 - stale token;
 - duplicate assignment;
-- revision mismatch;
+- marker/path mismatch;
 - second process lock;
 - reconnect replay.
 
@@ -417,15 +420,14 @@ Cloud bugs/retries cannot produce concurrent mutation.
 ### Extend v5 scheduler
 
 For stateless_read:
-- retain Auto Workspace selection;
-- bind to Checkpoint revision;
-- no persistent mutation.
+- retain eligible Workspace selection;
+- no persistent mutation requirement.
 
 For stateful_workstream:
 - force Primary Workspace;
 - force Primary Workspace Grant;
-- require checkout + lease;
-- select Worker/Account only inside that boundary.
+- require ready Workstream directory + lease;
+- select configured Worker only inside that boundary.
 
 ### Remove
 - arbitrary Workspace override for stateful steps.
@@ -433,7 +435,7 @@ For stateful_workstream:
 ### Tests
 - auxiliary research Workspace;
 - Primary Workspace offline;
-- Account unavailable on Primary;
+- Worker unavailable on Primary;
 - correct Worker selection;
 - workspace capacity + Workstream lease interaction.
 
@@ -471,36 +473,36 @@ Workflows are product data with immutable versions.
 
 ---
 
-## V6-13 — Checkpoint and rollback lifecycle
+## V6-13 — Persistent local state and Git responsibility
 
-### On success
-- verify dirty tree;
-- create managed commit;
-- create diff artifact;
-- record Checkpoint;
-- update Workstream current checkpoint;
-- release lease.
+### Goal
+Define what Conclave guarantees after removing managed Git checkpoints.
 
-### On failure/cancel
-- capture bounded diagnostics/diff;
-- reset checkout to base checkpoint;
-- clean controlled untracked files;
-- mark recovery status if rollback fails;
-- release or quarantine lease.
+### Conclave guarantees
+- stable Workstream CWD;
+- one active stateful mutator per Workstream;
+- directory retained across Work Requests;
+- rename-safe path identity;
+- Workspace re-enrollment continuity when local Work Root persists.
 
-### No-change success
-Record Run result without unnecessary commit; checkpoint may remain unchanged.
+### Worker/user responsibility
+- clone repositories;
+- choose branches;
+- commit/push;
+- fetch/pull/rebase/merge;
+- recover repository state after failed work.
+
+### Optional follow-up
+Runtime may detect repositories and expose branch/HEAD/dirty metadata without managing them.
 
 ### Tests
-- successful commit;
-- failed rollback;
-- untracked files;
-- dependency changes;
-- no-change;
-- cancellation.
+- state persists between Work Requests;
+- failed Run does not delete directory;
+- second Worker sees first Worker's files;
+- no automatic cleanup destroys unpushed work.
 
 ### Exit
-Next Work Request always starts from known state.
+Filesystem guarantees are explicit and do not imply Git rollback semantics.
 
 ---
 
@@ -525,8 +527,8 @@ Next Work Request always starts from known state.
 - needs input;
 - completed;
 - failed;
-- checkpoint;
-- changes/tests/findings.
+- working-directory state;
+- changes/tests/findings when reported by Workers.
 
 ### Tests
 - explicit Run required;
@@ -581,7 +583,7 @@ Editable:
 Include:
 - Project instructions;
 - Brief;
-- current Checkpoint;
+- relevant Workstream state;
 - Work Request;
 - explicit Discuss references;
 - explicit artifacts;
@@ -643,52 +645,43 @@ Team execution cost/identity is explicit through configured Workers.
 Allow research/review to use auxiliary Workspaces safely.
 
 ### Context
-Use immutable:
-- Checkpoint SHA;
-- R2/context artifacts;
-- repository snapshot mechanism supported by Workspace.
+Use bounded immutable context/artifacts where possible.
 
-Do not point auxiliary Workers at Primary mutable checkout.
+Do not point auxiliary Workers at the Primary Workstream's mutable local directory unless the workflow explicitly routes stateful work there.
 
 ### Tests
 - parallel research;
 - independent provider requirement;
-- stale snapshot;
+- stale context artifact;
 - Primary mutates while research runs;
-- synthesis uses correct revision metadata.
+- synthesis uses the intended referenced context.
 
 ### Exit
 Conclave gains parallelism without shared mutable filesystem risk.
 
 ---
 
-## V6-19 — Integration workflow
+## V6-19 — Repository integration guidance
 
-### Actions
-- Publish branch;
-- Create PR;
-- Merge;
-- Export patch;
-- Mark completed.
+### Initial behavior
+Repository integration is performed by Workers/users with standard Git/GitHub tooling.
 
-### GitHub
-Prefer PR for connected GitHub repositories.
+Conclave does not require:
+- registered repository;
+- managed branch;
+- managed PR state.
 
-### Permissions
-Project owner policy determines who can integrate.
+### Guidance
+For parallel Workstreams using one repository:
+- use separate branches;
+- commit/push before moving physical Workspace;
+- integrate through normal PR/merge flow.
 
-### Record
-Integration state belongs to Workstream.
-
-### Tests
-- PR creation metadata;
-- branch already published;
-- base moved;
-- merge conflict;
-- unauthorized integration.
+### Future convenience
+GitHub-aware actions may be added later without becoming a prerequisite for Workstream execution.
 
 ### Exit
-Workstream output has a controlled route back to Project base.
+Repository integration remains flexible and does not expand the required Conclave domain.
 
 ---
 
@@ -701,7 +694,7 @@ Workstream output has a controlled route back to Project base.
 - owned Workspace.
 
 ### Events
-Discussion, Work Request, checkout, lease, checkpoint, integration.
+Discussion, Work Request, working-directory readiness, lease, and Worker-reported execution state.
 
 ### Notification policy
 Notify only actionable/meaningful states:
@@ -741,16 +734,14 @@ No polling/full snapshot reload needed for active team work.
 - Work Request creation;
 - workflow selection;
 - Worker selection;
-- checkout provision/recovery;
+- working-directory conflict/readiness;
 - lease;
-- checkpoint;
-- integration.
+- configured Worker selection.
 
 ### Metrics
 - queue wait;
 - stateful duration;
-- checkout recovery rate;
-- failed rollback;
+- working-directory conflict rate;
 - Workspace utilization.
 
 ### Exit
@@ -787,8 +778,8 @@ Search active source for forbidden remnants:
 - `host_workspace_bindings`;
 - v4 configured Worker fallback;
 - normal Chat -> automatic Goal/Run;
-- mutable assignment using registered base repository path directly;
-- user-supplied arbitrary worktree path;
+- mutable assignment using arbitrary Cloud-supplied local path;
+- Project/Workstream display names in working-directory path;
 - provider-specific Workflow branching.
 
 Historical docs/tests may retain explicit historical references.
@@ -806,13 +797,13 @@ One coherent v6 architecture.
 4. create Project;
 5. grant Workspace;
 6. create Workstream;
-7. provision checkout;
-8. Discuss;
-9. create explicit Work Request;
-10. workflow runs;
-11. checkpoint created;
-12. second iteration starts from checkpoint;
-13. create PR.
+7. Discuss;
+8. create explicit Work Request;
+9. runtime creates the ID-only Workstream directory;
+10. Worker clones/uses repository as needed;
+11. workflow runs;
+12. second iteration reuses the same directory;
+13. normal Git/PR integration is available through Worker/user tooling.
 
 ### Exit
 Complete solo flow works from empty DB.
@@ -831,7 +822,7 @@ Verify:
 - configured members can execute;
 - two stateful Requests in same Workstream serialize;
 - different Workstreams run concurrently;
-- checkout paths never overlap;
+- Workstream directory paths never overlap;
 - failed Workstream A Run does not affect B;
 - viewer cannot execute;
 - configured Worker sponsor attribution correct;
@@ -848,12 +839,12 @@ Test:
 - path traversal;
 - symlink escape;
 - stale fencing;
-- forged checkout ID;
-- expected revision mismatch;
+- forged Project/Workstream path input;
+- marker mismatch;
 - duplicate dispatch;
 - Workspace crash during mutation;
 - Cloud/DO restart;
-- failed rollback/quarantine;
+- directory conflict handling;
 - configured Worker/credential authorization revocation;
 - Workspace Grant revocation;
 - malicious Worker permission request;
@@ -878,7 +869,7 @@ Avoid exposing implementation terms:
 - lease;
 - fencing token;
 - Durable Object;
-- checkout key.
+- local path marker internals.
 
 Show them only in diagnostics.
 
