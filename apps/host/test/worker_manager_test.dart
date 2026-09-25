@@ -339,6 +339,72 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('installs configured Worker identity using its Worker Type package',
+      () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-configured-worker-');
+    final bytes = [41, 42, 43];
+    final digest = sha256.convert(bytes).toString();
+    const policy = WorkerTrustPolicy(trustedSecrets: {'publisher': 'root'});
+    final manager = WorkerManager(
+      directory,
+      trustPolicy: policy,
+      allowedPermissions: {WorkerPermission.readWorkspace},
+    );
+    await manager.reconcile(
+      [
+        {
+          'workerId': 'configured-worker-1',
+          'packageWorkerId': 'worker-type-codex',
+          'version': '1.0.0',
+          'publisher': 'publisher',
+          'packageR2Key': 'workers/worker-type-codex/1.0.0/package.bin',
+          'packageDigest': digest,
+          'signature': policy.sign('publisher', digest),
+          'permissions': ['workspace:read'],
+        },
+      ],
+      download: (workerId, version, packageR2Key) async {
+        expect(workerId, 'worker-type-codex');
+        expect(version, '1.0.0');
+        expect(packageR2Key, contains('worker-type-codex'));
+        return bytes;
+      },
+    );
+    expect(await manager.activeVersion('configured-worker-1'), '1.0.0');
+    expect(await manager.activeVersion('worker-type-codex'), isNull);
+    await directory.delete(recursive: true);
+  });
+
+  test(
+      'reports unavailable Worker Type packages without crashing reconciliation',
+      () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-unavailable-worker-');
+    final manager = WorkerManager(directory);
+    final statuses = <Map<String, Object?>>[];
+    await manager.reconcile(
+      [
+        {
+          'workerId': 'configured-worker-2',
+          'version': 'unavailable',
+          'publisher': 'publisher',
+          'packageR2Key': '',
+          'packageDigest': '',
+          'signature': '',
+          'permissions': const [],
+          'packageAvailable': false,
+          'packageError': 'unsupported OS',
+        },
+      ],
+      download: (_, __, ___) async => const [],
+      onStatus: (status) async => statuses.add(status),
+    );
+    expect(statuses.single, containsPair('status', 'failed'));
+    expect(statuses.single['error'], 'unsupported OS');
+    await directory.delete(recursive: true);
+  });
+
   test('deduplicates one Worker installation shared by two users', () async {
     final directory =
         await Directory.systemTemp.createTemp('conclave-workers-shared-');

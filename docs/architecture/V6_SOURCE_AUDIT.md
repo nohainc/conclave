@@ -5,6 +5,19 @@
 **Baseline:** main after Architecture v5 implementation  
 **Target:** [ARCHITECTURE_V6.md](ARCHITECTURE_V6.md)
 
+## EW-0 vocabulary baseline
+
+The accepted configured-Worker model defines **Execution** as the top-level
+product area with **Workspaces** and **Workers** as its primary resources.
+Worker Type is catalog/infrastructure. Worker is a configured user resource
+with one logical external AI identity and may bind to multiple Workspaces.
+Credential material and AI Account/Credential Profile records remain internal
+security/readiness state beneath a Worker; they are not peer user resources.
+
+The source audit must therefore distinguish configured Worker authorization
+from internal credential checks and must flag any new user-facing AI Account
+surface as an EW-0 violation.
+
 ## V6-0 implementation status
 
 The first convergence slice is now implemented on the working baseline:

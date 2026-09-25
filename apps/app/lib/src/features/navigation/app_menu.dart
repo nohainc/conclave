@@ -125,7 +125,7 @@ class GlobalAppMenu extends StatelessWidget {
             if (compact) Scaffold.maybeOf(context)?.closeDrawer();
           },
           child: const Text(
-            'Workspaces',
+            'Execution',
             style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
           ),
         ),

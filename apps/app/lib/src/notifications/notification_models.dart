@@ -3,14 +3,14 @@ enum StudioNotificationKind {
   failed,
   approvalRequired,
   hostOffline,
-  accountExpired,
+  workerCredentialProblem,
   workerInstallFailed,
   invitationReceived,
 }
 
 enum StudioNotificationPriority { high, normal, low }
 
-enum StudioNotificationTarget { run, hosts, workers, accounts, workspace }
+enum StudioNotificationTarget { run, hosts, workers, workspace }
 
 /// Filters realtime noise from actionable team notifications. Progress,
 /// discussion, queue, checkout, and lease updates update read models but do
@@ -94,11 +94,12 @@ StudioNotification? notificationFromRealtimeEvent(
     'workstream.grant.problem' ||
     'workstream.recovery.required' =>
       StudioNotificationKind.failed,
-    'workstream.account.problem' => StudioNotificationKind.accountExpired,
+    'workstream.account.problem' =>
+      StudioNotificationKind.workerCredentialProblem,
     'host.offline' || 'host.stale' => StudioNotificationKind.hostOffline,
     'account.expired' ||
     'credential.expired' =>
-      StudioNotificationKind.accountExpired,
+      StudioNotificationKind.workerCredentialProblem,
     'worker.install.failed' ||
     'worker.install_failed' =>
       StudioNotificationKind.workerInstallFailed,
@@ -127,10 +128,10 @@ StudioNotification? notificationFromRealtimeEvent(
           'A response is needed before the Run can continue.',
         StudioNotificationKind.hostOffline =>
           'A Workspace is offline and may need to reconnect.',
-        StudioNotificationKind.accountExpired =>
-          'An AI Account needs to be re-authenticated.',
+        StudioNotificationKind.workerCredentialProblem =>
+          'A Worker connection needs to be re-authenticated.',
         StudioNotificationKind.workerInstallFailed =>
-          'A Worker could not be installed on a Workspace.',
+          'A Worker could not connect to a Workspace.',
         StudioNotificationKind.invitationReceived =>
           'You received a Workspace invitation.',
       };
@@ -145,7 +146,8 @@ StudioNotification? notificationFromRealtimeEvent(
     StudioNotificationKind.approvalRequired =>
       StudioNotificationTarget.run,
     StudioNotificationKind.hostOffline => StudioNotificationTarget.hosts,
-    StudioNotificationKind.accountExpired => StudioNotificationTarget.accounts,
+    StudioNotificationKind.workerCredentialProblem =>
+      StudioNotificationTarget.workers,
     StudioNotificationKind.workerInstallFailed =>
       StudioNotificationTarget.workers,
     StudioNotificationKind.invitationReceived =>
@@ -159,9 +161,10 @@ StudioNotification? notificationFromRealtimeEvent(
       StudioNotificationKind.completed => 'Run completed',
       StudioNotificationKind.failed => 'Run failed',
       StudioNotificationKind.approvalRequired => 'Action needed',
-    StudioNotificationKind.hostOffline => 'Workspace offline',
-      StudioNotificationKind.accountExpired => 'AI Account expired',
-      StudioNotificationKind.workerInstallFailed => 'Worker install failed',
+      StudioNotificationKind.hostOffline => 'Workspace offline',
+      StudioNotificationKind.workerCredentialProblem =>
+        'Worker connection expired',
+      StudioNotificationKind.workerInstallFailed => 'Worker connection failed',
       StudioNotificationKind.invitationReceived => 'Invitation received',
     },
     message: message,
@@ -169,7 +172,7 @@ StudioNotification? notificationFromRealtimeEvent(
     priority: switch (kind) {
       StudioNotificationKind.approvalRequired ||
       StudioNotificationKind.failed ||
-      StudioNotificationKind.accountExpired =>
+      StudioNotificationKind.workerCredentialProblem =>
         StudioNotificationPriority.high,
       StudioNotificationKind.hostOffline ||
       StudioNotificationKind.workerInstallFailed ||

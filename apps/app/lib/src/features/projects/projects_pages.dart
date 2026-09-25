@@ -1305,8 +1305,6 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   final _briefOutcomeController = TextEditingController();
   String _workflow = 'Full Cycle';
   String _quality = 'Balanced';
-  String _account = 'Auto';
-  String _accountMode = 'requester';
   String _workstreamBudget = 'No budget';
   String _requestEstimate = 'Auto estimate';
   String _model = 'Auto';
@@ -1500,8 +1498,6 @@ class _WorkstreamPageState extends State<WorkstreamPage>
           requestController: _requestController,
           workflow: _workflow,
           quality: _quality,
-          account: _account,
-          accountMode: _accountMode,
           workstreamBudget: _workstreamBudget,
           requestEstimate: _requestEstimate,
           model: _model,
@@ -1511,8 +1507,6 @@ class _WorkstreamPageState extends State<WorkstreamPage>
           primaryWorkspace: widget.workstream.primaryWorkspace,
           onWorkflowChanged: (value) => setState(() => _workflow = value),
           onQualityChanged: (value) => setState(() => _quality = value),
-          onAccountChanged: (value) => setState(() => _account = value),
-          onAccountModeChanged: (value) => setState(() => _accountMode = value),
           onWorkstreamBudgetChanged: (value) =>
               setState(() => _workstreamBudget = value),
           onRequestEstimateChanged: (value) =>
@@ -1630,8 +1624,6 @@ class _WorkComposer extends StatelessWidget {
     required this.requestController,
     required this.workflow,
     required this.quality,
-    required this.account,
-    required this.accountMode,
     required this.workstreamBudget,
     required this.requestEstimate,
     required this.model,
@@ -1641,8 +1633,6 @@ class _WorkComposer extends StatelessWidget {
     required this.primaryWorkspace,
     required this.onWorkflowChanged,
     required this.onQualityChanged,
-    required this.onAccountChanged,
-    required this.onAccountModeChanged,
     required this.onWorkstreamBudgetChanged,
     required this.onRequestEstimateChanged,
     required this.onModelChanged,
@@ -1655,8 +1645,6 @@ class _WorkComposer extends StatelessWidget {
   final TextEditingController requestController;
   final String workflow;
   final String quality;
-  final String account;
-  final String accountMode;
   final String workstreamBudget;
   final String requestEstimate;
   final String model;
@@ -1666,8 +1654,6 @@ class _WorkComposer extends StatelessWidget {
   final String primaryWorkspace;
   final ValueChanged<String> onWorkflowChanged;
   final ValueChanged<String> onQualityChanged;
-  final ValueChanged<String> onAccountChanged;
-  final ValueChanged<String> onAccountModeChanged;
   final ValueChanged<String> onWorkstreamBudgetChanged;
   final ValueChanged<String> onRequestEstimateChanged;
   final ValueChanged<String> onModelChanged;
@@ -1744,26 +1730,6 @@ class _WorkComposer extends StatelessWidget {
                       SizedBox(
                           width: 180,
                           child: _select(
-                              'Account policy',
-                              accountMode,
-                              const [
-                                'requester',
-                                'sponsor',
-                                'project_shared',
-                                'explicit_accounts',
-                                'auto_authorized'
-                              ],
-                              onAccountModeChanged)),
-                      SizedBox(
-                          width: 180,
-                          child: _select(
-                              'Account override',
-                              account,
-                              const ['Auto', 'Project account'],
-                              onAccountChanged)),
-                      SizedBox(
-                          width: 180,
-                          child: _select(
                               'Workstream budget',
                               workstreamBudget,
                               const ['No budget', '100 credits', '500 credits'],
@@ -1803,10 +1769,10 @@ class _WorkComposer extends StatelessWidget {
                     ]),
                     const SizedBox(height: 8),
                     const Text(
-                        'Sponsor mode may use only Accounts authorized by an existing Project Account Grant. Workstream policy can narrow that grant but cannot create one.'),
+                        'Sponsor mode may use only Workers explicitly authorized for the Project. Workstream policy can narrow that authorization but cannot create it.'),
                     const SizedBox(height: 4),
                     const Text(
-                        'Usage records both the requester and Account owner. Provider private-only rules and Account installation on the Primary Workspace remain authoritative.'),
+                        'Usage records the requester and Worker owner. Provider sharing rules and Worker readiness on the Primary Workspace remain authoritative.'),
                     const SizedBox(height: 8),
                     const Text(
                         'Worker is selected by the workflow and Workspace capability. There is no Workstream-level Worker default.'),

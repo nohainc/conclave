@@ -15,11 +15,12 @@ The Work composer contains:
 - optional references;
 - an explicit Run action.
 
-Advanced controls may select an Account override, model preference, and quality
+Advanced controls may select a Worker override, model preference, and quality
 preference. They may expose only Workspace controls that are valid for the
 Workstream's execution policy. A Workstream does not own a fixed Worker
 default: the workflow step and selected Workspace capabilities determine the
-Worker at scheduling time.
+Worker at scheduling time. Credential setup and readiness remain beneath the
+selected Worker.
 
 Viewers can inspect Workstream history but cannot submit, cancel, or respond to
 Work. Owners and collaborators may submit Work when Workstream policy permits.

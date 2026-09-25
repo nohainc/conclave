@@ -256,6 +256,27 @@ export const WorkerStatusPayloadSchema = z
       "removing",
     ]),
     error: z.string().optional(),
+    packageStatus: z
+      .enum(["absent", "installing", "ready", "updating", "failed"])
+      .optional(),
+    credentialStatus: z
+      .enum(["unknown", "setup_required", "ready", "expired", "error"])
+      .optional(),
+    permissionsStatus: z
+      .enum(["unknown", "checking", "ready", "denied", "error"])
+      .optional(),
+    effectiveReadiness: z
+      .enum([
+        "unknown",
+        "setup_required",
+        "ready",
+        "degraded",
+        "failed",
+        "revoked",
+      ])
+      .optional(),
+    activeAssignmentCount: z.number().int().nonnegative().optional(),
+    workerTypeId: nonEmptyStr.optional(),
   })
   .strict();
 export type WorkerStatusPayload = z.infer<typeof WorkerStatusPayloadSchema>;
@@ -312,8 +333,10 @@ export const AssignmentSnapshotSchema = z
     requestedByUserId: nonEmptyStr,
     hostId: nonEmptyStr,
     workerId: nonEmptyStr,
+    configuredWorkerId: nonEmptyStr.optional(),
+    workerTypeId: nonEmptyStr.optional(),
     resolvedWorkerVersion: nonEmptyStr,
-    credentialProfileId: nonEmptyStr,
+    credentialProfileId: nonEmptyStr.optional(),
     model: z.string().optional(),
     config: z.record(z.string(), z.unknown()).default({}),
     sessionPolicy: z

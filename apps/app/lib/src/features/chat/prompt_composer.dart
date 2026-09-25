@@ -15,8 +15,6 @@ class PromptComposer extends StatefulWidget {
     required this.onWorkerChanged,
     required this.selectedModel,
     required this.onModelChanged,
-    required this.selectedAccount,
-    required this.onAccountChanged,
     required this.selectedHost,
     required this.onHostChanged,
     required this.showAdvanced,
@@ -34,8 +32,6 @@ class PromptComposer extends StatefulWidget {
   final ValueChanged<String> onWorkerChanged;
   final String selectedModel;
   final ValueChanged<String> onModelChanged;
-  final String selectedAccount;
-  final ValueChanged<String> onAccountChanged;
   final String selectedHost;
   final ValueChanged<String> onHostChanged;
   final bool showAdvanced;
@@ -119,15 +115,6 @@ class _PromptComposerState extends State<PromptComposer> {
                       'gemini-2.0-flash'
                     ],
                     onChanged: (val) => widget.onModelChanged(val ?? 'Auto'),
-                  ),
-                  _DropdownSelector(
-                    label: 'Account',
-                    value: widget.selectedAccount,
-                    options: [
-                      'Auto',
-                      ...widget.snapshot.accounts.map((a) => a.name)
-                    ],
-                    onChanged: (val) => widget.onAccountChanged(val ?? 'Auto'),
                   ),
                   _DropdownSelector(
                     label: 'Workspace',

@@ -68,11 +68,11 @@ class _StudioAppState extends State<ConclaveAppShell> {
   final Set<String> expandedProjectIds = <String>{};
   bool showNewGoal = false;
   String? workerActionMessage;
+  List<StudioConfiguredWorker> configuredWorkers = const [];
   StudioHostEnrollment? enrollmentResult;
   StudioQualityPreset selectedQuality = StudioQualityPreset.balanced;
   String selectedExecutionWorker = 'Auto';
   String selectedExecutionModel = 'Auto';
-  String selectedExecutionAccount = 'Auto';
   String selectedExecutionHost = 'Auto';
   bool showAdvancedExecution = false;
   bool isSendingChat = false;
@@ -258,7 +258,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
         selectedRun: snapshot.run,
         workspaces: snapshot.agents,
         workers: snapshot.workers,
-        accounts: snapshot.accounts,
         unreadNotificationCount: unreadNotificationCount,
         isDarkTheme: _themeMode == ThemeMode.dark ||
             (_themeMode == ThemeMode.system &&
@@ -541,7 +540,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
   Future<void> _loadWorkspaces() async {
     try {
       await store.workspaces.list();
+      final loadedWorkers = await widget.dataSource.loadConfiguredWorkers();
       if (!mounted) return;
+      setState(() => configuredWorkers = loadedWorkers);
       _startRealtime();
     } catch (_) {
       // Snapshot loading remains the primary path for anonymous development.
@@ -628,9 +629,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
         return;
       }
       if (type.startsWith('account.') || type.startsWith('credential.')) {
-        final accounts = await store.accounts.refresh(workspaceId);
+        final workers = await widget.dataSource.loadConfiguredWorkers();
         if (!mounted) return;
-        setState(() => snapshot = snapshot.copyWith(accounts: accounts));
+        setState(() => configuredWorkers = workers);
         return;
       }
       if (type.startsWith('project.') || type.startsWith('chat.')) {
@@ -708,7 +709,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                             Icons.help_outline,
                           StudioNotificationKind.hostOffline =>
                             Icons.cloud_off_outlined,
-                          StudioNotificationKind.accountExpired =>
+                          StudioNotificationKind.workerCredentialProblem =>
                             Icons.key_off_outlined,
                           StudioNotificationKind.workerInstallFailed =>
                             Icons.download_for_offline_outlined,
@@ -775,8 +776,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
         _navigateTo(const StudioNavigation.hosts());
       case StudioNotificationTarget.workers:
         _navigateTo(const StudioNavigation.workers());
-      case StudioNotificationTarget.accounts:
-        _navigateTo(const StudioNavigation.accounts());
       case StudioNotificationTarget.workspace:
         _navigateTo(const StudioNavigation.hosts());
       case null:
@@ -891,43 +890,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
       browserNavigation.openExternal(uri);
     } catch (error) {
       if (mounted) _showSnackBar(error.toString());
-    }
-  }
-
-  Future<void> _requestCredentialSetup(StudioCredentialProfile account) async {
-    final workspaceId = executionWorkspaceId;
-    if (workspaceId == null) return;
-    try {
-      await widget.dataSource.requestCredentialSetup(
-        workspaceId: workspaceId,
-        profileId: account.id,
-      );
-      if (mounted) {
-        _showSnackBar('Local Account setup requested on the Workspace.');
-      }
-    } catch (error) {
-      if (mounted) {
-        _showSnackBar(error.toString());
-      }
-    }
-  }
-
-  Future<void> _revokeCredentialProfile(StudioCredentialProfile account) async {
-    final workspaceId = executionWorkspaceId;
-    if (workspaceId == null) return;
-    try {
-      await widget.dataSource.revokeCredentialProfile(
-        workspaceId: workspaceId,
-        profileId: account.id,
-      );
-      await _loadSnapshot(workspaceId: workspaceId, showSpinner: false);
-      if (mounted) {
-        _showSnackBar('Account revoked.');
-      }
-    } catch (error) {
-      if (mounted) {
-        _showSnackBar(error.toString());
-      }
     }
   }
 
@@ -1303,9 +1265,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
           builder: (dialogContext) => AlertDialog(
             title: const Text('Worker prerequisites missing'),
             content: const Text(
-                'A Worker needs one connected Workspace and an available Worker package. '
-                'Open Workspaces or Workers in the navigation to finish setup, then '
-                'return here.'),
+                'A Worker needs one connected Workspace and a ready connection. '
+                'Open Execution to finish setup, then return here.'),
             actions: [
               FilledButton(
                 onPressed: () => Navigator.pop(dialogContext),
@@ -1814,7 +1775,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                                 ? 'Enter your email and we will send a reset link if an account exists.'
                                 : authSignUp
                                     ? 'Create an account to start using Conclave AX.'
-                                    : 'Sign in securely to access your Projects, Workspaces, Workers, and Accounts.',
+                                    : 'Sign in securely to access your Projects, Workspaces, and Workers.',
                         textAlign: TextAlign.center),
                     const SizedBox(height: 20),
                     if (!resetPassword && authSignUp) ...[
@@ -2424,7 +2385,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
         projects: snapshot.projects,
         hosts: snapshot.agents,
         workers: snapshot.workers,
-        accounts: snapshot.accounts,
         run: snapshot.run,
         openFindingCount: snapshot.findings
             .where((finding) => finding.status == FindingStatus.open)
@@ -2433,7 +2393,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
         usageCostMicros: store.usage.costMicros,
         onOpenHosts: () => _navigateTo(const StudioNavigation.hosts()),
         onOpenWorkers: () => _navigateTo(const StudioNavigation.workers()),
-        onOpenAccounts: () => _navigateTo(const StudioNavigation.accounts()),
         onOpenUsage: () => _navigateTo(const StudioNavigation.usage()),
         onOpenProject: (projectId) =>
             _navigateTo(StudioNavigation.project(projectId)),
@@ -2625,8 +2584,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
         return _hostsView(initialTab: 0);
       case StudioRouteKind.workers:
         return _hostsView(initialTab: 1);
-      case StudioRouteKind.accounts:
-        return _hostsView(initialTab: 2);
       case StudioRouteKind.usage:
         return _usageView();
       case StudioRouteKind.profileSecurity:
@@ -2918,9 +2875,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
               selectedModel: selectedExecutionModel,
               onModelChanged: (value) =>
                   setState(() => selectedExecutionModel = value),
-              selectedAccount: selectedExecutionAccount,
-              onAccountChanged: (value) =>
-                  setState(() => selectedExecutionAccount = value),
               selectedHost: selectedExecutionHost,
               onHostChanged: (value) =>
                   setState(() => selectedExecutionHost = value),
@@ -3285,7 +3239,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
         children: [
           _contextLine(Icons.extension_outlined, 'Worker', worker),
           _contextLine(
-              Icons.account_circle_outlined, 'Account', account ?? 'Auto'),
+              Icons.extension_outlined, 'Worker connection', account ?? 'Auto'),
           _contextLine(Icons.computer_outlined, 'Workspace', host ?? 'Auto'),
           _contextLine(Icons.smart_toy_outlined, 'Model', model),
         ],
@@ -3815,60 +3769,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
                 color: color, fontSize: 10, fontWeight: FontWeight.w700))
       ]));
 
-  Future<void> _setWorkerAvailability(
-      StudioPlugin plugin, StudioAgent host, bool enabled) async {
-    final workspaceId = snapshot.workspaceId;
-    if (workspaceId == null || workspaceId.isEmpty) return;
-    try {
-      await store.workers.setEnabled(
-        workspaceId,
-        plugin.id,
-        enabled,
-        hostId: host.id,
-      );
-      await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
-      if (mounted) {
-        _showSnackBar(enabled
-            ? '${plugin.name} is now available on ${host.name}.'
-            : '${plugin.name} was removed from ${host.name}.');
-      }
-    } catch (error) {
-      if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
-    }
-  }
-
-  Future<void> _showWorkerDetails(StudioPlugin plugin) async {
-    await showDialog<void>(
-      context: navigatorKey.currentContext ?? context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(plugin.name),
-        content: SingleChildScrollView(
-          child: Text([
-            if (plugin.description.isNotEmpty) plugin.description,
-            'Version: ${plugin.version}',
-            'Publisher: ${plugin.publisher.isEmpty ? 'Unknown' : plugin.publisher}',
-            'Capabilities: ${plugin.capabilities.isEmpty ? 'None listed' : plugin.capabilities.join(', ')}',
-            'Roles: ${plugin.roles.isEmpty ? 'None listed' : plugin.roles.join(', ')}',
-            'Requirements: ${plugin.permissions.isEmpty ? 'No special permissions' : plugin.permissions.join(', ')}',
-            'Platforms: ${[
-              ...plugin.supportedOS,
-              ...plugin.supportedArchitecture
-            ].isEmpty ? 'Any compatible Workspace' : [
-                ...plugin.supportedOS,
-                ...plugin.supportedArchitecture
-              ].join(', ')}',
-          ].join('\n\n')),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
   List<StudioAgent> _workspaceCards() => store.workspaces.items
       .map(
         (workspace) => StudioAgent(
@@ -3885,11 +3785,356 @@ class _StudioAppState extends State<ConclaveAppShell> {
       )
       .toList(growable: false);
 
+  Future<void> _addConfiguredWorker() async {
+    if (snapshot.plugins.isEmpty) {
+      _showSnackBar('No Worker Types are available yet.',
+          type: ToastType.error);
+      return;
+    }
+    final nameController = TextEditingController();
+    final modelController = TextEditingController();
+    var typeId = snapshot.plugins.first.id;
+    var selectedWorkspaceIds = <String>{};
+    var step = 0;
+    var busy = false;
+    final result = await showDialog<StudioConfiguredWorker>(
+      context: navigatorKey.currentContext ?? context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final workspaces = _workspaceCards();
+          final type = snapshot.plugins.firstWhere((item) => item.id == typeId);
+          final canContinue = step == 0
+              ? nameController.text.trim().isNotEmpty
+              : step == 4
+                  ? selectedWorkspaceIds.isNotEmpty || workspaces.isEmpty
+                  : true;
+          return AlertDialog(
+            title: Text('Add Worker · ${step + 1} of 5'),
+            content: SizedBox(
+              width: 500,
+              child: SingleChildScrollView(
+                child: switch (step) {
+                  0 => Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Name this configured Worker.'),
+                        const SizedBox(height: 14),
+                        TextField(
+                          controller: nameController,
+                          autofocus: true,
+                          decoration: const InputDecoration(
+                              labelText: 'Worker name',
+                              hintText: 'Codex Personal'),
+                          onChanged: (_) => setDialogState(() {}),
+                        ),
+                      ],
+                    ),
+                  1 => DropdownButtonFormField<String>(
+                      initialValue: typeId,
+                      decoration:
+                          const InputDecoration(labelText: 'Worker Type'),
+                      items: snapshot.plugins
+                          .map((item) => DropdownMenuItem(
+                              value: item.id, child: Text(item.name)))
+                          .toList(),
+                      onChanged: (value) =>
+                          setDialogState(() => typeId = value!),
+                    ),
+                  2 => Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                            'Connect ${type.name} on each selected Workspace. Authentication stays local to that Workspace.'),
+                        const SizedBox(height: 14),
+                        const ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(Icons.lock_outline),
+                          title: Text('Workspace-local connection'),
+                          subtitle: Text(
+                              'You can finish authentication after creation from the Worker details.'),
+                        ),
+                      ],
+                    ),
+                  3 => TextField(
+                      controller: modelController,
+                      decoration: const InputDecoration(
+                          labelText: 'Default model (optional)',
+                          hintText: 'Auto'),
+                    ),
+                  4 => workspaces.isEmpty
+                      ? const Text(
+                          'No Workspaces yet. Create the Worker now and connect a Workspace later.')
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: workspaces
+                              .map((workspace) => CheckboxListTile(
+                                    value: selectedWorkspaceIds
+                                        .contains(workspace.id),
+                                    title: Text(workspace.name),
+                                    subtitle: Text(workspace.status),
+                                    onChanged: (selected) => setDialogState(() {
+                                      if (selected == true) {
+                                        selectedWorkspaceIds.add(workspace.id);
+                                      } else {
+                                        selectedWorkspaceIds
+                                            .remove(workspace.id);
+                                      }
+                                    }),
+                                  ))
+                              .toList(),
+                        ),
+                  _ => const SizedBox.shrink(),
+                },
+              ),
+            ),
+            actions: [
+              if (step > 0)
+                TextButton(
+                    onPressed: busy ? null : () => setDialogState(() => step--),
+                    child: const Text('Back')),
+              TextButton(
+                  onPressed: busy ? null : () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel')),
+              FilledButton(
+                onPressed: !canContinue || busy
+                    ? null
+                    : () async {
+                        if (step < 4) {
+                          setDialogState(() => step++);
+                          return;
+                        }
+                        setDialogState(() => busy = true);
+                        try {
+                          final created =
+                              await widget.dataSource.createConfiguredWorker(
+                            name: nameController.text.trim(),
+                            workerTypeId: typeId,
+                            workspaceIds: selectedWorkspaceIds.toList(),
+                            defaultModel: modelController.text.trim().isEmpty
+                                ? null
+                                : modelController.text.trim(),
+                          );
+                          if (dialogContext.mounted) {
+                            Navigator.pop(dialogContext, created);
+                          }
+                        } catch (error) {
+                          setDialogState(() => busy = false);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('$error')));
+                          }
+                        }
+                      },
+                child: Text(step < 4 ? 'Next' : 'Create Worker'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    nameController.dispose();
+    modelController.dispose();
+    if (result != null && mounted) {
+      setState(() => configuredWorkers = [
+            ...configuredWorkers.where((item) => item.id != result.id),
+            result,
+          ]);
+      _showSnackBar('${result.name} created.');
+    }
+  }
+
+  Future<void> _openConfiguredWorker(StudioConfiguredWorker worker) async {
+    await showDialog<void>(
+      context: navigatorKey.currentContext ?? context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(worker.name),
+        content: SizedBox(
+          width: 560,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Overview',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Text('Worker Type: ${worker.workerTypeName}'),
+                Text('Default model: ${worker.defaultModel ?? 'Auto'}'),
+                Text('Status: ${worker.status}'),
+                const SizedBox(height: 18),
+                Text('Workspaces',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      await _connectConfiguredWorkerWorkspace(worker);
+                      if (dialogContext.mounted) Navigator.pop(dialogContext);
+                    },
+                    icon: const Icon(Icons.add, size: 17),
+                    label: const Text('Connect Workspace'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (worker.bindings.isEmpty)
+                  const Text('No Workspace connected yet.')
+                else
+                  ...worker.bindings.map((binding) => Card(
+                        child: ListTile(
+                          title: Text(binding.workspaceName),
+                          subtitle: Text(binding.ready
+                              ? 'Ready to run'
+                              : 'Needs attention'),
+                          trailing: Wrap(
+                            spacing: 4,
+                            children: [
+                              if (binding.credentialStatus != 'ready')
+                                TextButton(
+                                  onPressed: () async {
+                                    await widget.dataSource
+                                        .setupConfiguredWorkerWorkspace(
+                                      workerId: worker.id,
+                                      workspaceId: binding.workspaceId,
+                                      action: 'reauthenticate',
+                                    );
+                                    if (dialogContext.mounted) {
+                                      Navigator.pop(dialogContext);
+                                    }
+                                  },
+                                  child: const Text('Reauthenticate'),
+                                ),
+                              IconButton(
+                                tooltip: 'Remove from Workspace',
+                                onPressed: () async {
+                                  final remaining = worker.bindings
+                                      .where((item) =>
+                                          item.workspaceId !=
+                                          binding.workspaceId)
+                                      .map((item) => item.workspaceId)
+                                      .toList();
+                                  await widget.dataSource
+                                      .updateConfiguredWorkerWorkspaces(
+                                          workerId: worker.id,
+                                          workspaceIds: remaining);
+                                  if (dialogContext.mounted) {
+                                    Navigator.pop(dialogContext);
+                                  }
+                                },
+                                icon: const Icon(Icons.remove_circle_outline),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )),
+                const SizedBox(height: 18),
+                Text('Usage', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 6),
+                const Text(
+                    'Usage and cost details will appear here as this Worker runs.'),
+                const SizedBox(height: 18),
+                Text('Settings',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 6),
+                Text('Concurrency limit: ${worker.concurrencyLimit}'),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _connectConfiguredWorkerWorkspace(
+      StudioConfiguredWorker worker) async {
+    final existing = worker.bindings.map((item) => item.workspaceId).toSet();
+    final available = _workspaceCards()
+        .where((workspace) => !existing.contains(workspace.id))
+        .toList();
+    if (available.isEmpty) {
+      _showSnackBar('All available Workspaces are already connected.');
+      return;
+    }
+    final workspaceId = await showDialog<String>(
+      context: navigatorKey.currentContext ?? context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Connect Workspace'),
+        content: SizedBox(
+          width: 380,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: available
+                .map((workspace) => ListTile(
+                      leading: const Icon(Icons.computer_outlined),
+                      title: Text(workspace.name),
+                      subtitle: Text(workspace.status),
+                      onTap: () => Navigator.pop(dialogContext, workspace.id),
+                    ))
+                .toList(),
+          ),
+        ),
+      ),
+    );
+    if (workspaceId == null) return;
+    await widget.dataSource.updateConfiguredWorkerWorkspaces(
+      workerId: worker.id,
+      workspaceIds: [...existing, workspaceId],
+    );
+    final refreshed = await widget.dataSource.loadConfiguredWorkers();
+    if (mounted) {
+      setState(() => configuredWorkers = refreshed);
+      _showSnackBar('Workspace connected.');
+    }
+  }
+
+  Future<void> _setupConfiguredWorkerWorkspace(
+      StudioConfiguredWorker worker, String workspaceId, String action) async {
+    try {
+      await widget.dataSource.setupConfiguredWorkerWorkspace(
+        workerId: worker.id,
+        workspaceId: workspaceId,
+        action: action,
+      );
+      configuredWorkers = await widget.dataSource.loadConfiguredWorkers();
+      if (mounted) {
+        setState(() {});
+        _showSnackBar('Workspace Worker setup requested.');
+      }
+    } catch (error) {
+      if (mounted) _showSnackBar('$error', type: ToastType.error);
+    }
+  }
+
+  Future<void> _removeConfiguredWorkerWorkspace(
+      StudioConfiguredWorker worker, String workspaceId) async {
+    final remaining = worker.bindings
+        .where((binding) => binding.workspaceId != workspaceId)
+        .map((binding) => binding.workspaceId)
+        .toList();
+    try {
+      await widget.dataSource.updateConfiguredWorkerWorkspaces(
+          workerId: worker.id, workspaceIds: remaining);
+      final refreshed = await widget.dataSource.loadConfiguredWorkers();
+      if (mounted) {
+        setState(() => configuredWorkers = refreshed);
+        _showSnackBar('Worker removed from Workspace.');
+      }
+    } catch (error) {
+      if (mounted) _showSnackBar('$error', type: ToastType.error);
+    }
+  }
+
   Widget _hostsView({int initialTab = 0}) => WorkspacesPage(
         workspaces:
             _workspaceCards().isNotEmpty ? _workspaceCards() : snapshot.agents,
         workers: snapshot.workers,
-        accounts: snapshot.accounts,
+        configuredWorkers: configuredWorkers,
         plugins: snapshot.plugins,
         initialTab: initialTab,
         onAdd: _enrollAgent,
@@ -3897,227 +4142,14 @@ class _StudioAppState extends State<ConclaveAppShell> {
         onUpdate: _announceAgentUpdate,
         onRevoke: (workspace) => _revokeAgent(workspace.id),
         onGrant: _bindHost,
-        onSetWorkerAvailability: _setWorkerAvailability,
-        onShowWorkerDetails: _showWorkerDetails,
-        onCreateAccount: _createCredentialProfile,
-        onRequestAccountSetup: _requestCredentialSetup,
-        onRevokeAccount: _revokeCredentialProfile,
-        onNavigateToAccounts: () =>
-            _navigateTo(const StudioNavigation.accounts()),
+        onAddConfiguredWorker: _addConfiguredWorker,
+        onOpenConfiguredWorker: _openConfiguredWorker,
+        onSetupConfiguredWorkerWorkspace: _setupConfiguredWorkerWorkspace,
+        onRemoveConfiguredWorkerWorkspace: _removeConfiguredWorkerWorkspace,
         workerActionMessage: workerActionMessage,
         onDismissWorkerActionMessage: () =>
             setState(() => workerActionMessage = null),
       );
-
-  Future<void> _createCredentialProfile() async {
-    final workspaceId = executionWorkspaceId;
-    if (workspaceId == null || workspaceId.isEmpty) return;
-    if (snapshot.plugins.isEmpty) {
-      _showSnackBar('Add a Worker before creating an AI Account.',
-          type: ToastType.error);
-      return;
-    }
-
-    var accountName = '';
-    var workerId = snapshot.plugins.first.id;
-    var hostId = snapshot.agents.firstOrNull?.id;
-    var authType = snapshot.agents.isEmpty ? 'none' : 'oauth_browser';
-    var ownerType = 'user';
-    var sharingPolicy = 'private_only';
-    final values = await showDialog<Map<String, dynamic>>(
-      context: navigatorKey.currentContext ?? context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          final needsHost = authType != 'none';
-          return AlertDialog(
-            title: const Text('Add AI Account'),
-            content: SizedBox(
-              width: 480,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                        'Connect an AI identity to a Worker. Secrets stay on the selected Workspace.'),
-                    const SizedBox(height: 16),
-                    TextField(
-                      autofocus: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Account name',
-                        hintText: 'My Codex',
-                      ),
-                      onChanged: (value) => accountName = value,
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: workerId,
-                      decoration: const InputDecoration(labelText: 'Worker'),
-                      items: snapshot.plugins
-                          .map((worker) => DropdownMenuItem(
-                                value: worker.id,
-                                child: Text(worker.name),
-                              ))
-                          .toList(),
-                      onChanged: (value) =>
-                          setDialogState(() => workerId = value ?? workerId),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: authType,
-                      decoration:
-                          const InputDecoration(labelText: 'Authentication'),
-                      items: const [
-                        DropdownMenuItem(
-                            value: 'oauth_browser',
-                            child: Text('Browser OAuth')),
-                        DropdownMenuItem(
-                            value: 'api_key',
-                            child: Text('API key on Workspace')),
-                        DropdownMenuItem(
-                            value: 'local_cli_session',
-                            child: Text('CLI login on Workspace')),
-                        DropdownMenuItem(
-                            value: 'none', child: Text('No authentication')),
-                      ],
-                      onChanged: (value) => setDialogState(() {
-                        authType = value ?? authType;
-                        if (authType == 'none') hostId = null;
-                        if (authType != 'none' &&
-                            hostId == null &&
-                            snapshot.agents.isNotEmpty) {
-                          hostId = snapshot.agents.first.id;
-                        }
-                      }),
-                    ),
-                    if (needsHost) ...[
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        initialValue: hostId,
-                        decoration: const InputDecoration(
-                            labelText: 'Workspace storage'),
-                        items: snapshot.agents
-                            .map((host) => DropdownMenuItem(
-                                  value: host.id,
-                                  child: Text(host.name),
-                                ))
-                            .toList(),
-                        onChanged: (value) =>
-                            setDialogState(() => hostId = value),
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                          'The Workspace will show the local authentication action. Conclave AX never receives the secret.',
-                          style: TextStyle(
-                              color: Color(0xff777683), fontSize: 12)),
-                    ],
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: ownerType,
-                      decoration: const InputDecoration(labelText: 'Owner'),
-                      items: const [
-                        DropdownMenuItem(
-                            value: 'user', child: Text('Personal account')),
-                        DropdownMenuItem(
-                            value: 'workspace',
-                            child: Text('Workspace account')),
-                      ],
-                      onChanged: (value) =>
-                          setDialogState(() => ownerType = value ?? ownerType),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: sharingPolicy,
-                      decoration: const InputDecoration(labelText: 'Sharing'),
-                      items: const [
-                        DropdownMenuItem(
-                            value: 'private_only', child: Text('Private')),
-                        DropdownMenuItem(
-                            value: 'owner_controlled',
-                            child: Text('Selected users')),
-                        DropdownMenuItem(
-                            value: 'workspace_capable',
-                            child: Text('Workspace')),
-                      ],
-                      onChanged: (value) => setDialogState(
-                          () => sharingPolicy = value ?? sharingPolicy),
-                    ),
-                    if (sharingPolicy == 'owner_controlled') ...[
-                      const SizedBox(height: 6),
-                      const Text(
-                          'You can add individual users after creation. They can use the Account but never read its secret.',
-                          style: TextStyle(
-                              color: Color(0xff777683), fontSize: 12)),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('Cancel')),
-              FilledButton(
-                onPressed: () => Navigator.pop(dialogContext, {
-                  'displayName': accountName.trim(),
-                  'workerId': workerId,
-                  'hostId': hostId,
-                  'authType': authType,
-                  'ownerType': ownerType,
-                  'sharingPolicy': sharingPolicy,
-                }),
-                child: const Text('Create Account'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-    if (values == null) return;
-    final displayName = values['displayName'] as String? ?? '';
-    if (displayName.isEmpty) {
-      _showSnackBar('Enter an Account name.', type: ToastType.error);
-      return;
-    }
-    final selectedAuthType = values['authType'] as String;
-    final selectedHostId = values['hostId'] as String?;
-    if (selectedAuthType != 'none' && selectedHostId == null) {
-      _showSnackBar('Choose a Workspace for local authentication.',
-          type: ToastType.error);
-      return;
-    }
-    setState(() => workerActionMessage = 'Creating Account…');
-    try {
-      final account = await widget.dataSource.createCredentialProfile(
-        workspaceId: workspaceId,
-        displayName: displayName,
-        workerId: values['workerId'] as String,
-        authType: selectedAuthType,
-        ownerType: values['ownerType'] as String,
-        sharingPolicy: values['sharingPolicy'] as String,
-        hostId: selectedHostId,
-      );
-      if (selectedHostId != null && selectedAuthType != 'none') {
-        await widget.dataSource.requestCredentialSetup(
-          workspaceId: workspaceId,
-          profileId: account.id,
-          action: 'setup',
-        );
-      }
-      await _loadSnapshot(workspaceId: workspaceId, showSpinner: false);
-      if (mounted) {
-        setState(() => workerActionMessage = null);
-        _showSnackBar(selectedHostId == null
-            ? 'AI Account created.'
-            : 'AI Account created. Complete setup on the Workspace.');
-      }
-    } catch (error) {
-      if (mounted) {
-        setState(() => workerActionMessage = null);
-        _showSnackBar(error.toString(), type: ToastType.error);
-      }
-    }
-  }
 
   Widget _usageView() {
     final report = snapshot.usageReport;
@@ -4174,8 +4206,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
             style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
       ),
       const SizedBox(height: 6),
-      const Text(
-          'Workspace usage across Projects, Accounts, Workers and people.',
+      const Text('Workspace usage across Projects, Workers and people.',
           style: TextStyle(color: Color(0xff777683), fontSize: 13)),
       const SizedBox(height: 20),
       Wrap(spacing: 12, runSpacing: 12, children: [
@@ -4205,7 +4236,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
         filter('User', usageUserFilter, options((row) => row.requesterName),
             (value) => setState(() => usageUserFilter = value ?? 'all')),
         filter(
-            'AI Account',
+            'Worker owner',
             usageAccountFilter,
             options((row) => row.accountName),
             (value) => setState(() => usageAccountFilter = value ?? 'all')),
@@ -4237,7 +4268,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                           dense: true,
                           title: Text('${row.workerName} · ${row.model}'),
                           subtitle: Text(
-                              '${row.projectName} · Requester: ${row.requesterName} · Account owner: ${row.accountOwnerName}'),
+                              '${row.projectName} · Requester: ${row.requesterName} · Worker owner: ${row.accountOwnerName}'),
                           trailing: Text(row.billingCategory == 'subscription'
                               ? 'Subscription · ${_formatNumber(row.tokens)} tokens'
                               : '${_formatCost(row.costMicros ?? 0)} · ${_formatNumber(row.tokens)} tokens'),

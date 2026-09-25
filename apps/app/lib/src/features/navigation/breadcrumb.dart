@@ -77,23 +77,15 @@ class AppBreadcrumb extends StatelessWidget {
           _breadcrumbText('Run', isCurrent: true),
         ],
       StudioRouteKind.hosts => [
-          _breadcrumbText('Workspaces', isCurrent: true),
+          _breadcrumbText('Execution', isCurrent: true),
         ],
       StudioRouteKind.workers => [
           _breadcrumbLink(
-            'Workspaces',
+            'Execution',
             () => onNavigateTo(const StudioNavigation.hosts()),
           ),
           _divider(),
           _breadcrumbText('Workers', isCurrent: true),
-        ],
-      StudioRouteKind.accounts => [
-          _breadcrumbLink(
-            'Workspaces',
-            () => onNavigateTo(const StudioNavigation.hosts()),
-          ),
-          _divider(),
-          _breadcrumbText('AI Accounts', isCurrent: true),
         ],
       StudioRouteKind.usage => [
           _breadcrumbText('Usage', isCurrent: true),

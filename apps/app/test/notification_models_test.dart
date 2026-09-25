@@ -6,9 +6,12 @@ void main() {
   test('only meaningful realtime states create notifications', () {
     expect(isMeaningfulRealtimeNotification('workstream.needs_input'), isTrue);
     expect(isMeaningfulRealtimeNotification('workstream.completed'), isTrue);
-    expect(isMeaningfulRealtimeNotification('workstream.recovery.required'), isTrue);
-    expect(isMeaningfulRealtimeNotification('discussion.message.created'), isFalse);
-    expect(isMeaningfulRealtimeNotification('workstream.lease.status'), isFalse);
+    expect(isMeaningfulRealtimeNotification('workstream.recovery.required'),
+        isTrue);
+    expect(isMeaningfulRealtimeNotification('discussion.message.created'),
+        isFalse);
+    expect(
+        isMeaningfulRealtimeNotification('workstream.lease.status'), isFalse);
   });
   test('maps terminal Run events to an unread notification', () {
     final notification = notificationFromRealtimeEvent({
@@ -57,8 +60,8 @@ void main() {
 
     expect(notifications.map((item) => item.title), [
       'Workspace offline',
-      'AI Account expired',
-      'Worker install failed',
+      'Worker connection expired',
+      'Worker connection failed',
       'Invitation received',
     ]);
     expect(notifications[0].target, StudioNotificationTarget.hosts);

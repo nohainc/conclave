@@ -29,4 +29,19 @@ Read v6 before new collaboration/execution architecture work:
 - [ADR-011](docs/decisions/ADR-011-workstream-working-directories.md)
 - [Workstream working-directory roadmap](docs/roadmaps/WORKSTREAM_WORKING_DIRECTORIES.md)
 
+### EW-0 execution vocabulary
+
+The configured-Worker model is accepted and its vocabulary is frozen:
+
+```text
+Execution
+├── Workspaces
+└── Workers
+```
+
+Worker Type is catalog/infrastructure. Worker is the configured user resource
+with one logical external AI identity and zero or more Workspace bindings.
+AI Account and Credential Profile remain internal credential/readiness terms;
+they are not equal first-class product resources.
+
 Architecture v4 and earlier are historical only.

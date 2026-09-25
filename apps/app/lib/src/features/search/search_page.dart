@@ -42,8 +42,8 @@ class SearchPage extends StatelessWidget {
         },
       ),
       CommandPaletteAction(
-        title: 'Workspaces',
-        subtitle: 'Manage local and remote machines',
+        title: 'Execution',
+        subtitle: 'Manage Workspaces and configured Workers',
         icon: Icons.computer_outlined,
         category: 'Navigation',
         onSelect: () {
@@ -59,16 +59,6 @@ class SearchPage extends StatelessWidget {
         onSelect: () {
           onClearSearch();
           onNavigateTo(const StudioNavigation.workers());
-        },
-      ),
-      CommandPaletteAction(
-        title: 'AI Accounts',
-        subtitle: 'Credential profiles and authorization',
-        icon: Icons.account_circle_outlined,
-        category: 'Navigation',
-        onSelect: () {
-          onClearSearch();
-          onNavigateTo(const StudioNavigation.accounts());
         },
       ),
       CommandPaletteAction(
@@ -123,9 +113,8 @@ class SearchPage extends StatelessWidget {
     for (final project in snapshot.projects) {
       actions.add(CommandPaletteAction(
         title: project.name,
-        subtitle: project.description.isNotEmpty
-            ? project.description
-            : 'Project',
+        subtitle:
+            project.description.isNotEmpty ? project.description : 'Project',
         icon: Icons.folder_outlined,
         category: 'Projects',
         onSelect: () {
@@ -142,7 +131,8 @@ class SearchPage extends StatelessWidget {
           category: 'Workstreams',
           onSelect: () {
             onClearSearch();
-            onNavigateTo(StudioNavigation.workstream(project.id, workstream.id));
+            onNavigateTo(
+                StudioNavigation.workstream(project.id, workstream.id));
           },
         ));
       }
@@ -190,7 +180,7 @@ class SearchPage extends StatelessWidget {
         title: agent.name,
         subtitle: '${agent.hostname} · ${agent.status}',
         icon: Icons.computer_outlined,
-        category: 'Workspaces',
+        category: 'Execution',
         onSelect: () {
           onClearSearch();
           onNavigateTo(const StudioNavigation.hosts());
@@ -208,20 +198,6 @@ class SearchPage extends StatelessWidget {
         onSelect: () {
           onClearSearch();
           onNavigateTo(const StudioNavigation.workers());
-        },
-      ));
-    }
-
-    // Accounts
-    for (final account in snapshot.accounts) {
-      actions.add(CommandPaletteAction(
-        title: account.displayName,
-        subtitle: '${account.worker} · ${account.status}',
-        icon: Icons.account_circle_outlined,
-        category: 'Accounts',
-        onSelect: () {
-          onClearSearch();
-          onNavigateTo(const StudioNavigation.accounts());
         },
       ));
     }
@@ -317,7 +293,8 @@ class SearchPage extends StatelessWidget {
                   : ConclaveBrand.lightSurface,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine,
+                color:
+                    isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine,
               ),
             ),
             child: Column(
@@ -441,9 +418,8 @@ class _SearchResultTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: isDark
-              ? ConclaveBrand.darkSurface
-              : ConclaveBrand.lightSurface,
+          color:
+              isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine,
@@ -455,14 +431,12 @@ class _SearchResultTile extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: isDark
-                    ? const Color(0xff201f30)
-                    : const Color(0xfff1f5f9),
+                color:
+                    isDark ? const Color(0xff201f30) : const Color(0xfff1f5f9),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: isDark
-                      ? ConclaveBrand.darkLine
-                      : ConclaveBrand.lightLine,
+                  color:
+                      isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine,
                 ),
               ),
               child: Icon(
@@ -484,15 +458,15 @@ class _SearchResultTile extends StatelessWidget {
                       color: isDark ? Colors.white : const Color(0xff0f172a),
                     ),
                   ),
-                  if (action.subtitle != null && action.subtitle!.isNotEmpty) ...[
+                  if (action.subtitle != null &&
+                      action.subtitle!.isNotEmpty) ...[
                     const SizedBox(height: 3),
                     Text(
                       action.subtitle!,
                       style: TextStyle(
                         fontSize: 12,
-                        color: isDark
-                            ? Colors.white54
-                            : const Color(0xff64748b),
+                        color:
+                            isDark ? Colors.white54 : const Color(0xff64748b),
                       ),
                     ),
                   ],
@@ -503,9 +477,8 @@ class _SearchResultTile extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: isDark
-                    ? const Color(0xff252438)
-                    : const Color(0xfff1f5f9),
+                color:
+                    isDark ? const Color(0xff252438) : const Color(0xfff1f5f9),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(

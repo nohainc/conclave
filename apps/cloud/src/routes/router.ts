@@ -67,6 +67,32 @@ export async function routeWorkerRequest(
         undefined,
       );
     }
+    const configuredWorkerCredentialMatch = url.pathname.match(
+      /^\/api\/workers\/([^/]+)\/workspaces\/([^/]+)\/credential$/,
+    );
+    if (
+      configuredWorkerCredentialMatch?.[1] &&
+      configuredWorkerCredentialMatch?.[2]
+    ) {
+      if (request.method === "GET") {
+        return await handlers.handleGetConfiguredWorkerWorkspaceCredential!(
+          request,
+          env,
+          configuredWorkerCredentialMatch[1],
+          configuredWorkerCredentialMatch[2],
+          ctx,
+        );
+      }
+      if (request.method === "DELETE") {
+        return await handlers.handleRevokeConfiguredWorkerWorkspaceCredential!(
+          request,
+          env,
+          configuredWorkerCredentialMatch[1],
+          configuredWorkerCredentialMatch[2],
+          ctx,
+        );
+      }
+    }
     const connectorTaskStatusMatch = url.pathname.match(
       /^\/api\/connector\/tasks\/([^/]+)\/status$/,
     );
@@ -83,81 +109,83 @@ export async function routeWorkerRequest(
     if (request.method === "POST" && url.pathname === "/api/workspaces") {
       return await handlers.handleCreateWorkspace!(request, env, ctx);
     }
-    // V5 Accounts are User-owned; the Workspace-prefixed routes below remain
-    // compatibility aliases for local setup placement.
-    if (request.method === "GET" && url.pathname === "/api/accounts") {
-      return await handlers.handleListCredentialProfiles!(
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/workers/observability"
+    ) {
+      return await handlers.handleConfiguredWorkerObservability!(
         request,
         env,
-        "",
         ctx,
       );
     }
-    if (request.method === "POST" && url.pathname === "/api/accounts") {
-      return await handlers.handleCreateCredentialProfile!(
-        request,
-        env,
-        "",
-        ctx,
-      );
+    if (request.method === "GET" && url.pathname === "/api/workers") {
+      return await handlers.handleListConfiguredWorkers!(request, env, ctx);
     }
-    const accountRootMatch = url.pathname.match(/^\/api\/accounts\/([^/]+)$/);
-    if (request.method === "PATCH" && accountRootMatch?.[1]) {
-      return await handlers.handleUpdateCredentialProfile!(
-        request,
-        env,
-        "",
-        accountRootMatch[1],
-        ctx,
-      );
+    if (request.method === "POST" && url.pathname === "/api/workers") {
+      return await handlers.handleCreateConfiguredWorker!(request, env, ctx);
     }
-    if (request.method === "DELETE" && accountRootMatch?.[1]) {
-      return await handlers.handleRevokeCredentialProfile!(
-        request,
-        env,
-        "",
-        accountRootMatch[1],
-        ctx,
-      );
-    }
-    const accountRootSetupMatch = url.pathname.match(
-      /^\/api\/accounts\/([^/]+)\/setup-intent$/,
-    );
-    if (request.method === "POST" && accountRootSetupMatch?.[1]) {
-      return await handlers.handleCreateCredentialSetupIntent!(
-        request,
-        env,
-        "",
-        accountRootSetupMatch[1],
-        ctx,
-      );
-    }
-    const accountRootGrantMatch = url.pathname.match(
-      /^\/api\/accounts\/([^/]+)\/grants$/,
-    );
-    if (request.method === "POST" && accountRootGrantMatch?.[1]) {
-      return await handlers.handleCreateCredentialGrant!(
-        request,
-        env,
-        "",
-        accountRootGrantMatch[1],
-        ctx,
-      );
-    }
-    const accountRootGrantItemMatch = url.pathname.match(
-      /^\/api\/accounts\/([^/]+)\/grants\/([^/]+)$/,
+    const configuredWorkerWorkspaceSetupMatch = url.pathname.match(
+      /^\/api\/workers\/([^/]+)\/workspaces\/([^/]+)\/(setup|reauthenticate)$/,
     );
     if (
-      request.method === "DELETE" &&
-      accountRootGrantItemMatch?.[1] &&
-      accountRootGrantItemMatch?.[2]
+      request.method === "POST" &&
+      configuredWorkerWorkspaceSetupMatch?.[1] &&
+      configuredWorkerWorkspaceSetupMatch?.[2] &&
+      configuredWorkerWorkspaceSetupMatch?.[3]
     ) {
-      return await handlers.handleRevokeCredentialGrant!(
+      return await handlers.handleConfiguredWorkerWorkspaceSetup!(
         request,
         env,
-        "",
-        accountRootGrantItemMatch[1],
-        accountRootGrantItemMatch[2],
+        configuredWorkerWorkspaceSetupMatch[1],
+        configuredWorkerWorkspaceSetupMatch[2],
+        configuredWorkerWorkspaceSetupMatch[3],
+        ctx,
+      );
+    }
+    const configuredWorkerWorkspacesMatch = url.pathname.match(
+      /^\/api\/workers\/([^/]+)\/workspaces$/,
+    );
+    if (request.method === "GET" && configuredWorkerWorkspacesMatch?.[1]) {
+      return await handlers.handleListConfiguredWorkerWorkspaces!(
+        request,
+        env,
+        configuredWorkerWorkspacesMatch[1],
+        ctx,
+      );
+    }
+    if (request.method === "PUT" && configuredWorkerWorkspacesMatch?.[1]) {
+      return await handlers.handleUpdateConfiguredWorkerWorkspaces!(
+        request,
+        env,
+        configuredWorkerWorkspacesMatch[1],
+        ctx,
+      );
+    }
+    const configuredWorkerMatch = url.pathname.match(
+      /^\/api\/workers\/([^/]+)$/,
+    );
+    if (request.method === "GET" && configuredWorkerMatch?.[1]) {
+      return await handlers.handleGetConfiguredWorker!(
+        request,
+        env,
+        configuredWorkerMatch[1],
+        ctx,
+      );
+    }
+    if (request.method === "PATCH" && configuredWorkerMatch?.[1]) {
+      return await handlers.handleUpdateConfiguredWorker!(
+        request,
+        env,
+        configuredWorkerMatch[1],
+        ctx,
+      );
+    }
+    if (request.method === "DELETE" && configuredWorkerMatch?.[1]) {
+      return await handlers.handleRevokeConfiguredWorker!(
+        request,
+        env,
+        configuredWorkerMatch[1],
         ctx,
       );
     }
@@ -483,97 +511,6 @@ export async function routeWorkerRequest(
       return deps.json(
         { error: "Configured Worker instances were removed in v4" },
         { status: 410 },
-      );
-    }
-
-    const accountsMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/accounts$/,
-    );
-    if (request.method === "GET" && accountsMatch?.[1]) {
-      return await handlers.handleListCredentialProfiles!(
-        request,
-        env,
-        accountsMatch[1],
-        ctx,
-      );
-    }
-    if (request.method === "POST" && accountsMatch?.[1]) {
-      return await handlers.handleCreateCredentialProfile!(
-        request,
-        env,
-        accountsMatch[1],
-        ctx,
-      );
-    }
-    const accountMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/accounts\/([^/]+)$/,
-    );
-    if (request.method === "PATCH" && accountMatch?.[1] && accountMatch?.[2]) {
-      return await handlers.handleUpdateCredentialProfile!(
-        request,
-        env,
-        accountMatch[1],
-        accountMatch[2],
-        ctx,
-      );
-    }
-    if (request.method === "DELETE" && accountMatch?.[1] && accountMatch?.[2]) {
-      return await handlers.handleRevokeCredentialProfile!(
-        request,
-        env,
-        accountMatch[1],
-        accountMatch[2],
-        ctx,
-      );
-    }
-    const setupIntentMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/accounts\/([^/]+)\/setup-intent$/,
-    );
-    if (
-      request.method === "POST" &&
-      setupIntentMatch?.[1] &&
-      setupIntentMatch?.[2]
-    ) {
-      return await handlers.handleCreateCredentialSetupIntent!(
-        request,
-        env,
-        setupIntentMatch[1],
-        setupIntentMatch[2],
-        ctx,
-      );
-    }
-    const accountGrantsMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/accounts\/([^/]+)\/grants$/,
-    );
-    if (
-      request.method === "POST" &&
-      accountGrantsMatch?.[1] &&
-      accountGrantsMatch?.[2]
-    ) {
-      return await handlers.handleCreateCredentialGrant!(
-        request,
-        env,
-        accountGrantsMatch[1],
-        accountGrantsMatch[2],
-        ctx,
-      );
-    }
-    const accountGrantMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/accounts\/([^/]+)\/grants\/([^/]+)$/,
-    );
-    if (
-      request.method === "DELETE" &&
-      accountGrantMatch?.[1] &&
-      accountGrantMatch?.[2] &&
-      accountGrantMatch?.[3]
-    ) {
-      return await handlers.handleRevokeCredentialGrant!(
-        request,
-        env,
-        accountGrantMatch[1],
-        accountGrantMatch[2],
-        accountGrantMatch[3],
-        ctx,
       );
     }
 

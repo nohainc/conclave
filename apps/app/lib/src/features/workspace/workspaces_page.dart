@@ -1,23 +1,21 @@
 import 'package:flutter/material.dart';
 
 import '../../studio/studio_models.dart';
-import 'accounts_tab.dart';
 import 'workers_tab.dart';
 import 'workspace_detail.dart';
 import 'workspaces_overview.dart';
 
-export 'accounts_tab.dart';
 export 'workers_tab.dart';
 export 'workspace_detail.dart';
 export 'workspaces_overview.dart';
 
-/// Execution configuration center consolidating Workspaces, Workers, and AI Accounts.
+/// Execution area for Workspaces and configured Workers.
 class WorkspacesPage extends StatefulWidget {
   const WorkspacesPage({
     super.key,
     required this.workspaces,
     required this.workers,
-    required this.accounts,
+    this.configuredWorkers = const [],
     this.plugins = const [],
     this.initialTab = 0,
     required this.onAdd,
@@ -25,19 +23,17 @@ class WorkspacesPage extends StatefulWidget {
     required this.onUpdate,
     required this.onRevoke,
     required this.onGrant,
-    this.onSetWorkerAvailability,
-    this.onShowWorkerDetails,
-    this.onCreateAccount,
-    this.onRequestAccountSetup,
-    this.onRevokeAccount,
-    this.onNavigateToAccounts,
     this.workerActionMessage,
     this.onDismissWorkerActionMessage,
+    this.onAddConfiguredWorker,
+    this.onOpenConfiguredWorker,
+    this.onSetupConfiguredWorkerWorkspace,
+    this.onRemoveConfiguredWorkerWorkspace,
   });
 
   final List<StudioAgent> workspaces;
   final List<StudioWorker> workers;
-  final List<StudioCredentialProfile> accounts;
+  final List<StudioConfiguredWorker> configuredWorkers;
   final List<StudioPlugin> plugins;
   final int initialTab;
   final VoidCallback onAdd;
@@ -45,15 +41,16 @@ class WorkspacesPage extends StatefulWidget {
   final ValueChanged<StudioAgent> onUpdate;
   final ValueChanged<StudioAgent> onRevoke;
   final ValueChanged<StudioAgent> onGrant;
-  final void Function(StudioPlugin plugin, StudioAgent host, bool desired)?
-      onSetWorkerAvailability;
-  final ValueChanged<StudioPlugin>? onShowWorkerDetails;
-  final VoidCallback? onCreateAccount;
-  final ValueChanged<StudioCredentialProfile>? onRequestAccountSetup;
-  final ValueChanged<StudioCredentialProfile>? onRevokeAccount;
-  final VoidCallback? onNavigateToAccounts;
   final String? workerActionMessage;
   final VoidCallback? onDismissWorkerActionMessage;
+  final VoidCallback? onAddConfiguredWorker;
+  final ValueChanged<StudioConfiguredWorker>? onOpenConfiguredWorker;
+  final Future<void> Function(
+          StudioConfiguredWorker worker, String workspaceId, String action)?
+      onSetupConfiguredWorkerWorkspace;
+  final Future<void> Function(
+          StudioConfiguredWorker worker, String workspaceId)?
+      onRemoveConfiguredWorkerWorkspace;
 
   @override
   State<WorkspacesPage> createState() => _WorkspacesPageState();
@@ -68,8 +65,8 @@ class _WorkspacesPageState extends State<WorkspacesPage>
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 3,
-      initialIndex: widget.initialTab.clamp(0, 2),
+      length: 2,
+      initialIndex: widget.initialTab.clamp(0, 1),
       vsync: this,
     );
   }
@@ -78,7 +75,7 @@ class _WorkspacesPageState extends State<WorkspacesPage>
   void didUpdateWidget(WorkspacesPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.initialTab != widget.initialTab) {
-      _tabController.animateTo(widget.initialTab.clamp(0, 2));
+      _tabController.animateTo(widget.initialTab.clamp(0, 1));
     }
   }
 
@@ -99,12 +96,17 @@ class _WorkspacesPageState extends State<WorkspacesPage>
     if (active != null) {
       return WorkspaceDetailView(
         workspace: active,
-        accounts: widget.accounts,
         onBack: () => setState(() => selected = null),
         onRename: widget.onRename,
         onUpdate: widget.onUpdate,
         onRevoke: widget.onRevoke,
         onGrant: widget.onGrant,
+        configuredWorkers: widget.configuredWorkers,
+        onOpenConfiguredWorker: widget.onOpenConfiguredWorker,
+        onSetupConfiguredWorkerWorkspace:
+            widget.onSetupConfiguredWorkerWorkspace,
+        onRemoveConfiguredWorkerWorkspace:
+            widget.onRemoveConfiguredWorkerWorkspace,
       );
     }
 
@@ -121,8 +123,8 @@ class _WorkspacesPageState extends State<WorkspacesPage>
           children: [
             _buildHeader(
               context,
-              'Workspaces',
-              'Execution environments, Workers, and AI Accounts.',
+              'Execution',
+              'Workspaces are where AI runs. Workers are configured AI/tool identities. Projects and Workstreams are what they work on.',
             ),
             const SizedBox(height: 16),
             Center(
@@ -133,7 +135,6 @@ class _WorkspacesPageState extends State<WorkspacesPage>
                 tabs: const [
                   Tab(text: 'Workspaces'),
                   Tab(text: 'Workers'),
-                  Tab(text: 'AI Accounts'),
                 ],
               ),
             ),
@@ -148,20 +149,10 @@ class _WorkspacesPageState extends State<WorkspacesPage>
               WorkersTab(
                 workspaces: widget.workspaces,
                 plugins: widget.plugins,
-                onSetWorkerAvailability: widget.onSetWorkerAvailability,
-                onShowWorkerDetails: widget.onShowWorkerDetails,
-                onNavigateToAccounts: widget.onNavigateToAccounts,
+                configuredWorkers: widget.configuredWorkers,
+                onAddConfiguredWorker: widget.onAddConfiguredWorker,
+                onOpenConfiguredWorker: widget.onOpenConfiguredWorker,
               )
-            else
-              AccountsTab(
-                accounts: widget.accounts,
-                onCreateAccount: widget.onCreateAccount,
-                onRequestAccountSetup: widget.onRequestAccountSetup,
-                onRevokeAccount: widget.onRevokeAccount,
-                workerActionMessage: widget.workerActionMessage,
-                onDismissWorkerActionMessage:
-                    widget.onDismissWorkerActionMessage,
-              ),
           ],
         );
       },

@@ -553,6 +553,109 @@ class StudioWorker {
       costMetadata: _map(json, 'costMetadata'));
 }
 
+class StudioWorkerWorkspaceBinding {
+  const StudioWorkerWorkspaceBinding({
+    required this.workspaceId,
+    required this.workspaceName,
+    required this.workspaceStatus,
+    required this.enabled,
+    required this.localReadiness,
+    required this.packageStatus,
+    required this.credentialStatus,
+    required this.permissionsStatus,
+    this.lastSeen,
+    this.nextActions = const [],
+  });
+
+  final String workspaceId;
+  final String workspaceName;
+  final String workspaceStatus;
+  final bool enabled;
+  final String localReadiness;
+  final String packageStatus;
+  final String credentialStatus;
+  final String permissionsStatus;
+  final String? lastSeen;
+  final List<String> nextActions;
+
+  bool get ready =>
+      enabled &&
+      localReadiness == 'ready' &&
+      packageStatus == 'ready' &&
+      credentialStatus == 'ready' &&
+      permissionsStatus == 'ready';
+
+  factory StudioWorkerWorkspaceBinding.fromJson(Map<String, dynamic> json) =>
+      StudioWorkerWorkspaceBinding(
+        workspaceId: _string(json, 'workspaceId'),
+        workspaceName: _string(json, 'workspaceName'),
+        workspaceStatus: _string(json, 'workspaceStatus', 'unknown'),
+        enabled: json['enabled'] == true,
+        localReadiness: _string(json, 'localReadiness', 'unknown'),
+        packageStatus: _string(json, 'packageStatus', 'unknown'),
+        credentialStatus: _string(json, 'credentialStatus', 'unknown'),
+        permissionsStatus: _string(json, 'permissionsStatus', 'unknown'),
+        lastSeen: json['lastSeen']?.toString(),
+        nextActions: _strings(json, 'nextActions'),
+      );
+}
+
+class StudioConfiguredWorker {
+  const StudioConfiguredWorker({
+    required this.id,
+    required this.name,
+    required this.workerTypeId,
+    required this.workerTypeName,
+    required this.status,
+    required this.defaultModel,
+    required this.concurrencyLimit,
+    required this.bindings,
+    this.config = const {},
+    this.costMetadata = const {},
+    this.nextActions = const [],
+  });
+
+  final String id;
+  final String name;
+  final String workerTypeId;
+  final String workerTypeName;
+  final String status;
+  final String? defaultModel;
+  final int concurrencyLimit;
+  final List<StudioWorkerWorkspaceBinding> bindings;
+  final Map<String, dynamic> config;
+  final Map<String, dynamic> costMetadata;
+  final List<String> nextActions;
+
+  int get readyWorkspaceCount =>
+      bindings.where((binding) => binding.ready).length;
+
+  factory StudioConfiguredWorker.fromJson(Map<String, dynamic> json) {
+    final type = json['workerType'];
+    final typeMap = type is Map
+        ? Map<String, dynamic>.from(type)
+        : const <String, dynamic>{};
+    return StudioConfiguredWorker(
+      id: _string(json, 'id'),
+      name: _string(json, 'name'),
+      workerTypeId: _string(json, 'workerTypeId'),
+      workerTypeName:
+          _string(typeMap, 'displayName', _string(json, 'workerTypeId')),
+      status: _string(json, 'status', 'active'),
+      defaultModel: json['defaultModel']?.toString(),
+      concurrencyLimit: json['concurrencyLimit'] as int? ?? 1,
+      bindings: (json['workspaces'] as List? ?? const [])
+          .whereType<Map>()
+          .map((item) => StudioWorkerWorkspaceBinding.fromJson(
+              Map<String, dynamic>.from(item)))
+          .toList(),
+      config: _map(json, 'config'),
+      costMetadata: _map(json, 'costMetadata'),
+      nextActions: _strings(json, 'nextActions'),
+    );
+  }
+}
+
 class StudioAgent {
   const StudioAgent({
     required this.id,

@@ -2,29 +2,38 @@ import 'package:flutter/material.dart';
 
 import '../../studio/studio_models.dart';
 
-/// Contextual Workspace detail view with Overview, Workers, AI Accounts,
-/// Project access, Repositories, Activity, and Settings tabs.
+/// Contextual Workspace detail view for runtime state and configured Workers.
 class WorkspaceDetailView extends StatefulWidget {
   const WorkspaceDetailView({
     super.key,
     required this.workspace,
-    required this.accounts,
+    this.configuredWorkers = const [],
     required this.onBack,
     required this.onRename,
     required this.onUpdate,
     required this.onRevoke,
     required this.onGrant,
     this.initialTab = 0,
+    this.onOpenConfiguredWorker,
+    this.onSetupConfiguredWorkerWorkspace,
+    this.onRemoveConfiguredWorkerWorkspace,
   });
 
   final StudioAgent workspace;
-  final List<StudioCredentialProfile> accounts;
+  final List<StudioConfiguredWorker> configuredWorkers;
   final VoidCallback onBack;
   final ValueChanged<StudioAgent> onRename;
   final ValueChanged<StudioAgent> onUpdate;
   final ValueChanged<StudioAgent> onRevoke;
   final ValueChanged<StudioAgent> onGrant;
   final int initialTab;
+  final ValueChanged<StudioConfiguredWorker>? onOpenConfiguredWorker;
+  final Future<void> Function(
+          StudioConfiguredWorker worker, String workspaceId, String action)?
+      onSetupConfiguredWorkerWorkspace;
+  final Future<void> Function(
+          StudioConfiguredWorker worker, String workspaceId)?
+      onRemoveConfiguredWorkerWorkspace;
 
   @override
   State<WorkspaceDetailView> createState() => _WorkspaceDetailViewState();
@@ -38,8 +47,8 @@ class _WorkspaceDetailViewState extends State<WorkspaceDetailView>
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 6,
-      initialIndex: widget.initialTab.clamp(0, 5),
+      length: 5,
+      initialIndex: widget.initialTab.clamp(0, 4),
       vsync: this,
     );
   }
@@ -48,7 +57,7 @@ class _WorkspaceDetailViewState extends State<WorkspaceDetailView>
   void didUpdateWidget(WorkspaceDetailView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.initialTab != widget.initialTab) {
-      _tabController.animateTo(widget.initialTab.clamp(0, 5));
+      _tabController.animateTo(widget.initialTab.clamp(0, 4));
     }
   }
 
@@ -60,12 +69,6 @@ class _WorkspaceDetailViewState extends State<WorkspaceDetailView>
 
   @override
   Widget build(BuildContext context) {
-    final localAccounts = widget.accounts
-        .where((account) =>
-            account.host == widget.workspace.id ||
-            account.host == widget.workspace.name)
-        .toList();
-
     return AnimatedBuilder(
       animation: _tabController,
       builder: (context, _) {
@@ -119,7 +122,6 @@ class _WorkspaceDetailViewState extends State<WorkspaceDetailView>
               tabs: const [
                 Tab(text: 'Overview'),
                 Tab(text: 'Workers'),
-                Tab(text: 'AI Accounts'),
                 Tab(text: 'Project access'),
                 Tab(text: 'Activity'),
                 Tab(text: 'Settings'),
@@ -129,9 +131,8 @@ class _WorkspaceDetailViewState extends State<WorkspaceDetailView>
             switch (activeIndex) {
               0 => _overview(),
               1 => _workers(),
-              2 => _accountsTab(localAccounts),
-              3 => _projectAccess(),
-              4 => _activity(),
+              2 => _projectAccess(),
+              3 => _activity(),
               _ => _settings(),
             },
           ],
@@ -152,7 +153,8 @@ class _WorkspaceDetailViewState extends State<WorkspaceDetailView>
               runSpacing: 12,
               children: [
                 Text('Status: ${widget.workspace.status}'),
-                Text('Current load: ${widget.workspace.activeTaskCount} active tasks'),
+                Text(
+                    'Current load: ${widget.workspace.activeTaskCount} active tasks'),
                 Text('Last seen: ${widget.workspace.lastSeen}'),
                 Text('Runtime: ${widget.workspace.version}')
               ],
@@ -173,51 +175,70 @@ class _WorkspaceDetailViewState extends State<WorkspaceDetailView>
         children: [
           _Panel(
             title: 'Workers on ${widget.workspace.name}',
-            subtitle: 'Manage what this Workspace has installed.',
-            child: widget.workspace.installedWorkers.isEmpty
-                ? const Text('No Workers installed.')
-                : Column(
-                    children: widget.workspace.installedWorkers
-                        .map(
-                          (worker) => ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: const Icon(Icons.extension_outlined),
-                            title: Text(worker.workerId),
-                            subtitle:
-                                Text('${worker.version} · ${worker.status}'),
-                          ),
-                        )
-                        .toList(),
-                  ),
+            subtitle: 'Configured AI/tool identities that can run here.',
+            child: _configuredWorkersOnWorkspace(),
           ),
         ],
       );
 
-  Widget _accountsTab(List<StudioCredentialProfile> localAccounts) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _Panel(
-            title: 'AI Accounts on ${widget.workspace.name}',
-            subtitle:
-                'Secrets remain local to this Workspace and are never transmitted to Cloud.',
-            child: localAccounts.isEmpty
-                ? const Text('No local AI Accounts.')
-                : Column(
-                    children: localAccounts
-                        .map(
-                          (account) => ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: const Icon(Icons.account_circle_outlined),
-                            title: Text(account.displayName),
-                            subtitle: Text(
-                                '${account.status} · ${account.sharing}'),
-                          ),
-                        )
-                        .toList(),
-                  ),
+  Widget _configuredWorkersOnWorkspace() {
+    final workers = widget.configuredWorkers
+        .where((worker) => worker.bindings
+            .any((binding) => binding.workspaceId == widget.workspace.id))
+        .toList();
+    if (workers.isEmpty) {
+      return const Text(
+          'No configured Workers are connected to this Workspace.');
+    }
+    return Column(
+      children: workers.map((worker) {
+        final binding = worker.bindings
+            .firstWhere((item) => item.workspaceId == widget.workspace.id);
+        return ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(
+            binding.ready
+                ? Icons.check_circle_outline
+                : Icons.warning_amber_outlined,
+            color: binding.ready
+                ? const Color(0xff3ca879)
+                : const Color(0xffc1842d),
           ),
-        ],
-      );
+          title: Text(worker.name),
+          subtitle: Text(
+              '${worker.workerTypeName} · ${binding.ready ? 'Ready to run' : 'Needs attention'}'),
+          trailing: Wrap(
+            spacing: 2,
+            children: [
+              if (binding.credentialStatus != 'ready')
+                TextButton(
+                  onPressed: widget.onSetupConfiguredWorkerWorkspace == null
+                      ? null
+                      : () => widget.onSetupConfiguredWorkerWorkspace!(
+                          worker, widget.workspace.id, 'reauthenticate'),
+                  child: const Text('Authenticate'),
+                ),
+              IconButton(
+                tooltip: 'Open Worker',
+                onPressed: widget.onOpenConfiguredWorker == null
+                    ? null
+                    : () => widget.onOpenConfiguredWorker!(worker),
+                icon: const Icon(Icons.open_in_new, size: 18),
+              ),
+              IconButton(
+                tooltip: 'Remove binding',
+                onPressed: widget.onRemoveConfiguredWorkerWorkspace == null
+                    ? null
+                    : () => widget.onRemoveConfiguredWorkerWorkspace!(
+                        worker, widget.workspace.id),
+                icon: const Icon(Icons.link_off_outlined, size: 18),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
 
   Widget _projectAccess() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -254,7 +275,8 @@ class _WorkspaceDetailViewState extends State<WorkspaceDetailView>
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.timeline_outlined),
               title: Text('Last seen ${widget.workspace.lastSeen}'),
-              subtitle: Text('${widget.workspace.activeTaskCount} active tasks'),
+              subtitle:
+                  Text('${widget.workspace.activeTaskCount} active tasks'),
             ),
           ),
         ],

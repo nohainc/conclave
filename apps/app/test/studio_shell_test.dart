@@ -104,17 +104,6 @@ void main() {
       expect(workersCtx.isNavActive(const StudioNavigation.hosts()), isTrue);
       expect(workersCtx.isNavActive(const StudioNavigation.home()), isFalse);
 
-      // AI Accounts route
-      const accountsCtx = StudioShellContext(
-        navigation: StudioNavigation.accounts(),
-        projects: [],
-      );
-      expect(
-          accountsCtx.isNavActive(const StudioNavigation.accounts()), isTrue);
-      expect(accountsCtx.isNavActive(const StudioNavigation.hosts()), isTrue);
-      expect(
-          accountsCtx.isNavActive(const StudioNavigation.projects()), isFalse);
-
       // Usage route
       const usageCtx = StudioShellContext(
         navigation: StudioNavigation.usage(),
@@ -260,7 +249,7 @@ void main() {
       // Tap ⋯ Application menu at bottom of sidebar
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
-      expect(find.text('Workspaces'), findsOneWidget);
+      expect(find.text('Execution'), findsOneWidget);
       expect(find.text('Usage'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
       expect(find.text('About Conclave AX'), findsOneWidget);
@@ -269,8 +258,8 @@ void main() {
       expect(find.text('Website'), findsOneWidget);
       expect(find.text('Log out'), findsOneWidget);
 
-      // Tap Workspaces in Application menu
-      await tester.tap(find.text('Workspaces'));
+      // Tap Execution in Application menu
+      await tester.tap(find.text('Execution'));
       await tester.pumpAndSettle();
       expect(navigatedTo?.kind, StudioRouteKind.hosts);
     });
@@ -325,7 +314,7 @@ void main() {
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
       expect(navigatedTo, isNull);
-      expect(find.text('Workspaces'), findsOneWidget);
+      expect(find.text('Execution'), findsOneWidget);
       expect(find.text('Usage'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
       expect(find.text('About Conclave AX'), findsOneWidget);
@@ -481,7 +470,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Check items exist
-      expect(find.text('Workspaces'), findsOneWidget);
+      expect(find.text('Execution'), findsOneWidget);
       expect(find.text('Usage'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
       expect(find.text('About Conclave AX'), findsOneWidget);
@@ -490,8 +479,8 @@ void main() {
       expect(find.text('Website'), findsOneWidget);
       expect(find.text('Log out'), findsOneWidget);
 
-      // Click Workspaces
-      await tester.tap(find.text('Workspaces'));
+      // Click Execution
+      await tester.tap(find.text('Execution'));
       await tester.pumpAndSettle();
       expect(navigatedTo?.kind, StudioRouteKind.hosts);
 
@@ -924,7 +913,7 @@ void main() {
       expect(navigatedTo?.projectId, 'project-1');
     });
 
-    testWidgets('renders nested breadcrumbs for Workers and AI Accounts',
+    testWidgets('renders Workers breadcrumbs',
         (tester) async {
       StudioNavigation? navigatedTo;
 
@@ -948,38 +937,12 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Workspaces'), findsOneWidget);
+      expect(find.text('Execution'), findsOneWidget);
       expect(find.text('Workers'), findsOneWidget);
 
-      await tester.tap(find.text('Workspaces'));
+      await tester.tap(find.text('Execution'));
       expect(navigatedTo?.kind, StudioRouteKind.hosts);
 
-      navigatedTo = null;
-      const accountsContext = StudioShellContext(
-        navigation: StudioNavigation.accounts(),
-        projects: [testProject],
-      );
-
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
-          home: Scaffold(
-            body: StudioTopBar(
-              shellContext: accountsContext,
-              onNavigateTo: (nav) => navigatedTo = nav,
-              onOpenCommandPalette: () {},
-              onOpenNotifications: () {},
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('Workspaces'), findsOneWidget);
-      expect(find.text('AI Accounts'), findsOneWidget);
-
-      await tester.tap(find.text('Workspaces'));
-      expect(navigatedTo?.kind, StudioRouteKind.hosts);
     });
 
     testWidgets('compact HUD displays full breadcrumb path for run',
@@ -1088,6 +1051,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(find.byTooltip('Conclave AX — Home'), findsOneWidget);
       expect(find.byTooltip('Expand sidebar'), findsOneWidget);
       expect(find.byTooltip('Search...'), findsOneWidget);
       expect(find.byTooltip('Add Project'), findsOneWidget);
@@ -1096,7 +1060,11 @@ void main() {
       expect(find.byTooltip('Vitalii Noha'), findsOneWidget);
       expect(find.byTooltip('Application menu'), findsOneWidget);
 
-      // Tapping Conclave AX brand logo toggles collapse / expands sidebar
+      // Tapping Conclave AX brand logo navigates to Home
+      await tester.tap(find.byTooltip('Conclave AX — Home'));
+      expect(navigatedTo, equals(const StudioNavigation.home()));
+
+      // Tapping Expand sidebar button expands sidebar
       await tester.tap(find.byTooltip('Expand sidebar'));
       expect(collapseToggled, isTrue);
 
@@ -1140,9 +1108,9 @@ void main() {
       // Tapping Application menu opens menu with Workspaces
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
-      expect(find.text('Workspaces'), findsOneWidget);
+      expect(find.text('Execution'), findsOneWidget);
       expect(find.text('Usage'), findsOneWidget);
-      await tester.tap(find.text('Workspaces'));
+      await tester.tap(find.text('Execution'));
       await tester.pumpAndSettle();
       expect(navigatedTo?.kind, StudioRouteKind.hosts);
     });
@@ -1397,7 +1365,6 @@ void main() {
         StudioNavigation.run('p-1', 'run-1', workstreamId: 'ws-running'),
         StudioNavigation.hosts(),
         StudioNavigation.workers(),
-        StudioNavigation.accounts(),
         StudioNavigation.usage(),
         StudioNavigation.profileSecurity(),
       ];
@@ -1616,31 +1583,6 @@ void main() {
       await tester.tap(find.text('Conclave Core'));
       expect(navigatedTo?.kind, StudioRouteKind.project);
 
-      // Test 2: AI Accounts route -> "AI Accounts"
-      navigatedTo = null;
-      const accountsContext = StudioShellContext(
-        navigation: StudioNavigation.accounts(),
-        projects: [],
-      );
-
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
-          home: Scaffold(
-            body: StudioTopBar(
-              shellContext: accountsContext,
-              onNavigateTo: (nav) => navigatedTo = nav,
-              onOpenCommandPalette: () {},
-              onToggleTheme: () {},
-              onOpenNotifications: () {},
-              onOpenAbout: () {},
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('AI Accounts'), findsOneWidget);
     });
 
     testWidgets(

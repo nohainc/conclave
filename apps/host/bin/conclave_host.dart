@@ -186,7 +186,47 @@ Future<void> main(List<String> args) async {
                   packageR2Key,
                 ),
                 onStatus: (status) async {
-                  connection?.reportWorkerStatuses([status]);
+                  final workerId = status['workerId'];
+                  final desiredWorker = workerId is String
+                      ? desired.firstWhere(
+                          (item) => item['workerId'] == workerId,
+                          orElse: () => const <String, Object?>{},
+                        )
+                      : const <String, Object?>{};
+                  final packageStatus = status['status'] == 'ready'
+                      ? 'ready'
+                      : status['status'] == 'failed'
+                          ? 'failed'
+                          : 'installing';
+                  final credentialStatus = desiredWorker['credentialStatus'];
+                  final configuredPermissionsStatus =
+                      desiredWorker['permissionsStatus'];
+                  final permissionsStatus =
+                      configuredPermissionsStatus == 'denied'
+                          ? 'denied'
+                          : status['status'] == 'ready'
+                              ? 'ready'
+                              : configuredPermissionsStatus;
+                  final effectiveReadiness = status['status'] == 'ready' &&
+                          credentialStatus == 'ready' &&
+                          permissionsStatus == 'ready'
+                      ? 'ready'
+                      : status['status'] == 'failed'
+                          ? 'failed'
+                          : 'degraded';
+                  connection?.reportWorkerStatuses([
+                    {
+                      ...status,
+                      'packageStatus': packageStatus,
+                      if (credentialStatus is String)
+                        'credentialStatus': credentialStatus,
+                      if (permissionsStatus is String)
+                        'permissionsStatus': permissionsStatus,
+                      'effectiveReadiness': effectiveReadiness,
+                      'activeAssignmentCount':
+                          connection.activeAssignmentCount,
+                    },
+                  ]);
                 },
               );
               final inventory = await workerManager.inventory();
@@ -201,6 +241,12 @@ Future<void> main(List<String> args) async {
                           'workerId': worker.workerId,
                           'version': worker.version,
                           'status': worker.active ? 'ready' : 'verifying',
+                          'packageStatus':
+                              worker.active ? 'ready' : 'installing',
+                          'effectiveReadiness':
+                              worker.active ? 'ready' : 'degraded',
+                          'activeAssignmentCount':
+                              connection?.activeAssignmentCount ?? 0,
                           'installedAt':
                               DateTime.now().toUtc().toIso8601String(),
                         })

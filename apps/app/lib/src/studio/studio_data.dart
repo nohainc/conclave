@@ -113,6 +113,38 @@ abstract interface class StudioDataSource {
   Future<void> deleteWorkstream({required String workstreamId});
   Future<List<StudioAgent>> loadHosts({required String workspaceId});
   Future<List<StudioWorker>> loadWorkers({required String workspaceId});
+  Future<List<StudioConfiguredWorker>> loadConfiguredWorkers() async =>
+      const [];
+  Future<StudioConfiguredWorker> createConfiguredWorker({
+    required String name,
+    required String workerTypeId,
+    required List<String> workspaceIds,
+    String? defaultModel,
+    int concurrencyLimit = 1,
+    Map<String, dynamic> config = const {},
+  }) async =>
+      throw UnimplementedError('Configured Worker creation is not available');
+  Future<void> updateConfiguredWorker({
+    required String workerId,
+    String? name,
+    String? defaultModel,
+    int? concurrencyLimit,
+    Map<String, dynamic>? config,
+  }) async =>
+      throw UnimplementedError('Configured Worker updates are not available');
+  Future<void> revokeConfiguredWorker({required String workerId}) async =>
+      throw UnimplementedError('Configured Worker revocation is not available');
+  Future<void> updateConfiguredWorkerWorkspaces({
+    required String workerId,
+    required List<String> workspaceIds,
+  }) async =>
+      throw UnimplementedError('Configured Worker bindings are not available');
+  Future<void> setupConfiguredWorkerWorkspace({
+    required String workerId,
+    required String workspaceId,
+    String action = 'setup',
+  }) async =>
+      throw UnimplementedError('Configured Worker setup is not available');
   Future<List<StudioCredentialProfile>> loadCredentialProfiles(
       {required String workspaceId});
   Future<StudioWorkspace> updateWorkspace({
@@ -501,6 +533,117 @@ class StudioApiClient implements StudioDataSource {
         'status': value['status'] ?? 'available',
       });
     }).toList();
+  }
+
+  @override
+  Future<List<StudioConfiguredWorker>> loadConfiguredWorkers() async {
+    final body = await _getJson(Uri.parse('$baseUrl/workers'));
+    return (body['workers'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) =>
+            StudioConfiguredWorker.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> _configuredWorkerMutation(
+      String method, Uri uri, Map<String, dynamic> payload) async {
+    final request = http.Request(method, uri)
+      ..headers.addAll(_headers(contentType: 'application/json'))
+      ..body = jsonEncode(payload);
+    final streamed = await client.send(request);
+    final response = await http.Response.fromStream(streamed);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+        'Worker action failed (${response.statusCode})',
+        statusCode: response.statusCode,
+      );
+    }
+    final decoded = jsonDecode(response.body);
+    return decoded is Map ? Map<String, dynamic>.from(decoded) : const {};
+  }
+
+  @override
+  Future<StudioConfiguredWorker> createConfiguredWorker({
+    required String name,
+    required String workerTypeId,
+    required List<String> workspaceIds,
+    String? defaultModel,
+    int concurrencyLimit = 1,
+    Map<String, dynamic> config = const {},
+  }) async {
+    final body = await _configuredWorkerMutation(
+      'POST',
+      Uri.parse('$baseUrl/workers'),
+      {
+        'name': name,
+        'workerTypeId': workerTypeId,
+        'workspaceIds': workspaceIds,
+        if (defaultModel != null && defaultModel.trim().isNotEmpty)
+          'defaultModel': defaultModel.trim(),
+        'concurrencyLimit': concurrencyLimit,
+        'config': config,
+        'authStrategy': {
+          'authType': 'local',
+          'sharingPolicy': 'private_only',
+        },
+      },
+    );
+    final worker = body['worker'];
+    if (worker is! Map) {
+      throw const StudioApiException('Worker creation response is malformed');
+    }
+    return StudioConfiguredWorker.fromJson(Map<String, dynamic>.from(worker));
+  }
+
+  @override
+  Future<void> updateConfiguredWorker({
+    required String workerId,
+    String? name,
+    String? defaultModel,
+    int? concurrencyLimit,
+    Map<String, dynamic>? config,
+  }) async {
+    await _configuredWorkerMutation(
+      'PATCH',
+      Uri.parse('$baseUrl/workers/$workerId'),
+      {
+        if (name != null) 'name': name,
+        if (defaultModel != null) 'defaultModel': defaultModel,
+        if (concurrencyLimit != null) 'concurrencyLimit': concurrencyLimit,
+        if (config != null) 'config': config,
+      },
+    );
+  }
+
+  @override
+  Future<void> revokeConfiguredWorker({required String workerId}) async {
+    await _configuredWorkerMutation(
+        'DELETE', Uri.parse('$baseUrl/workers/$workerId'), const {});
+  }
+
+  @override
+  Future<void> updateConfiguredWorkerWorkspaces({
+    required String workerId,
+    required List<String> workspaceIds,
+  }) async {
+    await _configuredWorkerMutation(
+      'PUT',
+      Uri.parse('$baseUrl/workers/$workerId/workspaces'),
+      {'workspaceIds': workspaceIds},
+    );
+  }
+
+  @override
+  Future<void> setupConfiguredWorkerWorkspace({
+    required String workerId,
+    required String workspaceId,
+    String action = 'setup',
+  }) async {
+    await _configuredWorkerMutation(
+      'POST',
+      Uri.parse('$baseUrl/workers/$workerId/workspaces/$workspaceId/$action'),
+      const {},
+    );
   }
 
   @override
@@ -1622,7 +1765,7 @@ class StudioApiClient implements StudioDataSource {
     Map<String, dynamic> costMetadata = const {},
   }) async {
     throw const StudioApiException(
-      'Configured Worker instances were removed. Manage Workers through Workspace desired state.',
+      'This Worker setup path is no longer available. Manage Workers through Execution.',
     );
   }
 }

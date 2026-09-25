@@ -159,7 +159,7 @@ void main() {
 
   group('Phase 13: Global Application Menu Regressions', () {
     testWidgets(
-        'menu contains Workspaces, Usage, Appearance, About, Documentation, GitHub, Website, Log out in correct order',
+        'menu contains Execution, Usage, Appearance, About, Documentation, GitHub, Website, Log out in correct order',
         (tester) async {
       StudioNavigation? navigated;
       bool aboutOpened = false;
@@ -189,7 +189,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify all required items are present in the menu
-      expect(find.text('Workspaces'), findsOneWidget);
+      expect(find.text('Execution'), findsOneWidget);
       expect(find.text('Usage'), findsOneWidget);
       expect(find.text('Archived Projects'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
@@ -200,8 +200,8 @@ void main() {
       expect(find.text('Log out'), findsOneWidget);
 
       // Verify destructive / action callbacks:
-      // 1. Workspaces
-      await tester.tap(find.text('Workspaces'));
+      // 1. Execution
+      await tester.tap(find.text('Execution'));
       await tester.pumpAndSettle();
       expect(navigated, const StudioNavigation.hosts());
 
@@ -304,33 +304,33 @@ void main() {
   });
 
   group('Phase 13: Legacy URL Redirects & Canonical Routing', () {
-    test('old /workers deep link canonicalizes to /workspaces/workers', () {
+    test('old /workers deep link canonicalizes to /execution/workers', () {
       final parsed = StudioNavigation.fromUri(Uri.parse('/workers'));
       expect(parsed, const StudioNavigation.workers());
-      expect(parsed.toUri().path, '/workspaces/workers');
+      expect(parsed.toUri().path, '/execution/workers');
     });
 
-    test('old /accounts deep link canonicalizes to /workspaces/accounts', () {
+    test('old /accounts deep link resolves to the Workers surface', () {
       final parsed = StudioNavigation.fromUri(Uri.parse('/accounts'));
-      expect(parsed, const StudioNavigation.accounts());
-      expect(parsed.toUri().path, '/workspaces/accounts');
+      expect(parsed, const StudioNavigation.workers());
+      expect(parsed.toUri().path, '/execution/workers');
     });
 
     test('query param tabs canonicalize to nested routes', () {
       final workersQuery =
           StudioNavigation.fromUri(Uri.parse('/workspaces?tab=workers'));
       expect(workersQuery, const StudioNavigation.workers());
-      expect(workersQuery.toUri().path, '/workspaces/workers');
+      expect(workersQuery.toUri().path, '/execution/workers');
 
       final accountsQuery =
           StudioNavigation.fromUri(Uri.parse('/workspaces?tab=accounts'));
-      expect(accountsQuery, const StudioNavigation.accounts());
-      expect(accountsQuery.toUri().path, '/workspaces/accounts');
+      expect(accountsQuery, const StudioNavigation.workers());
+      expect(accountsQuery.toUri().path, '/execution/workers');
 
       final legacyHosts =
           StudioNavigation.fromUri(Uri.parse('/hosts?tab=ai_accounts'));
-      expect(legacyHosts, const StudioNavigation.accounts());
-      expect(legacyHosts.toUri().path, '/workspaces/accounts');
+      expect(legacyHosts, const StudioNavigation.workers());
+      expect(legacyHosts.toUri().path, '/execution/workers');
     });
   });
 
@@ -539,7 +539,7 @@ void main() {
       // Open menu via button tap
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
-      expect(find.text('Workspaces'), findsOneWidget);
+      expect(find.text('Execution'), findsOneWidget);
 
       // Tap outside to dismiss
       await tester.tapAt(const Offset(400, 400));

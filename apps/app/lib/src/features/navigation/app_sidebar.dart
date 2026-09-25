@@ -578,19 +578,11 @@ class AppIconRail extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 4),
       child: Column(
         children: [
-          // Logo acts as the expand button when collapsed
+          // Logo navigates to Home
           Tooltip(
-            message: onToggleCollapse != null
-                ? 'Expand sidebar'
-                : 'Conclave AX — Home',
+            message: 'Conclave AX — Home',
             child: InkWell(
-              onTap: () {
-                if (onToggleCollapse != null) {
-                  onToggleCollapse!();
-                } else {
-                  onNavigateTo(const StudioNavigation.home());
-                }
-              },
+              onTap: () => onNavigateTo(const StudioNavigation.home()),
               borderRadius: BorderRadius.circular(8),
               hoverColor: const Color(0xff29283c),
               child: Padding(
@@ -599,7 +591,23 @@ class AppIconRail extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 14),
+          if (onToggleCollapse != null) ...[
+            const SizedBox(height: 6),
+            _railIconButton(
+              icon: Icons.menu_open_rounded,
+              iconWidget: Transform.flip(
+                flipX: true,
+                child: const Icon(
+                  Icons.menu_open_rounded,
+                  size: 20,
+                  color: Colors.white70,
+                ),
+              ),
+              tooltip: 'Expand sidebar',
+              onPressed: onToggleCollapse,
+            ),
+          ],
+          const SizedBox(height: 10),
 
           // Search popup control that opens an input popup and closes on focus loss
           _RailSearchMenuAnchor(

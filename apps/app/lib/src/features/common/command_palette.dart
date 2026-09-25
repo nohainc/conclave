@@ -80,8 +80,8 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
         },
       ),
       CommandPaletteAction(
-        title: 'Workspaces',
-        subtitle: 'Manage local and remote machines',
+        title: 'Execution',
+        subtitle: 'Manage Workspaces and configured Workers',
         icon: Icons.computer_outlined,
         category: 'Navigation',
         onSelect: () {
@@ -97,16 +97,6 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
         onSelect: () {
           if (Navigator.of(context).canPop()) Navigator.of(context).pop();
           widget.onNavigateTo(const StudioNavigation.workers());
-        },
-      ),
-      CommandPaletteAction(
-        title: 'AI Accounts',
-        subtitle: 'Credential profiles and authorization',
-        icon: Icons.account_circle_outlined,
-        category: 'Navigation',
-        onSelect: () {
-          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-          widget.onNavigateTo(const StudioNavigation.accounts());
         },
       ),
       CommandPaletteAction(
@@ -145,9 +135,8 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
     for (final project in widget.snapshot.projects) {
       actions.add(CommandPaletteAction(
         title: 'Project: ${project.name}',
-        subtitle: project.description.isNotEmpty
-            ? project.description
-            : 'Project',
+        subtitle:
+            project.description.isNotEmpty ? project.description : 'Project',
         icon: Icons.folder_outlined,
         category: 'Projects',
         onSelect: () {
@@ -191,7 +180,8 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
     if (activeRun != null) {
       final projectId = widget.snapshot.projects.firstOrNull?.id ?? '';
       actions.add(CommandPaletteAction(
-        title: 'Active Run: ${activeRun.objective.isNotEmpty ? activeRun.objective : activeRun.id}',
+        title:
+            'Active Run: ${activeRun.objective.isNotEmpty ? activeRun.objective : activeRun.id}',
         subtitle:
             '${activeRun.status.name} · ${activeRun.completedTaskCount}/${activeRun.taskCount} tasks',
         icon: Icons.play_circle_outline_rounded,
@@ -213,7 +203,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
         title: 'Workspace: ${agent.name}',
         subtitle: '${agent.hostname} · ${agent.status}',
         icon: Icons.computer_outlined,
-        category: 'Workspaces',
+        category: 'Execution',
         onSelect: () {
           if (Navigator.of(context).canPop()) Navigator.of(context).pop();
           widget.onNavigateTo(const StudioNavigation.hosts());
@@ -231,20 +221,6 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
         onSelect: () {
           if (Navigator.of(context).canPop()) Navigator.of(context).pop();
           widget.onNavigateTo(const StudioNavigation.workers());
-        },
-      ));
-    }
-
-    // Add Accounts
-    for (final account in widget.snapshot.accounts) {
-      actions.add(CommandPaletteAction(
-        title: 'Account: ${account.displayName}',
-        subtitle: '${account.worker} · ${account.status}',
-        icon: Icons.account_circle_outlined,
-        category: 'Accounts',
-        onSelect: () {
-          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-          widget.onNavigateTo(const StudioNavigation.accounts());
         },
       ));
     }

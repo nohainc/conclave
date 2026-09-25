@@ -67,6 +67,11 @@ No active architecture document defines AI Account as an equal first-class user 
 
 Create a domain object distinct from Worker Type/catalog.
 
+The core baseline is implemented in `packages/core/src/configured-worker.ts`.
+It keeps Worker Type, ConfiguredWorker, Workspace binding, and internal
+credential metadata as separate domain shapes without adding persistence or
+Cloud secret storage.
+
 ### Add conceptual model
 
 ConfiguredWorker:
@@ -133,6 +138,12 @@ Core can represent Worker Type, configured Worker and Workspace binding without 
 
 Persist configured Workers explicitly.
 
+The v6 schema now adds `configured_workers`,
+`worker_workspace_bindings`, and `workspace_worker_credentials`. The existing
+`workers` table remains the Worker Type/catalog table for this migration slice;
+AI Account records remain internal compatibility data and are no longer the
+only persisted configured identity path.
+
 ### Preferred pre-production schema
 
 Add:
@@ -176,6 +187,11 @@ Database no longer requires AI Account as the only configured identity object.
 ### Goal
 
 Expose configured Workers directly.
+
+The direct `/api/workers` resource is implemented. It owns configured Worker
+CRUD, Workspace binding/readiness management, local setup/reauthentication
+requests, and revocation. Existing account routes remain compatibility paths;
+new clients do not need to create an AI Account separately.
 
 ### API
 
@@ -226,6 +242,12 @@ A client can fully configure a Worker without creating an AI Account separately.
 
 ## EW-4 — Workspace convergence / desired state
 
+Implementation status: implemented in the v6 runtime path. Configured Worker
+bindings are now the declarative source for Workspace sync; package metadata is
+resolved from the Worker Type release, while installation and readiness are
+recorded per configured Worker and Workspace. Runtime reports package,
+credential, permission, effective-readiness, and active-assignment metadata.
+
 ### Goal
 
 Make Workspace binding declarative.
@@ -271,6 +293,12 @@ Binding a Worker to a Workspace is the only normal installation/readiness action
 ---
 
 ## EW-5 — Credential abstraction migration
+
+Implementation status: credential operations are Worker-contextual. The
+configured Worker API exposes only Workspace-binding credential metadata and
+setup/revocation actions; runtime credential status updates reconcile the
+corresponding binding. Secret values remain in the Workspace secure store and
+are never returned by Cloud APIs.
 
 ### Goal
 
@@ -318,6 +346,12 @@ All credential operations are Worker-contextual.
 ---
 
 ## EW-6 — Scheduler selection by configured Worker
+
+Implementation status: scheduler candidates now resolve configured Worker IDs,
+Worker Type IDs, Workspace bindings, package readiness, credential readiness,
+credential ownership, capabilities, permissions, and configured-Worker
+capacity. Assignment records preserve both configured Worker and Worker Type
+identities; legacy Account IDs remain optional internal accounting metadata.
 
 ### Goal
 
@@ -369,6 +403,11 @@ Assignments no longer require users to reason about an independent Account selec
 ---
 
 ## EW-7 — Project and Workstream authorization migration
+
+Implementation status: scheduler authorization is Worker-first. Workspace
+grants constrain configured Worker IDs, while Workstream execution policies
+can narrow configured Workers, Worker Types, providers, models, and budgets.
+Account identifiers remain optional internal attribution fields only.
 
 ### Goal
 

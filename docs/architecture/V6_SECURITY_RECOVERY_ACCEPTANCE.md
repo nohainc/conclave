@@ -3,7 +3,8 @@
 V6-26 is covered by the Cloud scheduler and Workspace runtime acceptance
 tests. The boundary is checked at both sides of dispatch:
 
-- Cloud rechecks active Workspace Project Grants and Account availability;
+- Cloud rechecks active Workspace Project Grants, Worker authorization, and
+  internal credential availability;
 - runtime rejects traversal, symlink escape, forged opaque checkout IDs,
   alternate Workstream IDs, stale fencing tokens, duplicate leases, and
   expected-revision mismatches;

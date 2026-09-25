@@ -24,6 +24,7 @@ export interface TaskToDispatch {
   readonly requestedByUserId?: string;
   readonly credentialProfileId?: string;
   readonly accountId?: string;
+  readonly configuredWorkerId?: string;
   readonly model?: string;
   readonly requiresIndependentVerification?: boolean;
   readonly workstreamId?: string;
@@ -218,14 +219,16 @@ async function dispatchV5ProjectAssignment(
       workerCatalogId: "",
       status: "failed",
       accepted: false,
-      error: "No eligible Project execution resource satisfied the Workspace Grant, Worker, Account, capacity, and permission filters",
+      error:
+        "No eligible Project execution resource satisfied the Workspace Grant, Worker, Account, capacity, and permission filters",
     };
   }
   const taskInput = task.input ?? {};
   await assertV5BudgetAvailable(env.CONCLAVE_DB, {
     projectId: target.projectId,
     runId,
-    accountId: target.accountId,
+    accountId:
+      target.accountId ?? target.credentialId ?? target.configuredWorkerId,
     inputTokens: Number(taskInput.inputTokens ?? 0),
     outputTokens: Number(taskInput.outputTokens ?? 0),
     estimatedCostMicros:
@@ -236,8 +239,11 @@ async function dispatchV5ProjectAssignment(
   const now = new Date().toISOString();
   const attemptRow = await env.CONCLAVE_DB.prepare(
     "SELECT COALESCE(MAX(attempt_number), 0) + 1 as next_num FROM attempts WHERE task_id = ?1",
-  ).bind(taskId).first<{ next_num: number }>();
-  const attemptNumber = params.explicitAttemptNumber ?? attemptRow?.next_num ?? 1;
+  )
+    .bind(taskId)
+    .first<{ next_num: number }>();
+  const attemptNumber =
+    params.explicitAttemptNumber ?? attemptRow?.next_num ?? 1;
   const randomPart = crypto.randomUUID().slice(0, 8);
   const attemptId = `att-${taskId}-${attemptNumber}-${Date.now()}-${randomPart}`;
   const assignmentId = `asg-${taskId}-${attemptNumber}-${Date.now()}-${randomPart}`;
@@ -250,41 +256,55 @@ async function dispatchV5ProjectAssignment(
   await env.CONCLAVE_DB.prepare(
     `INSERT INTO attempts (id, task_id, worker_id, attempt_number, input_snapshot_json, status, started_at)
      VALUES (?1, ?2, ?3, ?4, ?5, 'running', ?6)`,
-  ).bind(attemptId, taskId, target.workerId, attemptNumber, JSON.stringify(task.input ?? {}), now).run();
+  )
+    .bind(
+      attemptId,
+      taskId,
+      target.workerId,
+      attemptNumber,
+      JSON.stringify(task.input ?? {}),
+      now,
+    )
+    .run();
   await env.CONCLAVE_DB.prepare(
     `INSERT INTO worker_assignments
        (id, project_id, execution_workspace_id, workspace_project_grant_id,
         run_id, task_id, attempt_id, requested_by_user_id, runtime_identity_id,
-        worker_id, worker_version, account_id, model, config_json,
+        worker_id, configured_worker_id, worker_version, account_id, model, config_json,
         effective_permissions_json, permission_snapshot_json, timeout_ms,
         idempotency_key, status, input_json, created_at, updated_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
-             ?14, ?15, ?16, ?17, ?18, 'created', ?19, ?20, ?20)`,
-  ).bind(
-    assignmentId,
-    target.projectId,
-    target.workspaceId,
-    target.workspaceProjectGrantId,
-    runId,
-    taskId,
-    attemptId,
-    task.requestedByUserId,
-    target.workspaceRuntimeIdentityId,
-    target.workerId,
-    target.workerVersion,
-    target.accountId,
-    target.model,
-    JSON.stringify(task.input ?? {}),
-    JSON.stringify(target.effectivePermissions),
-    JSON.stringify(snapshot),
-    timeoutMs,
-    idempotencyKey,
-    JSON.stringify(task.input ?? {}),
-    now,
-  ).run();
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
+             ?15, ?16, ?17, ?18, ?19, 'created', ?20, ?21, ?21)`,
+  )
+    .bind(
+      assignmentId,
+      target.projectId,
+      target.workspaceId,
+      target.workspaceProjectGrantId,
+      runId,
+      taskId,
+      attemptId,
+      task.requestedByUserId,
+      target.workspaceRuntimeIdentityId,
+      target.workerTypeId,
+      target.configuredWorkerId,
+      target.workerVersion,
+      target.accountId ?? null,
+      target.model,
+      JSON.stringify(task.input ?? {}),
+      JSON.stringify(target.effectivePermissions),
+      JSON.stringify(snapshot),
+      timeoutMs,
+      idempotencyKey,
+      JSON.stringify(task.input ?? {}),
+      now,
+    )
+    .run();
   const workspaceOwner = await env.CONCLAVE_DB.prepare(
     "SELECT owner_user_id FROM execution_workspaces WHERE id = ?1",
-  ).bind(target.workspaceId).first<{ owner_user_id: string }>();
+  )
+    .bind(target.workspaceId)
+    .first<{ owner_user_id: string }>();
   if (workspaceOwner) {
     await recordExecutionWorkspaceAudit(env.CONCLAVE_DB, {
       workspaceId: target.workspaceId,
@@ -302,7 +322,11 @@ async function dispatchV5ProjectAssignment(
       },
     });
   }
-  await env.CONCLAVE_DB.prepare("UPDATE tasks SET status = 'running', updated_at = ?1 WHERE id = ?2").bind(now, taskId).run();
+  await env.CONCLAVE_DB.prepare(
+    "UPDATE tasks SET status = 'running', updated_at = ?1 WHERE id = ?2",
+  )
+    .bind(now, taskId)
+    .run();
   const payload = {
     snapshot: {
       assignmentId,
@@ -321,25 +345,45 @@ async function dispatchV5ProjectAssignment(
       attemptId,
       requestedByUserId: task.requestedByUserId,
       workerId: target.workerId,
+      configuredWorkerId: target.configuredWorkerId,
+      workerTypeId: target.workerTypeId,
       resolvedWorkerVersion: target.workerVersion,
+      credentialProfileId:
+        target.credentialId ?? target.accountId ?? target.configuredWorkerId,
       accountId: target.accountId,
       model: target.model,
       config: task.input ?? {},
       permissions: target.effectivePermissions,
       permissionSnapshot: snapshot,
-      contextRefs: (task.contextArtifactIds ?? []).map((artifactId) => ({ artifactId })),
+      contextRefs: (task.contextArtifactIds ?? []).map((artifactId) => ({
+        artifactId,
+      })),
       timeoutMs,
       idempotencyKey,
     },
     input: task.input ?? {},
   };
   if (!env.CONCLAVE_WORKSPACE_GATEWAY) {
-    const error = "Workspace Gateway is not configured; assignment was not dispatched";
+    const error =
+      "Workspace Gateway is not configured; assignment was not dispatched";
     await recordAssignmentError(env.CONCLAVE_DB, assignmentId, {
-      error: { code: "WORKSPACE_GATEWAY_NOT_CONFIGURED", message: error, retryable: true },
+      error: {
+        code: "WORKSPACE_GATEWAY_NOT_CONFIGURED",
+        message: error,
+        retryable: true,
+      },
       failedAt: now,
     });
-    return { assignmentId, attemptId, workerId: target.workerId, agentId: target.workspaceRuntimeIdentityId, workerCatalogId: target.workerId, status: "failed", accepted: false, error };
+    return {
+      assignmentId,
+      attemptId,
+      workerId: target.workerId,
+      agentId: target.workspaceRuntimeIdentityId,
+      workerCatalogId: target.workerId,
+      status: "failed",
+      accepted: false,
+      error,
+    };
   }
   try {
     const stub = env.CONCLAVE_WORKSPACE_GATEWAY.get(
@@ -360,17 +404,41 @@ async function dispatchV5ProjectAssignment(
         payload,
       }),
     });
-    if (!response.ok) throw new Error((await response.text()) || `Gateway returned HTTP ${response.status}`);
-    await env.CONCLAVE_DB.prepare("UPDATE worker_assignments SET status = 'dispatched', updated_at = ?1 WHERE id = ?2").bind(new Date().toISOString(), assignmentId).run();
+    if (!response.ok)
+      throw new Error(
+        (await response.text()) || `Gateway returned HTTP ${response.status}`,
+      );
+    await env.CONCLAVE_DB.prepare(
+      "UPDATE worker_assignments SET status = 'dispatched', updated_at = ?1 WHERE id = ?2",
+    )
+      .bind(new Date().toISOString(), assignmentId)
+      .run();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await recordAssignmentError(env.CONCLAVE_DB, assignmentId, {
       error: { code: "GATEWAY_DISPATCH_FAILED", message, retryable: true },
       failedAt: new Date().toISOString(),
     });
-    return { assignmentId, attemptId, workerId: target.workerId, agentId: target.workspaceRuntimeIdentityId, workerCatalogId: target.workerId, status: "failed", accepted: false, error: message };
+    return {
+      assignmentId,
+      attemptId,
+      workerId: target.workerId,
+      agentId: target.workspaceRuntimeIdentityId,
+      workerCatalogId: target.workerId,
+      status: "failed",
+      accepted: false,
+      error: message,
+    };
   }
-  return { assignmentId, attemptId, workerId: target.workerId, agentId: target.workspaceRuntimeIdentityId, workerCatalogId: target.workerId, status: "dispatched", accepted: true };
+  return {
+    assignmentId,
+    attemptId,
+    workerId: target.workerId,
+    agentId: target.workspaceRuntimeIdentityId,
+    workerCatalogId: target.workerId,
+    status: "dispatched",
+    accepted: true,
+  };
 }
 
 /**
@@ -671,12 +739,17 @@ export async function recordAssignmentResult(
     await recordV5AssignmentUsage(db, {
       assignmentId,
       inputTokens: Number((result as Record<string, unknown>).inputTokens ?? 0),
-      outputTokens: Number((result as Record<string, unknown>).outputTokens ?? 0),
-      costMicros: (result as Record<string, unknown>).costMicros as number | null | undefined,
+      outputTokens: Number(
+        (result as Record<string, unknown>).outputTokens ?? 0,
+      ),
+      costMicros: (result as Record<string, unknown>).costMicros as
+        number | null | undefined,
       durationMs: Number((result as Record<string, unknown>).durationMs ?? 0),
-      provider: (result as Record<string, unknown>).provider as string | undefined,
+      provider: (result as Record<string, unknown>).provider as
+        string | undefined,
       model: (result as Record<string, unknown>).model as string | undefined,
-      billingCategory: (result as Record<string, unknown>).billingCategory as "subscription" | "api" | "local" | "unknown" | undefined,
+      billingCategory: (result as Record<string, unknown>).billingCategory as
+        "subscription" | "api" | "local" | "unknown" | undefined,
     });
     // 3. Update attempt
     await db

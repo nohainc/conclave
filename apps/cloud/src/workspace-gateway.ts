@@ -88,7 +88,7 @@ export function workspaceAssignmentContextMatches(
   return (
     message.executionWorkspaceId === String(row.execution_workspace_id) &&
     message.workspaceRuntimeId === String(row.runtime_identity_id) &&
-    message.workerId === String(row.worker_id) &&
+    message.workerId === String(row.configured_worker_id ?? row.worker_id) &&
     message.runId === String(row.run_id) &&
     message.taskId === String(row.task_id) &&
     message.attemptId === String(row.attempt_id) &&
@@ -369,6 +369,9 @@ export class WorkspaceGateway implements DurableObject {
       case "worker.status":
         await this.recordWorkerStatus(message.payload);
         return;
+      case "credential.status":
+        await this.recordCredentialStatus(message.payload);
+        return;
       case "checkout.status":
         await this.recordCheckoutStatus(message.payload);
         return;
@@ -402,55 +405,80 @@ export class WorkspaceGateway implements DurableObject {
     const workspaceId = this.executionWorkspaceId;
     if (!workspaceId) return;
     const desiredRows = await this.env.CONCLAVE_DB.prepare(
-      `SELECT d.worker_id, d.version_policy, d.enabled,
-              w.publisher, wv.version, wv.protocol_version,
+      `SELECT b.worker_id AS configured_worker_id,
+              b.desired_version_policy, b.enabled,
+              b.package_status, b.credential_status, b.permissions_status,
+              cw.worker_type_id,
+              wt.display_name, wt.status AS worker_type_status,
+              wv.version, wv.protocol_version,
               wv.supported_os_json, wv.supported_arch_json,
               wv.capabilities_json, wv.permissions_json, wv.package_digest,
-              wv.package_r2_key, wv.signature, wv.entrypoint
-       FROM workspace_worker_desired_state d
-       JOIN workers w ON w.id = d.worker_id AND w.status = 'active'
-       JOIN worker_versions wv ON wv.worker_id = d.worker_id
-        AND wv.is_revoked = 0
-        AND (d.version_policy = 'latest' OR wv.version = d.version_policy)
-       WHERE d.workspace_id = ?1 AND d.enabled = 1
-       ORDER BY d.worker_id, wv.created_at DESC`,
+              wv.package_r2_key, wv.signature, wv.entrypoint,
+              wv.publisher
+       FROM worker_workspace_bindings b
+       JOIN configured_workers cw
+         ON cw.id = b.worker_id AND cw.status = 'active'
+       JOIN workers wt
+         ON wt.id = cw.worker_type_id AND wt.status = 'active'
+       LEFT JOIN worker_versions wv ON wv.worker_id = cw.worker_type_id
+        AND COALESCE(wv.is_revoked, 0) = 0
+        AND (b.desired_version_policy IN ('latest', 'stable')
+          OR wv.version = b.desired_version_policy)
+       WHERE b.workspace_id = ?1 AND b.enabled = 1
+       ORDER BY b.worker_id, wv.created_at DESC`,
     )
       .bind(workspaceId)
       .all<Record<string, unknown>>();
     const seen = new Set<string>();
     const desiredWorkers = (desiredRows.results ?? [])
       .filter((row) => {
-        const workerId = String(row.worker_id);
+        const workerId = String(row.configured_worker_id);
         if (seen.has(workerId)) return false;
         seen.add(workerId);
         return true;
       })
-      .map((row) => ({
-        workerId: String(row.worker_id),
-        version: String(row.version),
-        publisher: String(row.publisher),
-        protocolVersion: String(row.protocol_version),
-        minHostVersion: "0.1.0",
-        packageR2Key: String(row.package_r2_key),
-        packageDigest: String(row.package_digest),
-        signature: String(row.signature),
-        entrypoint: String(row.entrypoint),
-        permissions: jsonArray(row.permissions_json),
-        supportedPlatforms: [
-          ...jsonArray(row.supported_os_json),
-          ...jsonArray(row.supported_arch_json),
-        ],
-        secretEnvironmentVariables: [],
-      }));
+      .map((row) => {
+        const packageAvailable =
+          typeof row.version === "string" &&
+          typeof row.package_r2_key === "string" &&
+          typeof row.package_digest === "string" &&
+          typeof row.signature === "string" &&
+          typeof row.entrypoint === "string";
+        return {
+          workerId: String(row.configured_worker_id),
+          workerTypeId: String(row.worker_type_id),
+          packageWorkerId: String(row.worker_type_id),
+          version: packageAvailable ? String(row.version) : "unavailable",
+          packageAvailable,
+          packageError: packageAvailable
+            ? undefined
+            : "Worker Type package is unavailable",
+          publisher: String(row.publisher ?? "conclave"),
+          protocolVersion: String(row.protocol_version ?? "5.0"),
+          minHostVersion: "0.1.0",
+          packageR2Key: String(row.package_r2_key ?? ""),
+          packageDigest: String(row.package_digest ?? ""),
+          signature: String(row.signature ?? ""),
+          entrypoint: String(row.entrypoint ?? "package.bin"),
+          permissions: jsonArray(row.permissions_json),
+          supportedPlatforms: [
+            ...jsonArray(row.supported_os_json),
+            ...jsonArray(row.supported_arch_json),
+          ],
+          secretEnvironmentVariables: [],
+          credentialStatus: String(row.credential_status ?? "unknown"),
+          permissionsStatus: String(row.permissions_status ?? "unknown"),
+        };
+      });
     const installationRows = await this.env.CONCLAVE_DB.prepare(
-      `SELECT worker_id, resolved_version, status, error, installed_at, updated_at
-       FROM workspace_worker_installations WHERE workspace_id = ?1
-       ORDER BY worker_id`,
+      `SELECT configured_worker_id, resolved_version, status, error, installed_at, updated_at
+       FROM configured_worker_installations WHERE workspace_id = ?1
+       ORDER BY configured_worker_id`,
     )
       .bind(workspaceId)
       .all<Record<string, unknown>>();
     const installedWorkers = (installationRows.results ?? []).map((row) => ({
-      workerId: String(row.worker_id),
+      workerId: String(row.configured_worker_id),
       version: String(row.resolved_version),
       status: String(row.status),
       error: row.error == null ? null : String(row.error),
@@ -477,7 +505,13 @@ export class WorkspaceGateway implements DurableObject {
       payload: {
         desiredWorkers,
         installedWorkers,
-        credentialSetupIntents: [],
+        credentialSetupIntents: desiredWorkers
+          .filter((worker) => worker.credentialStatus === "setup_required")
+          .map((worker) => ({
+            workerId: worker.workerId,
+            workspaceId,
+            status: "requested",
+          })),
         activeAssignmentIds: (assignments.results ?? []).map((row) =>
           String(row.assignment_id),
         ),
@@ -501,37 +535,242 @@ export class WorkspaceGateway implements DurableObject {
       const version = typeof item.version === "string" ? item.version : null;
       const status = typeof item.status === "string" ? item.status : null;
       if (!workerId || !version || !status) continue;
+      const binding = await this.env.CONCLAVE_DB.prepare(
+        `SELECT b.worker_id, b.updated_at, cw.worker_type_id
+         FROM worker_workspace_bindings b
+         JOIN configured_workers cw ON cw.id = b.worker_id
+         WHERE b.worker_id = ?1 AND b.workspace_id = ?2
+           AND b.enabled = 1 AND cw.status = 'active'`,
+      )
+        .bind(workerId, workspaceId)
+        .first<{
+          worker_id: string;
+          updated_at: string;
+          worker_type_id: string;
+        }>();
+      if (!binding) continue;
+      const workerTypeId = binding.worker_type_id;
       const versionRow = await this.env.CONCLAVE_DB.prepare(
         `SELECT id FROM worker_versions
          WHERE worker_id = ?1 AND version = ?2 AND is_revoked = 0`,
       )
-        .bind(workerId, version)
+        .bind(workerTypeId, version)
         .first<{ id: string }>();
-      if (!versionRow) continue;
+      if (!versionRow && version !== "unavailable") continue;
       const normalized = normalizeWorkspaceWorkerInstallationStatus(status);
       const now = new Date().toISOString();
+      const packageStatus =
+        status === "ready"
+          ? "ready"
+          : status === "failed"
+            ? "failed"
+            : status === "absent" || status === "removing"
+              ? "absent"
+              : "installing";
+      const credentialStatus =
+        typeof item.credentialStatus === "string"
+          ? item.credentialStatus
+          : null;
+      const permissionsStatus =
+        typeof item.permissionsStatus === "string"
+          ? item.permissionsStatus
+          : null;
+      const effectiveReadiness =
+        typeof item.effectiveReadiness === "string"
+          ? item.effectiveReadiness
+          : status === "ready" &&
+              credentialStatus === "ready" &&
+              permissionsStatus === "ready"
+            ? "ready"
+            : status === "failed"
+              ? "failed"
+              : "degraded";
       await this.env.CONCLAVE_DB.prepare(
-        `INSERT INTO workspace_worker_installations
-           (id, workspace_id, worker_id, worker_version_id, resolved_version,
-            status, error, installed_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)
-         ON CONFLICT(workspace_id, worker_id) DO UPDATE SET
+        `INSERT INTO configured_worker_installations
+           (id, configured_worker_id, workspace_id, worker_type_id, worker_version_id,
+            resolved_version, status, error, installed_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9)
+         ON CONFLICT(workspace_id, configured_worker_id) DO UPDATE SET
+           worker_type_id = excluded.worker_type_id,
            worker_version_id = excluded.worker_version_id,
            resolved_version = excluded.resolved_version,
            status = excluded.status,
            error = excluded.error,
-           installed_at = COALESCE(workspace_worker_installations.installed_at, excluded.installed_at),
+           installed_at = COALESCE(configured_worker_installations.installed_at, excluded.installed_at),
            updated_at = excluded.updated_at`,
       )
         .bind(
           `installation-${workspaceId}-${workerId}`,
-          workspaceId,
           workerId,
-          versionRow.id,
+          workspaceId,
+          workerTypeId,
+          versionRow?.id ?? null,
           version,
           normalized,
           typeof item.error === "string" ? item.error : null,
           normalized === "ready" ? now : null,
+        )
+        .run();
+      await this.env.CONCLAVE_DB.prepare(
+        `UPDATE worker_workspace_bindings
+         SET package_status = ?1,
+             credential_status = COALESCE(?2, credential_status),
+             permissions_status = COALESCE(?3, permissions_status),
+             local_readiness = ?4,
+             last_seen = ?5,
+             updated_at = ?5
+         WHERE worker_id = ?6 AND workspace_id = ?7`,
+      )
+        .bind(
+          packageStatus,
+          credentialStatus,
+          permissionsStatus,
+          effectiveReadiness,
+          now,
+          workerId,
+          workspaceId,
+        )
+        .run();
+      const activeAssignments = await this.env.CONCLAVE_DB.prepare(
+        `SELECT COUNT(*) AS count FROM worker_assignments
+          WHERE execution_workspace_id = ?1
+            AND configured_worker_id = ?2
+            AND status IN ('created', 'running', 'dispatched')`,
+      )
+        .bind(workspaceId, workerId)
+        .first<{ count: number }>();
+      await this.env.CONCLAVE_DB.prepare(
+        `INSERT INTO configured_worker_observability_metrics
+          (id, configured_worker_id, worker_type_id, workspace_id, ready,
+           package_status, credential_status, permissions_status,
+           active_assignments, auth_failure, convergence_latency_ms, recorded_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`,
+      )
+        .bind(
+          `configured-worker-metric-${crypto.randomUUID()}`,
+          workerId,
+          workerTypeId,
+          workspaceId,
+          effectiveReadiness === "ready" ? 1 : 0,
+          packageStatus,
+          credentialStatus ?? "unknown",
+          permissionsStatus ?? "unknown",
+          Number(activeAssignments?.count ?? 0),
+          credentialStatus === "expired" ||
+            credentialStatus === "error" ||
+            credentialStatus === "setup_required"
+            ? 1
+            : 0,
+          Math.max(0, Date.parse(now) - Date.parse(String(binding.updated_at))),
+          now,
+        )
+        .run();
+    }
+  }
+
+  private async recordCredentialStatus(payload: unknown): Promise<void> {
+    const workspaceId = this.executionWorkspaceId;
+    if (!workspaceId || !payload || typeof payload !== "object") return;
+    const item = payload as Record<string, unknown>;
+    const workerId = typeof item.workerId === "string" ? item.workerId : null;
+    const status = typeof item.status === "string" ? item.status : null;
+    if (!workerId || !status) return;
+    const state =
+      status === "ready"
+        ? "ready"
+        : status === "expired"
+          ? "expired"
+          : status === "needs_auth"
+            ? "setup_required"
+            : "error";
+    const now = new Date().toISOString();
+    const binding = await this.env.CONCLAVE_DB.prepare(
+      `SELECT b.credential_status, b.permissions_status, b.package_status,
+              b.updated_at, cw.worker_type_id
+         FROM worker_workspace_bindings b
+         JOIN configured_workers cw ON cw.id = b.worker_id
+        WHERE b.worker_id = ?1 AND b.workspace_id = ?2
+          AND b.enabled = 1 AND cw.status = 'active'`,
+    )
+      .bind(workerId, workspaceId)
+      .first<{
+        credential_status: string;
+        permissions_status: string;
+        package_status: string;
+        updated_at: string;
+        worker_type_id: string;
+      }>();
+    if (!binding) return;
+    const readiness =
+      state === "ready" &&
+      binding.package_status === "ready" &&
+      binding.permissions_status === "ready"
+        ? "ready"
+        : state === "expired" || state === "error"
+          ? "degraded"
+          : "setup_required";
+    const activeAssignments = await this.env.CONCLAVE_DB.prepare(
+      `SELECT COUNT(*) AS count FROM worker_assignments
+        WHERE execution_workspace_id = ?1
+          AND configured_worker_id = ?2
+          AND status IN ('created', 'running', 'dispatched')`,
+    )
+      .bind(workspaceId, workerId)
+      .first<{ count: number }>();
+    await this.env.CONCLAVE_DB.batch([
+      this.env.CONCLAVE_DB.prepare(
+        `UPDATE workspace_worker_credentials
+            SET state = ?1, updated_at = ?2
+          WHERE worker_id = ?3 AND workspace_id = ?4`,
+      ).bind(state, now, workerId, workspaceId),
+      this.env.CONCLAVE_DB.prepare(
+        `UPDATE worker_workspace_bindings
+            SET credential_status = ?1, local_readiness = ?2,
+                last_seen = ?3, updated_at = ?3
+          WHERE worker_id = ?4 AND workspace_id = ?5`,
+      ).bind(state, readiness, now, workerId, workspaceId),
+      this.env.CONCLAVE_DB.prepare(
+        `INSERT INTO configured_worker_observability_metrics
+          (id, configured_worker_id, worker_type_id, workspace_id, ready,
+           package_status, credential_status, permissions_status,
+           active_assignments, auth_failure, convergence_latency_ms, recorded_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`,
+      ).bind(
+        `configured-worker-metric-${crypto.randomUUID()}`,
+        workerId,
+        binding.worker_type_id,
+        workspaceId,
+        state === "ready" &&
+          binding.package_status === "ready" &&
+          binding.permissions_status === "ready"
+          ? 1
+          : 0,
+        binding.package_status,
+        state,
+        binding.permissions_status,
+        Number(activeAssignments?.count ?? 0),
+        state === "expired" || state === "error" || state === "setup_required"
+          ? 1
+          : 0,
+        Math.max(0, Date.parse(now) - Date.parse(String(binding.updated_at))),
+        now,
+      ),
+    ]);
+    if (state === "ready" && binding.credential_status !== "ready") {
+      await this.env.CONCLAVE_DB.prepare(
+        `INSERT INTO configured_worker_audit_log
+          (id, configured_worker_id, workspace_id, actor_type, actor_id,
+           action, target_id, details_json, created_at)
+         VALUES (?1, ?2, ?3, 'workspace_runtime', ?4, 'worker.credential.ready', ?5, ?6, ?7)`,
+      )
+        .bind(
+          `configured-worker-audit-${crypto.randomUUID()}`,
+          workerId,
+          workspaceId,
+          workspaceId,
+          `${workerId}:${workspaceId}`,
+          JSON.stringify({ status }),
+          now,
         )
         .run();
     }
@@ -677,48 +916,64 @@ export class WorkspaceGateway implements DurableObject {
       )
       .run();
     const changed = value.changed === true;
-    const revision = typeof value.headRevision === "string" ? value.headRevision : null;
-    const workRequestId = typeof value.workRequestId === "string" ? value.workRequestId : null;
+    const revision =
+      typeof value.headRevision === "string" ? value.headRevision : null;
+    const workRequestId =
+      typeof value.workRequestId === "string" ? value.workRequestId : null;
     if (status === "checkpointed" && changed && revision && workRequestId) {
       const sequence = await this.env.CONCLAVE_DB.prepare(
         "SELECT COALESCE(MAX(sequence), 0) + 1 AS nextSequence FROM workstream_checkpoints WHERE checkout_id = ?1",
-      ).bind(checkoutId).first<{ nextSequence: number }>();
+      )
+        .bind(checkoutId)
+        .first<{ nextSequence: number }>();
       const checkpointId = `checkpoint-${crypto.randomUUID()}`;
       await this.env.CONCLAVE_DB.prepare(
         `INSERT INTO workstream_checkpoints
          (id, workstream_id, checkout_id, sequence, revision, summary, created_by_work_request_id, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
-      ).bind(
-        checkpointId,
-        String(checkout.workstreamId),
-        checkoutId,
-        sequence?.nextSequence ?? 1,
-        revision,
-        changed ? "Managed Workstream checkpoint" : "No-change Workstream result",
-        workRequestId,
-        now,
-      ).run();
+      )
+        .bind(
+          checkpointId,
+          String(checkout.workstreamId),
+          checkoutId,
+          sequence?.nextSequence ?? 1,
+          revision,
+          changed
+            ? "Managed Workstream checkpoint"
+            : "No-change Workstream result",
+          workRequestId,
+          now,
+        )
+        .run();
       await this.env.CONCLAVE_DB.prepare(
         `INSERT INTO workstream_current_checkpoints (workstream_id, checkpoint_id, updated_at)
          VALUES (?1, ?2, ?3)
          ON CONFLICT(workstream_id) DO UPDATE SET checkpoint_id = excluded.checkpoint_id, updated_at = excluded.updated_at`,
-      ).bind(String(checkout.workstreamId), checkpointId, now).run();
+      )
+        .bind(String(checkout.workstreamId), checkpointId, now)
+        .run();
     }
     if (revision && typeof value.diff === "string" && value.diff.length > 0) {
       await this.env.CONCLAVE_DB.prepare(
         `INSERT INTO workstream_diff_artifacts
          (id, workstream_id, checkout_id, work_request_id, revision, outcome, diff_text, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
-      ).bind(
-        `diff-${crypto.randomUUID()}`,
-        String(checkout.workstreamId),
-        checkoutId,
-        workRequestId,
-        revision,
-        status === "checkpointed" ? "success" : status === "rolled_back" ? "cancelled" : "failure",
-        String(value.diff).slice(0, 64 * 1024),
-        now,
-      ).run();
+      )
+        .bind(
+          `diff-${crypto.randomUUID()}`,
+          String(checkout.workstreamId),
+          checkoutId,
+          workRequestId,
+          revision,
+          status === "checkpointed"
+            ? "success"
+            : status === "rolled_back"
+              ? "cancelled"
+              : "failure",
+          String(value.diff).slice(0, 64 * 1024),
+          now,
+        )
+        .run();
     }
     await createEventPublisher(this.env).publish({
       type: "workstream.checkout.status",
@@ -743,7 +998,7 @@ export class WorkspaceGateway implements DurableObject {
     };
     const row = await this.env.CONCLAVE_DB.prepare(
       `SELECT wa.id, wa.execution_workspace_id, wa.runtime_identity_id,
-              wa.worker_id, wa.run_id, wa.task_id, wa.attempt_id,
+              wa.worker_id, wa.configured_worker_id, wa.run_id, wa.task_id, wa.attempt_id,
               wa.idempotency_key, wa.status
        FROM worker_assignments wa
        JOIN workspace_project_grants g

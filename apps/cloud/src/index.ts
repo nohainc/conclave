@@ -99,13 +99,23 @@ const routeHandlers = {
   handleSetHostDesiredState: handlers.handleSetHostDesiredState,
   handleListWorkerCatalog: handlers.handleListWorkerCatalog,
   handleGetWorkerCatalog: handlers.handleGetWorkerCatalog,
-  handleListCredentialProfiles: handlers.handleListCredentialProfiles,
-  handleCreateCredentialProfile: handlers.handleCreateCredentialProfile,
-  handleUpdateCredentialProfile: handlers.handleUpdateCredentialProfile,
-  handleRevokeCredentialProfile: handlers.handleRevokeCredentialProfile,
-  handleCreateCredentialSetupIntent: handlers.handleCreateCredentialSetupIntent,
-  handleCreateCredentialGrant: handlers.handleCreateCredentialGrant,
-  handleRevokeCredentialGrant: handlers.handleRevokeCredentialGrant,
+  handleListConfiguredWorkers: handlers.handleListConfiguredWorkers,
+  handleConfiguredWorkerObservability:
+    handlers.handleConfiguredWorkerObservability,
+  handleCreateConfiguredWorker: handlers.handleCreateConfiguredWorker,
+  handleGetConfiguredWorker: handlers.handleGetConfiguredWorker,
+  handleUpdateConfiguredWorker: handlers.handleUpdateConfiguredWorker,
+  handleRevokeConfiguredWorker: handlers.handleRevokeConfiguredWorker,
+  handleListConfiguredWorkerWorkspaces:
+    handlers.handleListConfiguredWorkerWorkspaces,
+  handleUpdateConfiguredWorkerWorkspaces:
+    handlers.handleUpdateConfiguredWorkerWorkspaces,
+  handleConfiguredWorkerWorkspaceSetup:
+    handlers.handleConfiguredWorkerWorkspaceSetup,
+  handleGetConfiguredWorkerWorkspaceCredential:
+    handlers.handleGetConfiguredWorkerWorkspaceCredential,
+  handleRevokeConfiguredWorkerWorkspaceCredential:
+    handlers.handleRevokeConfiguredWorkerWorkspaceCredential,
   handleSetWorkspaceWorkerAvailability:
     handlers.handleSetWorkspaceWorkerAvailability,
   handleSetWorkspaceDesiredWorkerState:

@@ -1,5 +1,11 @@
 # Conclave AX Architecture v5 — Project-Centric Workspaces
 
+> Historical vocabulary note: ADR-010 and EW-0 supersede this document's
+> user-facing AI Account/Credential Profile model. Those terms remain here to
+> describe the v5 implementation baseline; the active product model is
+> Execution → Workspaces + configured Workers, with credential state beneath
+> Workers.
+
 **Status:** Normative
 **Date:** 2026-09-24
 **Supersedes:** Architecture v4 Host + Worker model

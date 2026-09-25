@@ -1,6 +1,6 @@
 # ADR-010: Configured Worker as the User-Facing Execution Identity
 
-**Status:** Proposed  
+**Status:** Accepted
 **Date:** 2026-09-25  
 **Builds on:** ADR-008, ADR-009, Architecture v6
 
@@ -42,6 +42,17 @@ Execution
 ~~~
 
 There is no standalone **AI Accounts** primary product surface.
+
+This vocabulary is frozen by EW-0. **Execution** is the top-level product
+area; **Workspaces** and **Workers** are its primary user-facing resources.
+AI Account, Credential Profile, connection, and local credential records are
+implementation/security terms beneath a Worker, not peer user resources.
+
+EW-13 closes the migration boundary: the application exposes no AI Account
+navigation, setup wizard, or standalone account API routes. Credential setup
+and reauthentication are reached from a configured Worker Workspace binding;
+the underlying metadata remains internal where required for runtime security,
+provider policy, audit, and accounting.
 
 ### Workspace
 
@@ -255,3 +266,14 @@ The previous ADR-004 choice remains valid historical context, but v6 product nee
 ## Core product invariant
 
 > **Workspace is where AI can work. Worker is the configured AI/tool identity that can work. Project and Workstream define what it works on. Credential and package state are implementation details beneath those concepts.**
+
+## EW-0 frozen invariants
+
+- Worker Type is catalog/infrastructure, not a configured user resource.
+- A Worker has exactly one logical external AI identity.
+- A Worker may bind to multiple Workspaces.
+- A Workspace may host multiple Workers.
+- Multiple Workers may use the same Worker Type.
+- Credential material remains local to each Workspace where required.
+- A Worker has no single mandatory role; Workflows select Workers by role and
+  capability.

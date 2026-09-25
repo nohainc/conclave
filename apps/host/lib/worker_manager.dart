@@ -131,7 +131,10 @@ class WorkerManager {
     final desiredWorkerVersions = <String, String>{};
     for (final item in desired) {
       final workerId = item['workerId'];
+      final packageWorkerId = item['packageWorkerId'];
       final version = item['version'];
+      final packageAvailable = item['packageAvailable'];
+      final packageError = item['packageError'];
       final publisher = item['publisher'];
       final packageR2Key = item['packageR2Key'];
       final digest = item['packageDigest'];
@@ -149,6 +152,18 @@ class WorkerManager {
           signature is! String ||
           permissions is! List) {
         throw StateError('Cloud returned an invalid desired worker');
+      }
+      if (packageAvailable == false) {
+        await _reportStatus(
+          onStatus,
+          workerId,
+          version,
+          'failed',
+          error: packageError is String
+              ? packageError
+              : 'Worker Type package is unavailable',
+        );
+        continue;
       }
       _validatePathComponent(workerId, 'worker id');
       _validatePathComponent(version, 'worker version');
@@ -172,7 +187,11 @@ class WorkerManager {
           previousVersion == null ? 'requested' : 'updating',
         );
         await _reportStatus(onStatus, workerId, version, 'downloading');
-        final bytes = await download(workerId, version, packageR2Key);
+        final bytes = await download(
+          packageWorkerId is String ? packageWorkerId : workerId,
+          version,
+          packageR2Key,
+        );
         await _reportStatus(onStatus, workerId, version, 'verifying');
         await _reportStatus(onStatus, workerId, version, 'installing');
         await install(WorkerPackage(

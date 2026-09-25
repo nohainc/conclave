@@ -8,14 +8,12 @@ class HomePage extends StatelessWidget {
     required this.projects,
     required this.hosts,
     required this.workers,
-    required this.accounts,
     required this.run,
     required this.openFindingCount,
     required this.usageTokens,
     required this.usageCostMicros,
     required this.onOpenHosts,
     required this.onOpenWorkers,
-    required this.onOpenAccounts,
     required this.onOpenUsage,
     required this.onOpenProject,
     required this.onOpenChat,
@@ -27,14 +25,12 @@ class HomePage extends StatelessWidget {
   final List<StudioProject> projects;
   final List<StudioAgent> hosts;
   final List<StudioWorker> workers;
-  final List<StudioCredentialProfile> accounts;
   final StudioRun? run;
   final int openFindingCount;
   final int usageTokens;
   final int usageCostMicros;
   final VoidCallback onOpenHosts;
   final VoidCallback onOpenWorkers;
-  final VoidCallback onOpenAccounts;
   final VoidCallback onOpenUsage;
   final ValueChanged<String> onOpenProject;
   final void Function(String projectId, String chatId) onOpenChat;
@@ -49,7 +45,6 @@ class HomePage extends StatelessWidget {
       ? _GettingStarted(
           onOpenHosts: onOpenHosts,
           onOpenWorkers: onOpenWorkers,
-          onOpenAccounts: onOpenAccounts,
           onCreateProject: onCreateProject,
           onOpenArchivedProjects: onOpenArchivedProjects,
         )
@@ -57,14 +52,12 @@ class HomePage extends StatelessWidget {
           projects: projects,
           hosts: hosts,
           workers: workers,
-          accounts: accounts,
           run: run,
           openFindingCount: openFindingCount,
           usageTokens: usageTokens,
           usageCostMicros: usageCostMicros,
           onOpenHosts: onOpenHosts,
           onOpenWorkers: onOpenWorkers,
-          onOpenAccounts: onOpenAccounts,
           onOpenUsage: onOpenUsage,
           onOpenProject: onOpenProject,
           onOpenChat: onOpenChat,
@@ -77,14 +70,12 @@ class _GettingStarted extends StatelessWidget {
   const _GettingStarted({
     required this.onOpenHosts,
     required this.onOpenWorkers,
-    required this.onOpenAccounts,
     required this.onCreateProject,
     required this.onOpenArchivedProjects,
   });
 
   final VoidCallback onOpenHosts;
   final VoidCallback onOpenWorkers;
-  final VoidCallback onOpenAccounts;
   final VoidCallback onCreateProject;
   final VoidCallback onOpenArchivedProjects;
 
@@ -115,18 +106,12 @@ class _GettingStarted extends StatelessWidget {
               onPressed: onOpenWorkers),
           _SetupStep(
               number: '3',
-              title: 'AI Account',
-              detail: 'Connect an Account privately or use a shared one.',
-              action: 'Open Accounts',
-              onPressed: onOpenAccounts),
-          _SetupStep(
-              number: '4',
               title: 'Project',
               detail: 'Create a Project to organize your work.',
               action: 'Create project',
               onPressed: onCreateProject),
           _SetupStep(
-              number: '5',
+              number: '4',
               title: 'Archived Projects',
               detail: 'Restore a Project that was archived earlier.',
               action: 'View archived',
@@ -186,14 +171,12 @@ class _EstablishedHome extends StatelessWidget {
     required this.projects,
     required this.hosts,
     required this.workers,
-    required this.accounts,
     required this.run,
     required this.openFindingCount,
     required this.usageTokens,
     required this.usageCostMicros,
     required this.onOpenHosts,
     required this.onOpenWorkers,
-    required this.onOpenAccounts,
     required this.onOpenUsage,
     required this.onOpenProject,
     required this.onOpenChat,
@@ -204,14 +187,12 @@ class _EstablishedHome extends StatelessWidget {
   final List<StudioProject> projects;
   final List<StudioAgent> hosts;
   final List<StudioWorker> workers;
-  final List<StudioCredentialProfile> accounts;
   final StudioRun? run;
   final int openFindingCount;
   final int usageTokens;
   final int usageCostMicros;
   final VoidCallback onOpenHosts;
   final VoidCallback onOpenWorkers;
-  final VoidCallback onOpenAccounts;
   final VoidCallback onOpenUsage;
   final ValueChanged<String> onOpenProject;
   final void Function(String projectId, String chatId) onOpenChat;
@@ -282,7 +263,6 @@ class _EstablishedHome extends StatelessWidget {
         final cards = [
           _MetricCard('Workspaces', '${hosts.length}', onOpenHosts),
           _MetricCard('Workers', '${workers.length}', onOpenWorkers),
-          _MetricCard('Accounts', '${accounts.length}', onOpenAccounts),
           _MetricCard('Usage', _formatTokens(usageTokens), onOpenUsage),
         ];
         return constraints.maxWidth < 620

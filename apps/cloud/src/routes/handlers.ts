@@ -178,6 +178,46 @@ async function recordAudit(
   }
 }
 
+async function recordConfiguredWorkerAudit(
+  env: SecurityEnv,
+  input: {
+    workerId: string;
+    workspaceId?: string | null;
+    actorType: "user" | "workspace_runtime" | "system";
+    actorId: string;
+    action:
+      | "worker.created"
+      | "worker.updated"
+      | "worker.revoked"
+      | "worker.workspace.bound"
+      | "worker.workspace.unbound"
+      | "worker.credential.setup_requested"
+      | "worker.credential.ready"
+      | "worker.credential.revoked";
+    targetId: string;
+    details?: Record<string, unknown>;
+  },
+): Promise<void> {
+  await env.CONCLAVE_DB.prepare(
+    `INSERT INTO configured_worker_audit_log
+      (id, configured_worker_id, workspace_id, actor_type, actor_id, action,
+       target_id, details_json, created_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+  )
+    .bind(
+      `configured-worker-audit-${crypto.randomUUID()}`,
+      input.workerId,
+      input.workspaceId ?? null,
+      input.actorType,
+      input.actorId,
+      input.action,
+      input.targetId,
+      JSON.stringify(input.details ?? {}),
+      new Date().toISOString(),
+    )
+    .run();
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Workflow operation failed";
 }
@@ -643,7 +683,8 @@ async function handleRunRequest(
     throw new HttpError(400, "commitSha must be a hexadecimal Git commit SHA");
   }
   let workflowVersion: WorkflowVersion | undefined;
-  const workflowVersionValue = body.workflowVersionSnapshot ?? body.workflowVersion;
+  const workflowVersionValue =
+    body.workflowVersionSnapshot ?? body.workflowVersion;
   if (workflowVersionValue && typeof workflowVersionValue === "object") {
     try {
       workflowVersion = workflowVersionValue as WorkflowVersion;
@@ -2144,7 +2185,9 @@ async function handleListProjects(
         name: row.name,
         description: row.description,
         instructions:
-          typeof settings.instructions === "string" ? settings.instructions : "",
+          typeof settings.instructions === "string"
+            ? settings.instructions
+            : "",
         defaultExecutionPolicy:
           typeof settings.defaultExecutionPolicy === "string"
             ? settings.defaultExecutionPolicy
@@ -2274,19 +2317,21 @@ async function handleCreateProject(
     ]);
     return json(
       {
-      project: {
-        id,
-        name,
-        description,
-        instructions:
-          typeof settings.instructions === "string" ? settings.instructions : "",
-        defaultExecutionPolicy:
-          typeof settings.defaultExecutionPolicy === "string"
-            ? settings.defaultExecutionPolicy
-            : "balanced",
-        settings,
-        createdAt: now,
-        updatedAt: now,
+        project: {
+          id,
+          name,
+          description,
+          instructions:
+            typeof settings.instructions === "string"
+              ? settings.instructions
+              : "",
+          defaultExecutionPolicy:
+            typeof settings.defaultExecutionPolicy === "string"
+              ? settings.defaultExecutionPolicy
+              : "balanced",
+          settings,
+          createdAt: now,
+          updatedAt: now,
         },
       },
       { status: 201 },
@@ -2434,7 +2479,9 @@ async function handleUpdateProject(
     createdAt: existing.createdAt,
     updatedAt: now,
   };
-  if (project.name.trim().toLowerCase() !== existing.name.trim().toLowerCase()) {
+  if (
+    project.name.trim().toLowerCase() !== existing.name.trim().toLowerCase()
+  ) {
     const duplicate = await env.CONCLAVE_DB.prepare(
       `SELECT id FROM projects
        WHERE owner_user_id = ?1 AND id <> ?2
@@ -2502,12 +2549,9 @@ async function handleDeleteProject(
         error instanceof Error ? error.message : "Forbidden",
       );
     }
-    const workstreamFilter =
-      "SELECT id FROM workstreams WHERE project_id = ?1";
-    const workRequestFilter =
-      `SELECT id FROM work_requests WHERE workstream_id IN (${workstreamFilter})`;
-    const workflowTaskFilter =
-      `SELECT id FROM workflow_tasks WHERE work_request_id IN (${workRequestFilter})`;
+    const workstreamFilter = "SELECT id FROM workstreams WHERE project_id = ?1";
+    const workRequestFilter = `SELECT id FROM work_requests WHERE workstream_id IN (${workstreamFilter})`;
+    const workflowTaskFilter = `SELECT id FROM workflow_tasks WHERE work_request_id IN (${workRequestFilter})`;
     // D1 batches do not make the failing statement obvious to the client. Keep
     // this order explicit and execute each statement in sequence so restrictive
     // v6 foreign keys are removed before their parents.
@@ -2703,7 +2747,10 @@ async function handleCreateProjectInvitation(
     .bind(projectId, email)
     .first<{ id: string }>();
   if (existingInvitation) {
-    throw new HttpError(409, "A pending invitation already exists for this user");
+    throw new HttpError(
+      409,
+      "A pending invitation already exists for this user",
+    );
   }
   const now = new Date();
   const id = `pinv-${crypto.randomUUID()}`;
@@ -3341,7 +3388,9 @@ async function handleCreateChatMessage(
 // V6 Workstream Discuss / Work API
 // =========================================================================
 
-function workstreamMetadata(row: Record<string, unknown>): Record<string, unknown> {
+function workstreamMetadata(
+  row: Record<string, unknown>,
+): Record<string, unknown> {
   const accessPolicy = parseJson<Record<string, unknown>>(
     row.accessPolicyJson ?? row.access_policy_json,
     {},
@@ -3354,7 +3403,9 @@ function workstreamMetadata(row: Record<string, unknown>): Record<string, unknow
     lead: row.leadUserId ?? row.lead_user_id ?? null,
     accessPolicy,
     primaryWorkspace:
-      accessPolicy.primaryWorkspaceId ?? accessPolicy.primary_workspace_id ?? null,
+      accessPolicy.primaryWorkspaceId ??
+      accessPolicy.primary_workspace_id ??
+      null,
     currentCheckpoint: null,
     queueStatus: "Idle",
     createdAt: String(row.createdAt ?? row.created_at),
@@ -3396,7 +3447,13 @@ export async function handleListProjectWorkstreams(
   projectId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  await authorizeRequest(request, env, "project:read", projectId, accessContext);
+  await authorizeRequest(
+    request,
+    env,
+    "project:read",
+    projectId,
+    accessContext,
+  );
   const projectRow = await env.CONCLAVE_DB.prepare(
     `SELECT settings_json AS settingsJson FROM projects WHERE id = ?1`,
   )
@@ -3461,7 +3518,14 @@ export async function handleCreateWorkstream(
       `INSERT INTO workstreams
        (id, project_id, name, status, access_policy_json, lead_user_id, created_at, updated_at)
        VALUES (?1, ?2, ?3, 'active', ?4, ?5, ?6, ?6)`,
-    ).bind(id, projectId, name, JSON.stringify(accessPolicy), context.userId, now),
+    ).bind(
+      id,
+      projectId,
+      name,
+      JSON.stringify(accessPolicy),
+      context.userId,
+      now,
+    ),
     env.CONCLAVE_DB.prepare(
       `INSERT INTO workstream_memberships
        (workstream_id, user_id, role, created_at)
@@ -3503,10 +3567,14 @@ export async function handleUpdateWorkstream(
     unknown
   >;
   const name =
-    body.name === undefined ? workstream.name : requiredString(body.name, "name");
+    body.name === undefined
+      ? workstream.name
+      : requiredString(body.name, "name");
   const status =
     body.status === undefined ? workstream.status : String(body.status);
-  if (!["active", "paused", "blocked", "completed", "archived"].includes(status)) {
+  if (
+    !["active", "paused", "blocked", "completed", "archived"].includes(status)
+  ) {
     throw new HttpError(400, "Unsupported Workstream status");
   }
   const accessPolicy =
@@ -4165,11 +4233,15 @@ async function handleCreateWorkRequest(
     ),
   ]);
   if (mode === "stateful" && env.CONCLAVE_WORKSTREAM_COORDINATOR) {
-    const coordinator = env.CONCLAVE_WORKSTREAM_COORDINATOR.getByName(workstreamId);
+    const coordinator =
+      env.CONCLAVE_WORKSTREAM_COORDINATOR.getByName(workstreamId);
     const response = await coordinator.fetch(
       new Request("https://workstream-coordinator/enqueue", {
         method: "POST",
-        headers: { "content-type": "application/json", "x-workstream-id": workstreamId },
+        headers: {
+          "content-type": "application/json",
+          "x-workstream-id": workstreamId,
+        },
         body: JSON.stringify({ workRequestId: workRequest.id }),
       }),
     );
@@ -4194,16 +4266,34 @@ async function handleCancelWorkRequest(
 ): Promise<Response> {
   const row = await env.CONCLAVE_DB.prepare(
     "SELECT workstream_id AS workstreamId, mode, status FROM work_requests WHERE id = ?1",
-  ).bind(workRequestId).first<{ workstreamId: string; mode: string; status: string }>();
+  )
+    .bind(workRequestId)
+    .first<{ workstreamId: string; mode: string; status: string }>();
   if (!row) throw new HttpError(404, "Work Request not found");
-  if (row.mode !== "stateful") throw new HttpError(400, "Only stateful Work Requests can be cancelled here");
-  await authorizeWorkstreamAccess(request, env, row.workstreamId, "execute", accessContext);
-  if (!env.CONCLAVE_WORKSTREAM_COORDINATOR) throw new HttpError(503, "Workstream execution coordinator unavailable");
-  const coordinator = env.CONCLAVE_WORKSTREAM_COORDINATOR.getByName(row.workstreamId);
+  if (row.mode !== "stateful")
+    throw new HttpError(
+      400,
+      "Only stateful Work Requests can be cancelled here",
+    );
+  await authorizeWorkstreamAccess(
+    request,
+    env,
+    row.workstreamId,
+    "execute",
+    accessContext,
+  );
+  if (!env.CONCLAVE_WORKSTREAM_COORDINATOR)
+    throw new HttpError(503, "Workstream execution coordinator unavailable");
+  const coordinator = env.CONCLAVE_WORKSTREAM_COORDINATOR.getByName(
+    row.workstreamId,
+  );
   return coordinator.fetch(
     new Request("https://workstream-coordinator/cancel", {
       method: "POST",
-      headers: { "content-type": "application/json", "x-workstream-id": row.workstreamId },
+      headers: {
+        "content-type": "application/json",
+        "x-workstream-id": row.workstreamId,
+      },
       body: JSON.stringify({ workRequestId }),
     }),
   );
@@ -4511,7 +4601,8 @@ async function handleListHosts(
           capabilitiesJson: "[]",
           enrolledAt: workspace.createdAt,
           lastHeartbeatAt: null,
-          revokedAt: workspace.status === "revoked" ? workspace.updatedAt : null,
+          revokedAt:
+            workspace.status === "revoked" ? workspace.updatedAt : null,
           createdAt: workspace.createdAt,
           updatedAt: workspace.updatedAt,
           desiredWorkers: [],
@@ -5617,6 +5708,975 @@ async function handleCreateV5Account(
   );
 }
 
+type ConfiguredWorkerRow = Record<string, unknown>;
+
+function configuredWorkerBindingMetadata(
+  row: ConfiguredWorkerRow,
+): Record<string, unknown> {
+  const packageStatus = String(row.package_status ?? "absent");
+  const credentialStatus = String(
+    row.credential_status ?? row.credential_state ?? "unknown",
+  );
+  const permissionsStatus = String(row.permissions_status ?? "unknown");
+  const localReadiness = String(row.local_readiness ?? "unknown");
+  const nextActions: string[] = [];
+  if (row.workspace_status === "offline") nextActions.push("workspace_online");
+  if (packageStatus !== "ready") nextActions.push("install_worker");
+  if (credentialStatus !== "ready") nextActions.push("setup_credentials");
+  if (permissionsStatus !== "ready") nextActions.push("approve_permissions");
+  return {
+    workspaceId: String(row.workspace_id),
+    workspaceName: String(row.workspace_name ?? ""),
+    workspaceStatus: String(row.workspace_status ?? "unknown"),
+    enabled: Boolean(row.enabled),
+    desiredVersionPolicy: String(row.desired_version_policy ?? "stable"),
+    localReadiness,
+    packageStatus,
+    credentialStatus,
+    permissionsStatus,
+    lastSeen: row.last_seen == null ? null : String(row.last_seen),
+    updatedAt: String(row.binding_updated_at ?? row.updated_at ?? ""),
+    nextActions,
+  };
+}
+
+function configuredWorkerMetadata(
+  row: ConfiguredWorkerRow,
+  bindings: readonly ConfiguredWorkerRow[] = [],
+): Record<string, unknown> {
+  const bindingMetadata = bindings.map(configuredWorkerBindingMetadata);
+  const nextActions = new Set<string>();
+  for (const binding of bindingMetadata) {
+    for (const action of (binding.nextActions as string[]) ?? []) {
+      nextActions.add(action);
+    }
+  }
+  if (bindingMetadata.length === 0) nextActions.add("bind_workspace");
+  return {
+    id: String(row.id),
+    ownerUserId: String(row.owner_user_id),
+    name: String(row.name),
+    workerTypeId: String(row.worker_type_id),
+    workerType: {
+      id: String(row.worker_type_id),
+      displayName: String(row.worker_type_display_name ?? ""),
+      status: String(row.worker_type_status ?? "unknown"),
+    },
+    status: String(row.status),
+    defaultModel: row.default_model == null ? null : String(row.default_model),
+    config: parseJson(row.config_json, {}),
+    concurrencyLimit: Number(row.concurrency_limit),
+    costMetadata: parseJson(row.cost_metadata_json, null),
+    preferredRoles: parseJson(row.preferred_roles_json, []),
+    allowedRoles: parseJson(row.allowed_roles_json, []),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+    workspaces: bindingMetadata,
+    nextActions: [...nextActions],
+  };
+}
+
+async function loadConfiguredWorker(
+  env: SecurityEnv,
+  workerId: string,
+  ownerUserId?: string,
+): Promise<{
+  worker: ConfiguredWorkerRow;
+  bindings: ConfiguredWorkerRow[];
+} | null> {
+  const worker = await env.CONCLAVE_DB.prepare(
+    `SELECT cw.*, wt.display_name AS worker_type_display_name,
+            wt.status AS worker_type_status
+       FROM configured_workers cw
+       JOIN workers wt ON wt.id = cw.worker_type_id
+      WHERE cw.id = ?1${ownerUserId ? " AND cw.owner_user_id = ?2" : ""}`,
+  )
+    .bind(...(ownerUserId ? [workerId, ownerUserId] : [workerId]))
+    .first<ConfiguredWorkerRow>();
+  if (!worker) return null;
+  const bindings = await env.CONCLAVE_DB.prepare(
+    `SELECT b.*, ew.name AS workspace_name, ew.status AS workspace_status,
+            c.state AS credential_state
+       FROM worker_workspace_bindings b
+       JOIN execution_workspaces ew ON ew.id = b.workspace_id
+       LEFT JOIN workspace_worker_credentials c
+         ON c.worker_id = b.worker_id AND c.workspace_id = b.workspace_id
+      WHERE b.worker_id = ?1
+      ORDER BY ew.name, ew.id`,
+  )
+    .bind(workerId)
+    .all<ConfiguredWorkerRow>();
+  return { worker, bindings: bindings.results ?? [] };
+}
+
+async function authorizeConfiguredWorkerOwner(
+  env: SecurityEnv,
+  context: SecurityContext,
+  workerId: string,
+): Promise<{ worker: ConfiguredWorkerRow; bindings: ConfiguredWorkerRow[] }> {
+  const result = await loadConfiguredWorker(env, workerId, context.userId);
+  if (!result) throw new HttpError(404, "Configured Worker not found");
+  return result;
+}
+
+function configuredWorkerStringArray(
+  value: unknown,
+  field: string,
+): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new HttpError(400, `${field} must be an array of strings`);
+  }
+  return [...new Set(value.map((item) => String(item).trim()).filter(Boolean))];
+}
+
+function configuredWorkerObject(
+  value: unknown,
+  field: string,
+): Record<string, unknown> {
+  if (value === undefined) return {};
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new HttpError(400, `${field} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function configuredWorkerAuthStrategy(body: Record<string, unknown>): {
+  authType: string;
+  sharingPolicy: string;
+  providerMetadata: Record<string, unknown>;
+} {
+  const strategy = configuredWorkerObject(body.authStrategy, "authStrategy");
+  const authType = String(strategy.authType ?? body.authType ?? "none");
+  const sharingPolicy = String(
+    strategy.sharingPolicy ?? body.sharingPolicy ?? "private_only",
+  );
+  if (
+    !["none", "api_key", "oauth", "session_token", "local"].includes(authType)
+  ) {
+    throw new HttpError(400, "Unsupported Worker authentication type");
+  }
+  if (!["private_only", "explicit_project"].includes(sharingPolicy)) {
+    throw new HttpError(400, "Unsupported Worker credential sharing policy");
+  }
+  const providerMetadata = assertSafeProviderMetadata(
+    strategy.providerMetadata ?? body.providerMetadata,
+  );
+  return { authType, sharingPolicy, providerMetadata };
+}
+
+async function validateOwnedWorkspaces(
+  env: SecurityEnv,
+  context: SecurityContext,
+  workspaceIds: readonly string[],
+): Promise<void> {
+  if (new Set(workspaceIds).size !== workspaceIds.length) {
+    throw new HttpError(409, "Workspace IDs must be unique");
+  }
+  for (const workspaceId of workspaceIds) {
+    const workspace = await env.CONCLAVE_DB.prepare(
+      `SELECT id FROM execution_workspaces
+       WHERE id = ?1 AND owner_user_id = ?2 AND status <> 'revoked'`,
+    )
+      .bind(workspaceId, context.userId)
+      .first();
+    if (!workspace)
+      throw new HttpError(404, `Workspace ${workspaceId} not found`);
+  }
+}
+
+function configuredWorkerWorkspaceIds(body: Record<string, unknown>): string[] {
+  const value = body.workspaceIds;
+  if (value === undefined) return [];
+  const ids = configuredWorkerStringArray(value, "workspaceIds");
+  return ids ?? [];
+}
+
+function configuredWorkerBindingValues(
+  workerId: string,
+  workspaceId: string,
+  desiredVersionPolicy: string,
+  auth: ReturnType<typeof configuredWorkerAuthStrategy>,
+  now: string,
+): [unknown[], unknown[]] {
+  const credentialStatus =
+    auth.authType === "none" ? "ready" : "setup_required";
+  const localReadiness =
+    auth.authType === "none" ? "degraded" : "setup_required";
+  return [
+    [
+      workerId,
+      workspaceId,
+      desiredVersionPolicy,
+      localReadiness,
+      "absent",
+      credentialStatus,
+      "unknown",
+      now,
+    ],
+    [
+      `credential-${crypto.randomUUID().slice(0, 16)}`,
+      workerId,
+      workspaceId,
+      auth.authType,
+      auth.sharingPolicy,
+      JSON.stringify(auth.providerMetadata),
+      null,
+      credentialStatus,
+      now,
+      now,
+    ],
+  ];
+}
+
+export async function handleListConfiguredWorkers(
+  request: Request,
+  env: SecurityEnv,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  const rows = await env.CONCLAVE_DB.prepare(
+    `SELECT cw.*, wt.display_name AS worker_type_display_name,
+            wt.status AS worker_type_status
+       FROM configured_workers cw
+       JOIN workers wt ON wt.id = cw.worker_type_id
+      WHERE cw.owner_user_id = ?1
+      ORDER BY cw.name, cw.id`,
+  )
+    .bind(context.userId)
+    .all<ConfiguredWorkerRow>();
+  const workers = await Promise.all(
+    (rows.results ?? []).map(async (row) => {
+      const detail = await loadConfiguredWorker(
+        env,
+        String(row.id),
+        context.userId,
+      );
+      return configuredWorkerMetadata(row, detail?.bindings ?? []);
+    }),
+  );
+  return json({ workers });
+}
+
+export async function handleConfiguredWorkerObservability(
+  request: Request,
+  env: SecurityEnv,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  const workerRows = await env.CONCLAVE_DB.prepare(
+    `SELECT cw.id, cw.name, cw.worker_type_id, cw.concurrency_limit,
+            wt.display_name AS worker_type_name
+       FROM configured_workers cw
+       JOIN workers wt ON wt.id = cw.worker_type_id
+      WHERE cw.owner_user_id = ?1
+      ORDER BY cw.name, cw.id`,
+  )
+    .bind(context.userId)
+    .all<Record<string, unknown>>();
+  const workers = await Promise.all(
+    (workerRows.results ?? []).map(async (worker) => {
+      const workerId = String(worker.id);
+      const latest = await env.CONCLAVE_DB.prepare(
+        `SELECT m.*, ew.status AS workspace_status
+         FROM configured_worker_observability_metrics m
+         LEFT JOIN execution_workspaces ew ON ew.id = m.workspace_id
+        WHERE m.configured_worker_id = ?1
+          AND m.recorded_at = (SELECT MAX(m2.recorded_at)
+            FROM configured_worker_observability_metrics m2
+            WHERE m2.configured_worker_id = m.configured_worker_id
+              AND COALESCE(m2.workspace_id, '') = COALESCE(m.workspace_id, ''))
+        ORDER BY m.workspace_id`,
+      )
+        .bind(workerId)
+        .all<Record<string, unknown>>();
+      const usage = await env.CONCLAVE_DB.prepare(
+        `SELECT COALESCE(SUM(input_tokens), 0) AS input_tokens,
+              COALESCE(SUM(output_tokens), 0) AS output_tokens,
+              COALESCE(SUM(cost_micros), 0) AS cost_micros,
+              COUNT(*) AS assignments
+         FROM usage WHERE configured_worker_id = ?1`,
+      )
+        .bind(workerId)
+        .first<Record<string, unknown>>();
+      const audits = await env.CONCLAVE_DB.prepare(
+        `SELECT action, target_id, workspace_id, actor_type, actor_id, details_json, created_at
+         FROM configured_worker_audit_log
+        WHERE configured_worker_id = ?1
+        ORDER BY created_at DESC LIMIT 50`,
+      )
+        .bind(workerId)
+        .all<Record<string, unknown>>();
+      const samples = latest.results ?? [];
+      const authFailures = samples.filter(
+        (row) => Number(row.auth_failure) === 1,
+      ).length;
+      const convergence = samples
+        .map((row) =>
+          row.convergence_latency_ms == null
+            ? null
+            : Number(row.convergence_latency_ms),
+        )
+        .filter(
+          (value): value is number => value !== null && Number.isFinite(value),
+        );
+      return {
+        id: workerId,
+        name: String(worker.name),
+        workerTypeId: String(worker.worker_type_id),
+        workerTypeName: String(worker.worker_type_name),
+        concurrencyLimit: Number(worker.concurrency_limit),
+        bindings: samples.map((row) => ({
+          workspaceId:
+            row.workspace_id == null ? null : String(row.workspace_id),
+          workspaceStatus:
+            row.workspace_status == null ? null : String(row.workspace_status),
+          ready: Number(row.ready) === 1,
+          packageStatus: String(row.package_status),
+          credentialStatus: String(row.credential_status),
+          permissionsStatus: String(row.permissions_status),
+          activeAssignments: Number(row.active_assignments ?? 0),
+          authFailure: Number(row.auth_failure) === 1,
+          convergenceLatencyMs:
+            row.convergence_latency_ms == null
+              ? null
+              : Number(row.convergence_latency_ms),
+          recordedAt: String(row.recorded_at),
+        })),
+        metrics: {
+          readyBindings: samples.filter((row) => Number(row.ready) === 1)
+            .length,
+          partialBindings: samples.filter(
+            (row) =>
+              Number(row.ready) !== 1 &&
+              String(row.workspace_status) !== "offline" &&
+              String(row.package_status) !== "absent",
+          ).length,
+          offlineBindings: samples.filter(
+            (row) =>
+              String(row.workspace_status) === "offline" ||
+              String(row.package_status) === "absent",
+          ).length,
+          authFailures,
+          averageConvergenceLatencyMs:
+            convergence.length === 0
+              ? 0
+              : Math.round(
+                  convergence.reduce((sum, value) => sum + value, 0) /
+                    convergence.length,
+                ),
+          maxConvergenceLatencyMs:
+            convergence.length === 0 ? 0 : Math.max(...convergence),
+          activeAssignments: samples.reduce(
+            (sum, row) => sum + Number(row.active_assignments ?? 0),
+            0,
+          ),
+        },
+        usage: {
+          inputTokens: Number(usage?.input_tokens ?? 0),
+          outputTokens: Number(usage?.output_tokens ?? 0),
+          costMicros: Number(usage?.cost_micros ?? 0),
+          assignments: Number(usage?.assignments ?? 0),
+        },
+        audit: (audits.results ?? []).map((row) => ({
+          action: String(row.action),
+          targetId: String(row.target_id),
+          workspaceId:
+            row.workspace_id == null ? null : String(row.workspace_id),
+          actorType: String(row.actor_type),
+          actorId: String(row.actor_id),
+          details: parseJson(row.details_json, {}),
+          createdAt: String(row.created_at),
+        })),
+      };
+    }),
+  );
+  return json({ workers });
+}
+
+export async function handleCreateConfiguredWorker(
+  request: Request,
+  env: SecurityEnv,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  const body = (await request.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
+  const name = requiredString(body.name, "name").trim();
+  const workerTypeId = requiredString(body.workerTypeId, "workerTypeId");
+  const workerType = await env.CONCLAVE_DB.prepare(
+    "SELECT id, status FROM workers WHERE id = ?1 AND status <> 'revoked'",
+  )
+    .bind(workerTypeId)
+    .first<{ id: string; status: string }>();
+  if (!workerType) throw new HttpError(404, "Worker Type not found");
+  const workspaceIds = configuredWorkerWorkspaceIds(body);
+  await validateOwnedWorkspaces(env, context, workspaceIds);
+  const config = configuredWorkerObject(body.config, "config");
+  const costMetadata =
+    body.costMetadata === undefined
+      ? null
+      : configuredWorkerObject(body.costMetadata, "costMetadata");
+  const preferredRoles = configuredWorkerStringArray(
+    body.preferredRoles,
+    "preferredRoles",
+  );
+  const allowedRoles = configuredWorkerStringArray(
+    body.allowedRoles,
+    "allowedRoles",
+  );
+  const concurrencyLimit = body.concurrencyLimit ?? 1;
+  if (
+    typeof concurrencyLimit !== "number" ||
+    !Number.isInteger(concurrencyLimit) ||
+    concurrencyLimit <= 0
+  ) {
+    throw new HttpError(400, "concurrencyLimit must be a positive integer");
+  }
+  const auth = configuredWorkerAuthStrategy(body);
+  const id = `worker-${crypto.randomUUID().slice(0, 16)}`;
+  const now = new Date().toISOString();
+  const statements = [
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO configured_workers
+       (id, owner_user_id, name, worker_type_id, status, default_model,
+        config_json, concurrency_limit, cost_metadata_json, preferred_roles_json,
+        allowed_roles_json, created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, 'active', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11)`,
+    ).bind(
+      id,
+      context.userId,
+      name,
+      workerTypeId,
+      typeof body.defaultModel === "string" ? body.defaultModel : null,
+      JSON.stringify(config),
+      concurrencyLimit,
+      costMetadata === null ? null : JSON.stringify(costMetadata),
+      JSON.stringify(preferredRoles ?? []),
+      JSON.stringify(allowedRoles ?? []),
+      now,
+    ),
+  ];
+  const desiredVersionPolicy =
+    typeof body.desiredVersionPolicy === "string"
+      ? body.desiredVersionPolicy
+      : "stable";
+  for (const workspaceId of workspaceIds) {
+    const [bindingValues, credentialValues] = configuredWorkerBindingValues(
+      id,
+      workspaceId,
+      desiredVersionPolicy,
+      auth,
+      now,
+    );
+    statements.push(
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO worker_workspace_bindings
+         (worker_id, workspace_id, enabled, desired_version_policy,
+          local_readiness, package_status, credential_status, permissions_status,
+          updated_at)
+         VALUES (?1, ?2, 1, ?3, ?4, ?5, ?6, ?7, ?8)`,
+      ).bind(...bindingValues),
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO workspace_worker_credentials
+         (id, worker_id, workspace_id, owner_user_id, auth_type, sharing_policy,
+          provider_metadata_json, local_secret_ref, state, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`,
+      ).bind(
+        credentialValues[0],
+        credentialValues[1],
+        credentialValues[2],
+        context.userId,
+        ...credentialValues.slice(3),
+      ),
+    );
+  }
+  try {
+    await env.CONCLAVE_DB.batch(statements);
+  } catch (error) {
+    if (String(error).includes("UNIQUE")) {
+      throw new HttpError(409, "A Worker with this name already exists");
+    }
+    throw error;
+  }
+  await recordAudit(
+    env,
+    context,
+    "configured_worker.created",
+    "configured_worker",
+    id,
+    {
+      workerTypeId,
+      workspaceIds,
+    },
+  );
+  await recordConfiguredWorkerAudit(env, {
+    workerId: id,
+    actorType: "user",
+    actorId: context.userId,
+    action: "worker.created",
+    targetId: id,
+    details: { workerTypeId, workspaceIds },
+  });
+  for (const workspaceId of workspaceIds) {
+    await recordConfiguredWorkerAudit(env, {
+      workerId: id,
+      workspaceId,
+      actorType: "user",
+      actorId: context.userId,
+      action: "worker.workspace.bound",
+      targetId: `${id}:${workspaceId}`,
+      details: { workerTypeId },
+    });
+  }
+  const result = await loadConfiguredWorker(env, id, context.userId);
+  return json(
+    {
+      worker: result
+        ? configuredWorkerMetadata(result.worker, result.bindings)
+        : { id },
+    },
+    { status: 201 },
+  );
+}
+
+export async function handleGetConfiguredWorker(
+  request: Request,
+  env: SecurityEnv,
+  workerId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  const result = await authorizeConfiguredWorkerOwner(env, context, workerId);
+  return json({
+    worker: configuredWorkerMetadata(result.worker, result.bindings),
+  });
+}
+
+export async function handleUpdateConfiguredWorker(
+  request: Request,
+  env: SecurityEnv,
+  workerId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  const result = await authorizeConfiguredWorkerOwner(env, context, workerId);
+  const body = (await request.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
+  if (
+    body.workerTypeId !== undefined &&
+    body.workerTypeId !== result.worker.worker_type_id
+  ) {
+    throw new HttpError(
+      400,
+      "Worker Type cannot be changed after Worker creation",
+    );
+  }
+  const name =
+    body.name === undefined ? null : requiredString(body.name, "name").trim();
+  const config =
+    body.config === undefined
+      ? null
+      : JSON.stringify(configuredWorkerObject(body.config, "config"));
+  const costMetadata =
+    body.costMetadata === undefined
+      ? null
+      : JSON.stringify(
+          configuredWorkerObject(body.costMetadata, "costMetadata"),
+        );
+  const preferredRoles = configuredWorkerStringArray(
+    body.preferredRoles,
+    "preferredRoles",
+  );
+  const allowedRoles = configuredWorkerStringArray(
+    body.allowedRoles,
+    "allowedRoles",
+  );
+  const concurrencyLimit = body.concurrencyLimit;
+  if (
+    concurrencyLimit !== undefined &&
+    (typeof concurrencyLimit !== "number" ||
+      !Number.isInteger(concurrencyLimit) ||
+      concurrencyLimit <= 0)
+  ) {
+    throw new HttpError(400, "concurrencyLimit must be a positive integer");
+  }
+  const status = body.status;
+  if (
+    status !== undefined &&
+    !["active", "disabled"].includes(String(status))
+  ) {
+    throw new HttpError(400, "Worker status can only be active or disabled");
+  }
+  const now = new Date().toISOString();
+  try {
+    await env.CONCLAVE_DB.prepare(
+      `UPDATE configured_workers SET
+         name = COALESCE(?1, name), default_model = COALESCE(?2, default_model),
+         config_json = COALESCE(?3, config_json), concurrency_limit = COALESCE(?4, concurrency_limit),
+         cost_metadata_json = COALESCE(?5, cost_metadata_json),
+         preferred_roles_json = COALESCE(?6, preferred_roles_json),
+         allowed_roles_json = COALESCE(?7, allowed_roles_json), status = COALESCE(?8, status),
+         updated_at = ?9 WHERE id = ?10 AND owner_user_id = ?11`,
+    )
+      .bind(
+        name,
+        typeof body.defaultModel === "string" ? body.defaultModel : null,
+        config,
+        concurrencyLimit ?? null,
+        costMetadata,
+        preferredRoles ? JSON.stringify(preferredRoles) : null,
+        allowedRoles ? JSON.stringify(allowedRoles) : null,
+        status ?? null,
+        now,
+        workerId,
+        context.userId,
+      )
+      .run();
+  } catch (error) {
+    if (String(error).includes("UNIQUE")) {
+      throw new HttpError(409, "A Worker with this name already exists");
+    }
+    throw error;
+  }
+  await recordAudit(
+    env,
+    context,
+    "configured_worker.updated",
+    "configured_worker",
+    workerId,
+    {},
+  );
+  await recordConfiguredWorkerAudit(env, {
+    workerId,
+    actorType: "user",
+    actorId: context.userId,
+    action: "worker.updated",
+    targetId: workerId,
+  });
+  const updated = await loadConfiguredWorker(env, workerId, context.userId);
+  return json({
+    worker: updated
+      ? configuredWorkerMetadata(updated.worker, updated.bindings)
+      : null,
+  });
+}
+
+export async function handleRevokeConfiguredWorker(
+  request: Request,
+  env: SecurityEnv,
+  workerId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  await authorizeConfiguredWorkerOwner(env, context, workerId);
+  const now = new Date().toISOString();
+  await env.CONCLAVE_DB.batch([
+    env.CONCLAVE_DB.prepare(
+      "UPDATE configured_workers SET status = 'revoked', updated_at = ?1 WHERE id = ?2 AND owner_user_id = ?3",
+    ).bind(now, workerId, context.userId),
+    env.CONCLAVE_DB.prepare(
+      "UPDATE worker_workspace_bindings SET enabled = 0, local_readiness = 'revoked', updated_at = ?1 WHERE worker_id = ?2",
+    ).bind(now, workerId),
+    env.CONCLAVE_DB.prepare(
+      "UPDATE workspace_worker_credentials SET state = 'revoked', updated_at = ?1 WHERE worker_id = ?2",
+    ).bind(now, workerId),
+  ]);
+  await recordAudit(
+    env,
+    context,
+    "configured_worker.revoked",
+    "configured_worker",
+    workerId,
+    {},
+  );
+  await recordConfiguredWorkerAudit(env, {
+    workerId,
+    actorType: "user",
+    actorId: context.userId,
+    action: "worker.revoked",
+    targetId: workerId,
+  });
+  return json({ ok: true, revokedAt: now });
+}
+
+export async function handleListConfiguredWorkerWorkspaces(
+  request: Request,
+  env: SecurityEnv,
+  workerId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  const result = await authorizeConfiguredWorkerOwner(env, context, workerId);
+  return json({
+    workspaces: result.bindings.map(configuredWorkerBindingMetadata),
+  });
+}
+
+export async function handleUpdateConfiguredWorkerWorkspaces(
+  request: Request,
+  env: SecurityEnv,
+  workerId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  const result = await authorizeConfiguredWorkerOwner(env, context, workerId);
+  const body = (await request.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
+  const workspaceIds = configuredWorkerWorkspaceIds(body);
+  await validateOwnedWorkspaces(env, context, workspaceIds);
+  const auth = configuredWorkerAuthStrategy(body);
+  const desiredVersionPolicy =
+    typeof body.desiredVersionPolicy === "string"
+      ? body.desiredVersionPolicy
+      : "stable";
+  const existing = new Map(
+    result.bindings.map((binding) => [String(binding.workspace_id), binding]),
+  );
+  const now = new Date().toISOString();
+  const statements = [];
+  for (const binding of result.bindings) {
+    if (!workspaceIds.includes(String(binding.workspace_id))) {
+      statements.push(
+        env.CONCLAVE_DB.prepare(
+          "DELETE FROM worker_workspace_bindings WHERE worker_id = ?1 AND workspace_id = ?2",
+        ).bind(workerId, binding.workspace_id),
+        env.CONCLAVE_DB.prepare(
+          "DELETE FROM workspace_worker_credentials WHERE worker_id = ?1 AND workspace_id = ?2",
+        ).bind(workerId, binding.workspace_id),
+      );
+    }
+  }
+  for (const workspaceId of workspaceIds) {
+    const current = existing.get(workspaceId);
+    if (current) {
+      statements.push(
+        env.CONCLAVE_DB.prepare(
+          "UPDATE worker_workspace_bindings SET enabled = 1, desired_version_policy = ?1, updated_at = ?2 WHERE worker_id = ?3 AND workspace_id = ?4",
+        ).bind(desiredVersionPolicy, now, workerId, workspaceId),
+      );
+    } else {
+      const [bindingValues, credentialValues] = configuredWorkerBindingValues(
+        workerId,
+        workspaceId,
+        desiredVersionPolicy,
+        auth,
+        now,
+      );
+      statements.push(
+        env.CONCLAVE_DB.prepare(
+          `INSERT INTO worker_workspace_bindings
+           (worker_id, workspace_id, enabled, desired_version_policy, local_readiness,
+            package_status, credential_status, permissions_status, updated_at)
+           VALUES (?1, ?2, 1, ?3, ?4, ?5, ?6, ?7, ?8)`,
+        ).bind(...bindingValues),
+        env.CONCLAVE_DB.prepare(
+          `INSERT INTO workspace_worker_credentials
+           (id, worker_id, workspace_id, owner_user_id, auth_type, sharing_policy,
+            provider_metadata_json, local_secret_ref, state, created_at, updated_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`,
+        ).bind(
+          credentialValues[0],
+          credentialValues[1],
+          credentialValues[2],
+          context.userId,
+          ...credentialValues.slice(3),
+        ),
+      );
+    }
+  }
+  if (statements.length > 0) await env.CONCLAVE_DB.batch(statements);
+  for (const binding of result.bindings) {
+    const boundWorkspaceId = String(binding.workspace_id);
+    if (!workspaceIds.includes(boundWorkspaceId)) {
+      await recordConfiguredWorkerAudit(env, {
+        workerId,
+        workspaceId: boundWorkspaceId,
+        actorType: "user",
+        actorId: context.userId,
+        action: "worker.workspace.unbound",
+        targetId: `${workerId}:${boundWorkspaceId}`,
+      });
+    }
+  }
+  for (const workspaceId of workspaceIds) {
+    if (!existing.has(workspaceId)) {
+      await recordConfiguredWorkerAudit(env, {
+        workerId,
+        workspaceId,
+        actorType: "user",
+        actorId: context.userId,
+        action: "worker.workspace.bound",
+        targetId: `${workerId}:${workspaceId}`,
+      });
+    }
+  }
+  const updated = await loadConfiguredWorker(env, workerId, context.userId);
+  return json({
+    workspaces: updated?.bindings.map(configuredWorkerBindingMetadata) ?? [],
+  });
+}
+
+export async function handleConfiguredWorkerWorkspaceSetup(
+  request: Request,
+  env: SecurityEnv,
+  workerId: string,
+  workspaceId: string,
+  action: "setup" | "reauthenticate",
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  await authorizeConfiguredWorkerOwner(env, context, workerId);
+  const workspace = await env.CONCLAVE_DB.prepare(
+    "SELECT id FROM execution_workspaces WHERE id = ?1 AND owner_user_id = ?2 AND status <> 'revoked'",
+  )
+    .bind(workspaceId, context.userId)
+    .first();
+  if (!workspace) throw new HttpError(404, "Workspace not found");
+  const binding = await env.CONCLAVE_DB.prepare(
+    "SELECT worker_id FROM worker_workspace_bindings WHERE worker_id = ?1 AND workspace_id = ?2",
+  )
+    .bind(workerId, workspaceId)
+    .first();
+  if (!binding)
+    throw new HttpError(409, "Worker is not bound to this Workspace");
+  const now = new Date().toISOString();
+  const intentId = `worker-setup-${crypto.randomUUID().slice(0, 16)}`;
+  await env.CONCLAVE_DB.batch([
+    env.CONCLAVE_DB.prepare(
+      "UPDATE worker_workspace_bindings SET credential_status = 'setup_required', local_readiness = 'setup_required', updated_at = ?1 WHERE worker_id = ?2 AND workspace_id = ?3",
+    ).bind(now, workerId, workspaceId),
+    env.CONCLAVE_DB.prepare(
+      "UPDATE workspace_worker_credentials SET state = 'setup_required', updated_at = ?1 WHERE worker_id = ?2 AND workspace_id = ?3",
+    ).bind(now, workerId, workspaceId),
+  ]);
+  await recordAudit(
+    env,
+    context,
+    `configured_worker.credential_${action === "reauthenticate" ? "reauthenticated" : "setup_requested"}`,
+    "configured_worker_workspace_credential",
+    `${workerId}:${workspaceId}`,
+    { workerId, workspaceId, action },
+  );
+  await recordConfiguredWorkerAudit(env, {
+    workerId,
+    workspaceId,
+    actorType: "user",
+    actorId: context.userId,
+    action: "worker.credential.setup_requested",
+    targetId: `${workerId}:${workspaceId}`,
+    details: { action },
+  });
+  return json(
+    {
+      setupIntent: {
+        id: intentId,
+        workerId,
+        workspaceId,
+        action,
+        status: "requested",
+        requestedAt: now,
+      },
+      nextActions: ["complete_local_credential_setup"],
+    },
+    { status: 202 },
+  );
+}
+
+export async function handleGetConfiguredWorkerWorkspaceCredential(
+  request: Request,
+  env: SecurityEnv,
+  workerId: string,
+  workspaceId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  await authorizeConfiguredWorkerOwner(env, context, workerId);
+  const credential = await env.CONCLAVE_DB.prepare(
+    `SELECT c.worker_id, c.workspace_id, c.auth_type, c.sharing_policy,
+            c.provider_metadata_json, c.state, b.local_readiness,
+            b.credential_status, b.last_seen, b.updated_at
+       FROM workspace_worker_credentials c
+       JOIN worker_workspace_bindings b
+         ON b.worker_id = c.worker_id AND b.workspace_id = c.workspace_id
+      WHERE c.worker_id = ?1 AND c.workspace_id = ?2`,
+  )
+    .bind(workerId, workspaceId)
+    .first<Record<string, unknown>>();
+  if (!credential) throw new HttpError(404, "Worker credential not found");
+  return json({
+    credential: {
+      workerId,
+      workspaceId,
+      authType: String(credential.auth_type),
+      sharingPolicy: String(credential.sharing_policy),
+      providerMetadata: parseJson(credential.provider_metadata_json, {}),
+      state: String(credential.state),
+      localReadiness: String(credential.local_readiness),
+      credentialStatus: String(credential.credential_status),
+      lastSeen:
+        credential.last_seen == null ? null : String(credential.last_seen),
+      updatedAt: String(credential.updated_at),
+    },
+  });
+}
+
+export async function handleRevokeConfiguredWorkerWorkspaceCredential(
+  request: Request,
+  env: SecurityEnv,
+  workerId: string,
+  workspaceId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  await authorizeConfiguredWorkerOwner(env, context, workerId);
+  const now = new Date().toISOString();
+  const existing = await env.CONCLAVE_DB.prepare(
+    "SELECT id FROM workspace_worker_credentials WHERE worker_id = ?1 AND workspace_id = ?2",
+  )
+    .bind(workerId, workspaceId)
+    .first<{ id: string }>();
+  if (!existing) throw new HttpError(404, "Worker credential not found");
+  await env.CONCLAVE_DB.prepare(
+    `UPDATE workspace_worker_credentials
+        SET state = 'revoked', local_secret_ref = NULL, updated_at = ?1
+      WHERE worker_id = ?2 AND workspace_id = ?3`,
+  )
+    .bind(now, workerId, workspaceId)
+    .run();
+  await env.CONCLAVE_DB.prepare(
+    `UPDATE worker_workspace_bindings
+        SET credential_status = 'error', local_readiness = 'degraded',
+            updated_at = ?1
+      WHERE worker_id = ?2 AND workspace_id = ?3`,
+  )
+    .bind(now, workerId, workspaceId)
+    .run();
+  await recordAudit(
+    env,
+    context,
+    "configured_worker.credential_revoked",
+    "configured_worker_workspace_credential",
+    `${workerId}:${workspaceId}`,
+    { workerId, workspaceId },
+  );
+  await recordConfiguredWorkerAudit(env, {
+    workerId,
+    workspaceId,
+    actorType: "user",
+    actorId: context.userId,
+    action: "worker.credential.revoked",
+    targetId: `${workerId}:${workspaceId}`,
+  });
+  return json({ ok: true, revokedAt: now });
+}
+
 async function handleUpdateV5Account(
   request: Request,
   env: SecurityEnv,
@@ -5964,8 +7024,14 @@ async function createV5WorkspaceProjectGrant(
     .bind(workspaceId)
     .first<{ id: string; owner_user_id: string; status: string }>();
   if (!workspace) throw new HttpError(404, "Workspace not found");
-  if (workspace.owner_user_id !== context.userId || workspace.status === "revoked") {
-    throw new HttpError(403, "Only the Workspace owner can grant this Workspace");
+  if (
+    workspace.owner_user_id !== context.userId ||
+    workspace.status === "revoked"
+  ) {
+    throw new HttpError(
+      403,
+      "Only the Workspace owner can grant this Workspace",
+    );
   }
   let membership: { role: string } | null = null;
   try {
@@ -7561,13 +8627,16 @@ async function handleStudioSnapshot(
       run: null,
       projects: (rows.results ?? []).map((project) => {
         const settings = parseJson(project.settingsJson);
-        const rawWorkstreams = workstreamsByProject.get(String(project.id)) ?? [];
+        const rawWorkstreams =
+          workstreamsByProject.get(String(project.id)) ?? [];
         return {
           id: project.id,
           name: project.name,
           description: project.description,
           instructions:
-            typeof settings.instructions === "string" ? settings.instructions : "",
+            typeof settings.instructions === "string"
+              ? settings.instructions
+              : "",
           defaultExecutionPolicy:
             typeof settings.defaultExecutionPolicy === "string"
               ? settings.defaultExecutionPolicy
@@ -7576,7 +8645,10 @@ async function handleStudioSnapshot(
           branch: "",
           activeGoals: 0,
           chats: [],
-          workstreams: sortWorkstreams(rawWorkstreams, settings.workstreamOrder),
+          workstreams: sortWorkstreams(
+            rawWorkstreams,
+            settings.workstreamOrder,
+          ),
         };
       }),
       workers: [],
@@ -7613,14 +8685,8 @@ async function handleStudioSnapshot(
     });
   }
   const testMode = testAuthenticationEnabled(securityEnv);
-  const projectFilter =
-    testMode
-      ? ""
-      : " WHERE p.workspace_id = ?1";
-  const bind =
-    testMode
-      ? []
-      : [context.workspaceId];
+  const projectFilter = testMode ? "" : " WHERE p.workspace_id = ?1";
+  const bind = testMode ? [] : [context.workspaceId];
   const restrictProjects =
     !testMode &&
     context.workspaceRole !== "owner" &&
@@ -8284,9 +9350,7 @@ async function validateAndClaimCiEvidence(
     throw new HttpError(409, "Run has no valid CI correlation policy");
   }
   const expectedRepository =
-    typeof policy.repositoryId === "string"
-      ? policy.repositoryId
-      : undefined;
+    typeof policy.repositoryId === "string" ? policy.repositoryId : undefined;
   const expectedCommitSha =
     typeof policy.expectedCommitSha === "string"
       ? policy.expectedCommitSha

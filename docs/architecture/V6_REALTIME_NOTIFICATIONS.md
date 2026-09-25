@@ -32,7 +32,7 @@ meaningful states:
 
 - needs input;
 - Work completed or failed;
-- Account or Project Grant problems;
+- Worker, credential, or Project Grant problems;
 - recovery required.
 
 Discussion, queue, checkout, lease, and ordinary progress events update the

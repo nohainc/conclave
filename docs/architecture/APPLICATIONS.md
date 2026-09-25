@@ -1,6 +1,6 @@
 # Conclave AX Applications
 
-**Status:** Normative for Architecture v5
+**Status:** Normative for Architecture v5 and EW-0 execution vocabulary
 
 Conclave AX has three primary applications and one extension type.
 
@@ -19,8 +19,7 @@ Conclave AX has three primary applications and one extension type.
 - Projects and Chats;
 - Goals/Runs;
 - Workspace management;
-- Worker catalog;
-- Accounts / Credential Profiles;
+- configured Workers;
 - usage/cost;
 - approvals and evidence.
 
@@ -48,7 +47,7 @@ Conclave AX communicates only with Conclave Cloud.
 - realtime App connections;
 - Workspace Gateway;
 - Worker catalog/package registry;
-- Credential Profile authorization;
+- configured Worker and internal credential authorization;
 - assignment scheduling;
 - audit/evidence;
 - artifacts;
@@ -89,7 +88,10 @@ One Workspace runtime is installed per machine. Humans do not sign into or switc
 
 **Path:** `workers/<worker-id>`
 
-A Worker is an installable execution integration.
+A Worker is a user-managed configured execution identity. It selects one
+Worker Type, one logical external AI identity, defaults/capabilities, and one
+or more Workspace bindings. Worker Types and local credential state are
+infrastructure/security details beneath the Worker.
 
 Examples:
 - Codex;
@@ -110,11 +112,15 @@ Workers are language-independent executable packages. First-party Workers use Da
 
 Use:
 - Conclave AX;
+- Execution;
 - Workspace;
 - Worker;
-- Account.
+- Worker Type when referring to catalog/infrastructure;
+- credential state when referring to internal authentication/readiness.
 
-Use `CredentialProfile` only as the internal/domain term for Account.
+Do not expose AI Account or Credential Profile as a peer product resource.
+Those terms may remain in internal/domain code while the migration is in
+progress.
 
 ## Removed v4 product concepts
 

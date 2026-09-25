@@ -23,8 +23,8 @@ void main() {
     expect(legacyRun.kind, StudioRouteKind.run);
     expect(legacyRun.toUri().path, '/projects/project-1/runs/run-3');
 
-    final canonicalRun = StudioNavigation.fromUri(Uri.parse(
-        '/projects/project-1/workstreams/workstream-2/runs/run-3'));
+    final canonicalRun = StudioNavigation.fromUri(
+        Uri.parse('/projects/project-1/workstreams/workstream-2/runs/run-3'));
     expect(canonicalRun.kind, StudioRouteKind.run);
     expect(canonicalRun.projectId, 'project-1');
     expect(canonicalRun.workstreamId, 'workstream-2');
@@ -43,7 +43,6 @@ void main() {
       const StudioNavigation.projects(),
       const StudioNavigation.hosts(),
       const StudioNavigation.workers(),
-      const StudioNavigation.accounts(),
       const StudioNavigation.usage(),
       const StudioNavigation.profileSecurity(),
     ];
@@ -53,31 +52,25 @@ void main() {
     }
   });
 
-  test('uses canonical nested routes for Workspaces, Workers, and AI Accounts', () {
+  test('uses canonical Execution routes and preserves legacy aliases', () {
     const workspace = StudioNavigation.hosts();
-    expect(workspace.toUri().path, '/workspaces');
+    expect(workspace.toUri().path, '/execution/workspaces');
+    expect(StudioNavigation.fromUri(Uri.parse('/execution')), workspace);
+    expect(StudioNavigation.fromUri(Uri.parse('/execution/workspaces')),
+        workspace);
     expect(StudioNavigation.fromUri(Uri.parse('/workspaces')), workspace);
     expect(StudioNavigation.fromUri(Uri.parse('/hosts')), workspace);
 
     const workers = StudioNavigation.workers();
-    expect(workers.toUri().path, '/workspaces/workers');
+    expect(workers.toUri().path, '/execution/workers');
+    expect(StudioNavigation.fromUri(Uri.parse('/execution/workers')), workers);
     expect(StudioNavigation.fromUri(Uri.parse('/workspaces/workers')), workers);
     expect(StudioNavigation.fromUri(Uri.parse('/hosts/workers')), workers);
     expect(StudioNavigation.fromUri(Uri.parse('/workers')), workers);
-    expect(
-        StudioNavigation.fromUri(Uri.parse('/workspaces?tab=workers')), workers);
+    expect(StudioNavigation.fromUri(Uri.parse('/workspaces?tab=workers')),
+        workers);
     expect(StudioNavigation.fromUri(Uri.parse('/hosts?tab=workers')), workers);
 
-    const accounts = StudioNavigation.accounts();
-    expect(accounts.toUri().path, '/workspaces/accounts');
-    expect(
-        StudioNavigation.fromUri(Uri.parse('/workspaces/accounts')), accounts);
-    expect(StudioNavigation.fromUri(Uri.parse('/hosts/accounts')), accounts);
-    expect(StudioNavigation.fromUri(Uri.parse('/accounts')), accounts);
-    expect(StudioNavigation.fromUri(Uri.parse('/workspaces?tab=accounts')),
-        accounts);
-    expect(StudioNavigation.fromUri(Uri.parse('/hosts?tab=ai_accounts')),
-        accounts);
   });
 
   test('each browser tab can own an independent navigation state', () {

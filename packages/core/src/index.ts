@@ -20,6 +20,7 @@ export * from "./v6-observability.js";
 export * from "./v6-chat-migration.js";
 export * from "./v6-clean-room-acceptance.js";
 export * from "./v6-team-concurrency-acceptance.js";
+export * from "./configured-worker.js";
 export * from "./workflow-runner.js";
 export * from "./v4-scheduler.js";
 export * from "./multi-worker-ensemble.js";

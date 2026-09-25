@@ -6,6 +6,7 @@ export interface ProjectExecutionSelectionRequest {
   readonly role: string;
   readonly capabilities: readonly string[];
   readonly accountId?: string;
+  readonly configuredWorkerId?: string;
   readonly workspaceId?: string;
   readonly workerId?: string;
   readonly excludeIndependenceKeys?: readonly string[];
@@ -22,9 +23,17 @@ export interface V5ExecutionTarget {
   readonly workspaceId: string;
   readonly workspaceRuntimeIdentityId: string;
   readonly workspaceProjectGrantId: string;
+  /** Configured Worker identity selected for this assignment. */
+  readonly configuredWorkerId: string;
+  /** Worker Type/catalog identity used to resolve the package. */
+  readonly workerTypeId: string;
+  /** Compatibility alias for configuredWorkerId during the migration. */
   readonly workerId: string;
   readonly workerVersion: string;
-  readonly accountId: string;
+  /** Internal legacy accounting identity, when one exists. */
+  readonly accountId?: string;
+  readonly credentialId?: string;
+  readonly credentialOwnerUserId?: string;
   readonly model: string | null;
   readonly effectivePermissions: readonly string[];
   readonly permissionSnapshot: Record<string, unknown>;
@@ -44,7 +53,9 @@ function strings(value: unknown): string[] {
   if (typeof value !== "string") return [];
   try {
     const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string")
+      : [];
   } catch {
     return [];
   }
@@ -55,7 +66,7 @@ function object(value: unknown): Record<string, unknown> {
   try {
     const parsed = JSON.parse(value);
     return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? parsed as Record<string, unknown>
+      ? (parsed as Record<string, unknown>)
       : {};
   } catch {
     return {};
@@ -68,7 +79,13 @@ function number(value: unknown, fallback = 0): number {
 }
 
 function projectPermissions(role: string): string[] {
-  if (role === "owner") return ["repository:read", "repository:write", "shell:execute", "network:use"];
+  if (role === "owner")
+    return [
+      "repository:read",
+      "repository:write",
+      "shell:execute",
+      "network:use",
+    ];
   if (role === "collaborator") return ["repository:read", "repository:write"];
   return ["repository:read"];
 }
@@ -87,10 +104,56 @@ export async function selectProjectExecutionTarget(
   request: ProjectExecutionSelectionRequest,
   now = new Date(),
 ): Promise<V5ExecutionTarget | null> {
-  const membership = await db.prepare(
-    `SELECT role FROM project_memberships WHERE project_id = ?1 AND user_id = ?2`,
-  ).bind(request.projectId, request.requesterUserId).first<{ role: string }>();
+  const membership = await db
+    .prepare(
+      `SELECT role FROM project_memberships WHERE project_id = ?1 AND user_id = ?2`,
+    )
+    .bind(request.projectId, request.requesterUserId)
+    .first<{ role: string }>();
   if (!membership || membership.role === "viewer") return null;
+
+  if (request.workstreamId) {
+    const workstream = await db
+      .prepare(
+        `SELECT ws.project_id, ws.lead_user_id, ws.access_policy_json
+           FROM workstreams ws
+          WHERE ws.id = ?1`,
+      )
+      .bind(request.workstreamId)
+      .first<Record<string, unknown>>();
+    // Older test doubles and compatibility callers may not expose the
+    // Workstream read model yet; production rows always include project_id.
+    if (typeof workstream?.project_id === "string") {
+      if (workstream.project_id !== request.projectId) return null;
+      if (membership.role !== "owner") {
+        const policy = object(workstream.access_policy_json);
+        const allowedUsers = Array.isArray(policy.allowedUserIds)
+          ? policy.allowedUserIds.filter(
+              (value): value is string => typeof value === "string",
+            )
+          : [];
+        const allowedRoles = Array.isArray(policy.allowedProjectRoles)
+          ? policy.allowedProjectRoles.filter(
+              (value): value is string => typeof value === "string",
+            )
+          : [];
+        const allowedPermissions = Array.isArray(policy.allowedPermissions)
+          ? policy.allowedPermissions.filter(
+              (value): value is string => typeof value === "string",
+            )
+          : [];
+        if (
+          (allowedUsers.length > 0 &&
+            !allowedUsers.includes(request.requesterUserId)) ||
+          (allowedRoles.length > 0 &&
+            !allowedRoles.includes(membership.role)) ||
+          !allowedPermissions.includes("execute")
+        ) {
+          return null;
+        }
+      }
+    }
+  }
 
   const executionClass = request.executionClass ?? "stateless_read";
   let statefulLease: {
@@ -104,8 +167,9 @@ export async function selectProjectExecutionTarget(
   } | null = null;
   if (executionClass === "stateful_workstream") {
     if (!request.workstreamId || !request.workRequestId) return null;
-    statefulLease = await db.prepare(
-      `SELECT wr.workstream_id AS workstreamId, wr.id AS workRequestId,
+    statefulLease = await db
+      .prepare(
+        `SELECT wr.workstream_id AS workstreamId, wr.id AS workRequestId,
               wr.primary_workspace_id AS workspaceId, wr.checkout_id AS checkoutId,
               l.id AS leaseId, l.fencing_token AS fencingToken,
               c.revision AS expectedRevision, p.primary_workspace_id AS primaryWorkspaceId
@@ -119,108 +183,260 @@ export async function selectProjectExecutionTarget(
          AND wr.mode = 'stateful' AND wr.status = 'running'
          AND wr.primary_workspace_id = p.primary_workspace_id
        LIMIT 1`,
-    ).bind(request.workRequestId, request.workstreamId).first<Record<string, unknown>>().then((row) => {
-      if (!row) return null;
-      return {
-        workstreamId: String(row.workstreamId),
-        workRequestId: String(row.workRequestId),
-        workspaceId: String(row.workspaceId),
-        checkoutId: String(row.checkoutId),
-        leaseId: String(row.leaseId),
-        fencingToken: number(row.fencingToken),
-        expectedRevision: String(row.expectedRevision),
-      };
-    });
-    if (!statefulLease || (request.workspaceId && request.workspaceId !== statefulLease.workspaceId)) return null;
+      )
+      .bind(request.workRequestId, request.workstreamId)
+      .first<Record<string, unknown>>()
+      .then((row) => {
+        if (!row) return null;
+        return {
+          workstreamId: String(row.workstreamId),
+          workRequestId: String(row.workRequestId),
+          workspaceId: String(row.workspaceId),
+          checkoutId: String(row.checkoutId),
+          leaseId: String(row.leaseId),
+          fencingToken: number(row.fencingToken),
+          expectedRevision: String(row.expectedRevision),
+        };
+      });
+    if (
+      !statefulLease ||
+      (request.workspaceId && request.workspaceId !== statefulLease.workspaceId)
+    )
+      return null;
   }
 
-  const rows = await db.prepare(
-    `SELECT g.id AS grant_id, g.project_id, g.workspace_id, g.status AS grant_status,
+  const rows = await db
+    .prepare(
+      `SELECT g.id AS grant_id, g.project_id, g.workspace_id, g.status AS grant_status,
             g.scope, g.repository_mappings_json, g.path_mappings_json,
             g.allowed_worker_ids_json, g.allowed_worker_capabilities_json,
             g.allowed_permissions_json, g.network_policy_json,
             g.concurrency_json, g.budget_json, g.requires_step_up, g.expires_at,
             pep.budget_json AS project_budget_json,
+            ep.allowed_configured_worker_ids_json,
+            ep.allowed_worker_type_ids_json,
+            ep.allowed_providers_json,
+            ep.allowed_models_json,
+            ep.budget_json AS workstream_budget_json,
             ew.name AS workspace_name, ew.owner_user_id, ew.status AS workspace_status,
             wri.id AS runtime_identity_id,
-            w.id AS worker_id, w.publisher, wv.version AS worker_version,
+            cw.id AS configured_worker_id, cw.worker_type_id,
+            wt.display_name AS publisher, wv.version AS worker_version,
             wv.capabilities_json, wv.permissions_json,
-            i.status AS installation_status, d.enabled AS desired_enabled,
-            d.version_policy, a.id AS account_id, a.status AS account_status,
-            a.owner_user_id AS account_owner_user_id,
-            a.auth_type, a.execution_workspace_id AS account_workspace_id,
-            a.provider_metadata_json,
-            pag.id AS account_grant_id,
+            b.package_status AS package_status, b.enabled AS desired_enabled,
+            b.desired_version_policy AS version_policy,
+            c.id AS credential_id, c.state AS credential_status,
+            c.sharing_policy AS credential_sharing_policy,
+            c.owner_user_id AS credential_owner_user_id,
+            c.auth_type, c.provider_metadata_json,
+            cw.concurrency_limit AS configured_concurrency_limit,
             (SELECT COUNT(*) FROM worker_assignments wa
              WHERE wa.execution_workspace_id = g.workspace_id
+               AND (wa.configured_worker_id = cw.id OR
+                    (wa.configured_worker_id IS NULL AND wa.worker_id = cw.worker_type_id))
                AND wa.status IN ('created', 'dispatched', 'acknowledged', 'running')) AS active_assignments
      FROM workspace_project_grants g
      LEFT JOIN project_execution_preferences pep ON pep.project_id = g.project_id
+     LEFT JOIN workstream_execution_policies ep ON ep.workstream_id = ?4
      JOIN execution_workspaces ew ON ew.id = g.workspace_id
      JOIN workspace_runtime_identities wri ON wri.workspace_id = ew.id AND wri.revoked_at IS NULL
-     JOIN workspace_worker_desired_state d ON d.workspace_id = ew.id AND d.enabled = 1
-     JOIN workers w ON w.id = d.worker_id AND w.status = 'active'
-     JOIN worker_versions wv ON wv.worker_id = w.id AND wv.is_revoked = 0
-       AND (d.version_policy = 'latest' OR d.version_policy = wv.version)
-     JOIN workspace_worker_installations i ON i.workspace_id = ew.id
-       AND i.worker_id = w.id AND i.worker_version_id = wv.id AND i.status = 'ready'
-     JOIN ai_accounts a ON a.worker_id = w.id AND a.status = 'ready'
-     LEFT JOIN project_account_grants pag ON pag.project_id = g.project_id
-       AND pag.account_id = a.id AND pag.status = 'active'
-       AND (pag.grantee_user_id IS NULL OR pag.grantee_user_id = ?2)
-       AND (pag.expires_at IS NULL OR pag.expires_at > ?3)
+     JOIN worker_workspace_bindings b ON b.workspace_id = ew.id AND b.enabled = 1
+     JOIN configured_workers cw ON cw.id = b.worker_id AND cw.status = 'active'
+     JOIN workers wt ON wt.id = cw.worker_type_id AND wt.status = 'active'
+     JOIN worker_versions wv ON wv.worker_id = cw.worker_type_id AND wv.is_revoked = 0
+       AND (b.desired_version_policy IN ('latest', 'stable') OR b.desired_version_policy = wv.version)
+     JOIN workspace_worker_credentials c ON c.worker_id = cw.id AND c.workspace_id = ew.id
      WHERE g.project_id = ?1 AND g.status = 'active'
        AND (g.expires_at IS NULL OR g.expires_at > ?3)
        AND ew.status = 'online'
-       AND (a.owner_user_id = ?2 OR pag.id IS NOT NULL)
-       AND (a.execution_workspace_id IS NULL OR a.execution_workspace_id = ew.id)
-     ORDER BY CASE WHEN a.owner_user_id = ?2 THEN 0 ELSE 1 END,
-              active_assignments, ew.id, w.id, a.id`,
-  ).bind(request.projectId, request.requesterUserId, now.toISOString()).all<Row>();
+     ORDER BY CASE WHEN c.owner_user_id = ?2 THEN 0 ELSE 1 END,
+              active_assignments, ew.id, cw.id`,
+    )
+    .bind(
+      request.projectId,
+      request.requesterUserId,
+      now.toISOString(),
+      request.workstreamId ?? "",
+    )
+    .all<Row>();
 
   const excluded = new Set(request.excludeIndependenceKeys ?? []);
   const rejected: Array<Record<string, unknown>> = [];
   const candidates = [...(rows.results ?? [])].sort((left, right) => {
-    const load = number(left.active_assignments) - number(right.active_assignments);
-    return load || String(left.workspace_id).localeCompare(String(right.workspace_id));
+    const load =
+      number(left.active_assignments) - number(right.active_assignments);
+    return (
+      load ||
+      String(left.workspace_id).localeCompare(String(right.workspace_id))
+    );
   });
   for (const row of candidates) {
     const workspaceId = String(row.workspace_id);
-    const workerId = String(row.worker_id);
-    const accountId = String(row.account_id);
-    const capabilities = strings(row.capabilities_json).map((value) => value.toLowerCase());
-    const requiredCapabilities = request.capabilities.map((value) => value.toLowerCase());
-    const grantCapabilities = strings(row.allowed_worker_capabilities_json).map((value) => value.toLowerCase());
+    const configuredWorkerId = String(
+      row.configured_worker_id ?? row.worker_id,
+    );
+    const workerTypeId = String(row.worker_type_id ?? row.worker_id);
+    const workerId = configuredWorkerId;
+    const accountId =
+      row.account_id == null ? undefined : String(row.account_id);
+    const credentialId =
+      row.credential_id == null ? undefined : String(row.credential_id);
+    const credentialOwnerUserId =
+      row.credential_owner_user_id == null
+        ? row.account_owner_user_id == null
+          ? undefined
+          : String(row.account_owner_user_id)
+        : String(row.credential_owner_user_id);
+    const capabilities = strings(row.capabilities_json).map((value) =>
+      value.toLowerCase(),
+    );
+    const requiredCapabilities = request.capabilities.map((value) =>
+      value.toLowerCase(),
+    );
+    const grantCapabilities = strings(row.allowed_worker_capabilities_json).map(
+      (value) => value.toLowerCase(),
+    );
     const providerMetadata = object(row.provider_metadata_json);
-    const provider = String(providerMetadata.provider ?? providerMetadata.providerId ?? "unknown");
-    const independenceKey = `${provider}:${String(row.publisher)}`;
+    const provider = String(
+      providerMetadata.provider ?? providerMetadata.providerId ?? "unknown",
+    );
+    const independenceKey = `${provider}:${workerTypeId}`;
     const concurrency = object(row.concurrency_json);
-    const maxConcurrent = number(concurrency.maxConcurrentAssignments, 1);
+    const maxConcurrent = number(
+      row.configured_concurrency_limit,
+      number(concurrency.maxConcurrentAssignments, 1),
+    );
     const budget = object(row.budget_json);
     const projectBudget = object(row.project_budget_json);
+    const workstreamBudget = object(row.workstream_budget_json);
     const maxBudget = Math.min(
       request.maxCostMicros ?? Number.POSITIVE_INFINITY,
       number(budget.maxCostMicros, Number.POSITIVE_INFINITY),
       number(projectBudget.maxCostMicros, Number.POSITIVE_INFINITY),
+      number(workstreamBudget.maxCostMicros, Number.POSITIVE_INFINITY),
     );
 
-    const reject = (reason: string) => rejected.push({ workspaceId, workerId, accountId, reason });
-    if (statefulLease && workspaceId !== statefulLease.workspaceId) { reject("stateful_primary_workspace_required"); continue; }
-    if (String(row.workspace_status) !== "online") { reject("workspace_offline"); continue; }
-    if (String(row.grant_status) !== "active") { reject("grant_inactive"); continue; }
-    if (String(row.account_status) !== "ready") { reject("account_unavailable"); continue; }
-    if (request.workspaceId && request.workspaceId !== workspaceId) { reject("explicit_workspace_mismatch"); continue; }
-    if (request.workerId && request.workerId !== workerId) { reject("explicit_worker_mismatch"); continue; }
-    if (request.accountId && request.accountId !== accountId) { reject("explicit_account_mismatch"); continue; }
-    if (String(row.installation_status) !== "ready" || Number(row.desired_enabled) !== 1) { reject("worker_not_ready"); continue; }
-    if (!requiredCapabilities.every((capability) => capabilities.includes(capability))) { reject("worker_capability_missing"); continue; }
-    if (grantCapabilities.some((capability) => !capabilities.includes(capability))) { reject("grant_capability_not_declared"); continue; }
-    if (!allowedByJson(row, "allowed_worker_ids_json", workerId)) { reject("worker_not_allowed_by_grant"); continue; }
-    if (excluded.has(independenceKey)) { reject("provider_independence_conflict"); continue; }
-    if (number(row.active_assignments) >= maxConcurrent) { reject("workspace_concurrency_limit"); continue; }
-    if (request.model && providerMetadata.models && Array.isArray(providerMetadata.models) && !providerMetadata.models.includes(request.model)) { reject("model_not_supported_by_account"); continue; }
+    const reject = (reason: string) =>
+      rejected.push({ workspaceId, workerId, accountId, reason });
+    if (statefulLease && workspaceId !== statefulLease.workspaceId) {
+      reject("stateful_primary_workspace_required");
+      continue;
+    }
+    if (String(row.workspace_status) !== "online") {
+      reject("workspace_offline");
+      continue;
+    }
+    if (String(row.grant_status) !== "active") {
+      reject("grant_inactive");
+      continue;
+    }
+    const credentialStatus = String(
+      row.credential_status ?? row.account_status ?? "unknown",
+    );
+    if (credentialStatus !== "ready") {
+      reject("credential_unavailable");
+      continue;
+    }
+    const credentialSharingPolicy = String(
+      row.credential_sharing_policy ?? "explicit_project",
+    );
+    if (
+      credentialSharingPolicy === "private_only" &&
+      credentialOwnerUserId !== request.requesterUserId
+    ) {
+      reject("credential_private_to_owner");
+      continue;
+    }
+    if (request.workspaceId && request.workspaceId !== workspaceId) {
+      reject("explicit_workspace_mismatch");
+      continue;
+    }
+    const explicitConfiguredWorkerId =
+      request.configuredWorkerId ?? request.workerId;
+    if (
+      explicitConfiguredWorkerId &&
+      explicitConfiguredWorkerId !== configuredWorkerId
+    ) {
+      reject("explicit_worker_mismatch");
+      continue;
+    }
+    if (request.accountId && request.accountId !== accountId) {
+      reject("explicit_account_mismatch");
+      continue;
+    }
+    if (
+      String(row.package_status ?? row.installation_status) !== "ready" ||
+      Number(row.desired_enabled) !== 1
+    ) {
+      reject("worker_not_ready");
+      continue;
+    }
+    if (
+      !requiredCapabilities.every((capability) =>
+        capabilities.includes(capability),
+      )
+    ) {
+      reject("worker_capability_missing");
+      continue;
+    }
+    if (
+      grantCapabilities.some((capability) => !capabilities.includes(capability))
+    ) {
+      reject("grant_capability_not_declared");
+      continue;
+    }
+    if (!allowedByJson(row, "allowed_worker_ids_json", workerId)) {
+      reject("worker_not_allowed_by_grant");
+      continue;
+    }
+    if (
+      !allowedByJson(
+        row,
+        "allowed_configured_worker_ids_json",
+        configuredWorkerId,
+      )
+    ) {
+      reject("worker_not_allowed_by_workstream");
+      continue;
+    }
+    if (!allowedByJson(row, "allowed_worker_type_ids_json", workerTypeId)) {
+      reject("worker_type_not_allowed_by_workstream");
+      continue;
+    }
+    if (!allowedByJson(row, "allowed_providers_json", provider)) {
+      reject("provider_not_allowed_by_workstream");
+      continue;
+    }
+    const allowedModels = strings(row.allowed_models_json);
+    if (
+      allowedModels.length > 0 &&
+      (!request.model || !allowedModels.includes(request.model))
+    ) {
+      reject("model_not_allowed_by_workstream");
+      continue;
+    }
+    if (excluded.has(independenceKey)) {
+      reject("provider_independence_conflict");
+      continue;
+    }
+    if (number(row.active_assignments) >= maxConcurrent) {
+      reject("configured_worker_concurrency_limit");
+      continue;
+    }
+    if (
+      request.model &&
+      providerMetadata.models &&
+      Array.isArray(providerMetadata.models) &&
+      !providerMetadata.models.includes(request.model)
+    ) {
+      reject("model_not_supported_by_account");
+      continue;
+    }
     const estimatedCost = number(providerMetadata.estimatedCostMicros, 0);
-    if (estimatedCost > maxBudget) { reject("budget_limit"); continue; }
+    if (estimatedCost > maxBudget) {
+      reject("budget_limit");
+      continue;
+    }
 
     const grantPermissions = strings(row.allowed_permissions_json);
     const workerPermissions = strings(row.permissions_json);
@@ -231,11 +447,18 @@ export async function selectProjectExecutionTarget(
       workspaceLocalPermissions: workerPermissions,
       projectPolicyPermissions: projectPermissions(membership.role),
     });
-    if (permissions.length === 0) { reject("effective_permission_intersection_empty"); continue; }
+    if (permissions.length === 0) {
+      reject("effective_permission_intersection_empty");
+      continue;
+    }
     const snapshotAt = now.toISOString();
     const permissionSnapshot = {
       projectId: request.projectId,
       workspaceId,
+      configuredWorkerId,
+      workerTypeId,
+      credentialId,
+      credentialOwnerUserId,
       grantId: String(row.grant_id),
       requesterUserId: request.requesterUserId,
       scope: String(row.scope),
@@ -245,6 +468,15 @@ export async function selectProjectExecutionTarget(
       networkPolicy: object(row.network_policy_json),
       concurrency,
       budget,
+      workstreamPolicy: {
+        allowedConfiguredWorkerIds: strings(
+          row.allowed_configured_worker_ids_json,
+        ),
+        allowedWorkerTypeIds: strings(row.allowed_worker_type_ids_json),
+        allowedProviders: strings(row.allowed_providers_json),
+        allowedModels,
+        budget: workstreamBudget,
+      },
       ...(request.expectedRevision
         ? { checkpointRevision: request.expectedRevision }
         : {}),
@@ -255,18 +487,48 @@ export async function selectProjectExecutionTarget(
       workspaceId,
       workspaceRuntimeIdentityId: String(row.runtime_identity_id),
       workspaceProjectGrantId: String(row.grant_id),
+      configuredWorkerId,
+      workerTypeId,
       workerId,
       workerVersion: String(row.worker_version),
       accountId,
+      credentialId,
+      credentialOwnerUserId,
       model: request.model ?? null,
       effectivePermissions: permissions,
       permissionSnapshot,
       selectionExplanation: {
         projectMembership: membership.role,
-        workspace: { id: workspaceId, status: row.workspace_status, grantId: row.grant_id },
-        worker: { id: workerId, version: row.worker_version, status: row.installation_status },
-        account: { id: accountId, owner: row.account_owner_user_id === request.requesterUserId, provider },
-        filters: ["project_authorized", "grant_active", "workspace_online", "worker_ready", "account_authorized", "permissions_intersected", "capacity_available", "budget_available", ...(statefulLease ? ["primary_workspace", "checkout_ready", "lease_active"] : [])],
+        workspace: {
+          id: workspaceId,
+          status: row.workspace_status,
+          grantId: row.grant_id,
+        },
+        worker: {
+          id: configuredWorkerId,
+          workerTypeId,
+          version: row.worker_version,
+          status: row.package_status ?? row.installation_status,
+        },
+        credential: {
+          id: credentialId,
+          owner: credentialOwnerUserId === request.requesterUserId,
+          provider,
+        },
+        filters: [
+          "project_authorized",
+          "grant_active",
+          "workspace_online",
+          "configured_worker_bound",
+          "package_ready",
+          "credential_ready",
+          "permissions_intersected",
+          "capacity_available",
+          "budget_available",
+          ...(statefulLease
+            ? ["primary_workspace", "checkout_ready", "lease_active"]
+            : []),
+        ],
         rejectedAlternatives: rejected,
       },
       executionClass,

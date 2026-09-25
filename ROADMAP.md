@@ -20,6 +20,6 @@ Current execution model:
 Conclave AX -> Conclave Cloud -> Workspace -> Worker
 ```
 
-Projects are the collaboration boundary. A Project uses a Workspace only through an explicit Workspace Grant. Accounts are the user-facing representation of Credential Profiles.
+Projects are the collaboration boundary. A Project uses a Workspace only through an explicit Workspace Grant. Execution is the product area for Workspaces and configured Workers; credential/account records remain internal beneath Workers.
 
 Workers never connect directly to Conclave Cloud.
