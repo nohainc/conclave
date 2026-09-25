@@ -118,7 +118,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
   bool accountSecurityLoading = false;
   ThemeMode _themeMode = ThemeMode.system;
   bool _desktopSidebarCollapsed = false;
-  final List<ToastMessage> activeToasts = [];
   String usageRange = '30d';
   String usageProjectFilter = 'all';
   String usageUserFilter = 'all';
@@ -134,38 +133,38 @@ class _StudioAppState extends State<ConclaveAppShell> {
       };
 
   void _showSnackBar(String message, {ToastType type = ToastType.info}) {
-    _showToast(message, type: type);
-    messengerKey.currentState?.showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: const TextStyle(
-            color: Color(0xfff4f4f6),
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
+    messengerKey.currentState
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 4),
+          showCloseIcon: true,
+          closeIconColor: const Color(0xff9e9ea7),
+          content: Text(
+            message,
+            style: const TextStyle(
+              color: Color(0xfff4f4f6),
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          backgroundColor: const Color(0xff20202a),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          action: SnackBarAction(
+            label: 'Copy',
+            textColor: const Color(0xffb8a9fe),
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: message));
+              messengerKey.currentState?.hideCurrentSnackBar();
+            },
           ),
         ),
-        backgroundColor: const Color(0xff20202a),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        action: SnackBarAction(
-          label: 'Copy',
-          textColor: const Color(0xffb8a9fe),
-          onPressed: () {
-            Clipboard.setData(ClipboardData(text: message));
-          },
-        ),
-      ),
-    );
-  }
+      );
 
-  void _showToast(String message, {ToastType type = ToastType.info}) {
-    final id = DateTime.now().microsecondsSinceEpoch.toString();
-    final toast = ToastMessage(id: id, message: message, type: type);
-    setState(() => activeToasts.add(toast));
-    Future<void>.delayed(toast.duration, () {
+    Future<void>.delayed(const Duration(seconds: 4), () {
       if (mounted) {
-        setState(() => activeToasts.removeWhere((t) => t.id == id));
+        messengerKey.currentState?.hideCurrentSnackBar();
       }
     });
   }
@@ -1732,11 +1731,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
                     ),
                   );
                 },
-              ),
-              ToastOverlay(
-                toasts: activeToasts,
-                onDismiss: (id) =>
-                    setState(() => activeToasts.removeWhere((t) => t.id == id)),
               ),
             ],
           ),

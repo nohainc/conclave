@@ -480,8 +480,14 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
     }
   }
 
-  void _message(String message) => ScaffoldMessenger.of(context).showSnackBar(
+  void _message(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
         SnackBar(
+          duration: const Duration(seconds: 4),
+          showCloseIcon: true,
+          closeIconColor: const Color(0xff9e9ea7),
           content: Text(
             message,
             style: const TextStyle(
@@ -500,10 +506,18 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
             textColor: const Color(0xffb8a9fe),
             onPressed: () {
               Clipboard.setData(ClipboardData(text: message));
+              ScaffoldMessenger.of(context).hideCurrentSnackBar();
             },
           ),
         ),
       );
+
+    Future<void>.delayed(const Duration(seconds: 4), () {
+      if (mounted) {
+        ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+      }
+    });
+  }
 
   Future<void> _share() async {
     var email = '';
