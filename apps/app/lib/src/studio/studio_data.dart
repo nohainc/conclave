@@ -88,7 +88,7 @@ abstract interface class StudioDataSource {
     required String name,
     String? slug,
   });
-  Future<List<StudioProject>> loadProjects();
+  Future<List<StudioProject>> loadProjects({bool includeArchived = false});
   Future<List<Map<String, dynamic>>> loadProjectWorkspaces({
     required String projectId,
   });
@@ -313,8 +313,12 @@ class StudioApiClient implements StudioDataSource {
   }
 
   @override
-  Future<List<StudioProject>> loadProjects() async {
-    final body = await _getJson(Uri.parse('$baseUrl/projects'));
+  Future<List<StudioProject>> loadProjects(
+      {bool includeArchived = false}) async {
+    final uri = Uri.parse('$baseUrl/projects').replace(
+      queryParameters: includeArchived ? {'archived': 'true'} : null,
+    );
+    final body = await _getJson(uri);
     return (body['projects'] as List? ?? const [])
         .whereType<Map>()
         .map((item) => StudioProject.fromJson(Map<String, dynamic>.from(item)))
@@ -965,6 +969,9 @@ class StudioApiClient implements StudioDataSource {
         if (name != null) 'name': name,
         if (description != null) 'description': description,
         if (repository != null) 'repositoryId': repository,
+        if (instructions != null) 'instructions': instructions,
+        if (defaultExecutionPolicy != null)
+          'defaultExecutionPolicy': defaultExecutionPolicy,
         if (instructions != null ||
             defaultExecutionPolicy != null ||
             settings != null)

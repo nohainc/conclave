@@ -2094,13 +2094,15 @@ async function handleListProjects(
     accessContext,
   );
   if (context.authorizationModel === "v5") {
+    const includeArchived =
+      new URL(request.url).searchParams.get("archived") === "true";
     const rows = await env.CONCLAVE_DB.prepare(
       `SELECT p.id, p.name, p.description, p.repository_id AS repositoryId,
               p.settings_json AS settingsJson, p.created_at AS createdAt, p.updated_at AS updatedAt
        FROM projects p
        JOIN project_memberships pm ON pm.project_id = p.id
        WHERE pm.user_id = ?1
-         AND COALESCE(json_extract(p.settings_json, '$.archived'), 0) = 0
+         ${includeArchived ? "" : "AND COALESCE(json_extract(p.settings_json, '$.archived'), 0) = 0"}
        ORDER BY p.updated_at DESC`,
     )
       .bind(context.userId)
@@ -2366,6 +2368,12 @@ async function handleUpdateProject(
       ? (body.settings as Record<string, unknown>)
       : {}),
   };
+  if (typeof body.instructions === "string") {
+    settings.instructions = body.instructions;
+  }
+  if (typeof body.defaultExecutionPolicy === "string") {
+    settings.defaultExecutionPolicy = body.defaultExecutionPolicy;
+  }
   if (body.archived === true) settings.archived = true;
   if (body.archived === false) settings.archived = false;
   const now = new Date().toISOString();
@@ -2405,7 +2413,19 @@ async function handleUpdateProject(
       projectId,
     )
     .run();
-  return json({ project });
+  return json({
+    project: {
+      ...project,
+      instructions:
+        typeof project.settings.instructions === "string"
+          ? project.settings.instructions
+          : "",
+      defaultExecutionPolicy:
+        typeof project.settings.defaultExecutionPolicy === "string"
+          ? project.settings.defaultExecutionPolicy
+          : "balanced",
+    },
+  });
 }
 
 async function handleDeleteProject(

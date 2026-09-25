@@ -212,7 +212,8 @@ class StudioFixtureDataSource implements StudioDataSource {
       );
 
   @override
-  Future<List<StudioProject>> loadProjects() async =>
+  Future<List<StudioProject>> loadProjects(
+          {bool includeArchived = false}) async =>
       studioFixtureSnapshot().projects;
 
   @override

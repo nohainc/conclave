@@ -191,7 +191,9 @@ void main() {
     });
   });
 
-  test('composes focused Project and Workstream read models without Workspace snapshot', () async {
+  test(
+      'composes focused Project and Workstream read models without Workspace snapshot',
+      () async {
     final client = _ReadModelClient({
       '/api/projects': {
         'projects': [
@@ -298,6 +300,34 @@ void main() {
     expect(project.name, 'Authentication redesign');
     expect(client.lastRequest?.method, 'POST');
     expect(client.lastRequest?.url.path, '/api/projects');
+  });
+
+  test('persists Project instructions through the explicit update field',
+      () async {
+    final client = _JsonClient({
+      'project': {
+        'id': 'project-1',
+        'name': 'Project',
+        'description': '',
+        'instructions': 'Use the team conventions.',
+        'settings': {'instructions': 'Use the team conventions.'},
+      },
+    }, statusCode: 200);
+    final api = StudioApiClient(
+      baseUrl: 'https://conclave.test/api',
+      client: client,
+    );
+
+    final project = await api.updateProject(
+      projectId: 'project-1',
+      instructions: 'Use the team conventions.',
+    );
+
+    final payload = jsonDecode(client.lastBody!) as Map<String, dynamic>;
+    expect(payload['instructions'], 'Use the team conventions.');
+    expect((payload['settings'] as Map)['instructions'],
+        'Use the team conventions.');
+    expect(project.instructions, 'Use the team conventions.');
   });
 
   test('rejects removed configured Worker writes', () async {

@@ -150,7 +150,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
           ),
           backgroundColor: const Color(0xff20202a),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           action: SnackBarAction(
             label: 'Copy',
             textColor: const Color(0xffb8a9fe),
@@ -451,7 +452,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
               ),
               const SizedBox(height: 16),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: const Color(0xff7c6cf0).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
@@ -505,7 +507,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   ),
                   ActionChip(
                     avatar: const Icon(Icons.public_rounded, size: 14),
-                    label: const Text('Website', style: TextStyle(fontSize: 12)),
+                    label:
+                        const Text('Website', style: TextStyle(fontSize: 12)),
                     onPressed: () {
                       Navigator.of(dialogContext).pop();
                       browserNavigation
@@ -1186,7 +1189,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
       ),
     );
     final workspaceId = snapshot.workspaceId;
-    if (updated == null || updated.trim().isEmpty || workspaceId == null) return;
+    if (updated == null || updated.trim().isEmpty || workspaceId == null) {
+      return;
+    }
     try {
       await store.agents.updateHost(workspaceId, host.id, name: updated.trim());
       await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
@@ -1233,8 +1238,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
                 onChanged: (value) => name = value,
                 onFieldSubmitted: (value) {
                   if (value.trim().isNotEmpty) {
-                    Navigator.pop(
-                        dialogContext, (name: value.trim(), platform: platform));
+                    Navigator.pop(dialogContext,
+                        (name: value.trim(), platform: platform));
                   }
                 },
               ),
@@ -1259,7 +1264,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
               onPressed: () {
                 final trimmed = name.trim();
                 if (trimmed.isEmpty) return;
-                Navigator.pop(dialogContext, (name: trimmed, platform: platform));
+                Navigator.pop(
+                    dialogContext, (name: trimmed, platform: platform));
               },
               child: const Text('Create Workspace'),
             ),
@@ -1364,55 +1370,55 @@ class _StudioAppState extends State<ConclaveAppShell> {
     bool? saved;
     try {
       saved = await showDialog<bool>(
-      context: navigatorKey.currentContext ?? context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(existing == null ? 'Create Worker' : 'Edit Worker'),
-          content: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextFormField(
-                  initialValue: name,
-                  onChanged: (val) => setDialogState(() => name = val),
-                  decoration: const InputDecoration(labelText: 'Name')),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                initialValue: agentId,
-                decoration: const InputDecoration(labelText: 'Workspace'),
-                items: snapshot.agents
-                    .map((agent) => DropdownMenuItem(
-                        value: agent.id, child: Text(agent.name)))
-                    .toList(),
-                onChanged: (value) => setDialogState(() => agentId = value),
-              ),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                initialValue: workerCatalogId,
-                decoration: const InputDecoration(labelText: 'Worker'),
-                items: snapshot.plugins
-                    .map((plugin) => DropdownMenuItem(
-                        value: plugin.id, child: Text(plugin.name)))
-                    .toList(),
-                onChanged: (value) =>
-                    setDialogState(() => workerCatalogId = value),
-              ),
-              const SizedBox(height: 10),
-              TextFormField(
-                  initialValue: roles,
-                  onChanged: (val) => roles = val,
-                  decoration: const InputDecoration(
-                      labelText: 'Roles (comma separated)')),
-              const SizedBox(height: 10),
-              TextFormField(
-                  initialValue: capabilities,
-                  onChanged: (val) => capabilities = val,
-                  decoration: const InputDecoration(
-                      labelText: 'Capabilities (comma separated)')),
-              const SizedBox(height: 10),
-              TextFormField(
-                  initialValue: versionPolicy,
-                  onChanged: (val) => versionPolicy = val,
-                  decoration: const InputDecoration(
-                      labelText: 'Worker version policy')),
+        context: navigatorKey.currentContext ?? context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: Text(existing == null ? 'Create Worker' : 'Edit Worker'),
+            content: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                TextFormField(
+                    initialValue: name,
+                    onChanged: (val) => setDialogState(() => name = val),
+                    decoration: const InputDecoration(labelText: 'Name')),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: agentId,
+                  decoration: const InputDecoration(labelText: 'Workspace'),
+                  items: snapshot.agents
+                      .map((agent) => DropdownMenuItem(
+                          value: agent.id, child: Text(agent.name)))
+                      .toList(),
+                  onChanged: (value) => setDialogState(() => agentId = value),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: workerCatalogId,
+                  decoration: const InputDecoration(labelText: 'Worker'),
+                  items: snapshot.plugins
+                      .map((plugin) => DropdownMenuItem(
+                          value: plugin.id, child: Text(plugin.name)))
+                      .toList(),
+                  onChanged: (value) =>
+                      setDialogState(() => workerCatalogId = value),
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                    initialValue: roles,
+                    onChanged: (val) => roles = val,
+                    decoration: const InputDecoration(
+                        labelText: 'Roles (comma separated)')),
+                const SizedBox(height: 10),
+                TextFormField(
+                    initialValue: capabilities,
+                    onChanged: (val) => capabilities = val,
+                    decoration: const InputDecoration(
+                        labelText: 'Capabilities (comma separated)')),
+                const SizedBox(height: 10),
+                TextFormField(
+                    initialValue: versionPolicy,
+                    onChanged: (val) => versionPolicy = val,
+                    decoration: const InputDecoration(
+                        labelText: 'Worker version policy')),
                 const SizedBox(height: 10),
                 TextFormField(
                     initialValue: config,
@@ -1526,9 +1532,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
             .where((value) => value.isNotEmpty)
             .toList(),
         enabled: enabled,
-        workerVersionPolicy: versionPolicy.trim().isEmpty
-            ? 'latest'
-            : versionPolicy.trim(),
+        workerVersionPolicy:
+            versionPolicy.trim().isEmpty ? 'latest' : versionPolicy.trim(),
         config: _parseWorkerConfig(config),
         sessionPolicy: sessionPolicy,
         concurrencyLimit: _parseConcurrency(concurrency),
@@ -1693,8 +1698,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
                                       unawaited(_showAboutConclave()),
                                   onOpenExternal: (uri) =>
                                       browserNavigation.openExternal(uri),
-                                  onToggleCollapse: () => setState(() =>
-                                      _desktopSidebarCollapsed = false),
+                                  onToggleCollapse: () => setState(
+                                      () => _desktopSidebarCollapsed = false),
                                 )
                               : SizedBox(
                                   width: 248,
@@ -1717,8 +1722,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
                                         unawaited(_showAboutConclave()),
                                     onOpenExternal: (uri) =>
                                         browserNavigation.openExternal(uri),
-                                    onToggleCollapse: () => setState(() =>
-                                        _desktopSidebarCollapsed = true),
+                                    onToggleCollapse: () => setState(
+                                        () => _desktopSidebarCollapsed = true),
                                   ),
                                 ),
                         Expanded(
@@ -1822,8 +1827,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
                         controller: authEmailController,
                         autofocus: !authSignUp,
                         keyboardType: TextInputType.emailAddress,
-                        textInputAction:
-                            authResetRequest ? TextInputAction.done : TextInputAction.next,
+                        textInputAction: authResetRequest
+                            ? TextInputAction.done
+                            : TextInputAction.next,
                         onSubmitted: (_) {
                           if (authResetRequest) {
                             _submitEmailAuth();
@@ -1838,8 +1844,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
                         controller: authPasswordController,
                         autofocus: resetPassword,
                         obscureText: true,
-                        textInputAction:
-                            (!authSignUp && !resetPassword) ? TextInputAction.done : TextInputAction.next,
+                        textInputAction: (!authSignUp && !resetPassword)
+                            ? TextInputAction.done
+                            : TextInputAction.next,
                         onSubmitted: (_) {
                           if (!authSignUp && !resetPassword) {
                             _submitEmailAuth();
@@ -2457,7 +2464,66 @@ class _StudioAppState extends State<ConclaveAppShell> {
         onOpenRun: (projectId, runId) =>
             _navigateTo(StudioNavigation.run(projectId, runId)),
         onCreateProject: _createProject,
+        onOpenArchivedProjects: _showArchivedProjects,
       );
+
+  Future<void> _showArchivedProjects() async {
+    try {
+      final archived =
+          await widget.dataSource.loadProjects(includeArchived: true);
+      final inactive = archived.where((project) => project.archived).toList();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: navigatorKey.currentContext ?? context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Archived Projects'),
+          content: SizedBox(
+            width: 520,
+            child: inactive.isEmpty
+                ? const Text('No archived Projects.')
+                : ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: inactive.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (_, index) {
+                      final project = inactive[index];
+                      return ListTile(
+                        title: Text(project.name),
+                        subtitle: Text(project.description.isEmpty
+                            ? 'No description'
+                            : project.description),
+                        trailing: FilledButton.tonal(
+                          onPressed: () async {
+                            await widget.dataSource.updateProject(
+                              projectId: project.id,
+                              settings: const {'archived': false},
+                            );
+                            if (dialogContext.mounted) {
+                              Navigator.pop(dialogContext);
+                            }
+                            await _loadSnapshot(showSpinner: false);
+                            if (mounted) {
+                              _showSnackBar('Project restored.');
+                            }
+                          },
+                          child: const Text('Restore'),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
+    }
+  }
 
   Widget _projectOverviewView() {
     final project = selectedProject;

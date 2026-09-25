@@ -21,6 +21,7 @@ class HomePage extends StatelessWidget {
     required this.onOpenChat,
     required this.onOpenRun,
     required this.onCreateProject,
+    required this.onOpenArchivedProjects,
   });
 
   final List<StudioProject> projects;
@@ -39,6 +40,7 @@ class HomePage extends StatelessWidget {
   final void Function(String projectId, String chatId) onOpenChat;
   final void Function(String projectId, String runId) onOpenRun;
   final VoidCallback onCreateProject;
+  final VoidCallback onOpenArchivedProjects;
 
   bool get isNewWorkspace => projects.isEmpty;
 
@@ -49,6 +51,7 @@ class HomePage extends StatelessWidget {
           onOpenWorkers: onOpenWorkers,
           onOpenAccounts: onOpenAccounts,
           onCreateProject: onCreateProject,
+          onOpenArchivedProjects: onOpenArchivedProjects,
         )
       : _EstablishedHome(
           projects: projects,
@@ -66,6 +69,7 @@ class HomePage extends StatelessWidget {
           onOpenProject: onOpenProject,
           onOpenChat: onOpenChat,
           onOpenRun: onOpenRun,
+          onOpenArchivedProjects: onOpenArchivedProjects,
         );
 }
 
@@ -75,12 +79,14 @@ class _GettingStarted extends StatelessWidget {
     required this.onOpenWorkers,
     required this.onOpenAccounts,
     required this.onCreateProject,
+    required this.onOpenArchivedProjects,
   });
 
   final VoidCallback onOpenHosts;
   final VoidCallback onOpenWorkers;
   final VoidCallback onOpenAccounts;
   final VoidCallback onCreateProject;
+  final VoidCallback onOpenArchivedProjects;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -119,6 +125,12 @@ class _GettingStarted extends StatelessWidget {
               detail: 'Create a Project to organize your work.',
               action: 'Create project',
               onPressed: onCreateProject),
+          _SetupStep(
+              number: '5',
+              title: 'Archived Projects',
+              detail: 'Restore a Project that was archived earlier.',
+              action: 'View archived',
+              onPressed: onOpenArchivedProjects),
           Card(
             color: Theme.of(context).colorScheme.primaryContainer,
             child: ListTile(
@@ -186,6 +198,7 @@ class _EstablishedHome extends StatelessWidget {
     required this.onOpenProject,
     required this.onOpenChat,
     required this.onOpenRun,
+    required this.onOpenArchivedProjects,
   });
 
   final List<StudioProject> projects;
@@ -203,6 +216,7 @@ class _EstablishedHome extends StatelessWidget {
   final ValueChanged<String> onOpenProject;
   final void Function(String projectId, String chatId) onOpenChat;
   final void Function(String projectId, String runId) onOpenRun;
+  final VoidCallback onOpenArchivedProjects;
 
   @override
   Widget build(BuildContext context) {
@@ -214,6 +228,15 @@ class _EstablishedHome extends StatelessWidget {
       const Text('Home',
           style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
       const SizedBox(height: 8),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: OutlinedButton.icon(
+          onPressed: onOpenArchivedProjects,
+          icon: const Icon(Icons.archive_outlined, size: 16),
+          label: const Text('Archived Projects'),
+        ),
+      ),
+      const SizedBox(height: 12),
       Text('Your Workspace at a glance.',
           style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
