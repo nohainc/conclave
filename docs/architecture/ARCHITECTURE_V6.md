@@ -78,8 +78,9 @@ Different Workstreams may run concurrently on the same Workspace because their c
 
 - **Project** — shared collaboration and authorization boundary.
 - **Workspace** — one user-owned execution environment backed by one machine/runtime.
-- **Worker** — installed AI/tool capability inside a Workspace.
-- **AI Account** — external provider identity, authorized independently.
+- **Worker Type** — installable AI/tool capability definition such as Codex or Claude Code.
+- **Worker** — configured executable AI/tool identity. A Worker selects one Worker Type, one logical external AI identity, defaults/capabilities, and one or more Workspace bindings.
+- **Credential state** — internal authentication metadata/readiness for a Worker on a Workspace. Provider secrets remain local to the Workspace secure store and are not a standalone product resource.
 - **Run** — one orchestrated execution.
 - **Assignment** — immutable execution snapshot.
 
@@ -533,7 +534,8 @@ Work Request
   -> current Checkpoint/revision
   -> eligible Project Workspace Grants
   -> ready Workers
-  -> authorized AI Accounts
+  -> authorized configured Workers
+  -> package/credential readiness
   -> capacity / budget / independence
   -> Assignment
 ~~~
@@ -547,7 +549,7 @@ Work Request
   -> active Checkout
   -> exclusive Lease
   -> ready Worker
-  -> authorized AI Account
+  -> authorized configured Worker
   -> Assignment bound to Checkout + fencing token
 ~~~
 
@@ -555,16 +557,18 @@ The scheduler may never route a stateful step to an auxiliary Workspace.
 
 ## 21. AI Account policy
 
-Workstream execution Account policy is separate from Workspace access.
+Workstream execution Worker policy is separate from Workspace access.
 
-Supported policy modes:
-- requester;
-- sponsor;
-- project_shared;
-- explicit_accounts;
-- auto_authorized.
+Supported policy shapes may include:
+- requester-owned Workers;
+- sponsor-authorized Workers;
+- Project-shared Workers;
+- explicit Worker IDs;
+- auto-authorized Workers.
 
-Recommended default: requester.
+Recommended default: requester-owned or otherwise explicitly authorized Workers.
+
+The configured Worker is the user-facing resource. Credential/account authorization remains an internal security check beneath the Worker and may only narrow eligibility.
 
 ### Sponsor mode
 
@@ -901,7 +905,7 @@ Contains:
 
 Advanced:
 - Workspace override only when Workflow step is stateless or policy permits;
-- Account override within authorization;
+- Worker override within authorization;
 - model/quality controls.
 
 Primary button is **Run**, not Send.
@@ -913,7 +917,7 @@ Primary button is **Run**, not Send.
 3. Project authorization is the outer collaboration boundary.
 4. Workstream access may narrow but never broaden Project role.
 5. Workspace access still requires v5 Workspace Grants.
-6. AI Account access remains independent.
+6. Configured Worker authorization remains independent from Workspace access; underlying credential authorization remains an internal security boundary.
 7. Stateful execution uses only the Workstream Primary Workspace.
 8. Stateful execution uses only the managed Workstream Checkout.
 9. At most one active stateful lease exists per Checkout.
@@ -936,9 +940,9 @@ Keep:
 - user-owned Workspaces;
 - WorkspaceProjectGrant;
 - Project Account grants;
-- v5 scheduler eligibility concepts;
+- v5 scheduler eligibility concepts, adapted to configured Workers;
 - Workspace Gateway;
-- Worker desired state;
+- Worker Type package desired state;
 - Worker package signing;
 - runtime permission enforcement;
 - SafeWorkspace;
