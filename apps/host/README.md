@@ -1,10 +1,28 @@
 # Conclave Workspace
 
-The Conclave Workspace is the machine-side desktop application. Its local UI is
-intentionally focused on pairing, machine health, local account actions,
-repository permissions, Worker diagnostics, logs, updates, and quitting.
-Projects, Chats, Workspace administration, orchestration, and Worker catalog
-management belong in Conclave AX.
+Conclave Workspace is the machine-side execution and security runtime.
+
+It maintains the Cloud connection, owns the local Work Root, creates/resolves
+Workstream working directories, manages locally configured Workers and their
+credentials, installs/verifies Worker Type adapter packages, launches adapter
+child processes, enforces local permissions, supervises execution, and reports
+safe readiness/status back to Conclave Cloud.
+
+Its GUI is intentionally minimal and local-first:
+- pairing/connection;
+- Workers;
+- provider authentication;
+- local permissions;
+- current local work;
+- diagnostics/logs;
+- updates;
+- pause/quit.
+
+Projects, Workstreams, Discuss, Work orchestration, Project membership and
+remote scheduling policy belong in Conclave AX.
+
+Users install only Conclave Workspace. Worker adapters are managed internally;
+they are not separately installed desktop applications.
 
 ## Getting Started
 

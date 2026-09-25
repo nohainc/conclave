@@ -1,6 +1,6 @@
 # Conclave AX Technology Stack
 
-**Status:** Normative for Architecture v5
+**Status:** v6 baseline; v7 Worker/runtime additions proposed
 
 ## Stack summary
 
@@ -8,9 +8,9 @@
 | --- | --- |
 | Conclave AX | Flutter + Dart, Web |
 | Cloud | TypeScript + Cloudflare |
-| Workspace runtime | Flutter + Dart desktop |
-| Worker protocol | language-independent structured protocol |
-| First-party Workers | Dart where practical |
+| Conclave Workspace | Flutter + Dart desktop/background runtime |
+| Worker adapter protocol | language-independent structured protocol |
+| First-party adapters | Dart where practical |
 | Cloud database | Cloudflare D1 |
 | Artifacts/packages | Cloudflare R2 |
 | Durable orchestration | Cloudflare Workflows |
@@ -46,30 +46,32 @@ Do not add PostgreSQL/Redis/Kafka/Kubernetes without measured need.
 
 ## Workspace runtime
 
-The Workspace runtime is one Flutter/Dart desktop application. Its implementation currently lives under `apps/host` while the runtime migration proceeds.
+Conclave Workspace is one Flutter/Dart desktop application/runtime. Its implementation currently lives under `apps/host`.
 
-Unlike v3, there is no separate Workspace UI and execution runtime product split.
+There is no separately installed Worker application.
 
-The runtime process owns:
+The persistent runtime process owns:
 - Cloud WebSocket;
-- journal/reconciliation;
-- Worker manager;
+- Workspace enrollment/reconciliation;
+- local configured Worker registry;
 - secure credential integration;
+- Worker Type adapter manager;
+- Work Root/Workstream directory lifecycle;
 - child process supervision;
-- repository/runtime capabilities;
+- local permissions and diagnostics;
 - update lifecycle;
-- minimal local UI.
+- minimal local UI/tray behavior.
 
-Worker execution remains in separate OS child processes, retaining crash/cancellation/security isolation where it matters most.
+Adapter execution remains in separate per-assignment OS child processes, retaining crash/cancellation/security isolation while keeping the Cloud connection/runtime stable.
 
-## Workers
+## Worker adapters
 
-Workers are signed executable packages.
+Worker Types are implemented by signed adapter packages managed by Conclave Workspace.
 
-Preferred v4 local transport:
-- structured JSON/JSON-RPC over stdin/stdout for ordinary per-assignment Worker processes.
+Preferred local transport:
+- structured JSON/JSON-RPC over stdin/stdout for ordinary per-assignment adapter processes.
 
-A Worker may use:
+An adapter may use:
 - Dart;
 - TypeScript/Node;
 - Rust;
@@ -79,7 +81,9 @@ A Worker may use:
 
 when that runtime materially improves integration quality.
 
-Protocol compatibility and signing matter more than implementation language.
+Protocol compatibility, package signing, prerequisite detection and process isolation matter more than implementation language.
+
+A configured Worker is local configuration/state that references one adapter type; it is not itself a separately installed binary.
 
 ## Cross-language contracts
 
@@ -114,7 +118,7 @@ Prefer:
 - explicit state machines;
 - immutable Assignment snapshots;
 - idempotent commands;
-- desired-state reconciliation for Workspace Worker installs;
+- desired-state reconciliation for approved adapter releases and remote scheduling state;
 - capability-based scheduling/security;
 - bounded context assembly;
 - durable audit events without full event sourcing.
@@ -122,8 +126,9 @@ Prefer:
 ## Workspace runtime architecture patterns
 
 Prefer:
-- supervisor pattern for Worker child processes;
-- state machine for Worker install/update;
+- supervisor pattern for adapter/tool child processes;
+- state machine for adapter install/update;
+- local-first configured Worker registry with safe Cloud inventory sync;
 - platform adapters only for genuinely OS-specific behavior;
 - secure-store abstraction;
 - bounded logs/output;
