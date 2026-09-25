@@ -2292,51 +2292,21 @@ async function handleGetProject(
   projectId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  const context = await authorizeRequest(
+  await authorizeRequest(
     request,
     env,
     "projects:read",
     projectId,
     accessContext,
   );
-  if (context.authorizationModel === "v5") {
-    const row = await env.CONCLAVE_DB.prepare(
-      `SELECT p.id, p.name, p.description, p.repository_id AS repositoryId,
-              p.settings_json AS settingsJson, p.created_at AS createdAt, p.updated_at AS updatedAt
-       FROM projects p WHERE p.id = ?1`,
-    )
-      .bind(projectId)
-      .first<{
-        id: string;
-        name: string;
-        description: string | null;
-        repositoryId: string | null;
-        settingsJson: string;
-        createdAt: string;
-        updatedAt: string;
-      }>();
-    if (!row) throw new HttpError(404, "Project not found");
-    return json({
-      project: {
-        id: row.id,
-        name: row.name,
-        description: row.description,
-        repositoryId: row.repositoryId,
-        settings: parseJson(row.settingsJson),
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt,
-      },
-    });
-  }
   const row = await env.CONCLAVE_DB.prepare(
-    `SELECT p.id, p.workspace_id AS workspaceId, p.name, p.description, p.repository_id AS repositoryId,
+    `SELECT p.id, p.name, p.description, p.repository_id AS repositoryId,
             p.settings_json AS settingsJson, p.created_at AS createdAt, p.updated_at AS updatedAt
-     FROM projects p WHERE p.id = ?1 AND p.workspace_id = ?2`,
+     FROM projects p WHERE p.id = ?1`,
   )
-    .bind(projectId, context.workspaceId)
+    .bind(projectId)
     .first<{
       id: string;
-      workspaceId: string;
       name: string;
       description: string | null;
       repositoryId: string | null;
@@ -2348,7 +2318,6 @@ async function handleGetProject(
   return json({
     project: {
       id: row.id,
-      workspaceId: row.workspaceId,
       name: row.name,
       description: row.description,
       repositoryId: row.repositoryId,
@@ -2365,91 +2334,22 @@ async function handleUpdateProject(
   projectId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  const context = await authorizeRequest(
+  await authorizeRequest(
     request,
     env,
-    "projects:manage",
+    "projects:write",
     projectId,
     accessContext,
   );
-  if (context.authorizationModel === "v5") {
-    const existing = await env.CONCLAVE_DB.prepare(
-      `SELECT id, name, description,
-              repository_id AS repositoryId, settings_json AS settingsJson,
-              created_at AS createdAt, updated_at AS updatedAt
-       FROM projects WHERE id = ?1`,
-    )
-      .bind(projectId)
-      .first<{
-        id: string;
-        name: string;
-        description: string | null;
-        repositoryId: string | null;
-        settingsJson: string;
-        createdAt: string;
-        updatedAt: string;
-      }>();
-    if (!existing) throw new HttpError(404, "Project not found");
-
-    const body = (await request.json()) as Record<string, unknown>;
-    const settings = {
-      ...parseJson(existing.settingsJson),
-      ...(typeof body.settings === "object" && body.settings !== null
-        ? (body.settings as Record<string, unknown>)
-        : {}),
-    };
-    if (body.archived === true) settings.archived = true;
-    if (body.archived === false) settings.archived = false;
-    const now = new Date().toISOString();
-    const project = {
-      id: existing.id,
-      name:
-        typeof body.name === "string"
-          ? requiredString(body.name, "name")
-          : existing.name,
-      description:
-        body.description === null
-          ? null
-          : typeof body.description === "string"
-            ? body.description
-            : existing.description,
-      repositoryId:
-        body.repositoryId === null
-          ? null
-          : typeof body.repositoryId === "string"
-            ? body.repositoryId
-            : existing.repositoryId,
-      settings,
-      createdAt: existing.createdAt,
-      updatedAt: now,
-    };
-    await env.CONCLAVE_DB.prepare(
-      `UPDATE projects SET name = ?1, description = ?2, repository_id = ?3,
-         settings_json = ?4, updated_at = ?5
-       WHERE id = ?6`,
-    )
-      .bind(
-        project.name,
-        project.description,
-        project.repositoryId,
-        JSON.stringify(project.settings),
-        now,
-        projectId,
-      )
-      .run();
-    return json({ project });
-  }
-
   const existing = await env.CONCLAVE_DB.prepare(
-    `SELECT id, workspace_id AS workspaceId, name, description,
+    `SELECT id, name, description,
             repository_id AS repositoryId, settings_json AS settingsJson,
             created_at AS createdAt, updated_at AS updatedAt
-     FROM projects WHERE id = ?1 AND workspace_id = ?2`,
+     FROM projects WHERE id = ?1`,
   )
-    .bind(projectId, context.workspaceId)
+    .bind(projectId)
     .first<{
       id: string;
-      workspaceId: string;
       name: string;
       description: string | null;
       repositoryId: string | null;
@@ -2471,10 +2371,9 @@ async function handleUpdateProject(
   const now = new Date().toISOString();
   const project = {
     id: existing.id,
-    workspaceId: existing.workspaceId,
     name:
-      typeof body.name === "string"
-        ? requiredString(body.name, "name")
+      typeof body.name === "string" && body.name.trim().length > 0
+        ? body.name.trim()
         : existing.name,
     description:
       body.description === null
@@ -2492,11 +2391,10 @@ async function handleUpdateProject(
     createdAt: existing.createdAt,
     updatedAt: now,
   };
-  validateProject(project);
   await env.CONCLAVE_DB.prepare(
     `UPDATE projects SET name = ?1, description = ?2, repository_id = ?3,
        settings_json = ?4, updated_at = ?5
-     WHERE id = ?6 AND workspace_id = ?7`,
+     WHERE id = ?6`,
   )
     .bind(
       project.name,
@@ -2505,7 +2403,6 @@ async function handleUpdateProject(
       JSON.stringify(project.settings),
       now,
       projectId,
-      context.workspaceId,
     )
     .run();
   return json({ project });

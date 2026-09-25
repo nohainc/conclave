@@ -382,6 +382,7 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
   Future<void> _moveWorkstream(int index, int delta) async {
     final targetIndex = index + delta;
     if (targetIndex < 0 || targetIndex >= workstreams.length) return;
+    final previousList = List<StudioWorkstream>.from(workstreams);
     final updatedList = List<StudioWorkstream>.from(workstreams);
     final item = updatedList.removeAt(index);
     updatedList.insert(targetIndex, item);
@@ -402,9 +403,35 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
           'workstreamOrder': orderIds,
         },
       );
-      widget.onProjectUpdated?.call(updatedProject);
+      if (!mounted) return;
+      final mergedProject = StudioProject(
+        id: updatedProject.id,
+        name: updatedProject.name,
+        repository: updatedProject.repository,
+        branch: updatedProject.branch,
+        activeGoals: updatedProject.activeGoals,
+        lastActivity: updatedProject.lastActivity,
+        chats: updatedProject.chats.isNotEmpty
+            ? updatedProject.chats
+            : widget.project.chats,
+        workstreams: updatedList,
+        description: updatedProject.description,
+        instructions: updatedProject.instructions,
+        defaultExecutionPolicy: updatedProject.defaultExecutionPolicy,
+        archived: updatedProject.archived,
+        role: updatedProject.role.isNotEmpty
+            ? updatedProject.role
+            : widget.project.role,
+        settings: updatedProject.settings,
+      );
+      widget.onProjectUpdated?.call(mergedProject);
     } catch (error) {
-      _message(error.toString());
+      if (mounted) {
+        setState(() {
+          workstreams = previousList;
+        });
+        _message(error.toString());
+      }
     }
   }
 
