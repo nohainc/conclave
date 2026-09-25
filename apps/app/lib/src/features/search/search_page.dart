@@ -62,16 +62,6 @@ class SearchPage extends StatelessWidget {
         },
       ),
       CommandPaletteAction(
-        title: 'Usage',
-        subtitle: 'Token usage, cost analytics, and quotas',
-        icon: Icons.analytics_outlined,
-        category: 'Navigation',
-        onSelect: () {
-          onClearSearch();
-          onNavigateTo(const StudioNavigation.usage());
-        },
-      ),
-      CommandPaletteAction(
         title: 'Profile & Security',
         subtitle: 'Profile, passkeys, and account settings',
         icon: Icons.person_outline_rounded,

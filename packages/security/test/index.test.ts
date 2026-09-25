@@ -11,7 +11,6 @@ import {
   encryptCredential,
   decryptCredential,
   consumeRateLimit,
-  assertWithinBudget,
   computePackageDigest,
   signPackageDigest,
   verifyPackageDigestSignature,
@@ -604,18 +603,6 @@ describe("Architecture v2 Security & Authentication Suite", () => {
       expect(r3.allowed).toBe(false);
     });
 
-    it("enforces budget limits", () => {
-      const current = { inputTokens: 100, outputTokens: 50, costMicros: 1000 };
-      const next = { inputTokens: 50, outputTokens: 25, costMicros: 500 };
-      const policy = { maxCostMicros: 2000 };
-
-      const total = assertWithinBudget(policy, current, next);
-      expect(total.costMicros).toBe(1500);
-
-      expect(() =>
-        assertWithinBudget({ maxCostMicros: 1200 }, current, next),
-      ).toThrow(/Budget exceeded/);
-    });
 
     it("computes package digest, generates HMAC signature, and verifies successfully", async () => {
       const packageContent = "console.log('hello world plugin');";

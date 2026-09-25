@@ -6,6 +6,10 @@ const checks = [
   ["Workspace invitation routes", "apps/cloud/src/routes/router.ts", /workspaceInvitationsMatch|handleCreateWorkspaceInvitation|handleAcceptWorkspaceInvitation/],
   ["Host enrollment routes", "apps/cloud/src/routes/router.ts", /host-enrollments|\/api\/hosts\/enroll/],
   ["Assignment legacy fallback", "apps/cloud/src/assignment-dispatcher.ts", /selectWorkerForTask\(\s*env\.CONCLAVE_DB/],
+  ["Product Usage route", "apps/app/lib/src/navigation/studio_navigation.dart", /\bStudioRouteKind\.usage\b/],
+  ["Usage API handlers", "apps/cloud/src/routes/handlers.ts", /\bhandleProjectUsage\b|\bhandleWorkspaceUsage\b/],
+  ["Budget assertion in dispatch", "apps/cloud/src/assignment-dispatcher.ts", /\bassertV5BudgetAvailable\b/],
+  ["Usage accounting in dispatch", "apps/cloud/src/assignment-dispatcher.ts", /\brecordV5AssignmentUsage\b/],
 ];
 
 const failures = [];

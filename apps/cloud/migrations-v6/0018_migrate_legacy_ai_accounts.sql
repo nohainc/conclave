@@ -112,25 +112,6 @@ UPDATE worker_assignments
       WHERE a.id = worker_assignments.account_id
    );
 
-UPDATE usage
-   SET configured_worker_id = (
-         SELECT wa.configured_worker_id
-           FROM worker_assignments wa
-          WHERE wa.id = usage.assignment_id
-       ),
-       worker_type_id = (
-         SELECT cw.worker_type_id
-           FROM worker_assignments wa
-           JOIN configured_workers cw ON cw.id = wa.configured_worker_id
-          WHERE wa.id = usage.assignment_id
-       ),
-       credential_owner_user_id = COALESCE(
-         credential_owner_user_id,
-         account_owner_user_id
-       )
- WHERE configured_worker_id IS NULL
-   AND assignment_id IS NOT NULL;
-
 INSERT INTO configured_worker_audit_log
   (id, configured_worker_id, workspace_id, actor_type, actor_id, action,
    target_id, details_json, created_at)

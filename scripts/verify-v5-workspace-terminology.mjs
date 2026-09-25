@@ -18,6 +18,7 @@ const files = [
 
 function walk(entry) {
   const absolute = path.join(root, entry);
+  if (!fs.existsSync(absolute)) return [];
   if (!fs.statSync(absolute).isDirectory()) return [absolute];
   return fs
     .readdirSync(absolute, { withFileTypes: true })

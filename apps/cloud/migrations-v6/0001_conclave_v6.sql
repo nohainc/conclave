@@ -295,31 +295,9 @@ CREATE TABLE artifacts (
   created_at TEXT NOT NULL
 );
 
-CREATE TABLE usage (
-  id TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
-  workstream_id TEXT REFERENCES workstreams(id) ON DELETE SET NULL,
-  work_request_id TEXT REFERENCES work_requests(id) ON DELETE SET NULL,
-  workflow_version_id TEXT REFERENCES workflow_versions(id) ON DELETE SET NULL,
-  checkout_id TEXT REFERENCES workstream_checkouts(id) ON DELETE SET NULL,
-  execution_lease_id TEXT REFERENCES workstream_execution_leases(id) ON DELETE SET NULL,
-  assignment_id TEXT REFERENCES worker_assignments(id) ON DELETE SET NULL,
-  requester_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-  execution_workspace_id TEXT REFERENCES execution_workspaces(id) ON DELETE SET NULL,
-  worker_id TEXT REFERENCES workers(id) ON DELETE SET NULL,
-  account_id TEXT REFERENCES ai_accounts(id) ON DELETE SET NULL,
-  input_tokens INTEGER NOT NULL DEFAULT 0,
-  output_tokens INTEGER NOT NULL DEFAULT 0,
-  cost_micros INTEGER,
-  duration_ms INTEGER NOT NULL DEFAULT 0,
-  recorded_at TEXT NOT NULL
-);
-
 CREATE INDEX idx_v6_runs_workstream ON runs(workstream_id, created_at);
 CREATE INDEX idx_v6_assignments_work_request ON worker_assignments(work_request_id, created_at);
 CREATE INDEX idx_v6_artifacts_work_request ON artifacts(work_request_id, created_at);
-CREATE INDEX idx_v6_usage_work_request ON usage(work_request_id, recorded_at);
 
 -- Materialized, immutable-version task graph for the v6 Workflow runner.
 CREATE TABLE workflow_tasks (

@@ -123,12 +123,6 @@ export interface WorkspaceConcurrencyPolicy {
   readonly maxConcurrentAssignments: number;
 }
 
-export interface WorkspaceBudgetPolicy {
-  readonly maxCostMicros: number | null;
-  readonly maxInputTokens: number | null;
-  readonly maxOutputTokens: number | null;
-}
-
 /** Explicitly authorizes one Project to execute through one Workspace. */
 export interface WorkspaceProjectGrant {
   readonly id: string;
@@ -144,7 +138,6 @@ export interface WorkspaceProjectGrant {
   readonly allowedPermissions: readonly string[];
   readonly networkPolicy: WorkspaceNetworkPolicy;
   readonly concurrency: WorkspaceConcurrencyPolicy;
-  readonly budget: WorkspaceBudgetPolicy | null;
   readonly requiresStepUp: boolean;
   readonly expiresAt: string | null;
   readonly createdAt: string;
@@ -162,7 +155,6 @@ export interface EffectiveWorkspacePermission {
   readonly pathMappings: readonly WorkspacePathMapping[];
   readonly networkPolicy: WorkspaceNetworkPolicy;
   readonly concurrency: WorkspaceConcurrencyPolicy;
-  readonly budget: WorkspaceBudgetPolicy | null;
   readonly snapshotAt: string;
 }
 
@@ -557,7 +549,6 @@ export function resolveEffectivePermission(
       allowedHosts: [...grant.networkPolicy.allowedHosts],
     },
     concurrency: { ...grant.concurrency },
-    budget: grant.budget ? { ...grant.budget } : null,
     snapshotAt: input.now,
   };
 }

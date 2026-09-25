@@ -10,11 +10,8 @@ class HomePage extends StatelessWidget {
     required this.workers,
     required this.run,
     required this.openFindingCount,
-    required this.usageTokens,
-    required this.usageCostMicros,
     required this.onOpenHosts,
     required this.onOpenWorkers,
-    required this.onOpenUsage,
     required this.onOpenProject,
     required this.onOpenChat,
     required this.onOpenRun,
@@ -27,11 +24,8 @@ class HomePage extends StatelessWidget {
   final List<StudioWorker> workers;
   final StudioRun? run;
   final int openFindingCount;
-  final int usageTokens;
-  final int usageCostMicros;
   final VoidCallback onOpenHosts;
   final VoidCallback onOpenWorkers;
-  final VoidCallback onOpenUsage;
   final ValueChanged<String> onOpenProject;
   final void Function(String projectId, String chatId) onOpenChat;
   final void Function(String projectId, String runId) onOpenRun;
@@ -54,11 +48,8 @@ class HomePage extends StatelessWidget {
           workers: workers,
           run: run,
           openFindingCount: openFindingCount,
-          usageTokens: usageTokens,
-          usageCostMicros: usageCostMicros,
           onOpenHosts: onOpenHosts,
           onOpenWorkers: onOpenWorkers,
-          onOpenUsage: onOpenUsage,
           onOpenProject: onOpenProject,
           onOpenChat: onOpenChat,
           onOpenRun: onOpenRun,
@@ -173,11 +164,8 @@ class _EstablishedHome extends StatelessWidget {
     required this.workers,
     required this.run,
     required this.openFindingCount,
-    required this.usageTokens,
-    required this.usageCostMicros,
     required this.onOpenHosts,
     required this.onOpenWorkers,
-    required this.onOpenUsage,
     required this.onOpenProject,
     required this.onOpenChat,
     required this.onOpenRun,
@@ -189,11 +177,8 @@ class _EstablishedHome extends StatelessWidget {
   final List<StudioWorker> workers;
   final StudioRun? run;
   final int openFindingCount;
-  final int usageTokens;
-  final int usageCostMicros;
   final VoidCallback onOpenHosts;
   final VoidCallback onOpenWorkers;
-  final VoidCallback onOpenUsage;
   final ValueChanged<String> onOpenProject;
   final void Function(String projectId, String chatId) onOpenChat;
   final void Function(String projectId, String runId) onOpenRun;
@@ -261,9 +246,10 @@ class _EstablishedHome extends StatelessWidget {
       const SizedBox(height: 16),
       LayoutBuilder(builder: (context, constraints) {
         final cards = [
+          _MetricCard('Projects', '${projects.length}',
+              () => onOpenProject(projects.first.id)),
           _MetricCard('Workspaces', '${hosts.length}', onOpenHosts),
           _MetricCard('Workers', '${workers.length}', onOpenWorkers),
-          _MetricCard('Usage', _formatTokens(usageTokens), onOpenUsage),
         ];
         return constraints.maxWidth < 620
             ? Wrap(spacing: 12, runSpacing: 12, children: cards)
@@ -308,10 +294,6 @@ class _EstablishedHome extends StatelessWidget {
       ),
     ]);
   }
-
-  static String _formatTokens(int tokens) => tokens >= 1000
-      ? '${(tokens / 1000).toStringAsFixed(1)}k tokens'
-      : '$tokens tokens';
 }
 
 class _HomeCard extends StatelessWidget {

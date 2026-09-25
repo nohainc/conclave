@@ -211,7 +211,6 @@ describe("v6 D1 schema", () => {
         "allowed_worker_capabilities_json",
         "network_policy_json",
         "concurrency_json",
-        "budget_json",
         "requires_step_up",
       ]),
     );
@@ -242,17 +241,7 @@ describe("v6 D1 schema", () => {
     ]);
   });
 
-  it("persists configured Worker usage dimensions and audit action constraints", () => {
-    const usageColumns = JSON.parse(
-      apply("PRAGMA table_info(usage);"),
-    ) as Array<{ name: string }>;
-    expect(usageColumns.map((column) => column.name)).toEqual(
-      expect.arrayContaining([
-        "configured_worker_id",
-        "worker_type_id",
-        "credential_owner_user_id",
-      ]),
-    );
+  it("persists configured Worker audit action constraints", () => {
     expect(() =>
       apply(`${fixture}
       INSERT INTO configured_worker_audit_log

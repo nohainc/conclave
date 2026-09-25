@@ -385,7 +385,7 @@ Scheduler filters configured Workers by:
 5. credential readiness;
 6. permissions;
 7. capability;
-8. capacity/budget;
+8. capacity/concurrency;
 9. independence requirement.
 
 ### Assignment snapshot
@@ -394,7 +394,7 @@ Store both:
 - configuredWorkerId;
 - workerTypeId.
 
-Keep credential-owner/accounting metadata internally where required.
+Keep credential-owner/attribution metadata internally where required.
 
 ### Exit
 
@@ -406,7 +406,7 @@ Assignments no longer require users to reason about an independent Account selec
 
 Implementation status: scheduler authorization is Worker-first. Workspace
 grants constrain configured Worker IDs, while Workstream execution policies
-can narrow configured Workers, Worker Types, providers, models, and budgets.
+can narrow configured Workers, Worker Types, providers, and models.
 Account identifiers remain optional internal attribution fields only.
 
 ### Goal
@@ -424,15 +424,14 @@ Add/adjust Worker policy so a Project may use an explicit or eligible set of con
 Execution policy may narrow:
 - allowed Workers;
 - allowed Worker Types;
-- provider/model;
-- budget.
+- provider/model.
 
 ### Sponsor/shared use
 
 If another user's Worker may be used:
 - owner explicitly grants Worker use;
 - provider sharing policy is checked;
-- usage records requester and Worker/credential owner;
+- audit log records requester and Worker/credential owner;
 - Workstream policy only narrows existing authorization.
 
 ### Product wording
@@ -508,7 +507,7 @@ Show:
 - status;
 - Workspace readiness;
 - active assignments;
-- usage/cost summary where available.
+- operational health/metrics where available.
 
 ### Add Worker
 
@@ -525,7 +524,7 @@ Single wizard:
 Recommended sections:
 - Overview;
 - Workspaces;
-- Usage;
+- Observability / Audit;
 - Settings.
 
 Overview:
@@ -715,7 +714,7 @@ For each existing AI Account:
 - copy owner/sharing/provider metadata;
 - bind to account execution Workspace;
 - preserve safe credential references;
-- map usage/audit attribution.
+- map audit attribution.
 
 For existing Workspace Worker installations:
 - retain as package infrastructure;
@@ -744,7 +743,7 @@ From empty DB:
 11. create Workstream;
 12. Run Work;
 13. assignment uses configured Worker;
-14. usage is attributed correctly.
+14. assignment and audit are recorded correctly.
 
 ### Exit
 
@@ -768,7 +767,7 @@ Verify:
 - authentication can differ per Workspace;
 - Project can allow a subset;
 - workflow capability selection works;
-- usage distinguishes identities.
+- audit distinguishes identities.
 
 ### Exit
 
@@ -833,7 +832,7 @@ The execution model can be explained in three lines and the UI matches those lin
 10. EW-9 Workers UX
 11. EW-10 Workspace UX
 12. EW-11 catalog hiding
-13. EW-12 usage/audit
+13. EW-12 audit/observability
 14. EW-13 old Account cleanup
 15. EW-14 data migration
 16. EW-15..18 acceptance

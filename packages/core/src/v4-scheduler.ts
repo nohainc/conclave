@@ -13,7 +13,6 @@ export interface ProjectExecutionPreferences {
   readonly preferredModels?: readonly string[];
   readonly preferredCredentialProfileIds?: readonly string[];
   readonly quality?: "fast" | "balanced" | "high";
-  readonly maxCostMicros?: number | null;
 }
 
 export interface UserExecutionPreferences {
@@ -30,7 +29,6 @@ export interface V4TaskRequirements {
   readonly requesterUserId: string;
   readonly workspaceRole?: CredentialWorkspaceRole;
   readonly excludeIndependenceKeys?: readonly string[];
-  readonly budgetRemainingMicros?: number | null;
 }
 
 export interface AvailableWorkerAccount {
@@ -51,7 +49,6 @@ export interface AvailableWorkerAccount {
   readonly installationStatus?:
     "installing" | "installed" | "active" | "error" | "removed";
   readonly independenceKey?: string;
-  readonly estimatedCostMicros?: number;
 }
 
 export interface ResolvedWorkerTarget {
@@ -181,14 +178,6 @@ export function resolveExecutionTarget(
       user.executionPreference &&
       user.executionPreference !== "auto" &&
       candidate.billingMode !== user.executionPreference
-    )
-      return false;
-    if (project.maxCostMicros != null && candidate.billingMode === "api")
-      return false;
-    if (
-      task.budgetRemainingMicros != null &&
-      candidate.estimatedCostMicros != null &&
-      candidate.estimatedCostMicros > task.budgetRemainingMicros
     )
       return false;
     return canUseCredentialProfile(

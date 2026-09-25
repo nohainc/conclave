@@ -89,6 +89,8 @@ class GlobalAppMenu extends StatelessWidget {
           ),
         );
 
+    final menuIconColor = isDark ? Colors.white70 : Colors.black87;
+
     return MenuAnchor(
       style: menuStyle,
       builder: (context, controller, child) {
@@ -115,10 +117,10 @@ class GlobalAppMenu extends StatelessWidget {
         // 1. Application destinations
         MenuItemButton(
           style: itemStyle(),
-          leadingIcon: const Icon(
+          leadingIcon: Icon(
             Icons.grid_view_rounded,
             size: 16,
-            color: Color(0xff9e95ff),
+            color: menuIconColor,
           ),
           onPressed: () {
             onNavigateTo(const StudioNavigation.hosts());
@@ -131,30 +133,14 @@ class GlobalAppMenu extends StatelessWidget {
         ),
         MenuItemButton(
           style: itemStyle(),
-          leadingIcon: const Icon(
+          leadingIcon: Icon(
             Icons.archive_outlined,
             size: 16,
-            color: Color(0xffa78bfa),
+            color: menuIconColor,
           ),
           onPressed: onOpenArchivedProjects,
           child: const Text(
             'Archived Projects',
-            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
-          ),
-        ),
-        MenuItemButton(
-          style: itemStyle(),
-          leadingIcon: const Icon(
-            Icons.pie_chart_outline_rounded,
-            size: 16,
-            color: Color(0xff60a5fa),
-          ),
-          onPressed: () {
-            onNavigateTo(const StudioNavigation.usage());
-            if (compact) Scaffold.maybeOf(context)?.closeDrawer();
-          },
-          child: const Text(
-            'Usage',
             style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
           ),
         ),
@@ -164,10 +150,10 @@ class GlobalAppMenu extends StatelessWidget {
         SubmenuButton(
           style: itemStyle(),
           menuStyle: menuStyle,
-          leadingIcon: const Icon(
+          leadingIcon: Icon(
             Icons.contrast_rounded,
             size: 16,
-            color: Color(0xffc084fc),
+            color: menuIconColor,
           ),
           menuChildren: [
             MenuItemButton(
@@ -178,7 +164,7 @@ class GlobalAppMenu extends StatelessWidget {
                     : Icons.circle_outlined,
                 size: 15,
                 color: activeThemeMode == ThemeMode.system
-                    ? const Color(0xff9e95ff)
+                    ? (isDark ? Colors.white : Colors.black87)
                     : (isDark ? Colors.white38 : Colors.black38),
               ),
               onPressed: () {
@@ -201,7 +187,7 @@ class GlobalAppMenu extends StatelessWidget {
                     : Icons.circle_outlined,
                 size: 15,
                 color: activeThemeMode == ThemeMode.light
-                    ? const Color(0xff9e95ff)
+                    ? (isDark ? Colors.white : Colors.black87)
                     : (isDark ? Colors.white38 : Colors.black38),
               ),
               onPressed: () {
@@ -224,7 +210,7 @@ class GlobalAppMenu extends StatelessWidget {
                     : Icons.circle_outlined,
                 size: 15,
                 color: activeThemeMode == ThemeMode.dark
-                    ? const Color(0xff9e95ff)
+                    ? (isDark ? Colors.white : Colors.black87)
                     : (isDark ? Colors.white38 : Colors.black38),
               ),
               onPressed: () {
@@ -245,24 +231,12 @@ class GlobalAppMenu extends StatelessWidget {
             style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
           ),
         ),
-        divider(),
-
-        // 3. Product information
-        MenuItemButton(
-          style: itemStyle(),
-          leadingIcon: ConclaveBrand.logoMark(size: 16),
-          onPressed: onOpenAbout,
-          child: const Text(
-            'About Conclave AX',
-            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
-          ),
-        ),
         MenuItemButton(
           style: itemStyle(),
           leadingIcon: Icon(
             Icons.menu_book_rounded,
             size: 16,
-            color: isDark ? Colors.white54 : Colors.black54,
+            color: menuIconColor,
           ),
           onPressed: () =>
               onOpenExternal(Uri.parse('https://conclaveax.com/how-it-works/')),
@@ -273,34 +247,16 @@ class GlobalAppMenu extends StatelessWidget {
         ),
         MenuItemButton(
           style: itemStyle(),
-          leadingIcon: Icon(
-            Icons.code_rounded,
-            size: 16,
-            color: isDark ? Colors.white54 : Colors.black54,
-          ),
-          onPressed: () =>
-              onOpenExternal(Uri.parse('https://github.com/nohainc/conclave')),
+          leadingIcon: ConclaveBrand.logoMark(size: 16),
+          onPressed: onOpenAbout,
           child: const Text(
-            'GitHub repository',
-            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
-          ),
-        ),
-        MenuItemButton(
-          style: itemStyle(),
-          leadingIcon: Icon(
-            Icons.public_rounded,
-            size: 16,
-            color: isDark ? Colors.white54 : Colors.black54,
-          ),
-          onPressed: () => onOpenExternal(Uri.parse('https://conclaveax.com')),
-          child: const Text(
-            'Website',
+            'About Conclave AX',
             style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
           ),
         ),
         divider(),
 
-        // 4. Session action
+        // 3. Session action
         MenuItemButton(
           style: itemStyle(isDestructive: true),
           leadingIcon: const Icon(

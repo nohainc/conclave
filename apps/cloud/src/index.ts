@@ -143,6 +143,8 @@ const routeHandlers = {
   handleRevokeHostRelease: handlers.handleRevokeHostRelease,
   handleGetHostRelease: handlers.handleGetHostRelease,
   handleGetWorkspace: handlers.handleGetWorkspace,
+  handleUpdateWorkspace: handlers.handleUpdateWorkspace,
+  handleRevokeWorkspace: handlers.handleRevokeWorkspace,
   handleListProjects: handlers.handleListProjects,
   handleCreateProject: handlers.handleCreateProject,
   handleUpdateProject: handlers.handleUpdateProject,
@@ -178,7 +180,6 @@ const routeHandlers = {
   handleGoalRequest: handlers.handleGoalRequest,
   handleStudioSnapshot: handlers.handleStudioSnapshot,
   handleProjectReadModel: handlers.handleProjectReadModel,
-  handleWorkspaceUsage: handlers.handleWorkspaceUsage,
   handleRunCommand: handlers.handleRunCommand,
 } as unknown as WorkerRouteHandlers;
 

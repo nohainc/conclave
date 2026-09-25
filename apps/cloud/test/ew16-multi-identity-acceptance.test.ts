@@ -61,7 +61,6 @@ function candidate(
     allowed_permissions_json: JSON.stringify(["repository:read"]),
     network_policy_json: JSON.stringify({ mode: "deny_all" }),
     concurrency_json: JSON.stringify({ maxConcurrentAssignments: 2 }),
-    budget_json: JSON.stringify({ maxCostMicros: 1000 }),
     requires_step_up: 0,
     expires_at: null,
     workspace_name: workspaceId,
@@ -112,7 +111,7 @@ function schedulerDb(rows: Record<string, unknown>[]) {
 }
 
 describe("EW-16 multi-identity acceptance", () => {
-  it("supports independent identities, Workspace-local auth, subset policy, and usage dimensions", async () => {
+  it("supports independent identities, Workspace-local auth, subset policy, and attribution", async () => {
     const result = apply(`
       INSERT INTO users VALUES ('owner-1', 'owner@example.test', 'Owner', 'active', 'now', 'now');
       INSERT INTO execution_workspaces VALUES ('workspace-a', 'owner-1', 'Mac', 'online', 'now', 'now');
@@ -162,18 +161,10 @@ describe("EW-16 multi-identity acceptance", () => {
         VALUES ('grant-a', 'project-1', 'workspace-a', 'owner-1', 'project_repository', '["configured-company","configured-review"]', 'now', 'now');
       INSERT INTO workspace_project_grants (id, project_id, workspace_id, granted_by_user_id, scope, allowed_worker_ids_json, created_at, updated_at)
         VALUES ('grant-b', 'project-1', 'workspace-b', 'owner-1', 'project_repository', '["configured-backup"]', 'now', 'now');
-      INSERT INTO usage (id, project_id, requester_user_id, execution_workspace_id, configured_worker_id, worker_type_id, credential_owner_user_id, provider, input_tokens, output_tokens, duration_ms, recorded_at)
-        VALUES ('usage-personal', 'project-1', 'owner-1', 'workspace-a', 'configured-personal', 'worker-codex', 'owner-1', 'openai', 10, 20, 100, 'now');
-      INSERT INTO usage (id, project_id, requester_user_id, execution_workspace_id, configured_worker_id, worker_type_id, credential_owner_user_id, provider, input_tokens, output_tokens, duration_ms, recorded_at)
-        VALUES ('usage-company', 'project-1', 'owner-1', 'workspace-b', 'configured-company', 'worker-codex', 'owner-1', 'openai', 30, 40, 200, 'now');
-      INSERT INTO usage (id, project_id, requester_user_id, execution_workspace_id, configured_worker_id, worker_type_id, credential_owner_user_id, provider, input_tokens, output_tokens, duration_ms, recorded_at)
-        VALUES ('usage-review', 'project-1', 'owner-1', 'workspace-a', 'configured-review', 'worker-claude', 'owner-1', 'anthropic', 50, 60, 300, 'now');
       SELECT
         (SELECT COUNT(*) FROM configured_workers) AS configured_worker_count,
         (SELECT COUNT(*) FROM worker_workspace_bindings) AS binding_count,
-        (SELECT COUNT(*) FROM workspace_worker_credentials WHERE state = 'ready') AS ready_credential_count,
-        (SELECT COUNT(*) FROM usage WHERE configured_worker_id IS NOT NULL) AS attributed_usage_count,
-        (SELECT COUNT(DISTINCT configured_worker_id) FROM usage) AS distinct_usage_identity_count;
+        (SELECT COUNT(*) FROM workspace_worker_credentials WHERE state = 'ready') AS ready_credential_count;
     `);
 
     expect(result).toEqual([
@@ -181,8 +172,6 @@ describe("EW-16 multi-identity acceptance", () => {
         configured_worker_count: 4,
         binding_count: 6,
         ready_credential_count: 4,
-        attributed_usage_count: 3,
-        distinct_usage_identity_count: 3,
       },
     ]);
 

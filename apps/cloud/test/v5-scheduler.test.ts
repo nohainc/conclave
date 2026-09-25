@@ -20,7 +20,6 @@ function candidate(overrides: Record<string, unknown> = {}) {
     ]),
     network_policy_json: JSON.stringify({ mode: "deny_all", allowedHosts: [] }),
     concurrency_json: JSON.stringify({ maxConcurrentAssignments: 2 }),
-    budget_json: JSON.stringify({ maxCostMicros: 100 }),
     requires_step_up: 0,
     expires_at: null,
     workspace_name: "Contributor Workspace",
@@ -43,7 +42,6 @@ function candidate(overrides: Record<string, unknown> = {}) {
     credential_sharing_policy: "explicit_project",
     provider_metadata_json: JSON.stringify({
       provider: "provider-a",
-      estimatedCostMicros: 10,
     }),
     account_grant_id: null,
     active_assignments: 0,

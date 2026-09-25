@@ -191,8 +191,6 @@ class StudioShellContext {
             navigation.kind == StudioRouteKind.workers;
       case StudioRouteKind.workers:
         return navigation.kind == StudioRouteKind.workers;
-      case StudioRouteKind.usage:
-        return navigation.kind == StudioRouteKind.usage;
       case StudioRouteKind.profileSecurity:
         return navigation.kind == StudioRouteKind.profileSecurity;
       case StudioRouteKind.run:

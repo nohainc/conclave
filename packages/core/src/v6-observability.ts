@@ -1,25 +1,4 @@
-/** V6 usage, audit, and Workstream iteration observability contracts. */
-
-export interface V6UsageDimensions {
-  readonly projectId: string;
-  readonly workstreamId: string;
-  readonly workRequestId: string;
-  readonly requesterUserId: string;
-  readonly executionWorkspaceId: string;
-  readonly workspaceOwnerUserId: string;
-  readonly workerId: string;
-  /** Configured Worker identity; workerId remains the catalog/type compatibility field. */
-  readonly configuredWorkerId: string;
-  readonly workerTypeId: string;
-  readonly accountId: string;
-  readonly accountOwnerUserId: string;
-  readonly credentialOwnerUserId: string;
-  readonly workflowVersionId: string;
-  readonly inputTokens: number;
-  readonly outputTokens: number;
-  readonly costMicros: number | null;
-  readonly durationMs: number;
-}
+/** V6 audit and Workstream iteration observability contracts. */
 
 export const V6_AUDIT_ACTIONS = [
   "discussion.moderated",
@@ -92,24 +71,6 @@ function elapsed(start?: string, end?: string): number {
   if (!start || !end) return 0;
   const value = Date.parse(end) - Date.parse(start);
   return Number.isFinite(value) && value >= 0 ? value : 0;
-}
-
-export function validateV6UsageDimensions(input: V6UsageDimensions): void {
-  for (const [label, value] of Object.entries(input)) {
-    if (typeof value === "string" && !value.trim())
-      throw new Error(`${label} is required`);
-  }
-  for (const [label, value] of Object.entries(input)) {
-    if (
-      (label.endsWith("Tokens") ||
-        label.endsWith("Micros") ||
-        label.endsWith("Ms")) &&
-      value != null &&
-      (typeof value !== "number" || !Number.isFinite(value) || value < 0)
-    ) {
-      throw new Error(`${label} must be a non-negative number`);
-    }
-  }
 }
 
 export function computeV6ObservabilityMetrics(

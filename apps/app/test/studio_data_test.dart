@@ -95,8 +95,6 @@ void main() {
     expect(store.agents.items.single.id, 'agent-macbook');
     expect(store.workers.items, hasLength(3));
     expect(store.plugins.items, hasLength(6));
-    expect(store.usage.tokens, 32500);
-    expect(store.usage.costMicros, 650000);
   });
 
   test('preserves a session viewer when a snapshot omits viewer data',
@@ -208,7 +206,6 @@ void main() {
       '/api/workspaces/workspace-1/hosts': {'hosts': []},
       '/api/workspaces/workspace-1/workers': {'workers': []},
       '/api/workspaces/workspace-1/accounts': {'accounts': []},
-      '/api/projects/project-1/usage': {'usage': []},
       '/api/projects/project-1/read-model': {
         'workspaceId': 'workspace-1',
         'project': {
@@ -247,7 +244,6 @@ void main() {
     expect(readModel.projects.single.workstreams.single.id, 'workstream-1');
     expect(client.requests, isNot(contains('/api/studio/snapshot')));
     expect(client.requests, contains('/api/projects/project-1/read-model'));
-    expect(client.requests, contains('/api/projects/project-1/usage'));
   });
 
   test('normalizes the Cloud chat creation wrapper', () async {
@@ -347,7 +343,8 @@ void main() {
       throwsA(isA<StudioApiException>().having(
         (error) => error.message,
         'message',
-        contains('Configured Worker instances were removed'),
+        contains(
+            'This Worker setup path is no longer available. Manage Workers through Execution.'),
       )),
     );
     expect(client.lastRequest, isNull);
@@ -397,7 +394,6 @@ void main() {
           'host': 'host-1',
           'sharingPolicy': 'private_only',
           'status': 'ready',
-          'usage': '1.2k tokens',
         },
       ],
     });
@@ -451,6 +447,10 @@ void main() {
     expect(client.lastRequest?.method, 'DELETE');
     expect(client.lastRequest?.url.path,
         '/api/workspaces/workspace-1/hosts/host-1');
+
+    await api.revokeWorkspace(workspaceId: 'workspace-1');
+    expect(client.lastRequest?.method, 'DELETE');
+    expect(client.lastRequest?.url.path, '/api/workspaces/workspace-1');
   });
 
   test('updates Worker desired state for one Host without configured instances',

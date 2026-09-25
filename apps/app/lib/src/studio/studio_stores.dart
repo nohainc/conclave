@@ -12,8 +12,7 @@ class StudioStore {
         agents = AgentStore(dataSource),
         workers = WorkerStore(dataSource),
         plugins = PluginStore(dataSource),
-        accounts = AccountStore(dataSource),
-        usage = UsageStore(dataSource);
+        accounts = AccountStore(dataSource);
 
   final StudioDataSource dataSource;
   final AuthStore auth;
@@ -25,7 +24,6 @@ class StudioStore {
   final WorkerStore workers;
   final PluginStore plugins;
   final AccountStore accounts;
-  final UsageStore usage;
 
   Future<StudioSnapshot> reload(
       {String? projectId, String? workspaceId}) async {
@@ -40,7 +38,6 @@ class StudioStore {
     workers.replace(snapshot.workers);
     plugins.replace(snapshot.plugins);
     accounts.replace(snapshot.accounts);
-    usage.replace(snapshot.run);
     return snapshot;
   }
 }
@@ -122,6 +119,9 @@ class AgentStore {
 
   Future<void> revoke(String workspaceId, String agentId) =>
       source.revokeAgent(workspaceId: workspaceId, agentId: agentId);
+
+  Future<void> revokeWorkspace(String workspaceId) =>
+      source.revokeWorkspace(workspaceId: workspaceId);
 
   Future<void> announceUpdate(String workspaceId, String agentId,
           {String? channel, String? version}) =>
@@ -219,18 +219,6 @@ class AccountStore {
     final value = await source.loadCredentialProfiles(workspaceId: workspaceId);
     replace(value);
     return value;
-  }
-}
-
-class UsageStore {
-  UsageStore(this.source);
-  final StudioDataSource source;
-  int tokens = 0;
-  int costMicros = 0;
-
-  void replace(StudioRun? run) {
-    tokens = run?.tokens ?? 0;
-    costMicros = run?.costMicros ?? 0;
   }
 }
 

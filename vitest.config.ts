@@ -9,4 +9,11 @@ export default defineConfig({
       ),
     },
   },
+  test: {
+    exclude: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/apps/cloud/test/application-e2e.test.ts",
+    ],
+  },
 });

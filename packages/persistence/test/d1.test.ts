@@ -12,7 +12,6 @@ import {
   D1MembershipRepository,
   D1ProjectMembershipRepository,
   D1AuditLogRepository,
-  D1BudgetRepository,
   D1EventRepository,
   D1ModelCallRepository,
   D1TaskDependencyRepository,
@@ -336,36 +335,6 @@ describe("Cloudflare persistence adapters", () => {
       actorUserId: "user-1",
       resourceType: "run",
       action: "run.pause",
-    });
-  });
-
-  it("reconstructs token and cost budgets from D1", async () => {
-    const budget = await new D1BudgetRepository(
-      new FakeDb([
-        {
-          id: "budget-1",
-          workspace_id: "workspace-1",
-          project_id: "project-1",
-          run_id: "run-1",
-          max_cost_micros: 500000,
-          max_input_tokens: 10000,
-          max_output_tokens: 5000,
-          used_input_tokens: 1200,
-          used_output_tokens: 300,
-          used_cost_micros: 12000,
-          status: "active",
-          created_at: "now",
-          updated_at: "now",
-        },
-      ]),
-    ).get("budget-1");
-    expect(budget).toMatchObject({
-      organizationId: "workspace-1",
-      projectId: "project-1",
-      runId: "run-1",
-      maxInputTokens: 10000,
-      usedOutputTokens: 300,
-      usedCostMicros: 12000,
     });
   });
 

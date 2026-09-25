@@ -1,7 +1,7 @@
 /* global console, process */
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 const trackedFiles = execFileSync("git", ["ls-files", "-z"], {
   encoding: "utf8",
@@ -9,9 +9,9 @@ const trackedFiles = execFileSync("git", ["ls-files", "-z"], {
   .split("\0")
   .filter(Boolean);
 
-const codeFiles = trackedFiles.filter((file) =>
-  /\.(?:ts|tsx|js|mjs|json|yaml|yml)$/.test(file),
-);
+const codeFiles = trackedFiles
+  .filter((file) => existsSync(file))
+  .filter((file) => /\.(?:ts|tsx|js|mjs|json|yaml|yml)$/.test(file));
 const legacyPatterns = [
   /(?:^|["'`])(?:\.\/)?apps\/(?:agent|agent_app|agent_engine)(?:[/"'`]|$)/,
   /(?:^|["'`])(?:\.\/)?packages\/agent(?:-protocol)?(?:[/"'`]|$)/,

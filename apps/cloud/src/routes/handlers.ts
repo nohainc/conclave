@@ -1025,10 +1025,10 @@ async function handleListWorkspaces(
   const rows =
     context.authorizationModel === "v5"
       ? await env.CONCLAVE_DB.prepare(
-          `SELECT id, name, status, 'owner' AS role,
+           `SELECT id, name, status, 'owner' AS role,
                   created_at AS createdAt, updated_at AS updatedAt
            FROM execution_workspaces
-           WHERE owner_user_id = ?1
+           WHERE owner_user_id = ?1 AND status <> 'revoked'
            ORDER BY name ASC`,
         )
           .bind(context.userId)
@@ -1090,14 +1090,31 @@ async function handleCreateWorkspace(
   };
   validateWorkspace(workspace);
 
-  await env.CONCLAVE_DB.batch([
-    env.CONCLAVE_DB.prepare(
+  let status = "enrolled";
+  try {
+    await env.CONCLAVE_DB.prepare(
       "INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at) VALUES (?1, ?2, ?3, 'enrolled', ?4, ?4)",
-    ).bind(id, context.userId, name, now),
-  ]);
+    ).bind(id, context.userId, name, now).run();
+  } catch {
+    status = "active";
+    await env.CONCLAVE_DB.batch([
+      env.CONCLAVE_DB.prepare(
+        "INSERT INTO workspaces (id, name, slug, status, created_at, updated_at) VALUES (?1, ?2, ?3, 'active', ?4, ?4)",
+      ).bind(id, name, slug, now),
+      env.CONCLAVE_DB.prepare(
+        "INSERT INTO workspace_memberships (id, workspace_id, user_id, role, created_at, updated_at) VALUES (?1, ?2, ?3, 'owner', ?4, ?4)",
+      ).bind(`wm-${crypto.randomUUID()}`, id, context.userId, now),
+    ]);
+  }
 
   return json(
-    { workspace: { ...workspace, status: "enrolled", role: "owner" } },
+    {
+      workspace: {
+        ...workspace,
+        status,
+        role: "owner",
+      },
+    },
     { status: 201 },
   );
 }
@@ -1172,6 +1189,69 @@ async function handleUpdateWorkspace(
     },
   );
   return json({ workspace: { id: workspaceId, name, updatedAt: now } });
+}
+
+async function handleRevokeWorkspace(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, accessContext);
+  const workspace = await env.CONCLAVE_DB.prepare(
+    "SELECT id, status FROM execution_workspaces WHERE id = ?1 AND owner_user_id = ?2",
+  )
+    .bind(workspaceId, context.userId)
+    .first<{ id: string; status: string }>();
+  if (!workspace) throw new HttpError(404, "Workspace not found");
+
+  const now = new Date().toISOString();
+  const alreadyRevoked = workspace.status === "revoked";
+  if (!alreadyRevoked) {
+    const workspaceUpdate = await env.CONCLAVE_DB.prepare(
+      "UPDATE execution_workspaces SET status = 'revoked', updated_at = ?1 WHERE id = ?2 AND owner_user_id = ?3",
+    )
+      .bind(now, workspaceId, context.userId)
+      .run();
+    if (!workspaceUpdate.success || workspaceUpdate.meta.changes === 0) {
+      throw new HttpError(404, "Workspace not found");
+    }
+  }
+
+  await env.CONCLAVE_DB.prepare(
+    "UPDATE workspace_project_grants SET status = 'revoked', updated_at = ?1 WHERE workspace_id = ?2 AND status IN ('active', 'suspended')",
+  )
+    .bind(now, workspaceId)
+    .run();
+
+  // These tables were introduced by later configured-Worker migrations. A
+  // partially migrated development/preview database must still be able to
+  // revoke the canonical Workspace and its Project grants.
+  for (const statement of [
+    env.CONCLAVE_DB.prepare(
+      "UPDATE workspace_runtime_identities SET revoked_at = ?1 WHERE workspace_id = ?2 AND revoked_at IS NULL",
+    ).bind(now, workspaceId),
+    env.CONCLAVE_DB.prepare(
+      "UPDATE worker_workspace_bindings SET enabled = 0, local_readiness = 'revoked', updated_at = ?1 WHERE workspace_id = ?2",
+    ).bind(now, workspaceId),
+    env.CONCLAVE_DB.prepare(
+      "UPDATE workspace_worker_credentials SET state = 'revoked', updated_at = ?1 WHERE workspace_id = ?2 AND state <> 'revoked'",
+    ).bind(now, workspaceId),
+  ]) {
+    await statement.run().catch(() => undefined);
+  }
+
+  if (!alreadyRevoked) {
+    await recordAudit(
+      env,
+      context,
+      "workspace.revoked",
+      "workspace",
+      workspaceId,
+      { revokedAt: now },
+    );
+  }
+  return json({ ok: true, revokedAt: now, alreadyRevoked });
 }
 
 async function handleListWorkspaceMembers(
@@ -1333,8 +1413,6 @@ const WORKSPACE_BACKUP_QUERIES: readonly WorkspaceBackupQuery[] = [
   { name: "artifacts", sql: "SELECT * FROM artifacts WHERE workspace_id = ?1" },
   { name: "findings", sql: "SELECT * FROM findings WHERE workspace_id = ?1" },
   { name: "events", sql: "SELECT * FROM events WHERE workspace_id = ?1" },
-  { name: "budgets", sql: "SELECT * FROM budgets WHERE workspace_id = ?1" },
-  { name: "usage", sql: "SELECT * FROM usage WHERE workspace_id = ?1" },
   { name: "audit_log", sql: "SELECT * FROM audit_log WHERE workspace_id = ?1" },
   {
     name: "ci_evidence",
@@ -2591,7 +2669,6 @@ async function handleDeleteProject(
       "DELETE FROM project_audit_log WHERE project_id = ?1",
       "DELETE FROM project_memberships WHERE project_id = ?1",
       "DELETE FROM artifacts WHERE project_id = ?1",
-      "DELETE FROM usage WHERE project_id = ?1",
       "DELETE FROM projects WHERE id = ?1",
     ];
     for (const sql of cleanupStatements) {
@@ -5458,12 +5535,6 @@ type CredentialProfileRow = {
   providerMetadataJson: string;
   concurrencyLimit: number | null;
   ownerName: string | null;
-  lastUsedAt: string | null;
-  usageCount: number;
-  inputTokens: number;
-  outputTokens: number;
-  costMicros: number | null;
-  durationMs: number;
 };
 
 function accountSharingLabel(policy: string): string {
@@ -5492,14 +5563,6 @@ function accountMetadata(row: CredentialProfileRow): Record<string, unknown> {
     sharing: accountSharingLabel(row.sharingPolicy),
     providerMetadata: parseJson(row.providerMetadataJson, {}),
     concurrencyLimit: row.concurrencyLimit,
-    lastUsedAt: row.lastUsedAt,
-    usage: {
-      count: row.usageCount,
-      inputTokens: row.inputTokens,
-      outputTokens: row.outputTokens,
-      costMicros: row.costMicros,
-      durationMs: row.durationMs,
-    },
   };
 }
 
@@ -5518,21 +5581,13 @@ async function loadCredentialProfile(
             cp.sharing_policy as sharingPolicy,
             cp.provider_metadata_json as providerMetadataJson,
             cp.concurrency_limit as concurrencyLimit,
-            CASE WHEN cp.owner_type = 'user' THEN u.display_name ELSE ws.name END as ownerName,
-            MAX(us.recorded_at) as lastUsedAt,
-            COUNT(us.id) as usageCount,
-            COALESCE(SUM(us.input_tokens), 0) as inputTokens,
-            COALESCE(SUM(us.output_tokens), 0) as outputTokens,
-            SUM(us.cost_micros) as costMicros,
-            COALESCE(SUM(us.duration_ms), 0) as durationMs
+            CASE WHEN cp.owner_type = 'user' THEN u.display_name ELSE ws.name END as ownerName
      FROM credential_profiles cp
      JOIN workers w ON w.id = cp.worker_id
      LEFT JOIN hosts h ON h.id = cp.host_id
      LEFT JOIN users u ON cp.owner_type = 'user' AND u.id = cp.owner_id
      LEFT JOIN workspaces ws ON cp.owner_type = 'workspace' AND ws.id = cp.owner_id
-     LEFT JOIN usage us ON us.credential_profile_id = cp.id
-     WHERE cp.id = ?1 AND cp.workspace_id = ?2
-     GROUP BY cp.id`,
+     WHERE cp.id = ?1 AND cp.workspace_id = ?2`,
   )
     .bind(profileId, workspaceId)
     .first<CredentialProfileRow>();
@@ -5996,15 +6051,6 @@ export async function handleConfiguredWorkerObservability(
       )
         .bind(workerId)
         .all<Record<string, unknown>>();
-      const usage = await env.CONCLAVE_DB.prepare(
-        `SELECT COALESCE(SUM(input_tokens), 0) AS input_tokens,
-              COALESCE(SUM(output_tokens), 0) AS output_tokens,
-              COALESCE(SUM(cost_micros), 0) AS cost_micros,
-              COUNT(*) AS assignments
-         FROM usage WHERE configured_worker_id = ?1`,
-      )
-        .bind(workerId)
-        .first<Record<string, unknown>>();
       const audits = await env.CONCLAVE_DB.prepare(
         `SELECT action, target_id, workspace_id, actor_type, actor_id, details_json, created_at
          FROM configured_worker_audit_log
@@ -6077,12 +6123,6 @@ export async function handleConfiguredWorkerObservability(
             (sum, row) => sum + Number(row.active_assignments ?? 0),
             0,
           ),
-        },
-        usage: {
-          inputTokens: Number(usage?.input_tokens ?? 0),
-          outputTokens: Number(usage?.output_tokens ?? 0),
-          costMicros: Number(usage?.cost_micros ?? 0),
-          assignments: Number(usage?.assignments ?? 0),
         },
         audit: (audits.results ?? []).map((row) => ({
           action: String(row.action),
@@ -8733,7 +8773,6 @@ async function handleStudioSnapshot(
     findings,
     events,
     artifacts,
-    modelCalls,
     activeRun,
     latestRun,
   ] = await Promise.all([
@@ -8806,23 +8845,6 @@ async function handleStudioSnapshot(
       .bind(...scopedOwnershipBind)
       .all(),
     env.CONCLAVE_DB.prepare(
-      `SELECT u.worker_id AS worker, u.model, u.provider, u.credential_profile_id AS credentialProfileId,
-              u.credential_profile_owner_type AS credentialProfileOwnerType,
-              u.credential_profile_owner_id AS credentialProfileOwnerId,
-              u.requester_user_id AS requesterUserId, u.host_id AS hostId,
-              u.billing_category AS billingCategory,
-              u.run_id AS task, (u.input_tokens + u.output_tokens) AS tokens,
-              u.cost_micros AS cost, u.duration_ms AS duration,
-              'recorded' AS status
-       FROM usage u
-       JOIN runs r ON r.id = u.run_id
-       JOIN goals g ON g.id = r.goal_id
-       JOIN projects p ON p.id = g.project_id
-       WHERE ${scopedOwnership} ORDER BY u.recorded_at DESC LIMIT 100`,
-    )
-      .bind(...scopedOwnershipBind)
-      .all(),
-    env.CONCLAVE_DB.prepare(
       `SELECT r.id FROM runs r JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${scopedOwnership} AND r.status IN ('active', 'running', 'waiting') ORDER BY r.created_at DESC LIMIT 1`,
     )
       .bind(...scopedOwnershipBind)
@@ -8833,9 +8855,7 @@ async function handleStudioSnapshot(
         (SELECT COUNT(*) FROM tasks t JOIN phases ph ON ph.id = t.phase_id WHERE ph.run_id = r.id AND t.status = 'completed') AS completedTaskCount,
         (SELECT COUNT(*) FROM findings f WHERE f.run_id = r.id AND f.status IN ('open', 'fixed')) AS openFindingCount,
         (SELECT COUNT(*) FROM completion_criteria cc WHERE cc.goal_id = g.id AND cc.status = 'verified') AS verifiedCriterionCount,
-        (SELECT COUNT(*) FROM completion_criteria cc WHERE cc.goal_id = g.id) AS criterionCount,
-        COALESCE((SELECT SUM(input_tokens + output_tokens) FROM usage u WHERE u.run_id = r.id), 0) AS tokens,
-        COALESCE((SELECT SUM(cost_micros) FROM usage u WHERE u.run_id = r.id), 0) AS costMicros
+        (SELECT COUNT(*) FROM completion_criteria cc WHERE cc.goal_id = g.id) AS criterionCount
        FROM runs r JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${scopedOwnership} ORDER BY r.created_at DESC LIMIT 1`,
     )
       .bind(...scopedOwnershipBind)
@@ -8996,7 +9016,6 @@ async function handleStudioSnapshot(
     findings: findings.results ?? [],
     events: events.results ?? [],
     artifacts: artifacts.results ?? [],
-    modelCalls: modelCalls.results ?? [],
     accounts,
   });
 }
@@ -9107,216 +9126,6 @@ async function handleProjectReadModel(
     findings: [],
     events: [],
     artifacts: [],
-    modelCalls: [],
-  });
-}
-
-async function handleWorkspaceUsage(
-  request: Request,
-  env: SecurityEnv,
-  workspaceId: string,
-  accessContext?: ExecutionContext,
-): Promise<Response> {
-  const context = await securityContext(request, env, accessContext);
-  authorize(context, "project:read");
-  await requireWorkspaceContext(context, env, workspaceId);
-  const search = new URL(request.url).searchParams;
-  const urlSearch = (name: string) => search.get(name) ?? "";
-  const allowedRanges = new Set(["7d", "30d"]);
-  const range = allowedRanges.has(urlSearch("range"))
-    ? urlSearch("range")
-    : "30d";
-  const projectId = urlSearch("projectId");
-  const requesterUserId = urlSearch("requesterUserId");
-  const credentialProfileId = urlSearch("credentialProfileId");
-  const workerId = urlSearch("workerId");
-  const provider = urlSearch("provider");
-  const model = urlSearch("model");
-  const from = urlSearch("from");
-  const to = urlSearch("to");
-  const conditions = ["u.workspace_id = ?"];
-  const bindings: unknown[] = [workspaceId];
-  if (from) {
-    conditions.push("u.recorded_at >= ?");
-    bindings.push(from);
-  } else {
-    conditions.push("u.recorded_at >= datetime('now', ?)");
-    bindings.push(range === "7d" ? "-7 days" : "-30 days");
-  }
-  if (to) {
-    conditions.push("u.recorded_at <= ?");
-    bindings.push(to);
-  }
-  for (const [value, sql] of [
-    [projectId, "u.project_id = ?"],
-    [requesterUserId, "u.requester_user_id = ?"],
-    [credentialProfileId, "u.credential_profile_id = ?"],
-    [workerId, "u.worker_id = ?"],
-    [provider, "u.provider = ?"],
-    [model, "u.model = ?"],
-  ] as const) {
-    if (value) {
-      conditions.push(sql);
-      bindings.push(value);
-    }
-  }
-  const rows = await env.CONCLAVE_DB.prepare(
-    `SELECT u.id, u.project_id AS projectId, p.name AS projectName,
-            u.run_id AS runId, u.requester_user_id AS requesterUserId,
-            requester.display_name AS requesterName,
-            u.credential_profile_id AS credentialProfileId,
-            cp.display_name AS accountName,
-            cp.owner_type AS accountOwnerType,
-            cp.owner_id AS accountOwnerId,
-            CASE WHEN cp.owner_type = 'user' THEN owner.display_name
-                 WHEN cp.owner_type = 'workspace' THEN w.name ELSE NULL END
-              AS accountOwnerName,
-            u.worker_id AS workerId, worker.display_name AS workerName,
-            u.host_id AS hostId, u.provider, u.model,
-            u.billing_category AS billingCategory,
-            u.input_tokens AS inputTokens, u.output_tokens AS outputTokens,
-            (u.input_tokens + u.output_tokens) AS tokens,
-            u.cost_micros AS costMicros, u.duration_ms AS durationMs,
-            u.recorded_at AS recordedAt
-       FROM usage u
-       JOIN projects p ON p.id = u.project_id
-       JOIN workers worker ON worker.id = u.worker_id
-       LEFT JOIN users requester ON requester.id = u.requester_user_id
-       LEFT JOIN credential_profiles cp ON cp.id = u.credential_profile_id
-       LEFT JOIN users owner ON cp.owner_type = 'user' AND owner.id = cp.owner_id
-       LEFT JOIN workspaces w ON cp.owner_type = 'workspace' AND w.id = cp.owner_id
-      WHERE ${conditions.join(" AND ")}
-      ORDER BY u.recorded_at DESC
-      LIMIT 1000`,
-  )
-    .bind(...bindings)
-    .all();
-  const usage = rows.results ?? [];
-  const number = (value: unknown) =>
-    typeof value === "number" ? value : Number(value ?? 0);
-  const summary = usage.reduce<{
-    tokens: number;
-    knownApiCostMicros: number;
-    subscriptionUsage: number;
-    durationMs: number;
-    runs: Set<string>;
-  }>(
-    (result, row) => {
-      const item = row as Record<string, unknown>;
-      result.tokens += number(item.tokens);
-      result.durationMs += number(item.durationMs);
-      result.runs.add(String(item.runId));
-      if (item.billingCategory === "api" && item.costMicros != null) {
-        result.knownApiCostMicros += number(item.costMicros);
-      }
-      if (item.billingCategory === "subscription") result.subscriptionUsage++;
-      return result;
-    },
-    {
-      tokens: 0,
-      knownApiCostMicros: 0,
-      subscriptionUsage: 0,
-      durationMs: 0,
-      runs: new Set<string>(),
-    },
-  );
-  return json({
-    range,
-    filters: {
-      projectId,
-      requesterUserId,
-      credentialProfileId,
-      workerId,
-      provider,
-      model,
-      from,
-      to,
-    },
-    summary: {
-      tokens: summary.tokens,
-      knownApiCostMicros: summary.knownApiCostMicros,
-      subscriptionUsage: summary.subscriptionUsage,
-      runs: summary.runs.size,
-      durationMs: summary.durationMs,
-    },
-    usage,
-  });
-}
-
-async function handleProjectUsage(
-  request: Request,
-  env: SecurityEnv,
-  projectId: string,
-  accessContext?: ExecutionContext,
-): Promise<Response> {
-  await authorizeRequest(
-    request,
-    env,
-    "project:read",
-    projectId,
-    accessContext,
-  );
-  const search = new URL(request.url).searchParams;
-  const from = search.get("from") ?? "";
-  const to = search.get("to") ?? "";
-  const conditions = ["u.project_id = ?1"];
-  const bindings: unknown[] = [projectId];
-  if (from) {
-    conditions.push("u.recorded_at >= ?" + (bindings.length + 1));
-    bindings.push(from);
-  }
-  if (to) {
-    conditions.push("u.recorded_at <= ?" + (bindings.length + 1));
-    bindings.push(to);
-  }
-  const rows = await env.CONCLAVE_DB.prepare(
-    `SELECT u.id, u.project_id AS projectId, u.run_id AS runId,
-            u.requester_user_id AS requesterUserId, requester.display_name AS requesterName,
-            u.execution_workspace_id AS executionWorkspaceId, ew.name AS executionWorkspaceName,
-            u.workspace_owner_user_id AS workspaceOwnerUserId, workspaceOwner.display_name AS workspaceOwnerName,
-            u.worker_id AS workerId, worker.name AS workerName,
-            u.account_id AS accountId, u.account_owner_user_id AS accountOwnerUserId,
-            accountOwner.display_name AS accountOwnerName,
-            u.provider, u.model, u.billing_category AS billingCategory,
-            u.input_tokens AS inputTokens, u.output_tokens AS outputTokens,
-            (u.input_tokens + u.output_tokens) AS tokens,
-            u.cost_micros AS costMicros, u.duration_ms AS durationMs, u.recorded_at AS recordedAt
-       FROM usage u
-       JOIN execution_workspaces ew ON ew.id = u.execution_workspace_id
-       JOIN workers worker ON worker.id = u.worker_id
-       LEFT JOIN users requester ON requester.id = u.requester_user_id
-       LEFT JOIN users workspaceOwner ON workspaceOwner.id = u.workspace_owner_user_id
-       LEFT JOIN users accountOwner ON accountOwner.id = u.account_owner_user_id
-      WHERE ${conditions.join(" AND ")}
-      ORDER BY u.recorded_at DESC LIMIT 1000`,
-  )
-    .bind(...bindings)
-    .all<Record<string, unknown>>();
-  const usage = rows.results ?? [];
-  const total = (key: string) =>
-    usage.reduce((sum, row) => sum + Number(row[key] ?? 0), 0);
-  const budgets = await env.CONCLAVE_DB.prepare(
-    `SELECT id, run_id AS runId, account_id AS accountId,
-            max_input_tokens AS maxInputTokens, max_output_tokens AS maxOutputTokens,
-            max_cost_micros AS maxCostMicros, used_input_tokens AS usedInputTokens,
-            used_output_tokens AS usedOutputTokens, used_cost_micros AS usedCostMicros, status
-       FROM budgets WHERE project_id = ?1 ORDER BY created_at DESC`,
-  )
-    .bind(projectId)
-    .all<Record<string, unknown>>();
-  return json({
-    projectId,
-    filters: { from, to },
-    summary: {
-      tokens: total("tokens"),
-      inputTokens: total("inputTokens"),
-      outputTokens: total("outputTokens"),
-      costMicros: total("costMicros"),
-      durationMs: total("durationMs"),
-      runs: new Set(usage.map((row) => String(row.runId))).size,
-    },
-    usage,
-    budgets: budgets.results ?? [],
   });
 }
 
@@ -10654,6 +10463,7 @@ export {
   handleGetHostRelease,
   handleGetWorkspace,
   handleUpdateWorkspace,
+  handleRevokeWorkspace,
   handleListWorkspaceMembers,
   handleListProjects,
   handleCreateProject,
@@ -10684,7 +10494,5 @@ export {
   handleGoalRequest,
   handleStudioSnapshot,
   handleProjectReadModel,
-  handleProjectUsage,
-  handleWorkspaceUsage,
   handleRunCommand,
 };

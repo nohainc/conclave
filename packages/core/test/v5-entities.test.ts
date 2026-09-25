@@ -50,7 +50,6 @@ const grant: WorkspaceProjectGrant = {
   allowedPermissions: ["repository:read", "repository:write"],
   networkPolicy: { mode: "deny_all", allowedHosts: [] },
   concurrency: { maxConcurrentAssignments: 2 },
-  budget: null,
   requiresStepUp: false,
   expiresAt: "2027-01-01T00:00:00Z",
   createdAt: "2026-09-24T10:00:00Z",

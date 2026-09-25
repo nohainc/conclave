@@ -79,9 +79,6 @@ describe("EW-15 configured Worker solo acceptance", () => {
       INSERT INTO worker_assignments
         (id, project_id, run_id, workstream_id, work_request_id, workflow_version_id, checkout_id, execution_workspace_id, runtime_identity_id, worker_id, configured_worker_id, requested_by_user_id, status, input_json, output_json, created_at, updated_at)
         VALUES ('assignment1', 'p1', 'run1', 'stream1', 'request1', 'wfv1', 'checkout1', 'ws1', 'runtime1', 'worker1', 'configured-worker1', 'u1', 'completed', '{}', '{}', '2026-01-01', '2026-01-01');
-      INSERT INTO usage
-        (id, project_id, run_id, workstream_id, work_request_id, workflow_version_id, assignment_id, requester_user_id, execution_workspace_id, worker_id, configured_worker_id, worker_type_id, credential_owner_user_id, provider, billing_category, model, input_tokens, output_tokens, cost_micros, duration_ms, recorded_at)
-        VALUES ('usage1', 'p1', 'run1', 'stream1', 'request1', 'wfv1', 'assignment1', 'u1', 'ws1', 'worker1', 'configured-worker1', 'worker1', 'u1', 'openai', 'subscription', 'codex-latest', 120, 80, 2500, 4200, '2026-01-01');
       INSERT INTO workstream_checkpoints VALUES ('checkpoint1', 'stream1', 'checkout1', 1, 'checkpoint-sha-1', 'Implementation complete', 'request1', '2026-01-01');
       INSERT INTO workstream_current_checkpoints VALUES ('stream1', 'checkpoint1', '2026-01-01');
       INSERT INTO work_requests VALUES ('request2', 'stream1', 'u1', 'stateful', 'wf1', 'wfv1', '{}', 'queued', 'ws1', 'checkout1', '{"baseCheckpointRevision":"checkpoint-sha-1"}', '2026-01-02', '2026-01-02');
@@ -93,8 +90,6 @@ describe("EW-15 configured Worker solo acceptance", () => {
         (SELECT status FROM configured_worker_installations WHERE id = 'installation1') AS installation_status,
         (SELECT status FROM workspace_project_grants WHERE id = 'grant1') AS grant_status,
         (SELECT configured_worker_id FROM worker_assignments WHERE id = 'assignment1') AS assignment_worker,
-        (SELECT requester_user_id || ':' || execution_workspace_id || ':' || configured_worker_id || ':' || worker_type_id || ':' || credential_owner_user_id
-           FROM usage WHERE id = 'usage1') AS usage_attribution,
         (SELECT COUNT(*) FROM ai_accounts) AS ai_account_count,
         (SELECT COUNT(*) FROM project_account_grants) AS account_grant_count,
         (SELECT revision FROM workstream_checkpoints WHERE id = 'checkpoint1') AS checkpoint_revision,
@@ -108,7 +103,6 @@ describe("EW-15 configured Worker solo acceptance", () => {
         installation_status: "ready",
         grant_status: "active",
         assignment_worker: "configured-worker1",
-        usage_attribution: "u1:ws1:configured-worker1:worker1:u1",
         ai_account_count: 0,
         account_grant_count: 0,
         checkpoint_revision: "checkpoint-sha-1",

@@ -166,11 +166,6 @@ String _string(Map<String, dynamic> json, String key, [String fallback = '—'])
   return value == null ? fallback : value.toString();
 }
 
-int _int(Map<String, dynamic> json, String key) {
-  final value = json[key];
-  return value is num ? value.toInt() : int.tryParse('$value') ?? 0;
-}
-
 List<String> _strings(Map<String, dynamic> json, String key) =>
     List<String>.from(json[key] as List? ?? const []);
 
@@ -842,8 +837,6 @@ class StudioCredentialProfile {
     required this.sharing,
     required this.status,
     this.storageLocation = 'None',
-    this.lastUsed = 'Never',
-    this.usage = 'No usage recorded',
   });
 
   final String id;
@@ -854,8 +847,6 @@ class StudioCredentialProfile {
   final String sharing;
   final String status;
   final String storageLocation;
-  final String lastUsed;
-  final String usage;
 
   factory StudioCredentialProfile.fromJson(Map<String, dynamic> json) =>
       StudioCredentialProfile(
@@ -868,10 +859,6 @@ class StudioCredentialProfile {
             _string(json, 'sharing', _string(json, 'sharingPolicy', 'Private')),
         status: _string(json, 'status', 'setup_required'),
         storageLocation: _string(json, 'storageLocation', 'None'),
-        lastUsed: _string(json, 'lastUsedAt', 'Never'),
-        usage: json['usage'] is Map
-            ? '${_string(Map<String, dynamic>.from(json['usage'] as Map), 'count', '0')} uses · ${_string(Map<String, dynamic>.from(json['usage'] as Map), 'durationMs', '0')} ms'
-            : _string(json, 'usage', 'No usage recorded'),
       );
 }
 
@@ -885,8 +872,6 @@ class StudioTask {
     required this.detail,
     required this.progress,
     required this.dependencies,
-    required this.tokens,
-    required this.cost,
   });
 
   final String id;
@@ -897,8 +882,6 @@ class StudioTask {
   final String detail;
   final double progress;
   final List<String> dependencies;
-  final String tokens;
-  final String cost;
 
   factory StudioTask.fromJson(Map<String, dynamic> json) => StudioTask(
       id: _string(json, 'id'),
@@ -910,9 +893,7 @@ class StudioTask {
       worker: _string(json, 'worker'),
       detail: _string(json, 'detail'),
       progress: (json['progress'] as num?)?.toDouble() ?? 0,
-      dependencies: _strings(json, 'dependencies'),
-      tokens: _string(json, 'tokens'),
-      cost: _string(json, 'cost'));
+      dependencies: _strings(json, 'dependencies'));
 }
 
 class StudioFinding {
@@ -994,143 +975,6 @@ class StudioArtifact {
       source: _string(json, 'source'));
 }
 
-class StudioModelCall {
-  const StudioModelCall({
-    required this.worker,
-    required this.model,
-    required this.task,
-    required this.tokens,
-    required this.cost,
-    required this.duration,
-    required this.status,
-    this.account = '',
-    this.host = '',
-  });
-
-  final String worker;
-  final String model;
-  final String task;
-  final String tokens;
-  final String cost;
-  final String duration;
-  final String status;
-  final String account;
-  final String host;
-
-  factory StudioModelCall.fromJson(Map<String, dynamic> json) =>
-      StudioModelCall(
-          worker: _string(json, 'worker'),
-          model: _string(json, 'model'),
-          task: _string(json, 'task'),
-          tokens: _string(json, 'tokens'),
-          cost: _string(json, 'cost'),
-          duration: _string(json, 'duration'),
-          status: _string(json, 'status'),
-          account: _string(json, 'credentialProfileId'),
-          host: _string(json, 'hostId'));
-}
-
-class StudioUsageSummary {
-  const StudioUsageSummary({
-    this.tokens = 0,
-    this.knownApiCostMicros = 0,
-    this.subscriptionUsage = 0,
-    this.runs = 0,
-    this.durationMs = 0,
-  });
-
-  final int tokens;
-  final int knownApiCostMicros;
-  final int subscriptionUsage;
-  final int runs;
-  final int durationMs;
-
-  factory StudioUsageSummary.fromJson(Map<String, dynamic> json) =>
-      StudioUsageSummary(
-        tokens: _int(json, 'tokens'),
-        knownApiCostMicros: _int(json, 'knownApiCostMicros'),
-        subscriptionUsage: _int(json, 'subscriptionUsage'),
-        runs: _int(json, 'runs'),
-        durationMs: _int(json, 'durationMs'),
-      );
-}
-
-class StudioUsageRow {
-  const StudioUsageRow({
-    required this.runId,
-    required this.projectName,
-    required this.requesterName,
-    required this.accountName,
-    required this.accountOwnerName,
-    required this.workerName,
-    required this.provider,
-    required this.model,
-    required this.billingCategory,
-    required this.tokens,
-    required this.costMicros,
-    required this.durationMs,
-    required this.recordedAt,
-  });
-
-  final String projectName;
-  final String runId;
-  final String requesterName;
-  final String accountName;
-  final String accountOwnerName;
-  final String workerName;
-  final String provider;
-  final String model;
-  final String billingCategory;
-  final int tokens;
-  final int? costMicros;
-  final int durationMs;
-  final String recordedAt;
-
-  factory StudioUsageRow.fromJson(Map<String, dynamic> json) => StudioUsageRow(
-        runId: _string(json, 'runId'),
-        projectName: _string(json, 'projectName', 'Unknown project'),
-        requesterName: _string(json, 'requesterName', 'Unknown user'),
-        accountName: _string(json, 'accountName', 'No account'),
-        accountOwnerName: _string(json, 'accountOwnerName', 'Unknown owner'),
-        workerName: _string(json, 'workerName', _string(json, 'workerId')),
-        provider: _string(json, 'provider', 'Unknown provider'),
-        model: _string(json, 'model', 'Unknown model'),
-        billingCategory: _string(json, 'billingCategory', 'unknown'),
-        tokens: _int(json, 'tokens'),
-        costMicros: json['costMicros'] is num
-            ? (json['costMicros'] as num).toInt()
-            : null,
-        durationMs: _int(json, 'durationMs'),
-        recordedAt: _string(json, 'recordedAt'),
-      );
-}
-
-class StudioUsageReport {
-  const StudioUsageReport({
-    this.range = '30d',
-    this.summary = const StudioUsageSummary(),
-    this.rows = const [],
-  });
-
-  final String range;
-  final StudioUsageSummary summary;
-  final List<StudioUsageRow> rows;
-
-  factory StudioUsageReport.fromJson(Map<String, dynamic> json) =>
-      StudioUsageReport(
-        range: _string(json, 'range', '30d'),
-        summary: json['summary'] is Map
-            ? StudioUsageSummary.fromJson(
-                Map<String, dynamic>.from(json['summary'] as Map))
-            : const StudioUsageSummary(),
-        rows: (json['usage'] as List? ?? const [])
-            .whereType<Map>()
-            .map((item) =>
-                StudioUsageRow.fromJson(Map<String, dynamic>.from(item)))
-            .toList(),
-      );
-}
-
 class StudioRun {
   const StudioRun({
     required this.id,
@@ -1142,8 +986,6 @@ class StudioRun {
     required this.openFindingCount,
     required this.verifiedCriterionCount,
     required this.criterionCount,
-    required this.tokens,
-    required this.costMicros,
   });
 
   final String id;
@@ -1155,8 +997,6 @@ class StudioRun {
   final int openFindingCount;
   final int verifiedCriterionCount;
   final int criterionCount;
-  final int tokens;
-  final int costMicros;
 
   factory StudioRun.fromJson(Map<String, dynamic> json) => StudioRun(
         id: _string(json, 'id'),
@@ -1171,8 +1011,6 @@ class StudioRun {
         openFindingCount: json['openFindingCount'] as int? ?? 0,
         verifiedCriterionCount: json['verifiedCriterionCount'] as int? ?? 0,
         criterionCount: json['criterionCount'] as int? ?? 0,
-        tokens: json['tokens'] as int? ?? 0,
-        costMicros: json['costMicros'] as int? ?? 0,
       );
 }
 
@@ -1511,12 +1349,10 @@ class StudioSnapshot {
     required this.findings,
     required this.events,
     required this.artifacts,
-    required this.modelCalls,
     this.policy,
     this.candidateOutputs = const [],
     this.synthesisDecision,
     this.accounts = const [],
-    this.usageReport = const StudioUsageReport(),
   });
 
   final String? workspaceId;
@@ -1532,9 +1368,7 @@ class StudioSnapshot {
   final List<StudioFinding> findings;
   final List<StudioEvent> events;
   final List<StudioArtifact> artifacts;
-  final List<StudioModelCall> modelCalls;
   final List<StudioCredentialProfile> accounts;
-  final StudioUsageReport usageReport;
   final StudioPolicy? policy;
   final List<StudioCandidateOutput> candidateOutputs;
   final StudioSynthesisDecision? synthesisDecision;
@@ -1560,12 +1394,10 @@ class StudioSnapshot {
         findings: findings,
         events: events,
         artifacts: artifacts,
-        modelCalls: modelCalls,
         policy: policy,
         candidateOutputs: candidateOutputs,
         synthesisDecision: synthesisDecision,
         accounts: accounts ?? this.accounts,
-        usageReport: usageReport,
       );
 
   List<StudioChat> get allChats =>
@@ -1589,7 +1421,6 @@ class StudioSnapshot {
       findings: [],
       events: [],
       artifacts: [],
-      modelCalls: [],
       accounts: []);
 
   factory StudioSnapshot.fromJson(Map<String, dynamic> json) => StudioSnapshot(
@@ -1635,18 +1466,10 @@ class StudioSnapshot {
             .map((item) =>
                 StudioArtifact.fromJson(Map<String, dynamic>.from(item as Map)))
             .toList(),
-        modelCalls: (json['modelCalls'] as List? ?? const [])
-            .map((item) => StudioModelCall.fromJson(
-                Map<String, dynamic>.from(item as Map)))
-            .toList(),
         accounts: (json['accounts'] as List? ?? const [])
             .map((item) => StudioCredentialProfile.fromJson(
                 Map<String, dynamic>.from(item as Map)))
             .toList(),
-        usageReport: json['usageReport'] is Map
-            ? StudioUsageReport.fromJson(
-                Map<String, dynamic>.from(json['usageReport'] as Map))
-            : const StudioUsageReport(),
         policy: json['policy'] == null
             ? null
             : StudioPolicy.fromJson(

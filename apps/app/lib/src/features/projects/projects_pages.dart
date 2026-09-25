@@ -188,40 +188,67 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
       return;
     }
     var selectedId = ownedWorkspaces.first.id;
+    String? errorText;
     final accepted = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Connect Workspace'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<String>(
-                initialValue: selectedId,
-                decoration: const InputDecoration(labelText: 'Workspace'),
-                items: ownedWorkspaces
-                    .map((workspace) => DropdownMenuItem(
-                          value: workspace.id,
-                          child: Text(workspace.name),
-                        ))
-                    .toList(),
-                onChanged: (value) {
-                  if (value != null) setDialogState(() => selectedId = value);
-                },
+        builder: (context, setDialogState) {
+          void submit() {
+            final alreadyConnected = projectWorkspaces.any((pw) {
+              final pwId =
+                  (pw['workspaceId'] ?? pw['id'] ?? '').toString();
+              return pwId == selectedId;
+            });
+            if (alreadyConnected) {
+              setDialogState(() {
+                errorText = 'This Workspace is already connected to this Project.';
+              });
+              return;
+            }
+            Navigator.pop(dialogContext, true);
+          }
+
+          return AlertDialog(
+            title: const Text('Connect Workspace'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                DropdownButtonFormField<String>(
+                  initialValue: selectedId,
+                  decoration: InputDecoration(
+                    labelText: 'Workspace',
+                    errorText: errorText,
+                  ),
+                  items: ownedWorkspaces
+                      .map((workspace) => DropdownMenuItem(
+                            value: workspace.id,
+                            child: Text(workspace.name),
+                          ))
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() {
+                        selectedId = value;
+                        errorText = null;
+                      });
+                    }
+                  },
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: submit,
+                child: const Text('Connect'),
               ),
             ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Connect'),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
     if (accepted != true) return;
@@ -275,34 +302,54 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
 
   Future<void> _createWorkstream() async {
     var name = '';
+    String? errorText;
     final created = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Create Workstream'),
-        content: TextField(
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Workstream name'),
-          onChanged: (value) => name = value,
-          onSubmitted: (_) {
-            if (name.trim().isNotEmpty) {
-              Navigator.pop(dialogContext, name.trim());
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          void submit() {
+            final trimmed = name.trim();
+            if (trimmed.isEmpty) return;
+            final exists = workstreams.any(
+              (w) => w.name.trim().toLowerCase() == trimmed.toLowerCase(),
+            );
+            if (exists) {
+              setDialogState(() {
+                errorText = 'A workstream with this name already exists.';
+              });
+              return;
             }
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (name.trim().isNotEmpty) {
-                Navigator.pop(dialogContext, name.trim());
-              }
-            },
-            child: const Text('Create Workstream'),
-          ),
-        ],
+            Navigator.pop(dialogContext, trimmed);
+          }
+
+          return AlertDialog(
+            title: const Text('Create Workstream'),
+            content: TextField(
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: 'Workstream name',
+                errorText: errorText,
+              ),
+              onChanged: (value) {
+                name = value;
+                if (errorText != null) {
+                  setDialogState(() => errorText = null);
+                }
+              },
+              onSubmitted: (_) => submit(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: submit,
+                child: const Text('Create Workstream'),
+              ),
+            ],
+          );
+        },
       ),
     );
     if (created == null || created.isEmpty) return;
@@ -321,35 +368,57 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
 
   Future<void> _editWorkstream(StudioWorkstream workstream) async {
     var name = workstream.name;
+    String? errorText;
     final updatedName = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Edit Workstream'),
-        content: TextFormField(
-          initialValue: workstream.name,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Workstream name'),
-          onChanged: (value) => name = value,
-          onFieldSubmitted: (_) {
-            if (name.trim().isNotEmpty) {
-              Navigator.pop(dialogContext, name.trim());
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          void submit() {
+            final trimmed = name.trim();
+            if (trimmed.isEmpty) return;
+            final exists = workstreams.any(
+              (w) =>
+                  w.id != workstream.id &&
+                  w.name.trim().toLowerCase() == trimmed.toLowerCase(),
+            );
+            if (exists) {
+              setDialogState(() {
+                errorText = 'A workstream with this name already exists.';
+              });
+              return;
             }
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (name.trim().isNotEmpty) {
-                Navigator.pop(dialogContext, name.trim());
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
+            Navigator.pop(dialogContext, trimmed);
+          }
+
+          return AlertDialog(
+            title: const Text('Edit Workstream'),
+            content: TextFormField(
+              initialValue: workstream.name,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: 'Workstream name',
+                errorText: errorText,
+              ),
+              onChanged: (value) {
+                name = value;
+                if (errorText != null) {
+                  setDialogState(() => errorText = null);
+                }
+              },
+              onFieldSubmitted: (_) => submit(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: submit,
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
       ),
     );
     if (updatedName == null ||
@@ -552,48 +621,82 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
   Future<void> _share() async {
     var email = '';
     var role = 'collaborator';
+    String? errorText;
     final result = await showDialog<(String, String)>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Share Project'),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(
-              autofocus: true,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(labelText: 'Email address'),
-              onChanged: (value) => email = value,
-              onSubmitted: (_) {
-                if (email.trim().isNotEmpty) {
-                  Navigator.pop(dialogContext, (email.trim(), role));
-                }
-              },
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: role,
-              decoration: const InputDecoration(labelText: 'Role'),
-              items: const [
-                DropdownMenuItem(
-                    value: 'collaborator', child: Text('Collaborator')),
-                DropdownMenuItem(value: 'viewer', child: Text('Viewer')),
+        builder: (context, setDialogState) {
+          void submit() {
+            final trimmedEmail = email.trim();
+            if (trimmedEmail.isEmpty) return;
+            final normalized = trimmedEmail.toLowerCase();
+            final isAlreadyMember = members.any(
+              (m) => m.email.trim().toLowerCase() == normalized,
+            );
+            if (isAlreadyMember) {
+              setDialogState(() {
+                errorText = 'This user is already a member of the Project.';
+              });
+              return;
+            }
+            final isAlreadyInvited = invitations.any(
+              (i) => i.email.trim().toLowerCase() == normalized,
+            );
+            if (isAlreadyInvited) {
+              setDialogState(() {
+                errorText = 'An invitation was already sent to this email.';
+              });
+              return;
+            }
+            Navigator.pop(dialogContext, (trimmedEmail, role));
+          }
+
+          return AlertDialog(
+            title: const Text('Share Project'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  autofocus: true,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    labelText: 'Email address',
+                    errorText: errorText,
+                  ),
+                  onChanged: (value) {
+                    email = value;
+                    if (errorText != null) {
+                      setDialogState(() => errorText = null);
+                    }
+                  },
+                  onSubmitted: (_) => submit(),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: role,
+                  decoration: const InputDecoration(labelText: 'Role'),
+                  items: const [
+                    DropdownMenuItem(
+                        value: 'collaborator', child: Text('Collaborator')),
+                    DropdownMenuItem(value: 'viewer', child: Text('Viewer')),
+                  ],
+                  onChanged: (value) =>
+                      setDialogState(() => role = value ?? role),
+                ),
               ],
-              onChanged: (value) => setDialogState(() => role = value ?? role),
             ),
-          ]),
-          actions: [
-            TextButton(
+            actions: [
+              TextButton(
                 onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Cancel')),
-            FilledButton(
-                onPressed: () {
-                  if (email.trim().isNotEmpty) {
-                    Navigator.pop(dialogContext, (email.trim(), role));
-                  }
-                },
-                child: const Text('Send invitation')),
-          ],
-        ),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: submit,
+                child: const Text('Send invitation'),
+              ),
+            ],
+          );
+        },
       ),
     );
     if (result == null || result.$1.isEmpty) return;

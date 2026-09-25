@@ -86,8 +86,6 @@ void main() {
           detail: 'Done',
           progress: 1.0,
           dependencies: [],
-          tokens: '1200',
-          cost: '\$0.02',
         ),
         const StudioTask(
           id: 'task-2',
@@ -98,8 +96,6 @@ void main() {
           detail: 'In progress',
           progress: 0.5,
           dependencies: ['task-1'],
-          tokens: '2400',
-          cost: '\$0.05',
         ),
       ];
 
@@ -150,7 +146,7 @@ void main() {
       expect(find.text('Execution'), findsWidgets);
       expect(find.text('Workers'), findsWidgets);
       expect(find.text('AI Accounts'), findsNothing);
-      expect(find.text('Open Usage'), findsOneWidget);
+      expect(find.text('Profile & Security'), findsOneWidget);
 
       await tester.enterText(find.byType(TextField), 'Execution');
       await tester.pumpAndSettle();
@@ -162,14 +158,14 @@ void main() {
       await tester.pumpAndSettle();
       expect(navigatedTo?.kind, StudioRouteKind.hosts);
 
-      // Search for Usage / Open Usage
-      await tester.enterText(find.byType(TextField), 'Usage');
+      // Search for Profile & Security
+      await tester.enterText(find.byType(TextField), 'Profile');
       await tester.pumpAndSettle();
 
-      expect(find.text('Open Usage'), findsOneWidget);
-      await tester.tap(find.text('Open Usage'));
+      expect(find.text('Profile & Security'), findsOneWidget);
+      await tester.tap(find.text('Profile & Security'));
       await tester.pumpAndSettle();
-      expect(navigatedTo?.kind, StudioRouteKind.usage);
+      expect(navigatedTo?.kind, StudioRouteKind.profileSecurity);
     });
 
     testWidgets('CommandPaletteDialog supports keyboard navigation',

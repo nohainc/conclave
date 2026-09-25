@@ -11,6 +11,3 @@ ALTER TABLE workstream_execution_policies
 
 ALTER TABLE workstream_execution_policies
   ADD COLUMN allowed_models_json TEXT NOT NULL DEFAULT '[]';
-
-ALTER TABLE workstream_execution_policies
-  ADD COLUMN budget_json TEXT;

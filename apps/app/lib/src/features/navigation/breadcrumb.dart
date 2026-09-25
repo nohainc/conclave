@@ -87,9 +87,6 @@ class AppBreadcrumb extends StatelessWidget {
           _divider(),
           _breadcrumbText('Workers', isCurrent: true),
         ],
-      StudioRouteKind.usage => [
-          _breadcrumbText('Usage', isCurrent: true),
-        ],
       StudioRouteKind.profileSecurity => [
           _breadcrumbText('Profile & Security', isCurrent: true),
         ],

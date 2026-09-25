@@ -7,7 +7,6 @@ enum StudioRouteKind {
   run,
   hosts,
   workers,
-  usage,
   profileSecurity,
   login,
   search,
@@ -53,8 +52,6 @@ class StudioNavigation {
   const StudioNavigation.hosts() : this._(kind: StudioRouteKind.hosts);
 
   const StudioNavigation.workers() : this._(kind: StudioRouteKind.workers);
-
-  const StudioNavigation.usage() : this._(kind: StudioRouteKind.usage);
 
   const StudioNavigation.login({String? returnTo})
       : this._(kind: StudioRouteKind.login, loginReturnTo: returnTo);
@@ -116,7 +113,6 @@ class StudioNavigation {
     // Backward compatibility for standalone /workers and /accounts
     if (parts case ['workers']) return const StudioNavigation.workers();
     if (parts case ['accounts']) return const StudioNavigation.workers();
-    if (parts case ['usage']) return const StudioNavigation.usage();
     if (parts case ['search']) {
       return StudioNavigation.search(uri.queryParameters['q']);
     }
@@ -163,7 +159,6 @@ class StudioNavigation {
           : Uri(path: '/projects/$projectId/runs/$runId'),
       StudioRouteKind.hosts => Uri(path: '/execution/workspaces'),
       StudioRouteKind.workers => Uri(path: '/execution/workers'),
-      StudioRouteKind.usage => Uri(path: '/usage'),
       StudioRouteKind.login => Uri(
           path: '/login',
           queryParameters:

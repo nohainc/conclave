@@ -1076,53 +1076,6 @@ export function consumeRateLimit(
   };
 }
 
-export interface UsageTotals {
-  readonly inputTokens: number;
-  readonly outputTokens: number;
-  readonly costMicros: number;
-}
-
-export interface BudgetPolicy {
-  readonly maxInputTokens?: number;
-  readonly maxOutputTokens?: number;
-  readonly maxCostMicros?: number;
-}
-
-export class BudgetExceededError extends Error {
-  readonly code = "BUDGET_EXCEEDED";
-  constructor(readonly field: keyof UsageTotals) {
-    super(`Budget exceeded for ${field}`);
-    this.name = "BudgetExceededError";
-  }
-}
-
-export function assertWithinBudget(
-  policy: BudgetPolicy,
-  current: UsageTotals,
-  next: UsageTotals,
-): UsageTotals {
-  const total = {
-    inputTokens: current.inputTokens + next.inputTokens,
-    outputTokens: current.outputTokens + next.outputTokens,
-    costMicros: current.costMicros + next.costMicros,
-  };
-  if (
-    policy.maxInputTokens !== undefined &&
-    total.inputTokens > policy.maxInputTokens
-  )
-    throw new BudgetExceededError("inputTokens");
-  if (
-    policy.maxOutputTokens !== undefined &&
-    total.outputTokens > policy.maxOutputTokens
-  )
-    throw new BudgetExceededError("outputTokens");
-  if (
-    policy.maxCostMicros !== undefined &&
-    total.costMicros > policy.maxCostMicros
-  )
-    throw new BudgetExceededError("costMicros");
-  return total;
-}
 
 export interface EncryptedCredentialEnvelope {
   readonly version: 1;

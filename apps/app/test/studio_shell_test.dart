@@ -104,14 +104,6 @@ void main() {
       expect(workersCtx.isNavActive(const StudioNavigation.hosts()), isTrue);
       expect(workersCtx.isNavActive(const StudioNavigation.home()), isFalse);
 
-      // Usage route
-      const usageCtx = StudioShellContext(
-        navigation: StudioNavigation.usage(),
-        projects: [],
-      );
-      expect(usageCtx.isNavActive(const StudioNavigation.usage()), isTrue);
-      expect(usageCtx.isNavActive(const StudioNavigation.home()), isFalse);
-
       // Profile & Security route
       const profileCtx = StudioShellContext(
         navigation: StudioNavigation.profileSecurity(),
@@ -250,13 +242,14 @@ void main() {
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
       expect(find.text('Execution'), findsOneWidget);
-      expect(find.text('Usage'), findsOneWidget);
+      expect(find.text('Archived Projects'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
-      expect(find.text('About Conclave AX'), findsOneWidget);
       expect(find.text('Documentation'), findsOneWidget);
-      expect(find.text('GitHub repository'), findsOneWidget);
-      expect(find.text('Website'), findsOneWidget);
+      expect(find.text('About Conclave AX'), findsOneWidget);
       expect(find.text('Log out'), findsOneWidget);
+      expect(find.text('Usage'), findsNothing);
+      expect(find.text('GitHub repository'), findsNothing);
+      expect(find.text('Website'), findsNothing);
 
       // Tap Execution in Application menu
       await tester.tap(find.text('Execution'));
@@ -315,19 +308,19 @@ void main() {
       await tester.pumpAndSettle();
       expect(navigatedTo, isNull);
       expect(find.text('Execution'), findsOneWidget);
-      expect(find.text('Usage'), findsOneWidget);
+      expect(find.text('Archived Projects'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
-      expect(find.text('About Conclave AX'), findsOneWidget);
       expect(find.text('Documentation'), findsOneWidget);
-      expect(find.text('GitHub repository'), findsOneWidget);
-      expect(find.text('Website'), findsOneWidget);
+      expect(find.text('About Conclave AX'), findsOneWidget);
       expect(find.text('Log out'), findsOneWidget);
+      expect(find.text('Usage'), findsNothing);
+      expect(find.text('GitHub repository'), findsNothing);
+      expect(find.text('Website'), findsNothing);
     });
 
     testWidgets(
         'Phase 3: Global application menu actions (destinations, appearance submenu, product info, session logout)',
         (tester) async {
-      StudioNavigation? navigatedTo;
       ThemeMode? selectedThemeMode;
       var logoutTriggered = false;
       var aboutTriggered = false;
@@ -346,7 +339,7 @@ void main() {
           home: Scaffold(
             body: StudioSidebar(
               shellContext: shellContext,
-              onNavigateTo: (nav) => navigatedTo = nav,
+              onNavigateTo: (_) {},
               onToggleProjectExpanded: (_) {},
               onCreateProject: () {},
               onSetThemeMode: (mode) => selectedThemeMode = mode,
@@ -363,16 +356,7 @@ void main() {
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
 
-      // Test 1: Usage destination
-      await tester.tap(find.text('Usage'));
-      await tester.pumpAndSettle();
-      expect(navigatedTo?.kind, StudioRouteKind.usage);
-
-      // Re-open menu
-      await tester.tap(find.byTooltip('Application menu'));
-      await tester.pumpAndSettle();
-
-      // Test 2: Appearance Submenu
+      // Test 1: Appearance Submenu
       await tester.tap(find.text('Appearance'));
       await tester.pumpAndSettle();
       expect(find.text('System'), findsOneWidget);
@@ -387,16 +371,7 @@ void main() {
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
 
-      // Test 3: About Conclave AX
-      await tester.tap(find.text('About Conclave AX'));
-      await tester.pumpAndSettle();
-      expect(aboutTriggered, isTrue);
-
-      // Re-open menu
-      await tester.tap(find.byTooltip('Application menu'));
-      await tester.pumpAndSettle();
-
-      // Test 4: Documentation
+      // Test 2: Documentation
       await tester.tap(find.text('Documentation'));
       await tester.pumpAndSettle();
       expect(
@@ -406,26 +381,16 @@ void main() {
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
 
-      // Test 5: GitHub repository
-      await tester.tap(find.text('GitHub repository'));
+      // Test 3: About Conclave AX
+      await tester.tap(find.text('About Conclave AX'));
       await tester.pumpAndSettle();
-      expect(
-          openedExternalUri, Uri.parse('https://github.com/nohainc/conclave'));
+      expect(aboutTriggered, isTrue);
 
       // Re-open menu
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
 
-      // Test 6: Website
-      await tester.tap(find.text('Website'));
-      await tester.pumpAndSettle();
-      expect(openedExternalUri, Uri.parse('https://conclaveax.com'));
-
-      // Re-open menu
-      await tester.tap(find.byTooltip('Application menu'));
-      await tester.pumpAndSettle();
-
-      // Test 7: Log out
+      // Test 4: Log out
       await tester.tap(find.text('Log out'));
       await tester.pumpAndSettle();
       expect(logoutTriggered, isTrue);
@@ -471,13 +436,14 @@ void main() {
 
       // Check items exist
       expect(find.text('Execution'), findsOneWidget);
-      expect(find.text('Usage'), findsOneWidget);
+      expect(find.text('Archived Projects'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
-      expect(find.text('About Conclave AX'), findsOneWidget);
       expect(find.text('Documentation'), findsOneWidget);
-      expect(find.text('GitHub repository'), findsOneWidget);
-      expect(find.text('Website'), findsOneWidget);
+      expect(find.text('About Conclave AX'), findsOneWidget);
       expect(find.text('Log out'), findsOneWidget);
+      expect(find.text('Usage'), findsNothing);
+      expect(find.text('GitHub repository'), findsNothing);
+      expect(find.text('Website'), findsNothing);
 
       // Click Execution
       await tester.tap(find.text('Execution'));
@@ -493,13 +459,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(selectedThemeMode, ThemeMode.system);
 
-      // Reopen and check About Conclave AX
-      await tester.tap(find.byTooltip('Application menu'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('About Conclave AX'));
-      await tester.pumpAndSettle();
-      expect(aboutTriggered, isTrue);
-
       // Reopen and check Documentation
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
@@ -508,20 +467,12 @@ void main() {
       expect(
           openedExternalUri, Uri.parse('https://conclaveax.com/how-it-works/'));
 
-      // Reopen and check GitHub repository
+      // Reopen and check About Conclave AX
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('GitHub repository'));
+      await tester.tap(find.text('About Conclave AX'));
       await tester.pumpAndSettle();
-      expect(
-          openedExternalUri, Uri.parse('https://github.com/nohainc/conclave'));
-
-      // Reopen and check Website
-      await tester.tap(find.byTooltip('Application menu'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Website'));
-      await tester.pumpAndSettle();
-      expect(openedExternalUri, Uri.parse('https://conclaveax.com'));
+      expect(aboutTriggered, isTrue);
 
       // Reopen and check Log out
       await tester.tap(find.byTooltip('Application menu'));
@@ -833,8 +784,6 @@ void main() {
           openFindingCount: 0,
           verifiedCriterionCount: 1,
           criterionCount: 2,
-          tokens: 500,
-          costMicros: 1000,
         ),
       );
 
@@ -913,8 +862,7 @@ void main() {
       expect(navigatedTo?.projectId, 'project-1');
     });
 
-    testWidgets('renders Workers breadcrumbs',
-        (tester) async {
+    testWidgets('renders Workers breadcrumbs', (tester) async {
       StudioNavigation? navigatedTo;
 
       const workersContext = StudioShellContext(
@@ -942,7 +890,6 @@ void main() {
 
       await tester.tap(find.text('Execution'));
       expect(navigatedTo?.kind, StudioRouteKind.hosts);
-
     });
 
     testWidgets('compact HUD displays full breadcrumb path for run',
@@ -972,8 +919,6 @@ void main() {
           openFindingCount: 0,
           verifiedCriterionCount: 1,
           criterionCount: 2,
-          tokens: 500,
-          costMicros: 1000,
         ),
       );
 
@@ -1109,7 +1054,7 @@ void main() {
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
       expect(find.text('Execution'), findsOneWidget);
-      expect(find.text('Usage'), findsOneWidget);
+      expect(find.text('Usage'), findsNothing);
       await tester.tap(find.text('Execution'));
       await tester.pumpAndSettle();
       expect(navigatedTo?.kind, StudioRouteKind.hosts);
@@ -1365,7 +1310,6 @@ void main() {
         StudioNavigation.run('p-1', 'run-1', workstreamId: 'ws-running'),
         StudioNavigation.hosts(),
         StudioNavigation.workers(),
-        StudioNavigation.usage(),
         StudioNavigation.profileSecurity(),
       ];
 
@@ -1582,7 +1526,6 @@ void main() {
       expect(find.text('Conclave Core'), findsOneWidget);
       await tester.tap(find.text('Conclave Core'));
       expect(navigatedTo?.kind, StudioRouteKind.project);
-
     });
 
     testWidgets(
@@ -2120,7 +2063,7 @@ void main() {
     });
 
     testWidgets(
-        'About dialog displays title, version badge, description, and link action chips',
+        'About dialog displays title, version badge, description, and website action',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -2147,10 +2090,9 @@ void main() {
       expect(find.byType(AlertDialog), findsOneWidget);
       expect(find.text('Conclave AX v0.4.0 • Provider-Independent Core'),
           findsOneWidget);
-      expect(find.text('Docs'), findsOneWidget);
-      expect(find.text('GitHub'), findsOneWidget);
-      expect(find.text('Website'),
-          findsWidgets); // chip + button + menu item if visible
+      expect(find.text('Docs'), findsNothing);
+      expect(find.text('GitHub'), findsNothing);
+      expect(find.text('Website'), findsNothing);
       expect(find.text('Close'), findsOneWidget);
       expect(find.text('Visit website'), findsOneWidget);
 

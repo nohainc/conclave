@@ -152,7 +152,7 @@ describe("v4 dynamic execution resolution", () => {
     });
   });
 
-  it("skips offline Hosts, installing Workers, full capacity, budget, and independence conflicts", () => {
+  it("skips offline Hosts, installing Workers, full capacity, and independence conflicts", () => {
     const available = [
       candidate({ hostId: "offline", hostStatus: "offline" }),
       candidate({
@@ -161,18 +161,15 @@ describe("v4 dynamic execution resolution", () => {
       }),
       candidate({ hostId: "busy", activeAssignments: 2, concurrencyLimit: 2 }),
       candidate({ hostId: "excluded", independenceKey: "account-a" }),
-      candidate({ hostId: "over-budget", estimatedCostMicros: 5000 }),
       candidate({
         hostId: "ready",
         independenceKey: "account-b",
-        estimatedCostMicros: 10,
       }),
     ];
     const result = resolveExecutionTarget(
       {
         requesterUserId: "user-owner",
         excludeIndependenceKeys: ["account-a"],
-        budgetRemainingMicros: 100,
       },
       available,
     );

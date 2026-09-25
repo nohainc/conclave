@@ -10,12 +10,32 @@ const entrypoint = readFileSync(
   fileURLToPath(new URL("../src/index.ts", import.meta.url)),
   "utf8",
 );
+const router = readFileSync(
+  fileURLToPath(new URL("../src/routes/router.ts", import.meta.url)),
+  "utf8",
+);
 
 describe("v6 Project lifecycle integrity", () => {
   it("registers project deletion in the production route handler table", () => {
     expect(entrypoint).toContain(
       "handleDeleteProject: handlers.handleDeleteProject",
     );
+  });
+
+  it("routes Workspace revoke to the execution Workspace lifecycle", () => {
+    const start = router.indexOf('const workspaceMatch = url.pathname.match');
+    const end = router.indexOf('if (request.method === "PATCH"', start);
+    const body = router.slice(start, end);
+
+    expect(body).toContain('request.method === "DELETE"');
+    expect(body).toContain("handleRevokeWorkspace");
+    expect(entrypoint).toContain(
+      "handleRevokeWorkspace: handlers.handleRevokeWorkspace",
+    );
+    expect(handlers).toContain("UPDATE execution_workspaces SET status = 'revoked'");
+    expect(handlers).toContain("UPDATE workspace_project_grants SET status = 'revoked'");
+    expect(handlers).toContain("const alreadyRevoked = workspace.status === \"revoked\"");
+    expect(handlers).toContain("status <> 'revoked'");
   });
 
   it("records Project-scoped audits without requiring a Workspace", () => {

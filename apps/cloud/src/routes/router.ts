@@ -697,6 +697,14 @@ export async function routeWorkerRequest(
     }
 
     const workspaceMatch = url.pathname.match(/^\/api\/workspaces\/([^/]+)$/);
+    if (request.method === "DELETE" && workspaceMatch?.[1]) {
+      return await handlers.handleRevokeWorkspace!(
+        request,
+        env,
+        workspaceMatch[1],
+        ctx,
+      );
+    }
     if (request.method === "PATCH" && workspaceMatch?.[1]) {
       return await handlers.handleUpdateWorkspace!(
         request,
@@ -1033,28 +1041,6 @@ export async function routeWorkerRequest(
         env,
         request,
         projectReadModelMatch[1],
-        ctx,
-      );
-    }
-    const projectUsageMatch = url.pathname.match(
-      /^\/api\/projects\/([^/]+)\/usage$/,
-    );
-    if (request.method === "GET" && projectUsageMatch?.[1]) {
-      return await handlers.handleProjectUsage!(
-        request,
-        env,
-        projectUsageMatch[1],
-        ctx,
-      );
-    }
-    const usageReadModelMatch = url.pathname.match(
-      /^\/api\/workspaces\/([^/]+)\/usage$/,
-    );
-    if (request.method === "GET" && usageReadModelMatch?.[1]) {
-      return await handlers.handleWorkspaceUsage!(
-        request,
-        env,
-        usageReadModelMatch[1],
         ctx,
       );
     }

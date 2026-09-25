@@ -226,7 +226,7 @@ void main() {
     expect(find.text('Advanced'), findsOneWidget);
     await tester.tap(find.text('Advanced'));
     await tester.pumpAndSettle();
-    expect(find.text('Account policy'), findsOneWidget);
+    expect(find.text('Advanced controls'), findsOneWidget);
     expect(find.text('Workstream budget'), findsOneWidget);
     await tester.enterText(
         find.byType(TextField).first, 'Add the missing tests');
@@ -492,6 +492,188 @@ void main() {
     await tester.pumpAndSettle(const Duration(seconds: 5));
     await tester.binding.setSurfaceSize(null);
   });
+
+  testWidgets('Creating workstream with duplicate name shows warning and stays on dialog',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    var createdCount = 0;
+
+    final customDataSource = _DuplicateTestDataSource(
+      onCreateWorkstream: () => createdCount++,
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: ProjectPage(
+            project: const StudioProject(
+              id: 'p-1',
+              name: 'Test Project',
+              branch: 'main',
+              activeGoals: 0,
+              lastActivity: 'today',
+              workstreams: [
+                StudioWorkstream(
+                  id: 'ws-1',
+                  projectId: 'p-1',
+                  name: 'Frontend Design',
+                  lead: 'Owner',
+                  status: 'active',
+                  brief: '',
+                  primaryWorkspace: '',
+                  currentCheckpoint: '',
+                  queueStatus: 'idle',
+                ),
+              ],
+            ),
+            dataSource: customDataSource,
+            onOpenWorkstream: (_) {},
+            onEdit: () {},
+            onArchive: () {},
+            onDelete: () {},
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Tap create workstream button
+    await tester.tap(find.byTooltip('Create Workstream'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Create Workstream'), findsNWidgets(2)); // Title and Button
+
+    // Enter existing name (case-insensitive)
+    await tester.enterText(find.byType(TextField).first, 'frontend design');
+    await tester.tap(find.widgetWithText(FilledButton, 'Create Workstream'));
+    await tester.pumpAndSettle();
+
+    // Verify warning is displayed and dialog is still visible
+    expect(find.text('A workstream with this name already exists.'), findsOneWidget);
+    expect(find.text('Create Workstream'), findsNWidgets(2));
+    expect(createdCount, 0);
+
+    // Cancel dialog
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    await tester.binding.setSurfaceSize(null);
+  });
+
+  testWidgets('Connecting duplicate workspace shows warning and stays on dialog',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    var requestedCount = 0;
+
+    final customDataSource = _DuplicateTestDataSource(
+      onRequestWorkspace: () => requestedCount++,
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: ProjectPage(
+            project: const StudioProject(
+              id: 'p-1',
+              name: 'Test Project',
+              branch: 'main',
+              activeGoals: 0,
+              lastActivity: 'today',
+            ),
+            dataSource: customDataSource,
+            onOpenWorkstream: (_) {},
+            onEdit: () {},
+            onArchive: () {},
+            onDelete: () {},
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Switch to Workspaces Tab
+    await tester.tap(find.text('Workspaces'));
+    await tester.pumpAndSettle();
+
+    // Tap Connect Workspace button
+    await tester.tap(find.byTooltip('Connect Workspace'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Connect Workspace'), findsOneWidget); // Dialog title
+
+    // Attempt to connect already connected workspace
+    await tester.tap(find.widgetWithText(FilledButton, 'Connect'));
+    await tester.pumpAndSettle();
+
+    // Verify warning is displayed and dialog is still visible
+    expect(find.text('This Workspace is already connected to this Project.'), findsOneWidget);
+    expect(find.text('Connect Workspace'), findsOneWidget);
+    expect(requestedCount, 0);
+
+    // Cancel dialog
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    await tester.binding.setSurfaceSize(null);
+  });
+
+  testWidgets('Inviting duplicate member shows warning and stays on dialog',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    var inviteCount = 0;
+
+    final customDataSource = _DuplicateTestDataSource(
+      onInviteMember: () => inviteCount++,
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: ProjectPage(
+            project: const StudioProject(
+              id: 'p-1',
+              name: 'Test Project',
+              branch: 'main',
+              activeGoals: 0,
+              lastActivity: 'today',
+            ),
+            dataSource: customDataSource,
+            onOpenWorkstream: (_) {},
+            onEdit: () {},
+            onArchive: () {},
+            onDelete: () {},
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Switch to Members Tab
+    await tester.tap(find.text('Members'));
+    await tester.pumpAndSettle();
+
+    // Tap Share Project button
+    await tester.tap(find.byTooltip('Share Project'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Share Project'), findsOneWidget); // Dialog title
+
+    // Enter existing member email
+    await tester.enterText(find.byType(TextField).first, 'alice@example.com');
+    await tester.tap(find.widgetWithText(FilledButton, 'Send invitation'));
+    await tester.pumpAndSettle();
+
+    // Verify warning is displayed and dialog is still visible
+    expect(find.text('This user is already a member of the Project.'), findsOneWidget);
+    expect(find.text('Share Project'), findsOneWidget);
+    expect(inviteCount, 0);
+
+    // Cancel dialog
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    await tester.binding.setSurfaceSize(null);
+  });
 }
 
 class _WorkspaceTestDataSource extends StudioFixtureDataSource {
@@ -506,6 +688,95 @@ class _WorkspaceTestDataSource extends StudioFixtureDataSource {
           'workspaceName': 'Production Host',
         }
       ];
+}
+
+class _DuplicateTestDataSource extends StudioFixtureDataSource {
+  _DuplicateTestDataSource({
+    this.onCreateWorkstream,
+    this.onRequestWorkspace,
+    this.onInviteMember,
+  });
+
+  final VoidCallback? onCreateWorkstream;
+  final VoidCallback? onRequestWorkspace;
+  final VoidCallback? onInviteMember;
+
+  @override
+  Future<List<StudioWorkspace>> loadWorkspaces() async => const [
+        StudioWorkspace(
+          id: 'ws-1',
+          name: 'MacBook Pro',
+          slug: 'macbook-pro',
+          status: 'online',
+          role: 'owner',
+        ),
+      ];
+
+  @override
+  Future<List<Map<String, dynamic>>> loadProjectWorkspaces({
+    required String projectId,
+  }) async =>
+      [
+        {
+          'id': 'grant-1',
+          'workspaceId': 'ws-1',
+          'workspaceName': 'MacBook Pro',
+        }
+      ];
+
+  @override
+  Future<List<StudioProjectMember>> loadProjectMembers({
+    required String projectId,
+  }) async =>
+      const [
+        StudioProjectMember(
+          userId: 'u-alice',
+          email: 'alice@example.com',
+          displayName: 'Alice',
+          role: 'collaborator',
+          createdAt: '2026-01-01',
+        ),
+      ];
+
+  @override
+  Future<StudioWorkstream> createWorkstream({
+    required String projectId,
+    required String name,
+    String? brief,
+    String? lead,
+    String? primaryWorkspace,
+  }) async {
+    onCreateWorkstream?.call();
+    return StudioWorkstream(
+      id: 'ws-new',
+      projectId: projectId,
+      name: name,
+      lead: lead ?? 'Owner',
+      status: 'active',
+      brief: brief ?? '',
+      primaryWorkspace: primaryWorkspace ?? '',
+      currentCheckpoint: '',
+      queueStatus: 'idle',
+    );
+  }
+
+  @override
+  Future<void> requestProjectWorkspace({
+    required String projectId,
+    required String workspaceId,
+    List<String> repositoryMappings = const [],
+  }) async {
+    onRequestWorkspace?.call();
+  }
+
+  @override
+  Future<void> inviteProjectMember({
+    required String projectId,
+    required String email,
+    required String role,
+  }) async {
+    onInviteMember?.call();
+  }
 }
 
 void _noop() {}

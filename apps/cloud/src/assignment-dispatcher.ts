@@ -6,11 +6,7 @@ import {
 } from "@conclave/host-protocol";
 import type { GatewayEnv } from "./host-gateway.js";
 import { selectProjectExecutionTarget } from "./v5-scheduler.js";
-import {
-  assertV5BudgetAvailable,
-  recordExecutionWorkspaceAudit,
-  recordV5AssignmentUsage,
-} from "./v5-accounting.js";
+import { recordExecutionWorkspaceAudit } from "./v5-accounting.js";
 
 export interface TaskToDispatch {
   readonly id: string;
@@ -223,19 +219,6 @@ async function dispatchV5ProjectAssignment(
         "No eligible Project execution resource satisfied the Workspace Grant, Worker, Account, capacity, and permission filters",
     };
   }
-  const taskInput = task.input ?? {};
-  await assertV5BudgetAvailable(env.CONCLAVE_DB, {
-    projectId: target.projectId,
-    runId,
-    accountId:
-      target.accountId ?? target.credentialId ?? target.configuredWorkerId,
-    inputTokens: Number(taskInput.inputTokens ?? 0),
-    outputTokens: Number(taskInput.outputTokens ?? 0),
-    estimatedCostMicros:
-      typeof taskInput.estimatedCostMicros === "number"
-        ? taskInput.estimatedCostMicros
-        : null,
-  });
   const now = new Date().toISOString();
   const attemptRow = await env.CONCLAVE_DB.prepare(
     "SELECT COALESCE(MAX(attempt_number), 0) + 1 as next_num FROM attempts WHERE task_id = ?1",
@@ -736,21 +719,6 @@ export async function recordAssignmentResult(
 
   // 2. Query assignment context
   if (existing) {
-    await recordV5AssignmentUsage(db, {
-      assignmentId,
-      inputTokens: Number((result as Record<string, unknown>).inputTokens ?? 0),
-      outputTokens: Number(
-        (result as Record<string, unknown>).outputTokens ?? 0,
-      ),
-      costMicros: (result as Record<string, unknown>).costMicros as
-        number | null | undefined,
-      durationMs: Number((result as Record<string, unknown>).durationMs ?? 0),
-      provider: (result as Record<string, unknown>).provider as
-        string | undefined,
-      model: (result as Record<string, unknown>).model as string | undefined,
-      billingCategory: (result as Record<string, unknown>).billingCategory as
-        "subscription" | "api" | "local" | "unknown" | undefined,
-    });
     // 3. Update attempt
     await db
       .prepare(

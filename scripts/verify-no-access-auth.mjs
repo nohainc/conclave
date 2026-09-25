@@ -1,6 +1,5 @@
-/* global console, process */
-
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 
 const roots = [
@@ -32,6 +31,7 @@ const files = execFileSync("git", ["ls-files", "--", ...roots], {
   .trim()
   .split("\n")
   .filter(Boolean)
+  .filter((file) => existsSync(file))
   .filter((file) => !ignored.some((pattern) => pattern.test(file)));
 
 const violations = [];

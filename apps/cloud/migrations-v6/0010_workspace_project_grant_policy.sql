@@ -11,7 +11,4 @@ ALTER TABLE workspace_project_grants
   ADD COLUMN concurrency_json TEXT NOT NULL DEFAULT '{"maxConcurrentAssignments":1}';
 
 ALTER TABLE workspace_project_grants
-  ADD COLUMN budget_json TEXT;
-
-ALTER TABLE workspace_project_grants
   ADD COLUMN requires_step_up INTEGER NOT NULL DEFAULT 0 CHECK (requires_step_up IN (0, 1));

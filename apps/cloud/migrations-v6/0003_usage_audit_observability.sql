@@ -1,13 +1,4 @@
--- V6-21: complete usage attribution and Workstream audit/metrics read models.
-ALTER TABLE usage ADD COLUMN workspace_owner_user_id TEXT REFERENCES users(id) ON DELETE SET NULL;
-ALTER TABLE usage ADD COLUMN account_owner_user_id TEXT REFERENCES users(id) ON DELETE SET NULL;
-ALTER TABLE usage ADD COLUMN provider TEXT;
-ALTER TABLE usage ADD COLUMN billing_category TEXT;
-ALTER TABLE usage ADD COLUMN model TEXT;
-
-CREATE INDEX idx_v6_usage_workstream_time
-  ON usage(workstream_id, recorded_at);
-
+-- V6-21: complete Workstream audit and metrics read models.
 CREATE TABLE workstream_audit_log (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,

@@ -49,7 +49,7 @@ final class _WebStudioBrowserNavigation implements StudioBrowserNavigation {
   }
 
   @override
-  void openExternal(Uri uri) => html.window.location.assign(uri.toString());
+  void openExternal(Uri uri) => html.window.open(uri.toString(), '_blank');
 
   @override
   void dispose() {}

@@ -14,6 +14,7 @@
     "cloud:execution-boundary-check": "node scripts/verify-cloud-execution-boundary.mjs",
     "production:preflight": "node scripts/verify-production-security.mjs",
     "auth:access-guard": "node scripts/verify-no-access-auth.mjs",
+    "usage:architecture-guard": "node scripts/verify-no-usage-architecture.mjs",
     "v4:architecture-guard": "node scripts/verify-v4-architecture-guard.mjs",
     "v5:workspace-terminology": "node scripts/verify-v5-workspace-terminology.mjs",
     "v6:convergence": "node scripts/verify-v6-convergence.mjs",

@@ -232,6 +232,8 @@ abstract interface class StudioDataSource {
     required String workspaceId,
     required String agentId,
   });
+  Future<void> revokeWorkspace({required String workspaceId}) async =>
+      revokeAgent(workspaceId: workspaceId, agentId: workspaceId);
   Future<void> updateHost({
     required String workspaceId,
     required String hostId,
@@ -1364,9 +1366,6 @@ class StudioApiClient implements StudioDataSource {
     final detail = selected == null
         ? <String, dynamic>{}
         : await getJson(Uri.parse('$baseUrl/projects/$selected/read-model'));
-    final usageReport = selected == null
-        ? <String, dynamic>{'usage': const []}
-        : await getJson(Uri.parse('$baseUrl/projects/$selected/usage'));
     final detailProject = detail['project'];
     final mergedProjects = projects.map((project) {
       if (detailProject is Map && project['id'] == detailProject['id']) {
@@ -1374,19 +1373,6 @@ class StudioApiClient implements StudioDataSource {
       }
       return project;
     }).toList();
-    final usage = (usageReport['usage'] as List? ?? const [])
-        .whereType<Map>()
-        .map((value) => Map<String, dynamic>.from(value))
-        .toList();
-    final modelCalls = usage
-        .map((value) => {
-              ...value,
-              'worker': value['worker'] ?? value['workerId'],
-              'task': value['task'] ?? value['runId'],
-              'cost': value['cost'] ?? value['costMicros'],
-              'duration': value['duration'] ?? value['durationMs'],
-            })
-        .toList();
     return StudioSnapshot.fromJson({
       'workspaceId': selectedWorkspaceId,
       'projects': mergedProjects,
@@ -1403,16 +1389,12 @@ class StudioApiClient implements StudioDataSource {
         };
       }).toList(),
       'accounts': responses[3]['accounts'] ?? const [],
-      'usageReport': usageReport,
       'run': detail['run'],
       'activeRunId': detail['activeRunId'],
       'tasks': detail['tasks'] ?? const [],
       'findings': detail['findings'] ?? const [],
       'events': detail['events'] ?? const [],
       'artifacts': detail['artifacts'] ?? const [],
-      'modelCalls': modelCalls.isNotEmpty
-          ? modelCalls
-          : (detail['modelCalls'] ?? const []),
     });
   }
 
@@ -1665,6 +1647,21 @@ class StudioApiClient implements StudioDataSource {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StudioApiException(
           'Workspace revoke failed (${response.statusCode})');
+    }
+  }
+
+  @override
+  Future<void> revokeWorkspace({required String workspaceId}) async {
+    final response = await client.delete(
+      Uri.parse('$baseUrl/workspaces/$workspaceId'),
+      headers: _headers(),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final detail = response.body.trim();
+      throw StudioApiException(
+        'Workspace revoke failed (${response.statusCode})${detail.isEmpty ? '' : ': $detail'}',
+        statusCode: response.statusCode,
+      );
     }
   }
 

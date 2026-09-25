@@ -538,7 +538,7 @@ Work Request
   -> ready Workers
   -> authorized configured Workers
   -> package/credential readiness
-  -> capacity / budget / independence
+  -> capacity / concurrency / independence
   -> Assignment
 ~~~
 
@@ -579,12 +579,9 @@ A Workstream may have an Execution Sponsor, typically the Lead or Project owner.
 Sponsor mode means collaborators may use selected sponsor Accounts only when:
 - Account owner explicitly granted the Account to the Project;
 - Workstream policy allows the Account;
-- provider sharing policy permits it;
-- budget policy allows it.
+- provider sharing policy permits it.
 
 Workstream settings can narrow Account use but never create Account authorization by themselves.
-
-Usage records preserve both requester and Account owner.
 
 ## 22. Context assembly
 
@@ -917,7 +914,7 @@ Keep:
 - assignment journal/reconciliation;
 - Goal/Run/Task/Attempt;
 - artifacts/findings/verifications;
-- usage/accounting;
+- operational audit and observability;
 - realtime infrastructure.
 
 ## 33. What v6 replaces

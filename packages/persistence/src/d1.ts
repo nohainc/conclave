@@ -11,7 +11,6 @@ import type {
   RunRecord,
   TaskDependencyRecord,
   TaskRecord,
-  UsageRecord,
   VerificationRecord,
   ProjectRecord,
   WorkerRecord,
@@ -24,7 +23,6 @@ import type {
   MembershipRecord,
   ProjectMembershipRecord,
   AuditLogRecord,
-  BudgetRecord,
 } from "./index.js";
 
 export interface D1Result<T> {
@@ -260,77 +258,6 @@ export class D1AuditLogRepository {
       };
     });
   }
-}
-
-export class D1BudgetRepository {
-  constructor(private readonly db: D1DatabaseLike) {}
-
-  async get(id: string): Promise<BudgetRecord | null> {
-    const row = await this.db
-      .prepare("SELECT * FROM budgets WHERE id = ?1")
-      .bind(id)
-      .first();
-    return row ? toBudget(row) : null;
-  }
-
-  async save(budget: BudgetRecord): Promise<void> {
-    await this.db
-      .prepare(
-        `INSERT INTO budgets (id, workspace_id, project_id, run_id, credential_profile_id, max_cost_micros,
-           max_input_tokens, max_output_tokens, used_input_tokens, used_output_tokens,
-           used_cost_micros, status, max_attempts, max_wall_time_seconds, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, NULL, NULL, ?13, ?14)
-         ON CONFLICT(id) DO UPDATE SET project_id=excluded.project_id, run_id=excluded.run_id,
-           credential_profile_id=excluded.credential_profile_id,
-           max_cost_micros=excluded.max_cost_micros, max_input_tokens=excluded.max_input_tokens,
-           max_output_tokens=excluded.max_output_tokens, used_input_tokens=excluded.used_input_tokens,
-           used_output_tokens=excluded.used_output_tokens, used_cost_micros=excluded.used_cost_micros,
-           status=excluded.status, updated_at=excluded.updated_at`,
-      )
-      .bind(
-        budget.id,
-        budget.organizationId,
-        budget.projectId,
-        budget.runId,
-        budget.credentialProfileId,
-        budget.maxCostMicros,
-        budget.maxInputTokens,
-        budget.maxOutputTokens,
-        budget.usedInputTokens,
-        budget.usedOutputTokens,
-        budget.usedCostMicros,
-        budget.status,
-        budget.createdAt,
-        budget.updatedAt,
-      )
-      .run();
-  }
-}
-
-function toBudget(row: Record<string, unknown>): BudgetRecord {
-  return {
-    id: String(row.id),
-    organizationId: String(row.workspace_id),
-    projectId: row.project_id === null ? null : String(row.project_id),
-    runId: row.run_id === null ? null : String(row.run_id),
-    credentialProfileId:
-      row.credential_profile_id === null ||
-      row.credential_profile_id === undefined
-        ? null
-        : String(row.credential_profile_id),
-    maxInputTokens:
-      row.max_input_tokens === null ? null : Number(row.max_input_tokens),
-    maxOutputTokens:
-      row.max_output_tokens === null ? null : Number(row.max_output_tokens),
-    maxCostMicros:
-      row.max_cost_micros === null ? null : Number(row.max_cost_micros),
-    usedInputTokens: Number(row.used_input_tokens ?? 0),
-    usedOutputTokens: Number(row.used_output_tokens ?? 0),
-    usedCostMicros: Number(row.used_cost_micros ?? 0),
-    status: String(row.status) as BudgetRecord["status"],
-    createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at),
-  };
 }
 
 export class D1ProjectRepository {
@@ -1399,66 +1326,6 @@ function toVerification(row: Record<string, unknown>): VerificationRecord {
   };
 }
 
-export class D1UsageRepository {
-  constructor(private readonly db: D1DatabaseLike) {}
-
-  async save(usage: UsageRecord): Promise<void> {
-    const scope = await runScope(this.db, usage.runId);
-    if (!usage.workerId) throw new Error("D1 usage requires workerId");
-    const profile = usage.credentialProfileId
-      ? await this.db
-          .prepare(
-            "SELECT owner_type, owner_id FROM credential_profiles WHERE id = ?1",
-          )
-          .bind(usage.credentialProfileId)
-          .first<{ owner_type: string; owner_id: string }>()
-      : null;
-    await this.db
-      .prepare(
-        `INSERT INTO usage (id, workspace_id, project_id, run_id, worker_id, assignment_id, credential_profile_id, credential_profile_owner_type, credential_profile_owner_id, requester_user_id, host_id, provider, billing_category, model, input_tokens, output_tokens, cost_micros, duration_ms, recorded_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
-         ON CONFLICT(id) DO UPDATE SET input_tokens=excluded.input_tokens, output_tokens=excluded.output_tokens,
-           credential_profile_id=excluded.credential_profile_id, credential_profile_owner_type=excluded.credential_profile_owner_type,
-           credential_profile_owner_id=excluded.credential_profile_owner_id, requester_user_id=excluded.requester_user_id,
-           host_id=excluded.host_id, provider=excluded.provider, billing_category=excluded.billing_category,
-           model=excluded.model, cost_micros=excluded.cost_micros,
-           duration_ms=excluded.duration_ms, recorded_at=excluded.recorded_at`,
-      )
-      .bind(
-        usage.id,
-        scope.workspaceId,
-        scope.projectId,
-        usage.runId,
-        usage.workerId,
-        null,
-        usage.credentialProfileId ?? null,
-        usage.credentialProfileOwnerType ??
-          (profile?.owner_type as "user" | "workspace" | undefined) ??
-          null,
-        usage.credentialProfileOwnerId ?? profile?.owner_id ?? null,
-        usage.requesterUserId ?? null,
-        usage.hostId ?? null,
-        usage.provider ?? null,
-        usage.billingCategory ?? "unknown",
-        usage.model ?? null,
-        usage.inputTokens,
-        usage.outputTokens,
-        usage.estimatedCostMicros,
-        usage.executionMs,
-        usage.recordedAt,
-      )
-      .run();
-  }
-
-  async listByRun(runId: string): Promise<readonly UsageRecord[]> {
-    const rows = await this.db
-      .prepare("SELECT * FROM usage WHERE run_id = ?1 ORDER BY recorded_at")
-      .bind(runId)
-      .all();
-    return (rows.results ?? []).map(toUsage);
-  }
-}
-
 async function runScope(
   db: D1DatabaseLike,
   runId: string,
@@ -1471,55 +1338,6 @@ async function runScope(
     throw new Error(`Cannot persist record for unknown Run: ${runId}`);
   }
   return { workspaceId: row.workspace_id, projectId: row.project_id };
-}
-
-function toUsage(row: Record<string, unknown>): UsageRecord {
-  return {
-    id: String(row.id),
-    runId: String(row.run_id),
-    attemptId: null,
-    workerId: row.worker_id === null ? null : String(row.worker_id),
-    credentialProfileId:
-      row.credential_profile_id === null ||
-      row.credential_profile_id === undefined
-        ? null
-        : String(row.credential_profile_id),
-    credentialProfileOwnerType:
-      row.credential_profile_owner_type === null ||
-      row.credential_profile_owner_type === undefined
-        ? null
-        : (String(row.credential_profile_owner_type) as "user" | "workspace"),
-    credentialProfileOwnerId:
-      row.credential_profile_owner_id === null ||
-      row.credential_profile_owner_id === undefined
-        ? null
-        : String(row.credential_profile_owner_id),
-    requesterUserId:
-      row.requester_user_id === null || row.requester_user_id === undefined
-        ? null
-        : String(row.requester_user_id),
-    hostId:
-      row.host_id === null || row.host_id === undefined
-        ? null
-        : String(row.host_id),
-    provider:
-      row.provider === null || row.provider === undefined
-        ? null
-        : String(row.provider),
-    billingCategory: String(
-      row.billing_category ?? "unknown",
-    ) as UsageRecord["billingCategory"],
-    model:
-      row.model === null || row.model === undefined ? null : String(row.model),
-    inputTokens: Number(row.input_tokens),
-    outputTokens: Number(row.output_tokens),
-    executionMs: Number(row.duration_ms),
-    estimatedCostMicros:
-      row.cost_micros === null || row.cost_micros === undefined
-        ? null
-        : Number(row.cost_micros),
-    recordedAt: String(row.recorded_at),
-  };
 }
 
 function toAttempt(row: Record<string, unknown>): AttemptRecord {

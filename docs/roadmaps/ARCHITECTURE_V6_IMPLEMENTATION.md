@@ -628,21 +628,17 @@ Modes may include:
 - sponsor must explicitly authorize configured Worker use;
 - Workstream policy only narrows;
 - underlying provider/credential sharing policy remains authoritative;
-- usage stores requester, Worker owner and credential-owner attribution where required.
-
-### Budgets
-Optional Workstream budget and per-request estimate.
+- audit log records requester, Worker owner and credential-owner attribution where required.
 
 ### Tests
 - requester-owned Worker;
 - sponsor Worker;
 - revoked Worker grant;
 - provider private-only;
-- budget exceeded;
 - Worker not ready on Primary Workspace.
 
 ### Exit
-Team execution cost/identity is explicit through configured Workers.
+Team execution identity and access are explicit through configured Workers.
 
 ---
 

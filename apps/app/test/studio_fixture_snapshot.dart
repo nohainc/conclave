@@ -12,8 +12,6 @@ StudioSnapshot studioFixtureSnapshot() => const StudioSnapshot(
         openFindingCount: 1,
         verifiedCriterionCount: 0,
         criterionCount: 2,
-        tokens: 32500,
-        costMicros: 650000,
       ),
       projects: [
         StudioProject(
@@ -179,7 +177,6 @@ StudioSnapshot studioFixtureSnapshot() => const StudioSnapshot(
           host: 'Development Workspace',
           sharing: 'Private',
           status: 'ready',
-          usage: '12.4k tokens · \$2.10 this month',
         ),
       ],
       agents: [
@@ -259,8 +256,6 @@ StudioSnapshot studioFixtureSnapshot() => const StudioSnapshot(
               'Mapped app boundaries and identified the Flutter entry point.',
           progress: 1,
           dependencies: [],
-          tokens: '8.4k',
-          cost: '\$0.17',
         ),
         StudioTask(
           id: 'implement',
@@ -271,8 +266,6 @@ StudioSnapshot studioFixtureSnapshot() => const StudioSnapshot(
           detail: 'Implementing the first usable run dashboard and controls.',
           progress: .68,
           dependencies: ['Research repository structure'],
-          tokens: '24.1k',
-          cost: '\$0.48',
         ),
         StudioTask(
           id: 'review',
@@ -284,8 +277,6 @@ StudioSnapshot studioFixtureSnapshot() => const StudioSnapshot(
               'Waiting for implementation output before starting isolated review.',
           progress: 0,
           dependencies: ['Build the Studio execution surface'],
-          tokens: '—',
-          cost: '—',
         ),
         StudioTask(
           id: 'tests',
@@ -297,8 +288,6 @@ StudioSnapshot studioFixtureSnapshot() => const StudioSnapshot(
               'Will collect executable evidence for the completion criteria.',
           progress: 0,
           dependencies: ['Build the Studio execution surface'],
-          tokens: '—',
-          cost: '—',
         ),
       ],
       findings: [
@@ -361,24 +350,6 @@ StudioSnapshot studioFixtureSnapshot() => const StudioSnapshot(
             type: 'Structured plan',
             size: '4 KB',
             source: 'Lead · Plan'),
-      ],
-      modelCalls: [
-        StudioModelCall(
-            worker: 'Lead',
-            model: 'gpt-5.6-sol',
-            task: 'Build the Studio execution surface',
-            tokens: '24.1k',
-            cost: '\$0.48',
-            duration: '1m 42s',
-            status: 'Streaming'),
-        StudioModelCall(
-            worker: 'Lead',
-            model: 'gpt-5.6-sol',
-            task: 'Research repository structure',
-            tokens: '8.4k',
-            cost: '\$0.17',
-            duration: '38s',
-            status: 'Complete'),
       ],
       policy: StudioPolicy(
         preset: StudioQualityPreset.balanced,

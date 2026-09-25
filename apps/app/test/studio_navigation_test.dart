@@ -43,7 +43,6 @@ void main() {
       const StudioNavigation.projects(),
       const StudioNavigation.hosts(),
       const StudioNavigation.workers(),
-      const StudioNavigation.usage(),
       const StudioNavigation.profileSecurity(),
     ];
 

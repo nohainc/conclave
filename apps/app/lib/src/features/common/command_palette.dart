@@ -100,16 +100,6 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
         },
       ),
       CommandPaletteAction(
-        title: 'Open Usage',
-        subtitle: 'Token usage, cost analytics, and quotas',
-        icon: Icons.analytics_outlined,
-        category: 'Navigation',
-        onSelect: () {
-          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-          widget.onNavigateTo(const StudioNavigation.usage());
-        },
-      ),
-      CommandPaletteAction(
         title: 'Profile & Security',
         subtitle: 'Profile, passkeys, and account settings',
         icon: Icons.person_outline_rounded,

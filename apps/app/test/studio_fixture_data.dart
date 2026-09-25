@@ -499,6 +499,9 @@ class StudioFixtureDataSource implements StudioDataSource {
   }) async {}
 
   @override
+  Future<void> revokeWorkspace({required String workspaceId}) async {}
+
+  @override
   Future<void> updateHost({
     required String workspaceId,
     required String hostId,

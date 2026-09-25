@@ -15,7 +15,6 @@ import {
   D1RunRepository,
   D1TaskDependencyRepository,
   D1TaskRepository,
-  D1UsageRepository,
   D1VerificationRepository,
   D1ProjectRepository,
   D1WorkerRepository,
@@ -28,7 +27,6 @@ import {
   D1MembershipRepository,
   D1ProjectMembershipRepository,
   D1AuditLogRepository,
-  D1BudgetRepository,
   type D1DatabaseLike,
 } from "./d1.js";
 
@@ -46,12 +44,10 @@ export class D1PersistenceRepositories implements PersistenceRepositories {
   readonly verifications: D1VerificationRepository;
   readonly artifacts: D1ArtifactRepository;
   readonly events: D1EventRepository;
-  readonly usage: D1UsageRepository;
   readonly organizations: D1OrganizationRepository;
   readonly memberships: D1MembershipRepository;
   readonly projectMemberships: D1ProjectMembershipRepository;
   readonly auditLog: D1AuditLogRepository;
-  readonly budgets: D1BudgetRepository;
   readonly credentials: D1CredentialRepository;
   readonly retentionPolicies: D1RetentionPolicyRepository;
   readonly extensions: D1ExtensionRepository;
@@ -72,12 +68,10 @@ export class D1PersistenceRepositories implements PersistenceRepositories {
     this.verifications = new D1VerificationRepository(db);
     this.artifacts = new D1ArtifactRepository(db);
     this.events = new D1EventRepository(db);
-    this.usage = new D1UsageRepository(db);
     this.organizations = new D1OrganizationRepository(db);
     this.memberships = new D1MembershipRepository(db);
     this.projectMemberships = new D1ProjectMembershipRepository(db);
     this.auditLog = new D1AuditLogRepository(db);
-    this.budgets = new D1BudgetRepository(db);
     this.credentials = new D1CredentialRepository(db);
     this.retentionPolicies = new D1RetentionPolicyRepository(db);
     this.extensions = new D1ExtensionRepository(db);
@@ -113,7 +107,6 @@ export class D1PersistenceRepositories implements PersistenceRepositories {
     const verifications = await this.verifications.listByRun(runId);
     const artifacts = await this.artifacts.listByRun(runId);
     const events = await this.events.listByRun(runId);
-    const usage = await this.usage.listByRun(runId);
     const rows: RunAggregateRows = {
       goal,
       run,
@@ -126,7 +119,6 @@ export class D1PersistenceRepositories implements PersistenceRepositories {
       verifications,
       artifacts,
       events,
-      usage,
     };
     return reconstructRun(rows);
   }

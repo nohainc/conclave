@@ -11,7 +11,6 @@ export interface ProjectExecutionSelectionRequest {
   readonly workerId?: string;
   readonly excludeIndependenceKeys?: readonly string[];
   readonly model?: string;
-  readonly maxCostMicros?: number;
   readonly executionClass?: "stateless_read" | "stateful_workstream";
   readonly workstreamId?: string;
   readonly workRequestId?: string;
@@ -211,13 +210,11 @@ export async function selectProjectExecutionTarget(
             g.scope, g.repository_mappings_json, g.path_mappings_json,
             g.allowed_worker_ids_json, g.allowed_worker_capabilities_json,
             g.allowed_permissions_json, g.network_policy_json,
-            g.concurrency_json, g.budget_json, g.requires_step_up, g.expires_at,
-            pep.budget_json AS project_budget_json,
+            g.concurrency_json, g.requires_step_up, g.expires_at,
             ep.allowed_configured_worker_ids_json,
             ep.allowed_worker_type_ids_json,
             ep.allowed_providers_json,
             ep.allowed_models_json,
-            ep.budget_json AS workstream_budget_json,
             ew.name AS workspace_name, ew.owner_user_id, ew.status AS workspace_status,
             wri.id AS runtime_identity_id,
             cw.id AS configured_worker_id, cw.worker_type_id,
@@ -305,15 +302,6 @@ export async function selectProjectExecutionTarget(
     const maxConcurrent = number(
       row.configured_concurrency_limit,
       number(concurrency.maxConcurrentAssignments, 1),
-    );
-    const budget = object(row.budget_json);
-    const projectBudget = object(row.project_budget_json);
-    const workstreamBudget = object(row.workstream_budget_json);
-    const maxBudget = Math.min(
-      request.maxCostMicros ?? Number.POSITIVE_INFINITY,
-      number(budget.maxCostMicros, Number.POSITIVE_INFINITY),
-      number(projectBudget.maxCostMicros, Number.POSITIVE_INFINITY),
-      number(workstreamBudget.maxCostMicros, Number.POSITIVE_INFINITY),
     );
 
     const reject = (reason: string) =>
@@ -432,11 +420,6 @@ export async function selectProjectExecutionTarget(
       reject("model_not_supported_by_account");
       continue;
     }
-    const estimatedCost = number(providerMetadata.estimatedCostMicros, 0);
-    if (estimatedCost > maxBudget) {
-      reject("budget_limit");
-      continue;
-    }
 
     const grantPermissions = strings(row.allowed_permissions_json);
     const workerPermissions = strings(row.permissions_json);
@@ -467,7 +450,6 @@ export async function selectProjectExecutionTarget(
       pathMappings: parseJsonValue(row.path_mappings_json),
       networkPolicy: object(row.network_policy_json),
       concurrency,
-      budget,
       workstreamPolicy: {
         allowedConfiguredWorkerIds: strings(
           row.allowed_configured_worker_ids_json,
@@ -475,7 +457,6 @@ export async function selectProjectExecutionTarget(
         allowedWorkerTypeIds: strings(row.allowed_worker_type_ids_json),
         allowedProviders: strings(row.allowed_providers_json),
         allowedModels,
-        budget: workstreamBudget,
       },
       ...(request.expectedRevision
         ? { checkpointRevision: request.expectedRevision }
@@ -524,7 +505,6 @@ export async function selectProjectExecutionTarget(
           "credential_ready",
           "permissions_intersected",
           "capacity_available",
-          "budget_available",
           ...(statefulLease
             ? ["primary_workspace", "checkout_ready", "lease_active"]
             : []),

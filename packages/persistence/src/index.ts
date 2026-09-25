@@ -185,26 +185,6 @@ export interface RunEventRecord {
   readonly occurredAt: string;
 }
 
-export interface UsageRecord {
-  readonly id: string;
-  readonly runId: string;
-  readonly attemptId: string | null;
-  readonly workerId: string | null;
-  readonly credentialProfileId?: string | null;
-  readonly credentialProfileOwnerType?: "user" | "workspace" | null;
-  readonly credentialProfileOwnerId?: string | null;
-  readonly requesterUserId?: string | null;
-  readonly hostId?: string | null;
-  readonly provider?: string | null;
-  readonly billingCategory?: "subscription" | "api" | "local" | "unknown";
-  readonly model?: string | null;
-  readonly inputTokens: number;
-  readonly outputTokens: number;
-  readonly executionMs: number;
-  readonly estimatedCostMicros: number | null;
-  readonly recordedAt: string;
-}
-
 export interface OrganizationRecord extends EntityRecord {
   readonly name: string;
   readonly status: "active" | "suspended";
@@ -239,20 +219,6 @@ export interface AuditLogRecord {
   readonly metadata: JsonValue;
   readonly occurredAt: string;
   readonly retentionUntil: string;
-}
-
-export interface BudgetRecord extends EntityRecord {
-  readonly organizationId: string;
-  readonly projectId: string | null;
-  readonly runId: string | null;
-  readonly credentialProfileId?: string | null;
-  readonly maxInputTokens: number | null;
-  readonly maxOutputTokens: number | null;
-  readonly maxCostMicros: number | null;
-  readonly usedInputTokens: number;
-  readonly usedOutputTokens: number;
-  readonly usedCostMicros: number;
-  readonly status: "active" | "exhausted" | "disabled";
 }
 
 export interface EncryptedCredentialRecord {
@@ -352,10 +318,6 @@ export interface RunEventRepository {
   append(event: RunEventRecord): Promise<void>;
   listByRun(runId: string): Promise<readonly RunEventRecord[]>;
 }
-export interface UsageRepository {
-  save(record: UsageRecord): Promise<void>;
-  listByRun(runId: string): Promise<readonly UsageRecord[]>;
-}
 
 export type OrganizationRepository = Repository<OrganizationRecord>;
 export interface MembershipRepository {
@@ -372,7 +334,6 @@ export interface AuditLogRepository {
     organizationId: string,
   ): Promise<readonly AuditLogRecord[]>;
 }
-export type BudgetRepository = Repository<BudgetRecord>;
 export interface EncryptedCredentialRepository {
   get(
     organizationId: string,
@@ -409,12 +370,10 @@ export interface PersistenceRepositories {
   readonly verifications: VerificationRepository;
   readonly artifacts: ArtifactRepository;
   readonly events: RunEventRepository;
-  readonly usage: UsageRepository;
   readonly organizations: OrganizationRepository;
   readonly memberships: MembershipRepository;
   readonly projectMemberships: ProjectMembershipRepository;
   readonly auditLog: AuditLogRepository;
-  readonly budgets: BudgetRepository;
   readonly credentials: EncryptedCredentialRepository;
   readonly retentionPolicies: RetentionPolicyRepository;
   readonly extensions: ExtensionRepository;
@@ -447,7 +406,6 @@ export interface RunAggregateRows {
   readonly verifications: readonly VerificationRecord[];
   readonly artifacts: readonly ArtifactRecord[];
   readonly events: readonly RunEventRecord[];
-  readonly usage: readonly UsageRecord[];
 }
 
 export interface ReconstructedRun extends RunAggregateRows {

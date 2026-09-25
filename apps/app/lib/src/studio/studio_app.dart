@@ -118,14 +118,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
   bool accountSecurityLoading = false;
   ThemeMode _themeMode = ThemeMode.system;
   bool _desktopSidebarCollapsed = false;
-  String usageRange = '30d';
-  String usageProjectFilter = 'all';
-  String usageUserFilter = 'all';
-  String usageAccountFilter = 'all';
-  String usageWorkerFilter = 'all';
-  String usageProviderFilter = 'all';
-  String usageModelFilter = 'all';
-  DateTimeRange? usageCustomRange;
 
   bool get showRunDetails => switch (navigation.kind) {
         StudioRouteKind.home || StudioRouteKind.chat => false,
@@ -478,43 +470,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 16),
-              const Divider(height: 1),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: [
-                  ActionChip(
-                    avatar: const Icon(Icons.menu_book_rounded, size: 14),
-                    label: const Text('Docs', style: TextStyle(fontSize: 12)),
-                    onPressed: () {
-                      Navigator.of(dialogContext).pop();
-                      browserNavigation.openExternal(
-                          Uri.parse('https://conclaveax.com/how-it-works/'));
-                    },
-                  ),
-                  ActionChip(
-                    avatar: const Icon(Icons.code_rounded, size: 14),
-                    label: const Text('GitHub', style: TextStyle(fontSize: 12)),
-                    onPressed: () {
-                      Navigator.of(dialogContext).pop();
-                      browserNavigation.openExternal(
-                          Uri.parse('https://github.com/nohainc/conclave'));
-                    },
-                  ),
-                  ActionChip(
-                    avatar: const Icon(Icons.public_rounded, size: 14),
-                    label:
-                        const Text('Website', style: TextStyle(fontSize: 12)),
-                    onPressed: () {
-                      Navigator.of(dialogContext).pop();
-                      browserNavigation
-                          .openExternal(Uri.parse('https://conclaveax.com'));
-                    },
-                  ),
-                ],
               ),
             ],
           ),
@@ -1095,14 +1050,17 @@ class _StudioAppState extends State<ConclaveAppShell> {
     }
   }
 
-  Future<void> _revokeAgent(String agentId) async {
-    final workspaceId = snapshot.workspaceId;
-    if (workspaceId == null || workspaceId.isEmpty) return;
+  Future<void> _revokeWorkspace(String workspaceId) async {
+    if (workspaceId.isEmpty) return;
     try {
-      await store.agents.revoke(workspaceId, agentId);
+      await store.agents.revokeWorkspace(workspaceId);
+      await _loadWorkspaces();
       await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
+      if (mounted) {
+        _showSnackBar('Workspace revoked.');
+      }
     } catch (error) {
-      if (mounted) setState(() => loadError = error.toString());
+      if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
     }
   }
 
@@ -2389,11 +2347,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
         openFindingCount: snapshot.findings
             .where((finding) => finding.status == FindingStatus.open)
             .length,
-        usageTokens: store.usage.tokens,
-        usageCostMicros: store.usage.costMicros,
         onOpenHosts: () => _navigateTo(const StudioNavigation.hosts()),
         onOpenWorkers: () => _navigateTo(const StudioNavigation.workers()),
-        onOpenUsage: () => _navigateTo(const StudioNavigation.usage()),
         onOpenProject: (projectId) =>
             _navigateTo(StudioNavigation.project(projectId)),
         onOpenChat: (projectId, chatId) =>
@@ -2584,8 +2539,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
         return _hostsView(initialTab: 0);
       case StudioRouteKind.workers:
         return _hostsView(initialTab: 1);
-      case StudioRouteKind.usage:
-        return _usageView();
       case StudioRouteKind.profileSecurity:
         return _profileSecurityView();
       case StudioRouteKind.projects:
@@ -2637,7 +2590,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
       const SizedBox(height: 20),
       _runSection(
         title: 'Overview',
-        subtitle: 'Status, elapsed work, Workers, Account, and usage',
+        subtitle: 'Status, elapsed work, Workers, Account, and findings',
         icon: Icons.dashboard_outlined,
         child: Column(children: [
           _runHeader(compact),
@@ -3217,19 +3170,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
   }
 
   Widget _runContextCard() {
-    final call = snapshot.modelCalls.firstOrNull;
     final task = selectedTask ?? snapshot.tasks.firstOrNull;
-    final worker =
-        call?.worker.isNotEmpty == true ? call!.worker : task?.worker ?? 'Auto';
-    final model = call?.model.isNotEmpty == true ? call!.model : 'Auto';
-    final account = snapshot.accounts
-        .where((value) => value.id == call?.account)
-        .map((value) => value.displayName)
-        .firstOrNull;
-    final host = snapshot.agents
-        .where((value) => value.id == call?.host)
-        .map((value) => value.name)
-        .firstOrNull;
+    final worker = task?.worker.isNotEmpty == true ? task!.worker : 'Auto';
     return _panel(
       title: 'Execution context',
       subtitle: 'Trusted assignment details',
@@ -3238,10 +3180,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
         runSpacing: 12,
         children: [
           _contextLine(Icons.extension_outlined, 'Worker', worker),
-          _contextLine(
-              Icons.extension_outlined, 'Worker connection', account ?? 'Auto'),
-          _contextLine(Icons.computer_outlined, 'Workspace', host ?? 'Auto'),
-          _contextLine(Icons.smart_toy_outlined, 'Model', model),
+          _contextLine(Icons.extension_outlined, 'Worker connection', 'Auto'),
+          _contextLine(Icons.computer_outlined, 'Workspace', 'Auto'),
+          _contextLine(Icons.smart_toy_outlined, 'Model', 'Auto'),
         ],
       ),
     );
@@ -3342,21 +3283,13 @@ class _StudioAppState extends State<ConclaveAppShell> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (snapshot.modelCalls.isEmpty)
-              const Text('Model calls will appear as Workers execute.')
+            if (snapshot.events.isEmpty)
+              const Text('Diagnostics will appear as Workers execute.')
             else
-              ...snapshot.modelCalls.map((call) => ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.smart_toy_outlined),
-                    title: Text('${call.worker} · ${call.model}'),
-                    subtitle: Text(
-                        '${call.task} · ${call.tokens} tokens · ${call.duration}'),
-                    trailing: _statusChip(call.status, const Color(0xff6254d9)),
-                  )),
-            const Divider(),
-            Text(
-                'Correlation IDs: ${snapshot.events.where((event) => event.correlationId != null).map((event) => event.correlationId).toSet().join(', ')}',
-                style: const TextStyle(fontSize: 11, color: Color(0xff777683))),
+              Text(
+                  'Correlation IDs: ${snapshot.events.where((event) => event.correlationId != null).map((event) => event.correlationId).toSet().join(', ')}',
+                  style:
+                      const TextStyle(fontSize: 11, color: Color(0xff777683))),
           ],
         ),
       );
@@ -3524,8 +3457,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
               task.dependencies.isEmpty
                   ? 'None'
                   : task.dependencies.join(', ')),
-          _detailLine(Icons.token_outlined, 'Usage',
-              '${task.tokens} tokens  ·  ${task.cost}'),
           if (task.detail.contains('diff') ||
               task.detail.contains('@@') ||
               task.detail.startsWith('---') ||
@@ -3630,8 +3561,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
           child: const Text('Open run details')),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          _metric('Tokens', _formatNumber(snapshot.run?.tokens ?? 0)),
-          _metric('Cost', _formatCost(snapshot.run?.costMicros ?? 0)),
+          _metric('Tasks', '${snapshot.tasks.length}'),
+          _metric('Findings', '${snapshot.findings.length}'),
           _metric('Checks',
               '${snapshot.run?.verifiedCriterionCount ?? 0} / ${snapshot.run?.criterionCount ?? 0}')
         ]),
@@ -3653,29 +3584,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
                 fontWeight: FontWeight.w700,
                 color: Theme.of(context).colorScheme.onSurface))
       ]));
-
-  Widget _usageMetric(String label, String value) => SizedBox(
-        width: 150,
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label,
-              style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  fontSize: 10)),
-          const SizedBox(height: 4),
-          Text(value,
-              style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: Theme.of(context).colorScheme.onSurface)),
-        ]),
-      );
-
-  String _formatNumber(int value) => value == 0
-      ? '0'
-      : '${(value / 1000).toStringAsFixed(value >= 10000 ? 1 : 2)}k';
-
-  String _formatCost(int micros) =>
-      '\$${(micros / 1000000).toStringAsFixed(2)}';
 
   Widget _findingRow(StudioFinding finding) => Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -3794,7 +3702,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
     final nameController = TextEditingController();
     final modelController = TextEditingController();
     var typeId = snapshot.plugins.first.id;
-    var selectedWorkspaceIds = <String>{};
+    var chosenWorkspaceIds = <String>{};
     var step = 0;
     var busy = false;
     final result = await showDialog<StudioConfiguredWorker>(
@@ -3806,7 +3714,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
           final canContinue = step == 0
               ? nameController.text.trim().isNotEmpty
               : step == 4
-                  ? selectedWorkspaceIds.isNotEmpty || workspaces.isEmpty
+                  ? chosenWorkspaceIds.isNotEmpty || workspaces.isEmpty
                   : true;
           return AlertDialog(
             title: Text('Add Worker · ${step + 1} of 5'),
@@ -3870,16 +3778,15 @@ class _StudioAppState extends State<ConclaveAppShell> {
                           mainAxisSize: MainAxisSize.min,
                           children: workspaces
                               .map((workspace) => CheckboxListTile(
-                                    value: selectedWorkspaceIds
+                                    value: chosenWorkspaceIds
                                         .contains(workspace.id),
                                     title: Text(workspace.name),
                                     subtitle: Text(workspace.status),
                                     onChanged: (selected) => setDialogState(() {
                                       if (selected == true) {
-                                        selectedWorkspaceIds.add(workspace.id);
+                                        chosenWorkspaceIds.add(workspace.id);
                                       } else {
-                                        selectedWorkspaceIds
-                                            .remove(workspace.id);
+                                        chosenWorkspaceIds.remove(workspace.id);
                                       }
                                     }),
                                   ))
@@ -3911,7 +3818,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                               await widget.dataSource.createConfiguredWorker(
                             name: nameController.text.trim(),
                             workerTypeId: typeId,
-                            workspaceIds: selectedWorkspaceIds.toList(),
+                            workspaceIds: chosenWorkspaceIds.toList(),
                             defaultModel: modelController.text.trim().isEmpty
                                 ? null
                                 : modelController.text.trim(),
@@ -4029,11 +3936,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
                         ),
                       )),
                 const SizedBox(height: 18),
-                Text('Usage', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 6),
-                const Text(
-                    'Usage and cost details will appear here as this Worker runs.'),
-                const SizedBox(height: 18),
                 Text('Settings',
                     style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 6),
@@ -4140,7 +4042,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
         onAdd: _enrollAgent,
         onRename: _renameHost,
         onUpdate: _announceAgentUpdate,
-        onRevoke: (workspace) => _revokeAgent(workspace.id),
+        onRevoke: (workspace) => _revokeWorkspace(workspace.id),
         onGrant: _bindHost,
         onAddConfiguredWorker: _addConfiguredWorker,
         onOpenConfiguredWorker: _openConfiguredWorker,
@@ -4150,133 +4052,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
         onDismissWorkerActionMessage: () =>
             setState(() => workerActionMessage = null),
       );
-
-  Widget _usageView() {
-    final report = snapshot.usageReport;
-    final rows = report.rows.where((row) {
-      final inRange = usageCustomRange == null ||
-          (() {
-            final date = DateTime.tryParse(row.recordedAt);
-            return date == null ||
-                (!date.isBefore(usageCustomRange!.start) &&
-                    !date.isAfter(usageCustomRange!.end));
-          })();
-      return inRange &&
-          (usageProjectFilter == 'all' ||
-              row.projectName == usageProjectFilter) &&
-          (usageUserFilter == 'all' || row.requesterName == usageUserFilter) &&
-          (usageAccountFilter == 'all' ||
-              row.accountName == usageAccountFilter) &&
-          (usageWorkerFilter == 'all' || row.workerName == usageWorkerFilter) &&
-          (usageProviderFilter == 'all' ||
-              row.provider == usageProviderFilter) &&
-          (usageModelFilter == 'all' || row.model == usageModelFilter);
-    }).toList();
-    final tokens = rows.fold<int>(0, (sum, row) => sum + row.tokens);
-    final duration = rows.fold<int>(0, (sum, row) => sum + row.durationMs);
-    final apiCost = rows
-        .where((row) => row.billingCategory == 'api' && row.costMicros != null)
-        .fold<int>(0, (sum, row) => sum + row.costMicros!);
-    final subscriptionUses =
-        rows.where((row) => row.billingCategory == 'subscription').length;
-    final runIds =
-        rows.map((row) => row.runId).where((id) => id.isNotEmpty).toSet();
-    List<String> options(String Function(StudioUsageRow) selector) => [
-          'all',
-          ...rows.map(selector).where((value) => value.isNotEmpty).toSet()
-        ];
-    Widget filter(String label, String value, List<String> values,
-            ValueChanged<String?> onChanged) =>
-        SizedBox(
-          width: 150,
-          child: DropdownButtonFormField<String>(
-            initialValue: values.contains(value) ? value : 'all',
-            decoration: InputDecoration(labelText: label, isDense: true),
-            items: values
-                .map((item) => DropdownMenuItem(
-                    value: item, child: Text(item == 'all' ? 'All' : item)))
-                .toList(),
-            onChanged: onChanged,
-          ),
-        );
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Semantics(
-        header: true,
-        child: const Text('Usage',
-            style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
-      ),
-      const SizedBox(height: 6),
-      const Text('Workspace usage across Projects, Workers and people.',
-          style: TextStyle(color: Color(0xff777683), fontSize: 13)),
-      const SizedBox(height: 20),
-      Wrap(spacing: 12, runSpacing: 12, children: [
-        filter('Period', usageRange, const ['7d', '30d', 'custom'],
-            (value) async {
-          if (value == null) return;
-          if (value == 'custom') {
-            final range = await showDateRangePicker(
-                context: context,
-                firstDate: DateTime(2020),
-                lastDate: DateTime.now(),
-                initialDateRange: usageCustomRange);
-            if (range == null) return;
-            setState(() {
-              usageRange = value;
-              usageCustomRange = range;
-            });
-          } else {
-            setState(() {
-              usageRange = value;
-              usageCustomRange = null;
-            });
-          }
-        }),
-        filter('Project', usageProjectFilter, options((row) => row.projectName),
-            (value) => setState(() => usageProjectFilter = value ?? 'all')),
-        filter('User', usageUserFilter, options((row) => row.requesterName),
-            (value) => setState(() => usageUserFilter = value ?? 'all')),
-        filter(
-            'Worker owner',
-            usageAccountFilter,
-            options((row) => row.accountName),
-            (value) => setState(() => usageAccountFilter = value ?? 'all')),
-        filter('Worker', usageWorkerFilter, options((row) => row.workerName),
-            (value) => setState(() => usageWorkerFilter = value ?? 'all')),
-        filter('Provider', usageProviderFilter, options((row) => row.provider),
-            (value) => setState(() => usageProviderFilter = value ?? 'all')),
-        filter('Model', usageModelFilter, options((row) => row.model),
-            (value) => setState(() => usageModelFilter = value ?? 'all')),
-      ]),
-      const SizedBox(height: 20),
-      Wrap(spacing: 12, runSpacing: 12, children: [
-        _usageMetric('Tokens', _formatNumber(tokens)),
-        _usageMetric('Known API cost', _formatCost(apiCost)),
-        _usageMetric('Subscription usage', '$subscriptionUses uses'),
-        _usageMetric('Runs', '${runIds.length}'),
-        _usageMetric('Duration', '${(duration / 1000).round()} s'),
-      ]),
-      const SizedBox(height: 20),
-      _panel(
-        title: 'Usage details',
-        subtitle: 'Subscription usage has no invented monetary cost.',
-        child: rows.isEmpty
-            ? const Text('No usage matches these filters.')
-            : Column(
-                children: rows
-                    .take(100)
-                    .map((row) => ListTile(
-                          dense: true,
-                          title: Text('${row.workerName} · ${row.model}'),
-                          subtitle: Text(
-                              '${row.projectName} · Requester: ${row.requesterName} · Worker owner: ${row.accountOwnerName}'),
-                          trailing: Text(row.billingCategory == 'subscription'
-                              ? 'Subscription · ${_formatNumber(row.tokens)} tokens'
-                              : '${_formatCost(row.costMicros ?? 0)} · ${_formatNumber(row.tokens)} tokens'),
-                        ))
-                    .toList()),
-      ),
-    ]);
-  }
 
   Widget _profileSecurityView() {
     final viewer = store.auth.viewer ?? snapshot.viewer;

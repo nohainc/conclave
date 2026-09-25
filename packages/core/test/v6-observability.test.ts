@@ -2,54 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   computeV6ObservabilityMetrics,
   V6_AUDIT_ACTIONS,
-  validateV6UsageDimensions,
 } from "../src/index.js";
 
 describe("v6 observability", () => {
-  it("requires complete usage attribution", () => {
-    expect(() =>
-      validateV6UsageDimensions({
-        projectId: "p",
-        workstreamId: "s",
-        workRequestId: "r",
-        requesterUserId: "u",
-        executionWorkspaceId: "w",
-        workspaceOwnerUserId: "wo",
-        workerId: "worker",
-        configuredWorkerId: "configured-worker",
-        workerTypeId: "worker-type",
-        accountId: "account",
-        accountOwnerUserId: "ao",
-        credentialOwnerUserId: "ao",
-        workflowVersionId: "wf",
-        inputTokens: 2,
-        outputTokens: 3,
-        costMicros: 4,
-        durationMs: 5,
-      }),
-    ).not.toThrow();
-    expect(() =>
-      validateV6UsageDimensions({
-        projectId: "",
-        workstreamId: "s",
-        workRequestId: "r",
-        requesterUserId: "u",
-        executionWorkspaceId: "w",
-        workspaceOwnerUserId: "wo",
-        workerId: "worker",
-        configuredWorkerId: "configured-worker",
-        workerTypeId: "worker-type",
-        accountId: "account",
-        accountOwnerUserId: "ao",
-        credentialOwnerUserId: "ao",
-        workflowVersionId: "wf",
-        inputTokens: 0,
-        outputTokens: 0,
-        costMicros: null,
-        durationMs: 0,
-      }),
-    ).toThrow(/projectId/);
-  });
 
   it("computes iteration timing, recovery, rollback, and utilization", () => {
     const metrics = computeV6ObservabilityMetrics([

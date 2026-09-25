@@ -1,15 +1,4 @@
--- EW-12: configured Worker usage attribution, audit, and operational metrics.
-ALTER TABLE usage ADD COLUMN configured_worker_id TEXT REFERENCES configured_workers(id) ON DELETE SET NULL;
-ALTER TABLE usage ADD COLUMN worker_type_id TEXT REFERENCES workers(id) ON DELETE SET NULL;
-ALTER TABLE usage ADD COLUMN credential_owner_user_id TEXT REFERENCES users(id) ON DELETE SET NULL;
-
-CREATE INDEX idx_v6_usage_configured_worker_time
-  ON usage(configured_worker_id, recorded_at);
-CREATE INDEX idx_v6_usage_worker_type_time
-  ON usage(worker_type_id, recorded_at);
-CREATE INDEX idx_v6_usage_credential_owner_time
-  ON usage(credential_owner_user_id, recorded_at);
-
+-- EW-12: configured Worker audit and operational metrics.
 CREATE TABLE configured_worker_audit_log (
   id TEXT PRIMARY KEY,
   configured_worker_id TEXT NOT NULL REFERENCES configured_workers(id) ON DELETE CASCADE,
