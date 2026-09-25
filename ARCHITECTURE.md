@@ -17,7 +17,7 @@ Read:
 
 v6 keeps the v5 Project/Workspace boundary and introduces Workstream as the unit of collaborative work and mutable state.
 
-> **Projects contain Workstreams. People talk in Discuss. AI work starts only from Work. Stateful work uses one isolated Workstream checkout on one Primary Workspace.**
+> **Projects contain Workstreams. People talk in Discuss. AI work starts only from Work. Each Workstream uses one isolated persistent local working directory on its Primary Workspace, identified only by immutable Project and Workstream IDs.**
 
 Read v6 before new collaboration/execution architecture work:
 - [Architecture v6](docs/architecture/ARCHITECTURE_V6.md)
@@ -26,5 +26,7 @@ Read v6 before new collaboration/execution architecture work:
 - [ADR-009](docs/decisions/ADR-009-workstreams-isolated-execution.md)
 - [ADR-010](docs/decisions/ADR-010-configured-worker-execution-model.md)
 - [Configured Worker implementation roadmap](docs/roadmaps/CONFIGURED_WORKER_EXECUTION.md)
+- [ADR-011](docs/decisions/ADR-011-workstream-working-directories.md)
+- [Workstream working-directory roadmap](docs/roadmaps/WORKSTREAM_WORKING_DIRECTORIES.md)
 
 Architecture v4 and earlier are historical only.
