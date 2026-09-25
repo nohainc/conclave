@@ -30,7 +30,7 @@ A Workstream contains:
 - Lead/access policy;
 - default Workflow;
 - Primary Workspace;
-- Account policy;
+- configured Worker execution policy;
 - persistent managed checkout;
 - checkpoint history.
 
@@ -70,7 +70,7 @@ Failed/cancelled stateful work restores the managed checkout to the previous che
 - human discussion cannot accidentally trigger paid or mutating AI work;
 - multiple team members can work safely in parallel on different Workstreams;
 - one machine can execute multiple isolated Workstreams;
-- every AI iteration has explicit requester/workflow/account attribution;
+- every AI iteration has explicit requester/workflow/configured-Worker attribution;
 - stateful work starts from a known revision;
 - rollback and audit become straightforward;
 - current SafeWorkspace/GitRepository worktree primitives are reused.
