@@ -729,7 +729,7 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
                   ),
                 ),
                 const SizedBox(height: 6),
-                // Line 2: Description with big plus icon on the right
+                // Line 2: Description
                 _buildEditableField(
                   label: 'Description',
                   fieldKey: 'description',
@@ -737,16 +737,6 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
                   placeholder: 'No project description provided.',
                   controller: _descriptionController,
                   maxLines: 2,
-                  trailingAction: canManage
-                      ? Tooltip(
-                          message: 'Create Workstream',
-                          child: IconButton(
-                            icon: const Icon(Icons.add_circle_outline_rounded, size: 28),
-                            splashRadius: 20,
-                            onPressed: _createWorkstream,
-                          ),
-                        )
-                      : null,
                 ),
                 const SizedBox(height: 6),
                 // Line 3: Repository
@@ -834,6 +824,28 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
+                    'Each Workstream is one focused area of team work.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                if (canManage)
+                  IconButton(
+                    icon: const Icon(Icons.add),
+                    tooltip: 'Create Workstream',
+                    splashRadius: 20,
+                    onPressed: _createWorkstream,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
             if (loading)
               const LinearProgressIndicator()
             else if (workstreams.isEmpty)

@@ -50,6 +50,9 @@ void main() {
     expect(find.text('Workstreams'), findsOneWidget);
     expect(find.text('Workspaces'), findsOneWidget);
     expect(find.text('Members'), findsOneWidget);
+    expect(
+        find.text('Each Workstream is one focused area of team work.'),
+        findsOneWidget);
     expect(find.byTooltip('Create Workstream'), findsOneWidget);
     expect(find.text('Overview'), findsNothing);
     expect(find.text('Runs'), findsNothing);

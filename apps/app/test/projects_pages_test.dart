@@ -50,6 +50,9 @@ void main() {
     expect(find.text('Members'), findsOneWidget);
 
     // Verify Workstreams Tab contents
+    expect(
+        find.text('Each Workstream is one focused area of team work.'),
+        findsOneWidget);
     expect(find.byTooltip('Create Workstream'), findsOneWidget);
 
     // Switch to Workspaces Tab
