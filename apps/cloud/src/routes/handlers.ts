@@ -5765,6 +5765,21 @@ async function createV5WorkspaceProjectGrant(
   ) {
     throw new HttpError(400, "Unsupported Workspace Project Grant scope");
   }
+  const project = await env.CONCLAVE_DB.prepare(
+    "SELECT id FROM projects WHERE id = ?1",
+  )
+    .bind(projectId)
+    .first<{ id: string }>();
+  if (!project) throw new HttpError(404, "Project not found");
+  const workspace = await env.CONCLAVE_DB.prepare(
+    "SELECT id, owner_user_id, status FROM execution_workspaces WHERE id = ?1",
+  )
+    .bind(workspaceId)
+    .first<{ id: string; owner_user_id: string; status: string }>();
+  if (!workspace) throw new HttpError(404, "Workspace not found");
+  if (workspace.owner_user_id !== context.userId || workspace.status === "revoked") {
+    throw new HttpError(403, "Only the Workspace owner can grant this Workspace");
+  }
   let membership: { role: string } | null = null;
   try {
     membership = await authorizeProjectMembership(

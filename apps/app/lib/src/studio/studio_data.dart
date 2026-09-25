@@ -977,7 +977,17 @@ class StudioApiClient implements StudioDataSource {
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StudioApiException('Project update failed (${response.statusCode})',
+      var detail = '';
+      try {
+        final errorBody = jsonDecode(response.body);
+        if (errorBody is Map && errorBody['error'] is String) {
+          detail = ': ${errorBody['error']}';
+        }
+      } on Object {
+        // Keep the status useful when the server response is not JSON.
+      }
+      throw StudioApiException(
+          'Project update failed (${response.statusCode})$detail',
           statusCode: response.statusCode);
     }
     final body = jsonDecode(response.body);
