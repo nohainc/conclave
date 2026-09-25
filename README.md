@@ -8,10 +8,10 @@ Primary domain: **conclaveax.com**
 
 ## Architecture
 
-Architecture v5 is normative. Architecture v4 is historical only.
+Architecture v6 is the current Workstream/filesystem baseline. Architecture v7 is the proposed next Worker/runtime architecture.
 
 ```text
-Conclave AX -> Conclave Cloud -> Workspace -> Worker
+Conclave AX -> Conclave Cloud -> Conclave Workspace -> configured Worker -> adapter process
 ```
 
 > **Projects are collaboration. Workspaces provide execution. Workers are configured AI/tool identities. Credential/package state is managed beneath Workers.**
@@ -20,8 +20,8 @@ Conclave AX -> Conclave Cloud -> Workspace -> Worker
 
 - **Conclave AX** — the primary Flutter Web application.
 - **Conclave Cloud** — TypeScript control plane on Cloudflare.
-- **Workspace** — one execution environment backed by one enrolled machine/runtime.
-- **Workers** — configured executable AI/tool identities such as “Codex Personal” or “Claude Review”; each selects a Worker Type and connection and may run on one or more Workspaces.
+- **Conclave Workspace** — the machine-side execution/security runtime installed once per normal machine/OS-user installation.
+- **Workers** — locally configured executable AI/tool identities such as “Codex Personal” or “Claude Review”; each belongs to exactly one Workspace and uses one Worker Type adapter.
 - **Conclave AX Forge** — AI-assisted software-development workflow built on the platform.
 
 ## Technology stack
@@ -40,14 +40,14 @@ Conclave AX -> Conclave Cloud -> Workspace -> Worker
 
 - **Project** — the collaboration, history, and authorization boundary.
 - **Workspace** — one machine-backed execution environment owned by one User.
-- **Worker Type** — installable integration/catalog definition such as Codex or Claude Code.
-- **Worker** — one configured AI/tool identity with a Worker Type, logical external connection, defaults, capabilities, and Workspace bindings.
+- **Worker Type** — signed integration adapter definition such as Codex, Antigravity, Claude Code, OpenAI API, or Gemini API.
+- **Worker** — one locally configured AI/tool identity on exactly one Workspace, with one Worker Type, local credential state, defaults, capabilities, and model policy.
 - **Workspace Grant** — explicit permission for a Project to use a Workspace.
-- **Credential state** — internal authentication metadata/readiness for a Worker on a Workspace; provider secrets remain local to the Workspace secure store.
+- **Credential state** — local authentication metadata/readiness owned by Conclave Workspace; provider secrets never enter Conclave Cloud.
 - **Workstream working directory** — one persistent local directory resolved as `<work-root>/<project-id>/<workstream-id>`; names and Workspace ID never participate in path identity.
 - **Assignment** — one immutable execution snapshot resolving Project + Workstream + Workspace + configured Worker + Worker Type + model/config and authorized credential state.
 
-Worker processes run as separate child processes under Workspace runtime supervision. Workers do not authenticate directly to Conclave Cloud.
+Adapter processes run as separate per-assignment child processes under Conclave Workspace supervision. Workers do not authenticate directly to Conclave Cloud.
 
 ## Read first
 
@@ -60,6 +60,9 @@ Worker processes run as separate child processes under Workspace runtime supervi
 - [Configured Worker implementation roadmap](docs/roadmaps/CONFIGURED_WORKER_EXECUTION.md)
 - [Workstream working-directory decision](docs/decisions/ADR-011-workstream-working-directories.md)
 - [Workstream working-directory roadmap](docs/roadmaps/WORKSTREAM_WORKING_DIRECTORIES.md)
+- [Architecture v7](docs/architecture/ARCHITECTURE_V7.md)
+- [ADR-012: Workspace-owned local Workers](docs/decisions/ADR-012-workspace-owned-local-workers.md)
+- [v7 implementation roadmap](docs/roadmaps/ARCHITECTURE_V7_IMPLEMENTATION.md)
 - [AI Development Rules](AGENTS.md)
 
 Deployment guidance is in [docs/deployment/CLOUDFLARE.md](docs/deployment/CLOUDFLARE.md).
