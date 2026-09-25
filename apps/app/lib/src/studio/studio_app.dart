@@ -1160,31 +1160,36 @@ class _StudioAppState extends State<ConclaveAppShell> {
   }
 
   Future<void> _renameHost(StudioAgent host) async {
-    final controller = TextEditingController(text: host.name);
-    final name = await showDialog<String>(
+    var name = host.name;
+    final updated = await showDialog<String>(
       context: navigatorKey.currentContext ?? context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Rename Workspace'),
-        content: TextField(
-          controller: controller,
+        content: TextFormField(
+          initialValue: host.name,
           autofocus: true,
           decoration: const InputDecoration(labelText: 'Workspace name'),
+          onChanged: (value) => name = value,
+          onFieldSubmitted: (value) {
+            if (value.trim().isNotEmpty) {
+              Navigator.pop(dialogContext, value.trim());
+            }
+          },
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(dialogContext),
               child: const Text('Cancel')),
           FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, controller.text),
+              onPressed: () => Navigator.pop(dialogContext, name.trim()),
               child: const Text('Save')),
         ],
       ),
     );
-    controller.dispose();
     final workspaceId = snapshot.workspaceId;
-    if (name == null || name.trim().isEmpty || workspaceId == null) return;
+    if (updated == null || updated.trim().isEmpty || workspaceId == null) return;
     try {
-      await store.agents.updateHost(workspaceId, host.id, name: name.trim());
+      await store.agents.updateHost(workspaceId, host.id, name: updated.trim());
       await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
       if (mounted) _showSnackBar('Workspace renamed.');
     } catch (error) {
@@ -1205,7 +1210,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
   }
 
   Future<void> _enrollAgent() async {
-    final nameController = TextEditingController(text: 'My Workspace');
+    var name = 'My Workspace';
     var platform = 'macOS';
     final selected = await showDialog<({String name, String platform})>(
       context: navigatorKey.currentContext ?? context,
@@ -1219,13 +1224,20 @@ class _StudioAppState extends State<ConclaveAppShell> {
               const Text(
                   'Create an execution Workspace, then pair the machine where it will run.'),
               const SizedBox(height: 16),
-              TextField(
-                controller: nameController,
+              TextFormField(
+                initialValue: name,
                 autofocus: true,
                 decoration: const InputDecoration(
                   labelText: 'Workspace name',
                   hintText: 'e.g. MacBook Pro',
                 ),
+                onChanged: (value) => name = value,
+                onFieldSubmitted: (value) {
+                  if (value.trim().isNotEmpty) {
+                    Navigator.pop(
+                        dialogContext, (name: value.trim(), platform: platform));
+                  }
+                },
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
@@ -1246,9 +1258,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
                 child: const Text('Cancel')),
             FilledButton(
               onPressed: () {
-                final name = nameController.text.trim();
-                if (name.isEmpty) return;
-                Navigator.pop(dialogContext, (name: name, platform: platform));
+                final trimmed = name.trim();
+                if (trimmed.isEmpty) return;
+                Navigator.pop(dialogContext, (name: trimmed, platform: platform));
               },
               child: const Text('Create Workspace'),
             ),
@@ -1256,7 +1268,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
         ),
       ),
     );
-    nameController.dispose();
     if (selected == null) return;
     try {
       final workspace = await store.workspaces.create(name: selected.name);
@@ -1324,26 +1335,20 @@ class _StudioAppState extends State<ConclaveAppShell> {
       }
       return;
     }
-    final nameController = TextEditingController(text: existing?.name ?? '');
-    final rolesController = TextEditingController(
-        text: (existing?.roles.isNotEmpty == true
-                ? existing!.roles
-                : const ['researcher'])
-            .join(', '));
-    final capabilitiesController = TextEditingController(
-        text: (existing?.capabilities.isNotEmpty == true
-                ? existing!.capabilities
-                : const ['repository_read'])
-            .join(', '));
-    final configController = TextEditingController(
-        text:
-            const JsonEncoder.withIndent('  ').convert(existing?.config ?? {}));
-    final versionPolicyController =
-        TextEditingController(text: existing?.workerVersionPolicy ?? 'latest');
-    final independenceController =
-        TextEditingController(text: existing?.independenceKey ?? '');
-    final concurrencyController =
-        TextEditingController(text: '${existing?.concurrencyLimit ?? 1}');
+    var name = existing?.name ?? '';
+    var roles = (existing?.roles.isNotEmpty == true
+            ? existing!.roles
+            : const ['researcher'])
+        .join(', ');
+    var capabilities = (existing?.capabilities.isNotEmpty == true
+            ? existing!.capabilities
+            : const ['repository_read'])
+        .join(', ');
+    var config =
+        const JsonEncoder.withIndent('  ').convert(existing?.config ?? {});
+    var versionPolicy = existing?.workerVersionPolicy ?? 'latest';
+    var independenceKey = existing?.independenceKey ?? '';
+    var concurrency = '${existing?.concurrencyLimit ?? 1}';
     final configuredAgentId = existing?.agentId;
     var agentId = configuredAgentId != null &&
             snapshot.agents.any((agent) => agent.id == configuredAgentId)
@@ -1360,57 +1365,61 @@ class _StudioAppState extends State<ConclaveAppShell> {
     bool? saved;
     try {
       saved = await showDialog<bool>(
-        context: navigatorKey.currentContext ?? context,
-        builder: (dialogContext) => StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
-            title: Text(existing == null ? 'Create Worker' : 'Edit Worker'),
-            content: SingleChildScrollView(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                TextField(
-                    controller: nameController,
-                    onChanged: (_) => setDialogState(() {}),
-                    decoration: const InputDecoration(labelText: 'Name')),
+      context: navigatorKey.currentContext ?? context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(existing == null ? 'Create Worker' : 'Edit Worker'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextFormField(
+                  initialValue: name,
+                  onChanged: (val) => setDialogState(() => name = val),
+                  decoration: const InputDecoration(labelText: 'Name')),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: agentId,
+                decoration: const InputDecoration(labelText: 'Workspace'),
+                items: snapshot.agents
+                    .map((agent) => DropdownMenuItem(
+                        value: agent.id, child: Text(agent.name)))
+                    .toList(),
+                onChanged: (value) => setDialogState(() => agentId = value),
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: workerCatalogId,
+                decoration: const InputDecoration(labelText: 'Worker'),
+                items: snapshot.plugins
+                    .map((plugin) => DropdownMenuItem(
+                        value: plugin.id, child: Text(plugin.name)))
+                    .toList(),
+                onChanged: (value) =>
+                    setDialogState(() => workerCatalogId = value),
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                  initialValue: roles,
+                  onChanged: (val) => roles = val,
+                  decoration: const InputDecoration(
+                      labelText: 'Roles (comma separated)')),
+              const SizedBox(height: 10),
+              TextFormField(
+                  initialValue: capabilities,
+                  onChanged: (val) => capabilities = val,
+                  decoration: const InputDecoration(
+                      labelText: 'Capabilities (comma separated)')),
+              const SizedBox(height: 10),
+              TextFormField(
+                  initialValue: versionPolicy,
+                  onChanged: (val) => versionPolicy = val,
+                  decoration: const InputDecoration(
+                      labelText: 'Worker version policy')),
                 const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: agentId,
-                  decoration: const InputDecoration(labelText: 'Workspace'),
-                  items: snapshot.agents
-                      .map((agent) => DropdownMenuItem(
-                          value: agent.id, child: Text(agent.name)))
-                      .toList(),
-                  onChanged: (value) => setDialogState(() => agentId = value),
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: workerCatalogId,
-                  decoration: const InputDecoration(labelText: 'Worker'),
-                  items: snapshot.plugins
-                      .map((plugin) => DropdownMenuItem(
-                          value: plugin.id, child: Text(plugin.name)))
-                      .toList(),
-                  onChanged: (value) =>
-                      setDialogState(() => workerCatalogId = value),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                    controller: rolesController,
-                    decoration: const InputDecoration(
-                        labelText: 'Roles (comma separated)')),
-                const SizedBox(height: 10),
-                TextField(
-                    controller: capabilitiesController,
-                    decoration: const InputDecoration(
-                        labelText: 'Capabilities (comma separated)')),
-                const SizedBox(height: 10),
-                TextField(
-                    controller: versionPolicyController,
-                    decoration: const InputDecoration(
-                        labelText: 'Worker version policy')),
-                const SizedBox(height: 10),
-                TextField(
-                    controller: configController,
+                TextFormField(
+                    initialValue: config,
                     minLines: 2,
                     maxLines: 5,
+                    onChanged: (val) => config = val,
                     decoration: const InputDecoration(
                         labelText: 'Model/config (JSON)')),
                 const SizedBox(height: 10),
@@ -1435,9 +1444,10 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   }),
                 ),
                 const SizedBox(height: 10),
-                TextField(
-                    controller: concurrencyController,
+                TextFormField(
+                    initialValue: concurrency,
                     keyboardType: TextInputType.number,
+                    onChanged: (val) => concurrency = val,
                     decoration:
                         const InputDecoration(labelText: 'Concurrency limit')),
                 const SizedBox(height: 10),
@@ -1461,8 +1471,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   }),
                 ),
                 const SizedBox(height: 10),
-                TextField(
-                    controller: independenceController,
+                TextFormField(
+                    initialValue: independenceKey,
+                    onChanged: (val) => independenceKey = val,
                     decoration: const InputDecoration(
                         labelText: 'Independence key (optional)')),
                 SwitchListTile(
@@ -1478,7 +1489,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   onPressed: () => Navigator.pop(dialogContext, false),
                   child: const Text('Cancel')),
               FilledButton(
-                onPressed: nameController.text.trim().isEmpty ||
+                onPressed: name.trim().isEmpty ||
                         agentId == null ||
                         workerCatalogId == null
                     ? null
@@ -1493,63 +1504,41 @@ class _StudioAppState extends State<ConclaveAppShell> {
       if (mounted) {
         _showSnackBar('Could not open Worker editor: $error');
       }
-      nameController.dispose();
-      rolesController.dispose();
-      capabilitiesController.dispose();
-      configController.dispose();
-      versionPolicyController.dispose();
-      independenceController.dispose();
-      concurrencyController.dispose();
       return;
     }
     if (saved != true || agentId == null || workerCatalogId == null) {
-      nameController.dispose();
-      rolesController.dispose();
-      capabilitiesController.dispose();
-      configController.dispose();
-      versionPolicyController.dispose();
-      independenceController.dispose();
-      concurrencyController.dispose();
       return;
     }
     try {
       await store.workers.save(
         workspaceId: workspaceId,
         workerId: existing?.id,
-        name: nameController.text.trim(),
+        name: name.trim(),
         agentId: agentId!,
         workerCatalogId: workerCatalogId!,
-        roles: rolesController.text
+        roles: roles
             .split(',')
             .map((value) => value.trim())
             .where((value) => value.isNotEmpty)
             .toList(),
-        capabilities: capabilitiesController.text
+        capabilities: capabilities
             .split(',')
             .map((value) => value.trim())
             .where((value) => value.isNotEmpty)
             .toList(),
         enabled: enabled,
-        workerVersionPolicy: versionPolicyController.text.trim().isEmpty
+        workerVersionPolicy: versionPolicy.trim().isEmpty
             ? 'latest'
-            : versionPolicyController.text.trim(),
-        config: _parseWorkerConfig(configController.text),
+            : versionPolicy.trim(),
+        config: _parseWorkerConfig(config),
         sessionPolicy: sessionPolicy,
-        concurrencyLimit: _parseConcurrency(concurrencyController.text),
+        concurrencyLimit: _parseConcurrency(concurrency),
         billingMode: billingMode,
-        independenceKey: independenceController.text.trim(),
+        independenceKey: independenceKey.trim(),
       );
       await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
     } catch (error) {
       if (mounted) setState(() => loadError = error.toString());
-    } finally {
-      nameController.dispose();
-      rolesController.dispose();
-      capabilitiesController.dispose();
-      configController.dispose();
-      versionPolicyController.dispose();
-      independenceController.dispose();
-      concurrencyController.dispose();
     }
   }
 
@@ -2109,17 +2098,17 @@ class _StudioAppState extends State<ConclaveAppShell> {
   Future<void> _createWorkstream([StudioProject? targetProject]) async {
     final project = targetProject ?? selectedProject;
     if (project == null) return;
-    final nameController = TextEditingController();
-    final created = await showDialog<bool>(
+    var name = '';
+    final created = await showDialog<String>(
       context: navigatorKey.currentContext ?? context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Create Workstream'),
         content: TextField(
-          controller: nameController,
           autofocus: true,
+          onChanged: (value) => name = value,
           onSubmitted: (_) {
-            if (nameController.text.trim().isNotEmpty) {
-              Navigator.pop(dialogContext, true);
+            if (name.trim().isNotEmpty) {
+              Navigator.pop(dialogContext, name.trim());
             }
           },
           decoration: const InputDecoration(
@@ -2133,22 +2122,24 @@ class _StudioAppState extends State<ConclaveAppShell> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
+            onPressed: () {
+              if (name.trim().isNotEmpty) {
+                Navigator.pop(dialogContext, name.trim());
+              }
+            },
             child: const Text('Create'),
           ),
         ],
       ),
     );
-    final value = nameController.text.trim();
-    nameController.dispose();
-    if (created != true || value.isEmpty) return;
+    if (created == null || created.isEmpty) return;
 
     final newWorkstreamId =
         'workstream-${DateTime.now().microsecondsSinceEpoch}';
     final newWorkstream = StudioWorkstream(
       id: newWorkstreamId,
       projectId: project.id,
-      name: value,
+      name: created,
       lead: _shellContext.viewerDisplayName ?? 'You',
       status: 'active',
       brief: 'Add a brief so collaborators understand the intended outcome.',
@@ -2202,28 +2193,28 @@ class _StudioAppState extends State<ConclaveAppShell> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(
-                controller: TextEditingController(text: project.name),
+              TextFormField(
+                initialValue: project.name,
                 onChanged: (value) => name = value,
                 decoration: const InputDecoration(labelText: 'Project name'),
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: TextEditingController(text: project.description),
+              TextFormField(
+                initialValue: project.description,
                 onChanged: (value) => description = value,
                 decoration: const InputDecoration(labelText: 'Description'),
                 maxLines: 2,
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: TextEditingController(text: project.repository),
+              TextFormField(
+                initialValue: project.repository,
                 onChanged: (value) => repository = value,
                 decoration:
                     const InputDecoration(labelText: 'Repository (optional)'),
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: TextEditingController(text: project.instructions),
+              TextFormField(
+                initialValue: project.instructions,
                 onChanged: (value) => instructions = value,
                 decoration:
                     const InputDecoration(labelText: 'Project instructions'),
@@ -3862,7 +3853,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
       return;
     }
 
-    final nameController = TextEditingController();
+    var accountName = '';
     var workerId = snapshot.plugins.first.id;
     var hostId = snapshot.agents.firstOrNull?.id;
     var authType = snapshot.agents.isEmpty ? 'none' : 'oauth_browser';
@@ -3886,12 +3877,12 @@ class _StudioAppState extends State<ConclaveAppShell> {
                         'Connect an AI identity to a Worker. Secrets stay on the selected Workspace.'),
                     const SizedBox(height: 16),
                     TextField(
-                      controller: nameController,
                       autofocus: true,
                       decoration: const InputDecoration(
                         labelText: 'Account name',
                         hintText: 'My Codex',
                       ),
+                      onChanged: (value) => accountName = value,
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
@@ -4003,7 +3994,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   child: const Text('Cancel')),
               FilledButton(
                 onPressed: () => Navigator.pop(dialogContext, {
-                  'displayName': nameController.text.trim(),
+                  'displayName': accountName.trim(),
                   'workerId': workerId,
                   'hostId': hostId,
                   'authType': authType,
@@ -4017,7 +4008,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
         },
       ),
     );
-    nameController.dispose();
     if (values == null) return;
     final displayName = values['displayName'] as String? ?? '';
     if (displayName.isEmpty) {

@@ -265,38 +265,42 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
   }
 
   Future<void> _createWorkstream() async {
-    final name = TextEditingController();
-    final created = await showDialog<bool>(
+    var name = '';
+    final created = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Create Workstream'),
         content: TextField(
-          controller: name,
           autofocus: true,
           decoration: const InputDecoration(labelText: 'Workstream name'),
+          onChanged: (value) => name = value,
           onSubmitted: (_) {
-            if (name.text.trim().isNotEmpty) {
-              Navigator.pop(dialogContext, true);
+            if (name.trim().isNotEmpty) {
+              Navigator.pop(dialogContext, name.trim());
             }
           },
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Create Workstream')),
+            onPressed: () {
+              if (name.trim().isNotEmpty) {
+                Navigator.pop(dialogContext, name.trim());
+              }
+            },
+            child: const Text('Create Workstream'),
+          ),
         ],
       ),
     );
-    final value = name.text.trim();
-    name.dispose();
-    if (created != true || value.isEmpty) return;
+    if (created == null || created.isEmpty) return;
     try {
       final workstream = await widget.dataSource.createWorkstream(
         projectId: widget.project.id,
-        name: value,
+        name: created,
       );
       if (!mounted) return;
       setState(() => workstreams = [...workstreams, workstream]);
@@ -307,40 +311,43 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
   }
 
   Future<void> _editWorkstream(StudioWorkstream workstream) async {
-    final nameCtrl = TextEditingController(text: workstream.name);
-    final confirmed = await showDialog<bool>(
+    var name = workstream.name;
+    final updatedName = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Edit Workstream'),
-        content: TextField(
-          controller: nameCtrl,
+        content: TextFormField(
+          initialValue: workstream.name,
           autofocus: true,
           decoration: const InputDecoration(labelText: 'Workstream name'),
-          onSubmitted: (_) {
-            if (nameCtrl.text.trim().isNotEmpty) {
-              Navigator.pop(dialogContext, true);
+          onChanged: (value) => name = value,
+          onFieldSubmitted: (_) {
+            if (name.trim().isNotEmpty) {
+              Navigator.pop(dialogContext, name.trim());
             }
           },
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
+            onPressed: () {
+              if (name.trim().isNotEmpty) {
+                Navigator.pop(dialogContext, name.trim());
+              }
+            },
             child: const Text('Save'),
           ),
         ],
       ),
     );
-    final newName = nameCtrl.text.trim();
-    nameCtrl.dispose();
-    if (confirmed != true || newName.isEmpty || newName == workstream.name) return;
+    if (updatedName == null || updatedName.isEmpty || updatedName == workstream.name) return;
     try {
       final updated = await widget.dataSource.updateWorkstream(
         workstreamId: workstream.id,
-        name: newName,
+        name: updatedName,
       );
       if (!mounted) return;
       setState(() {
@@ -496,19 +503,24 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
       );
 
   Future<void> _share() async {
-    final email = TextEditingController();
+    var email = '';
     var role = 'collaborator';
-    final accepted = await showDialog<bool>(
+    final result = await showDialog<(String, String)>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('Share Project'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(
-              controller: email,
               autofocus: true,
               keyboardType: TextInputType.emailAddress,
               decoration: const InputDecoration(labelText: 'Email address'),
+              onChanged: (value) => email = value,
+              onSubmitted: (_) {
+                if (email.trim().isNotEmpty) {
+                  Navigator.pop(dialogContext, (email.trim(), role));
+                }
+              },
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
@@ -527,18 +539,20 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace> {
                 onPressed: () => Navigator.pop(dialogContext),
                 child: const Text('Cancel')),
             FilledButton(
-                onPressed: () => Navigator.pop(dialogContext, true),
+                onPressed: () {
+                  if (email.trim().isNotEmpty) {
+                    Navigator.pop(dialogContext, (email.trim(), role));
+                  }
+                },
                 child: const Text('Send invitation')),
           ],
         ),
       ),
     );
-    final address = email.text.trim();
-    email.dispose();
-    if (accepted != true || address.isEmpty) return;
+    if (result == null || result.$1.isEmpty) return;
     try {
       await widget.dataSource.inviteProjectMember(
-          projectId: widget.project.id, email: address, role: role);
+          projectId: widget.project.id, email: result.$1, role: result.$2);
       _message('Project invitation sent.');
       await _loadCollaboration();
     } catch (error) {
