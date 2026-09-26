@@ -241,7 +241,8 @@ void main() {
     await connection.close();
   });
 
-  test('reports correlated worker and Worker readiness', () async {
+  test('reports Workspace-owned Worker inventory over runtime protocol',
+      () async {
     final socket = FakeSocket();
     final connection = HostCloudConnection(
       uri: Uri.parse('wss://cloud.test/host'),
@@ -250,7 +251,6 @@ void main() {
       factory: (_) async => socket,
       heartbeat: const Duration(hours: 1),
     );
-
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
@@ -261,37 +261,24 @@ void main() {
       'payload': {'sessionId': 'session-1'},
     }));
     await Future<void>.delayed(const Duration(milliseconds: 10));
-
-    connection.reportWorkerStatuses([
+    connection.reportWorkerInventory([
       {
-        'workerId': 'conclave.codex',
-        'version': '1.0.0',
-        'status': 'active',
-        'installedAt': DateTime.now().toUtc().toIso8601String(),
+        'workerId': 'worker-1',
+        'workerTypeId': 'codex',
+        'status': 'ready',
+        'revision': 2,
       },
     ]);
-    connection.reportWorkerStatus(
-      workerId: 'worker-1',
-      status: 'available',
-      activeAssignments: 0,
-    );
     final messages = socket.sent
         .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
         .toList();
-    final worker = messages.firstWhere(
-      (message) => message['type'] == 'worker.status',
-      orElse: () => <String, dynamic>{},
+    final inventory = messages.firstWhere(
+      (message) => message['type'] == 'worker.inventory',
     );
-    final aggregatePayload = worker['payload'] as Map<String, dynamic>;
-    expect(aggregatePayload['workers'], isNotEmpty);
-    final workerPayload = messages.lastWhere(
-      (message) =>
-          message['type'] == 'worker.status' &&
-          (message['payload'] as Map<String, dynamic>)['workerId'] ==
-              'worker-1',
-    )['payload'] as Map<String, dynamic>;
-    expect(workerPayload['hostId'], 'host-1');
-    expect(workerPayload['workerId'], 'worker-1');
+    final payload = inventory['payload'] as Map<String, dynamic>;
+    expect(payload['fullSnapshot'], isTrue);
+    expect((payload['workers'] as List).single['workerId'], 'worker-1');
+    expect(jsonEncode(payload), isNot(contains('credentialRef')));
     await connection.close();
   });
 

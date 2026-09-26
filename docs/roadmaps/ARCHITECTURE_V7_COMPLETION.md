@@ -430,7 +430,7 @@ and that path does not require a V6 Worker binding. This is automated by
 
 # Phase 3 — Remove the V6 configured-Worker compatibility architecture
 
-**Prerequisite:** Phase 2 E2E migration-safety gate passes.
+**Status:** Implemented. The unchanged Phase 2 E2E migration-safety gate passes.
 
 ## Goal
 
@@ -528,6 +528,8 @@ Conclave Workspace creates Worker
 -> Cloud scheduling + authorization
 -> owning Workspace executes
 ~~~
+
+**Completion evidence:** the real Workspace child-adapter acceptance test passes unchanged; scheduler selection and assignment dispatch use V7 inventory and scheduling state; normal V6 Worker mutation/binding/credential routes and runtime handlers are removed; migration `0026_remove_v6_configured_workers.sql` preserves Worker Type + Workspace + Worker attribution and legacy audit attribution before dropping V6 tables. The unused V6 `WorkerManager` downloader/installer and tests were removed; the V7 adapter store and shared protocol remain.
 
 ---
 
@@ -838,13 +840,13 @@ V7 is implemented when all of the following are true:
   of local readiness.
 - [x] Full inventory snapshot omission creates a safe tombstone/disable state
   and cross-Workspace Worker ID reuse is rejected.
-- [ ] A real automated V7 end-to-end assignment passes through scheduler,
+- [x] A real automated V7 end-to-end assignment passes through scheduler,
   Workspace Gateway, local Worker registry and adapter child process.
-- [ ] The real V7 E2E path succeeds with no usable V6 binding candidate.
-- [ ] Legacy V6 scheduler fallback is removed.
-- [ ] Legacy Cloud-created configured Worker/binding APIs are removed from the
+- [x] The real V7 E2E path succeeds with no usable V6 binding candidate.
+- [x] Legacy V6 scheduler fallback is removed.
+- [x] Legacy Cloud-created configured Worker/binding APIs are removed from the
   current product architecture.
-- [ ] V6 binding persistence is no longer required for execution.
+- [x] V6 binding persistence is no longer required for execution.
 - [ ] Production adapter/application verification uses asymmetric public-key
   trust.
 - [ ] First-party adapter release automation exists.
@@ -866,8 +868,8 @@ V7 is implemented when all of the following are true:
 | Phase | Status | Gate |
 | --- | --- | --- |
 | 1 — V7 Cloud scheduling/inventory | ✅ Implemented | Unit/integration contract complete |
-| 2 — Real V7 E2E migration-safety gate | 🔄 Next | Required before V6 cleanup |
-| 3 — Remove V6 compatibility | ⏸ Blocked | Requires Phase 2 |
+| 2 — Real V7 E2E migration-safety gate | ✅ Implemented | Regression gate passes unchanged |
+| 3 — Remove V6 compatibility | ✅ Implemented | V7 scheduler/runtime/API and forward migration complete |
 | 4 — Production release trust | Pending | Required for public distribution |
 | 5 — Production Worker coverage | Pending | Required for supported catalog |
 | 6 — Failure/security hardening | Pending | Required for V7 baseline |

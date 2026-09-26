@@ -15,7 +15,6 @@ class WorkspacesPage extends StatefulWidget {
     super.key,
     required this.workspaces,
     required this.workers,
-    this.configuredWorkers = const [],
     this.workspaceWorkers = const [],
     this.plugins = const [],
     this.initialTab = 0,
@@ -30,16 +29,11 @@ class WorkspacesPage extends StatefulWidget {
     this.onConnect,
     this.workerActionMessage,
     this.onDismissWorkerActionMessage,
-    this.onAddConfiguredWorker,
-    this.onOpenConfiguredWorker,
-    this.onSetupConfiguredWorkerWorkspace,
-    this.onRemoveConfiguredWorkerWorkspace,
     this.onWorkspaceWorkerScheduling,
   });
 
   final List<StudioAgent> workspaces;
   final List<StudioWorker> workers;
-  final List<StudioConfiguredWorker> configuredWorkers;
   final List<StudioWorkspaceWorker> workspaceWorkers;
   final List<StudioPlugin> plugins;
   final int initialTab;
@@ -54,14 +48,6 @@ class WorkspacesPage extends StatefulWidget {
   final Future<void> Function(StudioAgent)? onConnect;
   final String? workerActionMessage;
   final VoidCallback? onDismissWorkerActionMessage;
-  final VoidCallback? onAddConfiguredWorker;
-  final ValueChanged<StudioConfiguredWorker>? onOpenConfiguredWorker;
-  final Future<void> Function(
-          StudioConfiguredWorker worker, String workspaceId, String action)?
-      onSetupConfiguredWorkerWorkspace;
-  final Future<void> Function(
-          StudioConfiguredWorker worker, String workspaceId)?
-      onRemoveConfiguredWorkerWorkspace;
   final Future<void> Function(StudioWorkspaceWorker worker, String action)?
       onWorkspaceWorkerScheduling;
 

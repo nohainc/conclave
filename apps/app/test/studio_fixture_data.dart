@@ -324,57 +324,12 @@ class StudioFixtureDataSource implements StudioDataSource {
       studioFixtureSnapshot().workers;
 
   @override
-  Future<List<StudioConfiguredWorker>> loadConfiguredWorkers() async =>
-      const [];
-
-  @override
   Future<List<StudioWorkspaceWorker>> loadWorkspaceWorkerInventory() async =>
       const [];
 
   @override
-  Future<StudioConfiguredWorker> createConfiguredWorker({
-    required String name,
-    required String workerTypeId,
-    required List<String> workspaceIds,
-    String? defaultModel,
-    int concurrencyLimit = 1,
-    Map<String, dynamic> config = const {},
-  }) async =>
-      StudioConfiguredWorker(
-        id: 'configured-worker',
-        name: name,
-        workerTypeId: workerTypeId,
-        workerTypeName: 'Codex',
-        status: 'active',
-        defaultModel: defaultModel,
-        concurrencyLimit: concurrencyLimit,
-        bindings: const [],
-      );
-
-  @override
-  Future<void> updateConfiguredWorker({
-    required String workerId,
-    String? name,
-    String? defaultModel,
-    int? concurrencyLimit,
-    Map<String, dynamic>? config,
-  }) async {}
-
-  @override
-  Future<void> revokeConfiguredWorker({required String workerId}) async {}
-
-  @override
-  Future<void> updateConfiguredWorkerWorkspaces({
-    required String workerId,
-    required List<String> workspaceIds,
-  }) async {}
-
-  @override
-  Future<void> setupConfiguredWorkerWorkspace({
-    required String workerId,
-    required String workspaceId,
-    String action = 'setup',
-  }) async {}
+  Future<void> setWorkspaceWorkerScheduling(
+      {required String workerId, required String action}) async {}
 
   @override
   Future<List<StudioCredentialProfile>> loadCredentialProfiles(

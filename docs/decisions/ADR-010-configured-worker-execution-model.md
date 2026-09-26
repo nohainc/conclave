@@ -1,6 +1,6 @@
 # ADR-010: Configured Worker as the User-Facing Execution Identity
 
-**Status:** Accepted for v6; ownership/cardinality superseded by ADR-012 for v7
+**Status:** Historical for v6; configured-Worker ownership, cardinality, and setup flow superseded by ADR-012. V6 Cloud binding APIs and persistence were retired in Phase 3.
 **Date:** 2026-09-25  
 **Builds on:** ADR-008, ADR-009, Architecture v6
 

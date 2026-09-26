@@ -51,7 +51,6 @@ void main() {
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: snapshot.agents,
         workers: snapshot.workers,
-        configuredWorkers: const [],
         onAdd: () {},
         onRename: (_) {},
         onUpdate: (_) {},
@@ -232,8 +231,7 @@ void main() {
       expect(find.byTooltip('Back to Workspaces'), findsOneWidget);
     });
 
-    testWidgets(
-        'Workspace detail lists only locally configured Workers',
+    testWidgets('Workspace detail lists only locally configured Workers',
         (tester) async {
       final snapshot = studioFixtureSnapshot();
       const localWorker = StudioWorkspaceWorker(

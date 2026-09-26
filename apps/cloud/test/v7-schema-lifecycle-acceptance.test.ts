@@ -24,9 +24,19 @@ const migrationFiles = [
   "0022_v7_adapter_releases.sql",
   "0024_v7_worker_scheduling.sql",
   "0025_v7_assignment_runtime.sql",
+  "0026_remove_v6_configured_workers.sql",
 ];
 
 const schema = migrationFiles
+  .map((file) =>
+    readFileSync(
+      fileURLToPath(new URL(`../migrations-v6/${file}`, import.meta.url)),
+      "utf8",
+    ),
+  )
+  .join("\n");
+const preCleanupSchema = migrationFiles
+  .filter((file) => file !== "0026_remove_v6_configured_workers.sql")
   .map((file) =>
     readFileSync(
       fileURLToPath(new URL(`../migrations-v6/${file}`, import.meta.url)),
@@ -45,6 +55,39 @@ function apply(sql: string): unknown[] {
 }
 
 describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
+  it("forward-migrates legacy assignment and audit attribution, then removes V6 tables", () => {
+    const result = JSON.parse(
+      execFileSync("sqlite3", ["-json", ":memory:"], {
+        input: `${preCleanupSchema}
+          INSERT INTO users VALUES ('u1', 'owner@example.test', 'Owner', 'active', '2026-01-01', '2026-01-01');
+          INSERT INTO execution_workspaces VALUES ('ws1', 'u1', 'Workspace', 'online', '2026-01-01', '2026-01-01');
+          INSERT INTO workspace_runtime_identities (id, workspace_id, credential_key_ref, created_at) VALUES ('rt1', 'ws1', 'ref', '2026-01-01');
+          INSERT INTO workers VALUES ('type1', 'Type One', 'active', '2026-01-01', '2026-01-01');
+          INSERT INTO configured_workers (id, owner_user_id, name, worker_type_id, concurrency_limit, created_at, updated_at) VALUES ('legacy1', 'u1', 'Legacy', 'type1', 1, '2026-01-01', '2026-01-01');
+          INSERT INTO projects (id, owner_user_id, name, created_at, updated_at) VALUES ('p1', 'u1', 'Project', '2026-01-01', '2026-01-01');
+          INSERT INTO worker_assignments (id, project_id, execution_workspace_id, runtime_identity_id, worker_id, status, created_at, updated_at, configured_worker_id) VALUES ('a1', 'p1', 'ws1', 'rt1', 'type1', 'completed', '2026-01-01', '2026-01-01', 'legacy1');
+          INSERT INTO configured_worker_audit_log (id, configured_worker_id, workspace_id, actor_type, actor_id, action, target_id, created_at) VALUES ('audit1', 'legacy1', 'ws1', 'user', 'u1', 'worker.created', 'legacy1', '2026-01-01');
+          ${readFileSync(fileURLToPath(new URL("../migrations-v6/0026_remove_v6_configured_workers.sql", import.meta.url)), "utf8")}
+          SELECT a.workspace_worker_id, a.worker_id, a.execution_workspace_id,
+                 h.worker_id AS audit_worker_id, h.workspace_id AS audit_workspace_id, h.worker_type_id AS audit_worker_type_id,
+                 (SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('configured_workers', 'worker_workspace_bindings', 'workspace_worker_credentials')) AS legacy_table_count
+            FROM worker_assignments a JOIN worker_attribution_audit_archive h ON h.id = 'audit1' WHERE a.id = 'a1';`,
+        encoding: "utf8",
+      }),
+    ) as unknown[];
+    expect(result).toEqual([
+      {
+        workspace_worker_id: "legacy1",
+        worker_id: "type1",
+        execution_workspace_id: "ws1",
+        audit_worker_id: "legacy1",
+        audit_workspace_id: "ws1",
+        audit_worker_type_id: "type1",
+        legacy_table_count: 0,
+      },
+    ]);
+  });
+
   it("validates ownership, grants, workstream policy, and assignment attribution schema without claiming runtime execution", () => {
     const result = apply(`
       INSERT INTO users VALUES ('u1', 'owner@example.test', 'Owner', 'active', '2026-01-01', '2026-01-01');
@@ -91,11 +134,12 @@ describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
       INSERT INTO worker_assignments (
         id, project_id, run_id, workstream_id, work_request_id, workflow_version_id,
         checkout_id, execution_workspace_id, runtime_identity_id, worker_id,
+        workspace_worker_id,
         requested_by_user_id, status, input_json, output_json,
         created_at, updated_at
       ) VALUES (
         'assignment1', 'p1', 'run1', 'stream1', 'request1', 'wfv1',
-        'checkout1', 'ws1', 'runtime1', 'codex',
+        'checkout1', 'ws1', 'runtime1', 'codex', 'v7-codex-1',
         'u1', 'completed', '{}', '{"status":"ok"}',
         '2026-01-01', '2026-01-01'
       );
@@ -104,6 +148,7 @@ describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
         (SELECT status FROM workspace_worker_inventory WHERE worker_id = 'v7-codex-1') AS inventory_status,
         (SELECT credential_status FROM workspace_worker_inventory WHERE worker_id = 'v7-codex-1') AS credential_status,
         (SELECT worker_id FROM worker_assignments WHERE id = 'assignment1') AS assigned_worker,
+        (SELECT workspace_worker_id FROM worker_assignments WHERE id = 'assignment1') AS workspace_worker,
         (SELECT status FROM worker_assignments WHERE id = 'assignment1') AS assignment_status,
         (SELECT COUNT(*) FROM ai_accounts) AS ai_account_count;
     `);
@@ -113,6 +158,7 @@ describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
         inventory_status: "ready",
         credential_status: "ready",
         assigned_worker: "codex",
+        workspace_worker: "v7-codex-1",
         assignment_status: "completed",
         ai_account_count: 0,
       },

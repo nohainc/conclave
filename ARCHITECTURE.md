@@ -1,6 +1,6 @@
 # Conclave AX Architecture
 
-Architecture v6 is the implemented Workstream/filesystem baseline. Architecture v7 is the active execution migration for Workspace-owned local Workers and managed adapter processes, defined by ADR-012.
+Architecture v6 is the historical Workstream/filesystem baseline. Architecture v7 is the active execution architecture for Workspace-owned local Workers and managed adapter processes, defined by ADR-012. Phase 3 removes the V6 configured-Worker compatibility runtime and persistence; earlier V6 architecture documents remain historical references.
 
 ## Current v5 model
 
@@ -55,4 +55,4 @@ Read:
 - [ADR-012](docs/decisions/ADR-012-workspace-owned-local-workers.md)
 - [v7 implementation roadmap](docs/roadmaps/ARCHITECTURE_V7_IMPLEMENTATION.md)
 
-The existing v6 Cloud-created, multi-Workspace Worker backend remains compatibility-only during migration and is no longer exposed as the normal Conclave AX Worker setup UX. New Worker architecture work follows v7 ownership rules.
+The V6 Cloud-created, multi-Workspace Worker backend has been retired. Current product code uses Workspace-owned Workers, safe Cloud inventory, Cloud scheduling authorization, and execution by the owning Workspace. New Worker architecture work follows V7 ownership rules.

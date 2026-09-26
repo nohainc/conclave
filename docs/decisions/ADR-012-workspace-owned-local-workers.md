@@ -1,6 +1,6 @@
 # ADR-012: Workspace-Owned Workers and Managed Adapter Processes
 
-**Status:** Accepted; implementation is converging under Architecture v7
+**Status:** Accepted; Workspace-owned Worker execution and V6 compatibility retirement implemented under Architecture v7. Production release gates remain open.
 
 **Date:** 2026-09-26  
 **Builds on:** ADR-008, ADR-009, ADR-010, ADR-011  

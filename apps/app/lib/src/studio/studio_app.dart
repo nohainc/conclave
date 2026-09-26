@@ -69,7 +69,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
   final Set<String> expandedProjectIds = <String>{};
   bool showNewGoal = false;
   String? workerActionMessage;
-  List<StudioConfiguredWorker> configuredWorkers = const [];
   List<StudioWorkspaceWorker> workspaceWorkers = const [];
   StudioHostEnrollment? enrollmentResult;
   StudioQualityPreset selectedQuality = StudioQualityPreset.balanced;
@@ -505,12 +504,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
       } catch (_) {
         // V7 inventory remains independently optional during migration.
       }
-      try {
-        final loadedWorkers = await widget.dataSource.loadConfiguredWorkers();
-        if (mounted) setState(() => configuredWorkers = loadedWorkers);
-      } catch (_) {
-        // Keep the safe V7 inventory available if the legacy API is absent.
-      }
       _startRealtime();
     } catch (_) {
       // Snapshot loading remains the primary path for anonymous development.
@@ -606,17 +599,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
         final workers = await store.workers.refresh(workspaceId);
         if (!mounted) return;
         setState(() => snapshot = snapshot.copyWith(workers: workers));
-        return;
-      }
-      if (type.startsWith('account.') || type.startsWith('credential.')) {
-        final workers = await widget.dataSource.loadConfiguredWorkers();
-        final localWorkers =
-            await widget.dataSource.loadWorkspaceWorkerInventory();
-        if (!mounted) return;
-        setState(() {
-          configuredWorkers = workers;
-          workspaceWorkers = localWorkers;
-        });
         return;
       }
       if (type.startsWith('project.') || type.startsWith('chat.')) {
@@ -3811,345 +3793,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
       )
       .toList(growable: false);
 
-  Future<void> _addConfiguredWorker() async {
-    if (snapshot.plugins.isEmpty) {
-      _showSnackBar('No Worker Types are available yet.',
-          type: ToastType.error);
-      return;
-    }
-    final nameController = TextEditingController();
-    final modelController = TextEditingController();
-    var typeId = snapshot.plugins.first.id;
-    var chosenWorkspaceIds = <String>{};
-    var step = 0;
-    var busy = false;
-    final result = await showDialog<StudioConfiguredWorker>(
-      context: navigatorKey.currentContext ?? context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          final workspaces = _workspaceCards();
-          final type = snapshot.plugins.firstWhere((item) => item.id == typeId);
-          final canContinue = step == 0
-              ? nameController.text.trim().isNotEmpty
-              : step == 4
-                  ? chosenWorkspaceIds.isNotEmpty || workspaces.isEmpty
-                  : true;
-          return AlertDialog(
-            title: Text('Add Worker · ${step + 1} of 5'),
-            content: SizedBox(
-              width: 500,
-              child: SingleChildScrollView(
-                child: switch (step) {
-                  0 => Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Name this configured Worker.'),
-                        const SizedBox(height: 14),
-                        TextField(
-                          controller: nameController,
-                          autofocus: true,
-                          decoration: const InputDecoration(
-                              labelText: 'Worker name',
-                              hintText: 'Codex Personal'),
-                          onChanged: (_) => setDialogState(() {}),
-                        ),
-                      ],
-                    ),
-                  1 => DropdownButtonFormField<String>(
-                      initialValue: typeId,
-                      decoration:
-                          const InputDecoration(labelText: 'Worker Type'),
-                      items: snapshot.plugins
-                          .map((item) => DropdownMenuItem(
-                              value: item.id, child: Text(item.name)))
-                          .toList(),
-                      onChanged: (value) =>
-                          setDialogState(() => typeId = value!),
-                    ),
-                  2 => Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                            'Connect ${type.name} on each selected Workspace. Authentication stays local to that Workspace.'),
-                        const SizedBox(height: 14),
-                        const ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(Icons.lock_outline),
-                          title: Text('Workspace-local connection'),
-                          subtitle: Text(
-                              'You can finish authentication after creation from the Worker details.'),
-                        ),
-                      ],
-                    ),
-                  3 => TextField(
-                      controller: modelController,
-                      decoration: const InputDecoration(
-                          labelText: 'Default model (optional)',
-                          hintText: 'Auto'),
-                    ),
-                  4 => workspaces.isEmpty
-                      ? const Text(
-                          'No Workspaces yet. Create the Worker now and connect a Workspace later.')
-                      : Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: workspaces
-                              .map((workspace) => CheckboxListTile(
-                                    value: chosenWorkspaceIds
-                                        .contains(workspace.id),
-                                    title: Text(workspace.name),
-                                    subtitle: Text(workspace.status),
-                                    onChanged: (selected) => setDialogState(() {
-                                      if (selected == true) {
-                                        chosenWorkspaceIds.add(workspace.id);
-                                      } else {
-                                        chosenWorkspaceIds.remove(workspace.id);
-                                      }
-                                    }),
-                                  ))
-                              .toList(),
-                        ),
-                  _ => const SizedBox.shrink(),
-                },
-              ),
-            ),
-            actions: [
-              if (step > 0)
-                TextButton(
-                    onPressed: busy ? null : () => setDialogState(() => step--),
-                    child: const Text('Back')),
-              TextButton(
-                  onPressed: busy ? null : () => Navigator.pop(dialogContext),
-                  child: const Text('Cancel')),
-              FilledButton(
-                onPressed: !canContinue || busy
-                    ? null
-                    : () async {
-                        if (step < 4) {
-                          setDialogState(() => step++);
-                          return;
-                        }
-                        setDialogState(() => busy = true);
-                        try {
-                          final created =
-                              await widget.dataSource.createConfiguredWorker(
-                            name: nameController.text.trim(),
-                            workerTypeId: typeId,
-                            workspaceIds: chosenWorkspaceIds.toList(),
-                            defaultModel: modelController.text.trim().isEmpty
-                                ? null
-                                : modelController.text.trim(),
-                          );
-                          if (dialogContext.mounted) {
-                            Navigator.pop(dialogContext, created);
-                          }
-                        } catch (error) {
-                          setDialogState(() => busy = false);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('$error')));
-                          }
-                        }
-                      },
-                child: Text(step < 4 ? 'Next' : 'Create Worker'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-    nameController.dispose();
-    modelController.dispose();
-    if (result != null && mounted) {
-      setState(() => configuredWorkers = [
-            ...configuredWorkers.where((item) => item.id != result.id),
-            result,
-          ]);
-      _showSnackBar('${result.name} created.');
-    }
-  }
-
-  Future<void> _openConfiguredWorker(StudioConfiguredWorker worker) async {
-    await showDialog<void>(
-      context: navigatorKey.currentContext ?? context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(worker.name),
-        content: SizedBox(
-          width: 560,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Overview',
-                    style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                Text('Worker Type: ${worker.workerTypeName}'),
-                Text('Default model: ${worker.defaultModel ?? 'Auto'}'),
-                Text('Status: ${worker.status}'),
-                const SizedBox(height: 18),
-                Text('Workspaces',
-                    style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      await _connectConfiguredWorkerWorkspace(worker);
-                      if (dialogContext.mounted) Navigator.pop(dialogContext);
-                    },
-                    icon: const Icon(Icons.add, size: 17),
-                    label: const Text('Connect Workspace'),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                if (worker.bindings.isEmpty)
-                  const Text('No Workspace connected yet.')
-                else
-                  ...worker.bindings.map((binding) => Card(
-                        child: ListTile(
-                          title: Text(binding.workspaceName),
-                          subtitle: Text(binding.ready
-                              ? 'Ready to run'
-                              : 'Needs attention'),
-                          trailing: Wrap(
-                            spacing: 4,
-                            children: [
-                              if (binding.credentialStatus != 'ready')
-                                TextButton(
-                                  onPressed: () async {
-                                    await widget.dataSource
-                                        .setupConfiguredWorkerWorkspace(
-                                      workerId: worker.id,
-                                      workspaceId: binding.workspaceId,
-                                      action: 'reauthenticate',
-                                    );
-                                    if (dialogContext.mounted) {
-                                      Navigator.pop(dialogContext);
-                                    }
-                                  },
-                                  child: const Text('Reauthenticate'),
-                                ),
-                              IconButton(
-                                tooltip: 'Remove from Workspace',
-                                onPressed: () async {
-                                  final remaining = worker.bindings
-                                      .where((item) =>
-                                          item.workspaceId !=
-                                          binding.workspaceId)
-                                      .map((item) => item.workspaceId)
-                                      .toList();
-                                  await widget.dataSource
-                                      .updateConfiguredWorkerWorkspaces(
-                                          workerId: worker.id,
-                                          workspaceIds: remaining);
-                                  if (dialogContext.mounted) {
-                                    Navigator.pop(dialogContext);
-                                  }
-                                },
-                                icon: const Icon(Icons.remove_circle_outline),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )),
-                const SizedBox(height: 18),
-                Text('Settings',
-                    style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 6),
-                Text('Concurrency limit: ${worker.concurrencyLimit}'),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Close')),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _connectConfiguredWorkerWorkspace(
-      StudioConfiguredWorker worker) async {
-    final existing = worker.bindings.map((item) => item.workspaceId).toSet();
-    final available = _workspaceCards()
-        .where((workspace) => !existing.contains(workspace.id))
-        .toList();
-    if (available.isEmpty) {
-      _showSnackBar('All available Workspaces are already connected.');
-      return;
-    }
-    final workspaceId = await showDialog<String>(
-      context: navigatorKey.currentContext ?? context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Connect Workspace'),
-        content: SizedBox(
-          width: 380,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: available
-                .map((workspace) => ListTile(
-                      leading: const Icon(Icons.computer_outlined),
-                      title: Text(workspace.name),
-                      subtitle: Text(workspace.status),
-                      onTap: () => Navigator.pop(dialogContext, workspace.id),
-                    ))
-                .toList(),
-          ),
-        ),
-      ),
-    );
-    if (workspaceId == null) return;
-    await widget.dataSource.updateConfiguredWorkerWorkspaces(
-      workerId: worker.id,
-      workspaceIds: [...existing, workspaceId],
-    );
-    final refreshed = await widget.dataSource.loadConfiguredWorkers();
-    if (mounted) {
-      setState(() => configuredWorkers = refreshed);
-      _showSnackBar('Workspace connected.');
-    }
-  }
-
-  Future<void> _setupConfiguredWorkerWorkspace(
-      StudioConfiguredWorker worker, String workspaceId, String action) async {
-    try {
-      await widget.dataSource.setupConfiguredWorkerWorkspace(
-        workerId: worker.id,
-        workspaceId: workspaceId,
-        action: action,
-      );
-      configuredWorkers = await widget.dataSource.loadConfiguredWorkers();
-      if (mounted) {
-        setState(() {});
-        _showSnackBar('Workspace Worker setup requested.');
-      }
-    } catch (error) {
-      if (mounted) _showSnackBar('$error', type: ToastType.error);
-    }
-  }
-
-  Future<void> _removeConfiguredWorkerWorkspace(
-      StudioConfiguredWorker worker, String workspaceId) async {
-    final remaining = worker.bindings
-        .where((binding) => binding.workspaceId != workspaceId)
-        .map((binding) => binding.workspaceId)
-        .toList();
-    try {
-      await widget.dataSource.updateConfiguredWorkerWorkspaces(
-          workerId: worker.id, workspaceIds: remaining);
-      final refreshed = await widget.dataSource.loadConfiguredWorkers();
-      if (mounted) {
-        setState(() => configuredWorkers = refreshed);
-        _showSnackBar('Worker removed from Workspace.');
-      }
-    } catch (error) {
-      if (mounted) _showSnackBar('$error', type: ToastType.error);
-    }
-  }
-
   Future<void> _setWorkspaceWorkerScheduling(
       StudioWorkspaceWorker worker, String action) async {
     try {
@@ -4170,7 +3813,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
         workspaces:
             _workspaceCards().isNotEmpty ? _workspaceCards() : snapshot.agents,
         workers: snapshot.workers,
-        configuredWorkers: configuredWorkers,
         workspaceWorkers: workspaceWorkers,
         plugins: snapshot.plugins,
         initialTab: initialTab,
@@ -4191,10 +3833,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
           Uri.parse(conclaveDownloadsUrl),
         ),
         onGrant: _bindHost,
-        onAddConfiguredWorker: _addConfiguredWorker,
-        onOpenConfiguredWorker: _openConfiguredWorker,
-        onSetupConfiguredWorkerWorkspace: _setupConfiguredWorkerWorkspace,
-        onRemoveConfiguredWorkerWorkspace: _removeConfiguredWorkerWorkspace,
         onWorkspaceWorkerScheduling: _setWorkspaceWorkerScheduling,
         workerActionMessage: workerActionMessage,
         onDismissWorkerActionMessage: () =>

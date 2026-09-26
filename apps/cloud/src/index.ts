@@ -11,7 +11,6 @@ export {
   type PublishedEventResult,
 } from "./event-publisher.js";
 export {
-  selectWorkerForTask,
   dispatchTaskAssignment,
   recordAssignmentResult,
   recordAssignmentError,
@@ -99,7 +98,6 @@ const routeHandlers = {
   handleSetHostDesiredState: handlers.handleSetHostDesiredState,
   handleListWorkerCatalog: handlers.handleListWorkerCatalog,
   handleGetWorkerCatalog: handlers.handleGetWorkerCatalog,
-  handleListConfiguredWorkers: handlers.handleListConfiguredWorkers,
   handleListWorkspaceWorkerInventory:
     handlers.handleListWorkspaceWorkerInventory,
   handleV7WorkerScheduling: handlers.handleV7WorkerScheduling,
@@ -107,22 +105,6 @@ const routeHandlers = {
   handlePublishV7Adapter: handlers.handlePublishV7Adapter,
   handleDownloadV7Adapter: handlers.handleDownloadV7Adapter,
   handleRevokeV7Adapter: handlers.handleRevokeV7Adapter,
-  handleConfiguredWorkerObservability:
-    handlers.handleConfiguredWorkerObservability,
-  handleCreateConfiguredWorker: handlers.handleCreateConfiguredWorker,
-  handleGetConfiguredWorker: handlers.handleGetConfiguredWorker,
-  handleUpdateConfiguredWorker: handlers.handleUpdateConfiguredWorker,
-  handleRevokeConfiguredWorker: handlers.handleRevokeConfiguredWorker,
-  handleListConfiguredWorkerWorkspaces:
-    handlers.handleListConfiguredWorkerWorkspaces,
-  handleUpdateConfiguredWorkerWorkspaces:
-    handlers.handleUpdateConfiguredWorkerWorkspaces,
-  handleConfiguredWorkerWorkspaceSetup:
-    handlers.handleConfiguredWorkerWorkspaceSetup,
-  handleGetConfiguredWorkerWorkspaceCredential:
-    handlers.handleGetConfiguredWorkerWorkspaceCredential,
-  handleRevokeConfiguredWorkerWorkspaceCredential:
-    handlers.handleRevokeConfiguredWorkerWorkspaceCredential,
   handleSetWorkspaceWorkerAvailability:
     handlers.handleSetWorkspaceWorkerAvailability,
   handleSetWorkspaceDesiredWorkerState:

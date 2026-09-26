@@ -74,32 +74,6 @@ export async function routeWorkerRequest(
         undefined,
       );
     }
-    const configuredWorkerCredentialMatch = url.pathname.match(
-      /^\/api\/workers\/([^/]+)\/workspaces\/([^/]+)\/credential$/,
-    );
-    if (
-      configuredWorkerCredentialMatch?.[1] &&
-      configuredWorkerCredentialMatch?.[2]
-    ) {
-      if (request.method === "GET") {
-        return await handlers.handleGetConfiguredWorkerWorkspaceCredential!(
-          request,
-          env,
-          configuredWorkerCredentialMatch[1],
-          configuredWorkerCredentialMatch[2],
-          ctx,
-        );
-      }
-      if (request.method === "DELETE") {
-        return await handlers.handleRevokeConfiguredWorkerWorkspaceCredential!(
-          request,
-          env,
-          configuredWorkerCredentialMatch[1],
-          configuredWorkerCredentialMatch[2],
-          ctx,
-        );
-      }
-    }
     const connectorTaskStatusMatch = url.pathname.match(
       /^\/api\/connector\/tasks\/([^/]+)\/status$/,
     );
@@ -115,16 +89,6 @@ export async function routeWorkerRequest(
     }
     if (request.method === "POST" && url.pathname === "/api/workspaces") {
       return await handlers.handleCreateWorkspace!(request, env, ctx);
-    }
-    if (
-      request.method === "GET" &&
-      url.pathname === "/api/workers/observability"
-    ) {
-      return await handlers.handleConfiguredWorkerObservability!(
-        request,
-        env,
-        ctx,
-      );
     }
     if (request.method === "GET" && url.pathname === "/api/v7/workers") {
       return await handlers.handleListWorkspaceWorkerInventory!(
@@ -187,76 +151,6 @@ export async function routeWorkerRequest(
         env,
         v7AdapterRevokeMatch[1],
         v7AdapterRevokeMatch[2],
-        ctx,
-      );
-    }
-    if (request.method === "GET" && url.pathname === "/api/workers") {
-      return await handlers.handleListConfiguredWorkers!(request, env, ctx);
-    }
-    if (request.method === "POST" && url.pathname === "/api/workers") {
-      return await handlers.handleCreateConfiguredWorker!(request, env, ctx);
-    }
-    const configuredWorkerWorkspaceSetupMatch = url.pathname.match(
-      /^\/api\/workers\/([^/]+)\/workspaces\/([^/]+)\/(setup|reauthenticate)$/,
-    );
-    if (
-      request.method === "POST" &&
-      configuredWorkerWorkspaceSetupMatch?.[1] &&
-      configuredWorkerWorkspaceSetupMatch?.[2] &&
-      configuredWorkerWorkspaceSetupMatch?.[3]
-    ) {
-      return await handlers.handleConfiguredWorkerWorkspaceSetup!(
-        request,
-        env,
-        configuredWorkerWorkspaceSetupMatch[1],
-        configuredWorkerWorkspaceSetupMatch[2],
-        configuredWorkerWorkspaceSetupMatch[3],
-        ctx,
-      );
-    }
-    const configuredWorkerWorkspacesMatch = url.pathname.match(
-      /^\/api\/workers\/([^/]+)\/workspaces$/,
-    );
-    if (request.method === "GET" && configuredWorkerWorkspacesMatch?.[1]) {
-      return await handlers.handleListConfiguredWorkerWorkspaces!(
-        request,
-        env,
-        configuredWorkerWorkspacesMatch[1],
-        ctx,
-      );
-    }
-    if (request.method === "PUT" && configuredWorkerWorkspacesMatch?.[1]) {
-      return await handlers.handleUpdateConfiguredWorkerWorkspaces!(
-        request,
-        env,
-        configuredWorkerWorkspacesMatch[1],
-        ctx,
-      );
-    }
-    const configuredWorkerMatch = url.pathname.match(
-      /^\/api\/workers\/([^/]+)$/,
-    );
-    if (request.method === "GET" && configuredWorkerMatch?.[1]) {
-      return await handlers.handleGetConfiguredWorker!(
-        request,
-        env,
-        configuredWorkerMatch[1],
-        ctx,
-      );
-    }
-    if (request.method === "PATCH" && configuredWorkerMatch?.[1]) {
-      return await handlers.handleUpdateConfiguredWorker!(
-        request,
-        env,
-        configuredWorkerMatch[1],
-        ctx,
-      );
-    }
-    if (request.method === "DELETE" && configuredWorkerMatch?.[1]) {
-      return await handlers.handleRevokeConfiguredWorker!(
-        request,
-        env,
-        configuredWorkerMatch[1],
         ctx,
       );
     }

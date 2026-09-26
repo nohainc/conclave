@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'assignment_journal.dart';
-import 'credential_profiles.dart';
 import 'runtime_capabilities.dart';
 import 'package:conclave_protocol/conclave_protocol.dart';
 import 'worker_protocol.dart';
@@ -76,9 +75,6 @@ typedef HostAssignmentCancellationHandler = Future<bool> Function(
   String assignmentId,
   String reason,
 );
-typedef HostSyncHandler = Future<void> Function(
-  Map<String, Object?> payload,
-);
 typedef HostUpdateAvailableHandler = Future<void> Function(
   Map<String, Object?> payload,
 );
@@ -123,13 +119,11 @@ class HostCloudConnection {
     String? hostname,
     this.hostVersion = '1.0.3',
     Map<String, Object?>? capabilities,
-    this.installedWorkerVersions = const {},
     this.activeWorkerIds = const [],
     this.unreconciledAssignmentIds = const [],
     this.assignmentHandler,
     this.assignmentCancellationHandler,
     this.assignmentJournal,
-    this.syncHandler,
     this.workerInventoryProvider,
     this.hostUpdateAvailableHandler,
     this.workstreamCheckoutManager,
@@ -155,13 +149,11 @@ class HostCloudConnection {
   final String hostname;
   final String hostVersion;
   final Map<String, Object?> capabilities;
-  final Map<String, String> installedWorkerVersions;
   final List<String> activeWorkerIds;
   final List<String> unreconciledAssignmentIds;
   final HostAssignmentHandler? assignmentHandler;
   final HostAssignmentCancellationHandler? assignmentCancellationHandler;
   final AssignmentJournal? assignmentJournal;
-  final HostSyncHandler? syncHandler;
   final Future<List<Map<String, Object?>>> Function()? workerInventoryProvider;
   final HostUpdateAvailableHandler? hostUpdateAvailableHandler;
   final WorkstreamCheckoutManager? workstreamCheckoutManager;
@@ -186,19 +178,8 @@ class HostCloudConnection {
   final _activeAssignments = <String>{};
   final _lastEphemeralWorkerEvent = <String, DateTime>{};
 
-  void reportWorkerStatuses(List<Map<String, Object?>> workers) {
-    _sendIfConnected('worker.status', {
-      'workers': workers
-          .map((worker) => {
-                ...worker,
-                'workspaceRuntimeId': hostId,
-              })
-          .toList(),
-    });
-  }
-
-  /// Publishes only the safe projection of Workspace-local Worker records.
-  /// The caller must omit credential references, secrets, and local paths.
+  /// Sends the Workspace-owned inventory projection. Secrets, credential
+  /// references, and local paths must not be included by the caller.
   void reportWorkerInventory(List<Map<String, Object?>> workers) {
     _sendIfConnected('worker.inventory', {
       'fullSnapshot': true,
@@ -212,30 +193,8 @@ class HostCloudConnection {
     try {
       reportWorkerInventory(await provider());
     } on Object {
-      // Keep the runtime connection alive if local registry diagnostics fail.
+      // A local inventory read failure must not tear down the runtime link.
     }
-  }
-
-  void reportWorkerStatus({
-    required String workerId,
-    required String status,
-    required int activeAssignments,
-    String? healthDetail,
-    List<String>? missingSecrets,
-  }) {
-    _sendIfConnected('worker.status', {
-      'workerId': workerId,
-      'workspaceRuntimeId': hostId,
-      'status': status,
-      'activeAssignments': activeAssignments,
-      if (healthDetail != null) 'healthDetail': healthDetail,
-      if (missingSecrets != null) 'missingSecrets': missingSecrets,
-    });
-  }
-
-  /// Reports credential metadata only. Raw secrets never cross this boundary.
-  void reportCredentialStatus(CredentialProfile profile) {
-    _sendIfConnected('credential.status', profile.toCloudMetadata());
   }
 
   /// Reports only logical Workstream readiness. Local absolute paths and
@@ -550,10 +509,6 @@ class HostCloudConnection {
       if (payload is Map<String, dynamic>) {
         syncResponse = Map<String, Object?>.from(payload);
         unawaited(_reconcileSyncResponse(syncResponse!).catchError((_) {}));
-        final handler = syncHandler;
-        if (handler != null) {
-          unawaited(handler(syncResponse!).catchError((_) {}));
-        }
       }
     } else if (decoded['type'] == 'workspace.update') {
       final payload = decoded['payload'];
@@ -1167,8 +1122,6 @@ class HostCloudConnection {
     socket.send(jsonEncode(_envelope('workspace.sync.request', {
       'workspaceRuntimeId': hostId,
       'executionWorkspaceId': workspaceId,
-      'installedWorkerVersions': installedWorkerVersions,
-      'activeWorkerIds': activeWorkerIds,
       if (recoveredAssignmentIds.isNotEmpty)
         'unreconciledAssignmentIds': recoveredAssignmentIds.toList()..sort(),
     })));

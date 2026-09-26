@@ -1,9 +1,9 @@
 # Conclave AX Roadmap
 
-Architecture v6 is the implemented Workstream/filesystem baseline. Architecture
-v7 is the active Worker/runtime migration. Its **desktop vertical slice is now
-implemented**, but architecture convergence and production release gates remain
-open before v7 becomes the implemented baseline.
+Architecture v6 is the historical Workstream/filesystem baseline. Architecture
+v7 is the active Worker/runtime architecture. Its desktop vertical slice and
+V6 compatibility retirement are implemented; production release gates remain
+open before v7 becomes the declared implemented baseline.
 
 Current execution direction:
 
@@ -30,24 +30,21 @@ The current implementation audit is:
 
 [V7 Implementation Audit](docs/architecture/V7_IMPLEMENTATION_AUDIT.md)
 
-Phase 1 (Cloud-owned Worker scheduling state, authoritative snapshot
-reconciliation, AX scheduling controls, and the V7-only candidate contract) is
-implemented in `main@2c740092`.
+Phases 1–3 are implemented: Cloud-owned V7 scheduling state and inventory,
+real V7 end-to-end assignment execution, and retirement of V6 Worker
+compatibility APIs, scheduler fallback, and persistence.
 
 The remaining sequence is intentionally:
 
-1. **Phase 2:** prove the real V7 scheduler -> Gateway -> Workspace -> adapter
-   end-to-end path;
-2. **Phase 3:** remove V6 Worker scheduler/API/persistence compatibility;
-3. **Phase 4:** replace shared-secret release trust with asymmetric signing and
+1. **Phase 4:** replace shared-secret release trust with asymmetric signing and
    automate release publication;
-4. **Phase 5:** finish production Worker coverage and live-provider acceptance;
-5. **Phase 6:** harden failure/recovery/security behavior;
-6. **Phase 7:** finish macOS background/update/diagnostics UX;
-7. **Phase 8:** declare v7 the implemented baseline only after all release
+2. **Phase 5:** finish production Worker coverage and live-provider acceptance;
+3. **Phase 6:** harden failure/recovery/security behavior;
+4. **Phase 7:** finish macOS background/update/diagnostics UX;
+5. **Phase 8:** declare v7 the implemented baseline only after all release
    gates pass.
 
-Destructive V6 cleanup is blocked until the Phase 2 behavioral E2E gate passes.
+The Phase 2 behavioral E2E migration-safety gate passes and remains a regression test for the V7 execution path.
 
 ## Historical roadmaps
 
