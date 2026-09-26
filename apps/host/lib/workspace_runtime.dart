@@ -13,8 +13,14 @@ import 'package:conclave_host/worker_trust_policy.dart';
 import 'package:conclave_host/v7_adapter_package_store.dart';
 
 Set<WorkerPermission> _configuredPermissions() {
-  return parseConfiguredWorkerPermissions(
-      Platform.environment['CONCLAVE_WORKER_PERMISSIONS']);
+  final configured = Platform.environment['CONCLAVE_WORKER_PERMISSIONS'];
+  if (configured == null || configured.trim().isEmpty) {
+    // Desktop installs must work without shell-provided environment. This is
+    // the machine-wide adapter admission ceiling only; each configured Worker
+    // still has an explicit local permission set that Cloud cannot broaden.
+    return WorkerPermission.values.toSet();
+  }
+  return parseConfiguredWorkerPermissions(configured);
 }
 
 Map<String, String> _workerSecrets() {
