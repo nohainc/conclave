@@ -816,44 +816,64 @@ implementation target** to **implemented baseline**.
 
 V7 is implemented when all of the following are true:
 
-- [ ] Cloud schedules Workspace-owned V7 Workers without V6 binding
-  dependency.
-- [ ] Cloud scheduling state supports enabled/disabled/draining independently
+- [x] A V7 inventory candidate can be selected without consulting the V6
+  binding query.
+- [x] Cloud scheduling state supports enabled/disabled/draining independently
   of local readiness.
+- [x] Full inventory snapshot omission creates a safe tombstone/disable state
+  and cross-Workspace Worker ID reuse is rejected.
+- [ ] A real automated V7 end-to-end assignment passes through scheduler,
+  Workspace Gateway, local Worker registry and adapter child process.
+- [ ] The real V7 E2E path succeeds with no usable V6 binding candidate.
+- [ ] Legacy V6 scheduler fallback is removed.
 - [ ] Legacy Cloud-created configured Worker/binding APIs are removed from the
   current product architecture.
 - [ ] V6 binding persistence is no longer required for execution.
-- [ ] Production adapter verification uses asymmetric public-key trust.
+- [ ] Production adapter/application verification uses asymmetric public-key
+  trust.
 - [ ] First-party adapter release automation exists.
-- [ ] Codex and Antigravity pass real opt-in acceptance.
 - [ ] Every Worker Type exposed as production-supported can become Ready and
   execute.
-- [ ] A real automated V7 end-to-end assignment passes through scheduler,
-  Workspace Gateway and adapter child process.
-- [ ] Inventory reconnect/removal/stale-revision behavior is tested.
+- [ ] Codex and Antigravity pass real opt-in acceptance.
+- [ ] Reconnect/removal/stale-revision behavior passes behavioral E2E
+  acceptance.
 - [ ] Failure/recovery and security acceptance pass.
 - [ ] macOS build/sign/notarize procedure passes.
-- [ ] Desktop-to-Cloud enrollment + Gateway smoke passes.
+- [x] Desktop-to-Cloud enrollment + Workspace Gateway smoke procedure exists.
 - [ ] Workspace runtime uses the actual packaged application version.
 - [ ] Background/menu-bar lifecycle is production-usable.
-- [ ] Provider secrets never enter Cloud state, events, artifacts or logs.
+- [ ] Provider secrets never enter Cloud state, events, artifacts or logs in
+  E2E/security acceptance.
 
-## Recommended PR sequence
+## Current phase status
+
+| Phase | Status | Gate |
+| --- | --- | --- |
+| 1 — V7 Cloud scheduling/inventory | ✅ Implemented | Unit/integration contract complete |
+| 2 — Real V7 E2E migration-safety gate | 🔄 Next | Required before V6 cleanup |
+| 3 — Remove V6 compatibility | ⏸ Blocked | Requires Phase 2 |
+| 4 — Production release trust | Pending | Required for public distribution |
+| 5 — Production Worker coverage | Pending | Required for supported catalog |
+| 6 — Failure/security hardening | Pending | Required for V7 baseline |
+| 7 — Desktop runtime maturity | Pending | Required for production UX |
+| 8 — Baseline/docs declaration | Pending | Requires all release gates |
+
+## Recommended PR sequence from current main
 
 Keep completion work reviewable and reversible:
 
-1. **Phase 1 — V7 scheduling state + V7-only candidate contract**
-2. **PR B — real V7 end-to-end integration harness**
-3. **PR C — remove V6 scheduler/API/persistence compatibility**
-4. **PR D — asymmetric adapter/release trust**
-5. **PR E — first-party adapter release workflow**
-6. **PR F — Claude Code + Ollama V7 adapters**
-7. **PR G — live adapter acceptance + reconciliation/failure hardening**
-8. **PR H — macOS menu-bar/update/diagnostics maturity**
-9. **PR I — final V7 docs/baseline declaration**
+1. **Phase 2 / PR B — real V7 end-to-end integration harness**
+2. **Phase 3 / PR C — remove V6 scheduler/API/persistence compatibility**
+3. **Phase 4 / PR D — asymmetric adapter + Workspace release trust**
+4. **Phase 4 / PR E — first-party adapter release workflow**
+5. **Phase 5 / PR F — Claude Code + Ollama V7 adapters**
+6. **Phase 5/6 / PR G — live adapter acceptance + failure/security hardening**
+7. **Phase 7 / PR H — macOS menu-bar/update/diagnostics maturity**
+8. **Phase 8 / PR I — final V7 docs/baseline declaration**
 
-PR B deliberately precedes destructive V6 cleanup. The real V7 path should be
-proven before the compatibility path is deleted.
+Phase 1 is already implemented in `main@2c740092`. Phase 2 deliberately
+precedes destructive V6 cleanup. The real V7 path must be proven before the
+compatibility path is deleted.
 
 ## Final target
 
