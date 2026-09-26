@@ -1,6 +1,6 @@
 # Conclave AX Architecture v7 — Local Worker Runtime and Adapter Execution
 
-**Status:** Active implementation target — desktop vertical slice implemented; Cloud/model/release convergence in progress  
+**Status:** Active implementation target — Phase 1 Cloud scheduling convergence implemented; Phase 2 real V7 E2E migration-safety gate is next  
 **Date:** 2026-09-26  
 **Builds on:** Architecture v6 Workstreams + ADR-011 filesystem model  
 **Primary decision:** [ADR-012](../decisions/ADR-012-workspace-owned-local-workers.md)
