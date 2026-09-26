@@ -205,7 +205,7 @@ Future<void> main() async {
       'installs, activates, and resolves a signed adapter with local secret scope',
       () async {
     await writeManifest('1.2.3');
-    await store.install(sourceDirectory: source);
+    final installed = await store.install(sourceDirectory: source);
     expect(await installed.exists(), isTrue);
     final launch = await store.resolve(
       worker: localWorker(),
@@ -311,7 +311,7 @@ Future<void> main() async {
 
   test('one installed adapter release serves multiple configured workers of the same type', () async {
     await writeManifest('1.2.3');
-    final installed = await store.install(sourceDirectory: source);
+    await store.install(sourceDirectory: source);
 
     final workerA = localWorker(
       id: 'worker-a',
