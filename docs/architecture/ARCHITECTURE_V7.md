@@ -1,11 +1,17 @@
 # Conclave AX Architecture v7 — Local Worker Runtime and Adapter Execution
 
-**Status:** Active implementation target — Phase 1 Cloud scheduling convergence implemented; Phase 2 real V7 E2E migration-safety gate is next  
+**Status:** Current architecture and active implementation target. V7 ownership, scheduler, E2E path, V6 compatibility retirement, and public-key release trust are implemented; production runtime gates remain open.
 **Date:** 2026-09-26  
 **Builds on:** Architecture v6 Workstreams + ADR-011 filesystem model  
 **Primary decision:** [ADR-012](../decisions/ADR-012-workspace-owned-local-workers.md)
 
 ## 1. Executive decision
+
+V7 is the sole current Worker ownership architecture. It is not yet the
+implemented baseline: Phase 5 production Worker acceptance, Phase 6 full
+failure/security acceptance, and Phase 7 native macOS `.app` updater recovery
+remain open. See the [current implementation audit](V7_IMPLEMENTATION_AUDIT.md)
+and [release gates](../roadmaps/ARCHITECTURE_V7_COMPLETION.md).
 
 v7 keeps the product model already established by the current application:
 
@@ -845,6 +851,11 @@ Keep previously verified active version where safe.
 | Run/Assignment/audit | Cloud |
 
 ## 27. Migration from v6 configured Workers
+
+This section records the migration rationale and target mapping. The Phase 3
+forward migration and runtime/API retirement are complete; it is not a
+compatibility design for current runtime code. Current behavior is defined by
+the sections above and ADR-012.
 
 Current v6:
 - configured Worker is Cloud-created;

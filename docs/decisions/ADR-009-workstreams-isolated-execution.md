@@ -1,6 +1,6 @@
 # ADR-009: Workstreams and Isolated Execution
 
-**Status:** Proposed  
+**Status:** Accepted; Workstream isolation and Primary Workspace rules remain current under Architecture v7. Any Worker ownership or binding assumptions are superseded by ADR-012.
 **Date:** 2026-09-24  
 **Builds on:** ADR-008 / Architecture v5
 

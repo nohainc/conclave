@@ -1,6 +1,6 @@
 # Conclave AX Technology Stack
 
-**Status:** v6 Workstream/filesystem baseline; v7 desktop vertical slice implemented, convergence in progress
+**Status:** Current v7 architecture; production readiness gates remain open
 
 ## Stack summary
 
@@ -146,16 +146,21 @@ Local Workspace secure store stores personal secrets by default.
 Do not persist plaintext credentials in D1, assignment payloads, logs, or artifacts.
 
 
-## V7 production convergence
+## V7 implementation status
 
-The current v7 desktop/runtime foundation is implemented, but the production
-baseline still requires:
-- V7-only Cloud Worker scheduling without V6 binding fallback;
-- independent Cloud scheduling state (enabled/disabled/draining);
-- asymmetric public-key trust for adapter and application release verification;
-- repeatable first-party adapter release automation;
-- complete production coverage for every Worker Type exposed by Workspace;
-- real scheduler -> Gateway -> Workspace -> adapter end-to-end acceptance;
-- production background/menu-bar and native update lifecycle.
+The current product model is V7: Workspace-owned local Workers, safe Cloud
+inventory, Cloud scheduling controls, Project/Workstream authorization, and
+execution by the owning Workspace. The scheduler no longer needs V6 binding
+records for V7 assignments. Public-key trust and first-party release workflows
+are implemented. V7 is not yet the declared implemented baseline: production
+Worker live acceptance, full failure/security acceptance, and native macOS
+`.app` update/recovery remain release gates.
 
-See [Architecture v7 Completion Plan](../roadmaps/ARCHITECTURE_V7_COMPLETION.md).
+The adapter protocol version 1.0 defines `initialize`, `validate`, `execute`,
+`progress`, `result`, `error`, `health`, and `version`. Interactive
+request/response input is intentionally deferred to a future versioned
+extension unless required by a production-supported adapter.
+
+See the [Architecture v7 Completion Plan](../roadmaps/ARCHITECTURE_V7_COMPLETION.md),
+[release operations](../deployment/WORKSPACE_RELEASES.md), and
+[release trust/key rotation](../security/RELEASE_TRUST_AND_ROTATION.md).

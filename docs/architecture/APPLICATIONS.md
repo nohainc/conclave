@@ -1,6 +1,6 @@
 # Conclave AX Applications
 
-**Status:** v7 active product/application boundary
+**Status:** Current v7 product/application boundary; production release gates remain open
 
 Conclave AX has three primary applications and one extension type.
 
@@ -26,8 +26,9 @@ Conclave AX is the web application. It is not packaged as the machine-side execu
 
 Conclave AX communicates only with Conclave Cloud.
 
-The synchronized Worker inventory is implemented. Explicit remote scheduling
-enable/disable/drain controls remain a v7 convergence item.
+Workspace-owned Worker inventory and V7 remote scheduling enable/disable/drain
+controls are implemented. Cloud schedules only Workers owned by their paired
+Workspace and cannot modify local credentials or permissions.
 
 ## 2. Conclave Cloud
 
@@ -136,18 +137,21 @@ Use:
 - credential state when referring to local authentication/readiness.
 
 Do not expose AI Account or Credential Profile as a peer product resource.
-Those terms may remain in internal/domain code while the migration is in
-progress.
+Credential state remains local Workspace-owned implementation/security state.
 
-## Removed v4 product concepts
+## Historical v4/v5 product terminology
 
-Architecture v5 does not expose:
+The following names belong to historical architecture documents and are not
+current product surfaces:
 - Conclave AX Studio as a product name;
 - Agent;
 - Agent Engine;
 - Plugin;
-- configured Worker instance;
 - Connection.
+
+Architecture v5 preceded the configured Worker model. V6 introduced configured
+Workers, and V7 makes them Workspace-owned local execution identities; see
+[ADR-012](../decisions/ADR-012-workspace-owned-local-workers.md).
 
 
 ## Build and pairing references

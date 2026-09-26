@@ -8,7 +8,7 @@ Primary domain: **conclaveax.com**
 
 ## Architecture
 
-Architecture v6 is the Workstream/filesystem baseline. Architecture v7 is the active Worker/runtime implementation target; its desktop vertical slice is implemented while Cloud-model cleanup, production trust, acceptance, and desktop maturity remain in progress.
+Architecture v7 is the current Worker ownership and execution architecture. V7 ownership, Cloud scheduling, end-to-end assignment execution, V6 compatibility retirement, and asymmetric release trust are implemented. V7 remains an active implementation target until production Worker, adversarial security/recovery, and native app-update release gates pass.
 
 ```text
 Conclave AX -> Conclave Cloud -> Conclave Workspace -> configured Worker -> adapter process
@@ -32,7 +32,7 @@ Conclave AX -> Conclave Cloud -> Conclave Workspace -> configured Worker -> adap
 - Cloudflare D1 for structured state.
 - Cloudflare R2 for artifacts, Worker packages, and releases.
 - Better Auth for human authentication.
-- Structured local Worker protocol between Workspace runtime and Worker processes.
+- Versioned structured V7 adapter protocol between Workspace runtime and adapter processes (`initialize`, `validate`, `execute`, `progress`, `result`, `error`, `health`, `version`). Interactive request/response input is a future protocol extension unless a supported adapter requires it.
 - GitHub Actions for CI/CD.
 - Wrangler for Cloudflare deployment.
 
@@ -52,19 +52,17 @@ Adapter processes run as separate per-assignment child processes under Conclave 
 ## Read first
 
 - [Architecture](ARCHITECTURE.md)
-- [Architecture v5](docs/architecture/ARCHITECTURE_V5.md)
+- [Current architecture](ARCHITECTURE.md)
 - [Technology Stack](docs/architecture/TECH_STACK.md)
 - [Applications](docs/architecture/APPLICATIONS.md)
-- [v5 implementation roadmap](docs/roadmaps/ARCHITECTURE_V5_IMPLEMENTATION.md)
-- [Configured Worker model](docs/decisions/ADR-010-configured-worker-execution-model.md)
-- [Configured Worker implementation roadmap](docs/roadmaps/CONFIGURED_WORKER_EXECUTION.md)
-- [Workstream working-directory decision](docs/decisions/ADR-011-workstream-working-directories.md)
 - [Workstream working-directory roadmap](docs/roadmaps/WORKSTREAM_WORKING_DIRECTORIES.md)
 - [Architecture v7](docs/architecture/ARCHITECTURE_V7.md)
 - [ADR-012: Workspace-owned local Workers](docs/decisions/ADR-012-workspace-owned-local-workers.md)
 - [v7 implementation roadmap](docs/roadmaps/ARCHITECTURE_V7_IMPLEMENTATION.md)
 - [v7 implementation audit](docs/architecture/V7_IMPLEMENTATION_AUDIT.md)
 - [v7 completion plan](docs/roadmaps/ARCHITECTURE_V7_COMPLETION.md)
+- [Workspace and adapter release operations](docs/deployment/WORKSPACE_RELEASES.md)
+- [Release trust and key rotation](docs/security/RELEASE_TRUST_AND_ROTATION.md)
 - [AI Development Rules](AGENTS.md)
 
-Deployment guidance is in [docs/deployment/CLOUDFLARE.md](docs/deployment/CLOUDFLARE.md).
+Deployment guidance is in [docs/deployment/CLOUDFLARE.md](docs/deployment/CLOUDFLARE.md). V6 architecture documents and ADR-009/ADR-010 remain historical; ADR-012 governs current Worker ownership.

@@ -1,386 +1,97 @@
-# Architecture v7 Implementation Audit — Current Main
+# Architecture v7 Implementation Audit
 
-**Reviewed baseline:** `main@2c740092fd0e558880873894fe997454a989fef2`  
-**Audit date:** 2026-09-26  
-**Target:** [Architecture v7](ARCHITECTURE_V7.md)  
-**Completion plan:** [Architecture v7 completion plan](../roadmaps/ARCHITECTURE_V7_COMPLETION.md)
+**Reviewed baseline:** `02ce1db`
+**Audit date:** 2026-09-26
+**Architecture:** [Architecture v7](ARCHITECTURE_V7.md)
+**Release gates:** [V7 completion plan](../roadmaps/ARCHITECTURE_V7_COMPLETION.md)
 
 ## Executive assessment
 
-Architecture v7 is **substantially implemented but not yet the implemented
-baseline**.
+Architecture v7 is the **current and sole Worker ownership architecture**. It
+is **not yet the implemented baseline**. The Phase 1–3 architecture work and
+Phase 4 public-key release trust are implemented. Production Worker acceptance,
+full failure/security acceptance, and native macOS app update recovery remain
+open. Do not change the baseline declaration until every release gate has
+executable evidence.
 
-The latest desktop-convergence work closed the earlier vertical-slice gaps:
-
-- Conclave Workspace Flutter desktop and the headless entrypoint now compose the
-  same real Cloud-connected runtime;
-- the desktop pairing flow redeems one-time Workspace enrollments;
-- runtime bearer credentials are stored separately from non-secret local
-  registration metadata;
-- the native macOS build/package script exists and CI builds the desktop app;
-- the real enrollment + Workspace Gateway smoke path exists;
-- Conclave AX no longer exposes the normal legacy Cloud-side Add Worker/binding
-  setup flow;
-- Antigravity uses the `agy` integration contract;
-- safe Workspace-owned Worker inventory is visible in Conclave AX.
-
-Phase 1 Cloud scheduling convergence is implemented:
-
-- V7 Workers have independent Cloud scheduling state (`enabled`, `disabled`,
-  `draining`);
-- drain requests preserve active work and complete to disabled with audit;
-- local readiness and Cloud scheduling are intersected rather than conflated;
-- full inventory snapshots reconcile omissions into tombstone/disabled state;
-- AX exposes V7 scheduling state and enable/disable/drain controls;
-- scheduler tests prove a V7 candidate can be selected without reading the V6
-  binding query.
-
-The remaining work is now concentrated in four architectural/release areas:
-
-1. **Behavioral V7 end-to-end proof is the next gate.** The current V7 solo
-   acceptance test is useful schema/lifecycle coverage, but it still inserts
-   inventory and completed assignment state directly. Before deleting V6, a
-   deterministic test must exercise scheduler -> Workspace Gateway -> Workspace
-   runtime -> local Worker registry -> V7 adapter child process -> result.
-2. **Legacy V6 APIs, fallback and persistence remain active.** The V7 path can
-   operate independently for candidate selection, but the compatibility query,
-   configured Worker routes and V6 tables still exist and should be removed only
-   after the real E2E gate passes.
-3. **Production adapter/application trust is not ready for public
-   distribution.** Package verification still relies on shared-secret HMAC
-   trust rather than asymmetric signatures with public verification keys.
-4. **Production coverage/maturity remains incomplete.** Claude Code/Ollama,
-   live provider acceptance, broader failure/security coverage and background
-   desktop/update UX remain.
-
-v7 should therefore be described as:
-
-> **desktop vertical slice implemented; architecture convergence and production
-> release gates still in progress.**
-
-## Product boundary
+## Current product boundaries
 
 ### Conclave AX
 
-Conclave AX is the **web application**.
+The web application owns human authentication, Projects, Workstreams, Discuss,
+Work, Workspace grants, remote Worker inventory and Cloud scheduling controls,
+results, artifacts, and audit. It does not create local Worker credentials.
 
-It owns:
-- human sign-in;
-- Projects and Workstreams;
-- Discuss and Work;
-- Workspace creation/grants;
-- remote Worker inventory;
-- Cloud scheduling/authorization controls;
-- results, artifacts and audit;
-- downloads/onboarding.
+### Conclave Cloud
 
-It does not create/authenticate local Workers.
+Cloud owns collaboration and scheduling state, Workspace registration/grants,
+safe inventory projections, Project/Workstream execution policy, assignments,
+and the Workspace Gateway. Cloud never receives provider credentials and does
+not make local Worker readiness or permissions broader.
 
 ### Conclave Workspace
 
-Conclave Workspace is the **desktop application/runtime** installed on the
-execution computer.
-
-It owns:
-- pairing;
-- persistent Cloud connection;
-- machine facts;
-- Work Root and Workstream directories;
-- local Worker creation/edit/removal;
-- provider authentication/API credentials;
-- local permissions;
-- adapter packages;
-- child process execution;
-- diagnostics and updates.
-
-All configured Workers originate here.
-
-## Desktop pairing and runtime status
-
-The intended V7 flow is implemented:
-
-~~~text
-Conclave AX web
--> Create Workspace
--> Connect machine
--> create one-time workspace_enrollment
--> show pairing code
-
-Conclave Workspace desktop
--> enter pairing code
--> POST /api/workspace-runtime/enroll
--> receive runtime ID + bearer token
--> store bearer token in OS secure store
--> store non-secret registration locally
--> connect /api/workspace-gateway/connect
--> workspace.hello
--> inventory sync
-~~~
-
-The repository also provides:
-
-~~~text
-bash scripts/build-workspace-macos.sh
-~~~
-
-and:
-
-~~~text
-CONCLAVE_ENROLLMENT_TOKEN=...   bash scripts/test-workspace-cloud-connection.sh
-~~~
-
-The remaining release work is production sign/notarize execution, update
-maturity, menu-bar/background UX, and full failure/recovery acceptance.
-
-## Worker Type naming
-
-Worker Type names identify the **execution integration**, not the subscription
-brand and not a model family.
-
-### Correct
-
-- **Codex** — invokes Codex CLI. Authentication may be a ChatGPT account.
-- **Antigravity** — invokes Google Antigravity CLI (`agy`).
-- **Claude Code** — invokes Claude Code.
-- **OpenAI API** — direct provider API.
-- **Gemini API** — direct Gemini API.
-- **Anthropic API** — direct Anthropic API.
-- **Ollama** — local Ollama service.
-
-### Incorrect / misleading
-
-- **ChatGPT Worker** for the Codex CLI integration;
-- **Gemini Worker** when the actual integration is Antigravity;
-- one Worker Type per model such as Gemini Pro, GPT-5.x or Claude Sonnet.
-
-If Conclave later supports a distinct Gemini CLI integration, it should be a
-separate Worker Type rather than being conflated with Antigravity or Gemini API.
-
-## Current implementation strengths
-
-### Workspace-local Worker ownership
-
-The local Worker registry is implemented with:
-- immutable local Worker IDs;
-- direct Workspace ownership;
-- revisioned/checksummed local persistence;
-- secure credential references rather than plaintext provider secrets;
-- local permissions/model/concurrency configuration;
-- safe Cloud inventory projection.
-
-### Adapter execution
-
-The V7 adapter path provides:
-- signed-manifest/package admission;
-- digest verification;
-- explicit package-relative executable;
-- permission checks;
-- bounded structured protocol;
-- per-assignment child processes;
-- bounded/redacted output;
-- Workstream CWD isolation;
-- process-tree cancellation;
-- per-Worker local concurrency;
-- package health checks and rollback.
-
-### First-party adapter foundation
-
-Implemented V7 adapter packages include:
-- Codex;
-- Antigravity;
-- OpenAI API;
-- Gemini API;
-- Anthropic API.
-
-Claude Code and Ollama are visible in local setup but do not yet have equivalent
-complete V7 package/execution coverage.
-
-### Safe inventory and AX execution UX
-
-The Workspace reports credential-free Worker inventory and Cloud stores it in
-`workspace_worker_inventory`.
-
-Conclave AX reads the owner-scoped V7 inventory and no longer exposes normal
-Cloud-side Worker creation/binding setup.
-
-## Remaining architecture gaps
-
-### 1. Hybrid V7 + V6 scheduler
-
-`apps/cloud/src/v5-scheduler.ts` currently queries both:
-
-~~~text
-workspace_worker_inventory
-~~~
-
-and the legacy V6 candidate graph:
-
-~~~text
-configured_workers
-worker_workspace_bindings
-workspace_worker_credentials
-~~~
-
-and merges the results.
-
-This preserves migration compatibility, but it means V7 is not yet the sole
-execution architecture.
-
-**Required completion:** make V7 Worker inventory + Cloud scheduling state +
-grants/policies sufficient for candidate selection, prove that path end to end,
-then remove V6 candidate resolution.
-
-### 2. Missing independent remote scheduling state
-
-For V7 rows the current scheduler effectively derives scheduling availability
-from local Worker readiness.
-
-V7 requires independent Cloud-owned operational state:
-
-~~~text
-enabled
-disabled
-draining
-~~~
-
-This state may narrow local capability but can never make an unready Worker
-ready or broaden local permissions.
-
-**Required completion:** persistence + API + AX controls + scheduler semantics +
-audit for enable/disable/drain.
-
-### 3. Legacy V6 Worker API remains
-
-The Cloud router still exposes V6 configured Worker operations including:
-- Cloud Worker creation;
-- Worker update/revoke;
-- Worker <-> Workspace binding CRUD;
-- per-binding setup/reauthentication;
-- per-binding credential operations.
-
-These are no longer part of the normal AX UX, but they remain live backend
-architecture.
-
-**Required completion:** retire them after real V7 execution acceptance and
-remove the corresponding runtime dependencies/tests.
-
-### 4. Legacy V6 persistence remains
-
-The schema still contains:
-- `configured_workers`;
-- `worker_workspace_bindings`;
-- `workspace_worker_credentials`.
-
-The V7 projection lives separately in `workspace_worker_inventory`.
-
-**Required completion:** use a forward migration to remove obsolete tables only
-after no production code depends on them. Do not rewrite already-applied
-production migrations.
-
-### 5. Production adapter/release trust
-
-`WorkerTrustPolicy` currently verifies release/package signatures with
-HMAC-SHA256 shared secrets.
-
-That is suitable for development fixtures but not public desktop distribution,
-because a verifier holding the shared signing secret can also produce valid
-signatures.
-
-**Release requirement:**
-- asymmetric signing, recommended Ed25519;
-- private key only in release infrastructure;
-- public verification key(s) trusted by Workspace;
-- key IDs;
-- rotation and revocation;
-- manifest + package digest binding retained.
-
-The same principle should be applied to Workspace application update metadata.
-
-This remains a **V7 production release gate**.
-
-### 6. First-party adapter release workflow
-
-Cloud catalog/storage and package publication primitives exist, but there is no
-repeatable first-party CI release workflow that builds, tests, signs, publishes,
-downloads and verifies adapters.
-
-**Required completion:** add a dedicated adapter release workflow with
-development/beta/stable and revocation procedures.
-
-### 7. Claude Code and Ollama are only partially supported
-
-The local Add Worker catalog exposes both.
-
-However:
-- Claude Code does not yet have the complete first-party V7 adapter package and
-  local auth lifecycle equivalent to Codex/Antigravity;
-- Ollama lacks the complete V7 adapter package, endpoint reachability/model
-  discovery and execution coverage.
-
-A production catalog should not advertise a Worker Type as supported unless it
-can become Ready and execute.
-
-### 8. Inventory reconciliation acceptance
-
-Revision checks and tombstones are exercised by the configured Worker API
-acceptance suite, including authoritative omission and reconnect idempotence.
-
-Verify:
-- omitted Worker reconciliation;
-- reconnect;
-- stale/equal revision;
-- re-pairing;
-- cross-Workspace Worker ID conflict.
-
-### 9. V7 runtime acceptance
-
-The schema-only `apps/cloud/test/v7-schema-lifecycle-acceptance.test.ts` directly inserts:
-- V7 Worker inventory;
-- Project/grant/workstream state;
-- completed Worker assignment.
-
-The real runtime round trip is covered by
-`apps/cloud/test/v7-runtime-e2e.acceptance.test.ts`. It uses a Dart Workspace
-bridge over stdio, real `HostCloudConnection`, local registry and package
-admission, the Cloud scheduler and Workspace Gateway, and an adapter child
-process. The test verifies progress, ID-only Workstream CWD, local Worker / Type
-attribution, and persisted Cloud result without a V6 binding candidate.
-
-The V7 execution migration-safety gate now passes. Keep the schema acceptance
-and runtime acceptance separate so fixture insertion is not confused with a
-product execution proof.
-
-### 10. Background desktop UX
-
-Closing the main macOS window no longer has to terminate the runtime, but a real
-menu-bar/tray product surface is still missing.
-
-Required maturity:
-- status;
-- current work;
-- pause/resume;
-- drain;
-- reopen;
-- diagnostics/logs;
-- quit behavior with active assignments.
-
-### 11. Workspace update integration
-
-The update controller already includes useful release discovery, download,
-verification, staging, health and rollback primitives.
-
-Remaining issues include:
-- production native `.app` replacement/restart flow;
-- active-assignment drain behavior;
-- consistent update trust;
-- using the build-injected Workspace version instead of a hard-coded runtime
-  `0.1.0` value.
-
-### 12. Adapter protocol documentation
-
-The implemented initial V7 protocol includes:
-
-~~~text
+Workspace is the persistent desktop runtime and machine security boundary. It
+owns pairing, runtime identity, local Workers and credentials, local
+permissions and prerequisites, adapter admission, Work Root/Workstream
+directories, child-process execution, cancellation, logs, and diagnostics.
+Cloud controls only remote scheduling state and authorization.
+
+## Implemented evidence
+
+- Workspace-created Workers synchronize as safe inventory and belong to exactly
+  one owning Workspace.
+- Cloud scheduling state distinguishes enabled, disabled, and draining from
+  local readiness. Scheduler V7 assignment resolution no longer reads V6
+  configured-Worker binding/credential rows.
+- The real V7 E2E acceptance path exercises Cloud scheduling, Workspace Gateway,
+  local Worker resolution, adapter admission/child execution, progress, and
+  result persistence without a usable V6 binding candidate.
+- V6 Worker mutation APIs, runtime fallback, and obsolete persistence were
+  retired through forward migrations. Historical migrations remain unchanged.
+- Adapter and Workspace release metadata use Ed25519 public-key verification;
+  release workflows publish immutable records and read back packages for
+  verification. See [release trust operations](../security/RELEASE_TRUST_AND_ROTATION.md).
+- Workspace has V7 packages for Codex, Antigravity, Claude Code, Ollama, and the
+  API Worker Types. Mock/protocol tests do not replace real provider acceptance.
+- macOS menu-bar controls, build-injected version reporting, diagnostics, and
+  production Workstream directory wiring are present. The native `.app` updater
+  is not complete.
+
+## Remaining release gates
+
+### Phase 5 — production Worker acceptance
+
+Run and record opt-in live acceptance for Codex with a real local account,
+Antigravity with a real `agy` session, and API Workers with real credentials.
+Confirm authentication expiry/remediation, model behavior, cancellation, and
+stateful Workstream execution. Validate the Ollama local endpoint against a real
+service. Keep secrets and billable calls out of routine CI.
+
+### Phase 6 — failure, recovery, and security
+
+The regression map in [V7 failure/recovery acceptance](V7_FAILURE_RECOVERY_ACCEPTANCE.md)
+covers many deterministic cases. Its limits still include real provider expiry,
+OS power/process failure, production release deployment, and complete
+reconnect-time cancellation/update scenarios. The Phase 6 exit gate is open
+until required cases pass at their operational boundaries and produce safe
+diagnostics.
+
+### Phase 7 — desktop runtime recovery
+
+The macOS menu bar exposes connection status, active assignment count, app
+navigation, pause/resume, drain, diagnostics/logs, and quit. The application
+version is build-injected and shared across runtime/update reporting. However,
+the current update mechanism is not a complete signed `.app` replacement flow:
+download/verification, drain, bundle staging/replacement, restart, health
+check, and rollback need to work as one native update transaction. Keep this
+gate open until an end-to-end app update test proves the transaction.
+
+## Initial V7 adapter protocol
+
+Protocol version 1.0 contains these operations/events:
+
+```text
 initialize
 validate
 execute
@@ -389,57 +100,22 @@ result
 error
 health
 version
-~~~
+```
 
-Architecture text also mentions request-input where supported, but a structured
-interactive request/response pair is not currently part of the V7 schema.
+Interactive request/response input is not part of the initial protocol. Add it
+only as a versioned extension when a production-supported adapter requires it.
 
-Treat interactive input as deferred until a supported adapter requires it, or
-add it through an explicit versioned protocol extension.
+## Historical architecture notes
 
-## Recommended completion sequence
+Architecture v4–v6 and ADR-009/ADR-010 remain historical decision records.
+Workstream isolation and ID-derived paths from ADR-009 remain current where
+compatible. ADR-010's Cloud-created, multi-Workspace Worker bindings are
+superseded by [ADR-012](../decisions/ADR-012-workspace-owned-local-workers.md).
+No current runtime may infer ownership from those historical binding rules.
 
-Use the dedicated
-[Architecture v7 completion plan](../roadmaps/ARCHITECTURE_V7_COMPLETION.md).
+## Baseline declaration rule
 
-Current status and sequence:
-
-1. **Phase 1 — complete:** V7 scheduling state, snapshot reconciliation and
-   V7-only candidate contract.
-2. **Phase 2 — next:** real V7 scheduler -> Gateway -> Workspace -> adapter E2E
-   migration-safety gate.
-3. **Phase 3:** remove V6 scheduler/API/persistence compatibility.
-4. **Phase 4:** asymmetric adapter/application trust and release automation.
-5. **Phase 5:** complete production Worker Type coverage and live acceptance.
-6. **Phase 6:** broader failure/recovery/security hardening.
-7. **Phase 7:** macOS menu-bar/update/diagnostics maturity.
-8. **Phase 8:** final documentation convergence and V7 baseline declaration.
-
-The E2E harness is a hard prerequisite for destructive V6 cleanup.
-
-## Definition of V7 complete
-
-V7 can be considered the implemented baseline when:
-
-1. a new user creates a Workspace in Conclave AX;
-2. installs the macOS Conclave Workspace build;
-3. pairs with the one-time code;
-4. AX reports the real machine/runtime state;
-5. the user creates/authenticates a Worker only in Workspace;
-6. the Worker appears automatically in AX;
-7. Cloud scheduling state can enable/disable/drain it independently of local
-   readiness;
-8. Project/Workstream policy can select it;
-9. scheduler dispatches it without V6 binding dependency;
-10. Workspace resolves the local Worker and verified adapter;
-11. adapter executes in the ID-only Workstream directory;
-12. result reaches Cloud/AX;
-13. no provider secret enters Cloud;
-14. legacy V6 Worker bindings/APIs are not required by the current execution
-   architecture;
-15. production adapter verification uses public-key trust;
-16. first-party production Worker Types have signed releases;
-17. real failure/security/reconnect acceptance passes;
-18. macOS build/sign/notarize and desktop-to-Cloud smoke procedures pass;
-19. the runtime reports/updates using the real packaged application version;
-20. background desktop lifecycle is production-usable.
+Keep Architecture v7 labeled **active implementation target** until every
+checkbox in the [release gate matrix](../roadmaps/ARCHITECTURE_V7_COMPLETION.md#v7-architecture-release-gates)
+is supported by current evidence. Phase 8 documentation is converged enough to
+state the current architecture, but it does not waive Phase 5–7 acceptance.

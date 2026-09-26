@@ -1,58 +1,69 @@
 # Conclave AX Architecture
 
-Architecture v6 is the historical Workstream/filesystem baseline. Architecture v7 is the active execution architecture for Workspace-owned local Workers and managed adapter processes, defined by ADR-012. Phase 3 removes the V6 configured-Worker compatibility runtime and persistence; earlier V6 architecture documents remain historical references.
+**Current architecture:** v7 — Workspace-owned Workers and managed adapter
+execution. V7 is the sole current Worker ownership model and remains an active
+implementation target until its production release gates pass.
 
-## Current v5 model
+## Product model
 
-> **Projects are collaboration. Workspaces provide execution. Workers are configured AI/tool identities. Credential state remains an internal security concern beneath Workers.**
-
-Read:
-- [Architecture v5](docs/architecture/ARCHITECTURE_V5.md)
-- [v5 guardrails](docs/architecture/V5_GUARDRAILS.md)
-- [ADR-008](docs/decisions/ADR-008-project-centric-workspaces.md)
-
-## v6 baseline
-
-v6 keeps the v5 Project/Workspace boundary and introduces Workstream as the unit of collaborative work and mutable state.
-
-> **Projects contain Workstreams. People talk in Discuss. AI work starts only from Work. Each Workstream uses one isolated persistent local working directory on its Primary Workspace, identified only by immutable Project and Workstream IDs.**
-
-Read v6 for the current Workstream/filesystem baseline:
-- [Architecture v6](docs/architecture/ARCHITECTURE_V6.md)
-- [v6 source audit](docs/architecture/V6_SOURCE_AUDIT.md)
-- [v6 implementation roadmap](docs/roadmaps/ARCHITECTURE_V6_IMPLEMENTATION.md)
-- [ADR-009](docs/decisions/ADR-009-workstreams-isolated-execution.md)
-- [ADR-010](docs/decisions/ADR-010-configured-worker-execution-model.md)
-- [Configured Worker implementation roadmap](docs/roadmaps/CONFIGURED_WORKER_EXECUTION.md)
-- [ADR-011](docs/decisions/ADR-011-workstream-working-directories.md)
-- [Workstream working-directory roadmap](docs/roadmaps/WORKSTREAM_WORKING_DIRECTORIES.md)
-
-### EW-0 execution vocabulary
-
-The configured-Worker model is accepted and its vocabulary is frozen:
+> **Projects are collaboration. Workspaces provide machine execution. Workers
+> are created and configured locally by their owning Workspace. Cloud
+> authorizes and schedules; the owning Workspace executes.**
 
 ```text
-Execution
-├── Workspaces
-└── Workers
+Conclave AX -> Conclave Cloud -> Conclave Workspace -> Worker adapter process
 ```
 
-Worker Type is adapter/catalog infrastructure. Under the active v7 target, a
-Worker is created/authenticated in Conclave Workspace and belongs to exactly one
-Workspace. AI Account and Credential Profile are not peer product resources.
+- **Conclave AX** is the human-facing web application for Projects, Workstreams,
+  Discuss, Work, Workspace grants, scheduling controls, results and audit.
+- **Conclave Cloud** is the authoritative collaboration and scheduling control
+  plane. It stores safe Workspace inventory and never receives provider
+  credentials.
+- **Conclave Workspace** is the persistent desktop runtime and machine security
+  boundary. It owns local Workers, credentials, permissions, prerequisites,
+  Work Root, adapter admission, process execution and local diagnostics.
+- **Worker Type** identifies a managed integration such as Codex, Claude Code,
+  an API provider, or Ollama. Models are Worker configuration, not Worker Types.
 
-Architecture v4 and earlier are historical only.
+Each configured Worker belongs to exactly one Workspace. Cloud scheduling state
+can enable, disable, or drain that Worker, but cannot make a locally unready
+Worker executable or broaden local permissions. Project/Workstream policy and
+Workspace grants narrow scheduling eligibility.
 
+## Workstream and execution protocol
 
-## Architecture v7 migration target
+Each Workstream has an ID-derived local directory under the Workspace Work
+Root. Stateful execution is fenced and restricted to the Workstream Primary
+Workspace. Stateless work may use another eligible Workspace only when grants
+and policy allow it.
 
-v7 keeps the v6 Project/Workstream and ID-only working-directory model, but simplifies Worker ownership:
+The initial V7 adapter protocol consists of `initialize`, `validate`,
+`execute`, `progress`, `result`, `error`, `health`, and `version` messages.
+Interactive request/response input is a future versioned extension unless a
+production-supported adapter requires it.
 
-> **Conclave Workspace is the machine runtime. A configured Worker belongs to exactly one Workspace and is created/authenticated locally. Worker Type is a managed adapter; model is configuration. Conclave AX discovers and schedules Workers remotely.**
+## Implementation status
 
-Read:
+V7 ownership, Cloud scheduling, real V7 assignment execution, and V6 Worker
+compatibility retirement are implemented. Production Worker coverage,
+adversarial acceptance, and native macOS app update recovery remain open; do
+not describe V7 as the implemented baseline until all release gates pass.
+
+## Current references
+
 - [Architecture v7](docs/architecture/ARCHITECTURE_V7.md)
-- [ADR-012](docs/decisions/ADR-012-workspace-owned-local-workers.md)
-- [v7 implementation roadmap](docs/roadmaps/ARCHITECTURE_V7_IMPLEMENTATION.md)
+- [ADR-012: Workspace-owned Workers](docs/decisions/ADR-012-workspace-owned-local-workers.md)
+- [Applications and product boundaries](docs/architecture/APPLICATIONS.md)
+- [Technology stack](docs/architecture/TECH_STACK.md)
+- [V7 implementation audit](docs/architecture/V7_IMPLEMENTATION_AUDIT.md)
+- [V7 completion plan and release gates](docs/roadmaps/ARCHITECTURE_V7_COMPLETION.md)
+- [V7 failure and security acceptance](docs/architecture/V7_FAILURE_RECOVERY_ACCEPTANCE.md)
+- [Deployment guidance](docs/deployment/CLOUDFLARE.md)
+- [Workspace and adapter release operations](docs/deployment/WORKSPACE_RELEASES.md)
+- [Release trust and key rotation](docs/security/RELEASE_TRUST_AND_ROTATION.md)
 
-The V6 Cloud-created, multi-Workspace Worker backend has been retired. Current product code uses Workspace-owned Workers, safe Cloud inventory, Cloud scheduling authorization, and execution by the owning Workspace. New Worker architecture work follows V7 ownership rules.
+## Historical documents
+
+Architecture v4–v6 and ADR-009/ADR-010 preserve the decisions made during the
+earlier migration. Where their Worker ownership or Cloud binding rules conflict
+with ADR-012, ADR-012 and Architecture v7 define current behavior.

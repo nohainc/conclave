@@ -34,15 +34,14 @@ Phases 1–3 are implemented: Cloud-owned V7 scheduling state and inventory,
 real V7 end-to-end assignment execution, and retirement of V6 Worker
 compatibility APIs, scheduler fallback, and persistence.
 
-The remaining sequence is intentionally:
+Phase 4's Ed25519 trust and first-party release workflows are implemented. The
+remaining release sequence is:
 
-1. **Phase 4:** replace shared-secret release trust with asymmetric signing and
-   automate release publication;
-2. **Phase 5:** finish production Worker coverage and live-provider acceptance;
-3. **Phase 6:** harden failure/recovery/security behavior;
-4. **Phase 7:** menu-bar lifecycle, runtime version reporting, diagnostics, and Workstream execution wiring are implemented; native `.app` replacement/restart/rollback remains open;
-5. **Phase 8:** declare v7 the implemented baseline only after all release
-   gates pass.
+1. **Phase 5:** finish supported-catalog and real-provider acceptance;
+2. **Phase 6:** close operational failure/recovery/security acceptance;
+3. **Phase 7:** finish the native `.app` replacement/restart/health-check/rollback transaction;
+4. **Phase 8:** keep documentation aligned now; declare v7 the implemented
+   baseline only after every release gate passes.
 
 The Phase 2 behavioral E2E migration-safety gate passes and remains a regression test for the V7 execution path.
 

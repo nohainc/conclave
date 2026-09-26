@@ -1,6 +1,6 @@
 # Architecture v7 — Workspace-Owned Workers Implementation Roadmap
 
-**Status:** In progress
+**Status:** Current V7 implementation roadmap; production acceptance gates remain open
 **Architecture:** [ARCHITECTURE_V7.md](../architecture/ARCHITECTURE_V7.md)  
 **Decision:** [ADR-012](../decisions/ADR-012-workspace-owned-local-workers.md)  
 **Date:** 2026-09-26
@@ -36,25 +36,30 @@ update/provider-expiry acceptance.
 - [x] **Conclave AX Worker setup boundary.** Normal web UX no longer creates/authenticates/binds legacy Cloud Workers; it shows the safe Worker inventory reported by Conclave Workspace.
 - [x] **Antigravity CLI contract correction.** Worker Type remains **Antigravity**; the adapter uses Google's supported `agy` executable/headless stream contract rather than a generic "Gemini adapter" or Codex-style flags.
 
-### Partial / remaining v7 convergence
+### Current production/release work
 
-- [~] **V7-3 — local Add Worker UX.** Desktop setup/edit/disable/remove exists for Codex, Antigravity and API-backed Workers. First-party adapter releases still require a repeatable production publication pipeline; Claude Code/Ollama execution coverage is incomplete.
-- [~] **V7-4 — production adapter trust.** Manifest/package admission, digest checks, health checks and rollback exist, but release trust still uses a shared HMAC secret. Public desktop distribution requires asymmetric signing: private key in release infrastructure, public verification key(s) in Conclave Workspace.
-- [~] **V7-7 — Antigravity live acceptance.** Adapter now targets official `agy` headless mode. Real Google-account acceptance remains opt-in/manual because it requires a provider account/quota.
-- [~] **V7-8 — API adapters.** OpenAI/Gemini/Anthropic provider adapters and mocked validation exist; opt-in live-provider acceptance and richer streaming/tool behavior remain.
-- [~] **V7-10/V7-11 — Cloud model/control cleanup.** Independent Cloud-owned scheduling state (`enabled` / `disabled` / `draining`), drain auditing and V7 operational-control routes are implemented. Legacy V6 configured-Worker/binding persistence and APIs remain for compatibility and are removed only after the Phase 2 real E2E gate passes.
-- [~] **V7-12/V7-13 — web execution UX cleanup.** Normal AX Worker setup is local-only and AX now exposes V7 scheduling state plus enable/disable/drain controls. Obsolete legacy data models/callbacks and activity gaps remain until the V6 backend path is removed.
-- [~] **V7-14/V7-15 — scheduler/authorization cleanup.** The V7 candidate contract now requires local readiness plus independent Cloud scheduling state and has a test proving V7 selection can skip the V6 binding query. The legacy V6 fallback still exists; do not remove it until the Phase 2 scheduler -> Gateway -> Workspace -> adapter E2E gate passes.
-- [~] **V7-17 — background desktop UX.** macOS no longer terminates when the main window closes; a real menu-bar/tray/reopen/drain UX remains.
-- [~] **V7-18 — local permission/auth maturity.** Local credential storage and permission ceilings are enforced; provider-specific reauthentication/attention UX remains uneven.
-- [~] **V7-19 — release/update maturity.** Adapter rollback exists and macOS package/sign/notarize support now exists; app self-update and production adapter key rotation remain.
-- [~] **V7-21 — observability.** Useful runtime/Worker status and audit exist without Usage accounting; desktop diagnostics can be expanded.
-- [ ] **V7-22 — remove legacy v6 Worker compatibility.**
+- [~] **V7-3 — local Add Worker UX and production support.** Setup/edit/disable/remove and first-party V7 package implementations exist for Codex, Antigravity, Claude Code, Ollama, and API Workers. Real opt-in provider/service acceptance and supported-catalog proof remain.
+- [x] **V7-4 — production adapter trust.** Adapter and Workspace release metadata use Ed25519, public trust roots, key IDs, rotation/revocation, and first-party release workflows. See [release trust/key rotation](../security/RELEASE_TRUST_AND_ROTATION.md).
+- [~] **V7-7 — Antigravity live acceptance.** Adapter targets official `agy` headless mode. Real Google-account acceptance remains opt-in/manual.
+- [~] **V7-8 — API adapters.** OpenAI/Gemini/Anthropic provider adapters and mocked validation exist; opt-in live-provider acceptance remains. Streaming/tool extensions are not an architecture blocker by themselves.
+- [x] **V7-10/V7-11 — Cloud model/control.** Independent Cloud-owned scheduling state, drain auditing, and V7 operational-control routes are implemented.
+- [x] **V7-12/V7-13 — web execution UX.** AX uses Workspace-owned inventory and exposes V7 scheduling state and controls; Cloud Worker creation/binding setup is retired.
+- [x] **V7-14/V7-15 — scheduler/authorization.** V7 candidate selection is V7-complete and the E2E assignment path passes without V6 binding resolution.
+- [~] **V7-17 — background desktop UX.** macOS menu-bar status, open/reopen, pause/resume, drain, diagnostics/logs, and quit controls are implemented. Native `.app` update/restart/rollback remains.
+- [~] **V7-18 — local permission/auth maturity.** Local credentials and permission ceilings are enforced. Live expiry/remediation and full local-attention acceptance remain.
+- [~] **V7-19 — release/update maturity.** Signed release workflows and adapter rollback exist. Native Workspace `.app` self-update transaction remains.
+- [~] **V7-21 — observability.** Bounded safe diagnostics include runtime identity/version, Cloud state, Worker/adapter/prerequisite status, Work Root, assignments, and sync/update timestamps; operational recovery diagnostics still need acceptance.
+- [x] **V7-22 — remove legacy v6 Worker compatibility.** Scheduler/API/persistence compatibility was removed with a forward migration.
 - [x] **V7-23…V7-27 — runtime migration-safety acceptance.** `v7-runtime-e2e.acceptance.test.ts` drives local Worker creation and inventory, Cloud enablement and Project scheduling, Gateway dispatch, V7 adapter admission/child execution, progress, ID-only Workstream CWD, and persisted result. It runs in the dedicated trusted CI job. The schema-only test remains separate; Phase 3 cleanup may now proceed.
 
 See [V7 Implementation Audit](../architecture/V7_IMPLEMENTATION_AUDIT.md) for the current convergence and release gates. The ordered remaining work is maintained in [Architecture v7 Completion Plan](ARCHITECTURE_V7_COMPLETION.md).
 
 ## Objective
+
+The step-by-step sections below preserve the implementation plan and migration
+history. Completed V6 migration tasks are not active compatibility requirements.
+Use the current status above and the [V7 implementation audit](../architecture/V7_IMPLEMENTATION_AUDIT.md)
+for present behavior and remaining release gates.
 
 Move Conclave AX from the current v6 configured-Worker model:
 

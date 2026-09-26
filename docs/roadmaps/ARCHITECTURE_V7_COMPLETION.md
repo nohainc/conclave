@@ -617,6 +617,11 @@ first-party release publication is repeatable.
 
 # Phase 5 — Complete production Worker Type coverage
 
+**Status:** Adapter packages for Codex, Antigravity, Claude Code, Ollama, and
+OpenAI/Gemini/Anthropic APIs are present with protocol/provider-mock coverage.
+Opt-in live acceptance and proof for each production-supported catalog entry
+remain required before closing this phase.
+
 ## Goal
 
 Every Worker Type shown as production-supported in Conclave Workspace can
@@ -674,6 +679,10 @@ validated and executed through V7.
 ---
 
 # Phase 6 — Failure, recovery and security hardening
+
+**Status:** Deterministic recovery/security coverage is mapped in
+[V7 Failure and Security Acceptance Coverage](../architecture/V7_FAILURE_RECOVERY_ACCEPTANCE.md).
+The exit gate remains open for the operational-boundary cases listed there.
 
 ## Goal
 
@@ -803,6 +812,10 @@ on the main window remaining open.
 
 # Phase 8 — Documentation and V7 baseline declaration
 
+**Status:** Documentation is being converged on V7 as the current ownership
+architecture. The implemented-baseline declaration is deferred because Phase
+5–7 release gates remain open.
+
 ## Goal
 
 Make the repository describe one current implemented architecture.
@@ -863,19 +876,22 @@ V7 is implemented when all of the following are true:
 - [x] Legacy Cloud-created configured Worker/binding APIs are removed from the
   current product architecture.
 - [x] V6 binding persistence is no longer required for execution.
-- [ ] Production adapter/application verification uses asymmetric public-key
+- [x] Production adapter/application verification uses asymmetric public-key
   trust.
-- [ ] First-party adapter release automation exists.
+- [x] First-party adapter release automation exists for adapter and Workspace
+  release metadata publication/readback.
 - [ ] Every Worker Type exposed as production-supported can become Ready and
   execute.
 - [ ] Codex and Antigravity pass real opt-in acceptance.
-- [ ] Reconnect/removal/stale-revision behavior passes behavioral E2E
+- [x] Inventory omission/reconnect/stale-revision and duplicate snapshot
+  behavior passes behavioral E2E
   acceptance.
 - [ ] Failure/recovery and security acceptance pass.
 - [ ] macOS build/sign/notarize procedure passes.
 - [x] Desktop-to-Cloud enrollment + Workspace Gateway smoke procedure exists.
-- [ ] Workspace runtime uses the actual packaged application version.
-- [ ] Background/menu-bar lifecycle is production-usable.
+- [x] Workspace runtime uses the actual packaged application version.
+- [ ] Background/menu-bar lifecycle and native update recovery are
+  production-usable.
 - [ ] Provider secrets never enter Cloud state, events, artifacts or logs in
   E2E/security acceptance.
 
@@ -886,28 +902,20 @@ V7 is implemented when all of the following are true:
 | 1 — V7 Cloud scheduling/inventory | ✅ Implemented | Unit/integration contract complete |
 | 2 — Real V7 E2E migration-safety gate | ✅ Implemented | Regression gate passes unchanged |
 | 3 — Remove V6 compatibility | ✅ Implemented | V7 scheduler/runtime/API and forward migration complete |
-| 4 — Production release trust | Pending | Required for public distribution |
-| 5 — Production Worker coverage | Pending | Required for supported catalog |
-| 6 — Failure/security hardening | Pending | Required for V7 baseline |
+| 4 — Production release trust | Implemented | Ed25519 verification, revocation, and release workflows; retain operational key procedures |
+| 5 — Production Worker coverage | In progress | Adapter packages/mocks exist; live provider and catalog acceptance remain |
+| 6 — Failure/security hardening | In progress | Broad deterministic coverage mapped; operational-boundary acceptance remains |
 | 7 — Desktop runtime maturity | In progress | Menu bar/version/diagnostics implemented; native `.app` updater remains open |
-| 8 — Baseline/docs declaration | Pending | Requires all release gates |
+| 8 — Baseline/docs declaration | Documentation converged; declaration deferred | Phase 5–7 gates must pass before V7 becomes the implemented baseline |
 
 ## Recommended PR sequence from current main
 
-Keep completion work reviewable and reversible:
-
-1. **Phase 2 / PR B — real V7 end-to-end integration harness**
-2. **Phase 3 / PR C — remove V6 scheduler/API/persistence compatibility**
-3. **Phase 4 / PR D — asymmetric adapter + Workspace release trust**
-4. **Phase 4 / PR E — first-party adapter release workflow**
-5. **Phase 5 / PR F — Claude Code + Ollama V7 adapters**
-6. **Phase 5/6 / PR G — live adapter acceptance + failure/security hardening**
-7. **Phase 7 / PR H — macOS menu-bar/update/diagnostics maturity**
-8. **Phase 8 / PR I — final V7 docs/baseline declaration**
-
-Phase 1 is already implemented in `main@2c740092`. Phase 2 deliberately
-precedes destructive V6 cleanup. The real V7 path must be proven before the
-compatibility path is deleted.
+The remaining execution order is: (1) opt-in live Worker acceptance and
+catalog readiness, (2) close operational failure/security cases, (3) complete
+the native macOS `.app` update transaction, and (4) re-audit every checkbox
+before declaring V7 the implemented baseline. Phases 1–4 and V6 compatibility
+retirement are already implemented; the historical PR ordering above has been
+retired.
 
 ## Final target
 
