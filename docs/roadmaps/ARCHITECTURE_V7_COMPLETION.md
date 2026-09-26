@@ -212,7 +212,7 @@ V6 Worker bindings for a V7 assignment.
 
 # Phase 2 — Prove the real V7 end-to-end execution path
 
-**Status:** 🔄 Next active phase
+**Status:** ✅ Automated migration-safety gate passes; Phase 3 is next
 
 ## Why this phase moved ahead of cleanup
 
@@ -223,13 +223,16 @@ state is independent from local readiness.
 That is necessary but not sufficient before deleting the compatibility
 architecture.
 
-`apps/cloud/test/v7-schema-lifecycle-acceptance.test.ts` is explicitly a
-schema/lifecycle test because it inserts Worker inventory and completed
-assignment state directly. The Workspace-side
-`apps/host/test/v7_runtime_execution_acceptance_test.dart` now proves local
-registry ownership, signed V7 admission, child-process progress/result, and
-ID-only Workstream execution. These tests still do not prove the complete Cloud
-dispatch round trip. The remaining path is:
+`apps/cloud/test/v7-schema-lifecycle-acceptance.test.ts` remains explicitly a
+schema/lifecycle test. The migration-safety gate is
+`apps/cloud/test/v7-runtime-e2e.acceptance.test.ts`: it syncs a locally created
+Worker through `workspace.hello` and authoritative inventory, enables Cloud
+scheduling, dispatches a real workflow task through the Project scheduler and
+Workspace Gateway, executes the signed fixture adapter as a child process, and
+persists its progress/result and Workstream output in Cloud. The adapter has
+no provider credentials or network dependency. The focused Workspace test
+`apps/host/test/v7_runtime_execution_acceptance_test.dart` separately verifies
+registry ownership, admission, and the ID-only CWD contract.
 
 ~~~text
 scheduler
@@ -383,9 +386,17 @@ Before Phase 3 begins, the automated harness must also cover:
 More exhaustive failure/security testing remains a later hardening phase; Phase
 2 contains the subset required to make V6 deletion safe.
 
+The V7 runtime acceptance test covers V7-only dispatch with no V6 Worker or
+binding rows, scheduling enablement, secret boundaries, attribution to local
+Worker ID + Workspace ID + Worker Type, and Workstream filesystem behavior.
+The companion `v5-scheduler.test.ts`, `configured-worker-api.test.ts`,
+`worker_executor_test.dart`, and `cloud_connection_test.dart` cover scheduling
+rejection, capacity, reconciliation/reconnect, and process cancellation.
+
 ## 2.8 CI placement
 
-The deterministic fake-adapter E2E test should run in normal trusted CI and must
+The deterministic fake-adapter E2E test runs in the dedicated `v7-runtime-e2e`
+job in normal trusted CI and must
 not require:
 - Codex login;
 - Google/Antigravity login;
@@ -396,7 +407,7 @@ Keep real-provider acceptance opt-in and separate.
 
 ## Phase 2 exit gate
 
-Phase 2 is complete only when a clean V7 Worker completes a real Work assignment
+Phase 2 is complete when a clean V7 Worker completes a real Work assignment
 through:
 
 ~~~text
@@ -410,7 +421,8 @@ scheduler
 -> result returned and persisted in Cloud
 ~~~
 
-and that path does not require a V6 Worker binding.
+and that path does not require a V6 Worker binding. This is automated by
+`v7-runtime-e2e.acceptance.test.ts` and runs in trusted CI.
 
 > **Do not start destructive Phase 3 cleanup before this gate passes.**
 

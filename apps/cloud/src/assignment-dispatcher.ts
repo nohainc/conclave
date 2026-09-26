@@ -219,11 +219,13 @@ async function dispatchV5ProjectAssignment(
     };
   }
   const now = new Date().toISOString();
-  const attemptRow = await env.CONCLAVE_DB.prepare(
-    "SELECT COALESCE(MAX(attempt_number), 0) + 1 as next_num FROM attempts WHERE task_id = ?1",
-  )
-    .bind(taskId)
-    .first<{ next_num: number }>();
+  const attemptRow = target.isWorkspaceOwnedV7Worker
+    ? null
+    : await env.CONCLAVE_DB.prepare(
+        "SELECT COALESCE(MAX(attempt_number), 0) + 1 as next_num FROM attempts WHERE task_id = ?1",
+      )
+        .bind(taskId)
+        .first<{ next_num: number }>();
   const attemptNumber =
     params.explicitAttemptNumber ?? attemptRow?.next_num ?? 1;
   const randomPart = crypto.randomUUID().slice(0, 8);
@@ -235,29 +237,39 @@ async function dispatchV5ProjectAssignment(
     ...target.permissionSnapshot,
     selectionExplanation: target.selectionExplanation,
   };
-  await env.CONCLAVE_DB.prepare(
-    `INSERT INTO attempts (id, task_id, worker_id, attempt_number, input_snapshot_json, status, started_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, 'running', ?6)`,
-  )
-    .bind(
-      attemptId,
-      taskId,
-      target.workerId,
-      attemptNumber,
-      JSON.stringify(task.input ?? {}),
-      now,
+  if (!target.isWorkspaceOwnedV7Worker) {
+    await env.CONCLAVE_DB.prepare(
+      `INSERT INTO attempts (id, task_id, worker_id, attempt_number, input_snapshot_json, status, started_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, 'running', ?6)`,
     )
-    .run();
-  await env.CONCLAVE_DB.prepare(
-    `INSERT INTO worker_assignments
+      .bind(
+        attemptId,
+        taskId,
+        target.workerId,
+        attemptNumber,
+        JSON.stringify(task.input ?? {}),
+        now,
+      )
+      .run();
+  }
+  const assignmentInsert = target.isWorkspaceOwnedV7Worker
+    ? `INSERT INTO worker_assignments
+       (id, project_id, execution_workspace_id, workspace_project_grant_id,
+        run_id, task_id, attempt_id, requested_by_user_id, runtime_identity_id,
+        worker_id, workspace_worker_id, worker_version, account_id, model, config_json,
+        effective_permissions_json, permission_snapshot_json, timeout_ms,
+        idempotency_key, status, input_json, created_at, updated_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
+             ?15, ?16, ?17, ?18, ?19, 'created', ?20, ?21, ?21)`
+    : `INSERT INTO worker_assignments
        (id, project_id, execution_workspace_id, workspace_project_grant_id,
         run_id, task_id, attempt_id, requested_by_user_id, runtime_identity_id,
         worker_id, configured_worker_id, worker_version, account_id, model, config_json,
         effective_permissions_json, permission_snapshot_json, timeout_ms,
         idempotency_key, status, input_json, created_at, updated_at)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
-             ?15, ?16, ?17, ?18, ?19, 'created', ?20, ?21, ?21)`,
-  )
+             ?15, ?16, ?17, ?18, ?19, 'created', ?20, ?21, ?21)`;
+  await env.CONCLAVE_DB.prepare(assignmentInsert)
     .bind(
       assignmentId,
       target.projectId,
@@ -304,11 +316,19 @@ async function dispatchV5ProjectAssignment(
       },
     });
   }
-  await env.CONCLAVE_DB.prepare(
-    "UPDATE tasks SET status = 'running', updated_at = ?1 WHERE id = ?2",
-  )
-    .bind(now, taskId)
-    .run();
+  if (target.isWorkspaceOwnedV7Worker) {
+    await env.CONCLAVE_DB.prepare(
+      "UPDATE workflow_tasks SET status = 'running', updated_at = ?1 WHERE id = ?2 AND status IN ('queued', 'waiting')",
+    )
+      .bind(now, taskId)
+      .run();
+  } else {
+    await env.CONCLAVE_DB.prepare(
+      "UPDATE tasks SET status = 'running', updated_at = ?1 WHERE id = ?2",
+    )
+      .bind(now, taskId)
+      .run();
+  }
   const payload = {
     snapshot: {
       assignmentId,
@@ -361,7 +381,7 @@ async function dispatchV5ProjectAssignment(
       attemptId,
       workerId: target.workerId,
       agentId: target.workspaceRuntimeIdentityId,
-      workerCatalogId: target.workerId,
+      workerCatalogId: target.workerTypeId,
       status: "failed",
       accepted: false,
       error,
@@ -391,7 +411,7 @@ async function dispatchV5ProjectAssignment(
         (await response.text()) || `Gateway returned HTTP ${response.status}`,
       );
     await env.CONCLAVE_DB.prepare(
-      "UPDATE worker_assignments SET status = 'dispatched', updated_at = ?1 WHERE id = ?2",
+      "UPDATE worker_assignments SET status = 'dispatched', updated_at = ?1 WHERE id = ?2 AND status = 'created'",
     )
       .bind(new Date().toISOString(), assignmentId)
       .run();
@@ -406,7 +426,7 @@ async function dispatchV5ProjectAssignment(
       attemptId,
       workerId: target.workerId,
       agentId: target.workspaceRuntimeIdentityId,
-      workerCatalogId: target.workerId,
+      workerCatalogId: target.workerTypeId,
       status: "failed",
       accepted: false,
       error: message,
@@ -417,7 +437,7 @@ async function dispatchV5ProjectAssignment(
     attemptId,
     workerId: target.workerId,
     agentId: target.workspaceRuntimeIdentityId,
-    workerCatalogId: target.workerId,
+    workerCatalogId: target.workerTypeId,
     status: "dispatched",
     accepted: true,
   };
@@ -701,10 +721,15 @@ export async function recordAssignmentResult(
 
   const existing = await db
     .prepare(
-      `SELECT status, task_id, attempt_id FROM worker_assignments WHERE id = ?1`,
+      `SELECT status, task_id, attempt_id, workspace_worker_id FROM worker_assignments WHERE id = ?1`,
     )
     .bind(assignmentId)
-    .first<{ status: string; task_id: string; attempt_id: string }>();
+    .first<{
+      status: string;
+      task_id: string;
+      attempt_id: string;
+      workspace_worker_id?: string | null;
+    }>();
   if (!existing || existing.status === "completed") return;
   if (existing.status === "failed" || existing.status === "cancelled") return;
 
@@ -717,7 +742,14 @@ export async function recordAssignmentResult(
     .run();
 
   // 2. Query assignment context
-  if (existing) {
+  if (existing && existing.workspace_worker_id) {
+    await db
+      .prepare(
+        "UPDATE workflow_tasks SET status = 'completed', output_json = ?1, updated_at = ?2 WHERE id = ?3",
+      )
+      .bind(JSON.stringify(result), now, existing.task_id)
+      .run();
+  } else if (existing) {
     // 3. Update attempt
     await db
       .prepare(
@@ -748,10 +780,15 @@ export async function recordAssignmentError(
 
   const existing = await db
     .prepare(
-      `SELECT status, task_id, attempt_id FROM worker_assignments WHERE id = ?1`,
+      `SELECT status, task_id, attempt_id, workspace_worker_id FROM worker_assignments WHERE id = ?1`,
     )
     .bind(assignmentId)
-    .first<{ status: string; task_id: string; attempt_id: string }>();
+    .first<{
+      status: string;
+      task_id: string;
+      attempt_id: string;
+      workspace_worker_id?: string | null;
+    }>();
   if (
     !existing ||
     ["completed", "failed", "cancelled"].includes(existing.status)
@@ -766,7 +803,14 @@ export async function recordAssignmentError(
     .bind(JSON.stringify(failure), now, assignmentId)
     .run();
 
-  if (existing) {
+  if (existing?.workspace_worker_id) {
+    await db
+      .prepare(
+        "UPDATE workflow_tasks SET status = 'failed', error = ?1, updated_at = ?2 WHERE id = ?3",
+      )
+      .bind(failure.error.message, now, existing.task_id)
+      .run();
+  } else if (existing) {
     await db
       .prepare(
         `UPDATE attempts SET status = 'failed', failure_class = ?1, finished_at = ?2 WHERE id = ?3`,
@@ -791,14 +835,28 @@ export async function recordAssignmentCancelled(
   const now = new Date().toISOString();
   const existing = await db
     .prepare(
-      `SELECT status, task_id, attempt_id FROM worker_assignments WHERE id = ?1`,
+      `SELECT status, task_id, attempt_id, workspace_worker_id FROM worker_assignments WHERE id = ?1`,
     )
     .bind(assignmentId)
-    .first<{ status: string; task_id: string; attempt_id: string }>();
+    .first<{
+      status: string;
+      task_id: string;
+      attempt_id: string;
+      workspace_worker_id?: string | null;
+    }>();
   if (
     !existing ||
     ["completed", "failed", "cancelled"].includes(existing.status)
   ) {
+    return;
+  }
+  if (existing.workspace_worker_id) {
+    await db
+      .prepare(
+        "UPDATE workflow_tasks SET status = 'cancelled', updated_at = ?1 WHERE id = ?2",
+      )
+      .bind(now, existing.task_id)
+      .run();
     return;
   }
   await db

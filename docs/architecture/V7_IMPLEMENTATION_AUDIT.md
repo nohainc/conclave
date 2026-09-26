@@ -322,8 +322,8 @@ can become Ready and execute.
 
 ### 8. Inventory reconciliation acceptance
 
-Revision checks and tombstones exist, but authoritative snapshot behavior still
-needs explicit reconnect/omission acceptance.
+Revision checks and tombstones are exercised by the configured Worker API
+acceptance suite, including authoritative omission and reconnect idempotence.
 
 Verify:
 - omitted Worker reconciliation;
@@ -332,23 +332,23 @@ Verify:
 - re-pairing;
 - cross-Workspace Worker ID conflict.
 
-### 9. V7 solo acceptance is schema-oriented, not behavioral E2E
+### 9. V7 runtime acceptance
 
 The schema-only `apps/cloud/test/v7-schema-lifecycle-acceptance.test.ts` directly inserts:
 - V7 Worker inventory;
 - Project/grant/workstream state;
 - completed Worker assignment.
 
-It does not exercise:
-- live inventory synchronization;
-- actual scheduler selection;
-- Workspace Gateway dispatch;
-- local Worker registry resolution;
-- V7 adapter child process;
-- result return.
+The real runtime round trip is covered by
+`apps/cloud/test/v7-runtime-e2e.acceptance.test.ts`. It uses a Dart Workspace
+bridge over stdio, real `HostCloudConnection`, local registry and package
+admission, the Cloud scheduler and Workspace Gateway, and an adapter child
+process. The test verifies progress, ID-only Workstream CWD, local Worker / Type
+attribution, and persisted Cloud result without a V6 binding candidate.
 
-Keep the test as schema/lifecycle coverage, but add a true integration
-acceptance harness for the complete product path.
+The V7 execution migration-safety gate now passes. Keep the schema acceptance
+and runtime acceptance separate so fixture insertion is not confused with a
+product execution proof.
 
 ### 10. Background desktop UX
 

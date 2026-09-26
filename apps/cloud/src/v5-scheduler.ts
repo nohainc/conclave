@@ -24,6 +24,8 @@ export interface V5ExecutionTarget {
   readonly workspaceProjectGrantId: string;
   /** Configured Worker identity selected for this assignment. */
   readonly configuredWorkerId: string;
+  /** True when this identity came from Workspace-owned V7 inventory. */
+  readonly isWorkspaceOwnedV7Worker: boolean;
   /** Worker Type/catalog identity used to resolve the package. */
   readonly workerTypeId: string;
   /** Compatibility alias for configuredWorkerId during the migration. */
@@ -254,7 +256,6 @@ export async function selectProjectExecutionTarget(
                     (wa.configured_worker_id IS NULL AND wa.worker_id = cw.worker_type_id))
                AND wa.status IN ('created', 'dispatched', 'acknowledged', 'running')) AS active_assignments
      FROM workspace_project_grants g
-     LEFT JOIN project_execution_preferences pep ON pep.project_id = g.project_id
      LEFT JOIN workstream_execution_policies ep ON ep.workstream_id = ?4
      JOIN execution_workspaces ew ON ew.id = g.workspace_id
      JOIN workspace_runtime_identities wri ON wri.workspace_id = ew.id AND wri.revoked_at IS NULL
@@ -304,11 +305,11 @@ export async function selectProjectExecutionTarget(
             i.local_concurrency_limit AS local_concurrency_limit,
             (SELECT COUNT(*) FROM worker_assignments wa
              WHERE wa.execution_workspace_id = g.workspace_id
-               AND (wa.configured_worker_id = i.worker_id OR
-                    (wa.configured_worker_id IS NULL AND wa.worker_id = i.worker_type_id))
+               AND (wa.workspace_worker_id = i.worker_id OR
+                    (wa.workspace_worker_id IS NULL AND wa.configured_worker_id = i.worker_id) OR
+                    (wa.workspace_worker_id IS NULL AND wa.configured_worker_id IS NULL AND wa.worker_id = i.worker_type_id))
                AND wa.status IN ('created', 'dispatched', 'acknowledged', 'running')) AS active_assignments
      FROM workspace_project_grants g
-     LEFT JOIN project_execution_preferences pep ON pep.project_id = g.project_id
      LEFT JOIN workstream_execution_policies ep ON ep.workstream_id = ?4
      JOIN execution_workspaces ew ON ew.id = g.workspace_id
      JOIN workspace_runtime_identities wri ON wri.workspace_id = ew.id AND wri.revoked_at IS NULL
@@ -398,7 +399,9 @@ export async function selectProjectExecutionTarget(
         row.local_concurrency_limit,
         number(row.configured_concurrency_limit, 1024),
       ),
-      number(row.cloud_concurrency_limit, 1024),
+      row.cloud_concurrency_limit == null
+        ? 1024
+        : number(row.cloud_concurrency_limit, 1024),
       number(concurrency.maxConcurrentAssignments, 1024),
     );
 
@@ -603,6 +606,7 @@ export async function selectProjectExecutionTarget(
       workspaceRuntimeIdentityId: String(row.runtime_identity_id),
       workspaceProjectGrantId: String(row.grant_id),
       configuredWorkerId,
+      isWorkspaceOwnedV7Worker: isV7,
       workerTypeId,
       workerId,
       workerVersion: String(row.worker_version),

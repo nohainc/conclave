@@ -939,7 +939,6 @@ class HostCloudConnection {
         'resolvedWorkerVersion',
         'credentialProfileId',
         'config',
-        'sessionPolicy',
         'permissions',
         'contextRefs',
         'timeoutMs',

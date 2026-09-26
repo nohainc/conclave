@@ -9,6 +9,27 @@ permissions:
   contents: read
 
 jobs:
+  v7-runtime-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: pnpm install --frozen-lockfile
+      - run: flutter pub get
+        working-directory: apps/host
+      - name: Real V7 Cloud to Workspace execution
+        run: DART_EXECUTABLE="$(command -v dart)" pnpm exec vitest run apps/cloud/test/v7-runtime-e2e.acceptance.test.ts
+
   typescript:
     runs-on: ubuntu-latest
     steps:

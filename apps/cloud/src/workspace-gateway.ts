@@ -137,7 +137,10 @@ export function workspaceAssignmentContextMatches(
   return (
     message.executionWorkspaceId === String(row.execution_workspace_id) &&
     message.workspaceRuntimeId === String(row.runtime_identity_id) &&
-    message.workerId === String(row.configured_worker_id ?? row.worker_id) &&
+    message.workerId ===
+      String(
+        row.workspace_worker_id ?? row.configured_worker_id ?? row.worker_id,
+      ) &&
     message.runId === String(row.run_id) &&
     message.taskId === String(row.task_id) &&
     message.attemptId === String(row.attempt_id) &&
@@ -1267,7 +1270,8 @@ export class WorkspaceGateway implements DurableObject {
     };
     const row = await this.env.CONCLAVE_DB.prepare(
       `SELECT wa.id, wa.execution_workspace_id, wa.runtime_identity_id,
-              wa.worker_id, wa.configured_worker_id, wa.run_id, wa.task_id, wa.attempt_id,
+              wa.worker_id, wa.configured_worker_id, wa.workspace_worker_id,
+              wa.run_id, wa.task_id, wa.attempt_id,
               wa.idempotency_key, wa.status
        FROM worker_assignments wa
        JOIN workspace_project_grants g

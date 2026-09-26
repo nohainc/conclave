@@ -620,6 +620,12 @@ class V7AdapterPackageStore {
     final result = <WorkerPermission>{};
     for (final permission in localPermissions) {
       switch (permission) {
+        case 'repository:read':
+          result.add(WorkerPermission.readWorkspace);
+          break;
+        case 'repository:write':
+          result.add(WorkerPermission.writeWorkspace);
+          break;
         case 'workstream_filesystem':
           result
             ..add(WorkerPermission.readWorkspace)

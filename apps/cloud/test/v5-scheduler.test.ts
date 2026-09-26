@@ -743,6 +743,7 @@ describe("V5 Project execution scheduler", () => {
       credential_status: "ready",
       local_worker_status: "ready",
       cloud_scheduling_state: "disabled",
+      cloud_concurrency_limit: null,
       configured_concurrency_limit: 2,
       active_assignments: 0,
     };
