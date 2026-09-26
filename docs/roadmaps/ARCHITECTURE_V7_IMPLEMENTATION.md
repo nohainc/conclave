@@ -321,14 +321,13 @@ Support declarative detection:
 
 Do not allow manifest to redirect to arbitrary executables outside verified package boundaries.
 
-The Host prerequisite probe accepts command names only, launches without a
-shell, passes only a small runtime environment, bounds version output and
+The Workspace prerequisite probe accepts command names only, launches without
+a shell, passes only a small runtime environment, bounds version output and
 execution time, and enforces declared semantic version ranges. Local setup
-invokes it for catalog-declared Codex, Claude Code, and Ollama CLI executables.
-Manifest admission now parses prerequisite declarations using the same Host
-policy, although Add Worker still reads the temporary built-in catalog.
-Ollama endpoint reachability and the Antigravity executable check remain
-outstanding.
+checks Codex, Antigravity (`agy`), Claude Code, and Ollama executables. The
+Worker Type choices are still compiled into the desktop app, while adapter
+releases are downloaded from the authenticated Cloud catalog. Ollama endpoint
+reachability remains outstanding.
 
 ## Protocol
 

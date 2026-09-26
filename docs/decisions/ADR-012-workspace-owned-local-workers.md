@@ -1,6 +1,7 @@
 # ADR-012: Workspace-Owned Workers and Managed Adapter Processes
 
-**Status:** Proposed for Architecture v7  
+**Status:** Accepted; implementation is converging under Architecture v7
+
 **Date:** 2026-09-26  
 **Builds on:** ADR-008, ADR-009, ADR-010, ADR-011  
 **Partially supersedes:** ADR-010 configured-Worker ownership/cardinality and creation flow

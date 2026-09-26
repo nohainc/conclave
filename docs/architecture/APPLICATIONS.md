@@ -26,6 +26,9 @@ Conclave AX is the web application. It is not packaged as the machine-side execu
 
 Conclave AX communicates only with Conclave Cloud.
 
+The synchronized Worker inventory is implemented. Explicit remote scheduling
+enable/disable/drain controls remain a v7 convergence item.
+
 ## 2. Conclave Cloud
 
 **Current path:** `apps/cloud`

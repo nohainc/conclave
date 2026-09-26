@@ -822,7 +822,7 @@ Keep previously verified active version where safe.
 | provider secret | local Workspace secure store |
 | adapter catalog/release metadata | Cloud |
 | adapter installed state | local Workspace |
-| scheduling enable/drain | Cloud |
+| scheduling enable/drain (target; controls incomplete) | Cloud |
 | Project/Workstream Worker authorization | Cloud |
 | local permission ceiling | local Workspace |
 | Run/Assignment/audit | Cloud |
