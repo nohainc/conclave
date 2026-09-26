@@ -1,6 +1,6 @@
 # Conclave AX Technology Stack
 
-**Status:** v6 baseline; v7 Worker/runtime additions proposed
+**Status:** v6 Workstream/filesystem baseline; v7 desktop vertical slice implemented, convergence in progress
 
 ## Stack summary
 
@@ -29,7 +29,7 @@ Flutter remains appropriate because:
 - consistent design system;
 - good adaptive layout support.
 
-v5 does not require a desktop Conclave AX binary.
+Conclave AX remains a web application. The native desktop product is Conclave Workspace.
 
 ## Cloud
 
@@ -144,3 +144,18 @@ R2 stores large immutable artifacts and packages.
 Local Workspace secure store stores personal secrets by default.
 
 Do not persist plaintext credentials in D1, assignment payloads, logs, or artifacts.
+
+
+## V7 production convergence
+
+The current v7 desktop/runtime foundation is implemented, but the production
+baseline still requires:
+- V7-only Cloud Worker scheduling without V6 binding fallback;
+- independent Cloud scheduling state (enabled/disabled/draining);
+- asymmetric public-key trust for adapter and application release verification;
+- repeatable first-party adapter release automation;
+- complete production coverage for every Worker Type exposed by Workspace;
+- real scheduler -> Gateway -> Workspace -> adapter end-to-end acceptance;
+- production background/menu-bar and native update lifecycle.
+
+See [Architecture v7 Completion Plan](../roadmaps/ARCHITECTURE_V7_COMPLETION.md).
