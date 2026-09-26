@@ -6,7 +6,6 @@ enum StudioRouteKind {
   workstream,
   run,
   hosts,
-  workers,
   profileSecurity,
   login,
   search,
@@ -55,9 +54,6 @@ class StudioNavigation {
 
   const StudioNavigation.workspace(String workspaceId)
       : this._(kind: StudioRouteKind.hosts, workspaceId: workspaceId);
-
-  /// Compatibility alias: Workers now live within Workspaces.
-  const StudioNavigation.workers() : this._(kind: StudioRouteKind.hosts);
 
   const StudioNavigation.login({String? returnTo})
       : this._(kind: StudioRouteKind.login, loginReturnTo: returnTo);
@@ -173,7 +169,6 @@ class StudioNavigation {
       StudioRouteKind.hosts => workspaceId != null
           ? Uri(path: '/workspaces/$workspaceId')
           : Uri(path: '/workspaces'),
-      StudioRouteKind.workers => Uri(path: '/execution/workers'),
       StudioRouteKind.login => Uri(
           path: '/login',
           queryParameters:

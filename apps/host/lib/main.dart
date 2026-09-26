@@ -1220,14 +1220,16 @@ class _WorkspaceTab extends StatelessWidget {
                         );
                       }
                       final readyCount = workers
-                          .where((w) => w.status == LocalWorkerStatus.ready)
+                          .where((w) => deriveLocalWorkerHealth(w) == 'Ready')
                           .length;
                       final attentionCount = workers
-                          .where((w) =>
-                              w.status == LocalWorkerStatus.needsAttention)
+                          .where((w) {
+                            final health = deriveLocalWorkerHealth(w);
+                            return health != 'Ready' && health != 'Disabled';
+                          })
                           .length;
                       final disabledCount = workers
-                          .where((w) => w.status == LocalWorkerStatus.disabled)
+                          .where((w) => deriveLocalWorkerHealth(w) == 'Disabled')
                           .length;
 
                       return Row(
@@ -1886,7 +1888,7 @@ class _WorkersTabState extends State<_WorkersTab> {
                                 ),
                               ),
                               const SizedBox(width: 14),
-                              Expanded(
+                                Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -1900,13 +1902,7 @@ class _WorkersTabState extends State<_WorkersTab> {
                                           ),
                                         ),
                                         const SizedBox(width: 8),
-                                        _WorkerStatusBadge(
-                                          status: worker.status,
-                                          credentialStatus:
-                                              worker.credentialStatus,
-                                          hasPermissions: worker
-                                              .localPermissions.isNotEmpty,
-                                        ),
+                                        _WorkerStatusBadge(worker: worker),
                                       ],
                                     ),
                                     const SizedBox(height: 4),
@@ -1919,6 +1915,17 @@ class _WorkersTabState extends State<_WorkersTab> {
                                             theme.colorScheme.onSurfaceVariant,
                                       ),
                                     ),
+                                    if (_healthReasonExplanation(deriveLocalWorkerHealth(worker)) != null) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        _healthReasonExplanation(deriveLocalWorkerHealth(worker))!,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: theme.colorScheme.error,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),
@@ -1997,40 +2004,108 @@ class _WorkersTabState extends State<_WorkersTab> {
       };
 }
 
+String deriveLocalWorkerHealth(LocalConfiguredWorker worker) {
+  if (worker.status == LocalWorkerStatus.disabled ||
+      worker.status == LocalWorkerStatus.removed) {
+    return 'Disabled';
+  }
+
+  // Explicit health reason if set
+  final reason = worker.adapterConfig['healthReason'] as String? ??
+      worker.adapterConfig['reason'] as String?;
+  if (reason != null) {
+    switch (reason) {
+      case 'cli_missing':
+        return 'CLI missing';
+      case 'adapter_unavailable':
+        return 'Adapter unavailable';
+      case 'endpoint_unavailable':
+        return 'Endpoint unavailable';
+      case 'credential_invalid':
+        return 'Credential invalid';
+      case 'permission_required':
+        return 'Permission required';
+      case 'sign_in_required':
+        return 'Sign in required';
+    }
+  }
+
+  if (worker.adapterConfig['cliMissing'] == true ||
+      worker.adapterConfig['prerequisiteMissing'] == true) {
+    return 'CLI missing';
+  }
+  if (worker.adapterConfig['adapterMissing'] == true ||
+      worker.adapterConfig['adapterUnavailable'] == true) {
+    return 'Adapter unavailable';
+  }
+  if (worker.adapterConfig['endpointUnavailable'] == true) {
+    return 'Endpoint unavailable';
+  }
+
+  // Credentials & auth
+  if (worker.credentialStatus ==
+          LocalWorkerCredentialStatus.needsAuthentication ||
+      worker.credentialStatus == LocalWorkerCredentialStatus.expired) {
+    return 'Sign in required';
+  }
+  if (worker.credentialStatus == LocalWorkerCredentialStatus.error) {
+    if (worker.authStrategy == 'local_endpoint') {
+      return 'Endpoint unavailable';
+    }
+    return 'Credential invalid';
+  }
+
+  // Permissions
+  if (worker.localPermissions.isEmpty) {
+    return 'Permission required';
+  }
+
+  if (worker.status == LocalWorkerStatus.needsAttention) {
+    if (worker.authStrategy == 'browser_auth') {
+      return 'Sign in required';
+    }
+    if (worker.authStrategy == 'local_endpoint') {
+      return 'Endpoint unavailable';
+    }
+    if (worker.authStrategy == 'api_key') {
+      return 'Credential invalid';
+    }
+    return 'Sign in required';
+  }
+
+  return 'Ready';
+}
+
+String? _healthReasonExplanation(String health) => switch (health) {
+      'Sign in required' => 'Sign in via browser or CLI to enable execution.',
+      'CLI missing' => 'Required CLI tool is missing or not in PATH.',
+      'Adapter unavailable' => 'Local adapter is missing or failed verification.',
+      'Endpoint unavailable' => 'Local service endpoint is unreachable.',
+      'Credential invalid' => 'Stored API key is missing or invalid.',
+      'Permission required' => 'Local workspace permissions must be granted.',
+      _ => null,
+    };
+
 class _WorkerStatusBadge extends StatelessWidget {
   const _WorkerStatusBadge({
-    required this.status,
-    this.credentialStatus = LocalWorkerCredentialStatus.ready,
-    this.hasPermissions = true,
+    required this.worker,
   });
 
-  final LocalWorkerStatus status;
-  final LocalWorkerCredentialStatus credentialStatus;
-  final bool hasPermissions;
+  final LocalConfiguredWorker worker;
 
   @override
   Widget build(BuildContext context) {
-    final (label, color) = switch (status) {
-      LocalWorkerStatus.ready => ('Ready', ConclaveBrand.success),
-      LocalWorkerStatus.needsAttention => switch (credentialStatus) {
-          LocalWorkerCredentialStatus.needsAuthentication => (
-              'Sign in required',
-              ConclaveBrand.warning
-            ),
-          LocalWorkerCredentialStatus.expired => (
-              'Auth expired',
-              ConclaveBrand.warning
-            ),
-          LocalWorkerCredentialStatus.error => (
-              'Credential error',
-              ConclaveBrand.error
-            ),
-          _ => !hasPermissions
-              ? ('Permission required', ConclaveBrand.warning)
-              : ('Needs attention', ConclaveBrand.warning),
-        },
-      LocalWorkerStatus.disabled => ('Disabled', Colors.grey),
-      LocalWorkerStatus.removed => ('Removed', ConclaveBrand.error),
+    final label = deriveLocalWorkerHealth(worker);
+    final color = switch (label) {
+      'Ready' => ConclaveBrand.success,
+      'Disabled' => Colors.grey,
+      'Sign in required' => ConclaveBrand.warning,
+      'Permission required' => ConclaveBrand.warning,
+      'CLI missing' => ConclaveBrand.error,
+      'Adapter unavailable' => ConclaveBrand.error,
+      'Endpoint unavailable' => ConclaveBrand.error,
+      'Credential invalid' => ConclaveBrand.error,
+      _ => ConclaveBrand.warning,
     };
 
     return Container(
@@ -2070,6 +2145,10 @@ class _WorkerDetailDialog extends StatelessWidget {
     final theme = Theme.of(context);
     final friendlyType =
         _WorkersTabState._friendlyTypeName(worker.workerTypeId);
+    final health = deriveLocalWorkerHealth(worker);
+    final option = LocalWorkerTypeOption.supported
+        .where((opt) => opt.id == worker.workerTypeId)
+        .firstOrNull;
 
     return AlertDialog(
       title: Row(
@@ -2086,11 +2165,7 @@ class _WorkerDetailDialog extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          _WorkerStatusBadge(
-            status: worker.status,
-            credentialStatus: worker.credentialStatus,
-            hasPermissions: worker.localPermissions.isNotEmpty,
-          ),
+          _WorkerStatusBadge(worker: worker),
         ],
       ),
       content: SizedBox(
@@ -2100,14 +2175,10 @@ class _WorkerDetailDialog extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Worker Type: $friendlyType',
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 12),
+              _DetailRow(label: 'Worker Type', value: friendlyType),
               _DetailRow(
-                label: 'Default Model',
-                value: worker.defaultModel ?? 'Not specified',
+                label: 'Model',
+                value: worker.defaultModel ?? 'Auto',
               ),
               if (worker.allowedModels.isNotEmpty)
                 _DetailRow(
@@ -2115,7 +2186,7 @@ class _WorkerDetailDialog extends StatelessWidget {
                   value: worker.allowedModels.join(', '),
                 ),
               _DetailRow(
-                label: 'Authentication',
+                label: 'Credential',
                 value: switch (worker.authStrategy) {
                   'api_key' => 'Encrypted API key on this machine',
                   'browser_auth' => 'Signed in locally via browser / CLI',
@@ -2123,34 +2194,35 @@ class _WorkerDetailDialog extends StatelessWidget {
                   _ => worker.authStrategy,
                 },
               ),
+              _DetailRow(
+                label: 'Adapter version',
+                value: worker.adapterVersionPolicy ??
+                    'Default (active verified release)',
+              ),
+              _DetailRow(
+                label: 'CLI / Prerequisite',
+                value: option?.prerequisite ?? 'None required',
+              ),
               if (worker.adapterConfig['endpointUrl'] != null)
                 _DetailRow(
                   label: 'Endpoint URL',
                   value: worker.adapterConfig['endpointUrl'] as String,
                 ),
-              const SizedBox(height: 8),
-              Text(
-                'Granted Local Permissions:',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+              _DetailRow(
+                label: 'Permissions',
+                value: worker.localPermissions.isEmpty
+                    ? 'None granted'
+                    : worker.localPermissions.join(', '),
               ),
-              const SizedBox(height: 4),
-              if (worker.localPermissions.isEmpty)
-                Text('No permissions granted', style: theme.textTheme.bodySmall)
-              else
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: [
-                    for (final perm in worker.localPermissions)
-                      Chip(
-                        visualDensity: VisualDensity.compact,
-                        label: Text(perm, style: const TextStyle(fontSize: 11)),
-                      ),
-                  ],
-                ),
-              const SizedBox(height: 16),
+              _DetailRow(
+                label: 'Concurrency',
+                value: '${worker.localConcurrencyLimit} concurrent runs',
+              ),
+              _DetailRow(
+                label: 'Local status',
+                value: health,
+              ),
+              const SizedBox(height: 12),
               ExpansionTile(
                 tilePadding: EdgeInsets.zero,
                 title: const Text(
@@ -2158,10 +2230,9 @@ class _WorkerDetailDialog extends StatelessWidget {
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
                 ),
                 children: [
-                  _DetailRow(label: 'Worker ID', value: worker.id),
-                  _DetailRow(label: 'Revision', value: 'r${worker.revision}'),
+                  _CopyableDetailRow(label: 'Worker ID', value: worker.id),
                   if (worker.credentialRef != null)
-                    _DetailRow(
+                    _CopyableDetailRow(
                       label: 'Credential Reference',
                       value: worker.credentialRef!,
                     ),

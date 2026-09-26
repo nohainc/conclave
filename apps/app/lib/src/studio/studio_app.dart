@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -280,8 +281,11 @@ class _StudioAppState extends State<ConclaveAppShell> {
     super.initState();
     _searchQueryController.addListener(_onSearchQueryChanged);
     browserNavigation = createStudioBrowserNavigation();
-    navigation = StudioNavigation.fromUri(
-        widget.initialUri ?? browserNavigation.current);
+    final initialUri = widget.initialUri ?? browserNavigation.current;
+    navigation = StudioNavigation.fromUri(initialUri);
+    if (!_isCanonicalWorkspaceUri(initialUri, navigation.toUri())) {
+      browserNavigation.replace(navigation.toUri());
+    }
     navigationSubscription =
         browserNavigation.changes.listen(_onBrowserNavigation);
     lifecycleSubscription = browserNavigation.lifecycleChanges
@@ -743,11 +747,13 @@ class _StudioAppState extends State<ConclaveAppShell> {
               notification.projectId!, notification.runId!));
         }
       case StudioNotificationTarget.hosts:
-        _navigateTo(const StudioNavigation.hosts());
-      case StudioNotificationTarget.workers:
-        _navigateTo(const StudioNavigation.workers());
       case StudioNotificationTarget.workspace:
-        _navigateTo(const StudioNavigation.hosts());
+        final workspaceId = notification.workspaceId ??
+            workspaceWorkers
+                .where((worker) => worker.id == notification.workerId)
+                .map((worker) => worker.workspaceId)
+                .firstOrNull;
+        _navigateTo(StudioNavigation.hosts(workspaceId: workspaceId));
       case null:
         break;
     }
@@ -1001,6 +1007,10 @@ class _StudioAppState extends State<ConclaveAppShell> {
 
   void _onBrowserNavigation(Uri uri) {
     final next = StudioNavigation.fromUri(uri);
+    final canonicalUri = next.toUri();
+    if (!_isCanonicalWorkspaceUri(uri, canonicalUri)) {
+      browserNavigation.replace(canonicalUri);
+    }
     if (next == navigation) return;
     final projectChanged =
         next.projectId != null && next.projectId != selectedProjectId;
@@ -1025,6 +1035,10 @@ class _StudioAppState extends State<ConclaveAppShell> {
       executionWorkspaceId: executionWorkspaceId,
     ));
   }
+
+  bool _isCanonicalWorkspaceUri(Uri actual, Uri canonical) =>
+      actual.path == canonical.path &&
+      mapEquals(actual.queryParameters, canonical.queryParameters);
 
   void _navigateTo(StudioNavigation next, {bool replace = false}) {
     if (next.kind != StudioRouteKind.search &&
@@ -2445,7 +2459,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
             .where((finding) => finding.status == FindingStatus.open)
             .length,
         onOpenHosts: () => _navigateTo(const StudioNavigation.hosts()),
-        onOpenWorkers: () => _navigateTo(const StudioNavigation.workers()),
+        onOpenWorkers: () => _navigateTo(const StudioNavigation.hosts()),
         onOpenProject: (projectId) =>
             _navigateTo(StudioNavigation.project(projectId)),
         onOpenChat: (projectId, chatId) =>
@@ -2636,11 +2650,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
   Widget _runDetailsView(bool compact) {
     switch (navigation.kind) {
       case StudioRouteKind.hosts:
-        return _hostsView(initialTab: 0);
-      case StudioRouteKind.workers:
-        // Historical Worker URLs continue to resolve while Workers move
-        // beneath their owning Workspace in the unified page.
-        return _hostsView(initialTab: 0);
+        return _hostsView();
       case StudioRouteKind.profileSecurity:
         return _profileSecurityView();
       case StudioRouteKind.projects:
@@ -3849,13 +3859,10 @@ class _StudioAppState extends State<ConclaveAppShell> {
     }
   }
 
-  Widget _hostsView({int initialTab = 0}) => WorkspacesPage(
+  Widget _hostsView() => WorkspacesPage(
         workspaces:
             _workspaceCards().isNotEmpty ? _workspaceCards() : snapshot.agents,
-        workers: snapshot.workers,
         workspaceWorkers: workspaceWorkers,
-        plugins: snapshot.plugins,
-        initialTab: initialTab,
         initialWorkspaceId: navigation.workspaceId,
         onSelectWorkspace: (workspaceId) {
           if (workspaceId != null) {

@@ -10,7 +10,7 @@ enum StudioNotificationKind {
 
 enum StudioNotificationPriority { high, normal, low }
 
-enum StudioNotificationTarget { run, hosts, workers, workspace }
+enum StudioNotificationTarget { run, hosts, workspace }
 
 /// Filters realtime noise from actionable team notifications. Progress,
 /// discussion, queue, checkout, and lease updates update read models but do
@@ -43,6 +43,8 @@ class StudioNotification {
     required this.priority,
     this.projectId,
     this.runId,
+    this.workspaceId,
+    this.workerId,
     this.target,
     this.read = false,
   });
@@ -55,6 +57,8 @@ class StudioNotification {
   final StudioNotificationPriority priority;
   final String? projectId;
   final String? runId;
+  final String? workspaceId;
+  final String? workerId;
   final StudioNotificationTarget? target;
   final bool read;
 
@@ -67,6 +71,8 @@ class StudioNotification {
         priority: priority,
         projectId: projectId,
         runId: runId,
+        workspaceId: workspaceId,
+        workerId: workerId,
         target: target,
         read: true,
       );
@@ -118,6 +124,14 @@ StudioNotification? notificationFromRealtimeEvent(
       _optionalString(event['runId']) ?? _optionalString(payloadMap['runId']);
   final projectId = _optionalString(event['projectId']) ??
       _optionalString(payloadMap['projectId']);
+  final workspaceId = _optionalString(event['workspaceId']) ??
+      _optionalString(event['workspace_id']) ??
+      _optionalString(payloadMap['workspaceId']) ??
+      _optionalString(payloadMap['workspace_id']);
+  final workerId = _optionalString(event['workerId']) ??
+      _optionalString(event['worker_id']) ??
+      _optionalString(payloadMap['workerId']) ??
+      _optionalString(payloadMap['worker_id']);
   final message = _optionalString(payloadMap['prompt']) ??
       _optionalString(payloadMap['summary']) ??
       _optionalString(payloadMap['error']) ??
@@ -147,9 +161,9 @@ StudioNotification? notificationFromRealtimeEvent(
       StudioNotificationTarget.run,
     StudioNotificationKind.hostOffline => StudioNotificationTarget.hosts,
     StudioNotificationKind.workerCredentialProblem =>
-      StudioNotificationTarget.workers,
+      StudioNotificationTarget.workspace,
     StudioNotificationKind.workerInstallFailed =>
-      StudioNotificationTarget.workers,
+      StudioNotificationTarget.workspace,
     StudioNotificationKind.invitationReceived =>
       StudioNotificationTarget.workspace,
   };
@@ -182,6 +196,8 @@ StudioNotification? notificationFromRealtimeEvent(
     },
     projectId: projectId,
     runId: runId,
+    workspaceId: workspaceId,
+    workerId: workerId,
     target: target,
   );
 }

@@ -1,3 +1,4 @@
+import 'package:conclave_host/configured_worker_registry.dart';
 import 'package:conclave_host/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -282,5 +283,102 @@ void main() {
 
     expect(find.text('Configured Workers'), findsOneWidget);
     expect(find.text('Add Worker'), findsOneWidget);
+  });
+
+  group('deriveLocalWorkerHealth', () {
+    LocalConfiguredWorker makeWorker({
+      LocalWorkerStatus status = LocalWorkerStatus.ready,
+      LocalWorkerCredentialStatus credentialStatus =
+          LocalWorkerCredentialStatus.ready,
+      String authStrategy = 'browser_auth',
+      List<String> permissions = const ['workstream_filesystem'],
+      Map<String, Object?> adapterConfig = const {},
+    }) {
+      return LocalConfiguredWorker(
+        id: 'worker-1',
+        workspaceId: 'ws-1',
+        name: 'Test Worker',
+        workerTypeId: 'claude-code',
+        authStrategy: authStrategy,
+        credentialRef: 'cred-1',
+        defaultModel: 'claude-3-7-sonnet',
+        adapterConfig: adapterConfig,
+        allowedModels: const ['claude-3-7-sonnet'],
+        localPermissions: permissions,
+        localConcurrencyLimit: 2,
+        adapterVersionPolicy: 'latest',
+        status: status,
+        credentialStatus: credentialStatus,
+        revision: 42,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      );
+    }
+
+    test('derives Ready for healthy worker', () {
+      final worker = makeWorker();
+      expect(deriveLocalWorkerHealth(worker), 'Ready');
+    });
+
+    test('derives Disabled for disabled worker', () {
+      final worker = makeWorker(status: LocalWorkerStatus.disabled);
+      expect(deriveLocalWorkerHealth(worker), 'Disabled');
+    });
+
+    test('derives Sign in required when authentication is needed or expired', () {
+      expect(
+        deriveLocalWorkerHealth(
+          makeWorker(
+              status: LocalWorkerStatus.needsAttention,
+              credentialStatus: LocalWorkerCredentialStatus.needsAuthentication),
+        ),
+        'Sign in required',
+      );
+      expect(
+        deriveLocalWorkerHealth(
+          makeWorker(credentialStatus: LocalWorkerCredentialStatus.expired),
+        ),
+        'Sign in required',
+      );
+    });
+
+    test('derives CLI missing when cliMissing flag is present', () {
+      final worker = makeWorker(
+        status: LocalWorkerStatus.needsAttention,
+        adapterConfig: {'cliMissing': true},
+      );
+      expect(deriveLocalWorkerHealth(worker), 'CLI missing');
+    });
+
+    test('derives Adapter unavailable when adapterMissing flag is present', () {
+      final worker = makeWorker(
+        status: LocalWorkerStatus.needsAttention,
+        adapterConfig: {'adapterMissing': true},
+      );
+      expect(deriveLocalWorkerHealth(worker), 'Adapter unavailable');
+    });
+
+    test('derives Endpoint unavailable for local endpoint error', () {
+      final worker = makeWorker(
+        authStrategy: 'local_endpoint',
+        status: LocalWorkerStatus.needsAttention,
+        credentialStatus: LocalWorkerCredentialStatus.error,
+      );
+      expect(deriveLocalWorkerHealth(worker), 'Endpoint unavailable');
+    });
+
+    test('derives Credential invalid for API key error', () {
+      final worker = makeWorker(
+        authStrategy: 'api_key',
+        status: LocalWorkerStatus.needsAttention,
+        credentialStatus: LocalWorkerCredentialStatus.error,
+      );
+      expect(deriveLocalWorkerHealth(worker), 'Credential invalid');
+    });
+
+    test('derives Permission required when localPermissions is empty', () {
+      final worker = makeWorker(permissions: const []);
+      expect(deriveLocalWorkerHealth(worker), 'Permission required');
+    });
   });
 }
