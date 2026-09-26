@@ -1171,170 +1171,7 @@ class _WorkspaceTab extends StatelessWidget {
 
         const SizedBox(height: 16),
 
-        // 3. WORKSPACE (Work Root, Application/Updates, Cloud Pairing)
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.laptop_mac, size: 20),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Workspace',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Work Root
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Work Root',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            snapshot.workRootPath ?? 'Not configured',
-                            style: const TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 12,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Workstream files and local execution are stored here.',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    if (snapshot.workRootPath != null)
-                      OutlinedButton.icon(
-                        onPressed: () => HostLifecycleController.openPath(
-                            snapshot.workRootPath!),
-                        icon: const Icon(Icons.folder_open, size: 14),
-                        label: const Text('Open Folder',
-                            style: TextStyle(fontSize: 12)),
-                      ),
-                  ],
-                ),
-
-                const Divider(height: 24),
-
-                // Application & Updates
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Application',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Conclave Workspace v${snapshot.appVersion}',
-                            style: theme.textTheme.bodySmall,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            snapshot.updateSummary,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: ConclaveBrand.success,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-
-                const Divider(height: 24),
-
-                // Cloud Pairing
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Cloud Pairing',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            snapshot.paired
-                                ? 'Connected as “${snapshot.workspaceName ?? 'Conclave Workspace'}”'
-                                : 'Not paired with Conclave Cloud',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          if (snapshot.lastInventorySyncAt != null) ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              'Last sync: ${snapshot.lastInventorySyncAt!.toLocal()}',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    if (snapshot.paired)
-                      OutlinedButton.icon(
-                        onPressed: onPair,
-                        icon: const Icon(Icons.sync, size: 14),
-                        label: const Text('Re-pair',
-                            style: TextStyle(fontSize: 12)),
-                      )
-                    else if (onPair != null)
-                      FilledButton.tonalIcon(
-                        onPressed: onPair,
-                        icon: const Icon(Icons.link, size: 14),
-                        label: const Text('Pair Workspace',
-                            style: TextStyle(fontSize: 12)),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 16),
-
-        // 4. WORKERS SUMMARY Card
+        // 3. WORKERS SUMMARY Card
         Card(
           child: Padding(
             padding: const EdgeInsets.all(20),
@@ -1362,8 +1199,12 @@ class _WorkspaceTab extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 if (localWorkerRegistry == null)
-                  const Text(
-                      'Local Worker setup is unavailable. Restart Workspace and check Diagnostics.')
+                  Text(
+                    'Worker diagnostics are available after pairing.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  )
                 else
                   FutureBuilder<List<LocalConfiguredWorker>>(
                     key: ValueKey(workerRevision),
@@ -1428,7 +1269,163 @@ class _WorkspaceTab extends StatelessWidget {
 
         const SizedBox(height: 16),
 
-        // 5. ADVANCED & DIAGNOSTICS (Expandable Accordion)
+        // 4. WORK ROOT Card
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.folder_open, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Work Root',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    if (snapshot.workRootPath != null)
+                      OutlinedButton.icon(
+                        onPressed: () => HostLifecycleController.openPath(
+                            snapshot.workRootPath!),
+                        icon: const Icon(Icons.folder_open, size: 14),
+                        label: const Text('Open Folder',
+                            style: TextStyle(fontSize: 12)),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  snapshot.workRootPath ?? 'Not configured',
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Workstream files and local execution are stored here.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // 5. APPLICATION & UPDATES Card
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.system_update_alt, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Application',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Conclave Workspace v${snapshot.appVersion}',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  snapshot.updateSummary,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: ConclaveBrand.success,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // 6. CLOUD CONNECTION & PAIRING Card
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.cloud_sync, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Cloud Pairing',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    if (snapshot.paired)
+                      OutlinedButton.icon(
+                        onPressed: onPair,
+                        icon: const Icon(Icons.sync, size: 14),
+                        label: const Text('Re-pair',
+                            style: TextStyle(fontSize: 12)),
+                      )
+                    else if (onPair != null)
+                      FilledButton.tonalIcon(
+                        onPressed: onPair,
+                        icon: const Icon(Icons.link, size: 14),
+                        label: const Text('Pair Workspace',
+                            style: TextStyle(fontSize: 12)),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  snapshot.paired
+                      ? 'Connected as “${snapshot.workspaceName ?? 'Conclave Workspace'}”'
+                      : 'Not paired with Conclave Cloud',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                if (snapshot.lastInventorySyncAt != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Last sync: ${snapshot.lastInventorySyncAt!.toLocal()}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // 7. ADVANCED & DIAGNOSTICS (Expandable Accordion)
         Card(
           child: Theme(
             data: theme.copyWith(dividerColor: Colors.transparent),
