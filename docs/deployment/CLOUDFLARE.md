@@ -120,10 +120,20 @@ Architecture v5 retains the `HostGateway` and `RealtimeGateway` Durable Object m
 When deploying through Wrangler, migration tags are applied automatically. If re-provisioning or updating Durable Objects, retain all migration tags in sequence so Cloudflare Workers can reconcile schema history.
 
 ### D1 Database Provisioning
-The production D1 database `conclave-production` applies the clean v5 baseline from `apps/cloud/migrations-v5`. The v4 migration directory is historical and is not a compatibility chain:
+The production D1 database `conclave-production` uses the forward V6 migration
+chain from `apps/cloud/migrations-v6`. The V4/V5 migration directories are
+historical baselines, not the active production chain:
 ```bash
 pnpm exec wrangler d1 migrations apply conclave-production --remote --config infra/cloudflare/app.wrangler.jsonc
 ```
+
+The V6 clean baseline intentionally omitted the legacy `host_releases` table.
+Migration `0027_public_key_release_trust.sql` creates the current Workspace
+release table when absent before adding its signing key ID and revocation state.
+If a migration fails, D1 rolls back that migration and leaves the last
+successful migration applied; correct the pending migration and re-run the
+same migration command after review. Do not manually mark a failed migration as
+applied.
 
 
 ## Backend deployment gate

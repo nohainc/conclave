@@ -29,27 +29,21 @@ const migrationFiles = [
 ];
 
 const schema = migrationFiles
-  .map((file) => {
-    const migration = readFileSync(
+  .map((file) =>
+    readFileSync(
       fileURLToPath(new URL(`../migrations-v6/${file}`, import.meta.url)),
       "utf8",
-    );
-    return file === "0027_public_key_release_trust.sql"
-      ? `CREATE TABLE host_releases (version TEXT PRIMARY KEY, package_digest TEXT, is_revoked INTEGER);\n${migration}`
-      : migration;
-  })
+    ),
+  )
   .join("\n");
 const preCleanupSchema = migrationFiles
   .filter((file) => file !== "0026_remove_v6_configured_workers.sql")
-  .map((file) => {
-    const migration = readFileSync(
+  .map((file) =>
+    readFileSync(
       fileURLToPath(new URL(`../migrations-v6/${file}`, import.meta.url)),
       "utf8",
-    );
-    return file === "0027_public_key_release_trust.sql"
-      ? `CREATE TABLE host_releases (version TEXT PRIMARY KEY, package_digest TEXT, is_revoked INTEGER);\n${migration}`
-      : migration;
-  })
+    ),
+  )
   .join("\n");
 
 function apply(sql: string): unknown[] {
@@ -62,6 +56,25 @@ function apply(sql: string): unknown[] {
 }
 
 describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
+  it("creates the Workspace release table on the clean v6 baseline", () => {
+    const columns = apply("PRAGMA table_info(host_releases);") as {
+      name: string;
+    }[];
+    expect(columns.map((column) => column.name)).toEqual(
+      expect.arrayContaining([
+        "version",
+        "channel",
+        "min_supported_agent_version",
+        "package_digest",
+        "signature",
+        "signing_key_id",
+      ]),
+    );
+    expect(
+      apply("SELECT COUNT(*) AS count FROM release_signing_key_revocations;"),
+    ).toEqual([{ count: 0 }]);
+  });
+
   it("forward-migrates legacy assignment and audit attribution, then removes V6 tables", () => {
     const result = JSON.parse(
       execFileSync("sqlite3", ["-json", ":memory:"], {
