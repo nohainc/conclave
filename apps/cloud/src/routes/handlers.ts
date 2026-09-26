@@ -4584,8 +4584,7 @@ async function handleRedeemWorkspaceEnrollment(
   }
 
   const runtimeId = `runtime-${crypto.randomUUID()}`;
-  const authToken =
-    `conclave_workspace_tok_${crypto.randomUUID().replace(/-/g, "")}`;
+  const authToken = `conclave_workspace_tok_${crypto.randomUUID().replace(/-/g, "")}`;
   const authTokenHash = await hashToken(authToken);
 
   // One normal Conclave Workspace runtime owns one execution Workspace.
