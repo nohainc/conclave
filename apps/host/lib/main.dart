@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'brand.dart';
 import 'adapter_prerequisite.dart';
 import 'diagnostics.dart';
+import 'friendly_computer_name.dart';
 import 'host.dart';
 import 'host_configuration.dart';
 import 'local_worker_setup.dart';
@@ -550,27 +551,38 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     );
   }
 
-  Future<void> _pairWorkspace() async {
+  Future<void> _pairWorkspace([WorkspacePairingRequest? directRequest]) async {
     final lifecycle = widget.lifecycle;
-    final currentRegistration =
-        HostRegistrationStore(lifecycle.host.config.dataDirectory).readSync();
-    final request = await showWorkspacePairingDialog(
-      context,
-      initialCloudUrl: currentRegistration?.cloudUrl ??
-          Platform.environment['CONCLAVE_HOST_CLOUD_URL'] ??
-          conclaveProductionCloudUrl,
-    );
+    final dataDirectory = lifecycle.host.config.dataDirectory;
+    final currentRegistration = HostRegistrationStore(dataDirectory).readSync();
+    final proposedName = currentRegistration?.name.isNotEmpty == true
+        ? currentRegistration!.name
+        : await resolveFriendlyComputerName();
+
+    final request = directRequest ??
+        await showWorkspacePairingDialog(
+          context,
+          initialCloudUrl: currentRegistration?.cloudUrl ??
+              Platform.environment['CONCLAVE_HOST_CLOUD_URL'] ??
+              conclaveProductionCloudUrl,
+          initialWorkspaceName: proposedName,
+        );
     if (request == null || !mounted) return;
 
     try {
       final service = WorkspacePairingService(
-        dataDirectory: lifecycle.host.config.dataDirectory,
+        dataDirectory: dataDirectory,
         credentialStore: lifecycle.host.credentialStore,
       );
+      final installationIdStore = InstallationIdentityStore(dataDirectory);
+      final installationId = await installationIdStore.getOrCreate();
+
       await service.pair(
         cloudUrl: request.cloudUrl,
         token: request.token,
         hostname: Platform.localHostname,
+        proposedWorkspaceName: request.workspaceName,
+        installationId: installationId,
       );
       final config = HostConfig.fromArgs(
         const [],
@@ -589,6 +601,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Pairing failed: $error')),
       );
+      rethrow;
     }
   }
 
@@ -723,7 +736,8 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
                 child: Text('Workspace is running in the background.'))
             : HostDashboard(
                 snapshot: lifecycle.uiSnapshot,
-                onPair: _pairWorkspace,
+                onPair: () => _pairWorkspace(),
+                onPairRequest: _pairWorkspace,
                 onUnpair: _unpairWorkspace,
                 onQuit: _confirmQuit,
                 onRetry: lifecycle.launch,
@@ -744,6 +758,7 @@ class HostDashboard extends StatefulWidget {
   const HostDashboard({
     required this.snapshot,
     this.onPair,
+    this.onPairRequest,
     this.onUnpair,
     this.onAccountAction,
     this.onQuit,
@@ -760,6 +775,7 @@ class HostDashboard extends StatefulWidget {
 
   final HostUiSnapshot snapshot;
   final VoidCallback? onPair;
+  final Future<void> Function(WorkspacePairingRequest request)? onPairRequest;
   final VoidCallback? onUnpair;
   final VoidCallback? onAccountAction;
   final VoidCallback? onQuit;
@@ -962,7 +978,8 @@ class _HostDashboardState extends State<HostDashboard> {
                 selectedIcon: Icons.computer,
                 label: 'Workspace',
                 selected: _selectedSurface == HostSurface.workspace,
-                onTap: () => setState(() => _selectedSurface = HostSurface.workspace),
+                onTap: () =>
+                    setState(() => _selectedSurface = HostSurface.workspace),
               ),
               const SizedBox(width: 16),
               _SurfaceTabButton(
@@ -970,7 +987,8 @@ class _HostDashboardState extends State<HostDashboard> {
                 selectedIcon: Icons.memory,
                 label: 'Workers',
                 selected: _selectedSurface == HostSurface.workers,
-                onTap: () => setState(() => _selectedSurface = HostSurface.workers),
+                onTap: () =>
+                    setState(() => _selectedSurface = HostSurface.workers),
               ),
             ],
           ),
@@ -988,6 +1006,7 @@ class _HostDashboardState extends State<HostDashboard> {
                   _WorkspaceTab(
                     snapshot: snapshot,
                     onPair: widget.onPair,
+                    onPairRequest: widget.onPairRequest,
                     onRetry: widget.onRetry,
                     onExportDiagnostics: widget.onExportDiagnostics,
                     onUnpair: widget.onUnpair,
@@ -1049,9 +1068,8 @@ class _SurfaceTabButton extends StatelessWidget {
             Icon(
               selected ? selectedIcon : icon,
               size: 18,
-              color: selected
-                  ? activeColor
-                  : theme.colorScheme.onSurfaceVariant,
+              color:
+                  selected ? activeColor : theme.colorScheme.onSurfaceVariant,
             ),
             const SizedBox(width: 8),
             Text(
@@ -1059,9 +1077,8 @@ class _SurfaceTabButton extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                color: selected
-                    ? activeColor
-                    : theme.colorScheme.onSurfaceVariant,
+                color:
+                    selected ? activeColor : theme.colorScheme.onSurfaceVariant,
               ),
             ),
           ],
@@ -1075,6 +1092,7 @@ class _WorkspaceTab extends StatelessWidget {
   const _WorkspaceTab({
     required this.snapshot,
     this.onPair,
+    this.onPairRequest,
     this.onRetry,
     this.onExportDiagnostics,
     this.onUnpair,
@@ -1082,6 +1100,7 @@ class _WorkspaceTab extends StatelessWidget {
 
   final HostUiSnapshot snapshot;
   final VoidCallback? onPair;
+  final Future<void> Function(WorkspacePairingRequest request)? onPairRequest;
   final Future<void> Function()? onRetry;
   final Future<void> Function()? onExportDiagnostics;
   final VoidCallback? onUnpair;
@@ -1111,59 +1130,19 @@ class _WorkspaceTab extends StatelessWidget {
           const SizedBox(height: 16),
         ],
 
-        // Pairing Card
-        if (onPair != null) ...[
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.link, size: 20),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Workspace Pairing',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      FilledButton.icon(
-                        onPressed: onPair,
-                        icon: const Icon(Icons.link, size: 14),
-                        label: const Text('Open Pairing',
-                            style: TextStyle(fontSize: 12)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    snapshot.paired
-                        ? 'Paired as “${snapshot.workspaceName ?? snapshot.hostname ?? 'Conclave Workspace'}”'
-                        : 'Not paired with Conclave Cloud.',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    snapshot.paired
-                        ? 'Connected to Conclave Cloud. Open pairing to reconnect or switch Workspace.'
-                        : 'Connect this machine to Conclave Cloud to enable remote execution and worker sync.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+        // Pairing / Connection Section
+        if (!snapshot.paired)
+          _ConnectWorkspaceCard(
+            snapshot: snapshot,
+            onPair: onPair,
+            onPairRequest: onPairRequest,
+          )
+        else
+          _PairedWorkspaceCard(
+            snapshot: snapshot,
+            onPair: onPair,
           ),
-          const SizedBox(height: 16),
-        ],
+        const SizedBox(height: 16),
 
         // Work Root Card
         Card(
@@ -1224,6 +1203,342 @@ class _WorkspaceTab extends StatelessWidget {
           onUnpair: onUnpair,
         ),
       ],
+    );
+  }
+}
+
+class _ConnectWorkspaceCard extends StatefulWidget {
+  const _ConnectWorkspaceCard({
+    required this.snapshot,
+    this.onPair,
+    this.onPairRequest,
+  });
+
+  final HostUiSnapshot snapshot;
+  final VoidCallback? onPair;
+  final Future<void> Function(WorkspacePairingRequest request)? onPairRequest;
+
+  @override
+  State<_ConnectWorkspaceCard> createState() => _ConnectWorkspaceCardState();
+}
+
+class _ConnectWorkspaceCardState extends State<_ConnectWorkspaceCard> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _codeController;
+  late final TextEditingController _cloudUrlController;
+  bool _isConnecting = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final defaultName = widget.snapshot.workspaceName ??
+        resolveFriendlyComputerNameSync(
+          localHostname: widget.snapshot.hostname,
+        );
+    _nameController = TextEditingController(text: defaultName);
+    _codeController = TextEditingController();
+    _cloudUrlController = TextEditingController(
+      text: widget.snapshot.cloudUrl ?? conclaveProductionCloudUrl,
+    );
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _codeController.dispose();
+    _cloudUrlController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final name = _nameController.text.trim();
+    final code = _codeController.text.trim();
+    final cloudUrl = _cloudUrlController.text.trim();
+    final uri = Uri.tryParse(cloudUrl);
+
+    if (name.isEmpty) {
+      setState(() => _error = 'Enter a workspace name.');
+      return;
+    }
+    if (code.isEmpty) {
+      setState(() => _error = 'Enter the pairing code from Conclave AX.');
+      return;
+    }
+    if (uri == null ||
+        !const {'https', 'http'}.contains(uri.scheme) ||
+        uri.host.isEmpty) {
+      setState(() => _error = 'Enter a valid Conclave Cloud URL.');
+      return;
+    }
+
+    setState(() {
+      _isConnecting = true;
+      _error = null;
+    });
+
+    final request = WorkspacePairingRequest(
+      cloudUrl: cloudUrl,
+      token: code,
+      workspaceName: name,
+    );
+
+    try {
+      if (widget.onPairRequest != null) {
+        await widget.onPairRequest!(request);
+      } else if (widget.onPair != null) {
+        widget.onPair!();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isConnecting = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.link_rounded,
+                    size: 24,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Connect this Workspace',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Connect this computer to Conclave AX.',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.04)
+                    : Colors.black.withValues(alpha: 0.03),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline_rounded,
+                    size: 16,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'You create the pairing code in Conclave AX → Workspaces → Connect Workspace.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton.icon(
+                    onPressed: () => HostLifecycleController.openAX(),
+                    icon: const Icon(Icons.open_in_new, size: 13),
+                    label: const Text(
+                      'Open Conclave AX',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: _nameController,
+              autocorrect: false,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                labelText: 'Workspace name',
+                helperText:
+                    'Proposed from your computer name. You can customize it before pairing.',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _codeController,
+              autocorrect: false,
+              enableSuggestions: false,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _submit(),
+              decoration: const InputDecoration(
+                labelText: 'Pairing code',
+                hintText: 'Paste pairing code from Conclave AX',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 14),
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: EdgeInsets.zero,
+              title: Text(
+                'Advanced options',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              children: [
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _cloudUrlController,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: const InputDecoration(
+                    labelText: 'Conclave Cloud URL',
+                    helperText:
+                        'Change this only for development or self-hosted environments.',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _error!,
+                style: TextStyle(color: theme.colorScheme.error),
+              ),
+            ],
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                FilledButton.icon(
+                  onPressed: _isConnecting ? null : _submit,
+                  icon: _isConnecting
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.link, size: 16),
+                  label: Text(_isConnecting ? 'Connecting...' : 'Connect'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 12),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PairedWorkspaceCard extends StatelessWidget {
+  const _PairedWorkspaceCard({
+    required this.snapshot,
+    this.onPair,
+  });
+
+  final HostUiSnapshot snapshot;
+  final VoidCallback? onPair;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.check_circle_outline,
+                    size: 20, color: Colors.green),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Workspace Connected',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (onPair != null) ...[
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: onPair,
+                    icon: const Icon(Icons.link, size: 14),
+                    label: const Text(
+                      'Switch Workspace',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Paired as “${snapshot.workspaceName ?? snapshot.hostname ?? 'Conclave Workspace'}”',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Connected to Conclave Cloud (${snapshot.cloudUrl ?? conclaveProductionCloudUrl}).',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1315,9 +1630,7 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
               ),
             _CopyableDetailRow(
               label: 'Workspace ID',
-              value: snapshot.workspaceId ??
-                  snapshot.hostId ??
-                  'Not paired',
+              value: snapshot.workspaceId ?? snapshot.hostId ?? 'Not paired',
             ),
             _CopyableDetailRow(
               label: 'Runtime ID',
@@ -1368,14 +1681,14 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
                 Expanded(
                   child: Text(
                     snapshot.logsPath ?? 'Not available',
-                    style: const TextStyle(
-                        fontFamily: 'monospace', fontSize: 11),
+                    style:
+                        const TextStyle(fontFamily: 'monospace', fontSize: 11),
                   ),
                 ),
                 if (snapshot.logsPath != null)
                   TextButton.icon(
-                    onPressed: () => HostLifecycleController.openPath(
-                        snapshot.logsPath!),
+                    onPressed: () =>
+                        HostLifecycleController.openPath(snapshot.logsPath!),
                     icon: const Icon(Icons.open_in_new, size: 14),
                     label: const Text('Open Log File',
                         style: TextStyle(fontSize: 11)),
@@ -1673,7 +1986,7 @@ class _WorkersTabState extends State<_WorkersTab> {
                                 ),
                               ),
                               const SizedBox(width: 14),
-                                Expanded(
+                              Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -1700,10 +2013,13 @@ class _WorkersTabState extends State<_WorkersTab> {
                                             theme.colorScheme.onSurfaceVariant,
                                       ),
                                     ),
-                                    if (_healthReasonExplanation(deriveLocalWorkerHealth(worker)) != null) ...[
+                                    if (_healthReasonExplanation(
+                                            deriveLocalWorkerHealth(worker)) !=
+                                        null) ...[
                                       const SizedBox(height: 4),
                                       Text(
-                                        _healthReasonExplanation(deriveLocalWorkerHealth(worker))!,
+                                        _healthReasonExplanation(
+                                            deriveLocalWorkerHealth(worker))!,
                                         style: TextStyle(
                                           fontSize: 12,
                                           color: theme.colorScheme.error,
@@ -1864,7 +2180,8 @@ String deriveLocalWorkerHealth(LocalConfiguredWorker worker) {
 String? _healthReasonExplanation(String health) => switch (health) {
       'Sign in required' => 'Sign in via browser or CLI to enable execution.',
       'CLI missing' => 'Required CLI tool is missing or not in PATH.',
-      'Adapter unavailable' => 'Local adapter is missing or failed verification.',
+      'Adapter unavailable' =>
+        'Local adapter is missing or failed verification.',
       'Endpoint unavailable' => 'Local service endpoint is unreachable.',
       'Credential invalid' => 'Stored API key is missing or invalid.',
       'Permission required' => 'Local workspace permissions must be granted.',
@@ -2147,7 +2464,6 @@ class _CopyableDetailRow extends StatelessWidget {
     );
   }
 }
-
 
 class _HostRecoveryPanel extends StatelessWidget {
   const _HostRecoveryPanel({

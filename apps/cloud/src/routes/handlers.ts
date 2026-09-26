@@ -1104,6 +1104,214 @@ async function handleCreateWorkspace(
   );
 }
 
+async function handleCreateWorkspacePairingIntent(
+  request: Request,
+  env: SecurityEnv,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, accessContext);
+  const body = (await request.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
+  const expiresMinutes = body.expiresMinutes ?? 15;
+  if (
+    typeof expiresMinutes !== "number" ||
+    !Number.isInteger(expiresMinutes) ||
+    expiresMinutes < 1 ||
+    expiresMinutes > 60
+  ) {
+    throw new HttpError(400, "expiresMinutes must be an integer from 1 to 60");
+  }
+
+  const pairingId = `pair-${crypto.randomUUID()}`;
+  const token = `conclave_pair_${crypto.randomUUID().replace(/-/g, "")}`;
+  const now = new Date();
+  const createdAt = now.toISOString();
+  const expiresAt = new Date(
+    now.getTime() + expiresMinutes * 60_000,
+  ).toISOString();
+  await env.CONCLAVE_DB.prepare(
+    `INSERT INTO workspace_pairing_intents
+       (pairing_id, owner_user_id, token_hash, created_at, expires_at)
+     VALUES (?1, ?2, ?3, ?4, ?5)`,
+  )
+    .bind(
+      pairingId,
+      context.userId,
+      await hashToken(token),
+      createdAt,
+      expiresAt,
+    )
+    .run();
+
+  return json(
+    {
+      id: pairingId,
+      token,
+      status: "pending",
+      createdAt,
+      expiresAt,
+    },
+    { status: 201 },
+  );
+}
+
+async function handleGetWorkspacePairingIntent(
+  request: Request,
+  env: SecurityEnv,
+  pairingId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, accessContext);
+  const row = await env.CONCLAVE_DB.prepare(
+    `SELECT pairing_id AS id, created_at AS createdAt,
+            expires_at AS expiresAt, used_at AS usedAt,
+            cancelled_at AS cancelledAt,
+            claimed_workspace_id AS workspaceId
+       FROM workspace_pairing_intents
+      WHERE pairing_id = ?1 AND owner_user_id = ?2`,
+  )
+    .bind(pairingId, context.userId)
+    .first<{
+      id: string;
+      createdAt: string;
+      expiresAt: string;
+      usedAt: string | null;
+      cancelledAt: string | null;
+      workspaceId: string | null;
+    }>();
+  if (!row) throw new HttpError(404, "Pairing intent not found");
+  const status = row.usedAt
+    ? "claimed"
+    : row.cancelledAt
+      ? "cancelled"
+      : row.expiresAt <= new Date().toISOString()
+        ? "expired"
+        : "pending";
+  return json({
+    pairingIntent: {
+      id: row.id,
+      status,
+      createdAt: row.createdAt,
+      expiresAt: row.expiresAt,
+      claimedAt: row.usedAt,
+      workspaceId: row.workspaceId,
+    },
+  });
+}
+
+async function handleRegenerateWorkspacePairingIntent(
+  request: Request,
+  env: SecurityEnv,
+  pairingId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, accessContext);
+  const existing = await env.CONCLAVE_DB.prepare(
+    `SELECT pairing_id, used_at FROM workspace_pairing_intents
+      WHERE pairing_id = ?1 AND owner_user_id = ?2`,
+  )
+    .bind(pairingId, context.userId)
+    .first<{ pairing_id: string; used_at: string | null }>();
+  if (!existing) throw new HttpError(404, "Pairing intent not found");
+  if (existing.used_at) {
+    throw new HttpError(409, "A claimed pairing intent cannot be regenerated");
+  }
+
+  const body = (await request.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
+  const expiresMinutes = body.expiresMinutes ?? 15;
+  if (
+    typeof expiresMinutes !== "number" ||
+    !Number.isInteger(expiresMinutes) ||
+    expiresMinutes < 1 ||
+    expiresMinutes > 60
+  ) {
+    throw new HttpError(400, "expiresMinutes must be an integer from 1 to 60");
+  }
+
+  const replacementId = `pair-${crypto.randomUUID()}`;
+  const token = `conclave_pair_${crypto.randomUUID().replace(/-/g, "")}`;
+  const now = new Date();
+  const createdAt = now.toISOString();
+  const expiresAt = new Date(
+    now.getTime() + expiresMinutes * 60_000,
+  ).toISOString();
+  await env.CONCLAVE_DB.batch([
+    env.CONCLAVE_DB.prepare(
+      `UPDATE workspace_pairing_intents SET cancelled_at = ?1
+        WHERE pairing_id = ?2 AND owner_user_id = ?3 AND used_at IS NULL`,
+    ).bind(createdAt, pairingId, context.userId),
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO workspace_pairing_intents
+         (pairing_id, owner_user_id, token_hash, created_at, expires_at)
+       VALUES (?1, ?2, ?3, ?4, ?5)`,
+    ).bind(
+      replacementId,
+      context.userId,
+      await hashToken(token),
+      createdAt,
+      expiresAt,
+    ),
+  ]);
+
+  return json(
+    {
+      id: replacementId,
+      token,
+      status: "pending",
+      createdAt,
+      expiresAt,
+    },
+    { status: 201 },
+  );
+}
+
+async function handleCancelWorkspacePairingIntent(
+  request: Request,
+  env: SecurityEnv,
+  pairingId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, accessContext);
+  const existing = await env.CONCLAVE_DB.prepare(
+    `SELECT used_at, cancelled_at, expires_at
+       FROM workspace_pairing_intents
+      WHERE pairing_id = ?1 AND owner_user_id = ?2`,
+  )
+    .bind(pairingId, context.userId)
+    .first<{
+      used_at: string | null;
+      cancelled_at: string | null;
+      expires_at: string;
+    }>();
+  if (!existing) throw new HttpError(404, "Pairing intent not found");
+  if (existing.used_at) {
+    throw new HttpError(409, "A claimed pairing intent cannot be cancelled");
+  }
+  if (
+    existing.cancelled_at ||
+    existing.expires_at <= new Date().toISOString()
+  ) {
+    return json({
+      ok: true,
+      status: existing.cancelled_at ? "cancelled" : "expired",
+    });
+  }
+  const cancelledAt = new Date().toISOString();
+  await env.CONCLAVE_DB.prepare(
+    `UPDATE workspace_pairing_intents SET cancelled_at = ?1
+      WHERE pairing_id = ?2 AND owner_user_id = ?3 AND used_at IS NULL
+        AND cancelled_at IS NULL`,
+  )
+    .bind(cancelledAt, pairingId, context.userId)
+    .run();
+  return json({ ok: true, status: "cancelled", cancelledAt });
+}
+
 async function handleGetWorkspace(
   request: Request,
   env: SecurityEnv,
@@ -4490,6 +4698,7 @@ async function handleRedeemWorkspaceEnrollment(
     token?: string;
     name?: string;
     hostname?: string;
+    installationId?: string;
     platform?: string;
     architecture?: string;
     appVersion?: string;
@@ -4502,6 +4711,128 @@ async function handleRedeemWorkspaceEnrollment(
 
   const tokenHash = await hashToken(token);
   const now = new Date().toISOString();
+  const pairingIntent = await env.CONCLAVE_DB.prepare(
+    `SELECT pairing_id AS pairingId, owner_user_id AS ownerUserId
+       FROM workspace_pairing_intents
+      WHERE token_hash = ?1 AND used_at IS NULL AND cancelled_at IS NULL
+        AND expires_at > ?2`,
+  )
+    .bind(tokenHash, now)
+    .first<{ pairingId: string; ownerUserId: string }>();
+  if (pairingIntent) {
+    const installationId = body.installationId?.trim();
+    const name = body.name?.trim();
+    if (!installationId || installationId.length > 200) {
+      return json(
+        { error: "A valid installationId is required to claim pairing" },
+        { status: 400 },
+      );
+    }
+    if (!name || name.length > 120) {
+      return json(
+        { error: "A Workspace display name is required to claim pairing" },
+        { status: 400 },
+      );
+    }
+
+    const workspaceId = `ws-${crypto.randomUUID()}`;
+    const runtimeId = `runtime-${crypto.randomUUID()}`;
+    const authToken = `conclave_workspace_tok_${crypto.randomUUID().replace(/-/g, "")}`;
+    const authTokenHash = await hashToken(authToken);
+    const results = await env.CONCLAVE_DB.batch([
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO execution_workspaces
+           (id, owner_user_id, name, status, created_at, updated_at)
+         SELECT ?1, ?2, ?3, 'offline', ?4, ?4
+          WHERE EXISTS (
+            SELECT 1 FROM workspace_pairing_intents
+             WHERE pairing_id = ?5 AND token_hash = ?6
+               AND owner_user_id = ?2 AND used_at IS NULL
+               AND cancelled_at IS NULL AND expires_at > ?4
+          )`,
+      ).bind(
+        workspaceId,
+        pairingIntent.ownerUserId,
+        name,
+        now,
+        pairingIntent.pairingId,
+        tokenHash,
+      ),
+      env.CONCLAVE_DB.prepare(
+        `UPDATE workspace_pairing_intents SET used_at = ?1,
+              claimed_workspace_id = ?2
+          WHERE pairing_id = ?3 AND token_hash = ?4 AND owner_user_id = ?5
+            AND used_at IS NULL AND cancelled_at IS NULL AND expires_at > ?1
+            AND EXISTS (SELECT 1 FROM execution_workspaces WHERE id = ?2)`,
+      ).bind(
+        now,
+        workspaceId,
+        pairingIntent.pairingId,
+        tokenHash,
+        pairingIntent.ownerUserId,
+      ),
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO workspace_runtime_identities
+           (id, workspace_id, credential_key_ref, credential_token_hash,
+            installation_id, created_at, revoked_at)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, NULL
+          WHERE EXISTS (
+            SELECT 1 FROM execution_workspaces
+             WHERE id = ?2 AND owner_user_id = ?7
+          )`,
+      ).bind(
+        runtimeId,
+        workspaceId,
+        `workspace-runtime:${runtimeId}`,
+        authTokenHash,
+        installationId,
+        now,
+        pairingIntent.ownerUserId,
+      ),
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO workspace_audit_log
+           (id, workspace_id, actor_type, actor_id, action, target_type,
+            target_id, details_json, created_at)
+         SELECT ?1, ?2, 'workspace', ?3, 'workspace.runtime.paired',
+                'workspace_runtime', ?3, ?4, ?5
+          WHERE EXISTS (
+            SELECT 1 FROM workspace_runtime_identities WHERE id = ?3
+          )`,
+      ).bind(
+        `audit-${crypto.randomUUID()}`,
+        workspaceId,
+        runtimeId,
+        JSON.stringify({
+          pairingId: pairingIntent.pairingId,
+          installationId,
+          hostname: body.hostname ?? null,
+          platform: body.platform ?? null,
+          architecture: body.architecture ?? null,
+          appVersion: body.appVersion ?? null,
+        }),
+        now,
+      ),
+    ]);
+    if (
+      (results[0]?.meta?.changes ?? 0) !== 1 ||
+      (results[1]?.meta?.changes ?? 0) !== 1
+    ) {
+      return json(
+        { error: "Pairing code was already used or is no longer valid" },
+        { status: 409 },
+      );
+    }
+    return json(
+      {
+        workspaceRuntimeId: runtimeId,
+        workspaceId,
+        workspaceName: name,
+        authToken,
+      },
+      { status: 201 },
+    );
+  }
+
   const enrollment = await env.CONCLAVE_DB.prepare(
     `SELECT e.id, e.workspace_id AS workspaceId, ew.name AS workspaceName
        FROM workspace_enrollments e
@@ -4559,20 +4890,24 @@ async function handleRedeemWorkspaceEnrollment(
     ).bind(now, enrollment.workspaceId),
     env.CONCLAVE_DB.prepare(
       `INSERT INTO workspace_runtime_identities
-        (id, workspace_id, credential_key_ref, credential_token_hash, created_at, revoked_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, NULL)`,
+        (id, workspace_id, credential_key_ref, credential_token_hash,
+         installation_id, created_at, revoked_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL)`,
     ).bind(
       runtimeId,
       enrollment.workspaceId,
       `workspace-runtime:${runtimeId}`,
       authTokenHash,
+      body.installationId?.trim() || null,
       now,
     ),
     env.CONCLAVE_DB.prepare(
       `UPDATE execution_workspaces
-          SET status = 'offline', updated_at = ?1
+          SET status = 'offline',
+              name = COALESCE(?3, name),
+              updated_at = ?1
         WHERE id = ?2 AND status <> 'revoked'`,
-    ).bind(now, enrollment.workspaceId),
+    ).bind(now, enrollment.workspaceId, body.name?.trim() || null),
     env.CONCLAVE_DB.prepare(
       `INSERT INTO workspace_audit_log
         (id, workspace_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
@@ -4582,6 +4917,7 @@ async function handleRedeemWorkspaceEnrollment(
       enrollment.workspaceId,
       runtimeId,
       JSON.stringify({
+        name: body.name ?? null,
         hostname: body.hostname ?? null,
         platform: body.platform ?? null,
         architecture: body.architecture ?? null,
@@ -4591,11 +4927,13 @@ async function handleRedeemWorkspaceEnrollment(
     ),
   ]);
 
+  const effectiveWorkspaceName = body.name?.trim() || enrollment.workspaceName;
+
   return json(
     {
       workspaceRuntimeId: runtimeId,
       workspaceId: enrollment.workspaceId,
-      workspaceName: enrollment.workspaceName,
+      workspaceName: effectiveWorkspaceName,
       authToken,
     },
     { status: 201 },
@@ -10181,6 +10519,10 @@ export {
   handleGetReleaseTrustState,
   handleRevokeReleaseSigningKey,
   handleCreateWorkspace,
+  handleCreateWorkspacePairingIntent,
+  handleGetWorkspacePairingIntent,
+  handleRegenerateWorkspacePairingIntent,
+  handleCancelWorkspacePairingIntent,
   handleUploadArtifact,
   handleGetArtifact,
   handleExportWorkspaceAudit,

@@ -94,6 +94,48 @@ export async function routeWorkerRequest(
     if (request.method === "GET" && url.pathname === "/api/workspaces") {
       return await handlers.handleListWorkspaces!(request, env, ctx);
     }
+    if (
+      request.method === "POST" &&
+      url.pathname === "/api/workspace-pairing-intents"
+    ) {
+      return await handlers.handleCreateWorkspacePairingIntent!(
+        request,
+        env,
+        ctx,
+      );
+    }
+    const pairingIntentMatch = url.pathname.match(
+      /^\/api\/workspace-pairing-intents\/([^/]+)(?:\/(regenerate|cancel))?$/,
+    );
+    if (pairingIntentMatch?.[1]) {
+      if (request.method === "GET" && !pairingIntentMatch[2]) {
+        return await handlers.handleGetWorkspacePairingIntent!(
+          request,
+          env,
+          pairingIntentMatch[1],
+          ctx,
+        );
+      }
+      if (request.method === "POST" && pairingIntentMatch[2] === "regenerate") {
+        return await handlers.handleRegenerateWorkspacePairingIntent!(
+          request,
+          env,
+          pairingIntentMatch[1],
+          ctx,
+        );
+      }
+      if (
+        (request.method === "POST" || request.method === "DELETE") &&
+        pairingIntentMatch[2] === "cancel"
+      ) {
+        return await handlers.handleCancelWorkspacePairingIntent!(
+          request,
+          env,
+          pairingIntentMatch[1],
+          ctx,
+        );
+      }
+    }
     if (request.method === "POST" && url.pathname === "/api/workspaces") {
       return await handlers.handleCreateWorkspace!(request, env, ctx);
     }

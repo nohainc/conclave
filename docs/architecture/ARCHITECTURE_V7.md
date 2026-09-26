@@ -171,24 +171,26 @@ Adapters are infrastructure, not separately installed product apps.
 
 ## 5. Workspace lifecycle
 
-### 5.1 Create
+### 5.1 Pair an installation
 
-Conclave AX asks only for Workspace name.
+Conclave AX creates a short-lived, owner-scoped pairing intent. No permanent
+Workspace exists yet, and Cloud stores only a hash of the one-time code. The
+desktop generates a stable installation ID and proposes a display name from
+the computer's friendly OS name; the user may edit it before pairing.
 
-Do not ask the user for platform.
+The desktop claims the code through:
 
 ~~~text
-Add Workspace
-Workspace name: [MacBook Pro]
+POST /api/workspace-runtime/enroll
 ~~~
 
-### 5.2 Connect
+For a pairing intent, Cloud atomically consumes the intent, creates the
+Workspace and runtime identity, and returns the runtime credential once. The
+credential is stored on the desktop. A claimed installation cannot silently
+pair to another identity; it must be explicitly unpaired first. Existing
+Workspace enrollment codes remain supported for already-created Workspaces.
 
-Workspace exists in Cloud as Not connected.
-
-User chooses **Connect machine**, receives an enrollment code, installs/opens Conclave Workspace and pairs it.
-
-### 5.3 Runtime reports machine facts
+### 5.2 Runtime reports machine facts
 
 After pairing, Workspace reports:
 - OS;
@@ -200,7 +202,7 @@ After pairing, Workspace reports:
 
 Machine facts are observed runtime state, not user configuration.
 
-### 5.4 Downloads
+### 5.3 Downloads
 
 The canonical download surface remains a dedicated Downloads page.
 
@@ -210,19 +212,12 @@ Contextual links may appear:
 - global app menu;
 - Workspace update prompt.
 
-### 5.5 Pairing protocol
+### 5.4 Pairing intent API
 
-The web application creates a one-time `workspace_enrollments` code.
-
-Conclave Workspace redeems it through:
-
-~~~text
-POST /api/workspace-runtime/enroll
-~~~
-
-Cloud returns:
-- Workspace Runtime ID;
-- Workspace ID/name;
+AX creates, checks, cancels, or regenerates temporary pairing intents through
+`/api/workspace-pairing-intents`. Status reads never return the raw code. The
+first successful desktop claim creates the permanent Workspace; expiry,
+cancellation, and a successful claim make the code unusable.
 - one runtime bearer token.
 
 The desktop app stores the bearer token only in the OS secure credential store and writes only non-secret registration metadata to disk. It then opens:

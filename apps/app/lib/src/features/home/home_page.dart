@@ -78,7 +78,7 @@ class _GettingStarted extends StatelessWidget {
               number: '1',
               title: 'Add a Workspace',
               detail: 'Connect a machine where Workers can run.',
-              action: 'Add Workspace',
+              action: 'Pair Workspace',
               onPressed: onOpenWorkspaces),
           _SetupStep(
               number: '2',

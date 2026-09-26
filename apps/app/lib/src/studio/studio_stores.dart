@@ -69,14 +69,28 @@ class WorkspaceStore {
   Future<StudioWorkspaceEnrollment> createEnrollment(String workspaceId) =>
       source.createWorkspaceEnrollment(workspaceId: workspaceId);
 
+  Future<StudioWorkspacePairingIntent> createPairingIntent() =>
+      source.createWorkspacePairingIntent();
+
+  Future<StudioWorkspacePairingIntent> pairingIntent(String pairingIntentId) =>
+      source.getWorkspacePairingIntent(pairingIntentId: pairingIntentId);
+
+  Future<StudioWorkspacePairingIntent> regeneratePairingIntent(
+          String pairingIntentId) =>
+      source.regenerateWorkspacePairingIntent(pairingIntentId: pairingIntentId);
+
+  Future<void> cancelPairingIntent(String pairingIntentId) =>
+      source.cancelWorkspacePairingIntent(pairingIntentId: pairingIntentId);
+
   Future<void> revoke(String workspaceId) =>
       source.revokeWorkspace(workspaceId: workspaceId);
 
   Future<void> update(String workspaceId, String name) async {
-    final updated = await source.updateWorkspace(
-        workspaceId: workspaceId, name: name);
-    replace(items.map((workspace) =>
-        workspace.id == workspaceId ? updated : workspace).toList());
+    final updated =
+        await source.updateWorkspace(workspaceId: workspaceId, name: name);
+    replace(items
+        .map((workspace) => workspace.id == workspaceId ? updated : workspace)
+        .toList());
   }
 
   Future<void> announceUpdate(String workspaceId, String runtimeId,

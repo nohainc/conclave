@@ -26,6 +26,7 @@ const migrationFiles = [
   "0025_v7_assignment_runtime.sql",
   "0026_remove_v6_configured_workers.sql",
   "0027_public_key_release_trust.sql",
+  "0028_workspace_pairing_intents.sql",
 ];
 
 const schema = migrationFiles
@@ -75,6 +76,18 @@ describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
     ).toEqual([{ count: 0 }]);
   });
 
+  it("stores pairing intent before any permanent execution Workspace exists", () => {
+    const result = apply(`
+      INSERT INTO users VALUES ('u1', 'owner@example.test', 'Owner', 'active', '2026-01-01', '2026-01-01');
+      INSERT INTO workspace_pairing_intents
+        (pairing_id, owner_user_id, token_hash, created_at, expires_at)
+        VALUES ('pair-1', 'u1', 'sha256:token-hash', '2026-01-01', '2026-01-01T00:15:00Z');
+      SELECT (SELECT COUNT(*) FROM workspace_pairing_intents) AS intent_count,
+             (SELECT COUNT(*) FROM execution_workspaces) AS workspace_count;
+    `) as { intent_count: number; workspace_count: number }[];
+    expect(result).toEqual([{ intent_count: 1, workspace_count: 0 }]);
+  });
+
   it("forward-migrates legacy assignment and audit attribution, then removes V6 tables", () => {
     const result = JSON.parse(
       execFileSync("sqlite3", ["-json", ":memory:"], {
@@ -112,7 +125,9 @@ describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
     const result = apply(`
       INSERT INTO users VALUES ('u1', 'owner@example.test', 'Owner', 'active', '2026-01-01', '2026-01-01');
       INSERT INTO execution_workspaces VALUES ('ws1', 'u1', 'MacBook Pro', 'online', '2026-01-01', '2026-01-01');
-      INSERT INTO workspace_runtime_identities VALUES ('runtime1', 'ws1', 'key-ref', '2026-01-01', NULL);
+      INSERT INTO workspace_runtime_identities
+        (id, workspace_id, credential_key_ref, created_at, revoked_at)
+        VALUES ('runtime1', 'ws1', 'key-ref', '2026-01-01', NULL);
       INSERT INTO workers VALUES ('codex', 'Codex', 'active', '2026-01-01', '2026-01-01');
 
       -- V7 Workspace-owned worker inventory synced from local Conclave Workspace

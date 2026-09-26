@@ -620,6 +620,34 @@ class StudioWorkspaceEnrollment {
       );
 }
 
+class StudioWorkspacePairingIntent {
+  const StudioWorkspacePairingIntent({
+    required this.id,
+    required this.status,
+    required this.expiresAt,
+    required this.createdAt,
+    this.token,
+    this.workspaceId,
+  });
+
+  final String id;
+  final String status;
+  final String expiresAt;
+  final String createdAt;
+  final String? token;
+  final String? workspaceId;
+
+  factory StudioWorkspacePairingIntent.fromJson(Map<String, dynamic> json) =>
+      StudioWorkspacePairingIntent(
+        id: _string(json, 'id'),
+        status: _string(json, 'status', 'pending'),
+        expiresAt: _string(json, 'expiresAt'),
+        createdAt: _string(json, 'createdAt'),
+        token: _string(json, 'token').isEmpty ? null : _string(json, 'token'),
+        workspaceId: json['workspaceId']?.toString(),
+      );
+}
+
 class StudioCredentialProfile {
   const StudioCredentialProfile({
     required this.id,
@@ -1020,8 +1048,8 @@ class StudioWorkspace {
         runtimeCapabilities: _jsonStrings(json, 'runtimeCapabilitiesJson'),
         factsUpdatedAt: json['factsUpdatedAt']?.toString(),
         updateChannel: _string(json, 'updateChannel', 'stable'),
-        lastSeen: _string(json, 'lastSeen',
-            json['factsUpdatedAt']?.toString() ?? '—'),
+        lastSeen: _string(
+            json, 'lastSeen', json['factsUpdatedAt']?.toString() ?? '—'),
         workerCount: json['workerCount'] as int? ?? 0,
         activeTaskCount: json['activeTaskCount'] as int? ?? 0,
         projectGrantCount: json['projectGrantCount'] as int? ?? 0,
@@ -1283,8 +1311,8 @@ class StudioSnapshot {
                 StudioProject.fromJson(Map<String, dynamic>.from(item as Map)))
             .toList(),
         workspaces: (json['workspaces'] as List? ?? const [])
-            .map((item) =>
-                StudioWorkspace.fromJson(Map<String, dynamic>.from(item as Map)))
+            .map((item) => StudioWorkspace.fromJson(
+                Map<String, dynamic>.from(item as Map)))
             .toList(),
         tasks: (json['tasks'] as List? ?? const [])
             .map((item) =>

@@ -72,6 +72,13 @@ const routeHandlers = {
   handleConnectorTaskRequest: handlers.handleConnectorTaskRequest,
   handleListWorkspaces: handlers.handleListWorkspaces,
   handleCreateWorkspace: handlers.handleCreateWorkspace,
+  handleCreateWorkspacePairingIntent:
+    handlers.handleCreateWorkspacePairingIntent,
+  handleGetWorkspacePairingIntent: handlers.handleGetWorkspacePairingIntent,
+  handleRegenerateWorkspacePairingIntent:
+    handlers.handleRegenerateWorkspacePairingIntent,
+  handleCancelWorkspacePairingIntent:
+    handlers.handleCancelWorkspacePairingIntent,
   handleUploadArtifact: handlers.handleUploadArtifact,
   handleGetArtifact: handlers.handleGetArtifact,
   handleExportWorkspaceAudit: handlers.handleExportWorkspaceAudit,

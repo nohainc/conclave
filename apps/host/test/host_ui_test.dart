@@ -5,6 +5,7 @@ import 'package:conclave_host/configured_worker_registry.dart';
 import 'package:conclave_host/main.dart';
 import 'package:conclave_host/platform_runtime.dart';
 import 'package:conclave_host/secure_credentials.dart';
+import 'package:conclave_host/workspace_pairing_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -84,6 +85,7 @@ void main() {
     WidgetTester tester,
     HostUiSnapshot snapshot, {
     VoidCallback? onPair,
+    Future<void> Function(WorkspacePairingRequest request)? onPairRequest,
     VoidCallback? onUnpair,
     VoidCallback? onAccountAction,
     VoidCallback? onQuit,
@@ -99,6 +101,7 @@ void main() {
           body: HostDashboard(
             snapshot: snapshot,
             onPair: onPair,
+            onPairRequest: onPairRequest,
             onUnpair: onUnpair,
             onAccountAction: onAccountAction,
             onQuit: onQuit,
@@ -114,28 +117,51 @@ void main() {
     );
   }
 
-  testWidgets('first launch presents clean workspace tab with pairing, work root, and diagnostics', (tester) async {
-    var paired = false;
+  testWidgets('first launch presents clean workspace tab with inline connect card, work root, and diagnostics', (tester) async {
+    tester.view.physicalSize = const Size(800, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    WorkspacePairingRequest? capturedRequest;
     await pumpDashboard(
       tester,
       const HostUiSnapshot(
         mode: HostUiMode.firstLaunch,
         title: 'Pair this Workspace',
         detail: 'Connect this machine to Conclave to begin.',
+        hostname: 'test-mac',
+        workspaceName: "Vitalii's MacBook Pro",
         workRootPath: '/Users/test/Work',
       ),
-      onPair: () => paired = true,
+      onPairRequest: (request) async => capturedRequest = request,
     );
 
-    expect(find.text('Workspace Pairing'), findsOneWidget);
-    expect(find.text('Open Pairing'), findsOneWidget);
+    expect(find.text('Connect this Workspace'), findsOneWidget);
+    expect(find.text('Connect this computer to Conclave AX.'), findsOneWidget);
+    expect(find.text('Workspace name'), findsOneWidget);
+    expect(find.text("Vitalii's MacBook Pro"), findsOneWidget);
+    expect(find.text('Pairing code'), findsOneWidget);
+    expect(find.text('You create the pairing code in Conclave AX → Workspaces → Connect Workspace.'), findsOneWidget);
+    expect(find.text('Open Conclave AX'), findsOneWidget);
+    expect(find.text('Advanced options'), findsOneWidget);
+    expect(find.text('Connect'), findsOneWidget);
     expect(find.text('Work Root'), findsOneWidget);
     expect(find.text('Advanced & Diagnostics'), findsOneWidget);
     expect(find.text('Projects'), findsNothing);
     expect(find.text('Chats'), findsNothing);
 
-    await tester.tap(find.text('Open Pairing'));
-    expect(paired, isTrue);
+    // Enter code and connect
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Pairing code'),
+      'code-987',
+    );
+    await tester.tap(find.text('Connect'));
+    await tester.pumpAndSettle();
+
+    expect(capturedRequest, isNotNull);
+    expect(capturedRequest!.workspaceName, "Vitalii's MacBook Pro");
+    expect(capturedRequest!.token, 'code-987');
   });
 
   testWidgets('offline Workspace displays recovery panel with retry',
@@ -196,9 +222,9 @@ void main() {
     // Header actions: 3-lines menu icon, no duplicate button in header
     expect(find.byIcon(Icons.menu), findsOneWidget);
 
-    // Streamlined Workspace tab: Pairing, Work Root and Advanced & Diagnostics
-    expect(find.text('Workspace Pairing'), findsOneWidget);
-    expect(find.text('Open Pairing'), findsOneWidget);
+    // Streamlined Workspace tab: Connected card, Work Root and Advanced & Diagnostics
+    expect(find.text('Workspace Connected'), findsOneWidget);
+    expect(find.text('Paired as “MacBook Pro”'), findsOneWidget);
     expect(find.text('Work Root'), findsOneWidget);
     expect(find.text('Advanced & Diagnostics'), findsOneWidget);
 

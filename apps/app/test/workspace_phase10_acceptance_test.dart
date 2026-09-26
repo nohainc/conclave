@@ -32,22 +32,19 @@ void main() {
   );
 
   group('Phase 10: Workspace Creation & Explicit Pairing Acceptance', () {
-    test(
-        'Workspace creation requires only a name and does not imply a platform',
-        () async {
+    test('pairing intent is created without a permanent Workspace', () async {
       final requests = <http.BaseRequest>[];
       final client = MockClient((request) async {
         requests.add(request);
-        if (request.method == 'POST' && request.url.path == '/api/workspaces') {
+        if (request.method == 'POST' &&
+            request.url.path == '/api/workspace-pairing-intents') {
           return http.Response(
             jsonEncode({
-              'workspace': {
-                'id': 'workspace-1',
-                'name': 'MacBook Pro',
-                'slug': 'macbook-pro',
-                'status': 'not_connected',
-                'role': 'owner',
-              },
+              'id': 'pair-1',
+              'token': 'conclave_pair_opaque-once',
+              'status': 'pending',
+              'createdAt': '2026-09-26T12:00:00Z',
+              'expiresAt': '2026-09-26T12:15:00Z',
             }),
             201,
           );
@@ -59,23 +56,20 @@ void main() {
         client: client,
       );
 
-      final created = await api.createWorkspace(name: 'MacBook Pro');
+      final created = await api.createWorkspacePairingIntent();
 
-      expect(created.name, 'MacBook Pro');
-      expect(created.status, 'not_connected');
+      expect(created.id, 'pair-1');
+      expect(created.token, 'conclave_pair_opaque-once');
+      expect(created.status, 'pending');
       expect(requests, hasLength(1));
-      expect(requests.single.url.path, '/api/workspaces');
+      expect(requests.single.url.path, '/api/workspace-pairing-intents');
 
       final body = jsonDecode((requests.single as http.Request).body)
           as Map<String, dynamic>;
-      expect(body.keys, ['name']);
-      expect(body['name'], 'MacBook Pro');
-      expect(body.containsKey('platform'), isFalse);
-      expect(body.containsKey('os'), isFalse);
-      expect(body.containsKey('architecture'), isFalse);
+      expect(body, {'expiresMinutes': 15});
 
       expect(
-        requests.any((req) => req.url.path.endsWith('/enrollments')),
+        requests.any((req) => req.url.path == '/api/workspaces'),
         isFalse,
       );
     });

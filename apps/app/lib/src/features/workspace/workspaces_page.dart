@@ -109,11 +109,11 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
                             letterSpacing: -0.3)),
                   ),
                   Tooltip(
-                    message: 'Add Workspace',
+                    message: 'Pair Workspace',
                     child: FilledButton.icon(
                       onPressed: widget.onAdd,
                       icon: const Icon(Icons.add),
-                      label: const Text('Add Workspace'),
+                      label: const Text('Pair Workspace'),
                     ),
                   ),
                 ],
@@ -571,7 +571,7 @@ class _EmptyWorkspaces extends StatelessWidget {
             const SizedBox(height: 10),
             Wrap(spacing: 8, children: [
               FilledButton(
-                  onPressed: onAdd, child: const Text('Add Workspace')),
+                  onPressed: onAdd, child: const Text('Pair Workspace')),
               if (onOpenDownloads != null)
                 OutlinedButton(
                     onPressed: onOpenDownloads,

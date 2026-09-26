@@ -316,8 +316,7 @@ class StudioFixtureDataSource implements StudioDataSource {
   Future<void> deleteWorkstream({required String workstreamId}) async {}
 
   @override
-  Future<List<StudioWorker>> loadWorkspaceWorkerInventory() async =>
-      const [];
+  Future<List<StudioWorker>> loadWorkspaceWorkerInventory() async => const [];
 
   @override
   Future<void> setWorkspaceWorkerScheduling(
@@ -500,7 +499,46 @@ class StudioFixtureDataSource implements StudioDataSource {
     );
   }
 
+  @override
+  Future<StudioWorkspacePairingIntent> createWorkspacePairingIntent({
+    int expiresMinutes = 15,
+  }) async =>
+      const StudioWorkspacePairingIntent(
+        id: 'pairing-fixture',
+        token: 'conclave_pair_fixture',
+        status: 'pending',
+        createdAt: 'Now',
+        expiresAt: 'Soon',
+      );
 
+  @override
+  Future<StudioWorkspacePairingIntent> getWorkspacePairingIntent({
+    required String pairingIntentId,
+  }) async =>
+      const StudioWorkspacePairingIntent(
+        id: 'pairing-fixture',
+        status: 'pending',
+        createdAt: 'Now',
+        expiresAt: 'Soon',
+      );
+
+  @override
+  Future<StudioWorkspacePairingIntent> regenerateWorkspacePairingIntent({
+    required String pairingIntentId,
+    int expiresMinutes = 15,
+  }) async =>
+      const StudioWorkspacePairingIntent(
+        id: 'pairing-fixture-new',
+        token: 'conclave_pair_fixture_new',
+        status: 'pending',
+        createdAt: 'Now',
+        expiresAt: 'Soon',
+      );
+
+  @override
+  Future<void> cancelWorkspacePairingIntent({
+    required String pairingIntentId,
+  }) async {}
 }
 
 /// Stateful fixture used by the empty-workspace onboarding test. It mirrors

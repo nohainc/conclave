@@ -193,15 +193,18 @@ section, backed by real audit events.
   download, update status, and revoke live in the card's overflow menu or a
   focused dialog.
 - Empty state explains that a Workspace is a computer where Workers run and
-  offers **Add Workspace** as primary action and **Download Conclave
+  offers **Pair a Workspace** as primary action and **Download Conclave
   Workspace** as secondary action.
-- An unconnected Cloud Workspace offers the enrollment/connect-machine flow.
-  Worker inventory appears only after the desktop has synchronized it.
+- Pairing creates a temporary owner-scoped intent, not a permanent Workspace.
+  The desktop proposes an editable display name and claims the one-time code;
+  Cloud creates the Workspace and runtime identity only after a successful
+  claim. Existing paired Workspaces remain available during migration.
+- Worker inventory appears only after the desktop has synchronized it.
 - Home may summarize Projects, Workspaces, and Active Runs. It must not make
   Workers a separate top-level destination; a Ready Workers metric, if kept,
   opens or focuses the Workspaces page.
-- Setup guidance is: add/connect a Workspace, configure Workers locally in
-  Conclave Workspace, then create or grant Project access as needed.
+- Setup guidance is: install and configure Workers locally in Conclave
+  Workspace, pair the installation, then grant Project access as needed.
 
 ## Routing compatibility contract
 

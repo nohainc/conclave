@@ -498,8 +498,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
     try {
       final loadedWorkspaces = await store.workspaces.list();
       if (!mounted) return;
-      setState(() =>
-          snapshot = snapshot.copyWith(workspaces: loadedWorkspaces));
+      setState(
+          () => snapshot = snapshot.copyWith(workspaces: loadedWorkspaces));
       try {
         final localWorkers =
             await widget.dataSource.loadWorkspaceWorkerInventory();
@@ -1191,50 +1191,100 @@ class _StudioAppState extends State<ConclaveAppShell> {
   }
 
   Future<void> _enrollWorkspace() async {
-    var name = 'My Workspace';
-    final selected = await showDialog<String>(
-      context: navigatorKey.currentContext ?? context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Add Workspace'),
-        content: TextFormField(
-          initialValue: name,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Workspace name',
-            hintText: 'e.g. MacBook Pro',
-          ),
-          onChanged: (value) => name = value,
-          onFieldSubmitted: (value) {
-            if (value.trim().isNotEmpty) {
-              Navigator.pop(dialogContext, value.trim());
-            }
-          },
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () {
-              final trimmed = name.trim();
-              if (trimmed.isEmpty) return;
-              Navigator.pop(dialogContext, trimmed);
-            },
-            child: const Text('Create Workspace'),
-          ),
-        ],
-      ),
-    );
-    if (selected == null) return;
     try {
-      final workspace = await store.workspaces.create(name: selected);
+      var pairingIntent = await store.workspaces.createPairingIntent();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: navigatorKey.currentContext ?? context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Connect a Workspace'),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Open Conclave Workspace on the computer you want to pair. Enter this one-time code and choose the Workspace name there.',
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: SelectableText(
+                          pairingIntent.token ?? 'Pairing code unavailable',
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Copy code',
+                        onPressed: pairingIntent.token == null
+                            ? null
+                            : () async {
+                                await Clipboard.setData(
+                                    ClipboardData(text: pairingIntent.token!));
+                                if (context.mounted) {
+                                  _showSnackBar('Pairing code copied.');
+                                }
+                              },
+                        icon: const Icon(Icons.copy_rounded),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(_enrollmentExpiryLabel(pairingIntent.expiresAt)),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  try {
+                    await store.workspaces
+                        .cancelPairingIntent(pairingIntent.id);
+                    if (dialogContext.mounted) {
+                      Navigator.pop(dialogContext);
+                    }
+                  } catch (error) {
+                    if (dialogContext.mounted) {
+                      _showSnackBar('$error', type: ToastType.error);
+                    }
+                  }
+                },
+                child: const Text('Cancel pairing'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  try {
+                    final replacement = await store.workspaces
+                        .regeneratePairingIntent(pairingIntent.id);
+                    if (dialogContext.mounted) {
+                      setDialogState(() => pairingIntent = replacement);
+                    }
+                  } catch (error) {
+                    if (dialogContext.mounted) {
+                      _showSnackBar('$error', type: ToastType.error);
+                    }
+                  }
+                },
+                child: const Text('Generate new code'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Done'),
+              ),
+            ],
+          ),
+        ),
+      );
       await _loadWorkspaces();
-      await _loadSnapshot(workspaceId: workspace.id, showSpinner: false);
-      if (mounted) {
-        _showSnackBar('Workspace created. Connect a machine when ready.');
-      }
     } catch (error) {
-      if (mounted) setState(() => loadError = error.toString());
+      if (mounted) _showSnackBar('$error', type: ToastType.error);
     }
   }
 
@@ -2205,7 +2255,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
     });
   }
 
-      Widget _homeView() => HomePage(
+  Widget _homeView() => HomePage(
         projects: snapshot.projects,
         workspaces: snapshot.workspaces,
         workers: workspaceWorkers,
@@ -2213,7 +2263,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
         openFindingCount: snapshot.findings
             .where((finding) => finding.status == FindingStatus.open)
             .length,
-        onOpenWorkspaces: () => _navigateTo(const StudioNavigation.workspaces()),
+        onOpenWorkspaces: () =>
+            _navigateTo(const StudioNavigation.workspaces()),
         onOpenProject: (projectId) =>
             _navigateTo(StudioNavigation.project(projectId)),
         onOpenChat: (projectId, chatId) =>
