@@ -8,7 +8,7 @@ Primary domain: **conclaveax.com**
 
 ## Architecture
 
-Architecture v6 is the Workstream/filesystem baseline. Architecture v7 is the active Worker/runtime implementation target.
+Architecture v6 is the Workstream/filesystem baseline. Architecture v7 is the active Worker/runtime implementation target; its desktop vertical slice is implemented while Cloud-model cleanup, production trust, acceptance, and desktop maturity remain in progress.
 
 ```text
 Conclave AX -> Conclave Cloud -> Conclave Workspace -> configured Worker -> adapter process
@@ -64,6 +64,7 @@ Adapter processes run as separate per-assignment child processes under Conclave 
 - [ADR-012: Workspace-owned local Workers](docs/decisions/ADR-012-workspace-owned-local-workers.md)
 - [v7 implementation roadmap](docs/roadmaps/ARCHITECTURE_V7_IMPLEMENTATION.md)
 - [v7 implementation audit](docs/architecture/V7_IMPLEMENTATION_AUDIT.md)
+- [v7 completion plan](docs/roadmaps/ARCHITECTURE_V7_COMPLETION.md)
 - [AI Development Rules](AGENTS.md)
 
 Deployment guidance is in [docs/deployment/CLOUDFLARE.md](docs/deployment/CLOUDFLARE.md).

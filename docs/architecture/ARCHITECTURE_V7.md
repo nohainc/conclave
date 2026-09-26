@@ -1,6 +1,6 @@
 # Conclave AX Architecture v7 — Local Worker Runtime and Adapter Execution
 
-**Status:** Active implementation target — desktop runtime convergence in progress  
+**Status:** Active implementation target — desktop vertical slice implemented; Cloud/model/release convergence in progress  
 **Date:** 2026-09-26  
 **Builds on:** Architecture v6 Workstreams + ADR-011 filesystem model  
 **Primary decision:** [ADR-012](../decisions/ADR-012-workspace-owned-local-workers.md)
@@ -621,15 +621,19 @@ One assignment child process is default.
 
 Prefer structured stdin/stdout protocol.
 
-Minimum messages:
+Initial protocol messages:
 - initialize;
+- validate;
 - execute;
 - progress;
-- request-input where supported;
 - result;
 - error;
-- cancel/termination semantics;
 - health/version.
+
+Cancellation is enforced by the Workspace process supervisor. Interactive
+request/response input is deferred until a supported adapter requires it; add it
+through an explicit versioned protocol extension rather than implying that the
+initial V7 schema already supports it.
 
 Protocol must include:
 - schema version;
@@ -883,3 +887,8 @@ Do not declare v7 production-complete until:
 - at least one real Codex and one real Antigravity execution succeed from locally configured Workers;
 - legacy Cloud-created/multi-Workspace Worker execution is no longer required;
 - adapter package verification no longer requires shipping the signing secret and uses asymmetric public-key trust.
+
+
+## Completion plan
+
+See [Architecture v7 Completion Plan](../roadmaps/ARCHITECTURE_V7_COMPLETION.md) for the remaining convergence and release gates.
