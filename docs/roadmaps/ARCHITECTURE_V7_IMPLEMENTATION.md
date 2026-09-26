@@ -32,17 +32,17 @@
 - [~] **V7-4 — production adapter trust.** Manifest/package admission, digest checks, health checks and rollback exist, but release trust still uses a shared HMAC secret. Public desktop distribution requires asymmetric signing: private key in release infrastructure, public verification key(s) in Conclave Workspace.
 - [~] **V7-7 — Antigravity live acceptance.** Adapter now targets official `agy` headless mode. Real Google-account acceptance remains opt-in/manual because it requires a provider account/quota.
 - [~] **V7-8 — API adapters.** OpenAI/Gemini/Anthropic provider adapters and mocked validation exist; opt-in live-provider acceptance and richer streaming/tool behavior remain.
-- [~] **V7-10/V7-11 — Cloud model cleanup.** v7 Worker inventory exists, but legacy v6 configured-Worker/binding persistence and APIs remain for migration compatibility.
-- [~] **V7-12/V7-13 — web execution UX cleanup.** Normal AX Worker setup is now local-only, but obsolete legacy data models/callbacks can still be removed after backend migration.
-- [~] **V7-14/V7-15 — scheduler/authorization cleanup.** Scheduler can use Workspace-owned inventory and respects local permission ceilings, but still carries compatibility resolution for v6 bindings.
+- [~] **V7-10/V7-11 — Cloud model/control cleanup.** V7 Worker inventory exists, but legacy V6 configured-Worker/binding persistence and APIs remain. V7 also still needs independent Cloud-owned scheduling state (`enabled` / `disabled` / `draining`) rather than deriving remote schedulability from local readiness.
+- [~] **V7-12/V7-13 — web execution UX cleanup.** Normal AX Worker setup is now local-only. Add the V7 scheduling controls and remove obsolete legacy data models/callbacks after backend migration.
+- [~] **V7-14/V7-15 — scheduler/authorization cleanup.** Scheduler can use Workspace-owned inventory and respects local permission ceilings, but still merges V7 candidates with V6 binding candidates. V7 must become sufficient for scheduling before the fallback is removed.
 - [~] **V7-17 — background desktop UX.** macOS no longer terminates when the main window closes; a real menu-bar/tray/reopen/drain UX remains.
 - [~] **V7-18 — local permission/auth maturity.** Local credential storage and permission ceilings are enforced; provider-specific reauthentication/attention UX remains uneven.
 - [~] **V7-19 — release/update maturity.** Adapter rollback exists and macOS package/sign/notarize support now exists; app self-update and production adapter key rotation remain.
 - [~] **V7-21 — observability.** Useful runtime/Worker status and audit exist without Usage accounting; desktop diagnostics can be expanded.
 - [ ] **V7-22 — remove legacy v6 Worker compatibility.**
-- [~] **V7-23…V7-27 — acceptance.** Automated unit/protocol tests cover major pieces; real signed macOS + real Cloud + real Codex/Antigravity/provider acceptance must pass before declaring v7 production-ready.
+- [~] **V7-23…V7-27 — acceptance.** Automated unit/protocol/schema tests cover major pieces, but the current `v7-solo-acceptance.test.ts` inserts inventory and completed assignment state directly. A real scheduler -> Workspace Gateway -> local Worker -> adapter child-process -> result integration harness, plus signed macOS and live-provider acceptance, must pass before declaring v7 production-ready.
 
-See [V7 Implementation Audit](../architecture/V7_IMPLEMENTATION_AUDIT.md) for the current convergence and release gates.
+See [V7 Implementation Audit](../architecture/V7_IMPLEMENTATION_AUDIT.md) for the current convergence and release gates. The ordered remaining work is maintained in [Architecture v7 Completion Plan](ARCHITECTURE_V7_COMPLETION.md).
 
 ## Objective
 
@@ -497,14 +497,14 @@ Same shape as Codex, adapted to supported Antigravity CLI/headless interfaces.
 - Workstream CWD;
 - error/status normalization.
 
-The first-party Antigravity V7 protocol adapter now wraps the local Antigravity
-CLI using JSONL execution, the resolved Workstream CWD, locally selected models,
-and the CLI workspace-write sandbox. It checks the local Google-account session
-through `antigravity auth status`, emits sanitized progress, and keeps provider
-tokens in Antigravity's local store. Conclave Workspace offers local sign-in
-validation and launch for Antigravity. Host release packager tests verify that
-the checked-in manifest template is signed, admitted, and installed cleanly into
-the Workspace package store.
+The first-party Antigravity V7 protocol adapter wraps Google's `agy` CLI using
+stream-json execution, the resolved Workstream CWD and locally selected models.
+The Workspace validates the local Google-account session through the supported
+`agy` flow, emits sanitized progress and keeps provider authentication local.
+Do not reintroduce the obsolete `antigravity` executable or `antigravity auth
+status` contract. Host release packager tests verify that the checked-in manifest
+template is signed, admitted and installed cleanly into the Workspace package
+store. Real Google-account acceptance remains opt-in/manual.
 
 ## Exit
 
@@ -675,6 +675,7 @@ Keep:
 Support:
 - scheduling enable/disable;
 - drain;
+- explicit Cloud-owned scheduling state independent of local Worker readiness;
 - request reauthentication attention;
 - request diagnostics refresh;
 - optionally request adapter update.
@@ -692,7 +693,7 @@ Worker creation/deletion source of truth is local Workspace sync.
 
 ## Exit
 
-Cloud cannot manufacture a ready local Worker without Workspace participation.
+Cloud cannot manufacture a ready local Worker without Workspace participation, and Cloud scheduling policy can narrow a ready local Worker without mutating local configuration.
 
 ---
 
