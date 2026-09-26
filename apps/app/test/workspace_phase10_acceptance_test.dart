@@ -127,9 +127,9 @@ void main() {
       expect(find.text('Connection status'), findsOneWidget);
       expect(find.text('Not connected'), findsNWidgets(2));
       expect(find.text('Machine'), findsOneWidget);
-      expect(find.text('Connect machine'), findsOneWidget);
+      expect(find.text('Connect Machine'), findsOneWidget);
 
-      await tester.tap(find.text('Connect machine'));
+      await tester.tap(find.text('Connect Machine'));
       expect(connectMachineTriggered, isTrue);
 
       // 2. Transition State: Pairing
@@ -220,7 +220,7 @@ void main() {
                   shellContext: const StudioShellContext(
                     navigation: StudioNavigation.workspaces(),
                     workspaces: [initialWorkspace],
-                                        projects: [],
+                    projects: [],
                     themeMode: ThemeMode.system,
                   ),
                   onNavigateTo: (_) {},

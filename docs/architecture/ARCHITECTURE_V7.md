@@ -93,6 +93,7 @@ Conclave AX is the **web application** and human orchestration/control surface. 
 
 It owns UX for:
 - authentication;
+- Home summary for Projects, Workspaces, and Ready Workers;
 - Projects;
 - Workstreams;
 - Discuss;
@@ -103,6 +104,13 @@ It owns UX for:
 - remote enable/disable/drain controls;
 - results/audit/artifacts;
 - Workspace downloads/onboarding.
+
+Home presents Workspaces and Ready Workers as links to the same `/workspaces`
+page. Getting Started orders setup as: add a Workspace, configure Workers in
+the Conclave Workspace desktop runtime, then create a Project. AX does not
+provide a detached global Worker page or Worker tab. A Workspace card contains
+only Workers from that Workspace's V7 inventory; local authentication and
+prerequisite remediation happen in the desktop runtime.
 
 It does not own provider secrets.
 

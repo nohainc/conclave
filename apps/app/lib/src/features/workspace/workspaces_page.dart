@@ -275,6 +275,10 @@ class _WorkspaceCardBody extends StatelessWidget {
     final theme = Theme.of(context);
     final installed =
         workspace.appVersion.isNotEmpty && workspace.appVersion != '—';
+    final connected = switch (workspace.status.toLowerCase()) {
+      'online' || 'busy' || 'draining' => true,
+      _ => false,
+    };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -313,11 +317,12 @@ class _WorkspaceCardBody extends StatelessWidget {
         const Padding(
           padding: EdgeInsets.only(bottom: 8),
           child: Text(
-            'Worker configuration and authentication are managed in Conclave Workspace on this computer.',
+            'Configure and authenticate Workers in Conclave Workspace on this computer. Synced Workers appear here for Cloud scheduling.',
           ),
         ),
         if (workers.isEmpty)
-          Text('No Workers have synced from this Workspace.',
+          Text(
+              'No Workers have synced yet. Configure your first Worker in Conclave Workspace on this computer.',
               style: TextStyle(color: theme.colorScheme.onSurfaceVariant))
         else
           ...workers.map((worker) => _WorkerRow(
@@ -329,11 +334,11 @@ class _WorkspaceCardBody extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: [
-            if (!installed && onConnect != null)
+            if ((!installed || !connected) && onConnect != null)
               OutlinedButton.icon(
                 onPressed: onConnect,
                 icon: const Icon(Icons.link_outlined),
-                label: const Text('Connect machine'),
+                label: const Text('Connect Machine'),
               ),
             if (onOpenDownloads != null)
               OutlinedButton.icon(
@@ -608,5 +613,4 @@ String _statusLabel(String status) => switch (status.toLowerCase()) {
       _ => status,
     };
 
-int _grantCount(StudioWorkspace workspace) =>
-    workspace.projectGrantCount;
+int _grantCount(StudioWorkspace workspace) => workspace.projectGrantCount;

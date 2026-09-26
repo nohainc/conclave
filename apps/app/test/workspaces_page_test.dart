@@ -201,6 +201,8 @@ void main() {
       expect(find.text('Last seen'), findsOneWidget);
       expect(find.text('Active work'), findsOneWidget);
       expect(find.text('Workers'), findsNWidgets(2));
+      // A single Workspace opens with runtime facts visible immediately.
+      expect(find.text('development-agent.local'), findsOneWidget);
     });
 
     testWidgets('expands one or two Workspaces and uses an accordion for more',
@@ -354,7 +356,7 @@ void main() {
       expect(find.text('Cloud scheduling · Enabled'), findsOneWidget);
       expect(
         find.text(
-            'Worker configuration and authentication are managed in Conclave Workspace on this computer.'),
+            'Configure and authenticate Workers in Conclave Workspace on this computer. Synced Workers appear here for Cloud scheduling.'),
         findsOneWidget,
       );
       expect(find.text('Authentication · browser_auth'), findsNothing);
@@ -384,8 +386,7 @@ void main() {
             workerCount: 1,
             activeTaskCount: 0,
           );
-      StudioWorker worker(String id, String workspaceId) =>
-          StudioWorker(
+      StudioWorker worker(String id, String workspaceId) => StudioWorker(
             id: id,
             workspaceId: workspaceId,
             workspaceName: 'Workspace $workspaceId',
@@ -424,6 +425,99 @@ void main() {
       expect(
           find.descendant(of: cards.at(1), matching: find.text('Worker two')),
           findsOneWidget);
+    });
+
+    testWidgets('needs-authentication points to Conclave Workspace desktop',
+        (tester) async {
+      final worker = StudioWorker.fromJson({
+        'id': 'worker-needs-auth',
+        'workspaceId': 'workspace-auth',
+        'workspaceName': 'Auth Mac',
+        'workerTypeId': 'codex',
+        'name': 'Codex Personal',
+        'status': 'needs_attention',
+        'authStrategy': 'browser_auth',
+        'credentialStatus': 'needs_authentication',
+        'localConcurrencyLimit': 1,
+        'revision': 1,
+        'capabilities': ['code'],
+        'allowedModels': [],
+      });
+      await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
+        workspaces: const [
+          StudioWorkspace(
+            id: 'workspace-auth',
+            name: 'Auth Mac',
+            status: 'online',
+          ),
+        ],
+        workspaceWorkers: [worker],
+        onAdd: () {},
+        onRename: (_) {},
+        onUpdate: (_) {},
+        onRevoke: (_) {},
+        onGrant: (_) {},
+      )));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sign-in required'), findsOneWidget);
+      await tester.tap(find.text('Codex Personal'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining(
+          'Complete sign-in or setup in Conclave Workspace on Auth Mac.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('disconnected Workspace offers the Connect Machine flow',
+        (tester) async {
+      StudioWorkspace? connectedWorkspace;
+      await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
+        workspaces: const [
+          StudioWorkspace(
+            id: 'workspace-offline',
+            name: 'Offline Mac',
+            status: 'offline',
+            appVersion: '1.4.0',
+          ),
+        ],
+        onAdd: () {},
+        onRename: (_) {},
+        onUpdate: (_) {},
+        onRevoke: (_) {},
+        onGrant: (_) {},
+        onConnect: (workspace) async => connectedWorkspace = workspace,
+      )));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Offline'), findsNWidgets(2));
+      expect(find.text('Connect Machine'), findsOneWidget);
+      await tester.tap(find.text('Connect Machine'));
+      expect(connectedWorkspace?.id, 'workspace-offline');
+    });
+
+    testWidgets('zero Workers explains local desktop configuration',
+        (tester) async {
+      await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
+        workspaces: const [
+          StudioWorkspace(id: 'workspace-empty', name: 'New Mac'),
+        ],
+        onAdd: () {},
+        onRename: (_) {},
+        onUpdate: (_) {},
+        onRevoke: (_) {},
+        onGrant: (_) {},
+      )));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'No Workers have synced yet. Configure your first Worker in Conclave Workspace on this computer.',
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('disabled Worker exposes the Enable scheduling action',

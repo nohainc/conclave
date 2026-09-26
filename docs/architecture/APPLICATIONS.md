@@ -30,6 +30,13 @@ The canonical execution-capacity destination in AX is **Workspaces**. Workers
 appear inside their owning Workspace rather than as an independent top-level
 page. See the [Workspaces UX and data contract](WORKSPACES_UX_CONTRACT.md).
 
+Home summarizes Projects, Workspaces, and locally ready Workers. Both the
+Workspace count and Ready Workers count open `/workspaces`; AX does not expose
+a global Worker inventory. Getting Started guides users to add a Workspace,
+configure Workers in the Conclave Workspace desktop app, and create a Project.
+Authentication and local readiness problems direct users back to that desktop
+runtime.
+
 Workspace-owned Worker inventory and V7 remote scheduling enable/disable/drain
 controls are implemented. Cloud schedules only Workers owned by their paired
 Workspace and cannot modify local credentials or permissions.

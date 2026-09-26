@@ -306,7 +306,7 @@ void main() {
       expect(parsed.toUri().path, '/workspaces');
     });
 
-    test('old /accounts deep link resolves to the Workers surface', () {
+    test('old /accounts deep link resolves to the Workspaces surface', () {
       final parsed = StudioNavigation.fromUri(Uri.parse('/accounts'));
       expect(parsed, const StudioNavigation.workspaces());
       expect(parsed.toUri().path, '/workspaces');

@@ -37,7 +37,6 @@ class HomePage extends StatelessWidget {
       ? _GettingStarted(
           onOpenWorkspaces: onOpenWorkspaces,
           onCreateProject: onCreateProject,
-          onOpenArchivedProjects: onOpenArchivedProjects,
         )
       : _EstablishedHome(
           projects: projects,
@@ -57,12 +56,10 @@ class _GettingStarted extends StatelessWidget {
   const _GettingStarted({
     required this.onOpenWorkspaces,
     required this.onCreateProject,
-    required this.onOpenArchivedProjects,
   });
 
   final VoidCallback onOpenWorkspaces;
   final VoidCallback onCreateProject;
-  final VoidCallback onOpenArchivedProjects;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -79,29 +76,23 @@ class _GettingStarted extends StatelessWidget {
           const SizedBox(height: 28),
           _SetupStep(
               number: '1',
-              title: 'Workspace',
+              title: 'Add a Workspace',
               detail: 'Connect a machine where Workers can run.',
               action: 'Add Workspace',
               onPressed: onOpenWorkspaces),
           _SetupStep(
               number: '2',
-              title: 'Worker',
+              title: 'Configure Workers in Conclave Workspace',
               detail:
                   'Configure and authenticate Workers in Conclave Workspace on your computer.',
               action: 'Open Workspaces',
               onPressed: onOpenWorkspaces),
           _SetupStep(
               number: '3',
-              title: 'Project',
+              title: 'Create Project',
               detail: 'Create a Project to organize your work.',
               action: 'Create project',
               onPressed: onCreateProject),
-          _SetupStep(
-              number: '4',
-              title: 'Archived Projects',
-              detail: 'Restore a Project that was archived earlier.',
-              action: 'View archived',
-              onPressed: onOpenArchivedProjects),
           Card(
             color: Theme.of(context).colorScheme.primaryContainer,
             child: ListTile(
@@ -196,7 +187,7 @@ class _EstablishedHome extends StatelessWidget {
         ),
       ),
       const SizedBox(height: 12),
-      Text('Your Workspace at a glance.',
+      Text('Your execution capacity at a glance.',
           style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
               fontSize: 14)),
@@ -242,7 +233,11 @@ class _EstablishedHome extends StatelessWidget {
           _MetricCard('Projects', '${projects.length}',
               () => onOpenProject(projects.first.id)),
           _MetricCard('Workspaces', '${workspaces.length}', onOpenWorkspaces),
-          _MetricCard('Workers', '${workers.length}', onOpenWorkspaces),
+          _MetricCard(
+            'Ready Workers',
+            '${workers.where((worker) => worker.status.toLowerCase() == 'ready').length}',
+            onOpenWorkspaces,
+          ),
         ];
         return constraints.maxWidth < 620
             ? Wrap(spacing: 12, runSpacing: 12, children: cards)
