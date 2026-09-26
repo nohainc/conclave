@@ -661,15 +661,20 @@ class WorkerManager {
   WorkerAssignmentHandler assignmentHandler(
     WorkerProcessExecutor executor, {
     Future<String?> Function(String repositoryId)? resolveRepositoryPath,
+    V7AdapterResolver? resolveV7Adapter,
     WorkstreamDirectoryLifecycle? workstreamDirectoryLifecycle,
     WorkstreamMutationCoordinator? workstreamMutationCoordinator,
+    Future<int?> Function(String workerId)? resolveConcurrencyLimit,
+    Future<Set<String>> Function(String workerId)? resolvePermissions,
     WorkerNotificationRelay? onNotification,
   }) =>
       WorkerAssignmentHandler(
         executor: executor,
         resolve: activeProcessSpec,
+        resolveV7Adapter: resolveV7Adapter,
         resolveRepositoryPath: resolveRepositoryPath,
-        resolvePermissions: activePermissions,
+        resolvePermissions: resolvePermissions ?? activePermissions,
+        resolveConcurrencyLimit: resolveConcurrencyLimit,
         workstreamDirectoryLifecycle: workstreamDirectoryLifecycle,
         workstreamMutationCoordinator: workstreamMutationCoordinator,
         onNotification: onNotification,

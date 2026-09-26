@@ -23,7 +23,7 @@ describe("v6 Project lifecycle integrity", () => {
   });
 
   it("routes Workspace revoke to the execution Workspace lifecycle", () => {
-    const start = router.indexOf('const workspaceMatch = url.pathname.match');
+    const start = router.indexOf("const workspaceMatch = url.pathname.match");
     const end = router.indexOf('if (request.method === "PATCH"', start);
     const body = router.slice(start, end);
 
@@ -32,9 +32,15 @@ describe("v6 Project lifecycle integrity", () => {
     expect(entrypoint).toContain(
       "handleRevokeWorkspace: handlers.handleRevokeWorkspace",
     );
-    expect(handlers).toContain("UPDATE execution_workspaces SET status = 'revoked'");
-    expect(handlers).toContain("UPDATE workspace_project_grants SET status = 'revoked'");
-    expect(handlers).toContain("const alreadyRevoked = workspace.status === \"revoked\"");
+    expect(handlers).toContain(
+      "UPDATE execution_workspaces SET status = 'revoked'",
+    );
+    expect(handlers).toContain(
+      "UPDATE workspace_project_grants SET status = 'revoked'",
+    );
+    expect(handlers).toContain(
+      'const alreadyRevoked = workspace.status === "revoked"',
+    );
     expect(handlers).toContain("status <> 'revoked'");
   });
 
@@ -49,7 +55,10 @@ describe("v6 Project lifecycle integrity", () => {
 
   it("preserves instructions when the v5 snapshot reloads Projects", () => {
     const start = handlers.indexOf("async function handleStudioSnapshot");
-    const end = handlers.indexOf("async function handleProjectReadModel", start);
+    const end = handlers.indexOf(
+      "async function handleProjectReadModel",
+      start,
+    );
     const body = handlers.slice(start, end);
 
     expect(body).toContain("instructions:");
@@ -60,14 +69,21 @@ describe("v6 Project lifecycle integrity", () => {
     expect(handlers).toContain("LOWER(TRIM(name)) = LOWER(TRIM(?2))");
     expect(handlers).toContain("id <> ?2");
     expect(handlers).toContain("status IN ('active', 'suspended')");
-    expect(handlers).toContain("status = 'pending' AND LOWER(email) = LOWER(?2)");
+    expect(handlers).toContain(
+      "status = 'pending' AND LOWER(email) = LOWER(?2)",
+    );
     expect(handlers).toContain("You already have a Project with this name");
-    expect(handlers).toContain("This Project already has a Workstream with this name");
+    expect(handlers).toContain(
+      "This Project already has a Workstream with this name",
+    );
   });
 
   it("cleans restrictive Workstream dependencies before deleting a Project", () => {
     const start = handlers.indexOf("async function handleDeleteProject");
-    const end = handlers.indexOf("async function authorizeProjectOwnerOrThrow", start);
+    const end = handlers.indexOf(
+      "async function authorizeProjectOwnerOrThrow",
+      start,
+    );
     const body = handlers.slice(start, end);
 
     expect(body).toContain("DELETE FROM workstream_current_checkpoints");
@@ -77,8 +93,10 @@ describe("v6 Project lifecycle integrity", () => {
     expect(body).toContain("DELETE FROM work_requests");
     expect(body).toContain("DELETE FROM workstream_checkouts");
     expect(body).toContain("DELETE FROM workstreams");
-    expect(body).toContain("DELETE FROM workspace_project_grants WHERE project_id = ?1");
+    expect(body).toContain(
+      "DELETE FROM workspace_project_grants WHERE project_id = ?1",
+    );
     expect(body).toContain("for (const sql of cleanupStatements)");
-    expect(body).toContain('DELETE FROM projects WHERE id = ?1');
+    expect(body).toContain("DELETE FROM projects WHERE id = ?1");
   });
 });

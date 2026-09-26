@@ -54,36 +54,49 @@ describe("v6 stateless fan-out", () => {
   it("plans parallel auxiliary assignments from one immutable snapshot", () => {
     const plan = planStatelessFanOut(base());
     expect(plan.assignments).toHaveLength(2);
-    expect(plan.assignments.every((item) => item.workspaceId !== "workspace-primary")).toBe(true);
+    expect(
+      plan.assignments.every(
+        (item) => item.workspaceId !== "workspace-primary",
+      ),
+    ).toBe(true);
     expect(plan.assignments.map((item) => item.providerKey)).toEqual([
       "provider-a",
       "provider-b",
     ]);
-    expect(plan.snapshot.contextArtifactIds).toEqual(["artifact-a", "artifact-b"]);
+    expect(plan.snapshot.contextArtifactIds).toEqual([
+      "artifact-a",
+      "artifact-b",
+    ]);
     expect(plan.assignments[0]?.snapshot).toEqual(plan.snapshot);
   });
 
   it("rejects stale checkpoints and unauthorized artifacts", () => {
-    expect(() => planStatelessFanOut({ ...base(), currentCheckpointSha: "sha-2" }))
-      .toThrow(/stale/);
-    expect(() => planStatelessFanOut({ ...base(), authorizedArtifactIds: ["artifact-a"] }))
-      .toThrow(/not authorized/);
+    expect(() =>
+      planStatelessFanOut({ ...base(), currentCheckpointSha: "sha-2" }),
+    ).toThrow(/stale/);
+    expect(() =>
+      planStatelessFanOut({ ...base(), authorizedArtifactIds: ["artifact-a"] }),
+    ).toThrow(/not authorized/);
   });
 
   it("requires independent providers and never accepts a Primary checkout path", () => {
-    expect(() => planStatelessFanOut({
-      ...base(),
-      candidates: base().candidates.map((candidate) => ({
-        ...candidate,
-        providerKey: "provider-a",
-      })),
-    })).toThrow(/Independent provider/);
-    expect(() => planStatelessFanOut({
-      ...base(),
-      repositorySnapshot: {
-        ...base().repositorySnapshot,
-        snapshotId: "primary/checkout",
-      },
-    })).toThrow(/opaque/);
+    expect(() =>
+      planStatelessFanOut({
+        ...base(),
+        candidates: base().candidates.map((candidate) => ({
+          ...candidate,
+          providerKey: "provider-a",
+        })),
+      }),
+    ).toThrow(/Independent provider/);
+    expect(() =>
+      planStatelessFanOut({
+        ...base(),
+        repositorySnapshot: {
+          ...base().repositorySnapshot,
+          snapshotId: "primary/checkout",
+        },
+      }),
+    ).toThrow(/opaque/);
   });
 });

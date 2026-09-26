@@ -1,0 +1,35 @@
+{
+  "workerTypeId": "anthropic-api",
+  "adapterVersion": "1.0.0",
+  "protocolVersion": "1.0",
+  "publisher": "conclave",
+  "displayName": "Anthropic API",
+  "supportedPlatforms": [
+    "macos-arm64",
+    "macos-x64",
+    "linux-arm64",
+    "linux-x64"
+  ],
+  "capabilities": ["text_generation"],
+  "permissions": ["network:anthropic"],
+  "authStrategies": ["api_key"],
+  "modelSelectionMode": "allow_list",
+  "prerequisites": [
+    { "kind": "executable", "executable": "node", "minimumVersion": "18.0.0" }
+  ],
+  "executable": "lib/api_protocol.mjs",
+  "launchArgs": [],
+  "secretRequirements": [
+    {
+      "name": "provider_api_key",
+      "authStrategy": "api_key",
+      "environmentVariable": "CONCLAVE_PROVIDER_API_KEY",
+      "required": true,
+      "description": "Provider API key"
+    }
+  ],
+  "healthCheck": { "mode": "protocol", "timeoutMs": 5000 },
+  "packageDigest": "<calculated-from-package-contents-on-publish>",
+  "signature": "<publisher-signature-on-publish>",
+  "releaseChannel": "stable"
+}

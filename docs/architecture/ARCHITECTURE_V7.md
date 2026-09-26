@@ -714,6 +714,12 @@ Normal signed application update.
 ### Worker adapter package
 Managed inside Conclave Workspace with signature/digest verification and rollback.
 
+The signature covers both the file-tree digest and the canonical manifest
+without its signature field. Workspace checks downloaded catalog metadata
+against the archived manifest, then verifies signature, permissions, platform,
+and health before atomic activation. Cloud stores versioned release metadata
+and archives but does not grant execution trust.
+
 ### Third-party tool
 Provider-owned lifecycle unless Conclave intentionally takes ownership.
 

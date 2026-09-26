@@ -139,10 +139,19 @@ const workspaceRuntimeFactsSchema = readFileSync(
   ),
   "utf8",
 );
+const workspaceWorkerInventorySchema = readFileSync(
+  fileURLToPath(
+    new URL(
+      "../migrations-v6/0021_workspace_worker_inventory.sql",
+      import.meta.url,
+    ),
+  ),
+  "utf8",
+);
 
 function apply(sql: string): string {
   return execFileSync("sqlite3", ["-json", ":memory:"], {
-    input: `${schema}\n${integrationSchema}\n${observabilitySchema}\n${chatMigrationSchema}\n${executionFoundationSchema}\n${projectSettingsSchema}\n${grantPolicySchema}\n${invitationsSchema}\n${repositoryRemovalSchema}\n${configuredWorkerSchema}\n${configuredWorkerRuntimeSchema}\n${configuredWorkerAssignmentsSchema}\n${workerFirstExecutionPolicySchema}\n${configuredWorkerObservabilitySchema}\n${legacyAccountConversionSchema}\n${workerAssignmentRequesterSchema}\n${workspaceRuntimeFactsSchema}\n${sql}`,
+    input: `${schema}\n${integrationSchema}\n${observabilitySchema}\n${chatMigrationSchema}\n${executionFoundationSchema}\n${projectSettingsSchema}\n${grantPolicySchema}\n${invitationsSchema}\n${repositoryRemovalSchema}\n${configuredWorkerSchema}\n${configuredWorkerRuntimeSchema}\n${configuredWorkerAssignmentsSchema}\n${workerFirstExecutionPolicySchema}\n${configuredWorkerObservabilitySchema}\n${legacyAccountConversionSchema}\n${workerAssignmentRequesterSchema}\n${workspaceRuntimeFactsSchema}\n${workspaceWorkerInventorySchema}\n${sql}`,
     encoding: "utf8",
   });
 }
@@ -195,6 +204,33 @@ describe("v6 D1 schema", () => {
         { name: "configured_worker_audit_log" },
         { name: "configured_worker_observability_metrics" },
         { name: "workspace_runtime_facts" },
+        { name: "workspace_worker_inventory" },
+      ]),
+    );
+  });
+
+  it("keeps local Worker inventory limited to safe synchronized fields", () => {
+    const columns = JSON.parse(
+      apply("PRAGMA table_info(workspace_worker_inventory);"),
+    ).map((column: { name: string }) => column.name);
+    expect(columns).toEqual(
+      expect.arrayContaining([
+        "worker_id",
+        "workspace_id",
+        "owner_user_id",
+        "worker_type_id",
+        "status",
+        "credential_status",
+        "revision",
+      ]),
+    );
+    expect(columns).not.toEqual(
+      expect.arrayContaining([
+        "api_key",
+        "secret",
+        "credential_ref",
+        "local_path",
+        "working_directory",
       ]),
     );
   });

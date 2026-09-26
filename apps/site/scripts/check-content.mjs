@@ -15,16 +15,30 @@ const expected = {
   "/": {
     title: "Conclave AX — Turn team decisions into verified AI work",
     heading: "Turn team decisions into verified AI work.",
-    content: ["Workstreams", "Discuss", "Work Request", "Safe parallel work", "Accounts and privacy"],
+    content: [
+      "Workstreams",
+      "Discuss",
+      "Work Request",
+      "Safe parallel work",
+      "Accounts and privacy",
+    ],
   },
   "/how-it-works/": {
     title: "How Conclave AX works",
     heading: "From team discussion to a verified result.",
-    content: ["Create a Project", "Open a Workstream", "Discuss", "Run a Work Request", "Coordinate", "Verify and continue"],
+    content: [
+      "Create a Project",
+      "Open a Workstream",
+      "Discuss",
+      "Run a Work Request",
+      "Coordinate",
+      "Verify and continue",
+    ],
   },
   "/workers/": {
     title: "Workers — Conclave AX",
-    heading: "Treat models and tools as capabilities, not as the whole workflow.",
+    heading:
+      "Treat models and tools as capabilities, not as the whole workflow.",
     content: ["Codex", "Claude Code", "OpenAI", "Anthropic"],
   },
   "/security/": {
@@ -35,12 +49,20 @@ const expected = {
   "/privacy/": {
     title: "Privacy — Conclave AX",
     heading: "Privacy follows the same boundaries as the product.",
-    content: ["Human identity and Projects", "Workspaces and local execution", "AI Accounts"],
+    content: [
+      "Human identity and Projects",
+      "Workspaces and local execution",
+      "AI Accounts",
+    ],
   },
   "/terms/": {
     title: "Terms — Conclave AX",
     heading: "Terms of Service",
-    content: ["Connected Workspaces", "Third-party AI providers", "Work outputs"],
+    content: [
+      "Connected Workspaces",
+      "Third-party AI providers",
+      "Work outputs",
+    ],
   },
 };
 
@@ -88,7 +110,9 @@ const appLinks = [
   ...home.matchAll(/href="(https:\/\/app\.conclaveax\.com[^"]*)"/g),
 ];
 if (appLinks.length < 3)
-  errors.push("homepage: expected at least three direct Open Conclave AX links");
+  errors.push(
+    "homepage: expected at least three direct Open Conclave AX links",
+  );
 if (!home.includes('href="/#product"'))
   errors.push("homepage: Product navigation anchor is missing");
 if (!home.includes('href="/#workstreams"'))
@@ -98,9 +122,13 @@ for (const [route, source] of sources) {
   if (/github\.com\/nohainc\/conclave/i.test(source))
     errors.push(`${route}: public GitHub repository link must not be present`);
   if (/\b(?:architecture\s+)?v\d+\b/i.test(source))
-    errors.push(`${route}: architecture version language must not be public product copy`);
+    errors.push(
+      `${route}: architecture version language must not be public product copy`,
+    );
   if (/shared workspace/i.test(source))
-    errors.push(`${route}: collaborative Workspace terminology must not return`);
+    errors.push(
+      `${route}: collaborative Workspace terminology must not return`,
+    );
 
   for (const [, href] of source.matchAll(
     /<a\b[^>]*href="([^"#]+)(#[^"]+)?"/g,

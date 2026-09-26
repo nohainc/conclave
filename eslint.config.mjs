@@ -16,12 +16,44 @@ export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ["apps/site/scripts/**/*.mjs"],
+    rules: {
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+        },
+      ],
+    },
+  },
+  {
+    files: ["apps/site/scripts/**/*.mjs", "scripts/**/*.mjs", "*.mjs"],
     languageOptions: {
       globals: {
         Buffer: "readonly",
         URL: "readonly",
         console: "readonly",
+        process: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+      },
+    },
+  },
+  {
+    files: ["packages/worker-manifest/adapters/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        AbortController: "readonly",
+        Buffer: "readonly",
+        Headers: "readonly",
+        Response: "readonly",
+        URL: "readonly",
+        clearTimeout: "readonly",
+        console: "readonly",
+        fetch: "readonly",
+        process: "readonly",
+        setTimeout: "readonly",
       },
     },
   },

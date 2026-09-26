@@ -32,7 +32,9 @@ class FakePlatform implements PlatformRuntime {
   @override
   Future<Process> startIsolatedProcess(
           String executable, List<String> arguments,
-          {String? workingDirectory, Map<String, String>? environment}) async =>
+          {String? workingDirectory,
+          Map<String, String>? environment,
+          bool includeParentEnvironment = true}) async =>
       throw UnimplementedError();
 
   @override

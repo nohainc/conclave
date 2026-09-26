@@ -204,7 +204,7 @@ export async function selectProjectExecutionTarget(
       return null;
   }
 
-  const rows = await db
+  const legacyRows = await db
     .prepare(
       `SELECT g.id AS grant_id, g.project_id, g.workspace_id, g.status AS grant_status,
             g.scope, g.repository_mappings_json, g.path_mappings_json,
@@ -255,11 +255,77 @@ export async function selectProjectExecutionTarget(
       now.toISOString(),
       request.workstreamId ?? "",
     )
-    .all<Row>();
+    .all<Row>()
+    .catch(() => ({ results: [] as Row[] }));
+
+  const v7Rows = await db
+    .prepare(
+      `SELECT g.id AS grant_id, g.project_id, g.workspace_id, g.status AS grant_status,
+            g.scope, g.repository_mappings_json, g.path_mappings_json,
+            g.allowed_worker_ids_json, g.allowed_worker_capabilities_json,
+            g.allowed_permissions_json, g.network_policy_json,
+            g.concurrency_json, g.requires_step_up, g.expires_at,
+            ep.allowed_configured_worker_ids_json,
+            ep.allowed_worker_type_ids_json,
+            ep.allowed_providers_json,
+            ep.allowed_models_json,
+            ew.name AS workspace_name, ew.owner_user_id, ew.status AS workspace_status,
+            wri.id AS runtime_identity_id,
+            i.worker_id AS configured_worker_id, i.worker_type_id,
+            i.worker_type_id AS publisher, COALESCE(i.adapter_version, '1.0.0') AS worker_version,
+            i.capabilities_json, i.local_permissions_summary_json AS permissions_json,
+            'ready' AS package_status,
+            CASE WHEN i.status = 'ready' THEN 1 ELSE 0 END AS desired_enabled,
+            'latest' AS version_policy,
+            NULL AS credential_id,
+            i.credential_status AS credential_status,
+            'explicit_project' AS credential_sharing_policy,
+            i.owner_user_id AS credential_owner_user_id,
+            i.auth_strategy AS auth_type,
+            json_object('provider', i.worker_type_id) AS provider_metadata_json,
+            i.local_concurrency_limit AS configured_concurrency_limit,
+            (SELECT COUNT(*) FROM worker_assignments wa
+             WHERE wa.execution_workspace_id = g.workspace_id
+               AND (wa.configured_worker_id = i.worker_id OR
+                    (wa.configured_worker_id IS NULL AND wa.worker_id = i.worker_type_id))
+               AND wa.status IN ('created', 'dispatched', 'acknowledged', 'running')) AS active_assignments
+     FROM workspace_project_grants g
+     LEFT JOIN project_execution_preferences pep ON pep.project_id = g.project_id
+     LEFT JOIN workstream_execution_policies ep ON ep.workstream_id = ?4
+     JOIN execution_workspaces ew ON ew.id = g.workspace_id
+     JOIN workspace_runtime_identities wri ON wri.workspace_id = ew.id AND wri.revoked_at IS NULL
+     JOIN workspace_worker_inventory i ON i.workspace_id = ew.id AND i.status != 'removed'
+     WHERE g.project_id = ?1 AND g.status = 'active'
+       AND (g.expires_at IS NULL OR g.expires_at > ?3)
+       AND ew.status = 'online'
+     ORDER BY CASE WHEN i.owner_user_id = ?2 THEN 0 ELSE 1 END,
+              active_assignments, ew.id, i.worker_id`,
+    )
+    .bind(
+      request.projectId,
+      request.requesterUserId,
+      now.toISOString(),
+      request.workstreamId ?? "",
+    )
+    .all<Row>()
+    .catch(() => ({ results: [] as Row[] }));
 
   const excluded = new Set(request.excludeIndependenceKeys ?? []);
   const rejected: Array<Record<string, unknown>> = [];
-  const candidates = [...(rows.results ?? [])].sort((left, right) => {
+  const seenConfigured = new Set<string>();
+  const combined: Row[] = [];
+  for (const row of v7Rows.results ?? []) {
+    const id = String(row.configured_worker_id ?? row.worker_id ?? "");
+    if (id) seenConfigured.add(id);
+    combined.push(row);
+  }
+  for (const row of legacyRows.results ?? []) {
+    const id = String(row.configured_worker_id ?? row.worker_id ?? "");
+    if (!seenConfigured.has(id)) {
+      combined.push(row);
+    }
+  }
+  const candidates = combined.sort((left, right) => {
     const load =
       number(left.active_assignments) - number(right.active_assignments);
     return (
@@ -321,7 +387,7 @@ export async function selectProjectExecutionTarget(
     const credentialStatus = String(
       row.credential_status ?? row.account_status ?? "unknown",
     );
-    if (credentialStatus !== "ready") {
+    if (credentialStatus !== "ready" && credentialStatus !== "not_required") {
       reject("credential_unavailable");
       continue;
     }

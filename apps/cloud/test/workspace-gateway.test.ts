@@ -39,12 +39,8 @@ describe("Workspace runtime Gateway", () => {
   it("fences stale socket close events after reconnect", () => {
     const current = {} as WebSocket;
     const stale = {} as WebSocket;
-    expect(isCurrentWorkspaceSocket(current, "new", current, "new")).toBe(
-      true,
-    );
-    expect(isCurrentWorkspaceSocket(current, "new", stale, "old")).toBe(
-      false,
-    );
+    expect(isCurrentWorkspaceSocket(current, "new", current, "new")).toBe(true);
+    expect(isCurrentWorkspaceSocket(current, "new", stale, "old")).toBe(false);
   });
 
   it("rejects assignment correlation for another Workspace runtime", () => {

@@ -7,8 +7,7 @@
  */
 
 export type StatelessSnapshotMechanism =
-  | "r2_context_artifacts"
-  | "repository_snapshot";
+  "r2_context_artifacts" | "repository_snapshot";
 
 export interface StatelessContextArtifact {
   readonly id: string;
@@ -77,21 +76,32 @@ export function planStatelessFanOut(
     `${input.workRequestId}:stateless:${index + 1}`,
 ): StatelessFanOutPlan {
   if (!input.projectId || !input.workstreamId || !input.workRequestId) {
-    throw new Error("Stateless fan-out requires Project, Workstream, and Work Request IDs");
+    throw new Error(
+      "Stateless fan-out requires Project, Workstream, and Work Request IDs",
+    );
   }
-  if (!input.checkpointSha || input.checkpointSha !== input.currentCheckpointSha) {
+  if (
+    !input.checkpointSha ||
+    input.checkpointSha !== input.currentCheckpointSha
+  ) {
     throw new Error("Stateless fan-out snapshot is stale");
   }
-  if (!input.repositorySnapshot.snapshotId ||
-      input.repositorySnapshot.checkpointSha !== input.checkpointSha) {
+  if (
+    !input.repositorySnapshot.snapshotId ||
+    input.repositorySnapshot.checkpointSha !== input.checkpointSha
+  ) {
     throw new Error("Repository snapshot does not match the Checkpoint SHA");
   }
-  if (input.repositorySnapshot.mechanism !== "r2_context_artifacts" &&
-      input.repositorySnapshot.mechanism !== "repository_snapshot") {
+  if (
+    input.repositorySnapshot.mechanism !== "r2_context_artifacts" &&
+    input.repositorySnapshot.mechanism !== "repository_snapshot"
+  ) {
     throw new Error("Unsupported stateless snapshot mechanism");
   }
-  if (input.repositorySnapshot.snapshotId.includes("/") ||
-      input.repositorySnapshot.snapshotId.includes("\\")) {
+  if (
+    input.repositorySnapshot.snapshotId.includes("/") ||
+    input.repositorySnapshot.snapshotId.includes("\\")
+  ) {
     throw new Error("Repository snapshot ID must be opaque");
   }
 
@@ -111,12 +121,15 @@ export function planStatelessFanOut(
     .filter((candidate) => candidate.workspaceId !== input.primaryWorkspaceId)
     .filter((candidate) =>
       required.every((capability) =>
-        candidate.capabilities.map((value) => value.toLowerCase()).includes(capability),
+        candidate.capabilities
+          .map((value) => value.toLowerCase())
+          .includes(capability),
       ),
     )
     .sort((left, right) =>
-      `${left.providerKey}:${left.workspaceId}:${left.workerId}`
-        .localeCompare(`${right.providerKey}:${right.workspaceId}:${right.workerId}`),
+      `${left.providerKey}:${left.workspaceId}:${left.workerId}`.localeCompare(
+        `${right.providerKey}:${right.workspaceId}:${right.workerId}`,
+      ),
     );
 
   if (input.requireIndependentProviders) {

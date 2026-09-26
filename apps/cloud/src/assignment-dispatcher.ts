@@ -1,5 +1,4 @@
 import {
-  type AssignmentStartPayload,
   type AssignmentResultPayload,
   type AssignmentFailurePayload,
   type AssignmentCancelPayload,

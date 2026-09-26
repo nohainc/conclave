@@ -1,9 +1,25 @@
 # Architecture v7 — Workspace-Owned Workers Implementation Roadmap
 
-**Status:** Proposed  
+**Status:** In progress
 **Architecture:** [ARCHITECTURE_V7.md](../architecture/ARCHITECTURE_V7.md)  
 **Decision:** [ADR-012](../decisions/ADR-012-workspace-owned-local-workers.md)  
 **Date:** 2026-09-26
+
+## Implementation status
+
+- [x] V7-0 — v7 vocabulary/ownership is the active direction; the existing v6 execution path remains in service during migration. A source guard rejects newly added v6-style binding UX, Cloud Add Worker flows, AI Account peer resources, and model-specific Worker Types.
+- [x] V7-1 — additive canonical v7 Worker and Worker Type contracts are available in `@conclave/core`; the legacy v6 contracts remain intact during migration. Contract checks cover Workspace ownership, name uniqueness scope, integration/model distinction, and immutable IDs.
+- [~] V7-2 — local Workspace-scoped Worker registry with schema version 4, checksum verification, atomic replacement, revisioned mutations, lifecycle operations, credential-free removal tombstones, and credential-reference-free backup export. Cloud user attribution is not fabricated in local state.
+- [~] V7-3 — local Add Worker catalog/form is wired into Conclave Workspace; existing Worker configuration can be edited, API credentials can be retained or rotated securely, and local disable/remove actions are available. Codex and Antigravity check their respective CLI and Node launcher prerequisites and offer local sign-in validation; Claude Code and Ollama executables are also checked. OpenAI/Gemini/Anthropic API credentials are verified through their admitted adapter's model-list request before the Worker is marked Ready. Fresh Workspaces still need API adapter releases published to Cloud; Ollama execution adapter remains.
+- [~] V7-4 — strict v7 adapter manifest and bounded structured protocol schemas are defined with path checks; publisher signatures bind both the canonical file-tree digest and every manifest field other than the signature. The Host enforces platform and machine/Worker permission ceilings, resolves package-contained executables, and creates scoped process specs. The production resolver loads active packages from the Workspace-owned V7 store, looks up credentials only in the OS secure store, and dispatches V7 assignments through the framed executor. Staged installs run the declared protocol/process-exit health check before atomic activation, and rollback re-verifies and health-checks a selected installed version. The store extracts bounded gzip-compressed tar archives with traversal, link, duplicate-path, expanded-size, and catalog-manifest consistency checks before normal verification. Cloud provides owner-authorized immutable V7 release publishing, platform/channel-filtered catalog reads, publisher-scoped revocation, and R2 downloads. Add Worker can acquire the latest supported channel release; periodic update/revocation reconciliation remains.
+- [~] V7-5 — existing child-process isolation now has a local per-Worker concurrency gate and queued cancellation; the configured Worker registry limit is wired into assignment resolution, and shutdown forces process-tree cleanup after graceful termination. Full acceptance coverage remains.
+- [~] V7-7 — first-party Antigravity V7 protocol adapter wraps the local Antigravity CLI using JSONL execution, resolved Workstream CWD, model configuration, and CLI sandboxing. Google-account local authentication status is checked without exposing credentials. The Host package release packager signs, admits, and installs the package archive.
+- [~] V7-8 — first-party OpenAI API, Gemini API, and Anthropic API adapters use separate provider implementations behind a shared V7 JSONL runtime. API keys enter only through the Host's scoped secure-credential environment injection, and provider model-list requests validate credentials before generation. Mocked provider tests and signed-package install/health tests pass. Streaming, provider tools, Workspace publication of release packages, and end-to-end scheduled execution remain.
+- [~] V7-9 — version 5.1 Workspace Runtime messages carry bounded safe Worker inventory snapshots; Workspace runtime ownership, monotonic per-Worker revisions, and credential-free Cloud tombstones are persisted in an additive table. `/api/v7/workers` exposes an owner-scoped safe inventory projection; the Host reports adapter version and capabilities only from a digest/signature/permission-verified active manifest. The AX Workers tab reads and displays that inventory without credential references and rereads it after a lightweight realtime inventory-updated signal. Runtime reconnect/stale-revision end-to-end acceptance remains.
+- [~] V7-14 — scheduler selects candidate Workers directly from synced Workspace inventory alongside legacy bindings during migration. Stateful assignments enforce Primary Workspace affinity and active execution leases, while stateless tasks discover any online, granted Workspace with matching capabilities.
+- [~] V7-15 — Cloud Project and Workstream policies explicitly narrow candidate Workers by configured Worker ID, Worker Type, provider, and model without expanding local permissions. Effective permissions are strictly bounded by the intersection of member, grant, and local Worker grants.
+- [~] V7-16 — adapter packages are decoupled from individual configured Worker identities. One verified adapter release in the Workspace package store serves all local Workers of that Worker Type with separate scoped credentials and per-Worker concurrency limits.
+
 
 ## Objective
 
@@ -205,6 +221,10 @@ Workers
 -> create
 ~~~
 
+Local inventory rows also provide disable/enable and remove actions. Removing
+a Worker requires confirmation and removes its referenced credential from the
+machine secure store.
+
 ## Worker Type selection
 
 Show user-facing types:
@@ -278,6 +298,15 @@ Support declarative detection:
 
 Do not allow manifest to redirect to arbitrary executables outside verified package boundaries.
 
+The Host prerequisite probe accepts command names only, launches without a
+shell, passes only a small runtime environment, bounds version output and
+execution time, and enforces declared semantic version ranges. Local setup
+invokes it for catalog-declared Codex, Claude Code, and Ollama CLI executables.
+Manifest admission now parses prerequisite declarations using the same Host
+policy, although Add Worker still reads the temporary built-in catalog.
+Ollama endpoint reachability and the Antigravity executable check remain
+outstanding.
+
 ## Protocol
 
 Structured stdin/stdout:
@@ -288,6 +317,21 @@ Structured stdin/stdout:
 - result;
 - error;
 - health/version.
+
+The Host executor implements these messages with bounded output, the shared
+local Worker concurrency gate, process-tree cancellation, and secret redaction.
+`WorkerAssignmentHandler` resolves active V7 adapters from the Workspace-owned
+package store and dispatches them through the V7 executor; assignments for
+Workers outside the local registry keep the v6 JSON-RPC path. Workstream CWD
+resolution, local permission checks, and stateful mutation locks wrap either
+path. Staged installs run the declared health handshake before activation, and
+rollback re-verifies and health-checks the selected installed version. The
+installer accepts pre-extracted local directories and bounded gzip tar
+archives. Cloud now provides immutable V7 adapter release publication, catalog
+filtering, publisher-scoped revocation, and R2 downloads. Add Worker fetches a
+supported release, checks the archive SHA-256 and exact catalog manifest, and
+installs through the signed package store. Periodic update/revocation
+reconciliation and first-party adapter coverage remain to be completed.
 
 ## Exit
 
@@ -330,7 +374,12 @@ Assignment
 
 ## Concurrency
 
-Each assignment process is independent.
+Each assignment process is independent. `WorkerProcessExecutor` enforces a per-Worker local concurrency limit (default 1) and queues additional assignments; cancellation also removes queued work before it launches. Assignment resolution supplies the configured Worker limit, capped by the executor's local safety ceiling.
+
+POSIX cancellation discovers and signals descendants explicitly, preserving the
+descendant PID set through graceful shutdown so the forced-kill pass can still
+terminate children after the adapter exits. An acceptance test runs a nested
+process that writes a heartbeat and verifies that cancellation stops it.
 
 Persistent processes are not part of initial v7.
 
@@ -382,6 +431,25 @@ Status: Ready
 - do not log raw session data;
 - use provider-supported local auth store.
 
+The first-party Codex V7 protocol adapter now wraps the local Codex CLI using
+JSONL execution, the resolved Workstream CWD, locally selected models, and the
+CLI workspace-write sandbox. It checks the local subscription session through
+`codex login status`, emits only sanitized progress, and leaves provider tokens
+in Codex's local auth store. Protocol tests use a fake CLI and make no live model
+request. Conclave Workspace now offers a local `codex login` action and checks
+`codex login status` when saving a Worker, recording only local authentication
+readiness. The Worker remains in Needs attention until an admitted adapter is
+installed. Host assignment resolution and the Add Worker readiness check now
+share the same package store; the UI checks the active package's digest,
+signature, platform, permissions, and protocol health before treating it as
+available. Cloud now hosts owner-authorized immutable releases, filtered
+catalog metadata, downloads, and publisher-scoped revocation. Add Worker can
+automatically acquire and admit the latest supported release. The Windows
+launcher and end-to-end assignment acceptance remain outstanding. The Host
+release packager accepts the checked-in manifest template, generates the signed
+release manifest, and has an integration test that packages, verifies, and
+installs the resulting archive using an isolated test signing key.
+
 ## Exit
 
 A Work Request can execute through a subscription-authenticated Codex Worker.
@@ -407,6 +475,15 @@ Same shape as Codex, adapted to supported Antigravity CLI/headless interfaces.
 - Workstream CWD;
 - error/status normalization.
 
+The first-party Antigravity V7 protocol adapter now wraps the local Antigravity
+CLI using JSONL execution, the resolved Workstream CWD, locally selected models,
+and the CLI workspace-write sandbox. It checks the local Google-account session
+through `antigravity auth status`, emits sanitized progress, and keeps provider
+tokens in Antigravity's local store. Conclave Workspace offers local sign-in
+validation and launch for Antigravity. Host release packager tests verify that
+the checked-in manifest template is signed, admitted, and installed cleanly into
+the Workspace package store.
+
 ## Exit
 
 The adapter abstraction is proven across two independent tool providers.
@@ -430,7 +507,8 @@ Support pay-per-use/provider API Workers without changing Worker architecture.
 Each uses:
 - local secure API credential;
 - default/allowed model policy;
-- optional endpoint/organization/project metadata.
+- optional HTTPS endpoint metadata (loopback HTTP is allowed for local development);
+- provider credential validation through the adapter model-list endpoint before Ready.
 
 ## Shared SDK
 
@@ -441,6 +519,18 @@ Do not create one giant provider-switch adapter initially.
 ## Exit
 
 Subscription tools and API Workers expose the same Conclave execution contract.
+
+The three first-party API adapters are implemented as separate provider modules
+over a shared framed protocol runtime. They validate API-key credentials with
+provider model-list requests and normalize non-streaming text output from the
+OpenAI Responses, Gemini generateContent, and Anthropic Messages APIs. The Host
+injects keys from its secure store only into the matching adapter process, and
+provider-specific network permissions are recorded in signed manifests. Tests
+use mocked HTTP responses and make no provider or billable requests. These
+initial adapters provide text generation only; they do not stream partial
+output or give models file, shell, or function-call tools. Signed releases are
+not yet published to a Cloud catalog, so they cannot be auto-installed by a
+fresh Workspace until a release owner publishes them.
 
 ---
 
@@ -490,6 +580,14 @@ Cloud accepts updates only from owning Workspace runtime.
 ## Exit
 
 Cloud Worker inventory can be reconstructed entirely from Workspace sync.
+
+The Workspace sends a full safe inventory after each successful hello and
+every fourth heartbeat. Cloud binds every entry to the authenticated runtime's
+Workspace, rejects cross-Workspace ID reuse and stale/equal revisions, and
+persists removal tombstones. The authenticated `/api/v7/workers` read returns
+only the signed-in user's projection and never includes secure-store references
+or local paths. Snapshot omission reconciliation and reconnect/stale-revision
+end-to-end acceptance remain open.
 
 ---
 
@@ -633,6 +731,18 @@ Optionally deep-link/open local app when on same machine later.
 
 AX clearly communicates that Worker setup happens on the machine.
 
+The AX Workers tab currently reads the owner-scoped V7 inventory API and
+displays Workspace, Worker Type, readiness, model/capability summary, and local
+concurrency. V6 Cloud-created Workers are explicitly labeled as legacy during
+the migration. V7 Worker inventory cards now open a detail view with Overview,
+Workspace, Local attention, Scheduling, and Activity/Audit sections. The current
+inventory contract omits remote scheduling state and recent activity, so those
+sections state that limitation explicitly. When no local Workers are synced,
+the primary CTA directs the user to add one in Conclave Workspace and explains
+that it will appear after sync; legacy Cloud creation remains a secondary
+migration action. Live scheduling controls and synced activity remain
+outstanding.
+
 ---
 
 # V7-13 — Conclave AX Worker detail UX
@@ -680,9 +790,16 @@ Remote controls:
 
 Cloud concurrency may only narrow local ceiling.
 
+The detail view is driven by the safe V7 inventory projection and shows Worker
+Type, owning Workspace, readiness, credential status, adapter version,
+model/capability summary, and local concurrency. Auth/prerequisite attention
+points the user back to Conclave Workspace on the owning machine. Scheduling
+state and recent audit data are not yet present in the inventory contract.
+
 ## Exit
 
-No binding matrix remains in normal UX.
+No binding matrix remains in normal UX; remote scheduling and activity are
+visible when their control/event contracts are available.
 
 ---
 
@@ -899,6 +1016,14 @@ Separate three update domains.
 - health check;
 - atomic activate;
 - rollback to previous verified version.
+
+The Workspace V7 store stages adapter directories or bounded gzip-compressed
+tar archives, rejects unsafe archive entries, verifies the signed digest and
+declared health check before activation, and can reactivate a re-verified,
+healthy installed version. Cloud stores immutable V7 releases in R2 and exposes
+catalog metadata, downloads, and revocation. Add Worker verifies the archive
+hash and catalog manifest before package admission; background update and
+revocation reconciliation remain open.
 
 ## Third-party tool
 

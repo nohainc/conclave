@@ -70,6 +70,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
   bool showNewGoal = false;
   String? workerActionMessage;
   List<StudioConfiguredWorker> configuredWorkers = const [];
+  List<StudioWorkspaceWorker> workspaceWorkers = const [];
   StudioHostEnrollment? enrollmentResult;
   StudioQualityPreset selectedQuality = StudioQualityPreset.balanced;
   String selectedExecutionWorker = 'Auto';
@@ -496,9 +497,20 @@ class _StudioAppState extends State<ConclaveAppShell> {
   Future<void> _loadWorkspaces() async {
     try {
       await store.workspaces.list();
-      final loadedWorkers = await widget.dataSource.loadConfiguredWorkers();
       if (!mounted) return;
-      setState(() => configuredWorkers = loadedWorkers);
+      try {
+        final localWorkers =
+            await widget.dataSource.loadWorkspaceWorkerInventory();
+        if (mounted) setState(() => workspaceWorkers = localWorkers);
+      } catch (_) {
+        // V7 inventory remains independently optional during migration.
+      }
+      try {
+        final loadedWorkers = await widget.dataSource.loadConfiguredWorkers();
+        if (mounted) setState(() => configuredWorkers = loadedWorkers);
+      } catch (_) {
+        // Keep the safe V7 inventory available if the legacy API is absent.
+      }
       _startRealtime();
     } catch (_) {
       // Snapshot loading remains the primary path for anonymous development.
@@ -574,8 +586,20 @@ class _StudioAppState extends State<ConclaveAppShell> {
     try {
       if (type.startsWith('host.') || type.startsWith('desired_state.')) {
         final hosts = await store.agents.refresh(workspaceId);
+        final localWorkers =
+            await widget.dataSource.loadWorkspaceWorkerInventory();
         if (!mounted) return;
-        setState(() => snapshot = snapshot.copyWith(agents: hosts));
+        setState(() {
+          snapshot = snapshot.copyWith(agents: hosts);
+          workspaceWorkers = localWorkers;
+        });
+        return;
+      }
+      if (type.startsWith('worker.inventory.')) {
+        final localWorkers =
+            await widget.dataSource.loadWorkspaceWorkerInventory();
+        if (!mounted) return;
+        setState(() => workspaceWorkers = localWorkers);
         return;
       }
       if (type.startsWith('worker.')) {
@@ -586,8 +610,13 @@ class _StudioAppState extends State<ConclaveAppShell> {
       }
       if (type.startsWith('account.') || type.startsWith('credential.')) {
         final workers = await widget.dataSource.loadConfiguredWorkers();
+        final localWorkers =
+            await widget.dataSource.loadWorkspaceWorkerInventory();
         if (!mounted) return;
-        setState(() => configuredWorkers = workers);
+        setState(() {
+          configuredWorkers = workers;
+          workspaceWorkers = localWorkers;
+        });
         return;
       }
       if (type.startsWith('project.') || type.startsWith('chat.')) {
@@ -4123,6 +4152,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
             _workspaceCards().isNotEmpty ? _workspaceCards() : snapshot.agents,
         workers: snapshot.workers,
         configuredWorkers: configuredWorkers,
+        workspaceWorkers: workspaceWorkers,
         plugins: snapshot.plugins,
         initialTab: initialTab,
         onAdd: _enrollAgent,

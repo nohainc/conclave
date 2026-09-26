@@ -59,6 +59,7 @@ import {
 import {
   validateWorkerManifest,
   compareSemver,
+  parseV7AdapterManifest,
 } from "@conclave/worker-manifest";
 import {
   AGENT_PROTOCOL_NAME,
@@ -1025,7 +1026,7 @@ async function handleListWorkspaces(
   const rows =
     context.authorizationModel === "v5"
       ? await env.CONCLAVE_DB.prepare(
-           `SELECT id, name,
+          `SELECT id, name,
                   CASE
                     WHEN status IN ('enrolled', 'offline') AND EXISTS (
                       SELECT 1 FROM workspace_enrollments e
@@ -1111,7 +1112,9 @@ async function handleCreateWorkspace(
   try {
     await env.CONCLAVE_DB.prepare(
       "INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at) VALUES (?1, ?2, ?3, 'enrolled', ?4, ?4)",
-    ).bind(id, context.userId, name, now).run();
+    )
+      .bind(id, context.userId, name, now)
+      .run();
   } catch {
     status = "active";
     await env.CONCLAVE_DB.batch([
@@ -6064,6 +6067,64 @@ export async function handleListConfiguredWorkers(
   return json({ workers });
 }
 
+/** Read the safe, Workspace-owned v7 inventory projection. */
+export async function handleListWorkspaceWorkerInventory(
+  request: Request,
+  env: SecurityEnv,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  const workspaceId = new URL(request.url).searchParams.get("workspaceId");
+  const rows = await env.CONCLAVE_DB.prepare(
+    `SELECT i.worker_id, i.workspace_id, ew.name AS workspace_name,
+            i.worker_type_id, i.name, i.status, i.auth_strategy,
+            i.default_model, i.allowed_models_json, i.capabilities_json,
+            i.local_permissions_summary_json, i.local_concurrency_limit,
+            i.adapter_version, i.credential_status, i.revision,
+            i.created_at, i.updated_at, i.last_seen_at, i.removed_at
+       FROM workspace_worker_inventory i
+       JOIN execution_workspaces ew ON ew.id = i.workspace_id
+      WHERE i.owner_user_id = ?1
+        AND (?2 IS NULL OR i.workspace_id = ?2)
+      ORDER BY ew.name, i.name, i.worker_id`,
+  )
+    .bind(context.userId, workspaceId)
+    .all<Record<string, unknown>>();
+  const parseArray = (value: unknown): unknown[] => {
+    try {
+      const decoded: unknown = JSON.parse(String(value ?? "[]"));
+      return Array.isArray(decoded) ? decoded : [];
+    } catch {
+      return [];
+    }
+  };
+  return json({
+    workers: (rows.results ?? []).map((row) => ({
+      id: String(row.worker_id),
+      workspaceId: String(row.workspace_id),
+      workspaceName: String(row.workspace_name),
+      workerTypeId: String(row.worker_type_id),
+      name: String(row.name),
+      status: String(row.status),
+      authStrategy: String(row.auth_strategy),
+      defaultModel:
+        row.default_model == null ? null : String(row.default_model),
+      allowedModels: parseArray(row.allowed_models_json),
+      capabilities: parseArray(row.capabilities_json),
+      localPermissionsSummary: parseArray(row.local_permissions_summary_json),
+      localConcurrencyLimit: Number(row.local_concurrency_limit),
+      adapterVersion:
+        row.adapter_version == null ? null : String(row.adapter_version),
+      credentialStatus: String(row.credential_status),
+      revision: Number(row.revision),
+      createdAt: String(row.created_at),
+      updatedAt: String(row.updated_at),
+      lastSeenAt: String(row.last_seen_at),
+      removedAt: row.removed_at == null ? null : String(row.removed_at),
+    })),
+  });
+}
+
 export async function handleConfiguredWorkerObservability(
   request: Request,
   env: SecurityEnv,
@@ -8281,7 +8342,7 @@ async function handleWorkspaceGatewayConnect(
   return stub.fetch(upgradedRequest);
 }
 
-async function handleHostProtocolMessage(
+export async function handleHostProtocolMessage(
   request: Request,
   env: SecurityEnv,
 ): Promise<Response> {
@@ -10445,6 +10506,392 @@ async function handleRevokeHostRelease(
   });
 }
 
+const MAX_V7_ADAPTER_ARCHIVE_BYTES = 20 * 1024 * 1024;
+
+/** Lists signed V7 adapter release manifests for Workspace package admission. */
+async function handleListV7Adapters(
+  request: Request,
+  env: SecurityEnv,
+  _ctx?: ExecutionContext,
+): Promise<Response> {
+  const url = new URL(request.url);
+  const workerTypeId = url.searchParams.get("workerTypeId");
+  const platform = url.searchParams.get("platform");
+  const channel = url.searchParams.get("channel");
+  if (workerTypeId && !/^[a-z0-9][a-z0-9._-]*$/.test(workerTypeId)) {
+    throw new HttpError(400, "workerTypeId is invalid");
+  }
+  if (
+    platform &&
+    ![
+      "macos-arm64",
+      "macos-x64",
+      "linux-arm64",
+      "linux-x64",
+      "windows-arm64",
+      "windows-x64",
+    ].includes(platform)
+  ) {
+    throw new HttpError(400, "platform is invalid");
+  }
+  if (channel && !["stable", "beta", "development"].includes(channel)) {
+    throw new HttpError(400, "channel is invalid");
+  }
+  const rows = await env.CONCLAVE_DB.prepare(
+    `SELECT worker_type_id, version, release_channel, protocol_version,
+            supported_platforms_json, manifest_json, package_digest,
+            archive_sha256, created_at
+     FROM v7_adapter_releases
+     WHERE is_revoked = 0
+       AND (?1 IS NULL OR worker_type_id = ?1)
+       AND (?2 IS NULL OR release_channel = ?2)
+     ORDER BY worker_type_id ASC, created_at DESC
+     LIMIT 500`,
+  )
+    .bind(workerTypeId, channel)
+    .all<{
+      worker_type_id: string;
+      version: string;
+      release_channel: string;
+      protocol_version: string;
+      supported_platforms_json: string;
+      manifest_json: string;
+      package_digest: string;
+      archive_sha256: string;
+      created_at: string;
+    }>();
+  const releases = (rows.results ?? [])
+    .filter((row) => {
+      try {
+        const platforms = JSON.parse(row.supported_platforms_json) as unknown;
+        return (
+          !platform ||
+          (Array.isArray(platforms) && platforms.includes(platform))
+        );
+      } catch {
+        return false;
+      }
+    })
+    .map((row) => ({
+      workerTypeId: row.worker_type_id,
+      version: row.version,
+      channel: row.release_channel,
+      protocolVersion: row.protocol_version,
+      supportedPlatforms: parseJson<string[]>(row.supported_platforms_json, []),
+      manifest: parseJson<Record<string, unknown>>(row.manifest_json, {}),
+      packageDigest: row.package_digest,
+      archiveSha256: row.archive_sha256,
+      downloadPath: `/api/v7/adapters/${encodeURIComponent(row.worker_type_id)}/versions/${encodeURIComponent(row.version)}/download`,
+      publishedAt: row.created_at,
+    }));
+  return json({ releases });
+}
+
+/** Publishes an immutable signed adapter package to the artifact bucket. */
+async function handlePublishV7Adapter(
+  request: Request,
+  env: SecurityEnv,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const publisher = await authorizeRequest(
+    request,
+    env,
+    "workspace:manage",
+    undefined,
+    ctx,
+  );
+  const hasPublisherAuthority =
+    (publisher.ownedWorkspaceIds?.length ?? 0) > 0 ||
+    publisher.roles.some((role) => role === "owner" || role === "admin");
+  if (!hasPublisherAuthority) {
+    throw new HttpError(
+      403,
+      "Workspace ownership is required to publish adapters",
+    );
+  }
+  const declaredLength = Number(request.headers.get("content-length") ?? 0);
+  if (declaredLength > MAX_V7_ADAPTER_ARCHIVE_BYTES * 1.4) {
+    throw new HttpError(413, "adapter release request is too large");
+  }
+  const maxRequestBytes = Math.ceil(MAX_V7_ADAPTER_ARCHIVE_BYTES * 1.4);
+  const reader = request.body?.getReader();
+  if (!reader) throw new HttpError(400, "request body is required");
+  const chunks: Uint8Array[] = [];
+  let requestBytes = 0;
+  try {
+    while (true) {
+      const part = await reader.read();
+      if (part.done) break;
+      requestBytes += part.value.byteLength;
+      if (requestBytes > maxRequestBytes) {
+        await reader.cancel();
+        throw new HttpError(413, "adapter release request is too large");
+      }
+      chunks.push(part.value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bodyBytes = new Uint8Array(requestBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bodyBytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  let bodyText: string;
+  try {
+    bodyText = new TextDecoder("utf-8", { fatal: true }).decode(bodyBytes);
+  } catch {
+    throw new HttpError(400, "request body must be valid UTF-8");
+  }
+  let body: unknown;
+  try {
+    body = JSON.parse(bodyText);
+  } catch {
+    throw new HttpError(400, "request body must be valid JSON");
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new HttpError(400, "request body must be an object");
+  }
+  const value = body as Record<string, unknown>;
+  if (
+    Object.keys(value).some(
+      (key) => !["manifest", "packageBase64"].includes(key),
+    )
+  ) {
+    throw new HttpError(400, "request contains unsupported fields");
+  }
+  let manifest: ReturnType<typeof parseV7AdapterManifest>;
+  try {
+    manifest = parseV7AdapterManifest(value.manifest);
+  } catch {
+    throw new HttpError(400, "V7 adapter manifest is invalid");
+  }
+  const manifestJson = JSON.stringify(value.manifest);
+  if (
+    typeof value.packageBase64 !== "string" ||
+    value.packageBase64.length === 0
+  ) {
+    throw new HttpError(400, "packageBase64 is required");
+  }
+  if (
+    value.packageBase64.length >
+    Math.ceil((MAX_V7_ADAPTER_ARCHIVE_BYTES * 4) / 3)
+  ) {
+    throw new HttpError(413, "adapter archive exceeds the 20 MB limit");
+  }
+  let archive: Uint8Array;
+  try {
+    const binary = atob(value.packageBase64);
+    archive = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  } catch {
+    throw new HttpError(400, "packageBase64 is invalid");
+  }
+  if (
+    archive.byteLength === 0 ||
+    archive.byteLength > MAX_V7_ADAPTER_ARCHIVE_BYTES
+  ) {
+    throw new HttpError(413, "adapter archive exceeds the 20 MB limit");
+  }
+  const archiveCopy = new Uint8Array(archive.byteLength);
+  archiveCopy.set(archive);
+  const archiveDigest = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", archiveCopy.buffer),
+  );
+  const archiveSha256 = [...archiveDigest]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  const existing = await env.CONCLAVE_DB.prepare(
+    `SELECT archive_sha256, manifest_json FROM v7_adapter_releases
+     WHERE worker_type_id = ?1 AND version = ?2`,
+  )
+    .bind(manifest.workerTypeId, manifest.adapterVersion)
+    .first<{ archive_sha256: string; manifest_json: string }>();
+  if (existing) {
+    if (
+      existing.archive_sha256 === archiveSha256 &&
+      existing.manifest_json === manifestJson
+    ) {
+      return json({
+        workerTypeId: manifest.workerTypeId,
+        version: manifest.adapterVersion,
+        archiveSha256,
+        status: "already_published",
+      });
+    }
+    throw new HttpError(409, "adapter release version is immutable");
+  }
+  const bucket = env.CONCLAVE_ARTIFACTS;
+  if (!bucket)
+    throw new HttpError(503, "adapter artifact storage is unavailable");
+  const packageR2Key = `v7-adapters/${manifest.workerTypeId}/${manifest.adapterVersion}/${archiveSha256}.tgz`;
+  await bucket.put(packageR2Key, archive, {
+    httpMetadata: { contentType: "application/gzip" },
+    customMetadata: {
+      workerTypeId: manifest.workerTypeId,
+      version: manifest.adapterVersion,
+      packageDigest: manifest.packageDigest,
+      archiveSha256,
+    },
+  });
+  const publishedAt = new Date().toISOString();
+  try {
+    await env.CONCLAVE_DB.prepare(
+      `INSERT INTO v7_adapter_releases (
+        publisher_user_id, worker_type_id, version, release_channel, protocol_version,
+        supported_platforms_json, manifest_json, package_digest,
+        archive_sha256, package_r2_key, created_at
+      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`,
+    )
+      .bind(
+        publisher.userId,
+        manifest.workerTypeId,
+        manifest.adapterVersion,
+        manifest.releaseChannel,
+        manifest.protocolVersion,
+        JSON.stringify(manifest.supportedPlatforms),
+        manifestJson,
+        manifest.packageDigest.toLowerCase(),
+        archiveSha256,
+        packageR2Key,
+        publishedAt,
+      )
+      .run();
+  } catch (error) {
+    await bucket.delete(packageR2Key).catch(() => undefined);
+    throw error;
+  }
+  return json(
+    {
+      workerTypeId: manifest.workerTypeId,
+      version: manifest.adapterVersion,
+      channel: manifest.releaseChannel,
+      packageDigest: manifest.packageDigest,
+      archiveSha256,
+      status: "published",
+      publishedAt,
+    },
+    { status: 201 },
+  );
+}
+
+async function handleDownloadV7Adapter(
+  _request: Request,
+  env: SecurityEnv,
+  workerTypeId: string,
+  version: string,
+  _ctx?: ExecutionContext,
+): Promise<Response> {
+  if (
+    !/^[a-z0-9][a-z0-9._-]*$/.test(workerTypeId) ||
+    !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(version)
+  ) {
+    throw new HttpError(400, "adapter release identity is invalid");
+  }
+  const row = await env.CONCLAVE_DB.prepare(
+    `SELECT package_r2_key, archive_sha256, package_digest, is_revoked
+     FROM v7_adapter_releases WHERE worker_type_id = ?1 AND version = ?2`,
+  )
+    .bind(workerTypeId, version)
+    .first<{
+      package_r2_key: string;
+      archive_sha256: string;
+      package_digest: string;
+      is_revoked: number;
+    }>();
+  if (!row) throw new HttpError(404, "adapter release was not found");
+  if (row.is_revoked === 1)
+    throw new HttpError(410, "adapter release is revoked");
+  const object = await env.CONCLAVE_ARTIFACTS.get(row.package_r2_key);
+  if (!object) throw new HttpError(404, "adapter package is unavailable");
+  return new Response(object.body, {
+    headers: {
+      "content-type": "application/gzip",
+      "content-length": String(object.size),
+      "x-conclave-archive-sha256": row.archive_sha256,
+      "x-conclave-package-digest": row.package_digest,
+      etag: object.etag,
+      "content-disposition": `attachment; filename="${workerTypeId}-${version}.tgz"`,
+    },
+  });
+}
+
+async function handleRevokeV7Adapter(
+  request: Request,
+  env: SecurityEnv,
+  workerTypeId: string,
+  version: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const publisher = await authorizeRequest(
+    request,
+    env,
+    "workspace:manage",
+    undefined,
+    ctx,
+  );
+  if (
+    (publisher.ownedWorkspaceIds?.length ?? 0) === 0 &&
+    !publisher.roles.some((role) => role === "owner" || role === "admin")
+  ) {
+    throw new HttpError(
+      403,
+      "Workspace ownership is required to revoke adapters",
+    );
+  }
+  if (
+    !/^[a-z0-9][a-z0-9._-]*$/.test(workerTypeId) ||
+    !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(version)
+  ) {
+    throw new HttpError(400, "adapter release identity is invalid");
+  }
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    throw new HttpError(400, "request body must be valid JSON");
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new HttpError(400, "request body must be an object");
+  }
+  const reason = (body as Record<string, unknown>).reason;
+  if (
+    typeof reason !== "string" ||
+    reason.trim().length < 1 ||
+    reason.length > 512
+  ) {
+    throw new HttpError(400, "a revocation reason is required");
+  }
+  const existing = await env.CONCLAVE_DB.prepare(
+    `SELECT is_revoked, publisher_user_id FROM v7_adapter_releases
+     WHERE worker_type_id = ?1 AND version = ?2`,
+  )
+    .bind(workerTypeId, version)
+    .first<{ is_revoked: number; publisher_user_id: string }>();
+  if (!existing) throw new HttpError(404, "adapter release was not found");
+  if (
+    existing.publisher_user_id !== publisher.userId &&
+    !publisher.roles.includes("admin")
+  ) {
+    throw new HttpError(
+      403,
+      "Only the adapter publisher or an administrator can revoke this release",
+    );
+  }
+  if (existing.is_revoked === 1) {
+    return json({ workerTypeId, version, status: "revoked" });
+  }
+  const revokedAt = new Date().toISOString();
+  await env.CONCLAVE_DB.prepare(
+    `UPDATE v7_adapter_releases
+     SET is_revoked = 1, revoked_at = ?1, revocation_reason = ?2
+     WHERE worker_type_id = ?3 AND version = ?4`,
+  )
+    .bind(revokedAt, reason.trim(), workerTypeId, version)
+    .run();
+  return json({ workerTypeId, version, status: "revoked", revokedAt });
+}
+
 export {
   json,
   errorMessage,
@@ -10459,6 +10906,10 @@ export {
   handleListPendingInvitations,
   handleConnectorTaskRequest,
   handleListWorkspaces,
+  handleListV7Adapters,
+  handlePublishV7Adapter,
+  handleDownloadV7Adapter,
+  handleRevokeV7Adapter,
   handleCreateWorkspace,
   handleUploadArtifact,
   handleGetArtifact,

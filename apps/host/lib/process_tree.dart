@@ -7,9 +7,12 @@ Future<Process> startIsolatedProcess(
   List<String> arguments, {
   String? workingDirectory,
   Map<String, String>? environment,
+  bool includeParentEnvironment = true,
 }) async {
   return currentPlatformRuntime.startIsolatedProcess(executable, arguments,
-      workingDirectory: workingDirectory, environment: environment);
+      workingDirectory: workingDirectory,
+      environment: environment,
+      includeParentEnvironment: includeParentEnvironment);
 }
 
 Future<void> terminateProcessTree(

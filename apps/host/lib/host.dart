@@ -3,10 +3,24 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'cloud_connection.dart';
+import 'configured_worker_registry.dart';
 import 'host_configuration.dart';
 import 'secure_credentials.dart';
 import 'platform_runtime.dart';
 import 'work_root.dart';
+import 'v7_adapter_package_store.dart';
+import 'worker_trust_policy.dart';
+
+export 'configured_worker_registry.dart';
+
+WorkerTrustPolicy _configuredAdapterTrustPolicy() {
+  final secret = Platform.environment['CONCLAVE_WORKER_TRUST_SECRET'];
+  final publisher =
+      Platform.environment['CONCLAVE_WORKER_TRUST_PUBLISHER'] ?? 'conclave';
+  return WorkerTrustPolicy(
+    trustedSecrets: secret == null ? const {} : {publisher: secret},
+  );
+}
 
 typedef HostStatusProvider = Future<Map<String, Object?>> Function();
 typedef HostUpdateHandler = Future<Map<String, Object?>> Function(
@@ -158,9 +172,26 @@ class Host {
     this.statusProvider,
     this.updateStatusProvider,
     this.updateHandler,
+    SecureCredentialStore? credentialStore,
+    V7AdapterPackageStore? adapterPackageStore,
     String Function(String)? redactLog,
     this.logFileMaxBytes = 1024 * 1024,
   })  : _configuredLogOutput = logOutput,
+        credentialStore =
+            credentialStore ?? const PlatformSecureCredentialStore(),
+        adapterPackageStore = adapterPackageStore ??
+            V7AdapterPackageStore(
+              root: Directory('${config.dataDirectory.path}/v7-adapters'),
+              trustPolicy: _configuredAdapterTrustPolicy(),
+              allowedPermissions: parseConfiguredWorkerPermissions(
+                  Platform.environment['CONCLAVE_WORKER_PERMISSIONS']),
+            ),
+        localWorkerRegistry = config.workspaceId == null
+            ? null
+            : LocalConfiguredWorkerRegistry(
+                dataDirectory: config.dataDirectory,
+                workspaceId: config.workspaceId!,
+              ),
         _log = HostLogger(logOutput ?? stdout,
             redact: redactLog ?? HostLogger._identity) {
     if (logFileMaxBytes <= 0) {
@@ -170,6 +201,9 @@ class Host {
   }
 
   final HostConfig config;
+  final SecureCredentialStore credentialStore;
+  final V7AdapterPackageStore adapterPackageStore;
+  final LocalConfiguredWorkerRegistry? localWorkerRegistry;
   final HostCloudConnection? cloudConnection;
   final HostStatusProvider? statusProvider;
   final HostStatusProvider? updateStatusProvider;

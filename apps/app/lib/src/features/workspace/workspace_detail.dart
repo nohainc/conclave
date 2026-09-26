@@ -9,6 +9,7 @@ class WorkspaceDetailView extends StatefulWidget {
     super.key,
     required this.workspace,
     this.configuredWorkers = const [],
+    this.workspaceWorkers = const [],
     required this.onBack,
     required this.onRename,
     required this.onUpdate,
@@ -24,6 +25,7 @@ class WorkspaceDetailView extends StatefulWidget {
 
   final StudioAgent workspace;
   final List<StudioConfiguredWorker> configuredWorkers;
+  final List<StudioWorkspaceWorker> workspaceWorkers;
   final VoidCallback onBack;
   final ValueChanged<StudioAgent> onRename;
   final ValueChanged<StudioAgent> onUpdate;
@@ -267,17 +269,54 @@ class _WorkspaceDetailViewState extends State<WorkspaceDetailView>
         children: [
           _Panel(
             title: 'Workers on ${widget.workspace.name}',
-            subtitle: 'Configured AI/tool identities that can run here.',
-            child: _configuredWorkersOnWorkspace(),
+            subtitle: 'Locally configured Workers reported by this Workspace.',
+            child: _workspaceWorkersOnWorkspace(),
           ),
+          if (_configuredWorkersForWorkspace().isNotEmpty)
+            _Panel(
+              title: 'Legacy Cloud-configured Workers',
+              subtitle: 'V6 Worker bindings retained during migration.',
+              child: _configuredWorkersOnWorkspace(
+                  _configuredWorkersForWorkspace()),
+            ),
         ],
       );
 
-  Widget _configuredWorkersOnWorkspace() {
-    final workers = widget.configuredWorkers
-        .where((worker) => worker.bindings
-            .any((binding) => binding.workspaceId == widget.workspace.id))
+  Widget _workspaceWorkersOnWorkspace() {
+    final workers = widget.workspaceWorkers
+        .where((worker) =>
+            worker.workspaceId == widget.workspace.id &&
+            worker.status != 'removed')
         .toList();
+    if (workers.isEmpty) {
+      return const Text('No local Workers have synced from this Workspace.');
+    }
+    return Column(
+      children: workers
+          .map((worker) => ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  worker.status == 'ready' &&
+                          const {'ready', 'not_required'}
+                              .contains(worker.credentialStatus)
+                      ? Icons.check_circle_outline
+                      : Icons.warning_amber_outlined,
+                ),
+                title: Text(worker.name),
+                subtitle: Text(
+                    '${worker.workerTypeId} · ${worker.status == 'ready' ? 'Ready' : worker.status == 'disabled' ? 'Disabled' : 'Needs attention'}'),
+              ))
+          .toList(),
+    );
+  }
+
+  List<StudioConfiguredWorker> _configuredWorkersForWorkspace() =>
+      widget.configuredWorkers
+          .where((worker) => worker.bindings
+              .any((binding) => binding.workspaceId == widget.workspace.id))
+          .toList();
+
+  Widget _configuredWorkersOnWorkspace(List<StudioConfiguredWorker> workers) {
     if (workers.isEmpty) {
       return const Text(
           'No configured Workers are connected to this Workspace.');

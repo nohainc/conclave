@@ -5,7 +5,6 @@ import {
 } from "../src/index.js";
 
 describe("v6 observability", () => {
-
   it("computes iteration timing, recovery, rollback, and utilization", () => {
     const metrics = computeV6ObservabilityMetrics([
       {

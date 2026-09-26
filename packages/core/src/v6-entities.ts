@@ -459,7 +459,9 @@ export function validateWorkRequest(
       );
     }
     if (!request.primaryWorkspaceId) {
-      throw new DomainInvariantError("Stateful WorkRequest requires a Primary Workspace");
+      throw new DomainInvariantError(
+        "Stateful WorkRequest requires a Primary Workspace",
+      );
     }
     if (request.primaryWorkspaceId !== policy.primaryWorkspaceId) {
       throw new DomainInvariantError(

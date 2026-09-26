@@ -287,6 +287,10 @@ class StudioFixtureDataSource implements StudioDataSource {
       const [];
 
   @override
+  Future<List<StudioWorkspaceWorker>> loadWorkspaceWorkerInventory() async =>
+      const [];
+
+  @override
   Future<StudioConfiguredWorker> createConfiguredWorker({
     required String name,
     required String workerTypeId,

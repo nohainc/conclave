@@ -1,4 +1,3 @@
-
 export async function recordExecutionWorkspaceAudit(
   db: D1Database,
   input: {

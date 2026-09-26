@@ -242,10 +242,22 @@ describe("Architecture v5 clean D1 schema", () => {
 
     // Project membership and Workspace access are separate boundaries.
     expect(
-      (db.prepare("SELECT owner_user_id FROM execution_workspaces WHERE id = 'owner-workspace'").get() as { owner_user_id: string }).owner_user_id,
+      (
+        db
+          .prepare(
+            "SELECT owner_user_id FROM execution_workspaces WHERE id = 'owner-workspace'",
+          )
+          .get() as { owner_user_id: string }
+      ).owner_user_id,
     ).toBe("owner");
     expect(
-      (db.prepare("SELECT COUNT(*) AS count FROM workspace_project_grants WHERE project_id = 'project' AND status = 'active'").get() as { count: number }).count,
+      (
+        db
+          .prepare(
+            "SELECT COUNT(*) AS count FROM workspace_project_grants WHERE project_id = 'project' AND status = 'active'",
+          )
+          .get() as { count: number }
+      ).count,
     ).toBe(2);
 
     // The recommended membership-removal policy revokes contributed capacity.
@@ -258,10 +270,22 @@ describe("Architecture v5 clean D1 schema", () => {
         WHERE project_id = 'project' AND granted_by_user_id = 'collaborator' AND status = 'active'`,
     ).run();
     expect(
-      (db.prepare("SELECT status FROM workspace_project_grants WHERE id = 'contributor-grant'").get() as { status: string }).status,
+      (
+        db
+          .prepare(
+            "SELECT status FROM workspace_project_grants WHERE id = 'contributor-grant'",
+          )
+          .get() as { status: string }
+      ).status,
     ).toBe("revoked");
     expect(
-      (db.prepare("SELECT COUNT(*) AS count FROM project_memberships WHERE project_id = 'project' AND user_id = 'collaborator'").get() as { count: number }).count,
+      (
+        db
+          .prepare(
+            "SELECT COUNT(*) AS count FROM project_memberships WHERE project_id = 'project' AND user_id = 'collaborator'",
+          )
+          .get() as { count: number }
+      ).count,
     ).toBe(0);
   });
 });

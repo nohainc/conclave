@@ -285,7 +285,9 @@ describe("Conclave Host & Worker Protocol v4", () => {
       expect(parsed.type).toBe("assignment.start");
       if (parsed.type === "assignment.start") {
         expect(parsed.payload.snapshot.fencingToken).toBe(4);
-        expect(parsed.payload.snapshot.executionClass).toBe("stateful_workstream");
+        expect(parsed.payload.snapshot.executionClass).toBe(
+          "stateful_workstream",
+        );
       }
     });
 

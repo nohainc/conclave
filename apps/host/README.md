@@ -24,6 +24,27 @@ remote scheduling policy belong in Conclave AX.
 Users install only Conclave Workspace. Worker adapters are managed internally;
 they are not separately installed desktop applications.
 
+## Packaging a V7 adapter release
+
+Use the release publisher's signing key from a protected environment. The
+packager validates the V7 manifest, computes the file-tree digest, signs the
+digest and canonical manifest, and emits a gzip-tar archive plus the exact
+manifest for the Cloud catalog request. The key is read only from the process
+environment and is not written into either output.
+
+```sh
+cd apps/host
+CONCLAVE_WORKER_TRUST_SECRET="$V7_ADAPTER_PUBLISHER_KEY" \
+  dart run bin/package_v7_adapter.dart \
+  --source ../../packages/worker-manifest/adapters/codex \
+  --output ../../dist/codex-1.0.0.tgz
+```
+
+The archive must remain under Cloud's 20 MiB release-upload limit. Publish its
+manifest and base64 archive to `POST /api/v7/adapters/publish` using an
+authenticated owner session. Cloud stores the immutable catalog entry and
+archive; Workspace verifies the release locally before use.
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.

@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:conclave_host/assignment_journal.dart';
 import 'package:conclave_host/cloud_connection.dart';
+import 'package:conclave_protocol/workspace_runtime_protocol.dart'
+    show workspaceRuntimeProtocolVersion;
 import 'package:conclave_host/worker_executor.dart';
 import 'package:conclave_host/worker_protocol.dart';
 import 'package:test/test.dart';
@@ -72,7 +74,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.workspace-runtime-protocol',
-      'protocolVersion': '5.0',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-hello-ack',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'workspace.hello.ack',
@@ -109,7 +111,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '4.0',
+      'protocolVersion': '4.1',
       'messageId': 'server-1',
       'correlationId': 'client-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -187,7 +189,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '4.0',
+      'protocolVersion': '4.1',
       'messageId': 'server-update-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'host.update',
@@ -252,7 +254,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '4.0',
+      'protocolVersion': '4.1',
       'messageId': 'server-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'host.hello.ack',
@@ -306,7 +308,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '4.0',
+      'protocolVersion': '4.1',
       'messageId': 'server-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'host.hello.ack',
@@ -381,7 +383,7 @@ void main() {
     await connection.connect();
     sockets.first.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '4.0',
+      'protocolVersion': '4.1',
       'messageId': 'server-ack',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'host.hello.ack',
@@ -421,7 +423,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '4.0',
+      'protocolVersion': '4.1',
       'messageId': 'server-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'host.hello.ack',
@@ -461,7 +463,7 @@ void main() {
 
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '4.0',
+      'protocolVersion': '4.1',
       'messageId': 'server-assignment-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'assignment.start',
@@ -524,7 +526,7 @@ void main() {
 
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '4.0',
+      'protocolVersion': '4.1',
       'messageId': 'server-empty-work-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'assignment.start',
@@ -588,7 +590,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '4.0',
+      'protocolVersion': '4.1',
       'messageId': 'server-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'host.hello.ack',
@@ -597,7 +599,7 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 10));
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '4.0',
+      'protocolVersion': '4.1',
       'messageId': 'server-sync-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'host.sync.result',
@@ -639,7 +641,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '4.0',
+      'protocolVersion': '4.1',
       'messageId': 'server-assignment-2',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'assignment.start',
@@ -677,7 +679,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '4.0',
+      'protocolVersion': '4.1',
       'messageId': 'server-assignment-3',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'assignment.start',
@@ -722,7 +724,7 @@ void main() {
 
     Map<String, Object?> assignment() => {
           'protocol': 'conclave.host-protocol',
-          'protocolVersion': '4.0',
+          'protocolVersion': '4.1',
           'messageId': 'server-replay-${executions + 1}',
           'timestamp': DateTime.now().toUtc().toIso8601String(),
           'type': 'assignment.start',
@@ -794,7 +796,7 @@ void main() {
 
     final assignment = <String, Object?>{
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '4.0',
+      'protocolVersion': '4.1',
       'messageId': 'server-running-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'assignment.start',
@@ -855,7 +857,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
-      'protocolVersion': '4.0',
+      'protocolVersion': '4.1',
       'messageId': 'cancel-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'assignment.cancel',
@@ -909,7 +911,7 @@ void main() {
     try {
       socket.controller.add(jsonEncode({
         'protocol': 'conclave.host-protocol',
-        'protocolVersion': '4.0',
+        'protocolVersion': '4.1',
         'messageId': 'forge-assignment-1',
         'timestamp': DateTime.now().toUtc().toIso8601String(),
         'type': 'assignment.start',

@@ -130,6 +130,7 @@ class HostCloudConnection {
     this.assignmentCancellationHandler,
     this.assignmentJournal,
     this.syncHandler,
+    this.workerInventoryProvider,
     this.hostUpdateAvailableHandler,
     this.workstreamCheckoutManager,
     this.heartbeat = const Duration(seconds: 15),
@@ -161,6 +162,7 @@ class HostCloudConnection {
   final HostAssignmentCancellationHandler? assignmentCancellationHandler;
   final AssignmentJournal? assignmentJournal;
   final HostSyncHandler? syncHandler;
+  final Future<List<Map<String, Object?>>> Function()? workerInventoryProvider;
   final HostUpdateAvailableHandler? hostUpdateAvailableHandler;
   final WorkstreamCheckoutManager? workstreamCheckoutManager;
   final Duration heartbeat;
@@ -179,6 +181,7 @@ class HostCloudConnection {
   int get activeAssignmentCount => _activeAssignments.length;
   List<String> get activeAssignmentIds => _activeAssignments.toList()..sort();
   int _messageSequence = 0;
+  int _heartbeatCount = 0;
   Map<String, Object?>? syncResponse;
   final _activeAssignments = <String>{};
   final _lastEphemeralWorkerEvent = <String, DateTime>{};
@@ -192,6 +195,25 @@ class HostCloudConnection {
               })
           .toList(),
     });
+  }
+
+  /// Publishes only the safe projection of Workspace-local Worker records.
+  /// The caller must omit credential references, secrets, and local paths.
+  void reportWorkerInventory(List<Map<String, Object?>> workers) {
+    _sendIfConnected('worker.inventory', {
+      'fullSnapshot': true,
+      'workers': workers,
+    });
+  }
+
+  Future<void> _reportCurrentWorkerInventory() async {
+    final provider = workerInventoryProvider;
+    if (provider == null || !isConnected) return;
+    try {
+      reportWorkerInventory(await provider());
+    } on Object {
+      // Keep the runtime connection alive if local registry diagnostics fail.
+    }
   }
 
   void reportWorkerStatus({
@@ -402,6 +424,11 @@ class HostCloudConnection {
           'activeAssignments': _activeAssignments.length,
         }),
       }));
+      _heartbeatCount++;
+      if (_heartbeatCount >= 4) {
+        _heartbeatCount = 0;
+        unawaited(_reportCurrentWorkerInventory());
+      }
     });
   }
 
@@ -516,6 +543,7 @@ class HostCloudConnection {
           }
         }
         unawaited(_sendSyncRequest());
+        unawaited(_reportCurrentWorkerInventory());
       }
     } else if (decoded['type'] == 'workspace.sync.result') {
       final payload = decoded['payload'];

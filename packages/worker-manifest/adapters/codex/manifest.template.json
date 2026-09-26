@@ -1,0 +1,28 @@
+{
+  "workerTypeId": "codex",
+  "adapterVersion": "1.0.0",
+  "protocolVersion": "1.0",
+  "publisher": "conclave",
+  "displayName": "Codex",
+  "supportedPlatforms": [
+    "macos-arm64",
+    "macos-x64",
+    "linux-arm64",
+    "linux-x64"
+  ],
+  "capabilities": ["code", "repository", "shell"],
+  "permissions": ["workspace:read", "workspace:write", "shell:execute"],
+  "authStrategies": ["browser_auth"],
+  "modelSelectionMode": "allow_list",
+  "prerequisites": [
+    { "kind": "executable", "executable": "node" },
+    { "kind": "executable", "executable": "codex", "minimumVersion": "0.158.0" }
+  ],
+  "executable": "bin/conclave-codex-adapter.mjs",
+  "launchArgs": [],
+  "secretRequirements": [],
+  "healthCheck": { "mode": "protocol", "timeoutMs": 5000 },
+  "packageDigest": "<calculated-from-package-contents-on-publish>",
+  "signature": "<publisher-signature-on-publish>",
+  "releaseChannel": "stable"
+}

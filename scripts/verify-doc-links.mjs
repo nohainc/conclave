@@ -1,5 +1,3 @@
-/* global console, process */
-
 import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 

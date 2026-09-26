@@ -97,8 +97,9 @@ String _networkMode(Object? value) {
 }
 
 void _validatePathMappings(Object? value) {
-  if (value is! List)
+  if (value is! List) {
     throw const RuntimeViolation('assignment path mappings are invalid');
+  }
   for (final mapping in value) {
     if (mapping is! Map ||
         mapping['projectPath'] is! String ||
@@ -128,7 +129,9 @@ void _rejectWorkerControlledPaths(Map<String, Object?> value) {
         visit(entry.value);
       }
     } else if (current is List) {
-      for (final item in current) visit(item);
+      for (final item in current) {
+        visit(item);
+      }
     }
   }
 
@@ -162,7 +165,9 @@ void _rejectCredentialMaterial(Map<String, Object?> value) {
         visit(entry.value);
       }
     } else if (current is List) {
-      for (final item in current) visit(item);
+      for (final item in current) {
+        visit(item);
+      }
     }
   }
 
@@ -178,8 +183,9 @@ void _validateRelativePath(String value) {
   for (final segment in segments) {
     if (segment.isEmpty || segment == '.') continue;
     if (segment == '..') {
-      if (depth == 0)
+      if (depth == 0) {
         throw const RuntimeViolation('assignment path escapes its grant');
+      }
       depth -= 1;
     } else {
       depth += 1;
@@ -677,7 +683,8 @@ class WorkstreamCheckoutLifecycleResult {
 
 /// @deprecated Historical checkout control plane retained for compatibility
 /// fixtures. Active assignments use the ID-derived Workstream directory.
-@Deprecated('Use WorkstreamDirectoryLifecycle and WorkstreamMutationCoordinator')
+@Deprecated(
+    'Use WorkstreamDirectoryLifecycle and WorkstreamMutationCoordinator')
 class WorkstreamCheckoutManager {
   WorkstreamCheckoutManager(Directory repositoryRoot)
       : _repositoryRoot = SafeWorkspace(repositoryRoot),

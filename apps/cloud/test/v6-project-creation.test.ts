@@ -198,7 +198,9 @@ describe("v6 Project creation", () => {
           ownedAccountIds: [],
         }),
       } as never,
-      new Request("https://conclave.test/api/studio/snapshot?projectId=project-1"),
+      new Request(
+        "https://conclave.test/api/studio/snapshot?projectId=project-1",
+      ),
       "project-1",
     );
 
@@ -271,8 +273,12 @@ describe("v6 Project creation", () => {
         lead: "user-1",
       },
     });
-    expect(prepared).toContainEqual(expect.stringContaining("INSERT INTO workstreams"));
-    expect(prepared).toContainEqual(expect.stringContaining("INSERT INTO workstream_memberships"));
+    expect(prepared).toContainEqual(
+      expect.stringContaining("INSERT INTO workstreams"),
+    );
+    expect(prepared).toContainEqual(
+      expect.stringContaining("INSERT INTO workstream_memberships"),
+    );
     expect(batchSize).toBe(2);
   });
 
@@ -281,7 +287,10 @@ describe("v6 Project creation", () => {
     let updatedBindings: unknown[] = [];
     const db = {
       prepare(query: string) {
-        if (query.includes("owner_user_id = ?1") && query.includes("id <> ?2")) {
+        if (
+          query.includes("owner_user_id = ?1") &&
+          query.includes("id <> ?2")
+        ) {
           return {
             bind() {
               return this;
@@ -302,7 +311,9 @@ describe("v6 Project creation", () => {
                 name: "Original Name",
                 description: "Original Desc",
                 repositoryId: null,
-                settingsJson: JSON.stringify({ workstreamOrder: ["ws-1", "ws-2"] }),
+                settingsJson: JSON.stringify({
+                  workstreamOrder: ["ws-1", "ws-2"],
+                }),
                 createdAt: "2026-01-01T00:00:00Z",
                 updatedAt: "2026-01-01T00:00:00Z",
               };
@@ -363,7 +374,11 @@ describe("v6 Project creation", () => {
 
     const getRes = await handleGetProject(
       new Request("https://conclave.test/api/projects/project-1"),
-      { CONCLAVE_ENVIRONMENT: "development", CONCLAVE_DB: db, TEST_AUTHENTICATION: auth } as never,
+      {
+        CONCLAVE_ENVIRONMENT: "development",
+        CONCLAVE_DB: db,
+        TEST_AUTHENTICATION: auth,
+      } as never,
       "project-1",
     );
     expect(getRes.status).toBe(200);
@@ -389,7 +404,11 @@ describe("v6 Project creation", () => {
           settings: { workstreamOrder: ["ws-2", "ws-1"] },
         }),
       }),
-      { CONCLAVE_ENVIRONMENT: "development", CONCLAVE_DB: db, TEST_AUTHENTICATION: auth } as never,
+      {
+        CONCLAVE_ENVIRONMENT: "development",
+        CONCLAVE_DB: db,
+        TEST_AUTHENTICATION: auth,
+      } as never,
       "project-1",
     );
     expect(updateRes.status).toBe(200);
@@ -400,7 +419,10 @@ describe("v6 Project creation", () => {
       };
     };
     expect(updateBody.project.name).toBe("Updated Name");
-    expect(updateBody.project.settings.workstreamOrder).toEqual(["ws-2", "ws-1"]);
+    expect(updateBody.project.settings.workstreamOrder).toEqual([
+      "ws-2",
+      "ws-1",
+    ]);
     expect(updatedQuery).toContain("UPDATE projects SET name = ?1");
     expect(updatedBindings[0]).toBe("Updated Name");
   });

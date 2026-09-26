@@ -16,6 +16,7 @@ class WorkspacesPage extends StatefulWidget {
     required this.workspaces,
     required this.workers,
     this.configuredWorkers = const [],
+    this.workspaceWorkers = const [],
     this.plugins = const [],
     this.initialTab = 0,
     required this.onAdd,
@@ -36,6 +37,7 @@ class WorkspacesPage extends StatefulWidget {
   final List<StudioAgent> workspaces;
   final List<StudioWorker> workers;
   final List<StudioConfiguredWorker> configuredWorkers;
+  final List<StudioWorkspaceWorker> workspaceWorkers;
   final List<StudioPlugin> plugins;
   final int initialTab;
   final VoidCallback onAdd;
@@ -108,6 +110,7 @@ class _WorkspacesPageState extends State<WorkspacesPage>
         onConnect: widget.onConnect ?? (_) async {},
         onOpenDownloads: widget.onOpenDownloads,
         configuredWorkers: widget.configuredWorkers,
+        workspaceWorkers: widget.workspaceWorkers,
         onOpenConfiguredWorker: widget.onOpenConfiguredWorker,
         onSetupConfiguredWorkerWorkspace:
             widget.onSetupConfiguredWorkerWorkspace,
@@ -157,6 +160,7 @@ class _WorkspacesPageState extends State<WorkspacesPage>
                 workspaces: widget.workspaces,
                 plugins: widget.plugins,
                 configuredWorkers: widget.configuredWorkers,
+                workspaceWorkers: widget.workspaceWorkers,
                 onAddConfiguredWorker: widget.onAddConfiguredWorker,
                 onOpenConfiguredWorker: widget.onOpenConfiguredWorker,
               )

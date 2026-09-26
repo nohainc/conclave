@@ -51,7 +51,9 @@ export function migrateChatToWorkstream(
     updatedAt: chat.updatedAt,
   };
   const discussionMessages = messages
-    .filter((message) => message.chatId === chat.id && message.senderType === "user")
+    .filter(
+      (message) => message.chatId === chat.id && message.senderType === "user",
+    )
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
     .map((message) => ({
       id: message.id,

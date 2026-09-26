@@ -665,6 +665,60 @@ class StudioConfiguredWorker {
   }
 }
 
+/// Safe Cloud projection of a locally owned Workspace Worker.
+/// It intentionally contains no credential references, secrets, or local paths.
+class StudioWorkspaceWorker {
+  const StudioWorkspaceWorker({
+    required this.id,
+    required this.workspaceId,
+    required this.workspaceName,
+    required this.workerTypeId,
+    required this.name,
+    required this.status,
+    required this.authStrategy,
+    required this.credentialStatus,
+    required this.localConcurrencyLimit,
+    required this.revision,
+    required this.capabilities,
+    required this.allowedModels,
+    this.defaultModel,
+    this.adapterVersion,
+  });
+
+  final String id;
+  final String workspaceId;
+  final String workspaceName;
+  final String workerTypeId;
+  final String name;
+  final String status;
+  final String authStrategy;
+  final String credentialStatus;
+  final int localConcurrencyLimit;
+  final int revision;
+  final String? defaultModel;
+  final String? adapterVersion;
+  final List<String> capabilities;
+  final List<String> allowedModels;
+
+  factory StudioWorkspaceWorker.fromJson(Map<String, dynamic> json) =>
+      StudioWorkspaceWorker(
+        id: _string(json, 'id'),
+        workspaceId: _string(json, 'workspaceId'),
+        workspaceName: _string(json, 'workspaceName'),
+        workerTypeId: _string(json, 'workerTypeId'),
+        name: _string(json, 'name'),
+        status: _string(json, 'status', 'needs_attention'),
+        authStrategy: _string(json, 'authStrategy', 'none'),
+        credentialStatus: _string(json, 'credentialStatus', 'error'),
+        localConcurrencyLimit: json['localConcurrencyLimit'] as int? ?? 1,
+        revision: json['revision'] as int? ?? 0,
+        defaultModel: json['defaultModel']?.toString(),
+        adapterVersion: json['adapterVersion']?.toString(),
+        capabilities: _strings(json, 'capabilities'),
+        allowedModels: _strings(json, 'allowedModels'),
+      );
+}
+
 class StudioAgent {
   const StudioAgent({
     required this.id,

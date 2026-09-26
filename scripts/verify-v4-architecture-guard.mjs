@@ -1,5 +1,3 @@
-/* global console, process */
-
 /**
  * Architecture v4 Guard Script
  *

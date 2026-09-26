@@ -603,7 +603,6 @@ describe("Architecture v2 Security & Authentication Suite", () => {
       expect(r3.allowed).toBe(false);
     });
 
-
     it("computes package digest, generates HMAC signature, and verifies successfully", async () => {
       const packageContent = "console.log('hello world plugin');";
       const digest = await computePackageDigest(packageContent);

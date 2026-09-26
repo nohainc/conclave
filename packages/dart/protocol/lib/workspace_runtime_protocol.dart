@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'conclave_protocol.dart';
 
 const workspaceRuntimeProtocolName = 'conclave.workspace-runtime-protocol';
-const workspaceRuntimeProtocolVersion = '5.0';
+const workspaceRuntimeProtocolVersion = '5.1';
 const workspaceRuntimeProtocolMaxMessageSizeBytes = 4194304;
 
 const workspaceRuntimeMessageTypes = <String>{
@@ -18,6 +18,7 @@ const workspaceRuntimeMessageTypes = <String>{
   'worker.install',
   'worker.remove',
   'worker.status',
+  'worker.inventory',
   'credential.status',
   'workstream.status',
   'checkout.provision',

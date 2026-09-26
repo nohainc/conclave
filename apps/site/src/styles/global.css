@@ -495,7 +495,9 @@ h3 {
 }
 .downloads-card--recommended {
   border-color: var(--color-line-glow);
-  box-shadow: 0 0 28px -10px rgba(99, 102, 241, 0.6), var(--shadow-card);
+  box-shadow:
+    0 0 28px -10px rgba(99, 102, 241, 0.6),
+    var(--shadow-card);
 }
 .downloads-card__header {
   display: flex;
@@ -1583,7 +1585,6 @@ h3 {
   }
 }
 
-
 /* Product model refresh */
 .split-section {
   display: grid;
@@ -1693,7 +1694,11 @@ h3 {
 
 .workstream-lane--work {
   border-color: var(--color-line-glow);
-  background: linear-gradient(180deg, var(--color-accent-wash), var(--color-surface));
+  background: linear-gradient(
+    180deg,
+    var(--color-accent-wash),
+    var(--color-surface)
+  );
 }
 
 .workstream-lane strong {

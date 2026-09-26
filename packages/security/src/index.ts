@@ -1076,7 +1076,6 @@ export function consumeRateLimit(
   };
 }
 
-
 export interface EncryptedCredentialEnvelope {
   readonly version: 1;
   readonly algorithm: "AES-GCM";

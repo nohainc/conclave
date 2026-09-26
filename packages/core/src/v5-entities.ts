@@ -172,11 +172,7 @@ export interface ProjectAccountGrant {
 
 export type AiAccountSharingMode = "private_only" | "project_shared";
 export type AiAccountStatus =
-  | "setup_required"
-  | "ready"
-  | "expired"
-  | "error"
-  | "revoked";
+  "setup_required" | "ready" | "expired" | "error" | "revoked";
 
 /** A User-owned provider identity; execution Workspace placement is storage, not ownership. */
 export interface AiAccount {

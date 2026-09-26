@@ -11,6 +11,7 @@ dependencies:
   flutter:
     sdk: flutter
   crypto: ^3.0.0
+  archive: ^4.3.0
   conclave_protocol:
     path: ../../packages/dart/protocol
 

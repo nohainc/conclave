@@ -36,7 +36,13 @@ function runtimeFacts(payload: unknown): {
   capabilities: string[];
 } {
   if (!payload || typeof payload !== "object") {
-    return { platform: null, architecture: null, hostname: null, appVersion: null, capabilities: [] };
+    return {
+      platform: null,
+      architecture: null,
+      hostname: null,
+      appVersion: null,
+      capabilities: [],
+    };
   }
   const value = payload as Record<string, unknown>;
   const rawCapabilities =
@@ -46,10 +52,14 @@ function runtimeFacts(payload: unknown): {
   const text = (candidate: unknown): string | null => {
     if (typeof candidate !== "string") return null;
     const normalized = candidate.trim();
-    return normalized.length > 0 && normalized.length <= 200 ? normalized : null;
+    return normalized.length > 0 && normalized.length <= 200
+      ? normalized
+      : null;
   };
   const capabilities = Array.isArray(value.runtimeCapabilities)
-    ? value.runtimeCapabilities.filter((item): item is string => typeof item === "string").slice(0, 100)
+    ? value.runtimeCapabilities
+        .filter((item): item is string => typeof item === "string")
+        .slice(0, 100)
     : [
         ...jsonArray(JSON.stringify(rawCapabilities.supportedRuntimes)),
         ...jsonArray(JSON.stringify(rawCapabilities.customCapabilities)),
@@ -58,8 +68,12 @@ function runtimeFacts(payload: unknown): {
     platform: text(value.platform ?? rawCapabilities.os),
     architecture: text(value.architecture ?? rawCapabilities.arch),
     hostname: text(value.hostname),
-    appVersion: text(value.appVersion ?? value.hostVersion ?? rawCapabilities.version),
-    capabilities: [...new Set(capabilities.map((item) => item.trim()).filter(Boolean))],
+    appVersion: text(
+      value.appVersion ?? value.hostVersion ?? rawCapabilities.version,
+    ),
+    capabilities: [
+      ...new Set(capabilities.map((item) => item.trim()).filter(Boolean)),
+    ],
   };
 }
 
@@ -334,6 +348,16 @@ export class WorkspaceGateway implements DurableObject {
         .bind(now, this.executionWorkspaceId)
         .run();
     }
+    // This event carries no Worker configuration. AX rereads the owner-scoped
+    // inventory endpoint after each complete snapshot.
+    if (this.executionWorkspaceId) {
+      await createEventPublisher(this.env).publish({
+        type: "worker.inventory.updated",
+        workspaceId: this.executionWorkspaceId,
+        payload: { status: "updated" },
+        durable: false,
+      });
+    }
   }
 
   private async handleMessage(data: unknown, sessionId: string): Promise<void> {
@@ -429,6 +453,9 @@ export class WorkspaceGateway implements DurableObject {
         return;
       case "worker.status":
         await this.recordWorkerStatus(message.payload);
+        return;
+      case "worker.inventory":
+        await this.recordWorkerInventory(message.payload);
         return;
       case "credential.status":
         await this.recordCredentialStatus(message.payload);
@@ -728,6 +755,137 @@ export class WorkspaceGateway implements DurableObject {
             : 0,
           Math.max(0, Date.parse(now) - Date.parse(String(binding.updated_at))),
           now,
+        )
+        .run();
+    }
+  }
+
+  private async recordWorkerInventory(payload: unknown): Promise<void> {
+    const workspaceId = this.executionWorkspaceId;
+    if (!workspaceId || !payload || typeof payload !== "object") return;
+    const reports = (payload as Record<string, unknown>).workers;
+    if (!Array.isArray(reports) || reports.length > 500) return;
+    const owner = await this.env.CONCLAVE_DB.prepare(
+      "SELECT owner_user_id FROM execution_workspaces WHERE id = ?1 AND status != 'revoked'",
+    )
+      .bind(workspaceId)
+      .first<{ owner_user_id: string }>();
+    if (!owner) return;
+    const now = new Date().toISOString();
+    for (const raw of reports) {
+      if (!raw || typeof raw !== "object") continue;
+      const item = raw as Record<string, unknown>;
+      const workerId = item.workerId;
+      const workerTypeId = item.workerTypeId;
+      const name = item.name;
+      const status = item.status;
+      const revision = item.revision;
+      const concurrency = item.localConcurrencyLimit;
+      if (
+        typeof workerId !== "string" ||
+        typeof workerTypeId !== "string" ||
+        typeof name !== "string" ||
+        typeof status !== "string" ||
+        !Number.isSafeInteger(revision) ||
+        (revision as number) < 1 ||
+        !Number.isInteger(concurrency) ||
+        (concurrency as number) < 1
+      ) {
+        continue;
+      }
+      const previous = await this.env.CONCLAVE_DB.prepare(
+        "SELECT workspace_id, revision FROM workspace_worker_inventory WHERE worker_id = ?1",
+      )
+        .bind(workerId)
+        .first<{ workspace_id: string; revision: number }>();
+      // A Worker ID is permanently owned by the Workspace that first synced
+      // it. Revisions only move forward, including removal tombstones.
+      if (
+        (previous && previous.workspace_id !== workspaceId) ||
+        (previous && Number(previous.revision) >= (revision as number))
+      ) {
+        continue;
+      }
+      const arrayJson = (value: unknown, max: number): string =>
+        JSON.stringify(
+          Array.isArray(value)
+            ? value
+                .filter((entry): entry is string => typeof entry === "string")
+                .map((entry) => entry.trim())
+                .filter(Boolean)
+                .slice(0, max)
+            : [],
+        );
+      const nullableText = (value: unknown, max: number): string | null =>
+        typeof value === "string" && value.trim().length <= max
+          ? value.trim() || null
+          : null;
+      const authStrategy = [
+        "none",
+        "browser_auth",
+        "api_key",
+        "local_endpoint",
+      ].includes(String(item.authStrategy))
+        ? String(item.authStrategy)
+        : "none";
+      const credentialStatus = [
+        "not_required",
+        "ready",
+        "needs_authentication",
+        "expired",
+        "error",
+      ].includes(String(item.credentialStatus))
+        ? String(item.credentialStatus)
+        : "error";
+      await this.env.CONCLAVE_DB.prepare(
+        `INSERT INTO workspace_worker_inventory
+          (worker_id, workspace_id, owner_user_id, worker_type_id, name,
+           status, auth_strategy, default_model, allowed_models_json,
+           capabilities_json, local_permissions_summary_json,
+           local_concurrency_limit, adapter_version, credential_status,
+           revision, created_at, updated_at, last_seen_at, removed_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
+         ON CONFLICT(worker_id) DO UPDATE SET
+           worker_type_id = excluded.worker_type_id,
+           name = excluded.name,
+           status = excluded.status,
+           auth_strategy = excluded.auth_strategy,
+           default_model = excluded.default_model,
+           allowed_models_json = excluded.allowed_models_json,
+           capabilities_json = excluded.capabilities_json,
+           local_permissions_summary_json = excluded.local_permissions_summary_json,
+           local_concurrency_limit = excluded.local_concurrency_limit,
+           adapter_version = excluded.adapter_version,
+           credential_status = excluded.credential_status,
+           revision = excluded.revision,
+           updated_at = excluded.updated_at,
+           last_seen_at = excluded.last_seen_at,
+           removed_at = excluded.removed_at
+         WHERE workspace_worker_inventory.workspace_id = excluded.workspace_id
+           AND workspace_worker_inventory.revision < excluded.revision`,
+      )
+        .bind(
+          workerId,
+          workspaceId,
+          owner.owner_user_id,
+          workerTypeId,
+          name.trim().slice(0, 200),
+          ["ready", "needs_attention", "disabled", "removed"].includes(status)
+            ? status
+            : "needs_attention",
+          authStrategy,
+          nullableText(item.defaultModel, 256),
+          arrayJson(item.allowedModels, 128),
+          arrayJson(item.capabilities, 128),
+          arrayJson(item.localPermissionsSummary, 64),
+          Math.min(1024, concurrency as number),
+          nullableText(item.adapterVersion, 128),
+          credentialStatus,
+          revision,
+          nullableText(item.createdAt, 40) ?? now,
+          now,
+          nullableText(item.lastSeenAt, 40) ?? now,
+          status === "removed" ? now : null,
         )
         .run();
     }

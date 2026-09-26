@@ -325,9 +325,9 @@ describe("IdentityService", () => {
     expect(
       queries.filter((query) => query.includes("INSERT INTO users")),
     ).toHaveLength(2);
-    expect(queries.some((query) => query.includes("workspace_memberships"))).toBe(
-      false,
-    );
+    expect(
+      queries.some((query) => query.includes("workspace_memberships")),
+    ).toBe(false);
   });
 
   it("returns pending invitations without accepting them", async () => {

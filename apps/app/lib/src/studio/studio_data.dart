@@ -115,6 +115,8 @@ abstract interface class StudioDataSource {
   Future<List<StudioWorker>> loadWorkers({required String workspaceId});
   Future<List<StudioConfiguredWorker>> loadConfiguredWorkers() async =>
       const [];
+  Future<List<StudioWorkspaceWorker>> loadWorkspaceWorkerInventory() async =>
+      const [];
   Future<StudioConfiguredWorker> createConfiguredWorker({
     required String name,
     required String workerTypeId,
@@ -544,6 +546,16 @@ class StudioApiClient implements StudioDataSource {
         .whereType<Map>()
         .map((item) =>
             StudioConfiguredWorker.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
+  @override
+  Future<List<StudioWorkspaceWorker>> loadWorkspaceWorkerInventory() async {
+    final body = await _getJson(Uri.parse('$baseUrl/v7/workers'));
+    return (body['workers'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) =>
+            StudioWorkspaceWorker.fromJson(Map<String, dynamic>.from(item)))
         .toList();
   }
 

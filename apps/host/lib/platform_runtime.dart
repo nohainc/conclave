@@ -19,6 +19,7 @@ abstract interface class PlatformRuntime {
     List<String> arguments, {
     String? workingDirectory,
     Map<String, String>? environment,
+    bool includeParentEnvironment = true,
   });
   Future<void> terminateProcessTree(Process process, {required bool force});
 }
@@ -28,6 +29,8 @@ final PlatformRuntime _platformRuntime =
     Platform.isWindows ? WindowsRuntime() : PosixRuntime();
 
 final class PosixRuntime implements PlatformRuntime {
+  final Map<int, Set<int>> _knownDescendants = {};
+
   @override
   String get operatingSystem => Platform.operatingSystem;
   @override
@@ -57,16 +60,20 @@ final class PosixRuntime implements PlatformRuntime {
   @override
   Future<Process> startIsolatedProcess(
       String executable, List<String> arguments,
-      {String? workingDirectory, Map<String, String>? environment}) async {
+      {String? workingDirectory,
+      Map<String, String>? environment,
+      bool includeParentEnvironment = true}) async {
     try {
       return await Process.start('setsid', [executable, ...arguments],
           workingDirectory: workingDirectory,
           environment: environment,
+          includeParentEnvironment: includeParentEnvironment,
           runInShell: false);
     } on ProcessException {
       return Process.start(executable, arguments,
           workingDirectory: workingDirectory,
           environment: environment,
+          includeParentEnvironment: includeParentEnvironment,
           runInShell: false);
     }
   }
@@ -76,13 +83,48 @@ final class PosixRuntime implements PlatformRuntime {
       {required bool force}) async {
     final signal = force ? '-KILL' : '-TERM';
     final dartSignal = force ? ProcessSignal.sigkill : ProcessSignal.sigterm;
+    final descendants = _knownDescendants.putIfAbsent(process.pid, () => {});
+    descendants.addAll(await _processDescendants(process.pid));
+    final orderedPids = descendants.toList().reversed.toList();
+    for (var offset = 0; offset < orderedPids.length; offset += 256) {
+      final pids = orderedPids.skip(offset).take(256).map((pid) => '$pid');
+      try {
+        await Process.run('kill', [signal, ...pids])
+            .timeout(const Duration(seconds: 5));
+      } on Object {
+        // Continue terminating the rest of the tree if one process raced exit.
+      }
+    }
     try {
-      await Process.run('kill', [signal, '-${process.pid}'])
-          .timeout(const Duration(seconds: 5));
+      await Process.run('kill', [signal, '${process.pid}'])
+          .timeout(const Duration(seconds: 2));
     } on Object {
-      // Group signalling is best effort in minimal environments.
+      // Fall through to Dart's direct-process signal as a final fallback.
     }
     process.kill(dartSignal);
+    if (force) _knownDescendants.remove(process.pid);
+  }
+
+  Future<Set<int>> _processDescendants(int rootPid) async {
+    final discovered = <int>{};
+    final pending = <int>[rootPid];
+    while (pending.isNotEmpty && discovered.length < 1024) {
+      final parent = pending.removeLast();
+      try {
+        final result = await Process.run('pgrep', ['-P', '$parent'])
+            .timeout(const Duration(seconds: 2));
+        if (result.exitCode != 0) continue;
+        for (final line in result.stdout.toString().split('\n')) {
+          final pid = int.tryParse(line.trim());
+          if (pid != null && pid != rootPid && discovered.add(pid)) {
+            pending.add(pid);
+          }
+        }
+      } on Object {
+        // pgrep may be absent; the direct Process.kill below still works.
+      }
+    }
+    return discovered;
   }
 }
 
@@ -106,10 +148,13 @@ final class WindowsRuntime implements PlatformRuntime {
   @override
   Future<Process> startIsolatedProcess(
       String executable, List<String> arguments,
-      {String? workingDirectory, Map<String, String>? environment}) {
+      {String? workingDirectory,
+      Map<String, String>? environment,
+      bool includeParentEnvironment = true}) {
     return Process.start(executable, arguments,
         workingDirectory: workingDirectory,
         environment: environment,
+        includeParentEnvironment: includeParentEnvironment,
         runInShell: false);
   }
 

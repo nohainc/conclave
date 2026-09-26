@@ -7,6 +7,11 @@ import {
   handleGetConfiguredWorker,
   handleGetConfiguredWorkerWorkspaceCredential,
   handleListConfiguredWorkerWorkspaces,
+  handleListWorkspaceWorkerInventory,
+  handleListV7Adapters,
+  handlePublishV7Adapter,
+  handleDownloadV7Adapter,
+  handleRevokeV7Adapter,
   handleRevokeConfiguredWorkerWorkspaceCredential,
   handleRevokeConfiguredWorker,
   handleUpdateConfiguredWorkerWorkspaces,
@@ -29,6 +34,8 @@ const migrationFiles = [
   "0017_configured_worker_observability.sql",
   "0018_migrate_legacy_ai_accounts.sql",
   "0019_worker_assignment_requester.sql",
+  "0021_workspace_worker_inventory.sql",
+  "0022_v7_adapter_releases.sql",
 ];
 
 class LocalD1Statement {
@@ -105,10 +112,43 @@ function createEnvironment() {
   `);
 
   let currentUserId = "owner";
+  let ownedWorkspaceIds: string[] = [];
+  const adapterObjects = new Map<string, Uint8Array>();
+  const bucket = {
+    async put(key: string, value: ArrayBuffer | ArrayBufferView | string) {
+      const bytes =
+        typeof value === "string"
+          ? new TextEncoder().encode(value)
+          : new Uint8Array(
+              value instanceof ArrayBuffer
+                ? value
+                : value.buffer.slice(
+                    value.byteOffset,
+                    value.byteOffset + value.byteLength,
+                  ),
+            );
+      adapterObjects.set(key, bytes);
+      return { key };
+    },
+    async get(key: string) {
+      const bytes = adapterObjects.get(key);
+      return bytes
+        ? {
+            body: new Response(bytes.buffer as ArrayBuffer).body,
+            size: bytes.byteLength,
+            etag: "test-etag",
+          }
+        : null;
+    },
+    async delete(key: string) {
+      adapterObjects.delete(key);
+    },
+  };
   const db = new LocalD1(sqlite);
   const env = {
     CONCLAVE_ENVIRONMENT: "development",
     CONCLAVE_DB: db,
+    CONCLAVE_ARTIFACTS: bucket,
     TEST_AUTHENTICATION: async () => ({
       userId: currentUserId,
       user: {
@@ -127,13 +167,17 @@ function createEnvironment() {
       organizationId: "",
       organizationRoles: ["viewer"],
       authorizationModel: "v5",
-      ownedWorkspaceIds: [],
+      ownedWorkspaceIds,
       ownedAccountIds: [],
     }),
   } as never;
   return {
     db,
     env,
+    adapterObjects,
+    setOwnedWorkspaceIds(workspaceIds: string[]) {
+      ownedWorkspaceIds = workspaceIds;
+    },
     setUser(userId: string) {
       currentUserId = userId;
     },
@@ -149,6 +193,48 @@ function request(method: string, body?: Record<string, unknown>): Request {
 }
 
 describe("configured Worker API", () => {
+  it("lists safe local Worker inventory only for the signed-in owner", async () => {
+    const test = createEnvironment();
+    test.db.sqlite.exec(`
+      INSERT INTO workspace_worker_inventory
+        (worker_id, workspace_id, owner_user_id, worker_type_id, name, status,
+         auth_strategy, default_model, allowed_models_json, capabilities_json,
+         local_permissions_summary_json, local_concurrency_limit, adapter_version,
+         credential_status, revision, created_at, updated_at, last_seen_at)
+      VALUES ('local-worker-1', 'workspace-a', 'owner', 'worker-type-codex',
+        'Codex Personal', 'ready', 'browser_auth', 'gpt-5.5', '["gpt-5.5"]',
+        '["coding"]', '["workspace_files"]', 2, '1.2.0', 'ready', 3,
+        'now', 'now', 'now');
+      INSERT INTO workspace_worker_inventory
+        (worker_id, workspace_id, owner_user_id, worker_type_id, name, status,
+         auth_strategy, local_permissions_summary_json, local_concurrency_limit,
+         credential_status, revision, created_at, updated_at, last_seen_at)
+      VALUES ('other-worker-1', 'workspace-other', 'other', 'worker-type-codex',
+        'Other Codex', 'ready', 'browser_auth', '[]', 1, 'ready', 1,
+        'now', 'now', 'now');
+    `);
+
+    const response = await handleListWorkspaceWorkerInventory(
+      new Request("https://conclave.test/api/v7/workers"),
+      test.env,
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      workers: Array<Record<string, unknown>>;
+    };
+    expect(body.workers).toHaveLength(1);
+    expect(body.workers[0]).toMatchObject({
+      id: "local-worker-1",
+      workspaceId: "workspace-a",
+      status: "ready",
+      localConcurrencyLimit: 2,
+      capabilities: ["coding"],
+    });
+    expect(JSON.stringify(body)).not.toMatch(
+      /credentialRef|secret|apiKey|path/i,
+    );
+  });
+
   it("creates a Worker with multiple owned Workspace bindings and readiness state", async () => {
     const test = createEnvironment();
     const response = await handleCreateConfiguredWorker(
@@ -384,5 +470,129 @@ describe("configured Worker API", () => {
     expect(auditActions).toEqual(
       expect.arrayContaining(["worker.credential.revoked"]),
     );
+  });
+
+  it("publishes immutable signed V7 adapter releases and filters catalog by platform", async () => {
+    const test = createEnvironment();
+    const manifest = {
+      workerTypeId: "codex",
+      adapterVersion: "1.0.0",
+      protocolVersion: "1.0",
+      publisher: "conclave",
+      displayName: "Codex",
+      supportedPlatforms: ["linux-x64"],
+      capabilities: ["code"],
+      permissions: ["workspace:read", "shell:execute"],
+      authStrategies: ["browser_auth"],
+      modelSelectionMode: "allow_list",
+      prerequisites: [],
+      executable: "bin/adapter.mjs",
+      launchArgs: [],
+      secretRequirements: [],
+      healthCheck: { mode: "protocol", timeoutMs: 5000 },
+      packageDigest: "a".repeat(64),
+      signature: "signed-package-digest",
+      releaseChannel: "stable",
+    };
+    const archive = new TextEncoder().encode("fake-tarball-bytes");
+    const publishRequest = (publishedManifest = manifest) =>
+      new Request("https://conclave.test/api/v7/adapters/publish", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          manifest: publishedManifest,
+          packageBase64: Buffer.from(archive).toString("base64"),
+        }),
+      });
+
+    await expect(
+      handlePublishV7Adapter(publishRequest(), test.env),
+    ).rejects.toMatchObject({ status: 403 });
+    test.setOwnedWorkspaceIds(["workspace-a"]);
+    const published = await handlePublishV7Adapter(publishRequest(), test.env);
+    expect(published.status).toBe(201);
+    expect(await published.json()).toMatchObject({
+      workerTypeId: "codex",
+      version: "1.0.0",
+      status: "published",
+    });
+    expect(test.adapterObjects.size).toBe(1);
+
+    const catalog = await handleListV7Adapters(
+      new Request(
+        "https://conclave.test/api/v7/adapters?workerTypeId=codex&platform=linux-x64",
+      ),
+      test.env,
+    );
+    expect(
+      ((await catalog.json()) as { releases: unknown[] }).releases,
+    ).toHaveLength(1);
+    const unsupportedPlatform = await handleListV7Adapters(
+      new Request(
+        "https://conclave.test/api/v7/adapters?workerTypeId=codex&platform=windows-x64",
+      ),
+      test.env,
+    );
+    expect(
+      ((await unsupportedPlatform.json()) as { releases: unknown[] }).releases,
+    ).toHaveLength(0);
+
+    const downloaded = await handleDownloadV7Adapter(
+      new Request(
+        "https://conclave.test/api/v7/adapters/codex/versions/1.0.0/download",
+      ),
+      test.env,
+      "codex",
+      "1.0.0",
+    );
+    expect(downloaded.status).toBe(200);
+    expect(downloaded.headers.get("x-conclave-package-digest")).toBe(
+      "a".repeat(64),
+    );
+    expect(new Uint8Array(await downloaded.arrayBuffer())).toEqual(archive);
+
+    const idempotent = await handlePublishV7Adapter(publishRequest(), test.env);
+    expect(await idempotent.json()).toMatchObject({
+      status: "already_published",
+    });
+
+    await expect(
+      handlePublishV7Adapter(
+        publishRequest({ ...manifest, signature: "different-signature" }),
+        test.env,
+      ),
+    ).rejects.toMatchObject({ status: 409 });
+
+    const revokeRequest = () =>
+      new Request(
+        "https://conclave.test/api/v7/adapters/codex/versions/1.0.0/revoke",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ reason: "Publisher rotation" }),
+        },
+      );
+    test.setUser("other");
+    await expect(
+      handleRevokeV7Adapter(revokeRequest(), test.env, "codex", "1.0.0"),
+    ).rejects.toMatchObject({ status: 403 });
+    test.setUser("owner");
+    const revoked = await handleRevokeV7Adapter(
+      revokeRequest(),
+      test.env,
+      "codex",
+      "1.0.0",
+    );
+    expect(await revoked.json()).toMatchObject({ status: "revoked" });
+    await expect(
+      handleDownloadV7Adapter(
+        new Request(
+          "https://conclave.test/api/v7/adapters/codex/versions/1.0.0/download",
+        ),
+        test.env,
+        "codex",
+        "1.0.0",
+      ),
+    ).rejects.toMatchObject({ status: 410 });
   });
 });

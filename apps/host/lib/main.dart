@@ -3,8 +3,102 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'brand.dart';
+import 'adapter_prerequisite.dart';
 import 'diagnostics.dart';
 import 'host.dart';
+import 'local_worker_setup.dart';
+import 'secure_credentials.dart';
+import 'v7_adapter_package_store.dart';
+import 'v7_adapter_catalog.dart';
+
+Future<AdapterPrerequisiteResult> _probeLocalWorkerPrerequisite(
+    String workerTypeId) async {
+  final types =
+      LocalWorkerTypeOption.supported.where((type) => type.id == workerTypeId);
+  if (types.isEmpty) {
+    return const AdapterPrerequisiteResult(
+      satisfied: false,
+      message: 'Worker Type is unavailable.',
+    );
+  }
+  final prerequisite = types.first.executablePrerequisite;
+  if (prerequisite == null) {
+    return AdapterPrerequisiteResult(
+      satisfied: false,
+      message:
+          'Required component is not available: ${types.first.prerequisite}.',
+    );
+  }
+  final checks = [prerequisite, ...types.first.additionalPrerequisites];
+  for (final check in checks) {
+    final result = await probeAdapterExecutable(check);
+    if (!result.satisfied) return result;
+  }
+  return AdapterPrerequisiteResult(
+    satisfied: true,
+    message: 'Required local tools are available.',
+  );
+}
+
+Future<bool> _validateLocalWorkerAuthentication(String workerTypeId) async {
+  if (workerTypeId == 'codex') {
+    try {
+      final result =
+          await Process.run('codex', ['login', 'status'], runInShell: false)
+              .timeout(const Duration(seconds: 10));
+      return result.exitCode == 0;
+    } on Object {
+      return false;
+    }
+  }
+  if (workerTypeId == 'antigravity') {
+    try {
+      final result =
+          await Process.run('antigravity', ['auth', 'status'], runInShell: false)
+              .timeout(const Duration(seconds: 10));
+      return result.exitCode == 0;
+    } on Object {
+      return false;
+    }
+  }
+  return false;
+}
+
+Future<bool> _validateLocalApiCredential(
+  V7AdapterPackageStore? packageStore,
+  String workerTypeId,
+  String apiKey,
+  String endpointUrl,
+  List<String> permissions,
+) async {
+  if (packageStore == null) return false;
+  try {
+    await packageStore.validateApiCredential(
+      workerTypeId: workerTypeId,
+      apiKey: apiKey,
+      endpointUrl: endpointUrl,
+      localPermissions: permissions,
+    );
+    return true;
+  } on Object {
+    return false;
+  }
+}
+
+Future<void> _launchLocalWorkerAuthentication(String workerTypeId) async {
+  if (workerTypeId == 'codex') {
+    await Process.start('codex', ['login'],
+        runInShell: false, mode: ProcessStartMode.detached);
+    return;
+  }
+  if (workerTypeId == 'antigravity') {
+    await Process.start('antigravity', ['auth', 'login'],
+        runInShell: false, mode: ProcessStartMode.detached);
+    return;
+  }
+  throw StateError(
+      'Sign-in setup is not available for this Worker Type yet.');
+}
 
 class HostLifecycleController extends ChangeNotifier {
   HostLifecycleController(this.host);
@@ -168,6 +262,7 @@ class ConclaveHostApp extends StatefulWidget {
 }
 
 class _ConclaveHostAppState extends State<ConclaveHostApp> {
+  int _workerRevision = 0;
   @override
   void initState() {
     super.initState();
@@ -212,6 +307,53 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Diagnostics exported to ${file.path}')),
     );
+  }
+
+  Future<void> _addLocalWorker(BuildContext context) async {
+    final registry = widget.lifecycle.host.localWorkerRegistry;
+    if (registry == null) return;
+    final added = await showDialog<bool>(
+      context: context,
+      builder: (context) => AddLocalWorkerDialog(
+        registry: registry,
+        credentialStore: widget.lifecycle.host.credentialStore,
+        // A Worker is never marked Ready until a verified adapter is
+        // installed and its provider authentication can be validated.
+        adapterAvailable: (workerTypeId, permissions) => widget
+            .lifecycle.host.adapterPackageStore
+            .hasVerifiedActivePackage(workerTypeId, permissions),
+        probePrerequisite: _probeLocalWorkerPrerequisite,
+        launchAuthentication: _launchLocalWorkerAuthentication,
+        validateAuthentication: _validateLocalWorkerAuthentication,
+        validateApiCredential:
+            (workerTypeId, apiKey, endpointUrl, permissions) =>
+                _validateLocalApiCredential(
+          widget.lifecycle.host.adapterPackageStore,
+          workerTypeId,
+          apiKey,
+          endpointUrl,
+          permissions,
+        ),
+        ensureAdapter: _ensureAdapterAvailable,
+      ),
+    );
+    if (added == true && mounted) setState(() => _workerRevision++);
+  }
+
+  Future<bool> _ensureAdapterAvailable(String workerTypeId) async {
+    final host = widget.lifecycle.host;
+    final cloudUri = host.config.cloudUri;
+    if (cloudUri == null) return false;
+    final catalog = V7AdapterCatalogClient(
+      cloudUri: cloudUri,
+      authToken: host.config.authToken,
+      packageStore: host.adapterPackageStore,
+    );
+    try {
+      return await catalog.installLatest(workerTypeId) != null;
+    } finally {
+      catalog.close();
+    }
   }
 
   @override
@@ -277,6 +419,12 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
                   onQuit: _confirmQuit,
                   onRetry: lifecycle.launch,
                   onExportDiagnostics: _exportDiagnostics,
+                  workerRevision: _workerRevision,
+                  localWorkerRegistry: lifecycle.host.localWorkerRegistry,
+                  credentialStore: lifecycle.host.credentialStore,
+                  adapterPackageStore: lifecycle.host.adapterPackageStore,
+                  ensureAdapter: _ensureAdapterAvailable,
+                  onAddWorker: () => _addLocalWorker(context),
                 ),
         ),
       ),
@@ -292,6 +440,12 @@ class HostDashboard extends StatelessWidget {
     this.onQuit,
     this.onRetry,
     this.onExportDiagnostics,
+    this.workerRevision = 0,
+    this.localWorkerRegistry,
+    this.credentialStore = const PlatformSecureCredentialStore(),
+    this.adapterPackageStore,
+    this.ensureAdapter,
+    this.onAddWorker,
     super.key,
   });
 
@@ -301,6 +455,12 @@ class HostDashboard extends StatelessWidget {
   final VoidCallback? onQuit;
   final Future<void> Function()? onRetry;
   final Future<void> Function()? onExportDiagnostics;
+  final int workerRevision;
+  final LocalConfiguredWorkerRegistry? localWorkerRegistry;
+  final SecureCredentialStore credentialStore;
+  final V7AdapterPackageStore? adapterPackageStore;
+  final Future<bool> Function(String workerTypeId)? ensureAdapter;
+  final Future<void> Function()? onAddWorker;
 
   @override
   Widget build(BuildContext context) {
@@ -392,10 +552,13 @@ class HostDashboard extends StatelessWidget {
                   '${snapshot.repositorySummary}. ${snapshot.permissionSummary}.',
             ),
             const SizedBox(height: 12),
-            _SectionCard(
-              title: 'Worker diagnostics',
-              icon: Icons.memory,
-              summary: snapshot.workerSummary,
+            _LocalWorkersCard(
+              key: ValueKey(workerRevision),
+              registry: localWorkerRegistry,
+              credentialStore: credentialStore,
+              adapterPackageStore: adapterPackageStore,
+              ensureAdapter: ensureAdapter,
+              onAddWorker: onAddWorker,
             ),
             const SizedBox(height: 12),
             _SectionCard(
@@ -446,6 +609,252 @@ class HostDashboard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _LocalWorkersCard extends StatefulWidget {
+  const _LocalWorkersCard({
+    required this.registry,
+    required this.credentialStore,
+    required this.adapterPackageStore,
+    this.ensureAdapter,
+    required this.onAddWorker,
+    super.key,
+  });
+
+  final LocalConfiguredWorkerRegistry? registry;
+  final SecureCredentialStore credentialStore;
+  final V7AdapterPackageStore? adapterPackageStore;
+  final Future<bool> Function(String workerTypeId)? ensureAdapter;
+  final Future<void> Function()? onAddWorker;
+
+  @override
+  State<_LocalWorkersCard> createState() => _LocalWorkersCardState();
+}
+
+class _LocalWorkersCardState extends State<_LocalWorkersCard> {
+  Future<List<LocalConfiguredWorker>>? _workers;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadWorkers();
+  }
+
+  @override
+  void didUpdateWidget(covariant _LocalWorkersCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.registry != widget.registry) _loadWorkers();
+  }
+
+  void _loadWorkers() {
+    _workers = widget.registry?.list();
+  }
+
+  Future<void> _setDisabled(LocalConfiguredWorker worker, bool disabled) async {
+    final registry = widget.registry;
+    if (registry == null) return;
+    await registry.update(
+      worker.id,
+      (current) => current.copyWith(
+        status: disabled
+            ? LocalWorkerStatus.disabled
+            : LocalWorkerStatus.needsAttention,
+      ),
+    );
+    if (mounted) setState(_loadWorkers);
+  }
+
+  Future<void> _remove(LocalConfiguredWorker worker) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Remove ${worker.name}?'),
+        content: const Text(
+            'This removes the Worker from this Workspace and deletes its locally stored credential.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove Worker'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final registry = widget.registry;
+    if (registry == null) return;
+    await registry.remove(worker.id);
+    final credentialRef = worker.credentialRef;
+    if (credentialRef != null) {
+      await widget.credentialStore.delete(credentialRef);
+    }
+    if (mounted) setState(_loadWorkers);
+  }
+
+  Future<void> _edit(LocalConfiguredWorker worker) async {
+    final registry = widget.registry;
+    if (registry == null) return;
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AddLocalWorkerDialog(
+        registry: registry,
+        credentialStore: widget.credentialStore,
+        worker: worker,
+        adapterAvailable: (workerTypeId, permissions) =>
+            widget.adapterPackageStore
+                ?.hasVerifiedActivePackage(workerTypeId, permissions) ??
+            Future.value(false),
+        probePrerequisite: _probeLocalWorkerPrerequisite,
+        launchAuthentication: _launchLocalWorkerAuthentication,
+        validateAuthentication: _validateLocalWorkerAuthentication,
+        validateApiCredential:
+            (workerTypeId, apiKey, endpointUrl, permissions) =>
+                _validateLocalApiCredential(
+          widget.adapterPackageStore,
+          workerTypeId,
+          apiKey,
+          endpointUrl,
+          permissions,
+        ),
+        ensureAdapter: widget.ensureAdapter,
+      ),
+    );
+    if (saved == true && mounted) setState(_loadWorkers);
+  }
+
+  @override
+  Widget build(BuildContext context) => Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.memory),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Text('Workers',
+                        style: Theme.of(context).textTheme.titleMedium),
+                  ),
+                  FilledButton.tonalIcon(
+                    onPressed:
+                        widget.registry == null ? null : widget.onAddWorker,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add Worker'),
+                  ),
+                ],
+              ),
+              if (widget.registry == null)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text(
+                      'Pair this Workspace before configuring local Workers.'),
+                )
+              else
+                FutureBuilder<List<LocalConfiguredWorker>>(
+                  future: _workers,
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                            'Worker registry needs repair: ${snapshot.error}',
+                            style: TextStyle(
+                                color: Theme.of(context).colorScheme.error)),
+                      );
+                    }
+                    if (!snapshot.hasData) {
+                      return const Padding(
+                        padding: EdgeInsets.only(top: 16),
+                        child: LinearProgressIndicator(),
+                      );
+                    }
+                    final workers = snapshot.data!;
+                    if (workers.isEmpty) {
+                      return const Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: Text(
+                            'No local Workers yet. Add one to configure this machine.'),
+                      );
+                    }
+                    return Column(
+                      children: [
+                        const SizedBox(height: 8),
+                        for (final worker in workers)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(
+                              worker.status == LocalWorkerStatus.ready
+                                  ? Icons.check_circle_outline
+                                  : worker.status == LocalWorkerStatus.disabled
+                                      ? Icons.pause_circle_outline
+                                      : Icons.error_outline,
+                            ),
+                            title: Text(worker.name),
+                            subtitle: Text(
+                                '${worker.workerTypeId} · ${_statusLabel(worker.status)}'
+                                '${worker.defaultModel == null ? '' : ' · ${worker.defaultModel}'}'),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('r${worker.revision}'),
+                                PopupMenuButton<String>(
+                                  tooltip: 'Worker actions',
+                                  onSelected: (action) {
+                                    if (action == 'edit') {
+                                      unawaited(_edit(worker));
+                                    } else if (action == 'disable') {
+                                      unawaited(_setDisabled(worker, true));
+                                    } else if (action == 'enable') {
+                                      unawaited(_setDisabled(worker, false));
+                                    } else if (action == 'remove') {
+                                      unawaited(_remove(worker));
+                                    }
+                                  },
+                                  itemBuilder: (context) => [
+                                    const PopupMenuItem(
+                                      value: 'edit',
+                                      child: Text('Edit configuration'),
+                                    ),
+                                    if (worker.status ==
+                                        LocalWorkerStatus.disabled)
+                                      const PopupMenuItem(
+                                        value: 'enable',
+                                        child: Text('Enable scheduling'),
+                                      )
+                                    else
+                                      const PopupMenuItem(
+                                        value: 'disable',
+                                        child: Text('Disable locally'),
+                                      ),
+                                    const PopupMenuItem(
+                                      value: 'remove',
+                                      child: Text('Remove Worker'),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+            ],
+          ),
+        ),
+      );
+
+  String _statusLabel(LocalWorkerStatus status) => switch (status) {
+        LocalWorkerStatus.ready => 'Ready',
+        LocalWorkerStatus.needsAttention => 'Needs attention',
+        LocalWorkerStatus.disabled => 'Disabled',
+        LocalWorkerStatus.removed => 'Removed',
+      };
 }
 
 class _SectionCard extends StatelessWidget {
@@ -525,7 +934,8 @@ class _HostRecoveryPanel extends StatelessWidget {
           Text(issue ?? 'The Workspace needs attention.',
               style: TextStyle(color: colors.onErrorContainer)),
           const SizedBox(height: 8),
-          Text('Your work is safe. The Workspace will not discard an assignment.',
+          Text(
+              'Your work is safe. The Workspace will not discard an assignment.',
               style: TextStyle(color: colors.onErrorContainer)),
           const SizedBox(height: 4),
           Text(

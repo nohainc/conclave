@@ -32,13 +32,20 @@ const forbidden = [
 function scanFiles(entry) {
   if (!fs.existsSync(entry)) return [];
   const relative = path.relative(root, entry);
-  if (ignored.has(relative) || [...ignored].some((item) => relative.startsWith(`${item}/`))) return [];
+  if (
+    ignored.has(relative) ||
+    [...ignored].some((item) => relative.startsWith(`${item}/`))
+  )
+    return [];
   const stat = fs.lstatSync(entry);
   if (stat.isSymbolicLink()) return [];
   if (stat.isDirectory()) {
-    return fs.readdirSync(entry).flatMap((name) => scanFiles(path.join(entry, name)));
+    return fs
+      .readdirSync(entry)
+      .flatMap((name) => scanFiles(path.join(entry, name)));
   }
-  return /\.(?:ts|tsx|dart|js|mjs|sql)$/.test(entry) && !entry.includes(`${path.sep}test${path.sep}`)
+  return /\.(?:ts|tsx|dart|js|mjs|sql)$/.test(entry) &&
+    !entry.includes(`${path.sep}test${path.sep}`)
     ? [entry]
     : [];
 }
@@ -66,4 +73,6 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log("Usage architecture guard passed: no active product usage infrastructure found.");
+console.log(
+  "Usage architecture guard passed: no active product usage infrastructure found.",
+);

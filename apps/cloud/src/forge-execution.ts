@@ -176,7 +176,6 @@ function cost(value: unknown): WorkerCostMetadata {
   };
 }
 
-
 export interface ForgeWorkerBinding {
   readonly worker: Worker;
   readonly agent: ExecutionHost;

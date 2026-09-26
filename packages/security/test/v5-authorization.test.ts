@@ -203,10 +203,8 @@ describe("Architecture v5 User + Project authorization", () => {
     let grantActive = true;
     const db: DatabaseAdapter = {
       prepare(query: string) {
-        let bound: unknown[] = [];
         return {
-          bind(...values: unknown[]) {
-            bound = values;
+          bind() {
             return this;
           },
           async first<T>() {
@@ -258,7 +256,9 @@ describe("Architecture v5 User + Project authorization", () => {
                 owner_user_id: "account-owner",
                 status: "ready",
                 sharing_mode: "project_shared",
-                provider_metadata_json: JSON.stringify({ providerSharingPolicy: "private_only" }),
+                provider_metadata_json: JSON.stringify({
+                  providerSharingPolicy: "private_only",
+                }),
               } as T;
             }
             return { role: "collaborator" } as T;
@@ -273,7 +273,12 @@ describe("Architecture v5 User + Project authorization", () => {
       },
     };
     await expect(
-      authorizeProjectAccountUse(db, (await context()) as SecurityContext, "project-collab", "account-1"),
+      authorizeProjectAccountUse(
+        db,
+        (await context()) as SecurityContext,
+        "project-collab",
+        "account-1",
+      ),
     ).rejects.toThrow(AuthorizationError);
   });
 });

@@ -119,6 +119,54 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
+    if (request.method === "GET" && url.pathname === "/api/v7/workers") {
+      return await handlers.handleListWorkspaceWorkerInventory!(
+        request,
+        env,
+        ctx,
+      );
+    }
+    if (request.method === "GET" && url.pathname === "/api/v7/adapters") {
+      return await handlers.handleListV7Adapters!(request, env, ctx);
+    }
+    if (
+      request.method === "POST" &&
+      url.pathname === "/api/v7/adapters/publish"
+    ) {
+      return await handlers.handlePublishV7Adapter!(request, env, ctx);
+    }
+    const v7AdapterDownloadMatch = url.pathname.match(
+      /^\/api\/v7\/adapters\/([^/]+)\/versions\/([^/]+)\/download$/,
+    );
+    if (
+      request.method === "GET" &&
+      v7AdapterDownloadMatch?.[1] &&
+      v7AdapterDownloadMatch?.[2]
+    ) {
+      return await handlers.handleDownloadV7Adapter!(
+        request,
+        env,
+        v7AdapterDownloadMatch[1],
+        v7AdapterDownloadMatch[2],
+        ctx,
+      );
+    }
+    const v7AdapterRevokeMatch = url.pathname.match(
+      /^\/api\/v7\/adapters\/([^/]+)\/versions\/([^/]+)\/revoke$/,
+    );
+    if (
+      request.method === "POST" &&
+      v7AdapterRevokeMatch?.[1] &&
+      v7AdapterRevokeMatch?.[2]
+    ) {
+      return await handlers.handleRevokeV7Adapter!(
+        request,
+        env,
+        v7AdapterRevokeMatch[1],
+        v7AdapterRevokeMatch[2],
+        ctx,
+      );
+    }
     if (request.method === "GET" && url.pathname === "/api/workers") {
       return await handlers.handleListConfiguredWorkers!(request, env, ctx);
     }

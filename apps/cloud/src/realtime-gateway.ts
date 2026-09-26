@@ -14,7 +14,8 @@ import {
 } from "./realtime-queue.js";
 
 export interface RealtimeScope {
-  kind?: "user" | "project" | "workstream" | "chat" | "run" | "execution_workspace";
+  kind?:
+    "user" | "project" | "workstream" | "chat" | "run" | "execution_workspace";
   executionWorkspaceId?: string;
   workspaceId?: string;
   projectId?: string;
@@ -24,7 +25,11 @@ export interface RealtimeScope {
 }
 
 export type RealtimeClientMessage =
-  | { type: "realtime.hello"; lastDurableSequence?: number; lastDurableSequences?: Record<string, number> }
+  | {
+      type: "realtime.hello";
+      lastDurableSequence?: number;
+      lastDurableSequences?: Record<string, number>;
+    }
   | { type: "subscribe"; scope: RealtimeScope }
   | { type: "unsubscribe"; scope: RealtimeScope }
   | { type: "ping" };
@@ -91,8 +96,14 @@ export function parseRealtimeClientMessage(
       ...(sequence === undefined || typeof sequence !== "number"
         ? {}
         : { lastDurableSequence: sequence }),
-      ...(value.lastDurableSequences && typeof value.lastDurableSequences === "object"
-        ? { lastDurableSequences: value.lastDurableSequences as Record<string, number> }
+      ...(value.lastDurableSequences &&
+      typeof value.lastDurableSequences === "object"
+        ? {
+            lastDurableSequences: value.lastDurableSequences as Record<
+              string,
+              number
+            >,
+          }
         : {}),
     };
   }
@@ -108,10 +119,19 @@ export function parseRealtimeClientMessage(
     throw new Error("Realtime subscription scope is required");
   }
   const scope = rawScope as Record<string, unknown>;
-  if (scope.kind === "user") return { type: value.type, scope: { kind: "user" } };
-  if (scope.kind === "project" || scope.kind === "workstream" || scope.kind === "chat" || scope.kind === "run") {
+  if (scope.kind === "user")
+    return { type: value.type, scope: { kind: "user" } };
+  if (
+    scope.kind === "project" ||
+    scope.kind === "workstream" ||
+    scope.kind === "chat" ||
+    scope.kind === "run"
+  ) {
     const idField = `${scope.kind}Id`;
-    if (typeof scope[idField] !== "string" || (scope[idField] as string).length === 0) {
+    if (
+      typeof scope[idField] !== "string" ||
+      (scope[idField] as string).length === 0
+    ) {
       throw new Error(`Realtime ${scope.kind} scope id is required`);
     }
     return {
@@ -120,10 +140,19 @@ export function parseRealtimeClientMessage(
     } as RealtimeClientMessage;
   }
   if (scope.kind === "execution_workspace") {
-    if (typeof scope.executionWorkspaceId !== "string" || scope.executionWorkspaceId.length === 0) {
+    if (
+      typeof scope.executionWorkspaceId !== "string" ||
+      scope.executionWorkspaceId.length === 0
+    ) {
       throw new Error("Realtime execution Workspace scope id is required");
     }
-    return { type: value.type, scope: { kind: "execution_workspace", executionWorkspaceId: scope.executionWorkspaceId } };
+    return {
+      type: value.type,
+      scope: {
+        kind: "execution_workspace",
+        executionWorkspaceId: scope.executionWorkspaceId,
+      },
+    };
   }
   const scopeFields = ["workspaceId", "projectId", "chatId", "runId"] as const;
   if (typeof scope.workspaceId !== "string" || scope.workspaceId.length === 0) {
@@ -171,7 +200,8 @@ export function eventMatchesScope(
 ): boolean {
   if (scope.kind === "user") return true;
   if (scope.kind === "project") return event.projectId === scope.projectId;
-  if (scope.kind === "workstream") return event.workstreamId === scope.workstreamId;
+  if (scope.kind === "workstream")
+    return event.workstreamId === scope.workstreamId;
   if (scope.kind === "chat") return event.chatId === scope.chatId;
   if (scope.kind === "run") return event.runId === scope.runId;
   if (scope.kind === "execution_workspace") {
@@ -202,32 +232,52 @@ export async function authorizeRealtimeScope(
 ): Promise<{ allowed: true } | { allowed: false; reason: string }> {
   if (scope.kind === "user") return { allowed: true };
   if (scope.kind === "project") {
-    const member = await db.prepare(
-      "SELECT 1 AS member FROM project_memberships WHERE project_id = ?1 AND user_id = ?2",
-    ).bind(scope.projectId, userId).first<{ member: number }>();
-    return member ? { allowed: true } : { allowed: false, reason: "project_access_denied" };
+    const member = await db
+      .prepare(
+        "SELECT 1 AS member FROM project_memberships WHERE project_id = ?1 AND user_id = ?2",
+      )
+      .bind(scope.projectId, userId)
+      .first<{ member: number }>();
+    return member
+      ? { allowed: true }
+      : { allowed: false, reason: "project_access_denied" };
   }
   if (scope.kind === "workstream") {
-    const member = await db.prepare(
-      `SELECT 1 AS member FROM workstreams w
+    const member = await db
+      .prepare(
+        `SELECT 1 AS member FROM workstreams w
        JOIN project_memberships pm ON pm.project_id = w.project_id
        WHERE w.id = ?1 AND pm.user_id = ?2`,
-    ).bind(scope.workstreamId, userId).first<{ member: number }>();
-    return member ? { allowed: true } : { allowed: false, reason: "workstream_access_denied" };
+      )
+      .bind(scope.workstreamId, userId)
+      .first<{ member: number }>();
+    return member
+      ? { allowed: true }
+      : { allowed: false, reason: "workstream_access_denied" };
   }
   if (scope.kind === "execution_workspace") {
-    const owner = await db.prepare(
-      "SELECT 1 AS owner FROM execution_workspaces WHERE id = ?1 AND owner_user_id = ?2 AND status <> 'revoked'",
-    ).bind(scope.executionWorkspaceId, userId).first<{ owner: number }>();
-    return owner ? { allowed: true } : { allowed: false, reason: "execution_workspace_access_denied" };
+    const owner = await db
+      .prepare(
+        "SELECT 1 AS owner FROM execution_workspaces WHERE id = ?1 AND owner_user_id = ?2 AND status <> 'revoked'",
+      )
+      .bind(scope.executionWorkspaceId, userId)
+      .first<{ owner: number }>();
+    return owner
+      ? { allowed: true }
+      : { allowed: false, reason: "execution_workspace_access_denied" };
   }
   if (scope.kind === "chat" || scope.kind === "run") {
-    const row = await db.prepare(
-      `SELECT pm.user_id FROM project_memberships pm
+    const row = await db
+      .prepare(
+        `SELECT pm.user_id FROM project_memberships pm
        JOIN ${scope.kind === "chat" ? "chats" : "runs"} resource ON resource.project_id = pm.project_id
        WHERE resource.id = ?1 AND pm.user_id = ?2`,
-    ).bind(scope[`${scope.kind}Id` as "chatId" | "runId"], userId).first<{ user_id: string }>();
-    return row ? { allowed: true } : { allowed: false, reason: `${scope.kind}_access_denied` };
+      )
+      .bind(scope[`${scope.kind}Id` as "chatId" | "runId"], userId)
+      .first<{ user_id: string }>();
+    return row
+      ? { allowed: true }
+      : { allowed: false, reason: `${scope.kind}_access_denied` };
   }
   const membership = await db
     .prepare(
@@ -412,8 +462,11 @@ export class RealtimeGateway implements DurableObject {
       }
       if (message.type === "realtime.hello") {
         connected.lastDurableSequence = message.lastDurableSequence ?? null;
-        for (const [key, value] of Object.entries(message.lastDurableSequences ?? {})) {
-          if (Number.isInteger(value) && value >= 0) connected.lastDurableSequences.set(key, value);
+        for (const [key, value] of Object.entries(
+          message.lastDurableSequences ?? {},
+        )) {
+          if (Number.isInteger(value) && value >= 0)
+            connected.lastDurableSequences.set(key, value);
         }
         this.sendRaw(connected.socket, {
           type: "realtime.ready",
@@ -484,16 +537,18 @@ export class RealtimeGateway implements DurableObject {
           this.metrics.activeAppSockets = this.clients.size;
           continue;
         }
-        const matchingScopes = [...connected.subscriptions.values()].filter((scope) =>
-          eventMatchesScope(event, scope),
+        const matchingScopes = [...connected.subscriptions.values()].filter(
+          (scope) => eventMatchesScope(event, scope),
         );
         if (matchingScopes.length === 0) continue;
         const gapScope = isDurableRealtimeEventType(event.type)
-          ? matchingScopes.find((scope) => requiresRealtimeReconnect(
-              connected.lastDurableSequences.get(scopeKey(scope)) ??
-                (scope.kind ? null : connected.lastDurableSequence),
-              event.sequence,
-            ))
+          ? matchingScopes.find((scope) =>
+              requiresRealtimeReconnect(
+                connected.lastDurableSequences.get(scopeKey(scope)) ??
+                  (scope.kind ? null : connected.lastDurableSequence),
+                event.sequence,
+              ),
+            )
           : undefined;
         if (gapScope) {
           this.metrics.reconnects += 1;

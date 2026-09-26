@@ -1,5 +1,3 @@
-/* global console, process */
-
 import { readFile } from "node:fs/promises";
 
 const configPath = process.argv[2] ?? "infra/cloudflare/app.wrangler.jsonc";
@@ -20,7 +18,10 @@ const required = isForgeService
       ["R2 artifact binding", /"binding"\s*:\s*"CONCLAVE_ARTIFACTS"/],
       ["Forge service binding", /"binding"\s*:\s*"CONCLAVE_FORGE_EXECUTION"/],
       ["Workflow binding", /"binding"\s*:\s*"CONCLAVE_RUN_WORKFLOW"/],
-      ["Workspace Gateway binding", /"name"\s*:\s*"CONCLAVE_WORKSPACE_GATEWAY"/],
+      [
+        "Workspace Gateway binding",
+        /"name"\s*:\s*"CONCLAVE_WORKSPACE_GATEWAY"/,
+      ],
     ];
 
 const missing = required

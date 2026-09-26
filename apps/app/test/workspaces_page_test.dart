@@ -64,7 +64,7 @@ void main() {
           find.textContaining('Workspaces are where AI runs'), findsOneWidget);
       await tester.tap(find.widgetWithText(Tab, 'Workers'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('A Worker is a configured AI/tool identity'),
+      expect(find.textContaining('Workers are created and authenticated'),
           findsOneWidget);
       expect(find.textContaining('AI Account'), findsNothing);
       expect(find.textContaining('Credential Profile'), findsNothing);
@@ -102,8 +102,8 @@ void main() {
       await tester.tap(find.widgetWithText(Tab, 'Workers'));
       await tester.pumpAndSettle();
       expect(
-          find.text(
-              'A Worker is a configured AI/tool identity. Connect it to the Workspaces where it can run.'),
+          find.textContaining(
+              'Workers are created and authenticated on their Workspace computer.'),
           findsOneWidget);
       expect(find.text('Connect Account'), findsNothing);
       expect(find.text('Make available'), findsNothing);
@@ -127,10 +127,16 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-          find.text(
-              'A Worker is a configured AI/tool identity. Connect it to the Workspaces where it can run.'),
+          find.textContaining(
+              'Workers are created and authenticated on their Workspace computer.'),
           findsOneWidget);
       expect(find.text('Add AI Account'), findsNothing);
+      expect(find.text('Add a Worker in Conclave Workspace'), findsOneWidget);
+      await tester.tap(find.text('Add a Worker in Conclave Workspace'));
+      await tester.pumpAndSettle();
+      expect(find.text('Add a Worker on its Workspace'), findsOneWidget);
+      expect(find.textContaining('it will appear in this inventory'),
+          findsOneWidget);
     });
 
     testWidgets('renders configured Worker readiness and opens its details',
@@ -176,6 +182,53 @@ void main() {
       expect(find.text('Ready'), findsOneWidget);
       await tester.tap(find.text('Open Worker'));
       expect(opened?.id, 'configured-1');
+    });
+
+    testWidgets('shows Workspace-owned inventory without credential details',
+        (tester) async {
+      final worker = StudioWorkspaceWorker.fromJson({
+        'id': 'local-worker-1',
+        'workspaceId': 'workspace-1',
+        'workspaceName': 'Build Mac',
+        'workerTypeId': 'codex',
+        'name': 'Codex Personal',
+        'status': 'ready',
+        'authStrategy': 'browser_auth',
+        'credentialStatus': 'ready',
+        'localConcurrencyLimit': 2,
+        'revision': 4,
+        'capabilities': ['code'],
+        'allowedModels': ['gpt-5.5'],
+        'defaultModel': 'gpt-5.5',
+      });
+      await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
+        workspaces: const [],
+        workers: const [],
+        workspaceWorkers: [worker],
+        initialTab: 1,
+        onAdd: () {},
+        onRename: (_) {},
+        onUpdate: (_) {},
+        onRevoke: (_) {},
+        onGrant: (_) {},
+      )));
+      await tester.pumpAndSettle();
+      expect(find.text('Workers from your Workspaces'), findsOneWidget);
+      expect(find.text('Codex Personal'), findsOneWidget);
+      expect(find.text('codex · Build Mac'), findsOneWidget);
+      expect(find.textContaining('gpt-5.5'), findsOneWidget);
+      expect(find.text('Ready'), findsOneWidget);
+      expect(find.text('Auth strategy'), findsNothing);
+      expect(find.textContaining('credentialRef'), findsNothing);
+      expect(find.text('Add legacy Cloud Worker'), findsOneWidget);
+      await tester.tap(find.text('Codex Personal'));
+      await tester.pumpAndSettle();
+      expect(find.text('Overview'), findsOneWidget);
+      expect(find.text('Workspace'), findsOneWidget);
+      expect(find.text('Scheduling'), findsOneWidget);
+      expect(find.text('Activity and audit'), findsOneWidget);
+      expect(find.textContaining('Remote scheduling state is not included'),
+          findsOneWidget);
     });
 
     testWidgets('keeps Add Workspace available when none exist',
@@ -249,10 +302,25 @@ void main() {
           ),
         ],
       );
+      const localWorker = StudioWorkspaceWorker(
+        id: 'local-worker-1',
+        workspaceId: 'agent-macbook',
+        workspaceName: 'MacBook Pro',
+        workerTypeId: 'codex',
+        name: 'Codex Local',
+        status: 'ready',
+        authStrategy: 'browser_auth',
+        credentialStatus: 'ready',
+        localConcurrencyLimit: 2,
+        revision: 5,
+        capabilities: ['code'],
+        allowedModels: ['gpt-5.5'],
+      );
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: snapshot.agents,
         workers: snapshot.workers,
         configuredWorkers: const [worker],
+        workspaceWorkers: const [localWorker],
         onAdd: () {},
         onRename: (_) {},
         onUpdate: (_) {},
@@ -266,6 +334,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Codex Personal'), findsOneWidget);
+      expect(find.text('Codex Local'), findsOneWidget);
+      expect(
+          find.text('Locally configured Workers reported by this Workspace.'),
+          findsOneWidget);
       expect(find.textContaining('Ready to run'), findsOneWidget);
       expect(find.text('AI Accounts'), findsNothing);
       expect(find.byTooltip('Open Worker'), findsOneWidget);

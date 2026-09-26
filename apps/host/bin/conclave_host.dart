@@ -10,6 +10,7 @@ import 'package:conclave_host/repository_registry.dart';
 import 'package:conclave_host/self_update.dart';
 import 'package:conclave_host/secure_credentials.dart';
 import 'package:conclave_host/worker_trust_policy.dart';
+import 'package:conclave_host/v7_adapter_package_store.dart';
 
 Set<WorkerPermission> _configuredPermissions() {
   return parseConfiguredWorkerPermissions(
@@ -94,15 +95,28 @@ Future<void> main(List<String> args) async {
   final publisher =
       Platform.environment['CONCLAVE_WORKER_TRUST_PUBLISHER'] ?? 'conclave';
   final trustSecret = Platform.environment['CONCLAVE_WORKER_TRUST_SECRET'];
+  final workerTrustPolicy = WorkerTrustPolicy(
+    trustedSecrets: trustSecret == null ? {} : {publisher: trustSecret},
+  );
+  const credentialStore = PlatformSecureCredentialStore();
   final releaseTrustPolicy = _releaseTrustPolicy(publisher);
   final workerManager = WorkerManager(
     Directory('${config.dataDirectory.path}/workers'),
     requireSignature: true,
-    trustPolicy: WorkerTrustPolicy(
-      trustedSecrets: trustSecret == null ? {} : {publisher: trustSecret},
-    ),
+    trustPolicy: workerTrustPolicy,
     allowedPermissions: _configuredPermissions(),
     secretEnvironment: _workerSecrets(),
+  );
+  final localWorkerRegistry = config.workspaceId == null
+      ? null
+      : LocalConfiguredWorkerRegistry(
+          dataDirectory: config.dataDirectory,
+          workspaceId: config.workspaceId!,
+        );
+  final v7AdapterPackageStore = V7AdapterPackageStore(
+    root: Directory('${config.dataDirectory.path}/v7-adapters'),
+    trustPolicy: workerTrustPolicy,
+    allowedPermissions: _configuredPermissions(),
   );
   var activeWorkerIds = (await workerManager.inventory())
       .where((worker) => worker.active)
@@ -115,6 +129,56 @@ Future<void> main(List<String> args) async {
   final workerHandler = workerManager.assignmentHandler(
     WorkerProcessExecutor(),
     resolveRepositoryPath: repositoryRegistry.resolve,
+    resolveV7Adapter: localWorkerRegistry == null
+        ? null
+        : (workerId) async {
+            final worker = await localWorkerRegistry.find(workerId);
+            if (worker == null) return null;
+            if (worker.status != LocalWorkerStatus.ready ||
+                (worker.authStrategy == 'api_key' &&
+                    worker.credentialStatus !=
+                        LocalWorkerCredentialStatus.ready)) {
+              throw StateError('local Worker is not ready for execution');
+            }
+            final adapter = await v7AdapterPackageStore.resolve(
+              worker: worker,
+              readCredential: credentialStore.readSync,
+            );
+            if (adapter == null) {
+              throw StateError(
+                  'no trusted adapter is installed for ${worker.workerTypeId}');
+            }
+            return adapter;
+          },
+    resolvePermissions: localWorkerRegistry == null
+        ? null
+        : (workerId) async {
+            final worker = await localWorkerRegistry.find(workerId);
+            if (worker == null) {
+              return workerManager.activePermissions(workerId);
+            }
+            return {
+              for (final permission in worker.localPermissions)
+                ...switch (permission) {
+                  'workstream_filesystem' => {
+                      'workspace:read',
+                      'workspace:write'
+                    },
+                  'shell_execution' => {'shell:execute'},
+                  'network' => {'network:outbound'},
+                  _ => {permission},
+                },
+            };
+          },
+    resolveConcurrencyLimit: localWorkerRegistry == null
+        ? null
+        : (workerId) async {
+            final workers = await localWorkerRegistry.list();
+            for (final worker in workers) {
+              if (worker.id == workerId) return worker.localConcurrencyLimit;
+            }
+            return null;
+          },
   );
   HostUpdateController? updateController;
   String? updateAvailable;
@@ -159,6 +223,55 @@ Future<void> main(List<String> args) async {
           activeWorkerIds: activeWorkerIds,
           assignmentHandler: workerHandler.call,
           assignmentCancellationHandler: workerHandler.cancel,
+          workerInventoryProvider: () async {
+            final localWorkers =
+                await localWorkerRegistry?.list(includeRemoved: true) ??
+                    const [];
+            final lastSeenAt = DateTime.now().toUtc().toIso8601String();
+            return Future.wait(localWorkers.map((worker) async {
+              Map<String, Object?>? adapterSummary;
+              try {
+                adapterSummary =
+                    await v7AdapterPackageStore.activeManifestSummary(worker);
+              } on Object {
+                // Invalid, revoked, or permission-incompatible packages must
+                // not be advertised as active in the safe inventory.
+              }
+              return <String, Object?>{
+                'workerId': worker.id,
+                'workerTypeId': worker.workerTypeId,
+                'name': worker.name,
+                'status': switch (worker.status) {
+                  LocalWorkerStatus.ready => 'ready',
+                  LocalWorkerStatus.needsAttention => 'needs_attention',
+                  LocalWorkerStatus.disabled => 'disabled',
+                  LocalWorkerStatus.removed => 'removed',
+                },
+                'authStrategy': worker.authStrategy,
+                'defaultModel': worker.defaultModel,
+                'allowedModels': worker.allowedModels,
+                'capabilities':
+                    adapterSummary?['capabilities'] ?? const <String>[],
+                'localPermissionsSummary': worker.localPermissions,
+                'localConcurrencyLimit': worker.localConcurrencyLimit,
+                // This records configured policy only when a concrete
+                // adapter build has been admitted and activated.
+                'adapterVersion': adapterSummary?['adapterVersion'],
+                'credentialStatus': switch (worker.credentialStatus) {
+                  LocalWorkerCredentialStatus.notRequired => 'not_required',
+                  LocalWorkerCredentialStatus.ready => 'ready',
+                  LocalWorkerCredentialStatus.needsAuthentication =>
+                    'needs_authentication',
+                  LocalWorkerCredentialStatus.expired => 'expired',
+                  LocalWorkerCredentialStatus.error => 'error',
+                },
+                'revision': worker.revision,
+                'createdAt': worker.createdAt,
+                'updatedAt': worker.updatedAt,
+                'lastSeenAt': lastSeenAt,
+              };
+            }).toList());
+          },
           hostUpdateAvailableHandler: (payload) async {
             final controller = updateController;
             if (controller == null) return;
@@ -223,8 +336,7 @@ Future<void> main(List<String> args) async {
                       if (permissionsStatus is String)
                         'permissionsStatus': permissionsStatus,
                       'effectiveReadiness': effectiveReadiness,
-                      'activeAssignmentCount':
-                          connection.activeAssignmentCount,
+                      'activeAssignmentCount': connection.activeAssignmentCount,
                     },
                   ]);
                 },
@@ -279,6 +391,7 @@ Future<void> main(List<String> args) async {
   final engine = Host(
     config: config,
     cloudConnection: connection,
+    adapterPackageStore: v7AdapterPackageStore,
     statusProvider: () async {
       await refreshUpdateAvailability();
       final workers = await workerManager.inventory();

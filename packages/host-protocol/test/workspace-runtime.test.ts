@@ -67,4 +67,50 @@ describe("Workspace Runtime protocol", () => {
       }).type,
     ).toBe("workstream.status");
   });
+
+  it("accepts only bounded safe Worker inventory projections", () => {
+    const worker = {
+      workerId: "worker-a",
+      workerTypeId: "codex",
+      name: "Codex Personal",
+      status: "needs_attention",
+      authStrategy: "browser_auth",
+      defaultModel: null,
+      allowedModels: [],
+      capabilities: ["code"],
+      localPermissionsSummary: ["workstream_filesystem"],
+      localConcurrencyLimit: 1,
+      adapterVersion: null,
+      credentialStatus: "needs_authentication",
+      revision: 1,
+      createdAt: "2026-09-24T12:00:00.000Z",
+      updatedAt: "2026-09-24T12:00:00.000Z",
+      lastSeenAt: "2026-09-24T12:00:00.000Z",
+    };
+    expect(
+      parseWorkspaceRuntimeMessage({
+        ...base,
+        type: "worker.inventory",
+        payload: { workers: [worker], fullSnapshot: true },
+      }).type,
+    ).toBe("worker.inventory");
+    expect(() =>
+      parseWorkspaceRuntimeMessage({
+        ...base,
+        type: "worker.inventory",
+        payload: {
+          workers: [{ ...worker, apiKey: "never-sync-this" }],
+          fullSnapshot: true,
+        },
+      }),
+    ).toThrow();
+    expect(() =>
+      parseWorkspaceRuntimeMessage({
+        ...base,
+        protocolVersion: "5.0",
+        type: "worker.inventory",
+        payload: { workers: [worker], fullSnapshot: true },
+      }),
+    ).toThrow(/requires Workspace protocol 5.1/);
+  });
 });

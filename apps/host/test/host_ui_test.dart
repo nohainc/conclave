@@ -43,7 +43,7 @@ void main() {
     expect(paired, isTrue);
   });
 
-    testWidgets('paired Workspace shows machine controls, not orchestration',
+  testWidgets('paired Workspace shows machine controls, not orchestration',
       (tester) async {
     await pumpDashboard(
       tester,
@@ -63,8 +63,10 @@ void main() {
     );
 
     expect(find.text('Repositories and permissions'), findsOneWidget);
-    expect(find.text('Worker diagnostics'), findsOneWidget);
+    expect(find.text('Workers'), findsOneWidget);
+    expect(find.text('Add Worker'), findsOneWidget);
     expect(find.text('Logs'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Updates'), 300);
     expect(find.text('Updates'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Quit Workspace'), 300);
     expect(find.text('Quit Workspace'), findsOneWidget);
@@ -126,8 +128,8 @@ void main() {
       ),
     );
     expect(find.text('Signature rejected'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Worker diagnostics'), 300);
-    expect(find.text('Worker diagnostics'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Workers'), 300);
+    expect(find.text('Workers'), findsOneWidget);
   });
 
   testWidgets('install failure explains safety and offers recovery',

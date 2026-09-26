@@ -167,6 +167,13 @@ Adapter packages are:
 - shared by configured Workers of that Worker Type;
 - hidden as infrastructure in normal product UX.
 
+The publisher signature binds the package file-tree digest and the canonical
+manifest with its `signature` field removed. This prevents executable,
+permission, platform, authentication, or secret-requirement declarations from
+being changed independently of the signed package contents. Cloud release
+catalog metadata is advisory; Workspace verifies the downloaded archive,
+manifest binding, signature, permissions, and health before activation.
+
 The user installs only Conclave Workspace.
 
 ### 6. Adapter processes are separate child processes

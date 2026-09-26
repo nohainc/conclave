@@ -34,7 +34,8 @@ function fail(message: string): never {
 }
 
 function pathsOverlap(left: string, right: string): boolean {
-  const normalize = (path: string) => path.replaceAll("\\", "/").replace(/\/+$/, "");
+  const normalize = (path: string) =>
+    path.replaceAll("\\", "/").replace(/\/+$/, "");
   const a = normalize(left);
   const b = normalize(right);
   return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
@@ -57,8 +58,10 @@ export function validateV6TeamConcurrencyAcceptance(
 
   const configured = new Set(acceptance.configuredExecutionMemberIds);
   for (const execution of acceptance.executions) {
-    if (!members.has(execution.requesterUserId) ||
-        acceptance.removedMemberIds.includes(execution.requesterUserId)) {
+    if (
+      !members.has(execution.requesterUserId) ||
+      acceptance.removedMemberIds.includes(execution.requesterUserId)
+    ) {
       fail("removed Project members cannot create new Work Requests");
     }
     if (!configured.has(execution.requesterUserId)) {
@@ -72,7 +75,11 @@ export function validateV6TeamConcurrencyAcceptance(
     }
   }
 
-  if (acceptance.rejectedExecutionRequesterIds.includes(acceptance.viewerUserId) === false) {
+  if (
+    acceptance.rejectedExecutionRequesterIds.includes(
+      acceptance.viewerUserId,
+    ) === false
+  ) {
     fail("viewer execution must be rejected");
   }
 
@@ -80,11 +87,15 @@ export function validateV6TeamConcurrencyAcceptance(
     const current = acceptance.executions[i]!;
     for (let j = i + 1; j < acceptance.executions.length; j += 1) {
       const other = acceptance.executions[j]!;
-      if (current.workstreamId !== other.workstreamId && pathsOverlap(current.checkoutPath, other.checkoutPath)) {
+      if (
+        current.workstreamId !== other.workstreamId &&
+        pathsOverlap(current.checkoutPath, other.checkoutPath)
+      ) {
         fail("Workstream checkout paths overlap");
       }
       const sameWorkstream = current.workstreamId === other.workstreamId;
-      const overlapsInTime = current.startedAtMs < other.finishedAtMs &&
+      const overlapsInTime =
+        current.startedAtMs < other.finishedAtMs &&
         other.startedAtMs < current.finishedAtMs;
       if (sameWorkstream && overlapsInTime) {
         fail("stateful Work Requests in one Workstream must serialize");
@@ -100,17 +111,23 @@ export function validateV6TeamConcurrencyAcceptance(
   for (const execution of acceptance.executions) {
     if (
       execution.outcome === "failed" &&
-      [...failedWorkstreams].some((workstreamId) => workstreamId !== execution.workstreamId)
+      [...failedWorkstreams].some(
+        (workstreamId) => workstreamId !== execution.workstreamId,
+      )
     ) {
       fail("failed Workstream execution must be isolated");
     }
   }
-  const hasConcurrentIndependentWork = acceptance.executions.some((current, index) =>
-    acceptance.executions.slice(index + 1).some((other) =>
-      current.workstreamId !== other.workstreamId &&
-      current.startedAtMs < other.finishedAtMs &&
-      other.startedAtMs < current.finishedAtMs,
-    ),
+  const hasConcurrentIndependentWork = acceptance.executions.some(
+    (current, index) =>
+      acceptance.executions
+        .slice(index + 1)
+        .some(
+          (other) =>
+            current.workstreamId !== other.workstreamId &&
+            current.startedAtMs < other.finishedAtMs &&
+            other.startedAtMs < current.finishedAtMs,
+        ),
   );
   if (!hasConcurrentIndependentWork) {
     fail("different Workstreams must run concurrently");
