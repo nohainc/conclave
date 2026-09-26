@@ -40,7 +40,7 @@ describe("V7 Workspace inventory recovery acceptance", () => {
   it("reconciles duplicate snapshots, omissions, reconnects, and foreign Worker IDs idempotently", async () => {
     const sqlite = new DatabaseSync(":memory:");
     sqlite.exec(`
-      CREATE TABLE execution_workspaces (id TEXT PRIMARY KEY, owner_user_id TEXT NOT NULL, status TEXT NOT NULL);
+      CREATE TABLE execution_workspaces (id TEXT PRIMARY KEY, owner_user_id TEXT NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL);
       CREATE TABLE workspace_worker_inventory (
         worker_id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, owner_user_id TEXT NOT NULL,
         worker_type_id TEXT NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL,
@@ -56,8 +56,8 @@ describe("V7 Workspace inventory recovery acceptance", () => {
         hostname TEXT, app_version TEXT, runtime_capabilities_json TEXT,
         updated_at TEXT NOT NULL
       );
-      INSERT INTO execution_workspaces VALUES ('workspace-a', 'owner-a', 'online');
-      INSERT INTO execution_workspaces VALUES ('workspace-b', 'owner-b', 'online');
+      INSERT INTO execution_workspaces VALUES ('workspace-a', 'owner-a', 'Development MacBook', 'online');
+      INSERT INTO execution_workspaces VALUES ('workspace-b', 'owner-b', 'Other Workspace', 'online');
     `);
     const db = new LocalD1(sqlite);
     const gateway = new WorkspaceGateway(
@@ -101,6 +101,11 @@ describe("V7 Workspace inventory recovery acceptance", () => {
         )
         .get("workspace-a"),
     ).toMatchObject({ hostname: "acceptance-host", app_version: "7.0.0" });
+    expect(
+      sqlite
+        .prepare("SELECT name FROM execution_workspaces WHERE id = ?")
+        .get("workspace-a"),
+    ).toMatchObject({ name: "Development MacBook" });
     const report = {
       workerId: "worker-shared-id",
       workerTypeId: "fixture-worker",

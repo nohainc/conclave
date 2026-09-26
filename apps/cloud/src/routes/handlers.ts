@@ -1409,12 +1409,21 @@ async function handleUpdateWorkspace(
     throw new HttpError(400, "Workspace name must be 1 to 120 characters");
   }
   const now = new Date().toISOString();
-  const result = await env.CONCLAVE_DB.prepare(
-    "UPDATE workspaces SET name = ?1, updated_at = ?2 WHERE id = ?3 AND status = 'active'",
-  )
-    .bind(name, now, workspaceId)
-    .run();
-  if (!result.success) throw new HttpError(404, "Workspace not found");
+  const executionWorkspace = context.authorizationModel === "v5";
+  const result = executionWorkspace
+    ? await env.CONCLAVE_DB.prepare(
+        "UPDATE execution_workspaces SET name = ?1, updated_at = ?2 WHERE id = ?3 AND owner_user_id = ?4 AND status <> 'revoked'",
+      )
+        .bind(name, now, workspaceId, context.userId)
+        .run()
+    : await env.CONCLAVE_DB.prepare(
+        "UPDATE workspaces SET name = ?1, updated_at = ?2 WHERE id = ?3 AND status = 'active'",
+      )
+        .bind(name, now, workspaceId)
+        .run();
+  if (!result.success || result.meta.changes === 0) {
+    throw new HttpError(404, "Workspace not found");
+  }
   await recordAudit(
     env,
     context,
@@ -1424,6 +1433,7 @@ async function handleUpdateWorkspace(
     {
       name,
     },
+    executionWorkspace ? workspaceId : undefined,
   );
   return json({ workspace: { id: workspaceId, name, updatedAt: now } });
 }

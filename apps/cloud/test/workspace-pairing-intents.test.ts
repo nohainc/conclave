@@ -9,6 +9,7 @@ import {
   handleGetWorkspacePairingIntent,
   handleRegenerateWorkspacePairingIntent,
   handleRedeemWorkspaceEnrollment,
+  handleUpdateWorkspace,
 } from "../src/routes/handlers.js";
 
 const migrationsDirectory = fileURLToPath(
@@ -131,6 +132,55 @@ describe("Workspace pairing intents", () => {
     } as never;
     return { sqlite, db, env };
   }
+
+  it("renames the canonical execution Workspace without changing its runtime identity", async () => {
+    const { sqlite, env } = setup();
+    sqlite.exec(`
+      INSERT INTO execution_workspaces
+        (id, owner_user_id, name, status, created_at, updated_at)
+        VALUES ('ws-rename', 'owner', 'Development MacBook', 'offline', 'now', 'now');
+      INSERT INTO workspace_runtime_identities
+        (id, workspace_id, credential_key_ref, credential_token_hash, created_at, revoked_at)
+        VALUES ('runtime-rename', 'ws-rename', 'runtime-key', 'sha256:saved-token', 'now', NULL);
+      INSERT INTO workspace_runtime_facts
+        (workspace_id, platform, architecture, hostname, app_version, runtime_capabilities_json, updated_at)
+        VALUES ('ws-rename', 'macos', 'arm64', 'Vitaliis-MacBook-Pro.local', '1.4.2', '{}', 'now');
+    `);
+
+    const response = await handleUpdateWorkspace(
+      new Request("https://conclave.test/api/workspaces/ws-rename", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "Dev Lab" }),
+      }),
+      env,
+      "ws-rename",
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      workspace: { id: "ws-rename", name: "Dev Lab" },
+    });
+    expect(
+      sqlite
+        .prepare("SELECT name FROM execution_workspaces WHERE id = ?")
+        .get("ws-rename"),
+    ).toMatchObject({ name: "Dev Lab" });
+    expect(
+      sqlite
+        .prepare(
+          "SELECT credential_token_hash FROM workspace_runtime_identities WHERE id = ?",
+        )
+        .get("runtime-rename"),
+    ).toMatchObject({ credential_token_hash: "sha256:saved-token" });
+    expect(
+      sqlite
+        .prepare(
+          "SELECT hostname FROM workspace_runtime_facts WHERE workspace_id = ?",
+        )
+        .get("ws-rename"),
+    ).toMatchObject({ hostname: "Vitaliis-MacBook-Pro.local" });
+  });
 
   it("creates a hashed, owner-scoped intent without a permanent Workspace", async () => {
     const { sqlite, env } = setup();
