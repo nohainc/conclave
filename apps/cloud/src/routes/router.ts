@@ -40,11 +40,7 @@ export async function routeWorkerRequest(
       deps.requireSameOriginForCookieMutation(request);
     }
     if (workspaceEnrollmentRedeem) {
-      return await handlers.handleRedeemWorkspaceEnrollment!(
-        request,
-        env,
-        ctx,
-      );
+      return await handlers.handleRedeemWorkspaceEnrollment!(request, env, ctx);
     }
     if (request.method === "GET" && url.pathname === "/api/session") {
       return await handlers.handleSession!(request, env, ctx);
