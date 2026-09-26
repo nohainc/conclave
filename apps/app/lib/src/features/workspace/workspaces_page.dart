@@ -108,14 +108,15 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
                             fontWeight: FontWeight.w700,
                             letterSpacing: -0.3)),
                   ),
-                  Tooltip(
-                    message: 'Connect Workspace',
-                    child: FilledButton.icon(
-                      onPressed: widget.onAdd,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Connect Workspace'),
+                  if (widget.workspaces.isNotEmpty)
+                    Tooltip(
+                      message: 'Connect Workspace',
+                      child: FilledButton.icon(
+                        onPressed: widget.onAdd,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Connect Workspace'),
+                      ),
                     ),
-                  ),
                 ],
               ),
               const SizedBox(height: 6),
@@ -567,8 +568,12 @@ class _EmptyWorkspaces extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('No Workspaces yet'),
-            const SizedBox(height: 10),
+            const Text('No Workspaces connected',
+                style: TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            const Text(
+                'Connect a computer running Conclave Workspace to make local Workers available to your Projects.'),
+            const SizedBox(height: 14),
             Wrap(spacing: 8, children: [
               FilledButton(
                   onPressed: onAdd, child: const Text('Connect Workspace')),

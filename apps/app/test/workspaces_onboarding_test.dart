@@ -21,8 +21,14 @@ void main() {
     ));
 
     expect(find.text('Workspaces'), findsOneWidget);
-    expect(find.text('Connect Workspace'), findsNWidgets(2));
+    expect(find.text('Connect Workspace'), findsOneWidget);
     expect(find.text('Pair Workspace'), findsNothing);
+    expect(find.text('No Workspaces connected'), findsOneWidget);
+    expect(
+      find.text(
+          'Connect a computer running Conclave Workspace to make local Workers available to your Projects.'),
+      findsOneWidget,
+    );
     expect(find.text('Download Conclave Workspace'), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
   });

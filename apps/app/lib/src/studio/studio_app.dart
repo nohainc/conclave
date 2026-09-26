@@ -1230,7 +1230,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
             });
             final claimed = pairingIntent.status == 'claimed';
             return AlertDialog(
-              title: const Text('Connect a Workspace'),
+              title: const Text('Connecting a Workspace'),
               content: SizedBox(
                 width: 420,
                 child: Column(
@@ -1276,7 +1276,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                           ? 'This code expired. Generate a new code to continue.'
                           : pairingIntent.status == 'cancelled'
                               ? 'This pairing code was cancelled.'
-                              : 'Waiting for Conclave Workspace…'),
+                              : 'Waiting for the desktop application…'),
                     ],
                   ],
                 ),
