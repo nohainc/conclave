@@ -30,6 +30,11 @@ jobs:
       - run: pnpm production:preflight
       - run: pnpm auth:access-guard
       - run: pnpm v4:architecture-guard
+      - name: Show required Prettier changes
+        run: |
+          pnpm exec prettier --write .github/workflows/ci.yml apps/cloud/src/routes/handlers.ts apps/cloud/src/routes/router.ts
+          git diff -- .github/workflows/ci.yml apps/cloud/src/routes/handlers.ts apps/cloud/src/routes/router.ts
+          exit 1
       - run: pnpm check
       - name: Real Cloud/D1 application E2E
         run: pnpm app:e2e
