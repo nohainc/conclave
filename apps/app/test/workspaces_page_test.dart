@@ -139,51 +139,6 @@ void main() {
           findsOneWidget);
     });
 
-    testWidgets('renders configured Worker readiness and opens its details',
-        (tester) async {
-      const worker = StudioConfiguredWorker(
-        id: 'configured-1',
-        name: 'Codex Personal',
-        workerTypeId: 'codex',
-        workerTypeName: 'Codex',
-        status: 'active',
-        defaultModel: 'gpt-5',
-        concurrencyLimit: 2,
-        bindings: [
-          StudioWorkerWorkspaceBinding(
-            workspaceId: 'workspace-1',
-            workspaceName: 'Development Workspace',
-            workspaceStatus: 'online',
-            enabled: true,
-            localReadiness: 'ready',
-            packageStatus: 'ready',
-            credentialStatus: 'ready',
-            permissionsStatus: 'ready',
-          ),
-        ],
-      );
-      StudioConfiguredWorker? opened;
-      await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
-        workspaces: const [],
-        workers: const [],
-        configuredWorkers: [worker],
-        initialTab: 1,
-        onAdd: () {},
-        onRename: (_) {},
-        onUpdate: (_) {},
-        onRevoke: (_) {},
-        onGrant: (_) {},
-        onOpenConfiguredWorker: (value) => opened = value,
-      )));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Codex Personal'), findsOneWidget);
-      expect(find.text('1/1 Workspaces ready · concurrency 2'), findsOneWidget);
-      expect(find.text('Ready'), findsOneWidget);
-      await tester.tap(find.text('Open Worker'));
-      expect(opened?.id, 'configured-1');
-    });
-
     testWidgets('shows Workspace-owned inventory without credential details',
         (tester) async {
       final worker = StudioWorkspaceWorker.fromJson({
@@ -220,7 +175,7 @@ void main() {
       expect(find.text('Ready'), findsOneWidget);
       expect(find.text('Auth strategy'), findsNothing);
       expect(find.textContaining('credentialRef'), findsNothing);
-      expect(find.text('Add legacy Cloud Worker'), findsOneWidget);
+      expect(find.text('Add legacy Cloud Worker'), findsNothing);
       await tester.tap(find.text('Codex Personal'));
       await tester.pumpAndSettle();
       expect(find.text('Overview'), findsOneWidget);
@@ -278,30 +233,9 @@ void main() {
     });
 
     testWidgets(
-        'Workspace detail lists configured Workers and removes AI Accounts',
+        'Workspace detail lists only locally configured Workers',
         (tester) async {
       final snapshot = studioFixtureSnapshot();
-      const worker = StudioConfiguredWorker(
-        id: 'configured-1',
-        name: 'Codex Personal',
-        workerTypeId: 'codex',
-        workerTypeName: 'Codex',
-        status: 'active',
-        defaultModel: 'Auto',
-        concurrencyLimit: 1,
-        bindings: [
-          StudioWorkerWorkspaceBinding(
-            workspaceId: 'agent-macbook',
-            workspaceName: 'Development Workspace',
-            workspaceStatus: 'ONLINE',
-            enabled: true,
-            localReadiness: 'ready',
-            packageStatus: 'ready',
-            credentialStatus: 'ready',
-            permissionsStatus: 'ready',
-          ),
-        ],
-      );
       const localWorker = StudioWorkspaceWorker(
         id: 'local-worker-1',
         workspaceId: 'agent-macbook',
@@ -319,7 +253,6 @@ void main() {
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: snapshot.agents,
         workers: snapshot.workers,
-        configuredWorkers: const [worker],
         workspaceWorkers: const [localWorker],
         onAdd: () {},
         onRename: (_) {},
@@ -333,15 +266,13 @@ void main() {
       await tester.tap(find.widgetWithText(Tab, 'Workers'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Codex Personal'), findsOneWidget);
       expect(find.text('Codex Local'), findsOneWidget);
       expect(
           find.text('Locally configured Workers reported by this Workspace.'),
           findsOneWidget);
-      expect(find.textContaining('Ready to run'), findsOneWidget);
+      expect(find.text('Codex Personal'), findsNothing);
       expect(find.text('AI Accounts'), findsNothing);
-      expect(find.byTooltip('Open Worker'), findsOneWidget);
-      expect(find.byTooltip('Remove binding'), findsOneWidget);
+      expect(find.byTooltip('Remove binding'), findsNothing);
     });
 
     testWidgets('renders without layout exceptions in a scroll view',

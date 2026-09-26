@@ -27,13 +27,20 @@ export async function routeWorkerRequest(
 ): Promise<Response> {
   const url = new URL(request.url);
   try {
+    const workspaceEnrollmentRedeem =
+      request.method === "POST" &&
+      url.pathname === "/api/workspace-runtime/enroll";
     if (
-      request.method === "POST" ||
-      request.method === "PUT" ||
-      request.method === "PATCH" ||
-      request.method === "DELETE"
+      !workspaceEnrollmentRedeem &&
+      (request.method === "POST" ||
+        request.method === "PUT" ||
+        request.method === "PATCH" ||
+        request.method === "DELETE")
     ) {
       deps.requireSameOriginForCookieMutation(request);
+    }
+    if (workspaceEnrollmentRedeem) {
+      return await handlers.handleRedeemWorkspaceEnrollment!(request, env, ctx);
     }
     if (request.method === "GET" && url.pathname === "/api/session") {
       return await handlers.handleSession!(request, env, ctx);

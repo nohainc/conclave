@@ -8,7 +8,7 @@ Primary domain: **conclaveax.com**
 
 ## Architecture
 
-Architecture v6 is the current Workstream/filesystem baseline. Architecture v7 is the proposed next Worker/runtime architecture.
+Architecture v6 is the Workstream/filesystem baseline. Architecture v7 is the active Worker/runtime implementation target.
 
 ```text
 Conclave AX -> Conclave Cloud -> Conclave Workspace -> configured Worker -> adapter process
@@ -20,13 +20,13 @@ Conclave AX -> Conclave Cloud -> Conclave Workspace -> configured Worker -> adap
 
 - **Conclave AX** — the primary Flutter Web application.
 - **Conclave Cloud** — TypeScript control plane on Cloudflare.
-- **Conclave Workspace** — the machine-side execution/security runtime installed once per normal machine/OS-user installation.
+- **Conclave Workspace** — the native desktop execution/security application installed once per normal machine/OS-user installation; macOS is the first release target.
 - **Workers** — locally configured executable AI/tool identities such as “Codex Personal” or “Claude Review”; each belongs to exactly one Workspace and uses one Worker Type adapter.
 - **Conclave AX Forge** — AI-assisted software-development workflow built on the platform.
 
 ## Technology stack
 
-- Flutter + Dart for Conclave AX and the Workspace runtime application.
+- Flutter + Dart for the Conclave AX web application and Conclave Workspace desktop application.
 - TypeScript for Conclave Cloud.
 - Cloudflare Workers + Workflows + Durable Objects.
 - Cloudflare D1 for structured state.
@@ -63,6 +63,7 @@ Adapter processes run as separate per-assignment child processes under Conclave 
 - [Architecture v7](docs/architecture/ARCHITECTURE_V7.md)
 - [ADR-012: Workspace-owned local Workers](docs/decisions/ADR-012-workspace-owned-local-workers.md)
 - [v7 implementation roadmap](docs/roadmaps/ARCHITECTURE_V7_IMPLEMENTATION.md)
+- [v7 implementation audit](docs/architecture/V7_IMPLEMENTATION_AUDIT.md)
 - [AI Development Rules](AGENTS.md)
 
 Deployment guidance is in [docs/deployment/CLOUDFLARE.md](docs/deployment/CLOUDFLARE.md).

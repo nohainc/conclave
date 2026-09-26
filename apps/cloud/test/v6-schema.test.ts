@@ -148,10 +148,25 @@ const workspaceWorkerInventorySchema = readFileSync(
   ),
   "utf8",
 );
+const adapterReleaseSchema = readFileSync(
+  fileURLToPath(
+    new URL("../migrations-v6/0022_v7_adapter_releases.sql", import.meta.url),
+  ),
+  "utf8",
+);
+const workspaceRuntimeCredentialSchema = readFileSync(
+  fileURLToPath(
+    new URL(
+      "../migrations-v6/0023_workspace_runtime_credentials.sql",
+      import.meta.url,
+    ),
+  ),
+  "utf8",
+);
 
 function apply(sql: string): string {
   return execFileSync("sqlite3", ["-json", ":memory:"], {
-    input: `${schema}\n${integrationSchema}\n${observabilitySchema}\n${chatMigrationSchema}\n${executionFoundationSchema}\n${projectSettingsSchema}\n${grantPolicySchema}\n${invitationsSchema}\n${repositoryRemovalSchema}\n${configuredWorkerSchema}\n${configuredWorkerRuntimeSchema}\n${configuredWorkerAssignmentsSchema}\n${workerFirstExecutionPolicySchema}\n${configuredWorkerObservabilitySchema}\n${legacyAccountConversionSchema}\n${workerAssignmentRequesterSchema}\n${workspaceRuntimeFactsSchema}\n${workspaceWorkerInventorySchema}\n${sql}`,
+    input: `${schema}\n${integrationSchema}\n${observabilitySchema}\n${chatMigrationSchema}\n${executionFoundationSchema}\n${projectSettingsSchema}\n${grantPolicySchema}\n${invitationsSchema}\n${repositoryRemovalSchema}\n${configuredWorkerSchema}\n${configuredWorkerRuntimeSchema}\n${configuredWorkerAssignmentsSchema}\n${workerFirstExecutionPolicySchema}\n${configuredWorkerObservabilitySchema}\n${legacyAccountConversionSchema}\n${workerAssignmentRequesterSchema}\n${workspaceRuntimeFactsSchema}\n${workspaceWorkerInventorySchema}\n${adapterReleaseSchema}\n${workspaceRuntimeCredentialSchema}\n${sql}`,
     encoding: "utf8",
   });
 }
@@ -162,7 +177,9 @@ INSERT INTO projects (id, owner_user_id, name, description, created_at, updated_
   VALUES ('p1', 'u1', 'Project', NULL, '2026-01-01', '2026-01-01');
 INSERT INTO project_memberships VALUES ('pm1', 'p1', 'u1', 'owner', '2026-01-01', '2026-01-01');
 INSERT INTO execution_workspaces VALUES ('ws1', 'u1', 'Workspace', 'online', '2026-01-01', '2026-01-01');
-INSERT INTO workspace_runtime_identities VALUES ('runtime1', 'ws1', 'key-ref', '2026-01-01', NULL);
+INSERT INTO workspace_runtime_identities
+  (id, workspace_id, credential_key_ref, created_at, revoked_at, credential_token_hash)
+  VALUES ('runtime1', 'ws1', 'key-ref', '2026-01-01', NULL, 'runtime-token-hash');
 INSERT INTO workers VALUES ('worker1', 'Worker', 'active', '2026-01-01', '2026-01-01');
 INSERT INTO configured_workers (id, owner_user_id, name, worker_type_id, default_model, concurrency_limit, created_at, updated_at)
   VALUES ('configured-worker1', 'u1', 'Worker Personal', 'worker1', 'model-1', 2, '2026-01-01', '2026-01-01');
@@ -205,6 +222,7 @@ describe("v6 D1 schema", () => {
         { name: "configured_worker_observability_metrics" },
         { name: "workspace_runtime_facts" },
         { name: "workspace_worker_inventory" },
+        { name: "v7_adapter_releases" },
       ]),
     );
   });
@@ -233,6 +251,15 @@ describe("v6 D1 schema", () => {
         "working_directory",
       ]),
     );
+  });
+
+  it("stores only a runtime credential hash for paired Workspaces", () => {
+    const columns = JSON.parse(
+      apply("PRAGMA table_info(workspace_runtime_identities);"),
+    ).map((column: { name: string }) => column.name);
+    expect(columns).toContain("credential_token_hash");
+    expect(columns).not.toContain("credential_token");
+    expect(columns).not.toContain("auth_token");
   });
 
   it("enforces one active checkout and one active lease", () => {

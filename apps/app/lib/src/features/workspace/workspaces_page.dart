@@ -132,13 +132,7 @@ class _WorkspacesPageState extends State<WorkspacesPage>
         onGrant: widget.onGrant,
         onConnect: widget.onConnect ?? (_) async {},
         onOpenDownloads: widget.onOpenDownloads,
-        configuredWorkers: widget.configuredWorkers,
         workspaceWorkers: widget.workspaceWorkers,
-        onOpenConfiguredWorker: widget.onOpenConfiguredWorker,
-        onSetupConfiguredWorkerWorkspace:
-            widget.onSetupConfiguredWorkerWorkspace,
-        onRemoveConfiguredWorkerWorkspace:
-            widget.onRemoveConfiguredWorkerWorkspace,
       );
     }
 
@@ -185,10 +179,7 @@ class _WorkspacesPageState extends State<WorkspacesPage>
               WorkersTab(
                 workspaces: widget.workspaces,
                 plugins: widget.plugins,
-                configuredWorkers: widget.configuredWorkers,
                 workspaceWorkers: widget.workspaceWorkers,
-                onAddConfiguredWorker: widget.onAddConfiguredWorker,
-                onOpenConfiguredWorker: widget.onOpenConfiguredWorker,
               )
           ],
         );

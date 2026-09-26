@@ -8,7 +8,6 @@ class WorkspaceDetailView extends StatefulWidget {
   const WorkspaceDetailView({
     super.key,
     required this.workspace,
-    this.configuredWorkers = const [],
     this.workspaceWorkers = const [],
     required this.onBack,
     required this.onRename,
@@ -18,13 +17,10 @@ class WorkspaceDetailView extends StatefulWidget {
     required this.onConnect,
     this.onOpenDownloads,
     this.initialTab = 0,
-    this.onOpenConfiguredWorker,
-    this.onSetupConfiguredWorkerWorkspace,
-    this.onRemoveConfiguredWorkerWorkspace,
+
   });
 
   final StudioAgent workspace;
-  final List<StudioConfiguredWorker> configuredWorkers;
   final List<StudioWorkspaceWorker> workspaceWorkers;
   final VoidCallback onBack;
   final ValueChanged<StudioAgent> onRename;
@@ -34,13 +30,6 @@ class WorkspaceDetailView extends StatefulWidget {
   final Future<void> Function(StudioAgent) onConnect;
   final VoidCallback? onOpenDownloads;
   final int initialTab;
-  final ValueChanged<StudioConfiguredWorker>? onOpenConfiguredWorker;
-  final Future<void> Function(
-          StudioConfiguredWorker worker, String workspaceId, String action)?
-      onSetupConfiguredWorkerWorkspace;
-  final Future<void> Function(
-          StudioConfiguredWorker worker, String workspaceId)?
-      onRemoveConfiguredWorkerWorkspace;
 
   @override
   State<WorkspaceDetailView> createState() => _WorkspaceDetailViewState();
@@ -272,13 +261,6 @@ class _WorkspaceDetailViewState extends State<WorkspaceDetailView>
             subtitle: 'Locally configured Workers reported by this Workspace.',
             child: _workspaceWorkersOnWorkspace(),
           ),
-          if (_configuredWorkersForWorkspace().isNotEmpty)
-            _Panel(
-              title: 'Legacy Cloud-configured Workers',
-              subtitle: 'V6 Worker bindings retained during migration.',
-              child: _configuredWorkersOnWorkspace(
-                  _configuredWorkersForWorkspace()),
-            ),
         ],
       );
 
@@ -307,67 +289,6 @@ class _WorkspaceDetailViewState extends State<WorkspaceDetailView>
                     '${worker.workerTypeId} · ${worker.status == 'ready' ? 'Ready' : worker.status == 'disabled' ? 'Disabled' : 'Needs attention'}'),
               ))
           .toList(),
-    );
-  }
-
-  List<StudioConfiguredWorker> _configuredWorkersForWorkspace() =>
-      widget.configuredWorkers
-          .where((worker) => worker.bindings
-              .any((binding) => binding.workspaceId == widget.workspace.id))
-          .toList();
-
-  Widget _configuredWorkersOnWorkspace(List<StudioConfiguredWorker> workers) {
-    if (workers.isEmpty) {
-      return const Text(
-          'No configured Workers are connected to this Workspace.');
-    }
-    return Column(
-      children: workers.map((worker) {
-        final binding = worker.bindings
-            .firstWhere((item) => item.workspaceId == widget.workspace.id);
-        return ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: Icon(
-            binding.ready
-                ? Icons.check_circle_outline
-                : Icons.warning_amber_outlined,
-            color: binding.ready
-                ? const Color(0xff3ca879)
-                : const Color(0xffc1842d),
-          ),
-          title: Text(worker.name),
-          subtitle: Text(
-              '${worker.workerTypeName} · ${binding.ready ? 'Ready to run' : 'Needs attention'}'),
-          trailing: Wrap(
-            spacing: 2,
-            children: [
-              if (binding.credentialStatus != 'ready')
-                TextButton(
-                  onPressed: widget.onSetupConfiguredWorkerWorkspace == null
-                      ? null
-                      : () => widget.onSetupConfiguredWorkerWorkspace!(
-                          worker, widget.workspace.id, 'reauthenticate'),
-                  child: const Text('Authenticate'),
-                ),
-              IconButton(
-                tooltip: 'Open Worker',
-                onPressed: widget.onOpenConfiguredWorker == null
-                    ? null
-                    : () => widget.onOpenConfiguredWorker!(worker),
-                icon: const Icon(Icons.open_in_new, size: 18),
-              ),
-              IconButton(
-                tooltip: 'Remove binding',
-                onPressed: widget.onRemoveConfiguredWorkerWorkspace == null
-                    ? null
-                    : () => widget.onRemoveConfiguredWorkerWorkspace!(
-                        worker, widget.workspace.id),
-                icon: const Icon(Icons.link_off_outlined, size: 18),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
     );
   }
 

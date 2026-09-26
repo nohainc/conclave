@@ -311,7 +311,7 @@ Future<void> main() async {
 
   test('one installed adapter release serves multiple configured workers of the same type', () async {
     await writeManifest('1.2.3');
-    final installed = await store.install(sourceDirectory: source);
+    await store.install(sourceDirectory: source);
 
     final workerA = localWorker(
       id: 'worker-a',

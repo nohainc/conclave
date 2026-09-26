@@ -4523,6 +4523,126 @@ async function handleRevokeHostEnrollment(
   return json({ ok: true, revokedAt: now });
 }
 
+async function handleRedeemWorkspaceEnrollment(
+  request: Request,
+  env: SecurityEnv,
+): Promise<Response> {
+  const body = parseJson<{
+    token?: string;
+    name?: string;
+    hostname?: string;
+    platform?: string;
+    architecture?: string;
+    appVersion?: string;
+  }>(await request.text(), {});
+
+  const token = body.token?.trim();
+  if (!token) {
+    return json({ error: "Enrollment token is required" }, { status: 400 });
+  }
+
+  const tokenHash = await hashToken(token);
+  const now = new Date().toISOString();
+  const enrollment = await env.CONCLAVE_DB.prepare(
+    `SELECT e.id, e.workspace_id AS workspaceId, ew.name AS workspaceName
+       FROM workspace_enrollments e
+       JOIN execution_workspaces ew ON ew.id = e.workspace_id
+      WHERE e.token_hash = ?1
+        AND e.revoked_at IS NULL
+        AND e.used_at IS NULL
+        AND e.expires_at > ?2
+        AND ew.status <> 'revoked'`,
+  )
+    .bind(tokenHash, now)
+    .first<{ id: string; workspaceId: string; workspaceName: string }>();
+
+  if (!enrollment) {
+    return json(
+      { error: "Invalid, expired, revoked, or already used enrollment token" },
+      { status: 401 },
+    );
+  }
+
+  // Claim the one-time code before minting a long-lived runtime credential.
+  // The conditional update makes two concurrent redemption attempts race
+  // safely: only one may change used_at from NULL.
+  const claimed = await env.CONCLAVE_DB.prepare(
+    `UPDATE workspace_enrollments
+        SET used_at = ?1
+      WHERE id = ?2
+        AND used_at IS NULL
+        AND revoked_at IS NULL
+        AND expires_at > ?1`,
+  )
+    .bind(now, enrollment.id)
+    .run();
+  if ((claimed.meta?.changes ?? 0) !== 1) {
+    return json(
+      { error: "Enrollment token was already used or is no longer valid" },
+      { status: 409 },
+    );
+  }
+
+  const runtimeId = `runtime-${crypto.randomUUID()}`;
+  const authToken = `conclave_workspace_tok_${crypto.randomUUID().replace(/-/g, "")}`;
+  const authTokenHash = await hashToken(authToken);
+
+  // One normal Conclave Workspace runtime owns one execution Workspace.
+  // Re-pairing revokes an older runtime credential while preserving the
+  // machine's local Project/Workstream data, whose path does not depend on
+  // Workspace/runtime identity.
+  await env.CONCLAVE_DB.batch([
+    env.CONCLAVE_DB.prepare(
+      `UPDATE workspace_runtime_identities
+          SET revoked_at = ?1
+        WHERE workspace_id = ?2
+          AND revoked_at IS NULL`,
+    ).bind(now, enrollment.workspaceId),
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO workspace_runtime_identities
+        (id, workspace_id, credential_key_ref, credential_token_hash, created_at, revoked_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, NULL)`,
+    ).bind(
+      runtimeId,
+      enrollment.workspaceId,
+      `workspace-runtime:${runtimeId}`,
+      authTokenHash,
+      now,
+    ),
+    env.CONCLAVE_DB.prepare(
+      `UPDATE execution_workspaces
+          SET status = 'offline', updated_at = ?1
+        WHERE id = ?2 AND status <> 'revoked'`,
+    ).bind(now, enrollment.workspaceId),
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO workspace_audit_log
+        (id, workspace_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
+       VALUES (?1, ?2, 'workspace', ?3, 'workspace.runtime.enrolled', 'workspace_runtime', ?3, ?4, ?5)`,
+    ).bind(
+      `audit-${crypto.randomUUID()}`,
+      enrollment.workspaceId,
+      runtimeId,
+      JSON.stringify({
+        hostname: body.hostname ?? null,
+        platform: body.platform ?? null,
+        architecture: body.architecture ?? null,
+        appVersion: body.appVersion ?? null,
+      }),
+      now,
+    ),
+  ]);
+
+  return json(
+    {
+      workspaceRuntimeId: runtimeId,
+      workspaceId: enrollment.workspaceId,
+      workspaceName: enrollment.workspaceName,
+      authToken,
+    },
+    { status: 201 },
+  );
+}
+
 async function handleEnrollHost(
   request: Request,
   env: SecurityEnv,
@@ -10924,6 +11044,7 @@ export {
   handleWorkspaceMemberStatus,
   handleInternalDispatchTaskAssignment,
   handleWorkspaceGatewayConnect,
+  handleRedeemWorkspaceEnrollment,
   handleEnrollHost,
   handleBindHostWorkspace,
   handleListHostEnrollments,

@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
-import '../bin/conclave_host.dart' show downloadWorkerPackage;
+import 'package:conclave_host/workspace_runtime.dart' show downloadWorkerPackage;
 
 void main() {
   test('downloads authenticated worker bytes within the configured limit',
