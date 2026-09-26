@@ -114,7 +114,8 @@ void main() {
     );
   }
 
-  testWidgets('first launch presents clean workspace tab with work root and diagnostics', (tester) async {
+  testWidgets('first launch presents clean workspace tab with pairing, work root, and diagnostics', (tester) async {
+    var paired = false;
     await pumpDashboard(
       tester,
       const HostUiSnapshot(
@@ -123,12 +124,18 @@ void main() {
         detail: 'Connect this machine to Conclave to begin.',
         workRootPath: '/Users/test/Work',
       ),
+      onPair: () => paired = true,
     );
 
+    expect(find.text('Workspace Pairing'), findsOneWidget);
+    expect(find.text('Open Pairing'), findsOneWidget);
     expect(find.text('Work Root'), findsOneWidget);
     expect(find.text('Advanced & Diagnostics'), findsOneWidget);
     expect(find.text('Projects'), findsNothing);
     expect(find.text('Chats'), findsNothing);
+
+    await tester.tap(find.text('Open Pairing'));
+    expect(paired, isTrue);
   });
 
   testWidgets('offline Workspace displays recovery panel with retry',
@@ -174,6 +181,7 @@ void main() {
         logsPath: '/tmp/host.log',
         updateSummary: 'Up to date',
       ),
+      onPair: () {},
     );
 
     // Only Workspace and Workers tabs exist in top navigation
@@ -188,14 +196,15 @@ void main() {
     // Header actions: 3-lines menu icon, no duplicate button in header
     expect(find.byIcon(Icons.menu), findsOneWidget);
 
-    // Streamlined Workspace tab: Work Root and Advanced & Diagnostics
+    // Streamlined Workspace tab: Pairing, Work Root and Advanced & Diagnostics
+    expect(find.text('Workspace Pairing'), findsOneWidget);
+    expect(find.text('Open Pairing'), findsOneWidget);
     expect(find.text('Work Root'), findsOneWidget);
     expect(find.text('Advanced & Diagnostics'), findsOneWidget);
 
     // Removed sections are not on the Workspace tab
     expect(find.text('Current Work'), findsNothing);
     expect(find.text('View Workers'), findsNothing);
-    expect(find.text('Cloud Pairing'), findsNothing);
     expect(find.bySemanticsLabel('Workspace status'), findsNothing);
   });
 

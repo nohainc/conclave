@@ -976,6 +976,7 @@ class _HostDashboardState extends State<HostDashboard> {
                 children: [
                   _WorkspaceTab(
                     snapshot: snapshot,
+                    onPair: widget.onPair,
                     onRetry: widget.onRetry,
                     onExportDiagnostics: widget.onExportDiagnostics,
                     onUnpair: widget.onUnpair,
@@ -1062,12 +1063,14 @@ class _SurfaceTabButton extends StatelessWidget {
 class _WorkspaceTab extends StatelessWidget {
   const _WorkspaceTab({
     required this.snapshot,
+    this.onPair,
     this.onRetry,
     this.onExportDiagnostics,
     this.onUnpair,
   });
 
   final HostUiSnapshot snapshot;
+  final VoidCallback? onPair;
   final Future<void> Function()? onRetry;
   final Future<void> Function()? onExportDiagnostics;
   final VoidCallback? onUnpair;
@@ -1091,6 +1094,60 @@ class _WorkspaceTab extends StatelessWidget {
                     ? 'Retry connection'
                     : 'Retry update',
                 onRetry: onRetry,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+
+        // Pairing Card
+        if (onPair != null) ...[
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.link, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Workspace Pairing',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton.icon(
+                        onPressed: onPair,
+                        icon: const Icon(Icons.link, size: 14),
+                        label: const Text('Open Pairing',
+                            style: TextStyle(fontSize: 12)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    snapshot.paired
+                        ? 'Paired as “${snapshot.workspaceName ?? snapshot.hostname ?? 'Conclave Workspace'}”'
+                        : 'Not paired with Conclave Cloud.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    snapshot.paired
+                        ? 'Connected to Conclave Cloud. Open pairing to reconnect or switch Workspace.'
+                        : 'Connect this machine to Conclave Cloud to enable remote execution and worker sync.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
