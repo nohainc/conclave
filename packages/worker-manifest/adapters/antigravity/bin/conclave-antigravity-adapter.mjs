@@ -25,24 +25,20 @@ function boundedText(value, maxBytes) {
 
 function cliArgs(model) {
   const args = [
-    "--ask-for-approval",
-    "never",
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json",
     "--sandbox",
-    "workspace-write",
-    "exec",
-    "--json",
-    "--color",
-    "never",
-    "--cd",
-    process.cwd(),
+    "--print-timeout",
+    "15m",
   ];
   if (model) args.push("--model", model);
-  args.push("-");
   return args;
 }
 
 async function runCli(prompt, model, requestId, assignmentId) {
-  const child = spawn("antigravity", cliArgs(model), {
+  const child = spawn("agy", cliArgs(model), {
     cwd: process.cwd(),
     env: process.env,
     stdio: ["pipe", "pipe", "pipe"],
@@ -51,7 +47,7 @@ async function runCli(prompt, model, requestId, assignmentId) {
   let stdoutBytes = 0;
   let stderrBytes = 0;
   let finalMessage = "";
-  let turnCompleted = false;
+  let completed = false;
   let cliError = null;
 
   const stdout = createInterface({ input: child.stdout, crlfDelay: Infinity });
@@ -68,32 +64,24 @@ async function runCli(prompt, model, requestId, assignmentId) {
     } catch {
       return;
     }
-    if (
-      event.type === "item.completed" &&
-      event.item?.type === "agent_message"
-    ) {
-      finalMessage = boundedText(event.item.text, 512 * 1024);
-    } else if (
-      event.type === "item.completed" &&
-      event.item?.type === "command_execution"
-    ) {
-      // Command output may contain repository data or provider diagnostics.
-      // Never forward raw tool output as realtime progress.
+    if (event.event === "step_update") {
       send("progress", {
         requestId,
         assignmentId,
-        message:
-          "Antigravity is executing a command in the Workstream workspace.",
+        message: "Antigravity is working in the Workstream workspace.",
       });
-    } else if (event.type === "turn.completed") {
-      turnCompleted = true;
-    } else if (event.type === "turn.failed") {
-      cliError =
-        boundedText(event.error?.message, 2048) ||
-        "Antigravity execution failed.";
-    } else if (event.type === "error") {
-      cliError =
-        boundedText(event.message, 2048) || "Antigravity execution failed.";
+      return;
+    }
+    if (event.event === "result") {
+      completed = true;
+      const status = event.result?.status;
+      if (status === "SUCCESS") {
+        finalMessage = boundedText(event.result?.response, 512 * 1024);
+      } else {
+        cliError =
+          boundedText(event.result?.error, 2048) ||
+          `Antigravity ended with status ${status || "ERROR"}.`;
+      }
     }
   });
 
@@ -104,13 +92,18 @@ async function runCli(prompt, model, requestId, assignmentId) {
       child.kill();
     }
   });
-  child.stdin.end(prompt);
+  child.stdin.end(
+    `${JSON.stringify({
+      event: "user",
+      message: { content: prompt },
+    })}\n`,
+  );
 
   const exitCode = await new Promise((resolve, reject) => {
     child.once("error", reject);
     child.once("close", resolve);
   });
-  if (exitCode !== 0 || cliError || !turnCompleted) {
+  if (exitCode !== 0 || cliError || !completed) {
     throw new Error(
       cliError ||
         `Antigravity exited with code ${exitCode} before completing the turn.`,
@@ -122,7 +115,10 @@ async function runCli(prompt, model, requestId, assignmentId) {
 }
 
 async function checkLogin() {
-  const child = spawn("antigravity", ["auth", "status"], {
+  // Antigravity has no documented non-interactive "auth status" command.
+  // /usage is handled by the CLI itself and validates that a local account
+  // session is available without spending a model turn.
+  const child = spawn("agy", ["-p", "/usage"], {
     cwd: process.cwd(),
     env: process.env,
     stdio: ["ignore", "ignore", "ignore"],
