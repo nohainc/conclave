@@ -14,7 +14,7 @@ class WorkRootResolver {
   final String? overridePath;
 
   String get defaultPath {
-    final separator = platform.isWindows ? r'\' : Platform.pathSeparator;
+    final separator = platform.isWindows ? r'\' : '/';
     if (platform.isWindows) {
       return _join(
           platform.homeDirectory, 'AppData', 'Local', 'Conclave', 'Work',
@@ -22,7 +22,8 @@ class WorkRootResolver {
     }
     if (platform.operatingSystem == 'macos') {
       return _join(platform.homeDirectory, 'Library', 'Application Support',
-          'Conclave', 'Work');
+          'Conclave', 'Work',
+          separator: separator);
     }
     return _join(platform.homeDirectory, '.local', 'share', 'conclave', 'work',
         separator: separator);

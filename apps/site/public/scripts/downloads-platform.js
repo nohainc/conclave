@@ -1,7 +1,4 @@
-const browserNavigator = navigator;
-const platform =
-  browserNavigator.userAgentData?.platform ?? navigator.userAgent;
-const normalized = platform.toLowerCase();
+const normalized = navigator.userAgent.toLowerCase();
 const currentPlatform = normalized.includes("mac")
   ? "macos"
   : normalized.includes("win")

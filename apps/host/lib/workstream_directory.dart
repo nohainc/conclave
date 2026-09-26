@@ -6,6 +6,17 @@ import 'workstream_marker.dart';
 import 'workstream_path.dart';
 import 'workstream_repository_observability.dart';
 
+/// A stable lock outside the deletable Workstream directory. Windows cannot
+/// rename a directory while a file inside it remains open and locked.
+File workstreamMutationLockFile({
+  required Directory workRoot,
+  required String projectId,
+  required String workstreamId,
+}) =>
+    File('${workRoot.path}${Platform.pathSeparator}.conclave-mutation-locks'
+        '${Platform.pathSeparator}$projectId${Platform.pathSeparator}'
+        '$workstreamId.lock');
+
 const workstreamWorkspaceChangeWarning =
     'Local files are not transferred automatically. Commit/push or otherwise '
     'preserve required state before continuing on another Workspace.';
@@ -127,10 +138,10 @@ class WorkstreamDirectoryViolation implements Exception {
 
 /// Serializes stateful mutation per Workstream directory.
 ///
-/// The lock is deliberately stored beside the Workstream marker rather than
-/// under repository or checkout metadata. OS file locking releases it when a
-/// runtime process exits, while the persisted fencing token rejects stale
-/// assignments after reconnect or restart.
+/// OS file locking releases the stable Work Root lock when a runtime process
+/// exits, while the persisted fencing token rejects stale assignments after
+/// reconnect or restart. The lock remains outside the Workstream directory so
+/// explicit cleanup can safely rename that directory on Windows.
 class WorkstreamMutationCoordinator {
   WorkstreamMutationCoordinator(this.lifecycle);
 
@@ -158,14 +169,23 @@ class WorkstreamMutationCoordinator {
       } catch (_) {
         // A failed predecessor must not permanently block the Workstream.
       }
-      final directory = await lifecycle.ensureForExecution(
+      final candidate = await lifecycle._pathResolver.resolve(
         projectId: projectId,
         workstreamId: workstreamId,
       );
-      final lockFile = File(_join(directory.path, '.conclave-workstream.lock'));
+      final lockFile = workstreamMutationLockFile(
+        workRoot: Directory(Directory(candidate.path).parent.parent.path),
+        projectId: projectId,
+        workstreamId: workstreamId,
+      );
+      await lockFile.parent.create(recursive: true);
       final handle = await lockFile.open(mode: FileMode.append);
       try {
         await handle.lock(FileLock.exclusive);
+        final directory = await lifecycle.ensureForExecution(
+          projectId: projectId,
+          workstreamId: workstreamId,
+        );
         await _validateAndRecordFence(
           directory,
           leaseId: leaseId,

@@ -165,10 +165,18 @@ final class WindowsRuntime implements PlatformRuntime {
       final result = await Process.run(
               'taskkill', ['/PID', '${process.pid}', '/T', if (force) '/F'])
           .timeout(const Duration(seconds: 5));
-      if (result.exitCode == 0) return;
+      if (result.exitCode == 0) {
+        await process.exitCode.timeout(const Duration(seconds: 5));
+        return;
+      }
     } on Object {
       // Fall back to the Dart handle if taskkill is unavailable or times out.
     }
     process.kill(force ? ProcessSignal.sigkill : ProcessSignal.sigterm);
+    try {
+      await process.exitCode.timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      // The caller retains its own bounded timeout if the process is stuck.
+    }
   }
 }

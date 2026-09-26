@@ -91,8 +91,11 @@ void main() {
       () async {
     final candidate = (await service().scan()).candidates.single;
     final lockFile = File(
-      '${workstream.path}${Platform.pathSeparator}.conclave-workstream.lock',
+      '${root.path}${Platform.pathSeparator}.conclave-mutation-locks'
+      '${Platform.pathSeparator}project-1${Platform.pathSeparator}'
+      'workstream-1.lock',
     );
+    await lockFile.parent.create(recursive: true);
     final handle = await lockFile.open(mode: FileMode.append);
     await handle.lock(FileLock.exclusive);
     try {

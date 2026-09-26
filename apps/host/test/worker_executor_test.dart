@@ -568,9 +568,26 @@ Future<void> main() async {
     expect(await executor.cancel('assignment-cancel-tree'), isTrue);
     await expectLater(execution, throwsA(isA<ProcessException>()));
 
-    final stoppedAt = await File(heartbeatPath).readAsString();
-    await Future<void>.delayed(const Duration(milliseconds: 200));
-    expect(await File(heartbeatPath).readAsString(), stoppedAt);
+    final heartbeatFile = File(heartbeatPath);
+    final postCancelDeadline = DateTime.now().add(const Duration(seconds: 5));
+    String? stoppedAt;
+    while (DateTime.now().isBefore(postCancelDeadline)) {
+      try {
+        final before = await heartbeatFile.readAsString();
+        await Future<void>.delayed(const Duration(milliseconds: 150));
+        final after = await heartbeatFile.readAsString();
+        if (before == after) {
+          stoppedAt = after;
+          break;
+        }
+      } on FileSystemException {
+        // Windows may briefly deny reads while the terminated child closes
+        // its inherited handle. Retry until the handle is released.
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    expect(stoppedAt, isNotNull,
+        reason: 'child process did not release its heartbeat file');
     if (!Platform.isWindows) {
       final probe = await Process.run('kill', ['-0', '$childPid']);
       expect(probe.exitCode, isNonZero);

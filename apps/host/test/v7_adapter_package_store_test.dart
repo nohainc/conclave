@@ -8,6 +8,10 @@ import 'package:conclave_host/v7_adapter_package_store.dart';
 import 'package:conclave_host/worker_trust_policy.dart';
 import 'package:test/test.dart';
 import 'support/ed25519_release_fixture.dart';
+import 'support/compile_dart_executable.dart';
+
+String get adapterExecutable =>
+    'bin/adapter${Platform.isWindows ? '.exe' : ''}';
 
 void main() {
   late Directory temp;
@@ -30,21 +34,19 @@ Future<void> main() async {
     final request = jsonDecode(line) as Map<String, dynamic>;
     final base = {'protocolVersion': '1.0', 'requestId': request['requestId']};
     switch (request['type']) {
-      case 'initialize.request': adapterVersion = request['adapterVersion'] as String; stdout.writeln(jsonEncode({...base, 'type': 'initialize.result', 'adapterVersion': adapterVersion, 'capabilities': <String>[] }));
-      case 'version.request': stdout.writeln(jsonEncode({...base, 'type': 'version.result', 'adapterVersion': adapterVersion}));
-      case 'health.request': stdout.writeln(jsonEncode({...base, 'type': 'health.result', 'healthy': $healthy}));
-      default: stdout.writeln(jsonEncode({...base, 'type': 'error', 'code': 'unexpected', 'message': 'unexpected health request', 'retryable': false}));
+      case 'initialize.request': adapterVersion = request['adapterVersion'] as String; stdout.writeln(jsonEncode({...base, 'type': 'initialize.result', 'adapterVersion': adapterVersion, 'capabilities': <String>[] })); break;
+      case 'version.request': stdout.writeln(jsonEncode({...base, 'type': 'version.result', 'adapterVersion': adapterVersion})); break;
+      case 'health.request': stdout.writeln(jsonEncode({...base, 'type': 'health.result', 'healthy': $healthy})); break;
+      default: stdout.writeln(jsonEncode({...base, 'type': 'error', 'code': 'unexpected', 'message': 'unexpected health request', 'retryable': false})); break;
     }
   }
 }
 ''');
-    final launcher = File('${source.path}/bin/adapter');
-    await launcher.writeAsString(
-        '#!/bin/sh\nexec dart "\$(dirname "\$0")/adapter.dart"\n');
-    final chmod = await Process.run('chmod', ['700', launcher.path]);
-    if (chmod.exitCode != 0) {
-      throw StateError('failed to mark adapter executable');
-    }
+    await compileDartExecutable(
+      File('${source.path}/bin/adapter.dart'),
+      Directory('${source.path}/bin'),
+      name: 'adapter',
+    );
   }
 
   setUp(() async {
@@ -80,7 +82,7 @@ Future<void> main() async {
       'authStrategies': ['api_key'],
       'modelSelectionMode': 'allow_list',
       'prerequisites': <Object>[],
-      'executable': 'bin/adapter',
+      'executable': adapterExecutable,
       'launchArgs': [],
       'secretRequirements': [
         {
@@ -134,7 +136,9 @@ Future<void> main() async {
     await for (final entity
         in source.list(recursive: true, followLinks: false)) {
       if (entity is! File) continue;
-      final name = entity.path.substring(source.path.length + 1);
+      final name = entity.path
+          .substring(source.path.length + 1)
+          .replaceAll(Platform.pathSeparator, '/');
       final entry = ArchiveFile.bytes(name, await entity.readAsBytes());
       entry.mode = (await entity.stat()).mode & 0x1ff;
       archive.addFile(entry);
@@ -149,7 +153,11 @@ Future<void> main() async {
     await writeManifest('1.2.3');
     final installed =
         await store.installArchive(archiveBytes: await packSource());
-    expect(await File('${installed.path}/bin/adapter').exists(), isTrue);
+    expect(
+        await File(
+                '${installed.path}${Platform.pathSeparator}$adapterExecutable')
+            .exists(),
+        isTrue);
     expect(await store.hasVerifiedActivePackage('codex'), isTrue);
     expect(
       await store.hasVerifiedActivePackage('codex', ['workstream_filesystem']),
@@ -161,7 +169,8 @@ Future<void> main() async {
       isTrue,
     );
     expect(
-        await File('${installed.path}/bin/adapter')
+        await File(
+                '${installed.path}${Platform.pathSeparator}$adapterExecutable')
             .stat()
             .then((s) => s.mode & 0x49),
         isNonZero);
@@ -215,7 +224,10 @@ Future<void> main() async {
     );
     expect(launch, isNotNull);
     expect(launch!.adapterVersion, '1.2.3');
-    expect(launch.processSpec.executable, endsWith('/bin/adapter'));
+    expect(
+      launch.processSpec.executable,
+      endsWith('${Platform.pathSeparator}bin${Platform.pathSeparator}adapter'),
+    );
     expect(launch.processSpec.environment,
         {'PROVIDER_API_KEY': 'private-api-key'});
     expect(launch.processSpec.secretValues, {'private-api-key'});
@@ -226,7 +238,8 @@ Future<void> main() async {
       () async {
     await writeManifest('1.2.3');
     final installed = await store.install(sourceDirectory: source);
-    await File('${installed.path}/bin/adapter').writeAsString('tampered');
+    await File('${installed.path}${Platform.pathSeparator}$adapterExecutable')
+        .writeAsString('tampered');
     await expectLater(
       store.resolve(
         worker: localWorker(),
@@ -343,7 +356,10 @@ Future<void> main() async {
 
     expect(launchA?.processSpec.executable, launchB?.processSpec.executable);
     expect(
-        launchA?.processSpec.executable, endsWith('/codex/1.2.3/bin/adapter'));
+      launchA?.processSpec.executable,
+      endsWith(
+          '${Platform.pathSeparator}codex${Platform.pathSeparator}1.2.3${Platform.pathSeparator}bin${Platform.pathSeparator}adapter'),
+    );
     expect(launchA?.processSpec.environment['PROVIDER_API_KEY'], 'secret-a');
 
     expect(launchB?.processSpec.environment['PROVIDER_API_KEY'], 'secret-b');

@@ -9,6 +9,7 @@ import 'package:conclave_host/v7_adapter_catalog.dart';
 import 'package:conclave_host/v7_adapter_package_store.dart';
 import 'package:conclave_host/worker_trust_policy.dart';
 import 'support/ed25519_release_fixture.dart';
+import 'support/compile_dart_executable.dart';
 
 void main() {
   late Directory temp;
@@ -58,22 +59,22 @@ Future<void> main() async {
       case 'initialize.request':
         version = request['adapterVersion'] as String;
         stdout.writeln(jsonEncode({...base, 'type': 'initialize.result', 'adapterVersion': version, 'capabilities': <String>[]}));
+        break;
       case 'version.request':
         stdout.writeln(jsonEncode({...base, 'type': 'version.result', 'adapterVersion': version}));
+        break;
       case 'health.request':
         stdout.writeln(jsonEncode({...base, 'type': 'health.result', 'healthy': true}));
+        break;
     }
   }
 }
 ''');
-    final launcher = File('${packageSource.path}/bin/adapter');
-    await launcher.writeAsString(
-      r'''#!/bin/sh
-exec dart "$(dirname "$0")/adapter.dart"
-''',
+    await compileDartExecutable(
+      File('${packageSource.path}/bin/adapter.dart'),
+      Directory('${packageSource.path}/bin'),
+      name: 'adapter',
     );
-    final chmod = await Process.run('chmod', ['700', launcher.path]);
-    expect(chmod.exitCode, 0);
 
     final digest = await store.digestDirectory(packageSource);
     final manifest = <String, Object?>{
@@ -88,7 +89,7 @@ exec dart "$(dirname "$0")/adapter.dart"
       'authStrategies': ['browser_auth'],
       'modelSelectionMode': 'allow_list',
       'prerequisites': <Object>[],
-      'executable': 'bin/adapter',
+      'executable': 'bin/adapter${Platform.isWindows ? '.exe' : ''}',
       'launchArgs': <String>[],
       'secretRequirements': <Object>[],
       'healthCheck': {'mode': 'protocol', 'timeoutMs': 5000},
@@ -105,7 +106,9 @@ exec dart "$(dirname "$0")/adapter.dart"
     await for (final entity
         in packageSource.list(recursive: true, followLinks: false)) {
       if (entity is! File) continue;
-      final name = entity.path.substring(packageSource.path.length + 1);
+      final name = entity.path
+          .substring(packageSource.path.length + 1)
+          .replaceAll(Platform.pathSeparator, '/');
       final entry = ArchiveFile.bytes(name, await entity.readAsBytes());
       entry.mode = (await entity.stat()).mode & 0x1ff;
       archive.addFile(entry);

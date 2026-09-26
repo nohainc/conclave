@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'workstream_marker.dart';
+import 'workstream_directory.dart';
 import 'workstream_path.dart';
 
 typedef WorkstreamActiveCheck = Future<bool> Function(
@@ -158,13 +159,16 @@ class WorkstreamCleanupService {
           'Workstream has an active assignment');
     }
 
-    final lockFile = File(
-      '${directory.path}${Platform.pathSeparator}.conclave-workstream.lock',
+    final lockFile = workstreamMutationLockFile(
+      workRoot: await _canonicalRoot(),
+      projectId: marker.projectId,
+      workstreamId: marker.workstreamId,
     );
     RandomAccessFile? lock;
     late Directory tombstone;
     var lockAcquired = false;
     try {
+      await lockFile.parent.create(recursive: true);
       lock = await lockFile.open(mode: FileMode.append);
       try {
         await Future.any<void>([

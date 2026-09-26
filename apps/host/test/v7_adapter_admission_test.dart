@@ -70,7 +70,10 @@ void main() {
       localConcurrencyLimit: 2,
       availableSecrets: {'provider-token': 'private-token'},
     );
-    expect(spec.executable, endsWith('/bin/adapter'));
+    expect(
+      spec.executable,
+      endsWith('${Platform.pathSeparator}bin${Platform.pathSeparator}adapter'),
+    );
     expect(spec.workingDirectory, '/tmp/workstream');
     expect(spec.environment, {'PROVIDER_TOKEN': 'private-token'});
     expect(spec.allowedEnvironmentVariables, {'PROVIDER_TOKEN'});
