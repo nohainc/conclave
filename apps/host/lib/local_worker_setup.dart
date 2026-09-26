@@ -36,7 +36,7 @@ class LocalWorkerTypeOption {
       name: 'Codex',
       description: 'Use a local Codex installation and account.',
       authStrategy: 'browser_auth',
-      authLabel: 'Codex account',
+      authLabel: 'ChatGPT account',
       prerequisite: 'Codex CLI',
       executablePrerequisite: AdapterExecutablePrerequisite(
           executable: 'codex', minimumVersion: '0.158.0'),
@@ -46,7 +46,7 @@ class LocalWorkerTypeOption {
       permissions: ['workstream_filesystem', 'shell_execution'],
     ),
     LocalWorkerTypeOption(
-      id: 'antigravity',
+      id: 'agy',
       name: 'Antigravity',
       description: 'Use Antigravity on this machine.',
       authStrategy: 'browser_auth',
