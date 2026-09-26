@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { routeHandlers } from "../src/index.js";
 import {
   routeWorkerRequest,
   type WorkerRouteDependencies,
@@ -20,6 +21,13 @@ function dependencies(
 }
 
 describe("Workspace desktop enrollment route", () => {
+  it("registers the production claim and unpair handlers", () => {
+    expect(typeof routeHandlers.handleRedeemWorkspaceEnrollment).toBe(
+      "function",
+    );
+    expect(typeof routeHandlers.handleUnpairWorkspaceRuntime).toBe("function");
+  });
+
   it("redeems a one-time Workspace code without cookie same-origin auth", async () => {
     const sameOrigin = vi.fn();
     const redeem = vi.fn(async () =>

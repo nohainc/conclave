@@ -63,7 +63,7 @@ function applyCorsHeaders(
   });
 }
 
-const routeHandlers = {
+export const routeHandlers = {
   handleSession: handlers.handleSession,
   handleSessionLogout: handlers.handleSessionLogout,
   handleCompleteStepUp: handlers.handleCompleteStepUp,
@@ -79,6 +79,8 @@ const routeHandlers = {
     handlers.handleRegenerateWorkspacePairingIntent,
   handleCancelWorkspacePairingIntent:
     handlers.handleCancelWorkspacePairingIntent,
+  handleRedeemWorkspaceEnrollment: handlers.handleRedeemWorkspaceEnrollment,
+  handleUnpairWorkspaceRuntime: handlers.handleUnpairWorkspaceRuntime,
   handleUploadArtifact: handlers.handleUploadArtifact,
   handleGetArtifact: handlers.handleGetArtifact,
   handleExportWorkspaceAudit: handlers.handleExportWorkspaceAudit,
