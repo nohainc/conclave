@@ -127,7 +127,7 @@ void main() {
       expect(find.text(snapshot.workspaces.first.name), findsOneWidget);
       expect(find.widgetWithText(Tab, 'AI Accounts'), findsNothing);
 
-      await tester.tap(find.byTooltip('Add Workspace'));
+      await tester.tap(find.byTooltip('Connect Workspace'));
       expect(addWorkspaceCalled, isTrue);
 
       expect(find.text('Connect Account'), findsNothing);
@@ -201,7 +201,7 @@ void main() {
       expect(find.text('Add legacy Cloud Worker'), findsNothing);
     });
 
-    testWidgets('keeps Add Workspace available when none exist',
+    testWidgets('keeps Connect Workspace available when none exist',
         (tester) async {
       var addWorkspaceCalled = false;
       var downloadsOpened = false;
@@ -216,8 +216,8 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      expect(find.text('No Workspaces yet'), findsOneWidget);
-      await tester.tap(find.byTooltip('Add Workspace'));
+      expect(find.text('No Workspaces connected'), findsOneWidget);
+      await tester.tap(find.text('Connect Workspace'));
       expect(addWorkspaceCalled, isTrue);
       await tester.tap(find.text('Download Conclave Workspace'));
       expect(downloadsOpened, isTrue);

@@ -237,19 +237,6 @@ class StudioFixtureDataSource implements StudioDataSource {
       ];
 
   @override
-  Future<StudioWorkspace> createWorkspace({
-    required String name,
-    String? slug,
-  }) async =>
-      StudioWorkspace(
-        id: 'workspace-created',
-        name: name,
-        slug: slug ?? 'workspace-created',
-        status: 'active',
-        role: 'owner',
-      );
-
-  @override
   Future<List<StudioProject>> loadProjects(
           {bool includeArchived = false}) async =>
       studioFixtureSnapshot().projects;

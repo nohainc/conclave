@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   handleCancelWorkspacePairingIntent,
+  handleCreateWorkspace,
   handleCreateWorkspacePairingIntent,
   handleGetWorkspacePairingIntent,
   handleRegenerateWorkspacePairingIntent,
@@ -180,6 +181,25 @@ describe("Workspace pairing intents", () => {
         )
         .get("ws-rename"),
     ).toMatchObject({ hostname: "Vitaliis-MacBook-Pro.local" });
+  });
+
+  it("requires pairing before creating a V7 execution Workspace", async () => {
+    const { sqlite, env } = setup();
+    await expect(
+      handleCreateWorkspace(
+        new Request("https://conclave.test/api/workspaces", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: "Unpaired placeholder" }),
+        }),
+        env,
+      ),
+    ).rejects.toThrow("before pairing is no longer supported");
+    expect(
+      sqlite
+        .prepare("SELECT COUNT(*) AS count FROM execution_workspaces")
+        .get(),
+    ).toMatchObject({ count: 0 });
   });
 
   it("creates a hashed, owner-scoped intent without a permanent Workspace", async () => {

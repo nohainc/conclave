@@ -184,7 +184,7 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
   Future<void> _connectWorkspace() async {
     if (ownedWorkspaces.isEmpty) {
       _message(
-          'Add a Workspace first. You can connect it to this Project later.');
+          'Connect a Workspace first. You can grant it access to this Project later.');
       return;
     }
     var selectedId = ownedWorkspaces.first.id;

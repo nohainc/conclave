@@ -76,9 +76,10 @@ class _GettingStarted extends StatelessWidget {
           const SizedBox(height: 28),
           _SetupStep(
               number: '1',
-              title: 'Add a Workspace',
-              detail: 'Connect a machine where Workers can run.',
-              action: 'Pair Workspace',
+              title: 'Connect a Workspace',
+              detail:
+                  'Pair Conclave Workspace on the computer where Workers run.',
+              action: 'Connect Workspace',
               onPressed: onOpenWorkspaces),
           _SetupStep(
               number: '2',

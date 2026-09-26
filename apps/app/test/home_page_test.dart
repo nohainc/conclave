@@ -33,7 +33,7 @@ void main() {
     )));
 
     expect(find.text('Getting started'), findsOneWidget);
-    expect(find.text('Add Workspace'), findsOneWidget);
+    expect(find.text('Connect a Workspace'), findsOneWidget);
     expect(
         find.text('Configure Workers in Conclave Workspace'), findsOneWidget);
     expect(find.text('Create Project'), findsOneWidget);

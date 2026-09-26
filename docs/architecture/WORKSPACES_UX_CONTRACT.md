@@ -1,6 +1,6 @@
 # Conclave AX Workspaces UX and Data Contract
 
-**Status:** Phases 1–5 Workspaces UI/model migration and Phase A6 compatibility handling are implemented.
+**Status:** Workspaces UI/model migration, Phase A6 compatibility handling, and pairing-first onboarding cleanup are implemented.
 
 **Applies to:** Conclave AX and its Cloud read models.
 
@@ -209,6 +209,10 @@ returned to AX.
   The desktop proposes an editable display name and claims the one-time code;
   Cloud creates the Workspace and runtime identity only after a successful
   claim. Existing paired Workspaces remain available during migration.
+- New V7 execution Workspaces cannot be created with `POST /api/workspaces`;
+  that endpoint returns `410 Gone` for the V7 authorization model. AX uses
+  pairing intents. The retained non-V7 handler path exists only for historical
+  compatibility and is not called by current AX.
 - Legacy, unpaired Workspace placeholders are retained during migration. The
   Workspace read model identifies whether an active runtime identity exists;
   AX shows the old **Connect Machine** enrollment flow only for an unpaired

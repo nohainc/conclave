@@ -45,7 +45,7 @@ class WorkspacesOverview extends StatelessWidget {
               ),
               IconButton(
                 icon: const Icon(Icons.add),
-                tooltip: 'Add Workspace',
+                tooltip: 'Connect Workspace',
                 splashRadius: 20,
                 onPressed: onAdd,
               ),
@@ -58,7 +58,7 @@ class WorkspacesOverview extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('No workspaces yet.'),
+                  const Text('No Workspaces connected'),
                   const SizedBox(height: 8),
                   OutlinedButton.icon(
                     onPressed: onOpenDownloads,

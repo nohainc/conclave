@@ -1097,6 +1097,12 @@ async function handleCreateWorkspace(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, accessContext);
+  if (context.authorizationModel === "v5") {
+    throw new HttpError(
+      410,
+      "Workspace creation before pairing is no longer supported. Create a pairing intent and connect Conclave Workspace.",
+    );
+  }
   const body = (await request.json()) as Record<string, unknown>;
   const name = requiredString(body.name, "name");
   const slug =
