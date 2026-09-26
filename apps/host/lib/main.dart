@@ -555,6 +555,29 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     final lifecycle = widget.lifecycle;
     final dataDirectory = lifecycle.host.config.dataDirectory;
     final currentRegistration = HostRegistrationStore(dataDirectory).readSync();
+
+    if (currentRegistration != null && lifecycle.uiSnapshot.paired) {
+      if (mounted) {
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Already Connected'),
+            content: const Text(
+              'This installation is already connected to a Workspace.\n\n'
+              'Disconnect the current Workspace before connecting to another account.',
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
     final proposedName = currentRegistration?.name.isNotEmpty == true
         ? currentRegistration!.name
         : await resolveFriendlyComputerName();
@@ -1140,7 +1163,6 @@ class _WorkspaceTab extends StatelessWidget {
         else
           _PairedWorkspaceCard(
             snapshot: snapshot,
-            onPair: onPair,
           ),
         const SizedBox(height: 16),
 
@@ -1481,60 +1503,62 @@ class _ConnectWorkspaceCardState extends State<_ConnectWorkspaceCard> {
 class _PairedWorkspaceCard extends StatelessWidget {
   const _PairedWorkspaceCard({
     required this.snapshot,
-    this.onPair,
   });
 
   final HostUiSnapshot snapshot;
-  final VoidCallback? onPair;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final workspaceName =
+        snapshot.workspaceName ?? snapshot.hostname ?? 'Conclave Workspace';
+    final isConnected =
+        snapshot.mode == HostUiMode.ready || snapshot.cloudConnected;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                const Icon(Icons.check_circle_outline,
-                    size: 20, color: Colors.green),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Workspace Connected',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                if (onPair != null) ...[
-                  const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    onPressed: onPair,
-                    icon: const Icon(Icons.link, size: 14),
-                    label: const Text(
-                      'Switch Workspace',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  ),
-                ],
-              ],
+            Text(
+              'Workspace',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              workspaceName,
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 8),
-            Text(
-              'Paired as “${snapshot.workspaceName ?? snapshot.hostname ?? 'Conclave Workspace'}”',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Connected to Conclave Cloud (${snapshot.cloudUrl ?? conclaveProductionCloudUrl}).',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: isConnected ? Colors.green : Colors.orange,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  isConnected ? 'Connected' : 'Connecting...',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: isConnected
+                        ? (theme.brightness == Brightness.dark
+                            ? Colors.greenAccent
+                            : Colors.green.shade700)
+                        : Colors.orange.shade700,
+                  ),
+                ),
+              ],
             ),
           ],
         ),

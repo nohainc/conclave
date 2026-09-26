@@ -222,11 +222,17 @@ void main() {
     // Header actions: 3-lines menu icon, no duplicate button in header
     expect(find.byIcon(Icons.menu), findsOneWidget);
 
-    // Streamlined Workspace tab: Connected card, Work Root and Advanced & Diagnostics
-    expect(find.text('Workspace Connected'), findsOneWidget);
-    expect(find.text('Paired as “MacBook Pro”'), findsOneWidget);
+    // Streamlined Workspace tab: Workspace title, display name, Connected indicator, Work Root and Advanced & Diagnostics
+    expect(find.text('Workspace'), findsWidgets);
+    expect(find.text('MacBook Pro'), findsOneWidget);
+    expect(find.text('Connected'), findsOneWidget);
     expect(find.text('Work Root'), findsOneWidget);
     expect(find.text('Advanced & Diagnostics'), findsOneWidget);
+
+    // No pairing form is shown when paired
+    expect(find.text('Connect this Workspace'), findsNothing);
+    expect(find.text('Pairing code'), findsNothing);
+    expect(find.text('Connect'), findsNothing);
 
     // Removed sections are not on the Workspace tab
     expect(find.text('Current Work'), findsNothing);
@@ -255,7 +261,7 @@ void main() {
     );
 
     expect(find.text('Conclave Workspace'), findsOneWidget);
-    expect(find.text('MacBook Pro'), findsOneWidget);
+    expect(find.text('MacBook Pro'), findsWidgets);
     expect(find.text('Connected'), findsWidgets);
 
     // Open overflow menu (3 lines icon)

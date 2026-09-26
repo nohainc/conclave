@@ -187,12 +187,19 @@ describe("Workspace pairing intents", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           token: pairing.token,
-          installationId: "install-test-1",
+          installationId: "install_12345678-1234-4234-8234-123456789abc",
           name: "Test Computer",
           hostname: "test.local",
           platform: "macos",
           architecture: "arm64",
           appVersion: "1.0.0",
+          runtimeCapabilities: {
+            os: "macos",
+            arch: "arm64",
+            appVersion: "1.0.0",
+            supportedRuntimes: ["dart"],
+            maxConcurrentWorkers: 1,
+          },
         }),
       }),
       env,
@@ -215,7 +222,28 @@ describe("Workspace pairing intents", () => {
           "SELECT installation_id FROM workspace_runtime_identities WHERE id = ?",
         )
         .get(claimed.workspaceRuntimeId),
-    ).toMatchObject({ installation_id: "install-test-1" });
+    ).toMatchObject({
+      installation_id: "install_12345678-1234-4234-8234-123456789abc",
+    });
+    expect(
+      sqlite
+        .prepare(
+          "SELECT hostname, platform, architecture, app_version FROM workspace_runtime_facts WHERE workspace_id = ?",
+        )
+        .get(claimed.workspaceId),
+    ).toMatchObject({
+      hostname: "test.local",
+      platform: "macos",
+      architecture: "arm64",
+      app_version: "1.0.0",
+    });
+    expect(
+      sqlite
+        .prepare(
+          "SELECT COUNT(*) AS count FROM workspace_audit_log WHERE workspace_id = ?",
+        )
+        .get(claimed.workspaceId),
+    ).toMatchObject({ count: 2 });
 
     const duplicate = await handleRedeemWorkspaceEnrollment(
       new Request("https://conclave.test/api/workspace-runtime/enroll", {
@@ -223,18 +251,168 @@ describe("Workspace pairing intents", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           token: pairing.token,
-          installationId: "install-test-1",
+          installationId: "install_12345678-1234-4234-8234-123456789abc",
           name: "Other",
         }),
       }),
       env,
     );
-    expect(duplicate.status).toBe(401);
+    expect(duplicate.status).toBe(409);
+    expect(await duplicate.json()).toMatchObject({
+      code: "pairing_already_claimed",
+      workspaceId: claimed.workspaceId,
+    });
     expect(
       sqlite
         .prepare("SELECT COUNT(*) AS count FROM execution_workspaces")
         .get(),
     ).toMatchObject({ count: 1 });
+
+    const anotherIntent = await handleCreateWorkspacePairingIntent(
+      new Request("https://conclave.test/api/workspace-pairing-intents", {
+        method: "POST",
+        body: "{}",
+      }),
+      env,
+    );
+    const secondPairing = (await anotherIntent.json()) as { token: string };
+    const alreadyPaired = await handleRedeemWorkspaceEnrollment(
+      new Request("https://conclave.test/api/workspace-runtime/enroll", {
+        method: "POST",
+        body: JSON.stringify({
+          token: secondPairing.token,
+          installationId: "install_12345678-1234-4234-8234-123456789abc",
+        }),
+      }),
+      env,
+    );
+    expect(alreadyPaired.status).toBe(409);
+    expect(await alreadyPaired.json()).toMatchObject({
+      code: "installation_already_paired",
+      workspaceId: claimed.workspaceId,
+    });
+    expect(
+      sqlite
+        .prepare("SELECT COUNT(*) AS count FROM execution_workspaces")
+        .get(),
+    ).toMatchObject({ count: 1 });
+  });
+
+  it("rejects invalid machine metadata without consuming the intent", async () => {
+    const { sqlite, env } = setup();
+    const created = await handleCreateWorkspacePairingIntent(
+      new Request("https://conclave.test/api/workspace-pairing-intents", {
+        method: "POST",
+        body: "{}",
+      }),
+      env,
+    );
+    const pairing = (await created.json()) as { token: string; id: string };
+    const response = await handleRedeemWorkspaceEnrollment(
+      new Request("https://conclave.test/api/workspace-runtime/enroll", {
+        method: "POST",
+        body: JSON.stringify({
+          token: pairing.token,
+          installationId: "bad-id",
+        }),
+      }),
+      env,
+    );
+    expect(response.status).toBe(400);
+    expect(
+      sqlite
+        .prepare("SELECT COUNT(*) AS count FROM execution_workspaces")
+        .get(),
+    ).toMatchObject({ count: 0 });
+    expect(
+      sqlite
+        .prepare(
+          "SELECT used_at FROM workspace_pairing_intents WHERE pairing_id = ?",
+        )
+        .get(pairing.id),
+    ).toMatchObject({ used_at: null });
+  });
+
+  it("rejects a suspended owner before creating any Workspace", async () => {
+    const { sqlite, env } = setup();
+    const created = await handleCreateWorkspacePairingIntent(
+      new Request("https://conclave.test/api/workspace-pairing-intents", {
+        method: "POST",
+        body: "{}",
+      }),
+      env,
+    );
+    const pairing = (await created.json()) as { token: string };
+    sqlite
+      .prepare("UPDATE users SET status = 'suspended' WHERE id = 'owner'")
+      .run();
+    const response = await handleRedeemWorkspaceEnrollment(
+      new Request("https://conclave.test/api/workspace-runtime/enroll", {
+        method: "POST",
+        body: JSON.stringify({ token: pairing.token }),
+      }),
+      env,
+    );
+    expect(response.status).toBe(403);
+    expect(
+      sqlite
+        .prepare("SELECT COUNT(*) AS count FROM execution_workspaces")
+        .get(),
+    ).toMatchObject({ count: 0 });
+  });
+
+  it("rolls back the Workspace and intent claim if any transaction write fails", async () => {
+    const { sqlite, env } = setup();
+    const created = await handleCreateWorkspacePairingIntent(
+      new Request("https://conclave.test/api/workspace-pairing-intents", {
+        method: "POST",
+        body: "{}",
+      }),
+      env,
+    );
+    const pairing = (await created.json()) as { token: string; id: string };
+    sqlite.exec(`
+      CREATE TRIGGER fail_pairing_audit
+      BEFORE INSERT ON workspace_audit_log
+      WHEN NEW.action = 'workspace.runtime.paired'
+      BEGIN SELECT RAISE(ABORT, 'injected audit failure'); END;
+    `);
+    await expect(
+      handleRedeemWorkspaceEnrollment(
+        new Request("https://conclave.test/api/workspace-runtime/enroll", {
+          method: "POST",
+          body: JSON.stringify({
+            token: pairing.token,
+            installationId: "install_12345678-1234-4234-8234-123456789abc",
+            name: "Test Computer",
+            hostname: "test.local",
+            platform: "macos",
+            architecture: "arm64",
+            appVersion: "1.0.0",
+            runtimeCapabilities: {
+              os: "macos",
+              arch: "arm64",
+              appVersion: "1.0.0",
+              supportedRuntimes: ["dart"],
+              maxConcurrentWorkers: 1,
+            },
+          }),
+        }),
+        env,
+      ),
+    ).rejects.toThrow("injected audit failure");
+    expect(
+      sqlite
+        .prepare("SELECT COUNT(*) AS count FROM execution_workspaces")
+        .get(),
+    ).toMatchObject({ count: 0 });
+    expect(
+      sqlite
+        .prepare(
+          "SELECT used_at FROM workspace_pairing_intents WHERE pairing_id = ?",
+        )
+        .get(pairing.id),
+    ).toMatchObject({ used_at: null });
   });
 
   it("returns status only to its owner, and supports cancellation and regeneration", async () => {

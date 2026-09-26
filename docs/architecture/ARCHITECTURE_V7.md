@@ -15,7 +15,7 @@ and [release gates](../roadmaps/ARCHITECTURE_V7_COMPLETION.md).
 
 v7 keeps the product model already established by the current application:
 
-~~~text
+```text
 Conclave AX
   -> Projects
        -> Workstreams
@@ -24,7 +24,7 @@ Conclave AX
   -> Workspaces
        -> Workspace
             -> Workers
-~~~
+```
 
 The execution implementation becomes simpler and more machine-native:
 
@@ -48,6 +48,7 @@ The complete mental model should fit in four lines:
 > **Worker** = locally configured AI/tool identity on that machine.
 
 The user does not need to understand:
+
 - Worker packages;
 - adapter protocol;
 - credential profiles;
@@ -63,7 +64,7 @@ ownership, and route compatibility contract are defined in the
 
 ## 3. Product topology
 
-~~~text
+```text
                          CONCLAVE AX
                              |
                              v
@@ -81,7 +82,7 @@ ownership, and route compatibility contract are defined in the
        |       |        |              |       |
      Codex  Gemini API Claude        Codex  Ollama
    Personal   Work     Review         Build   Local
-~~~
+```
 
 Each configured Worker exists on one Workspace only.
 
@@ -92,6 +93,7 @@ Each configured Worker exists on one Workspace only.
 Conclave AX is the **web application** and human orchestration/control surface. It is not the machine executor and it does not configure provider credentials locally.
 
 It owns UX for:
+
 - authentication;
 - Home summary for Projects, Workspaces, and Ready Workers;
 - Projects;
@@ -119,6 +121,7 @@ It does not own provider secrets.
 Cloud is the authoritative collaboration/orchestration control plane.
 
 It owns:
+
 - users and Project membership;
 - Workstreams;
 - Work Requests/Workflows/Runs;
@@ -137,6 +140,7 @@ Cloud does not execute an external AI/tool directly.
 Conclave Workspace is the **desktop application/runtime** installed on the execution computer. It is the persistent local execution/security boundary. All configured Workers are created/authenticated here.
 
 It owns:
+
 - pairing;
 - one machine runtime identity;
 - local Work Root;
@@ -159,6 +163,7 @@ A Worker adapter is signed integration code managed by Conclave Workspace.
 It owns translation between the Conclave assignment protocol and one external execution technology.
 
 Examples:
+
 - Codex adapter;
 - Antigravity adapter;
 - Claude Code adapter;
@@ -180,19 +185,27 @@ the computer's friendly OS name; the user may edit it before pairing.
 
 The desktop claims the code through:
 
-~~~text
+```text
 POST /api/workspace-runtime/enroll
-~~~
+```
 
 For a pairing intent, Cloud atomically consumes the intent, creates the
 Workspace and runtime identity, and returns the runtime credential once. The
 credential is stored on the desktop. A claimed installation cannot silently
 pair to another identity; it must be explicitly unpaired first. Existing
 Workspace enrollment codes remain supported for already-created Workspaces.
+Claim validation checks the intent state and active owner, validates the stable
+installation ID and bounded machine facts, and rejects an installation already
+bound to a live Workspace. The transaction records the installation binding,
+initial runtime facts, credential hash, and audit events together. Repeating a
+successful claim returns `409 pairing_already_claimed` with the existing
+Workspace ID and does not mint a second Workspace or credential; the desktop
+must retain the credential from the successful response.
 
 ### 5.2 Runtime reports machine facts
 
 After pairing, Workspace reports:
+
 - OS;
 - architecture;
 - hostname;
@@ -207,6 +220,7 @@ Machine facts are observed runtime state, not user configuration.
 The canonical download surface remains a dedicated Downloads page.
 
 Contextual links may appear:
+
 - Workspaces empty state;
 - Connect machine flow;
 - global app menu;
@@ -218,13 +232,14 @@ AX creates, checks, cancels, or regenerates temporary pairing intents through
 `/api/workspace-pairing-intents`. Status reads never return the raw code. The
 first successful desktop claim creates the permanent Workspace; expiry,
 cancellation, and a successful claim make the code unusable.
+
 - one runtime bearer token.
 
 The desktop app stores the bearer token only in the OS secure credential store and writes only non-secret registration metadata to disk. It then opens:
 
-~~~text
+```text
 /api/workspace-gateway/connect?workspaceRuntimeId=<runtime-id>
-~~~
+```
 
 and authenticates with the bearer token.
 
@@ -236,11 +251,12 @@ macOS is the first desktop release target.
 
 The supported repository build entrypoint is:
 
-~~~text
+```text
 bash scripts/build-workspace-macos.sh
-~~~
+```
 
 The script:
+
 - resolves Flutter dependencies;
 - runs analyze/tests unless explicitly skipped;
 - builds the native release app;
@@ -253,9 +269,9 @@ Conclave Workspace is distributed directly rather than through Mac App Store san
 
 A real Cloud smoke procedure is available through:
 
-~~~text
+```text
 CONCLAVE_ENROLLMENT_TOKEN=... bash scripts/test-workspace-cloud-connection.sh
-~~~
+```
 
 Use a disposable Workspace because the test consumes a real one-time enrollment and establishes a real runtime identity.
 
@@ -265,18 +281,18 @@ Conclave Workspace is background-first with a minimal GUI.
 
 ### 6.1 Before pairing
 
-~~~text
+```text
 Conclave Workspace
 
 Connect to Conclave AX
 Pairing code: [________]
 
 [Connect]
-~~~
+```
 
 ### 6.2 Main local view
 
-~~~text
+```text
 Conclave Workspace
 
 MacBook Pro
@@ -295,11 +311,12 @@ Authentication · Codex Personal · Running
 Machine
 Work Root   ...
 Version     ...
-~~~
+```
 
 ### 6.3 Local-only areas
 
 Recommended:
+
 - Overview;
 - Workers;
 - Permissions;
@@ -313,6 +330,7 @@ Do not replicate Projects/Workstreams/Work UI.
 Desktop builds should continue execution when the main window is closed.
 
 Tray/menu-bar controls may include:
+
 - connection status;
 - current work;
 - pause accepting new work;
@@ -327,7 +345,7 @@ Tray/menu-bar controls may include:
 
 A configured Worker contains safe logical/local fields:
 
-~~~text
+```text
 id
 workspaceId
 name
@@ -343,17 +361,17 @@ status
 adapterVersion
 createdAt
 updatedAt
-~~~
+```
 
 Cloud stores only the safe projection.
 
 ### 7.2 Cardinality
 
-~~~text
+```text
 Workspace 1 -> N Workers
 Worker N -> 1 Workspace
 Worker Type 1 -> N Workers
-~~~
+```
 
 No configured Worker Workspace-binding table is needed in the target model.
 
@@ -362,6 +380,7 @@ No configured Worker Workspace-binding table is needed in the target model.
 Worker name need not be globally unique.
 
 Recommended uniqueness:
+
 - unique within one Workspace, case-insensitive where practical.
 
 Cloud always uses immutable Worker ID.
@@ -372,7 +391,7 @@ Worker Type describes an integration.
 
 Suggested metadata:
 
-~~~text
+```text
 id
 displayName
 adapterProtocolVersion
@@ -387,11 +406,12 @@ publisher
 packageDigest
 signature
 releaseChannel
-~~~
+```
 
 ### 8.1 Tool-backed types
 
 Examples:
+
 - Codex;
 - Antigravity;
 - Claude Code.
@@ -399,6 +419,7 @@ Examples:
 Adapter may invoke a locally installed provider tool.
 
 Manifest declares:
+
 - executable prerequisite;
 - supported versions;
 - detection command;
@@ -408,6 +429,7 @@ Manifest declares:
 ### 8.2 API-backed types
 
 Examples:
+
 - OpenAI API;
 - Gemini API;
 - Anthropic API.
@@ -419,6 +441,7 @@ API credentials remain in local secure storage.
 ### 8.3 Local-model types
 
 Examples:
+
 - Ollama;
 - LM Studio;
 - vLLM endpoint.
@@ -441,6 +464,7 @@ Subscription/account brand, Worker Type and model are separate concepts.
 Model is not Worker Type.
 
 A configured Worker may use:
+
 - fixed model;
 - default model + allowed set;
 - provider/tool Auto mode.
@@ -449,11 +473,11 @@ An Assignment may request a model.
 
 Effective model must satisfy:
 
-~~~text
+```text
 Assignment request
 ∩ configured Worker allowed models
 ∩ adapter/tool capabilities
-~~~
+```
 
 If no model is explicitly requested, use configured Worker default/Auto.
 
@@ -463,7 +487,7 @@ If no model is explicitly requested, use configured Worker default/Auto.
 
 Flow:
 
-~~~text
+```text
 Workers
 -> Add Worker
 -> choose Worker Type
@@ -475,13 +499,14 @@ Workers
 -> validate
 -> create
 -> sync safe projection
-~~~
+```
 
 ### 10.2 Authentication
 
 Auth is adapter-defined but local.
 
 Possible strategies:
+
 - provider browser login;
 - cached subscription session;
 - API key;
@@ -489,6 +514,7 @@ Possible strategies:
 - no credential/local endpoint.
 
 Cloud receives only:
+
 - strategy label;
 - readiness;
 - safe provider/account hint if permitted.
@@ -505,7 +531,7 @@ Cloud stores enough Worker data to schedule safely without owning secret configu
 
 Suggested projection:
 
-~~~text
+```text
 workerId
 workspaceId
 ownerUserId
@@ -520,7 +546,7 @@ adapterVersion
 credentialStatus
 lastSeenAt
 revision
-~~~
+```
 
 Workspace sends idempotent upsert/tombstone events.
 
@@ -533,6 +559,7 @@ Cloud rejects inventory updates from any runtime other than the Worker's owning 
 Workspace is authoritative for existence/local configuration/readiness.
 
 Sync triggers:
+
 - Worker created;
 - Worker edited;
 - credential state changed;
@@ -545,6 +572,7 @@ Sync triggers:
 ### 12.2 Cloud -> local operational policy
 
 Cloud may synchronize:
+
 - scheduling enabled/disabled;
 - drain state;
 - Project/Workstream authorization context;
@@ -578,7 +606,7 @@ Cloud owns remote scheduling/authorization fields.
 
 Scheduler candidate becomes simpler:
 
-~~~text
+```text
 Configured Worker
 -> owning Workspace
 -> active Workspace Project Grant
@@ -589,21 +617,23 @@ Configured Worker
 -> local capacity available
 -> Cloud scheduling enabled
 -> Workstream policy allows Worker
-~~~
+```
 
 There is no Workspace-binding search for a configured Worker because Worker already has exactly one Workspace.
 
 For stateful Work:
+
 - Workspace must equal Workstream Primary Workspace.
 
 For stateless Work:
+
 - eligible Worker/Workspace may be selected from granted Workspaces.
 
 ## 14. Assignment snapshot
 
 Assignment snapshots include:
 
-~~~text
+```text
 projectId
 workstreamId
 workRequestId
@@ -616,9 +646,10 @@ requested/resolvedModel
 capabilities/permissions snapshot
 executionClass
 lease/fencing data where stateful
-~~~
+```
 
 Do not include:
+
 - provider secret;
 - arbitrary executable path;
 - arbitrary local CWD.
@@ -627,7 +658,7 @@ Do not include:
 
 Default:
 
-~~~text
+```text
 Cloud assignment
 -> Workspace validates
 -> resolve Workstream CWD
@@ -640,7 +671,7 @@ Cloud assignment
 -> capture result
 -> terminate/cleanup
 -> report completion
-~~~
+```
 
 One assignment child process is default.
 
@@ -649,6 +680,7 @@ One assignment child process is default.
 Prefer structured stdin/stdout protocol.
 
 Initial protocol messages:
+
 - initialize;
 - validate;
 - execute;
@@ -663,6 +695,7 @@ through an explicit versioned protocol extension rather than implying that the
 initial V7 schema already supports it.
 
 Protocol must include:
+
 - schema version;
 - assignment ID;
 - bounded payload sizes;
@@ -675,6 +708,7 @@ Do not scrape interactive terminal UI when a supported machine-readable/headless
 Workspace runtime supervises adapter/tool process trees.
 
 Requirements:
+
 - explicit CWD;
 - minimal environment;
 - scoped secret injection;
@@ -692,9 +726,9 @@ A crashed adapter must not disconnect the Workspace runtime.
 
 ADR-011 remains unchanged:
 
-~~~text
+```text
 <work-root>/<project-id>/<workstream-id>/
-~~~
+```
 
 All Workers on one Workspace assigned to the same Workstream see the same directory.
 
@@ -723,6 +757,7 @@ Stateful Workstream mutation lock is an additional independent constraint.
 ### Workers inventory
 
 Show:
+
 - Worker name;
 - Worker Type;
 - owning Workspace;
@@ -735,6 +770,7 @@ Show:
 ### Allowed actions
 
 Initial:
+
 - open Worker details;
 - enable/disable scheduling;
 - drain;
@@ -755,6 +791,7 @@ Worker removal is local-first; Cloud may support a remote removal request later 
 ## 21. Worker details in Conclave AX
 
 Recommended sections:
+
 - Overview;
 - Workspace;
 - Activity/Audit;
@@ -763,11 +800,13 @@ Recommended sections:
 Remove multi-Workspace binding UX.
 
 Connection/authentication details are informational:
+
 - Ready;
 - Needs authentication;
 - Needs local attention.
 
 Action copy should say:
+
 > Complete in Conclave Workspace on MacBook Pro.
 
 ## 22. Project/Workstream authorization
@@ -775,6 +814,7 @@ Action copy should say:
 Worker authorization remains Cloud-controlled.
 
 Project policy may allow:
+
 - any eligible Worker on granted Workspace;
 - explicit Worker IDs;
 - Worker Types;
@@ -789,6 +829,7 @@ Because a Worker has one Workspace, authorization is easier to reason about.
 Conclave Workspace is the local authority.
 
 Cloud can request execution but local runtime verifies:
+
 - owning Worker;
 - Workspace grant context;
 - adapter signature/version;
@@ -805,9 +846,11 @@ No Cloud instruction can override local trust boundaries.
 Three update layers:
 
 ### Conclave Workspace app
+
 Normal signed application update.
 
 ### Worker adapter package
+
 Managed inside Conclave Workspace with signature/digest verification and rollback.
 
 The signature covers both the file-tree digest and the canonical manifest
@@ -817,6 +860,7 @@ and health before atomic activation. Cloud stores versioned release metadata
 and archives but does not grant execution trust.
 
 ### Third-party tool
+
 Provider-owned lifecycle unless Conclave intentionally takes ownership.
 
 UI must distinguish these.
@@ -824,39 +868,45 @@ UI must distinguish these.
 ## 25. Failure behavior
 
 ### Cloud offline
+
 Workspace does not accept new Cloud work; running assignment follows explicit connection-loss policy.
 
 ### Workspace offline
+
 Cloud stops scheduling it.
 
 ### Adapter crash
+
 Assignment fails/retries according to Workflow; Workspace remains online.
 
 ### Credential expiry
+
 Worker becomes Needs authentication; other Workers remain eligible.
 
 ### Tool missing/outdated
+
 Worker becomes Needs attention.
 
 ### Adapter update failure
+
 Keep previously verified active version where safe.
 
 ## 26. Data ownership summary
 
-| Data | Authority |
-| --- | --- |
-| Project/Workstream | Cloud |
-| Workspace registration | Cloud |
-| Work Root/files | local Workspace |
-| configured Worker existence/config | local Workspace |
-| Worker safe inventory projection | Cloud replica |
-| provider secret | local Workspace secure store |
-| adapter catalog/release metadata | Cloud |
-| adapter installed state | local Workspace |
-| scheduling enable/drain (target; controls incomplete) | Cloud |
-| Project/Workstream Worker authorization | Cloud |
-| local permission ceiling | local Workspace |
-| Run/Assignment/audit | Cloud |
+| Data                                                  | Authority                    |
+| ----------------------------------------------------- | ---------------------------- |
+| Project/Workstream                                    | Cloud                        |
+| Workspace registration                                | Cloud                        |
+| Work Root/files                                       | local Workspace              |
+| configured Worker existence/config                    | local Workspace              |
+| Worker safe inventory projection                      | Cloud replica                |
+| provider secret                                       | local Workspace secure store |
+| adapter catalog/release metadata                      | Cloud                        |
+| adapter installed state                               | local Workspace              |
+| scheduling enable/drain (target; controls incomplete) | Cloud                        |
+| Project/Workstream Worker authorization               | Cloud                        |
+| local permission ceiling                              | local Workspace              |
+| Run/Assignment/audit                                  | Cloud                        |
 
 ## 27. Migration from v6 configured Workers
 
@@ -866,16 +916,19 @@ compatibility design for current runtime code. Current behavior is defined by
 the sections above and ADR-012.
 
 Current v6:
+
 - configured Worker is Cloud-created;
 - Worker may bind to multiple Workspaces;
 - credential/readiness is per binding.
 
 v7 target:
+
 - configured Worker is local-created;
 - Worker has exactly one Workspace;
 - credential/readiness is direct local Worker state.
 
 Pre-production migration preference:
+
 - clean dev schema/reset where practical;
 - do not preserve multi-Workspace binding complexity as permanent compatibility architecture.
 
@@ -884,6 +937,7 @@ Temporary migration may convert each current Worker/Workspace binding into one l
 ## 28. Non-goals for initial v7
 
 Do not initially build:
+
 - separate Worker desktop apps;
 - persistent Worker daemons;
 - hardware fingerprinting;
@@ -899,27 +953,26 @@ Do not initially build:
 
 A new user should be able to understand:
 
-~~~text
+```text
 Install Conclave Workspace on a computer.
 Add/authenticate Workers on that computer.
 Conclave AX discovers those Workers.
 Use them from Projects and Workstreams.
-~~~
+```
 
 No additional infrastructure vocabulary should be required.
-
 
 ## 30. Implementation audit and release gates
 
 The current source-level convergence is tracked in [V7 Implementation Audit](V7_IMPLEMENTATION_AUDIT.md).
 
 Do not declare v7 production-complete until:
+
 - desktop pairing + Workspace Gateway smoke succeeds against the target Cloud;
 - signed/notarized macOS build passes;
 - at least one real Codex and one real Antigravity execution succeed from locally configured Workers;
 - legacy Cloud-created/multi-Workspace Worker execution is no longer required;
 - adapter package verification no longer requires shipping the signing secret and uses asymmetric public-key trust.
-
 
 ## Completion plan
 

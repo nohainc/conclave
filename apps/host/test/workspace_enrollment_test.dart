@@ -159,6 +159,42 @@ void main() {
         saved?.installationId, 'install_12345678-1234-4234-8234-123456789abc');
   });
 
+  test('blocks pairing if installation is already paired locally', () async {
+    final temp =
+        await Directory.systemTemp.createTemp('conclave-pairing-block-test-');
+    addTearDown(() => temp.delete(recursive: true));
+
+    final registration = const HostRegistration(
+      hostId: 'runtime-existing',
+      workspaceId: 'workspace-existing',
+      cloudUrl: 'https://app.conclaveax.com',
+      name: 'Existing Workspace',
+      hostname: 'test-mac',
+      installationId: 'install_existing',
+    );
+    await HostRegistrationStore(temp).write(registration);
+
+    final service = WorkspacePairingService(
+      dataDirectory: temp,
+      credentialStore: _MemoryCredentials(),
+    );
+
+    expect(
+      () => service.pair(
+        cloudUrl: 'https://app.conclaveax.com',
+        token: 'new-token',
+        hostname: 'test-mac',
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          contains('This installation is already connected to a Workspace'),
+        ),
+      ),
+    );
+  });
+
   group('SafeMachineFacts', () {
     test('collects safe machine facts without secrets', () {
       final facts = SafeMachineFacts.collect(

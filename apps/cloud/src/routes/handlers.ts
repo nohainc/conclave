@@ -4702,6 +4702,7 @@ async function handleRedeemWorkspaceEnrollment(
     platform?: string;
     architecture?: string;
     appVersion?: string;
+    runtimeCapabilities?: unknown;
   }>(await request.text(), {});
 
   const token = body.token?.trim();
@@ -4712,25 +4713,167 @@ async function handleRedeemWorkspaceEnrollment(
   const tokenHash = await hashToken(token);
   const now = new Date().toISOString();
   const pairingIntent = await env.CONCLAVE_DB.prepare(
-    `SELECT pairing_id AS pairingId, owner_user_id AS ownerUserId
+    `SELECT pairing_id AS pairingId, owner_user_id AS ownerUserId,
+            expires_at AS expiresAt, cancelled_at AS cancelledAt,
+            used_at AS usedAt, claimed_workspace_id AS claimedWorkspaceId
        FROM workspace_pairing_intents
-      WHERE token_hash = ?1 AND used_at IS NULL AND cancelled_at IS NULL
-        AND expires_at > ?2`,
+      WHERE token_hash = ?1`,
   )
-    .bind(tokenHash, now)
-    .first<{ pairingId: string; ownerUserId: string }>();
+    .bind(tokenHash)
+    .first<{
+      pairingId: string;
+      ownerUserId: string;
+      expiresAt: string;
+      cancelledAt: string | null;
+      usedAt: string | null;
+      claimedWorkspaceId: string | null;
+    }>();
   if (pairingIntent) {
+    if (pairingIntent.expiresAt <= now) {
+      return json({ error: "Pairing code has expired" }, { status: 410 });
+    }
+    if (pairingIntent.cancelledAt) {
+      return json({ error: "Pairing code was cancelled" }, { status: 409 });
+    }
+    if (pairingIntent.usedAt) {
+      return json(
+        {
+          error:
+            "Pairing code was already claimed; retry cannot create another Workspace",
+          code: "pairing_already_claimed",
+          workspaceId: pairingIntent.claimedWorkspaceId,
+        },
+        { status: 409 },
+      );
+    }
+
+    const owner = await env.CONCLAVE_DB.prepare(
+      "SELECT status FROM users WHERE id = ?1",
+    )
+      .bind(pairingIntent.ownerUserId)
+      .first<{ status: string }>();
+    if (!owner || owner.status !== "active") {
+      return json(
+        { error: "Pairing owner is no longer active" },
+        { status: 403 },
+      );
+    }
+
     const installationId = body.installationId?.trim();
     const name = body.name?.trim();
-    if (!installationId || installationId.length > 200) {
+    if (
+      !installationId ||
+      !/^install_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        installationId,
+      )
+    ) {
       return json(
-        { error: "A valid installationId is required to claim pairing" },
+        { error: "A valid stable installationId is required to claim pairing" },
         { status: 400 },
       );
     }
-    if (!name || name.length > 120) {
+    const existingInstallation = await env.CONCLAVE_DB.prepare(
+      `SELECT identity.workspace_id AS workspaceId
+         FROM workspace_runtime_identities identity
+         JOIN execution_workspaces workspace
+           ON workspace.id = identity.workspace_id
+        WHERE identity.installation_id = ?1
+          AND identity.revoked_at IS NULL
+          AND workspace.status <> 'revoked'
+        LIMIT 1`,
+    )
+      .bind(installationId)
+      .first<{ workspaceId: string }>();
+    if (existingInstallation) {
       return json(
-        { error: "A Workspace display name is required to claim pairing" },
+        {
+          error:
+            "This installation is already paired; unpair it before pairing another Workspace",
+          code: "installation_already_paired",
+          workspaceId: existingInstallation.workspaceId,
+        },
+        { status: 409 },
+      );
+    }
+
+    const hostname = body.hostname?.trim();
+    const platform = body.platform?.trim().toLowerCase();
+    const architecture = body.architecture?.trim().toLowerCase();
+    const appVersion = body.appVersion?.trim();
+    if (
+      !hostname ||
+      hostname.length > 253 ||
+      /[\u0000-\u001f\u007f]/.test(hostname) ||
+      !["macos", "linux", "windows"].includes(platform ?? "") ||
+      !["arm64", "x64"].includes(architecture ?? "") ||
+      !appVersion ||
+      appVersion.length > 64 ||
+      !/^[0-9A-Za-z.+-]+$/.test(appVersion)
+    ) {
+      return json(
+        { error: "Machine metadata is invalid or exceeds supported bounds" },
+        { status: 400 },
+      );
+    }
+    if (!name || name.length > 120 || /[\u0000-\u001f\u007f]/.test(name)) {
+      return json(
+        { error: "Workspace name is invalid or exceeds 120 characters" },
+        { status: 400 },
+      );
+    }
+
+    const capabilities = body.runtimeCapabilities ?? {
+      os: platform,
+      arch: architecture,
+      appVersion,
+      supportedRuntimes: ["dart"],
+      maxConcurrentWorkers: 1,
+    };
+    if (
+      capabilities === null ||
+      typeof capabilities !== "object" ||
+      Array.isArray(capabilities)
+    ) {
+      return json(
+        { error: "Runtime capabilities must be an object" },
+        { status: 400 },
+      );
+    }
+    const capabilityObject = capabilities as Record<string, unknown>;
+    const capabilityKeys = Object.keys(capabilityObject);
+    const supportedRuntimes = capabilityObject.supportedRuntimes;
+    if (
+      capabilityKeys.some(
+        (key) =>
+          ![
+            "os",
+            "arch",
+            "appVersion",
+            "supportedRuntimes",
+            "maxConcurrentWorkers",
+          ].includes(key),
+      ) ||
+      JSON.stringify(capabilityObject).length > 4096 ||
+      capabilityObject.os !== platform ||
+      capabilityObject.arch !== architecture ||
+      capabilityObject.appVersion !== appVersion ||
+      !Array.isArray(supportedRuntimes) ||
+      supportedRuntimes.length > 16 ||
+      supportedRuntimes.some(
+        (runtime) =>
+          typeof runtime !== "string" ||
+          runtime.length === 0 ||
+          runtime.length > 32 ||
+          !/^[a-z0-9_-]+$/i.test(runtime),
+      ) ||
+      !Number.isInteger(capabilityObject.maxConcurrentWorkers) ||
+      (capabilityObject.maxConcurrentWorkers as number) < 1 ||
+      (capabilityObject.maxConcurrentWorkers as number) > 256
+    ) {
+      return json(
+        {
+          error: "Runtime capabilities are invalid or exceed supported bounds",
+        },
         { status: 400 },
       );
     }
@@ -4749,6 +4892,16 @@ async function handleRedeemWorkspaceEnrollment(
              WHERE pairing_id = ?5 AND token_hash = ?6
                AND owner_user_id = ?2 AND used_at IS NULL
                AND cancelled_at IS NULL AND expires_at > ?4
+               AND EXISTS (SELECT 1 FROM users WHERE id = ?2 AND status = 'active')
+          )
+         UNION ALL
+         SELECT NULL, NULL, NULL, NULL, NULL, NULL
+          WHERE NOT EXISTS (
+            SELECT 1 FROM workspace_pairing_intents
+             WHERE pairing_id = ?5 AND token_hash = ?6
+               AND owner_user_id = ?2 AND used_at IS NULL
+               AND cancelled_at IS NULL AND expires_at > ?4
+               AND EXISTS (SELECT 1 FROM users WHERE id = ?2 AND status = 'active')
           )`,
       ).bind(
         workspaceId,
@@ -4775,11 +4928,7 @@ async function handleRedeemWorkspaceEnrollment(
         `INSERT INTO workspace_runtime_identities
            (id, workspace_id, credential_key_ref, credential_token_hash,
             installation_id, created_at, revoked_at)
-         SELECT ?1, ?2, ?3, ?4, ?5, ?6, NULL
-          WHERE EXISTS (
-            SELECT 1 FROM execution_workspaces
-             WHERE id = ?2 AND owner_user_id = ?7
-          )`,
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL)`,
       ).bind(
         runtimeId,
         workspaceId,
@@ -4787,7 +4936,20 @@ async function handleRedeemWorkspaceEnrollment(
         authTokenHash,
         installationId,
         now,
-        pairingIntent.ownerUserId,
+      ),
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO workspace_runtime_facts
+           (workspace_id, platform, architecture, hostname, app_version,
+            runtime_capabilities_json, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`,
+      ).bind(
+        workspaceId,
+        platform,
+        architecture,
+        hostname,
+        appVersion,
+        JSON.stringify(capabilityObject),
+        now,
       ),
       env.CONCLAVE_DB.prepare(
         `INSERT INTO workspace_audit_log
@@ -4805,11 +4967,25 @@ async function handleRedeemWorkspaceEnrollment(
         JSON.stringify({
           pairingId: pairingIntent.pairingId,
           installationId,
-          hostname: body.hostname ?? null,
-          platform: body.platform ?? null,
-          architecture: body.architecture ?? null,
-          appVersion: body.appVersion ?? null,
+          hostname,
+          platform,
+          architecture,
+          appVersion,
         }),
+        now,
+      ),
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO workspace_audit_log
+           (id, workspace_id, actor_type, actor_id, action, target_type,
+            target_id, details_json, created_at)
+         VALUES (?1, ?2, 'user', ?3, 'workspace.pairing.claimed',
+                 'workspace_pairing_intent', ?4, ?5, ?6)`,
+      ).bind(
+        `audit-${crypto.randomUUID()}`,
+        workspaceId,
+        pairingIntent.ownerUserId,
+        pairingIntent.pairingId,
+        JSON.stringify({ installationId, runtimeId }),
         now,
       ),
     ]);

@@ -318,7 +318,16 @@ class WorkspacePairingService {
     required String hostname,
     String? proposedWorkspaceName,
     String? installationId,
+    bool force = false,
   }) async {
+    final existing = HostRegistrationStore(dataDirectory).readSync();
+    if (existing != null && !force) {
+      throw StateError(
+        'This installation is already connected to a Workspace. '
+        'Disconnect the current Workspace before connecting to another account.',
+      );
+    }
+
     final client = WorkspaceEnrollmentClient(cloudUrl: cloudUrl);
     try {
       final result = await client.redeem(
