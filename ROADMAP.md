@@ -30,17 +30,24 @@ The current implementation audit is:
 
 [V7 Implementation Audit](docs/architecture/V7_IMPLEMENTATION_AUDIT.md)
 
-The completion sequence is intentionally:
+Phase 1 (Cloud-owned Worker scheduling state, authoritative snapshot
+reconciliation, AX scheduling controls, and the V7-only candidate contract) is
+implemented in `main@2c740092`.
 
-1. finish V7 Cloud scheduling state and candidate model;
-2. prove the real V7 end-to-end path;
-3. remove V6 Worker binding/API/persistence compatibility;
-4. replace shared-secret release trust with asymmetric signing;
-5. automate first-party adapter releases;
-6. finish production Worker coverage and live acceptance;
-7. harden failure/security/reconciliation behavior;
-8. finish macOS background/update/diagnostics UX;
-9. declare v7 the implemented baseline only after all release gates pass.
+The remaining sequence is intentionally:
+
+1. **Phase 2:** prove the real V7 scheduler -> Gateway -> Workspace -> adapter
+   end-to-end path;
+2. **Phase 3:** remove V6 Worker scheduler/API/persistence compatibility;
+3. **Phase 4:** replace shared-secret release trust with asymmetric signing and
+   automate release publication;
+4. **Phase 5:** finish production Worker coverage and live-provider acceptance;
+5. **Phase 6:** harden failure/recovery/security behavior;
+6. **Phase 7:** finish macOS background/update/diagnostics UX;
+7. **Phase 8:** declare v7 the implemented baseline only after all release
+   gates pass.
+
+Destructive V6 cleanup is blocked until the Phase 2 behavioral E2E gate passes.
 
 ## Historical roadmaps
 
