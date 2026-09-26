@@ -303,6 +303,12 @@ class _WorkspaceCardBody extends StatelessWidget {
             ),
           ],
         ),
+        const Padding(
+          padding: EdgeInsets.only(bottom: 8),
+          child: Text(
+            'Worker configuration and authentication are managed in Conclave Workspace on this computer.',
+          ),
+        ),
         if (workers.isEmpty)
           Text('No Workers have synced from this Workspace.',
               style: TextStyle(color: theme.colorScheme.onSurfaceVariant))
@@ -342,46 +348,166 @@ class _WorkspaceCardBody extends StatelessWidget {
   }
 }
 
-class _WorkerRow extends StatelessWidget {
+class _WorkerRow extends StatefulWidget {
   const _WorkerRow({required this.worker, required this.onScheduling});
   final StudioWorkspaceWorker worker;
   final Future<void> Function(StudioWorkspaceWorker, String)? onScheduling;
 
   @override
+  State<_WorkerRow> createState() => _WorkerRowState();
+}
+
+class _WorkerRowState extends State<_WorkerRow> {
+  bool _showDiagnostics = false;
+
+  @override
   Widget build(BuildContext context) {
-    final ready = worker.status == 'ready' &&
-        const {'ready', 'not_required'}.contains(worker.credentialStatus);
+    final worker = widget.worker;
     final action = switch (worker.schedulingState) {
-      'enabled' => 'disable',
-      'draining' => null,
+      'enabled' || 'draining' => 'disable',
       _ => 'enable',
     };
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(ready ? Icons.check_circle_outline : Icons.warning_amber),
-      title: Text(worker.name),
-      subtitle: Text(
-          '${worker.workerTypeId} · ${ready ? 'Ready' : worker.status == 'disabled' ? 'Disabled locally' : 'Needs attention'} · Scheduling ${worker.schedulingState}'),
-      trailing: onScheduling == null
-          ? null
-          : Wrap(
-              spacing: 2,
+    final readiness = _readinessLabel(worker.status);
+    final credential = _credentialLabel(worker.credentialStatus);
+    return Column(
+      children: [
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          onTap: () => setState(() => _showDiagnostics = !_showDiagnostics),
+          leading: Icon(worker.status == 'ready'
+              ? Icons.check_circle_outline
+              : Icons.warning_amber),
+          title: Text(worker.name),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 4,
               children: [
-                if (action != null)
-                  TextButton(
-                    onPressed: () => onScheduling!(worker, action),
-                    child: Text(action == 'enable' ? 'Enable' : 'Disable'),
-                  ),
-                if (worker.schedulingState == 'enabled')
-                  TextButton(
-                    onPressed: () => onScheduling!(worker, 'drain'),
-                    child: const Text('Drain'),
-                  ),
+                _WorkerStatus(text: _workerTypeLabel(worker.workerTypeId)),
+                _WorkerStatus(text: 'Model · ${worker.defaultModel ?? 'Auto'}'),
+                _WorkerStatus(text: readiness),
+                _WorkerStatus(text: credential),
+                _WorkerStatus(
+                    text:
+                        'Cloud scheduling · ${_schedulingLabel(worker.schedulingState)}'),
               ],
             ),
+          ),
+          trailing: widget.onScheduling == null
+              ? Icon(_showDiagnostics ? Icons.expand_less : Icons.expand_more)
+              : Wrap(
+                  spacing: 2,
+                  children: [
+                    TextButton(
+                      onPressed: () => widget.onScheduling!(worker, action),
+                      child: Text(action == 'enable' ? 'Enable' : 'Disable'),
+                    ),
+                    if (worker.schedulingState == 'enabled')
+                      TextButton(
+                        onPressed: () => widget.onScheduling!(worker, 'drain'),
+                        child: const Text('Drain'),
+                      ),
+                  ],
+                ),
+        ),
+        if (_showDiagnostics)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(48, 0, 8, 12),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Wrap(
+                spacing: 18,
+                runSpacing: 8,
+                children: [
+                  _Diagnostic(label: 'Worker Type', value: worker.workerTypeId),
+                  _Diagnostic(
+                      label: 'Adapter', value: worker.adapterVersion ?? '—'),
+                  _Diagnostic(
+                      label: 'Capabilities',
+                      value: worker.capabilities.isEmpty
+                          ? '—'
+                          : worker.capabilities.join(', ')),
+                  _Diagnostic(
+                      label: 'Local concurrency',
+                      value: '${worker.localConcurrencyLimit}'),
+                  if (worker.cloudConcurrencyLimit != null)
+                    _Diagnostic(
+                        label: 'Cloud concurrency',
+                        value: '${worker.cloudConcurrencyLimit}'),
+                  if (credential != 'Authentication ready' &&
+                      credential != 'Authentication not required')
+                    _Diagnostic(
+                        label: 'Local attention',
+                        value:
+                            'Complete sign-in or setup in Conclave Workspace on ${worker.workspaceName}.'),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
+
+class _WorkerStatus extends StatelessWidget {
+  const _WorkerStatus({required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Chip(
+        visualDensity: VisualDensity.compact,
+        label: Text(text),
+      );
+}
+
+class _Diagnostic extends StatelessWidget {
+  const _Diagnostic({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Text('$label · $value');
+}
+
+String _workerTypeLabel(String value) => switch (value.toLowerCase()) {
+      'claude-code' => 'Claude Code',
+      'anthropic-api' => 'Anthropic API',
+      'openai-api' => 'OpenAI API',
+      'gemini-api' => 'Gemini API',
+      'antigravity' => 'Antigravity',
+      'ollama' => 'Ollama',
+      'codex' => 'Codex',
+      _ => value
+          .split(RegExp(r'[-_]'))
+          .where((part) => part.isNotEmpty)
+          .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+          .join(' '),
+    };
+
+String _readinessLabel(String value) => switch (value.toLowerCase()) {
+      'ready' => 'Ready locally',
+      'disabled' => 'Disabled locally',
+      'removed' => 'Removed locally',
+      'needs_attention' => 'Needs local attention',
+      _ => 'Readiness · $value',
+    };
+
+String _credentialLabel(String value) => switch (value.toLowerCase()) {
+      'ready' => 'Authentication ready',
+      'not_required' => 'Authentication not required',
+      'needs_authentication' || 'missing' => 'Sign-in required',
+      'expired' => 'Sign-in expired',
+      'error' => 'Authentication needs attention',
+      _ => 'Authentication · $value',
+    };
+
+String _schedulingLabel(String value) => switch (value.toLowerCase()) {
+      'enabled' => 'Enabled',
+      'disabled' => 'Disabled',
+      'draining' => 'Draining',
+      _ => value,
+    };
 
 class _Fact extends StatelessWidget {
   const _Fact({required this.label, required this.value});

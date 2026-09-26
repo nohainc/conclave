@@ -1,6 +1,6 @@
 # Conclave AX Workspaces UX and Data Contract
 
-**Status:** Phase 1 contract; Phase 2 Workspaces page is implemented.
+**Status:** Phase 1 contract; Phases 2 and 3 Workspaces UI are implemented.
 
 **Applies to:** Conclave AX and its Cloud read models.
 
@@ -34,8 +34,10 @@ Workspaces
 
 This contract defines the UX and frontend read model. Phase 2 replaces the
 two-tab Execution surface and separate Workspace detail screen with expandable
-Workspace cards. Compatibility parsing remains while old links continue to
-resolve to the Workspaces page.
+Workspace cards. Phase 3 moves Worker inventory, readiness, credential
+attention, Cloud scheduling, and Enable/Disable/Drain controls into each
+owning Workspace card. Compatibility parsing remains while old links continue
+to resolve to the Workspaces page.
 
 ## Canonical Workspace overview model
 
@@ -111,12 +113,14 @@ readiness, Cloud scheduling enabled, an online Workspace, active grants,
 matching Project/Workstream policy, capability/model compatibility, and
 available capacity.
 
-Normal Worker rows expose Worker name, type, default model when useful, local
-readiness, and Cloud scheduling state. `Auto` is the presentation for no
-configured default model. Keep revisions, auth strategy, raw model allowlists,
-permission names, credential references, local paths, and internal IDs out of
-the normal row. An expanded detail view may show adapter version, capabilities,
-concurrency limits, and a safe attention reason.
+Normal Worker rows expose Worker name, friendly type, default model, local
+readiness, credential attention, and Cloud scheduling state. `Auto` is the
+presentation for no configured default model. Keep revisions, auth strategy,
+raw model allowlists, permission names, credential references, local paths,
+and internal IDs out of the normal row. An expanded diagnostics view may show
+adapter version, capabilities, concurrency limits, and safe local remediation
+guidance. Worker configuration and authentication are explicitly managed in
+Conclave Workspace on the owning computer.
 
 AX may enable, disable, or drain scheduling. AX may not create or locally
 remove a Worker, set credentials, approve local permissions, install a CLI,
@@ -222,9 +226,11 @@ phase removes it deliberately.
 ## Implementation notes
 
 The page now shows runtime facts, synchronized Workspace Workers, Project grant
-counts, and activity inline in expandable cards. Worker rows are sourced from
-the V7 inventory and do not expose credential strategy or local permission
-details. Grant counts are refreshed from Project Workspace Grant read models;
+counts, and activity inline in expandable cards. Worker rows are filtered
+exclusively by `workspaceId`, are sourced from the V7 inventory, and do not
+expose credential strategy or local permission details. The old global
+Workers widget is compatibility-only and displays no separate inventory or
+controls. Grant counts are refreshed from Project Workspace Grant read models;
 runtime activity continues to use the current available assignment summary.
 
 `StudioAgent` remains as a transitional UI adapter for Workspace cards and

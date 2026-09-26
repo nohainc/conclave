@@ -164,8 +164,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Workers'), findsNWidgets(2));
       expect(find.text('Codex Personal'), findsOneWidget);
-      expect(find.textContaining('codex'), findsOneWidget);
-      expect(find.textContaining('Scheduling disabled'), findsOneWidget);
+      expect(find.text('Codex'), findsOneWidget);
+      expect(find.text('Cloud scheduling · Disabled'), findsOneWidget);
       expect(find.text('Auth strategy'), findsNothing);
       expect(find.textContaining('credentialRef'), findsNothing);
       expect(find.text('Add legacy Cloud Worker'), findsNothing);
@@ -288,6 +288,179 @@ void main() {
       expect(find.text('Codex Personal'), findsNothing);
       expect(find.text('AI Accounts'), findsNothing);
       expect(find.byTooltip('Remove binding'), findsNothing);
+    });
+
+    testWidgets('Worker rows show V7 status and scheduling controls',
+        (tester) async {
+      final worker = StudioWorkspaceWorker.fromJson({
+        'id': 'worker-claude',
+        'workspaceId': 'workspace-1',
+        'workspaceName': 'Build Mac',
+        'workerTypeId': 'claude-code',
+        'name': 'Claude on Build Mac',
+        'status': 'ready',
+        'authStrategy': 'browser_auth',
+        'credentialStatus': 'expired',
+        'localConcurrencyLimit': 2,
+        'revision': 3,
+        'capabilities': ['code'],
+        'allowedModels': ['claude-sonnet'],
+        'schedulingState': 'enabled',
+        'defaultModel': 'claude-sonnet-4',
+      });
+      final actions = <String>[];
+      await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
+        workspaces: const [
+          StudioAgent(
+            id: 'workspace-1',
+            name: 'Build Mac',
+            hostname: 'build-mac.local',
+            status: 'online',
+            version: '1.0.0',
+            pluginCount: 0,
+            workerCount: 1,
+            activeTaskCount: 0,
+          ),
+        ],
+        workers: const [],
+        workspaceWorkers: [worker],
+        onAdd: () {},
+        onRename: (_) {},
+        onUpdate: (_) {},
+        onRevoke: (_) {},
+        onGrant: (_) {},
+        onWorkspaceWorkerScheduling: (worker, action) async {
+          actions.add(action);
+        },
+      )));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Claude on Build Mac'), findsOneWidget);
+      expect(find.text('Claude Code'), findsOneWidget);
+      expect(find.text('Model · claude-sonnet-4'), findsOneWidget);
+      expect(find.text('Ready locally'), findsOneWidget);
+      expect(find.text('Sign-in expired'), findsOneWidget);
+      expect(find.text('Cloud scheduling · Enabled'), findsOneWidget);
+      expect(
+        find.text(
+            'Worker configuration and authentication are managed in Conclave Workspace on this computer.'),
+        findsOneWidget,
+      );
+      expect(find.text('Authentication · browser_auth'), findsNothing);
+
+      await tester.tap(find.text('Claude on Build Mac'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Local attention'), findsOneWidget);
+      expect(
+          find.textContaining(
+              'Complete sign-in or setup in Conclave Workspace on Build Mac.'),
+          findsOneWidget);
+      expect(find.text('Allowed models'), findsNothing);
+
+      await tester.tap(find.text('Disable'));
+      await tester.tap(find.text('Drain'));
+      expect(actions, ['disable', 'drain']);
+    });
+
+    testWidgets('Workers are grouped only under their owning Workspace ID',
+        (tester) async {
+      StudioAgent workspace(String id) => StudioAgent(
+            id: id,
+            name: 'Workspace $id',
+            hostname: '$id.local',
+            status: 'online',
+            version: '1.0.0',
+            pluginCount: 0,
+            workerCount: 1,
+            activeTaskCount: 0,
+          );
+      StudioWorkspaceWorker worker(String id, String workspaceId) =>
+          StudioWorkspaceWorker(
+            id: id,
+            workspaceId: workspaceId,
+            workspaceName: 'Workspace $workspaceId',
+            workerTypeId: 'ollama',
+            name: 'Worker $id',
+            status: 'ready',
+            authStrategy: 'none',
+            credentialStatus: 'not_required',
+            localConcurrencyLimit: 1,
+            revision: 1,
+            capabilities: const [],
+            allowedModels: const [],
+          );
+
+      await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
+        workspaces: [workspace('one'), workspace('two')],
+        workers: const [],
+        workspaceWorkers: [worker('one', 'one'), worker('two', 'two')],
+        onAdd: () {},
+        onRename: (_) {},
+        onUpdate: (_) {},
+        onRevoke: (_) {},
+        onGrant: (_) {},
+      )));
+      await tester.pumpAndSettle();
+
+      final cards = find.byType(Card);
+      final firstCard = tester.widget<Card>(cards.at(0));
+      final secondCard = tester.widget<Card>(cards.at(1));
+      expect(firstCard, isNot(same(secondCard)));
+      expect(
+          find.descendant(of: cards.at(0), matching: find.text('Worker one')),
+          findsOneWidget);
+      expect(
+          find.descendant(of: cards.at(0), matching: find.text('Worker two')),
+          findsNothing);
+      expect(
+          find.descendant(of: cards.at(1), matching: find.text('Worker two')),
+          findsOneWidget);
+    });
+
+    testWidgets('disabled Worker exposes the Enable scheduling action',
+        (tester) async {
+      final actions = <String>[];
+      await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
+        workspaces: const [
+          StudioAgent(
+            id: 'workspace-enable',
+            name: 'Enable Workspace',
+            hostname: 'enable.local',
+            status: 'online',
+            version: '1.0.0',
+            pluginCount: 0,
+            workerCount: 1,
+            activeTaskCount: 0,
+          ),
+        ],
+        workers: const [],
+        workspaceWorkers: const [
+          StudioWorkspaceWorker(
+            id: 'worker-disabled',
+            workspaceId: 'workspace-enable',
+            workspaceName: 'Enable Workspace',
+            workerTypeId: 'ollama',
+            name: 'Local model',
+            status: 'ready',
+            authStrategy: 'local_endpoint',
+            credentialStatus: 'not_required',
+            localConcurrencyLimit: 1,
+            revision: 1,
+            capabilities: [],
+            allowedModels: [],
+          ),
+        ],
+        onAdd: () {},
+        onRename: (_) {},
+        onUpdate: (_) {},
+        onRevoke: (_) {},
+        onGrant: (_) {},
+        onWorkspaceWorkerScheduling: (_, action) async => actions.add(action),
+      )));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Enable'));
+      expect(actions, ['enable']);
     });
 
     testWidgets('renders without layout exceptions in a scroll view',
