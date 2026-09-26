@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/features/projects/projects_pages.dart';
 import 'package:conclave_app/src/studio/studio_models.dart';
@@ -166,10 +167,7 @@ void main() {
     expect(find.text('Discuss'), findsOneWidget);
     expect(find.text('Work'), findsNWidgets(2));
     expect(find.text('Archive'), findsNothing);
-    await tester.pumpAndSettle();
-    expect(find.text('No Work yet. Describe what you need, then press Run.'),
-        findsOneWidget);
-    expect(find.text('Work'), findsNWidgets(2));
+    expect(find.text('What should Conclave do?'), findsOneWidget);
     expect(
         find.text(
             'Ask AI to do something for the team. Nothing runs until you press Run.'),
@@ -179,19 +177,20 @@ void main() {
     expect(find.textContaining('Durable Object'), findsNothing);
     expect(find.textContaining('checkout key'), findsNothing);
     expect(
-        find.text('Viewer access can read the timeline but cannot run Work.'),
+        find.text('Viewer access can read the workstream but cannot run Work.'),
         findsOneWidget);
     expect(find.text('Run'), findsOneWidget);
   });
 
-  testWidgets('collaborator can explicitly run Work and cancel it',
+  testWidgets('collaborator can explicitly run Work',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
-    await tester.pumpWidget(const MaterialApp(
+    String? submittedWork;
+    await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: SingleChildScrollView(
           child: WorkstreamPage(
-            project: StudioProject(
+            project: const StudioProject(
               id: 'project-1',
               name: 'Project One',
               branch: '',
@@ -199,7 +198,7 @@ void main() {
               lastActivity: 'today',
               role: 'collaborator',
             ),
-            workstream: StudioWorkstream(
+            workstream: const StudioWorkstream(
               id: 'workstream-1',
               projectId: 'project-1',
               name: 'Implementation',
@@ -213,28 +212,23 @@ void main() {
             onBackToProject: _noop,
             onArchive: _noop,
             onProvisionCheckout: _noop,
+            onRunWork: (work) => submittedWork = work,
             initialTab: 1,
           ),
         ),
       ),
     ));
     await tester.pumpAndSettle();
-    await tester.pumpAndSettle();
 
     expect(find.text('What should Conclave do?'), findsOneWidget);
     expect(find.text('Workflow'), findsOneWidget);
-    expect(find.text('Advanced'), findsOneWidget);
-    await tester.tap(find.text('Advanced'));
-    await tester.pumpAndSettle();
-    expect(find.text('Advanced controls'), findsOneWidget);
-    expect(find.text('Workstream budget'), findsOneWidget);
     await tester.enterText(
         find.byType(TextField).first, 'Add the missing tests');
     await tester.ensureVisible(find.text('Run'));
     await tester.tap(find.text('Run'));
     await tester.pumpAndSettle();
 
-    expect(find.text('queued'), findsOneWidget);
+    expect(submittedWork, 'Add the missing tests');
     await tester.binding.setSurfaceSize(null);
   });
 

@@ -1407,15 +1407,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   final _requestController = TextEditingController();
   final _discussionController = TextEditingController();
   String _workflow = 'Full Cycle';
-  String _quality = 'Balanced';
-  String _workstreamBudget = 'No budget';
-  String _requestEstimate = 'Auto estimate';
-  String _model = 'Auto';
-  bool _advanced = false;
-  bool _references = false;
-  final List<_WorkTimelineItem> _timeline = [];
   final List<_DiscussionItem> _discussion = [];
-  List<String> _draftReferences = <String>[];
 
   @override
   void initState() {
@@ -1572,101 +1564,22 @@ class _WorkstreamPageState extends State<WorkstreamPage>
           controller: _discussionController,
           onSend: _sendDiscussion,
         ),
-        if (_timeline.any((item) => item.status == 'completed')) ...[
-          const SizedBox(height: 16),
-          _ProjectPanel(
-            title: 'Work completed',
-            subtitle:
-                'A compact activity notification from the Work timeline.',
-            child: TextButton.icon(
-              onPressed: () => _tabController.animateTo(1),
-              icon: const Icon(Icons.open_in_new),
-              label: const Text('View Work result'),
-            ),
-          ),
-        ],
       ],
     );
   }
 
-  Widget _work(BuildContext context) =>
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _WorkComposer(
-          requestController: _requestController,
-          workflow: _workflow,
-          quality: _quality,
-          workstreamBudget: _workstreamBudget,
-          requestEstimate: _requestEstimate,
-          model: _model,
-          advanced: _advanced,
-          references: _references,
-          canExecute: _canExecute,
-          primaryWorkspace: widget.workstream.primaryWorkspace,
-          onWorkflowChanged: (value) => setState(() => _workflow = value),
-          onQualityChanged: (value) => setState(() => _quality = value),
-          onWorkstreamBudgetChanged: (value) =>
-              setState(() => _workstreamBudget = value),
-          onRequestEstimateChanged: (value) =>
-              setState(() => _requestEstimate = value),
-          onModelChanged: (value) => setState(() => _model = value),
-          onAdvancedChanged: () => setState(() => _advanced = !_advanced),
-          onReferencesChanged: () => setState(() => _references = !_references),
-          onRun: _runWork,
-          onProvisionCheckout: widget.onProvisionCheckout,
-        ),
-        _ProjectPanel(
-          title: 'Context assembled for Work',
-          subtitle:
-              'Deterministic, bounded context. The full discussion transcript is excluded by default.',
-          child: _ContextPreview(context: _buildContext()),
-        ),
-        _ProjectPanel(
-          title: 'Work timeline',
-          subtitle:
-              'Every request has an explicit status and execution result.',
-          child: _timeline.isEmpty
-              ? const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                        'No Work yet. Describe what you need, then press Run.'),
-                    SizedBox(height: 6),
-                    Text('Work requests coming next'),
-                  ],
-                )
-              : Column(
-                  children: _timeline
-                      .map((item) => _WorkTimelineCard(
-                            item: item,
-                            onCancel: item.status == 'queued' ||
-                                    item.status == 'running'
-                                ? () =>
-                                    setState(() => item.status = 'cancelled')
-                                : null,
-                            onRespond: item.status == 'needs input'
-                                ? () => setState(() => item.status = 'running')
-                                : null,
-                          ))
-                      .toList(),
-                ),
-        ),
-      ]);
+  Widget _work(BuildContext context) => _WorkComposer(
+        requestController: _requestController,
+        workflow: _workflow,
+        canExecute: _canExecute,
+        onWorkflowChanged: (value) => setState(() => _workflow = value),
+        onRun: _runWork,
+      );
 
   void _runWork() {
     final text = _requestController.text.trim();
     if (!_canExecute || text.isEmpty) return;
-    setState(() {
-      _timeline.insert(
-        0,
-        _WorkTimelineItem(
-          request: text,
-          workflow: _workflow,
-          status: 'queued',
-          detail: 'Waiting for the Workstream coordinator.',
-        ),
-      );
-      _requestController.clear();
-    });
+    _requestController.clear();
     widget.onRunWork?.call(text);
   }
 
@@ -1759,70 +1672,22 @@ class _WorkstreamPageState extends State<WorkstreamPage>
       }
     }
   }
-
-  _WorkstreamContext _buildContext() => _WorkstreamContext.build(
-        projectInstructions: widget.project.instructions,
-        purpose: widget.workstream.brief,
-        state: widget.workstream.status,
-        constraints:
-            'Use the Project policy and the Workstream Primary Workspace.',
-        expectedOutcome:
-            'A verified result with an understandable checkpoint and evidence.',
-        checkpoint: widget.workstream.currentCheckpoint,
-        workRequest: _requestController.text,
-        references: _draftReferences,
-        artifacts: const [],
-        workflowRequirements: _workflowRequirements(_workflow),
-      );
-
-  List<String> _workflowRequirements(String workflow) => [
-        'Workflow: $workflow',
-        'Execution must satisfy the selected Workflow version and result contract.',
-      ];
 }
 
 class _WorkComposer extends StatelessWidget {
   const _WorkComposer({
     required this.requestController,
     required this.workflow,
-    required this.quality,
-    required this.workstreamBudget,
-    required this.requestEstimate,
-    required this.model,
-    required this.advanced,
-    required this.references,
     required this.canExecute,
-    required this.primaryWorkspace,
     required this.onWorkflowChanged,
-    required this.onQualityChanged,
-    required this.onWorkstreamBudgetChanged,
-    required this.onRequestEstimateChanged,
-    required this.onModelChanged,
-    required this.onAdvancedChanged,
-    required this.onReferencesChanged,
     required this.onRun,
-    required this.onProvisionCheckout,
   });
 
   final TextEditingController requestController;
   final String workflow;
-  final String quality;
-  final String workstreamBudget;
-  final String requestEstimate;
-  final String model;
-  final bool advanced;
-  final bool references;
   final bool canExecute;
-  final String primaryWorkspace;
   final ValueChanged<String> onWorkflowChanged;
-  final ValueChanged<String> onQualityChanged;
-  final ValueChanged<String> onWorkstreamBudgetChanged;
-  final ValueChanged<String> onRequestEstimateChanged;
-  final ValueChanged<String> onModelChanged;
-  final VoidCallback onAdvancedChanged;
-  final VoidCallback onReferencesChanged;
   final VoidCallback onRun;
-  final VoidCallback onProvisionCheckout;
 
   @override
   Widget build(BuildContext context) => _ProjectPanel(
@@ -1866,207 +1731,19 @@ class _WorkComposer extends StatelessWidget {
                   }
                 : null,
           ),
-          const SizedBox(height: 8),
-          Wrap(spacing: 8, children: [
-            OutlinedButton.icon(
-              onPressed: onReferencesChanged,
-              icon: Icon(references ? Icons.link : Icons.add_link),
-              label: Text(references ? 'References added' : 'Add references'),
-            ),
-            TextButton.icon(
-              onPressed: onAdvancedChanged,
-              icon: Icon(advanced ? Icons.expand_less : Icons.tune),
-              label: const Text('Advanced'),
-            ),
-          ]),
-          if (advanced)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Advanced controls',
-                        style: TextStyle(fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 8),
-                    Wrap(spacing: 12, runSpacing: 12, children: [
-                      SizedBox(
-                          width: 180,
-                          child: _select(
-                              'Workstream budget',
-                              workstreamBudget,
-                              const ['No budget', '100 credits', '500 credits'],
-                              onWorkstreamBudgetChanged)),
-                      SizedBox(
-                          width: 180,
-                          child: _select(
-                              'Request estimate',
-                              requestEstimate,
-                              const [
-                                'Auto estimate',
-                                '10 credits',
-                                '50 credits'
-                              ],
-                              onRequestEstimateChanged)),
-                      SizedBox(
-                          width: 180,
-                          child: _select(
-                              'Model',
-                              model,
-                              const ['Auto', 'Best available'],
-                              onModelChanged)),
-                      SizedBox(
-                          width: 180,
-                          child: _select(
-                              'Quality',
-                              quality,
-                              const ['Economy', 'Balanced', 'High assurance'],
-                              onQualityChanged)),
-                      SizedBox(
-                          width: 220,
-                          child: TextFormField(
-                              initialValue: primaryWorkspace,
-                              enabled: false,
-                              decoration: const InputDecoration(
-                                  labelText: 'Primary Workspace'))),
-                    ]),
-                    const SizedBox(height: 8),
-                    const Text(
-                        'Sponsor mode may use only Workers explicitly authorized for the Project. Workstream policy can narrow that authorization but cannot create it.'),
-                    const SizedBox(height: 4),
-                    const Text(
-                        'Usage records the requester and Worker owner. Provider sharing rules and Worker readiness on the Primary Workspace remain authoritative.'),
-                    const SizedBox(height: 8),
-                    const Text(
-                        'Worker is selected by the workflow and Workspace capability. There is no Workstream-level Worker default.'),
-                  ]),
-            ),
-          const SizedBox(height: 12),
-          Wrap(spacing: 10, children: [
-            FilledButton.icon(
-              onPressed: canExecute ? onRun : null,
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('Run'),
-            ),
-            OutlinedButton.icon(
-              onPressed: canExecute ? onProvisionCheckout : null,
-              icon: const Icon(Icons.inventory_2_outlined),
-              label: const Text('Prepare workspace'),
-            ),
-          ]),
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: canExecute ? onRun : null,
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('Run'),
+          ),
           if (!canExecute)
             const Padding(
               padding: EdgeInsets.only(top: 8),
               child: Text(
-                  'Viewer access can read the timeline but cannot run Work.'),
+                  'Viewer access can read the workstream but cannot run Work.'),
             ),
         ]),
-      );
-
-  Widget _select(String label, String value, List<String> values,
-          ValueChanged<String> onChanged) =>
-      DropdownButtonFormField<String>(
-        initialValue: value,
-        isExpanded: true,
-        decoration: InputDecoration(labelText: label),
-        items: values
-            .map((item) => DropdownMenuItem(value: item, child: Text(item)))
-            .toList(),
-        onChanged: (next) {
-          if (next != null) onChanged(next);
-        },
-      );
-}
-
-class _WorkTimelineItem {
-  _WorkTimelineItem(
-      {required this.request,
-      required this.workflow,
-      required this.status,
-      required this.detail});
-  final String request;
-  final String workflow;
-  String status;
-  final String detail;
-}
-
-class _WorkstreamContext {
-  const _WorkstreamContext(this.sections);
-
-  final List<MapEntry<String, String>> sections;
-
-  factory _WorkstreamContext.build({
-    required String projectInstructions,
-    required String purpose,
-    required String state,
-    required String constraints,
-    required String expectedOutcome,
-    required String checkpoint,
-    required String workRequest,
-    required List<String> references,
-    required List<String> artifacts,
-    required List<String> workflowRequirements,
-  }) {
-    final entries = <MapEntry<String, String>>[
-      MapEntry('Project instructions', _bounded(projectInstructions)),
-      MapEntry('Brief · purpose', _bounded(purpose)),
-      MapEntry('Brief · state', _bounded(state)),
-      MapEntry('Brief · constraints', _bounded(constraints)),
-      MapEntry('Brief · expected outcome', _bounded(expectedOutcome)),
-      MapEntry('Current checkpoint', _bounded(checkpoint)),
-      MapEntry(
-          'Work Request',
-          _bounded(
-              workRequest.isEmpty ? 'Draft not yet written.' : workRequest)),
-      MapEntry(
-          'Discuss references',
-          references.isEmpty
-              ? 'None explicitly selected.'
-              : references.map(_bounded).join('\n')),
-      MapEntry(
-          'Explicit artifacts',
-          artifacts.isEmpty
-              ? 'None explicitly selected.'
-              : artifacts.map(_bounded).join('\n')),
-      MapEntry('Workflow requirements',
-          workflowRequirements.map(_bounded).join('\n')),
-    ];
-    return _WorkstreamContext(entries);
-  }
-
-  static String _bounded(String value) {
-    final normalized = value.trim().replaceAll(RegExp(r'\s+'), ' ');
-    return normalized.length <= 240
-        ? normalized
-        : '${normalized.substring(0, 237)}...';
-  }
-}
-
-class _ContextPreview extends StatelessWidget {
-  const _ContextPreview({required this.context});
-  final _WorkstreamContext context;
-
-  @override
-  Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: this
-            .context
-            .sections
-            .map((section) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: RichText(
-                    text: TextSpan(
-                      style: DefaultTextStyle.of(context).style,
-                      children: [
-                        TextSpan(
-                            text: '${section.key}: ',
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w600)),
-                        TextSpan(text: section.value),
-                      ],
-                    ),
-                  ),
-                ))
-            .toList(),
       );
 }
 
@@ -2372,41 +2049,6 @@ class _DiscussionInputBox extends StatelessWidget {
       ),
     );
   }
-}
-
-class _WorkTimelineCard extends StatelessWidget {
-  const _WorkTimelineCard(
-      {required this.item, required this.onCancel, required this.onRespond});
-  final _WorkTimelineItem item;
-  final VoidCallback? onCancel;
-  final VoidCallback? onRespond;
-
-  @override
-  Widget build(BuildContext context) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Wrap(spacing: 8, children: [
-              Chip(label: Text(item.status)),
-              Chip(label: Text(item.workflow)),
-            ]),
-            Text(item.request,
-                style: const TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 4),
-            Text(item.detail),
-            if (item.status == 'completed')
-              const Padding(
-                  padding: EdgeInsets.only(top: 6),
-                  child: Text('Checkpoint · Changes · Tests · Findings')),
-            if (onRespond != null)
-              TextButton(
-                  onPressed: onRespond, child: const Text('Provide input')),
-            if (onCancel != null)
-              TextButton(onPressed: onCancel, child: const Text('Cancel Work')),
-          ]),
-        ),
-      );
 }
 
 class _ProjectPanel extends StatelessWidget {

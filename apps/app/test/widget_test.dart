@@ -82,8 +82,7 @@ void main() {
     expect(find.text('No discussion messages yet'), findsOneWidget);
     await tester.tap(find.text('Work'));
     await tester.pumpAndSettle();
-    expect(find.text('No Work yet. Describe what you need, then press Run.'),
-        findsOneWidget);
+    expect(find.text('What should Conclave do?'), findsOneWidget);
     expect(find.text('lease'), findsNothing);
     expect(find.text('fencing token'), findsNothing);
     expect(find.text('Durable Object'), findsNothing);
