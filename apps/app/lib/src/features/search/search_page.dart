@@ -48,7 +48,7 @@ class SearchPage extends StatelessWidget {
         category: 'Navigation',
         onSelect: () {
           onClearSearch();
-          onNavigateTo(const StudioNavigation.hosts());
+          onNavigateTo(const StudioNavigation.workspaces());
         },
       ),
       CommandPaletteAction(
@@ -154,16 +154,17 @@ class SearchPage extends StatelessWidget {
       ));
     }
 
-    // Workspaces / Agents
-    for (final agent in snapshot.agents) {
+    // Workspaces
+    for (final workspace in snapshot.workspaces) {
       actions.add(CommandPaletteAction(
-        title: agent.name,
-        subtitle: '${agent.hostname} · ${agent.status}',
+        title: workspace.name,
+        subtitle: '${workspace.hostname} · ${workspace.status}',
         icon: Icons.computer_outlined,
         category: 'Workspaces',
         onSelect: () {
           onClearSearch();
-          onNavigateTo(const StudioNavigation.hosts());
+          onNavigateTo(
+              StudioNavigation.workspaces(workspaceId: workspace.id));
         },
       ));
     }

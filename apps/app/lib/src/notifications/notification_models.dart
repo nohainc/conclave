@@ -2,7 +2,7 @@ enum StudioNotificationKind {
   completed,
   failed,
   approvalRequired,
-  hostOffline,
+  workspaceOffline,
   workerCredentialProblem,
   workerInstallFailed,
   invitationReceived,
@@ -10,7 +10,7 @@ enum StudioNotificationKind {
 
 enum StudioNotificationPriority { high, normal, low }
 
-enum StudioNotificationTarget { run, hosts, workspace }
+enum StudioNotificationTarget { run, workspaces, workspace }
 
 /// Filters realtime noise from actionable team notifications. Progress,
 /// discussion, queue, checkout, and lease updates update read models but do
@@ -102,7 +102,7 @@ StudioNotification? notificationFromRealtimeEvent(
       StudioNotificationKind.failed,
     'workstream.account.problem' =>
       StudioNotificationKind.workerCredentialProblem,
-    'host.offline' || 'host.stale' => StudioNotificationKind.hostOffline,
+    'host.offline' || 'host.stale' => StudioNotificationKind.workspaceOffline,
     'account.expired' ||
     'credential.expired' =>
       StudioNotificationKind.workerCredentialProblem,
@@ -140,7 +140,7 @@ StudioNotification? notificationFromRealtimeEvent(
         StudioNotificationKind.failed => 'The Run needs attention.',
         StudioNotificationKind.approvalRequired =>
           'A response is needed before the Run can continue.',
-        StudioNotificationKind.hostOffline =>
+        StudioNotificationKind.workspaceOffline =>
           'A Workspace is offline and may need to reconnect.',
         StudioNotificationKind.workerCredentialProblem =>
           'A Worker connection needs to be re-authenticated.',
@@ -159,7 +159,8 @@ StudioNotification? notificationFromRealtimeEvent(
     StudioNotificationKind.failed ||
     StudioNotificationKind.approvalRequired =>
       StudioNotificationTarget.run,
-    StudioNotificationKind.hostOffline => StudioNotificationTarget.hosts,
+      StudioNotificationKind.workspaceOffline =>
+        StudioNotificationTarget.workspaces,
     StudioNotificationKind.workerCredentialProblem =>
       StudioNotificationTarget.workspace,
     StudioNotificationKind.workerInstallFailed =>
@@ -175,7 +176,7 @@ StudioNotification? notificationFromRealtimeEvent(
       StudioNotificationKind.completed => 'Run completed',
       StudioNotificationKind.failed => 'Run failed',
       StudioNotificationKind.approvalRequired => 'Action needed',
-      StudioNotificationKind.hostOffline => 'Workspace offline',
+      StudioNotificationKind.workspaceOffline => 'Workspace offline',
       StudioNotificationKind.workerCredentialProblem =>
         'Worker connection expired',
       StudioNotificationKind.workerInstallFailed => 'Worker connection failed',
@@ -188,7 +189,7 @@ StudioNotification? notificationFromRealtimeEvent(
       StudioNotificationKind.failed ||
       StudioNotificationKind.workerCredentialProblem =>
         StudioNotificationPriority.high,
-      StudioNotificationKind.hostOffline ||
+      StudioNotificationKind.workspaceOffline ||
       StudioNotificationKind.workerInstallFailed ||
       StudioNotificationKind.invitationReceived =>
         StudioNotificationPriority.normal,

@@ -6,12 +6,11 @@ class HomePage extends StatelessWidget {
   const HomePage({
     super.key,
     required this.projects,
-    required this.hosts,
+    required this.workspaces,
     required this.workers,
     required this.run,
     required this.openFindingCount,
-    required this.onOpenHosts,
-    required this.onOpenWorkers,
+    required this.onOpenWorkspaces,
     required this.onOpenProject,
     required this.onOpenChat,
     required this.onOpenRun,
@@ -20,12 +19,11 @@ class HomePage extends StatelessWidget {
   });
 
   final List<StudioProject> projects;
-  final List<StudioAgent> hosts;
+  final List<StudioWorkspace> workspaces;
   final List<StudioWorker> workers;
   final StudioRun? run;
   final int openFindingCount;
-  final VoidCallback onOpenHosts;
-  final VoidCallback onOpenWorkers;
+  final VoidCallback onOpenWorkspaces;
   final ValueChanged<String> onOpenProject;
   final void Function(String projectId, String chatId) onOpenChat;
   final void Function(String projectId, String runId) onOpenRun;
@@ -37,19 +35,17 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => isNewWorkspace
       ? _GettingStarted(
-          onOpenHosts: onOpenHosts,
-          onOpenWorkers: onOpenWorkers,
+          onOpenWorkspaces: onOpenWorkspaces,
           onCreateProject: onCreateProject,
           onOpenArchivedProjects: onOpenArchivedProjects,
         )
       : _EstablishedHome(
           projects: projects,
-          hosts: hosts,
+          workspaces: workspaces,
           workers: workers,
           run: run,
           openFindingCount: openFindingCount,
-          onOpenHosts: onOpenHosts,
-          onOpenWorkers: onOpenWorkers,
+          onOpenWorkspaces: onOpenWorkspaces,
           onOpenProject: onOpenProject,
           onOpenChat: onOpenChat,
           onOpenRun: onOpenRun,
@@ -59,14 +55,12 @@ class HomePage extends StatelessWidget {
 
 class _GettingStarted extends StatelessWidget {
   const _GettingStarted({
-    required this.onOpenHosts,
-    required this.onOpenWorkers,
+    required this.onOpenWorkspaces,
     required this.onCreateProject,
     required this.onOpenArchivedProjects,
   });
 
-  final VoidCallback onOpenHosts;
-  final VoidCallback onOpenWorkers;
+  final VoidCallback onOpenWorkspaces;
   final VoidCallback onCreateProject;
   final VoidCallback onOpenArchivedProjects;
 
@@ -88,13 +82,14 @@ class _GettingStarted extends StatelessWidget {
               title: 'Workspace',
               detail: 'Connect a machine where Workers can run.',
               action: 'Add Workspace',
-              onPressed: onOpenHosts),
+              onPressed: onOpenWorkspaces),
           _SetupStep(
               number: '2',
               title: 'Worker',
-              detail: 'Choose the AI integration you want to use.',
-              action: 'View Workers',
-              onPressed: onOpenWorkers),
+              detail:
+                  'Configure and authenticate Workers in Conclave Workspace on your computer.',
+              action: 'Open Workspaces',
+              onPressed: onOpenWorkspaces),
           _SetupStep(
               number: '3',
               title: 'Project',
@@ -160,12 +155,11 @@ class _SetupStep extends StatelessWidget {
 class _EstablishedHome extends StatelessWidget {
   const _EstablishedHome({
     required this.projects,
-    required this.hosts,
+    required this.workspaces,
     required this.workers,
     required this.run,
     required this.openFindingCount,
-    required this.onOpenHosts,
-    required this.onOpenWorkers,
+    required this.onOpenWorkspaces,
     required this.onOpenProject,
     required this.onOpenChat,
     required this.onOpenRun,
@@ -173,12 +167,11 @@ class _EstablishedHome extends StatelessWidget {
   });
 
   final List<StudioProject> projects;
-  final List<StudioAgent> hosts;
+  final List<StudioWorkspace> workspaces;
   final List<StudioWorker> workers;
   final StudioRun? run;
   final int openFindingCount;
-  final VoidCallback onOpenHosts;
-  final VoidCallback onOpenWorkers;
+  final VoidCallback onOpenWorkspaces;
   final ValueChanged<String> onOpenProject;
   final void Function(String projectId, String chatId) onOpenChat;
   final void Function(String projectId, String runId) onOpenRun;
@@ -248,8 +241,8 @@ class _EstablishedHome extends StatelessWidget {
         final cards = [
           _MetricCard('Projects', '${projects.length}',
               () => onOpenProject(projects.first.id)),
-          _MetricCard('Workspaces', '${hosts.length}', onOpenHosts),
-          _MetricCard('Workers', '${workers.length}', onOpenWorkers),
+          _MetricCard('Workspaces', '${workspaces.length}', onOpenWorkspaces),
+          _MetricCard('Workers', '${workers.length}', onOpenWorkspaces),
         ];
         return constraints.maxWidth < 620
             ? Wrap(spacing: 12, runSpacing: 12, children: cards)

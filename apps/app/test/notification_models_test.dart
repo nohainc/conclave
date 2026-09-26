@@ -70,7 +70,7 @@ void main() {
       'Worker connection failed',
       'Invitation received',
     ]);
-    expect(notifications[0].target, StudioNotificationTarget.hosts);
+    expect(notifications[0].target, StudioNotificationTarget.workspaces);
     expect(notifications[1].priority, StudioNotificationPriority.high);
     expect(notifications[1].target, StudioNotificationTarget.workspace);
     expect(notifications[1].workspaceId, 'workspace-1');

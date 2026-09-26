@@ -21,25 +21,21 @@ class WorkspacesPage extends StatefulWidget {
     required this.onGrant,
     this.onOpenDownloads,
     this.onConnect,
-    this.workerActionMessage,
-    this.onDismissWorkerActionMessage,
     this.onWorkspaceWorkerScheduling,
   });
 
-  final List<StudioAgent> workspaces;
-  final List<StudioWorkspaceWorker> workspaceWorkers;
+  final List<StudioWorkspace> workspaces;
+  final List<StudioWorker> workspaceWorkers;
   final String? initialWorkspaceId;
   final ValueChanged<String?>? onSelectWorkspace;
   final VoidCallback onAdd;
-  final ValueChanged<StudioAgent> onRename;
-  final ValueChanged<StudioAgent> onUpdate;
-  final ValueChanged<StudioAgent> onRevoke;
-  final ValueChanged<StudioAgent> onGrant;
+  final ValueChanged<StudioWorkspace> onRename;
+  final ValueChanged<StudioWorkspace> onUpdate;
+  final ValueChanged<StudioWorkspace> onRevoke;
+  final ValueChanged<StudioWorkspace> onGrant;
   final VoidCallback? onOpenDownloads;
-  final Future<void> Function(StudioAgent)? onConnect;
-  final String? workerActionMessage;
-  final VoidCallback? onDismissWorkerActionMessage;
-  final Future<void> Function(StudioWorkspaceWorker worker, String action)?
+  final Future<void> Function(StudioWorkspace)? onConnect;
+  final Future<void> Function(StudioWorker worker, String action)?
       onWorkspaceWorkerScheduling;
 
   @override
@@ -128,16 +124,6 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
                 style: TextStyle(
                     color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
-              if (widget.workerActionMessage case final message?)
-                MaterialBanner(
-                  content: Text(message),
-                  actions: [
-                    TextButton(
-                      onPressed: widget.onDismissWorkerActionMessage,
-                      child: const Text('Dismiss'),
-                    ),
-                  ],
-                ),
               const SizedBox(height: 12),
               if (widget.workspaces.isEmpty)
                 _EmptyWorkspaces(
@@ -236,7 +222,7 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
         },
       );
 
-  void _toggle(StudioAgent workspace) {
+  void _toggle(StudioWorkspace workspace) {
     final isExpanded = _expanded.contains(workspace.id);
     setState(() {
       if (isExpanded) {
@@ -276,13 +262,13 @@ class _WorkspaceCardBody extends StatelessWidget {
     required this.onScheduling,
   });
 
-  final StudioAgent workspace;
-  final List<StudioWorkspaceWorker> workers;
+  final StudioWorkspace workspace;
+  final List<StudioWorker> workers;
   final VoidCallback onGrant;
   final VoidCallback onUpdate;
   final Future<void> Function()? onConnect;
   final VoidCallback? onOpenDownloads;
-  final Future<void> Function(StudioWorkspaceWorker, String)? onScheduling;
+  final Future<void> Function(StudioWorker, String)? onScheduling;
 
   @override
   Widget build(BuildContext context) {
@@ -371,8 +357,8 @@ class _WorkspaceCardBody extends StatelessWidget {
 
 class _WorkerRow extends StatefulWidget {
   const _WorkerRow({required this.worker, required this.onScheduling});
-  final StudioWorkspaceWorker worker;
-  final Future<void> Function(StudioWorkspaceWorker, String)? onScheduling;
+  final StudioWorker worker;
+  final Future<void> Function(StudioWorker, String)? onScheduling;
 
   @override
   State<_WorkerRow> createState() => _WorkerRowState();
@@ -591,12 +577,12 @@ class _EmptyWorkspaces extends StatelessWidget {
       );
 }
 
-String _machine(StudioAgent workspace) {
-  final os = switch (workspace.os.toLowerCase()) {
+String _machine(StudioWorkspace workspace) {
+  final os = switch (workspace.platform.toLowerCase()) {
     'macos' => 'macOS',
     'windows' => 'Windows',
     'linux' => 'Linux',
-    _ => workspace.os,
+    _ => workspace.platform,
   };
   final architecture = switch (workspace.architecture.toLowerCase()) {
     'arm64' => 'Apple Silicon',
@@ -622,5 +608,5 @@ String _statusLabel(String status) => switch (status.toLowerCase()) {
       _ => status,
     };
 
-int _grantCount(StudioAgent workspace) =>
-    workspace.projectGrantCount ?? workspace.workspaceBindings.length;
+int _grantCount(StudioWorkspace workspace) =>
+    workspace.projectGrantCount;

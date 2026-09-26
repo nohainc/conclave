@@ -11,15 +11,10 @@ class PromptComposer extends StatefulWidget {
     required this.onSubmitted,
     required this.selectedQuality,
     required this.onQualityChanged,
-    required this.selectedWorker,
-    required this.onWorkerChanged,
     required this.selectedModel,
     required this.onModelChanged,
-    required this.selectedHost,
-    required this.onHostChanged,
     required this.showAdvanced,
     required this.onToggleAdvanced,
-    required this.snapshot,
     this.isBusy = false,
     this.discussionOnly = false,
   });
@@ -28,15 +23,10 @@ class PromptComposer extends StatefulWidget {
   final ValueChanged<String> onSubmitted;
   final StudioQualityPreset selectedQuality;
   final ValueChanged<StudioQualityPreset> onQualityChanged;
-  final String selectedWorker;
-  final ValueChanged<String> onWorkerChanged;
   final String selectedModel;
   final ValueChanged<String> onModelChanged;
-  final String selectedHost;
-  final ValueChanged<String> onHostChanged;
   final bool showAdvanced;
   final VoidCallback onToggleAdvanced;
-  final StudioSnapshot snapshot;
   final bool isBusy;
   final bool discussionOnly;
 
@@ -96,15 +86,6 @@ class _PromptComposerState extends State<PromptComposer> {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   _DropdownSelector(
-                    label: 'Worker',
-                    value: widget.selectedWorker,
-                    options: [
-                      'Auto',
-                      ...widget.snapshot.workers.map((w) => w.displayName)
-                    ],
-                    onChanged: (val) => widget.onWorkerChanged(val ?? 'Auto'),
-                  ),
-                  _DropdownSelector(
                     label: 'Model',
                     value: widget.selectedModel,
                     options: const [
@@ -115,15 +96,6 @@ class _PromptComposerState extends State<PromptComposer> {
                       'gemini-2.0-flash'
                     ],
                     onChanged: (val) => widget.onModelChanged(val ?? 'Auto'),
-                  ),
-                  _DropdownSelector(
-                    label: 'Workspace',
-                    value: widget.selectedHost,
-                    options: [
-                      'Auto',
-                      ...widget.snapshot.hosts.map((h) => h.name)
-                    ],
-                    onChanged: (val) => widget.onHostChanged(val ?? 'Auto'),
                   ),
                   Container(
                     padding:
@@ -138,22 +110,6 @@ class _PromptComposerState extends State<PromptComposer> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text(
-                          'Candidates',
-                          style: TextStyle(
-                              fontSize: 11, fontWeight: FontWeight.w500),
-                        ),
-                        Text(
-                          ': ${widget.snapshot.workers.length}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: isDark
-                                ? ConclaveBrand.darkInkMuted
-                                : ConclaveBrand.lightInkMuted,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
                         const Text(
                           'Cost',
                           style: TextStyle(

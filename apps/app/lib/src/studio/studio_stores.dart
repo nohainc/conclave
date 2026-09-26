@@ -9,9 +9,6 @@ class StudioStore {
         workspaces = WorkspaceStore(dataSource),
         chats = ChatStore(dataSource),
         runs = RunStore(dataSource),
-        agents = AgentStore(dataSource),
-        workers = WorkerStore(dataSource),
-        plugins = PluginStore(dataSource),
         accounts = AccountStore(dataSource);
 
   final StudioDataSource dataSource;
@@ -20,9 +17,6 @@ class StudioStore {
   final ProjectStore projects;
   final ChatStore chats;
   final RunStore runs;
-  final AgentStore agents;
-  final WorkerStore workers;
-  final PluginStore plugins;
   final AccountStore accounts;
 
   Future<StudioSnapshot> reload(
@@ -30,13 +24,10 @@ class StudioStore {
     final snapshot = await dataSource.loadReadModels(
         projectId: projectId, workspaceId: workspaceId);
     auth.replace(snapshot.viewer);
-    workspaces.replace(snapshot.workspaceId);
+    workspaces.replace(snapshot.workspaces);
     projects.replace(snapshot.projects);
     chats.replace(snapshot.allChats);
     runs.replace(snapshot.run);
-    agents.replace(snapshot.agents);
-    workers.replace(snapshot.workers);
-    plugins.replace(snapshot.plugins);
     accounts.replace(snapshot.accounts);
     return snapshot;
   }
@@ -61,9 +52,11 @@ class WorkspaceStore {
   final StudioDataSource source;
   List<StudioWorkspace> items = const [];
 
+  void replace(List<StudioWorkspace> value) => items = List.unmodifiable(value);
+
   Future<List<StudioWorkspace>> list() async {
     final value = await source.loadWorkspaces();
-    items = List.unmodifiable(value);
+    replace(value);
     return value;
   }
 
@@ -73,7 +66,26 @@ class WorkspaceStore {
     return workspace;
   }
 
-  void replace(String? _) {}
+  Future<StudioWorkspaceEnrollment> createEnrollment(String workspaceId) =>
+      source.createWorkspaceEnrollment(workspaceId: workspaceId);
+
+  Future<void> revoke(String workspaceId) =>
+      source.revokeWorkspace(workspaceId: workspaceId);
+
+  Future<void> update(String workspaceId, String name) async {
+    final updated = await source.updateWorkspace(
+        workspaceId: workspaceId, name: name);
+    replace(items.map((workspace) =>
+        workspace.id == workspaceId ? updated : workspace).toList());
+  }
+
+  Future<void> announceUpdate(String workspaceId, String runtimeId,
+          {String? channel, String? version}) =>
+      source.announceWorkspaceUpdate(
+          workspaceId: workspaceId,
+          runtimeId: runtimeId,
+          channel: channel,
+          version: version);
 }
 
 class ChatStore {
@@ -99,112 +111,6 @@ class RunStore {
 
   Future<void> control(String runId, String command) =>
       source.controlRun(runId, command);
-}
-
-class AgentStore {
-  AgentStore(this.source);
-  final StudioDataSource source;
-  List<StudioAgent> items = const [];
-
-  Future<StudioHostEnrollment> createEnrollment(String workspaceId) =>
-      source.createHostEnrollment(workspaceId: workspaceId);
-
-  void replace(List<StudioAgent> value) => items = List.unmodifiable(value);
-
-  Future<List<StudioAgent>> refresh(String workspaceId) async {
-    final value = await source.loadHosts(workspaceId: workspaceId);
-    replace(value);
-    return value;
-  }
-
-  Future<void> revoke(String workspaceId, String agentId) =>
-      source.revokeAgent(workspaceId: workspaceId, agentId: agentId);
-
-  Future<void> revokeWorkspace(String workspaceId) =>
-      source.revokeWorkspace(workspaceId: workspaceId);
-
-  Future<void> announceUpdate(String workspaceId, String agentId,
-          {String? channel, String? version}) =>
-      source.announceAgentUpdate(
-          workspaceId: workspaceId,
-          agentId: agentId,
-          channel: channel,
-          version: version);
-
-  Future<void> updateHost(String workspaceId, String hostId,
-          {String? name, String? channel}) =>
-      source.updateHost(
-          workspaceId: workspaceId,
-          hostId: hostId,
-          name: name,
-          channel: channel);
-
-  Future<void> bindWorkspace(String workspaceId, String hostId) =>
-      source.bindHostWorkspace(workspaceId: workspaceId, hostId: hostId);
-}
-
-class WorkerStore {
-  WorkerStore(this.source);
-  final StudioDataSource source;
-  List<StudioWorker> items = const [];
-
-  void replace(List<StudioWorker> value) => items = List.unmodifiable(value);
-
-  Future<List<StudioWorker>> refresh(String workspaceId) async {
-    final value = await source.loadWorkers(workspaceId: workspaceId);
-    replace(value);
-    return value;
-  }
-
-  Future<void> setEnabled(String workspaceId, String workerId, bool enabled,
-          {String? hostId}) =>
-      source.setWorkerEnabled(
-          workspaceId: workspaceId,
-          workerId: workerId,
-          enabled: enabled,
-          hostId: hostId);
-
-  Future<void> save({
-    required String workspaceId,
-    String? workerId,
-    required String name,
-    required String agentId,
-    required String workerCatalogId,
-    required List<String> roles,
-    required List<String> capabilities,
-    required bool enabled,
-    String workerVersionPolicy = 'latest',
-    Map<String, dynamic> config = const {},
-    String sessionPolicy = 'stateless',
-    int concurrencyLimit = 1,
-    String billingMode = 'local_compute',
-    String independenceKey = '',
-    Map<String, dynamic> costMetadata = const {},
-  }) =>
-      source.saveWorker(
-          workspaceId: workspaceId,
-          workerId: workerId,
-          name: name,
-          agentId: agentId,
-          workerCatalogId: workerCatalogId,
-          roles: roles,
-          capabilities: capabilities,
-          enabled: enabled,
-          workerVersionPolicy: workerVersionPolicy,
-          config: config,
-          sessionPolicy: sessionPolicy,
-          concurrencyLimit: concurrencyLimit,
-          billingMode: billingMode,
-          independenceKey: independenceKey,
-          costMetadata: costMetadata);
-}
-
-class PluginStore {
-  PluginStore(this.source);
-  final StudioDataSource source;
-  List<StudioPlugin> items = const [];
-
-  void replace(List<StudioPlugin> value) => items = List.unmodifiable(value);
 }
 
 class AccountStore {

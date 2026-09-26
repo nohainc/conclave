@@ -92,9 +92,8 @@ void main() {
     expect(store.projects.items.first.id, 'forge');
     expect(store.chats.items, hasLength(3));
     expect(store.runs.current?.id, 'run-fixture');
-    expect(store.agents.items.single.id, 'agent-macbook');
-    expect(store.workers.items, hasLength(3));
-    expect(store.plugins.items, hasLength(6));
+    expect(store.workspaces.items.single.id, 'workspace-macbook');
+    expect(store.workspaces.items, hasLength(1));
   });
 
   test('preserves a session viewer when a snapshot omits viewer data',
@@ -203,8 +202,7 @@ void main() {
           },
         ],
       },
-      '/api/workspaces/workspace-1/hosts': {'hosts': []},
-      '/api/workspaces/workspace-1/workers': {'workers': []},
+      '/api/workspaces': {'workspaces': []},
       '/api/workspaces/workspace-1/accounts': {'accounts': []},
       '/api/projects/project-1/read-model': {
         'workspaceId': 'workspace-1',
@@ -244,6 +242,11 @@ void main() {
     expect(readModel.projects.single.workstreams.single.id, 'workstream-1');
     expect(client.requests, isNot(contains('/api/studio/snapshot')));
     expect(client.requests, contains('/api/projects/project-1/read-model'));
+    expect(client.requests, contains('/api/workspaces'));
+    expect(client.requests,
+        isNot(contains('/api/workspaces/workspace-1/hosts')));
+    expect(client.requests,
+        isNot(contains('/api/workspaces/workspace-1/workers')));
   });
 
   test('normalizes the Cloud chat creation wrapper', () async {
@@ -323,66 +326,18 @@ void main() {
     expect(project.instructions, 'Use the team conventions.');
   });
 
-  test('rejects removed configured Worker writes', () async {
-    final client = _JsonClient({}, statusCode: 200);
-    final api = StudioApiClient(
-      baseUrl: 'https://conclave.test/api',
-      client: client,
-    );
-
-    await expectLater(
-      api.saveWorker(
-        workspaceId: 'workspace-1',
-        name: 'Codex Main',
-        agentId: 'agent-1',
-        workerCatalogId: 'worker-codex',
-        roles: const ['reviewer'],
-        capabilities: const ['code_review'],
-        enabled: false,
-      ),
-      throwsA(isA<StudioApiException>().having(
-        (error) => error.message,
-        'message',
-        contains(
-            'This Worker setup path is no longer available. Manage Workers through Execution.'),
-      )),
-    );
-    expect(client.lastRequest, isNull);
-  });
-
-  test('parses full Worker desired state from the Cloud read model', () {
-    final worker = StudioWorker.fromJson({
-      'id': 'worker-1',
-      'name': 'Codex Main',
-      'workerVersionPolicy': 'compatible',
-      'config': {'model': 'codex'},
-      'sessionPolicy': 'persistent',
-      'concurrencyLimit': 4,
-      'billingMode': 'subscription',
-      'independenceKey': 'codex-main',
-      'costMetadata': {'estimatedCostMicrosPerAttempt': null},
-    });
-
-    expect(worker.workerVersionPolicy, 'compatible');
-    expect(worker.config['model'], 'codex');
-    expect(worker.sessionPolicy, 'persistent');
-    expect(worker.concurrencyLimit, 4);
-    expect(worker.billingMode, 'subscription');
-    expect(worker.independenceKey, 'codex-main');
-  });
-
-  test('parses v4 Hosts and Credential Profiles from the read model', () {
+  test('parses Workspace runtime facts and credential profiles', () {
     final snapshot = StudioSnapshot.fromJson({
       'workspaceId': 'workspace-1',
-      'hosts': [
+      'workspaces': [
         {
-          'id': 'host-1',
-          'name': 'Mac Host',
+          'id': 'workspace-runtime-1',
+          'name': 'Build Workspace',
           'hostname': 'mac.local',
           'status': 'online',
-          'version': '4.0.0',
+          'appVersion': '4.0.0',
           'workerCount': 2,
-          'workspaceBindings': ['workspace-1', 'workspace-2'],
+          'platform': 'macos',
         },
       ],
       'accounts': [
@@ -396,16 +351,49 @@ void main() {
           'status': 'ready',
         },
       ],
+      'hosts': [
+        {'id': 'obsolete-host'},
+      ],
+      'workers': [
+        {'id': 'obsolete-configured-worker'},
+      ],
     });
 
-    expect(snapshot.agents.single.name, 'Mac Host');
-    expect(snapshot.agents.single.workspaceBindings,
-        ['workspace-1', 'workspace-2']);
+    expect(snapshot.workspaces, hasLength(1));
+    expect(snapshot.workspaces.single.name, 'Build Workspace');
+    expect(snapshot.workspaces.single.appVersion, '4.0.0');
+    expect(snapshot.workspaces.single.platform, 'macos');
     expect(snapshot.accounts.single.displayName, 'Personal Codex');
     expect(snapshot.accounts.single.sharing, 'private_only');
   });
 
-  test('announces an Agent update through the Cloud management endpoint',
+  test('parses only the safe V7 Workspace Worker projection', () {
+    final worker = StudioWorker.fromJson({
+      'id': 'worker-codex',
+      'workspaceId': 'workspace-1',
+      'workspaceName': 'Build Workspace',
+      'workerTypeId': 'codex',
+      'name': 'Codex',
+      'status': 'ready',
+      'authStrategy': 'local_session',
+      'credentialStatus': 'ready',
+      'localConcurrencyLimit': 2,
+      'revision': 4,
+      'capabilities': ['code'],
+      'allowedModels': ['gpt-5-codex'],
+      'schedulingState': 'enabled',
+      'defaultModel': 'gpt-5-codex',
+      'apiKey': 'must-not-be-retained',
+    });
+
+    expect(worker.workspaceId, 'workspace-1');
+    expect(worker.workerTypeId, 'codex');
+    expect(worker.schedulingState, 'enabled');
+    expect(worker.localConcurrencyLimit, 2);
+    expect(worker.allowedModels, ['gpt-5-codex']);
+  });
+
+  test('announces a Workspace runtime update through the Cloud management endpoint',
       () async {
     final client = _JsonClient({}, statusCode: 200);
     final api = StudioApiClient(
@@ -413,15 +401,15 @@ void main() {
       client: client,
     );
 
-    await api.announceAgentUpdate(
+    await api.announceWorkspaceUpdate(
       workspaceId: 'workspace-1',
-      agentId: 'agent-1',
+      runtimeId: 'runtime-1',
       channel: 'stable',
     );
 
     expect(client.lastRequest?.method, 'POST');
     expect(client.lastRequest?.url.path,
-        '/api/workspaces/workspace-1/hosts/agent-1/update');
+        '/api/workspaces/workspace-1/hosts/runtime-1/update');
     expect(jsonDecode(client.lastBody!)['channel'], 'stable');
   });
 
@@ -439,40 +427,13 @@ void main() {
       client: client,
     );
 
-    await api.createHostEnrollment(workspaceId: 'workspace-1');
+    await api.createWorkspaceEnrollment(workspaceId: 'workspace-1');
     expect(client.lastRequest?.url.path,
         '/api/workspaces/workspace-1/enrollments');
-
-    await api.revokeAgent(workspaceId: 'workspace-1', agentId: 'host-1');
-    expect(client.lastRequest?.method, 'DELETE');
-    expect(client.lastRequest?.url.path,
-        '/api/workspaces/workspace-1/hosts/host-1');
 
     await api.revokeWorkspace(workspaceId: 'workspace-1');
     expect(client.lastRequest?.method, 'DELETE');
     expect(client.lastRequest?.url.path, '/api/workspaces/workspace-1');
-  });
-
-  test('updates Worker desired state for one Host without configured instances',
-      () async {
-    final client = _JsonClient({}, statusCode: 200);
-    final api = StudioApiClient(
-      baseUrl: 'https://conclave.test/api',
-      client: client,
-    );
-
-    await api.setWorkerEnabled(
-      workspaceId: 'workspace-1',
-      workerId: 'worker-codex',
-      enabled: true,
-      hostId: 'host-1',
-    );
-
-    expect(client.lastRequest?.method, 'PUT');
-    expect(client.lastRequest?.url.path,
-        '/api/workspaces/workspace-1/workers/worker-codex');
-    expect(jsonDecode(client.lastBody!)['enabled'], isTrue);
-    expect(jsonDecode(client.lastBody!)['hostId'], 'host-1');
   });
 
   test('creates an AI Account with Host-local setup metadata', () async {
@@ -545,9 +506,7 @@ void main() {
     final client = _JsonClient({
       'workspaceId': 'workspace-2',
       'projects': [],
-      'workers': [],
-      'agents': [],
-      'plugins': [],
+      'workspaces': [],
       'tasks': [],
       'findings': [],
       'events': [],

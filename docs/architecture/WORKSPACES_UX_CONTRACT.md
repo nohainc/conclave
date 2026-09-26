@@ -1,6 +1,6 @@
 # Conclave AX Workspaces UX and Data Contract
 
-**Status:** Phase 1 contract; Phases 2 and 3 Workspaces UI are implemented.
+**Status:** Phases 1–5 Workspaces UI and frontend model migration are implemented.
 
 **Applies to:** Conclave AX and its Cloud read models.
 
@@ -32,12 +32,11 @@ Workspaces
   work may use another Workspace only when its grant and execution policy allow
   it.
 
-This contract defines the UX and frontend read model. Phase 2 replaces the
-two-tab Execution surface and separate Workspace detail screen with expandable
-Workspace cards. Phase 3 moves Worker inventory, readiness, credential
-attention, Cloud scheduling, and Enable/Disable/Drain controls into each
-owning Workspace card. Compatibility parsing remains while old links continue
-to resolve to the Workspaces page.
+This contract defines the UX and frontend read model. The Workspaces page uses
+one `StudioWorkspace` model and one `StudioWorker` V7 inventory projection.
+Worker inventory, readiness, credential attention, Cloud scheduling, and
+Enable/Disable/Drain controls live inside each owning Workspace card. Legacy
+URLs continue to resolve to the canonical Workspaces page.
 
 ## Canonical Workspace overview model
 
@@ -235,12 +234,10 @@ Workers tab, global Worker page, or Workspace detail page. Grant counts are
 refreshed from Project Workspace Grant read models; runtime activity continues
 to use the current available assignment summary.
 
-`StudioAgent` remains as a transitional UI adapter for Workspace cards and
-legacy callers. Historical routes remain parseable and redirect to the shared
-Workspaces page; Worker-targeted notifications resolve the owning Workspace
-when an inventory identity is available. Later phases can replace the adapter
-with the explicit `StudioWorkspaceOverview` model without changing this UX
-contract.
+Workspace data comes from the Cloud Workspace read model, and Worker data comes
+from the V7 inventory. The frontend no longer queries configured Worker or
+Host collections. Worker-targeted notifications resolve the owning Workspace
+when an inventory identity is available.
 
 ## Phase 1 exit checks
 

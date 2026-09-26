@@ -22,7 +22,7 @@ void main() {
       expect(homeContext.isNavActive(const StudioNavigation.home()), isTrue);
       expect(
           homeContext.isNavActive(const StudioNavigation.projects()), isFalse);
-      expect(homeContext.isNavActive(const StudioNavigation.hosts()), isFalse);
+      expect(homeContext.isNavActive(const StudioNavigation.workspaces()), isFalse);
 
       const projectContext = StudioShellContext(
         navigation: StudioNavigation.project('project-1'),
@@ -80,7 +80,7 @@ void main() {
           reason: '$nav should NOT activate Home',
         );
         expect(
-          ctx.isNavActive(const StudioNavigation.hosts()),
+          ctx.isNavActive(const StudioNavigation.workspaces()),
           isFalse,
           reason: '$nav should NOT activate Workspaces',
         );
@@ -88,19 +88,19 @@ void main() {
 
       // Workspaces route
       const hostsCtx = StudioShellContext(
-        navigation: StudioNavigation.hosts(),
+        navigation: StudioNavigation.workspaces(),
         projects: [],
       );
-      expect(hostsCtx.isNavActive(const StudioNavigation.hosts()), isTrue);
+      expect(hostsCtx.isNavActive(const StudioNavigation.workspaces()), isTrue);
       expect(hostsCtx.isNavActive(const StudioNavigation.projects()), isFalse);
       expect(hostsCtx.isNavActive(const StudioNavigation.home()), isFalse);
 
       // Legacy Worker routes resolve to Workspaces.
       const legacyWorkersCtx = StudioShellContext(
-        navigation: StudioNavigation.hosts(),
+        navigation: StudioNavigation.workspaces(),
         projects: [],
       );
-      expect(legacyWorkersCtx.isNavActive(const StudioNavigation.hosts()), isTrue);
+      expect(legacyWorkersCtx.isNavActive(const StudioNavigation.workspaces()), isTrue);
       expect(legacyWorkersCtx.isNavActive(const StudioNavigation.home()), isFalse);
 
       // Profile & Security route
@@ -149,19 +149,17 @@ void main() {
         projects: [testProject],
         selectedProject: testProject,
         workspaces: [
-          StudioAgent(
+          StudioWorkspace(
             id: 'agent-1',
             name: 'MacBook Pro',
             hostname: 'vitalii-mac',
             status: 'online',
-            os: 'macOS',
+            platform: 'macOS',
             architecture: 'arm64',
-            version: '0.6.0',
+            appVersion: '0.6.0',
             lastSeen: 'just now',
             workerCount: 2,
-            pluginCount: 2,
             activeTaskCount: 1,
-            workspaceBindings: [],
           ),
         ],
         viewerDisplayName: 'Vitalii Noha',
@@ -257,7 +255,7 @@ void main() {
       // Tap Execution in Application menu
       await tester.tap(find.text('Workspaces'));
       await tester.pumpAndSettle();
-      expect(navigatedTo?.kind, StudioRouteKind.hosts);
+      expect(navigatedTo?.kind, StudioRouteKind.workspaces);
     });
 
     testWidgets(
@@ -451,7 +449,7 @@ void main() {
       // Click Execution
       await tester.tap(find.text('Workspaces'));
       await tester.pumpAndSettle();
-      expect(navigatedTo?.kind, StudioRouteKind.hosts);
+      expect(navigatedTo?.kind, StudioRouteKind.workspaces);
 
       // Reopen and check Appearance -> System
       await tester.tap(find.byTooltip('Application menu'));
@@ -588,19 +586,17 @@ void main() {
         selectedProject: testProject,
         selectedWorkstream: testProject.workstreams.first,
         workspaces: const [
-          StudioAgent(
+          StudioWorkspace(
             id: 'agent-1',
             name: 'MacBook Pro',
             hostname: 'vitalii-mac',
             status: 'online',
-            os: 'macOS',
+            platform: 'macOS',
             architecture: 'arm64',
-            version: '0.6.0',
+            appVersion: '0.6.0',
             lastSeen: 'just now',
             workerCount: 2,
-            pluginCount: 2,
             activeTaskCount: 1,
-            workspaceBindings: [],
           ),
         ],
         unreadNotificationCount: 3,
@@ -870,7 +866,7 @@ void main() {
       StudioNavigation? navigatedTo;
 
       const workersContext = StudioShellContext(
-        navigation: StudioNavigation.hosts(),
+        navigation: StudioNavigation.workspaces(),
         projects: [testProject],
       );
 
@@ -1060,7 +1056,7 @@ void main() {
       expect(find.text('Usage'), findsNothing);
       await tester.tap(find.text('Workspaces'));
       await tester.pumpAndSettle();
-      expect(navigatedTo?.kind, StudioRouteKind.hosts);
+      expect(navigatedTo?.kind, StudioRouteKind.workspaces);
     });
 
     testWidgets(
@@ -1075,49 +1071,43 @@ void main() {
 
       StudioNavigation? navigatedTo;
 
-      const macBook = StudioAgent(
+      const macBook = StudioWorkspace(
         id: 'agent-1',
         name: 'MacBook Pro',
         hostname: 'vitalii-mac',
         status: 'online',
-        os: 'macOS',
+        platform: 'macOS',
         architecture: 'arm64',
-        version: '0.6.0',
+        appVersion: '0.6.0',
         lastSeen: 'just now',
         workerCount: 4,
-        pluginCount: 2,
         activeTaskCount: 1,
-        workspaceBindings: [],
       );
 
-      const buildServer = StudioAgent(
+      const buildServer = StudioWorkspace(
         id: 'agent-2',
         name: 'Build Server',
         hostname: 'build-srv',
         status: 'online',
-        os: 'Linux',
+        platform: 'Linux',
         architecture: 'x64',
-        version: '0.6.0',
+        appVersion: '0.6.0',
         lastSeen: 'just now',
         workerCount: 6,
-        pluginCount: 3,
         activeTaskCount: 0,
-        workspaceBindings: [],
       );
 
-      const officeMac = StudioAgent(
+      const officeMac = StudioWorkspace(
         id: 'agent-3',
         name: 'Office Mac',
         hostname: 'office-mac',
         status: 'offline',
-        os: 'macOS',
+        platform: 'macOS',
         architecture: 'arm64',
-        version: '0.6.0',
+        appVersion: '0.6.0',
         lastSeen: '2 hours ago',
         workerCount: 0,
-        pluginCount: 0,
         activeTaskCount: 0,
-        workspaceBindings: [],
       );
 
       // 1. Global context test: "2 / 3 Workspaces online"
@@ -1166,37 +1156,33 @@ void main() {
       // Tap Manage Workspaces in popover footer
       await tester.tap(find.text('Manage Workspaces'));
       await tester.pumpAndSettle();
-      expect(navigatedTo?.kind, StudioRouteKind.hosts);
+      expect(navigatedTo?.kind, StudioRouteKind.workspaces);
     });
 
     test('StudioShellContext derives correct tone and label across states', () {
-      const macBook = StudioAgent(
+      const macBook = StudioWorkspace(
         id: 'agent-1',
         name: 'MacBook Pro',
         hostname: 'vitalii-mac',
         status: 'online',
-        os: 'macOS',
+        platform: 'macOS',
         architecture: 'arm64',
-        version: '0.6.0',
+        appVersion: '0.6.0',
         lastSeen: 'just now',
         workerCount: 4,
-        pluginCount: 2,
         activeTaskCount: 1,
-        workspaceBindings: [],
       );
-      const officeMacOffline = StudioAgent(
+      const officeMacOffline = StudioWorkspace(
         id: 'agent-3',
         name: 'Office Mac',
         hostname: 'office-mac',
         status: 'offline',
-        os: 'macOS',
+        platform: 'macOS',
         architecture: 'arm64',
-        version: '0.6.0',
+        appVersion: '0.6.0',
         lastSeen: 'yesterday',
         workerCount: 0,
-        pluginCount: 0,
         activeTaskCount: 0,
-        workspaceBindings: [],
       );
 
       // Workstream context: targeted workspace online
@@ -1311,8 +1297,8 @@ void main() {
         StudioNavigation.project('p-1'),
         StudioNavigation.workstream('p-1', 'ws-running'),
         StudioNavigation.run('p-1', 'run-1', workstreamId: 'ws-running'),
-        StudioNavigation.hosts(),
-        StudioNavigation.hosts(),
+        StudioNavigation.workspaces(),
+        StudioNavigation.workspaces(),
         StudioNavigation.profileSecurity(),
       ];
 
@@ -1536,13 +1522,12 @@ void main() {
       expect(navigatedTo?.kind, StudioRouteKind.project);
 
       // Test 1c: Workspace route -> "Workspaces / Workspace Name"
-      const testWs = StudioAgent(
+      const testWs = StudioWorkspace(
         id: 'ws-mac',
         name: 'MacBook Pro',
         hostname: 'macbook-pro',
         status: 'online',
-        version: '1.0.0',
-        pluginCount: 0,
+        appVersion: '1.0.0',
         workerCount: 0,
         activeTaskCount: 0,
       );
@@ -1572,7 +1557,7 @@ void main() {
       expect(find.text('Workspaces'), findsOneWidget);
       expect(find.text('MacBook Pro'), findsOneWidget);
       await tester.tap(find.text('Workspaces'));
-      expect(navigatedTo?.kind, StudioRouteKind.hosts);
+      expect(navigatedTo?.kind, StudioRouteKind.workspaces);
       expect(navigatedTo?.workspaceId, isNull);
     });
 
@@ -1590,19 +1575,17 @@ void main() {
         navigation: StudioNavigation.home(),
         projects: [],
         workspaces: [
-          StudioAgent(
+          StudioWorkspace(
             id: 'agent-1',
             name: 'Build Server',
             hostname: 'build-srv',
             status: 'offline',
-            os: 'Linux',
+            platform: 'Linux',
             architecture: 'x86_64',
-            version: '0.6.0',
+            appVersion: '0.6.0',
             lastSeen: '10m ago',
             workerCount: 0,
-            pluginCount: 0,
             activeTaskCount: 0,
-            workspaceBindings: [],
           ),
         ],
         realtimeStale: true,

@@ -316,15 +316,7 @@ class StudioFixtureDataSource implements StudioDataSource {
   Future<void> deleteWorkstream({required String workstreamId}) async {}
 
   @override
-  Future<List<StudioAgent>> loadHosts({required String workspaceId}) async =>
-      studioFixtureSnapshot().agents;
-
-  @override
-  Future<List<StudioWorker>> loadWorkers({required String workspaceId}) async =>
-      studioFixtureSnapshot().workers;
-
-  @override
-  Future<List<StudioWorkspaceWorker>> loadWorkspaceWorkerInventory() async =>
+  Future<List<StudioWorker>> loadWorkspaceWorkerInventory() async =>
       const [];
 
   @override
@@ -452,14 +444,6 @@ class StudioFixtureDataSource implements StudioDataSource {
   }
 
   @override
-  Future<void> setWorkerEnabled({
-    required String workspaceId,
-    required String workerId,
-    required bool enabled,
-    String? hostId,
-  }) async {}
-
-  @override
   Future<StudioCredentialProfile> createCredentialProfile({
     required String workspaceId,
     required String displayName,
@@ -493,42 +477,22 @@ class StudioFixtureDataSource implements StudioDataSource {
   }) async {}
 
   @override
-  Future<void> revokeAgent({
-    required String workspaceId,
-    required String agentId,
-  }) async {}
-
-  @override
   Future<void> revokeWorkspace({required String workspaceId}) async {}
 
   @override
-  Future<void> updateHost({
+  Future<void> announceWorkspaceUpdate({
     required String workspaceId,
-    required String hostId,
-    String? name,
-    String? channel,
-  }) async {}
-
-  @override
-  Future<void> bindHostWorkspace({
-    required String workspaceId,
-    required String hostId,
-  }) async {}
-
-  @override
-  Future<void> announceAgentUpdate({
-    required String workspaceId,
-    required String agentId,
+    required String runtimeId,
     String? channel,
     String? version,
   }) async {}
 
   @override
-  Future<StudioHostEnrollment> createHostEnrollment({
+  Future<StudioWorkspaceEnrollment> createWorkspaceEnrollment({
     required String workspaceId,
     int expiresHours = 24,
   }) async {
-    return StudioHostEnrollment(
+    return StudioWorkspaceEnrollment(
       id: 'enrollment-fixture',
       token: 'conclave_enroll_fixture',
       workspaceId: workspaceId,
@@ -536,24 +500,7 @@ class StudioFixtureDataSource implements StudioDataSource {
     );
   }
 
-  @override
-  Future<void> saveWorker({
-    required String workspaceId,
-    String? workerId,
-    required String name,
-    required String agentId,
-    required String workerCatalogId,
-    required List<String> roles,
-    required List<String> capabilities,
-    required bool enabled,
-    String workerVersionPolicy = 'latest',
-    Map<String, dynamic> config = const {},
-    String sessionPolicy = 'stateless',
-    int concurrencyLimit = 1,
-    String billingMode = 'local_compute',
-    String independenceKey = '',
-    Map<String, dynamic> costMetadata = const {},
-  }) async {}
+
 }
 
 /// Stateful fixture used by the empty-workspace onboarding test. It mirrors

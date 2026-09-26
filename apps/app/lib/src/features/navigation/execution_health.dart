@@ -227,7 +227,7 @@ class ExecutionStatusPopover extends StatelessWidget {
                   if (Navigator.of(context).canPop()) {
                     Navigator.of(context).pop();
                   }
-                  onNavigateTo(const StudioNavigation.hosts());
+                  onNavigateTo(const StudioNavigation.workspaces());
                 },
                 borderRadius: const BorderRadius.vertical(
                   bottom: Radius.circular(12),
@@ -262,7 +262,7 @@ class ExecutionStatusPopover extends StatelessWidget {
   }
 
   Widget _buildWorkspaceRow({
-    required StudioAgent ws,
+    required StudioWorkspace ws,
     required bool isDark,
     required Color inkColor,
     required Color mutedInk,

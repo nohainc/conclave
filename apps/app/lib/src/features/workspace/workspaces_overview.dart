@@ -12,9 +12,9 @@ class WorkspacesOverview extends StatelessWidget {
     this.onOpenDownloads,
   });
 
-  final List<StudioAgent> workspaces;
+  final List<StudioWorkspace> workspaces;
   final VoidCallback onAdd;
-  final ValueChanged<StudioAgent> onSelectWorkspace;
+  final ValueChanged<StudioWorkspace> onSelectWorkspace;
   final VoidCallback? onOpenDownloads;
 
   @override
@@ -130,10 +130,10 @@ class WorkspacesOverview extends StatelessWidget {
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
-                              if (workspace.os != '—' ||
+                              if (workspace.platform != '—' ||
                                   workspace.architecture != '—')
                                 Text(
-                                  '${workspace.os} · ${workspace.architecture}',
+                                  '${workspace.platform} · ${workspace.architecture}',
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: theme.colorScheme.onSurfaceVariant,
@@ -156,7 +156,7 @@ class WorkspacesOverview extends StatelessWidget {
                         Expanded(
                           flex: 2,
                           child: Text(
-                            '${workspace.workspaceBindings.length}',
+                            '${workspace.projectGrantCount}',
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                               fontSize: 13.5,

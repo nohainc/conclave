@@ -139,35 +139,6 @@ StudioSnapshot studioFixtureSnapshot() => const StudioSnapshot(
           ],
         ),
       ],
-      workers: [
-        StudioWorker(
-          id: 'lead',
-          name: 'Lead',
-          provider: 'OpenAI',
-          role: 'lead',
-          capabilities: ['planning', 'implementation', 'evaluation'],
-          status: 'Available',
-          cost: '\$0.02 / 1k tokens',
-        ),
-        StudioWorker(
-          id: 'reviewer',
-          name: 'Reviewer',
-          provider: 'Anthropic',
-          role: 'reviewer',
-          capabilities: ['code_review', 'risk_analysis'],
-          status: 'Working',
-          cost: '\$0.03 / 1k tokens',
-        ),
-        StudioWorker(
-          id: 'runtime',
-          name: 'Local Runtime',
-          provider: 'Conclave',
-          role: 'executor',
-          capabilities: ['tests', 'git', 'artifacts'],
-          status: 'Connected',
-          cost: 'Local',
-        ),
-      ],
       accounts: [
         StudioCredentialProfile(
           id: 'account-codex',
@@ -179,71 +150,16 @@ StudioSnapshot studioFixtureSnapshot() => const StudioSnapshot(
           status: 'ready',
         ),
       ],
-      agents: [
-        StudioAgent(
-          id: 'agent-macbook',
+      workspaces: [
+        StudioWorkspace(
+          id: 'workspace-macbook',
           name: 'Development Workspace',
           hostname: 'development-agent.local',
           status: 'ONLINE',
-          version: '1.5.0',
-          pluginCount: 3,
+          appVersion: '1.5.0',
           workerCount: 5,
           activeTaskCount: 1,
-          desiredWorkers: [
-            StudioDesiredWorker(workerId: 'codex', version: '1.2.0'),
-            StudioDesiredWorker(workerId: 'claude-code', version: '1.0.4'),
-          ],
-          installedWorkers: [
-            StudioInstalledWorker(
-                workerId: 'codex', version: '1.2.0', status: 'ready'),
-            StudioInstalledWorker(
-                workerId: 'claude-code', version: '1.0.4', status: 'ready'),
-          ],
         ),
-      ],
-      plugins: [
-        StudioPlugin(
-            id: 'codex',
-            name: 'Codex',
-            version: '1.2.0',
-            status: 'Installed',
-            roles: ['Implementation', 'Research'],
-            capabilities: ['repository_write', 'tests']),
-        StudioPlugin(
-            id: 'claude-code',
-            name: 'Claude Code',
-            version: '1.0.4',
-            status: 'Installed',
-            roles: ['Review', 'Research'],
-            capabilities: ['code_review', 'repository_read']),
-        StudioPlugin(
-            id: 'openai',
-            name: 'OpenAI',
-            version: 'API',
-            status: 'Available',
-            roles: ['Planning'],
-            capabilities: ['planning']),
-        StudioPlugin(
-            id: 'anthropic',
-            name: 'Anthropic',
-            version: 'API',
-            status: 'Available',
-            roles: ['Review'],
-            capabilities: ['code_review']),
-        StudioPlugin(
-            id: 'git',
-            name: 'Git',
-            version: 'builtin',
-            status: 'Installed',
-            roles: ['Tool'],
-            capabilities: ['git', 'diff']),
-        StudioPlugin(
-            id: 'docker',
-            name: 'Docker',
-            version: 'builtin',
-            status: 'Available',
-            roles: ['Tool'],
-            capabilities: ['build', 'sandbox']),
       ],
       tasks: [
         StudioTask(

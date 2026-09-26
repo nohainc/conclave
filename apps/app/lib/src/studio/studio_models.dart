@@ -55,20 +55,12 @@ extension StudioChatMessageHelpers on StudioChatMessage {
   StudioMessageRole get senderRole => sender.role;
 }
 
-extension StudioWorkerHelpers on StudioWorker {
-  String get displayName => name;
-}
-
 extension StudioCredentialProfileHelpers on StudioCredentialProfile {
   String get name => displayName;
 }
 
 extension StudioProjectHelpers on StudioProject {
   String get title => name;
-}
-
-extension StudioSnapshotHelpers on StudioSnapshot {
-  List<StudioAgent> get hosts => agents;
 }
 
 enum FindingSeverity { blocker, major, minor, note }
@@ -181,11 +173,6 @@ List<String> _jsonStrings(Map<String, dynamic> json, String key) {
   } catch (_) {
     return const [];
   }
-}
-
-Map<String, dynamic> _map(Map<String, dynamic> json, String key) {
-  final value = json[key];
-  return value is Map ? Map<String, dynamic>.from(value) : <String, dynamic>{};
 }
 
 enum StudioMessageSender { user, conclave, system }
@@ -552,75 +539,10 @@ class StudioProject {
       );
 }
 
-class StudioWorker {
-  const StudioWorker({
-    required this.id,
-    required this.name,
-    required this.provider,
-    required this.role,
-    required this.capabilities,
-    required this.status,
-    required this.cost,
-    this.agentName = '—',
-    this.pluginName = '—',
-    this.roles = const [],
-    this.agentId = '',
-    this.workerCatalogId = '',
-    this.workerVersionPolicy = 'latest',
-    this.config = const {},
-    this.sessionPolicy = 'stateless',
-    this.concurrencyLimit = 1,
-    this.billingMode = 'local_compute',
-    this.independenceKey = '',
-    this.costMetadata = const {},
-  });
-
-  final String id;
-  final String name;
-  final String provider;
-  final String role;
-  final List<String> capabilities;
-  final String status;
-  final String cost;
-  final String agentName;
-  final String pluginName;
-  final List<String> roles;
-  final String agentId;
-  final String workerCatalogId;
-  final String workerVersionPolicy;
-  final Map<String, dynamic> config;
-  final String sessionPolicy;
-  final int concurrencyLimit;
-  final String billingMode;
-  final String independenceKey;
-  final Map<String, dynamic> costMetadata;
-
-  factory StudioWorker.fromJson(Map<String, dynamic> json) => StudioWorker(
-      id: _string(json, 'id'),
-      name: _string(json, 'name'),
-      provider: _string(json, 'provider'),
-      role: _string(json, 'role'),
-      capabilities: _strings(json, 'capabilities'),
-      status: _string(json, 'status'),
-      cost: _string(json, 'cost'),
-      agentName: _string(json, 'agentName'),
-      pluginName: _string(json, 'pluginName'),
-      roles: _strings(json, 'roles'),
-      agentId: _string(json, 'agentId'),
-      workerCatalogId: _string(json, 'workerCatalogId'),
-      workerVersionPolicy: _string(json, 'workerVersionPolicy', 'latest'),
-      config: _map(json, 'config'),
-      sessionPolicy: _string(json, 'sessionPolicy', 'stateless'),
-      concurrencyLimit: json['concurrencyLimit'] as int? ?? 1,
-      billingMode: _string(json, 'billingMode', 'local_compute'),
-      independenceKey: _string(json, 'independenceKey', ''),
-      costMetadata: _map(json, 'costMetadata'));
-}
-
 /// Safe Cloud projection of a locally owned Workspace Worker.
 /// It intentionally contains no credential references, secrets, or local paths.
-class StudioWorkspaceWorker {
-  const StudioWorkspaceWorker({
+class StudioWorker {
+  const StudioWorker({
     required this.id,
     required this.workspaceId,
     required this.workspaceName,
@@ -656,8 +578,7 @@ class StudioWorkspaceWorker {
   final String schedulingState;
   final int? cloudConcurrencyLimit;
 
-  factory StudioWorkspaceWorker.fromJson(Map<String, dynamic> json) =>
-      StudioWorkspaceWorker(
+  factory StudioWorker.fromJson(Map<String, dynamic> json) => StudioWorker(
         id: _string(json, 'id'),
         workspaceId: _string(json, 'workspaceId'),
         workspaceName: _string(json, 'workspaceName'),
@@ -677,116 +598,8 @@ class StudioWorkspaceWorker {
       );
 }
 
-class StudioAgent {
-  const StudioAgent({
-    required this.id,
-    required this.name,
-    required this.hostname,
-    required this.status,
-    required this.version,
-    required this.pluginCount,
-    required this.workerCount,
-    required this.activeTaskCount,
-    this.os = '—',
-    this.architecture = '—',
-    this.appVersion = '—',
-    this.updateChannel = '—',
-    this.lastSeen = '—',
-    this.runtimeCapabilities = const [],
-    this.workspaceBindings = const [],
-    this.projectGrantCount,
-    this.desiredWorkers = const [],
-    this.installedWorkers = const [],
-  });
-
-  final String id;
-  final String name;
-  final String hostname;
-  final String status;
-  final String version;
-  final int pluginCount;
-  final int workerCount;
-  final int activeTaskCount;
-  final String os;
-  final String architecture;
-  final String appVersion;
-  final String updateChannel;
-  final String lastSeen;
-  final List<String> runtimeCapabilities;
-  final List<String> workspaceBindings;
-  final int? projectGrantCount;
-  final List<StudioDesiredWorker> desiredWorkers;
-  final List<StudioInstalledWorker> installedWorkers;
-
-  factory StudioAgent.fromJson(Map<String, dynamic> json) => StudioAgent(
-        id: _string(json, 'id'),
-        name: _string(json, 'name'),
-        hostname: _string(json, 'hostname'),
-        status: _string(json, 'lifecycleStatus', _string(json, 'status')),
-        version: _string(json, 'version'),
-        pluginCount: json['pluginCount'] as int? ?? 0,
-        workerCount: json['workerCount'] as int? ?? 0,
-        activeTaskCount: json['activeTaskCount'] as int? ?? 0,
-        os: _string(json, 'os'),
-        architecture: _string(json, 'architecture'),
-        appVersion: _string(json, 'appVersion'),
-        updateChannel: _string(json, 'updateChannel'),
-        lastSeen: _string(json, 'lastSeen'),
-        runtimeCapabilities: _jsonStrings(json, 'runtimeCapabilitiesJson'),
-        workspaceBindings: _strings(json, 'workspaceBindings'),
-        desiredWorkers: (json['desiredWorkers'] as List? ?? const [])
-            .whereType<Map>()
-            .map((item) =>
-                StudioDesiredWorker.fromJson(Map<String, dynamic>.from(item)))
-            .toList(),
-        installedWorkers: (json['installedWorkers'] as List? ?? const [])
-            .whereType<Map>()
-            .map((item) =>
-                StudioInstalledWorker.fromJson(Map<String, dynamic>.from(item)))
-            .toList(),
-      );
-}
-
-class StudioDesiredWorker {
-  const StudioDesiredWorker({
-    required this.workerId,
-    required this.version,
-    this.status = 'requested',
-  });
-
-  final String workerId;
-  final String version;
-  final String status;
-
-  factory StudioDesiredWorker.fromJson(Map<String, dynamic> json) =>
-      StudioDesiredWorker(
-        workerId: _string(json, 'workerId', _string(json, 'worker_id')),
-        version: _string(json, 'version', _string(json, 'requiredVersion')),
-        status: _string(json, 'status', 'requested'),
-      );
-}
-
-class StudioInstalledWorker {
-  const StudioInstalledWorker({
-    required this.workerId,
-    required this.version,
-    required this.status,
-  });
-
-  final String workerId;
-  final String version;
-  final String status;
-
-  factory StudioInstalledWorker.fromJson(Map<String, dynamic> json) =>
-      StudioInstalledWorker(
-        workerId: _string(json, 'workerId', _string(json, 'worker_id')),
-        version: _string(json, 'version'),
-        status: _string(json, 'status', 'installed'),
-      );
-}
-
-class StudioHostEnrollment {
-  const StudioHostEnrollment({
+class StudioWorkspaceEnrollment {
+  const StudioWorkspaceEnrollment({
     required this.id,
     required this.token,
     required this.workspaceId,
@@ -798,63 +611,12 @@ class StudioHostEnrollment {
   final String workspaceId;
   final String expiresAt;
 
-  factory StudioHostEnrollment.fromJson(Map<String, dynamic> json) =>
-      StudioHostEnrollment(
+  factory StudioWorkspaceEnrollment.fromJson(Map<String, dynamic> json) =>
+      StudioWorkspaceEnrollment(
         id: _string(json, 'id'),
         token: _string(json, 'token'),
         workspaceId: _string(json, 'workspaceId'),
         expiresAt: _string(json, 'expiresAt'),
-      );
-}
-
-class StudioPlugin {
-  const StudioPlugin({
-    required this.id,
-    required this.name,
-    required this.version,
-    required this.status,
-    required this.roles,
-    required this.capabilities,
-    this.description = '',
-    this.publisher = '',
-    this.channel = '—',
-    this.permissions = const [],
-    this.supportedOS = const [],
-    this.supportedArchitecture = const [],
-    this.installedAgentCount = 0,
-    this.connectedAccountCount = 0,
-  });
-
-  final String id;
-  final String name;
-  final String version;
-  final String status;
-  final List<String> roles;
-  final List<String> capabilities;
-  final String description;
-  final String publisher;
-  final String channel;
-  final List<String> permissions;
-  final List<String> supportedOS;
-  final List<String> supportedArchitecture;
-  final int installedAgentCount;
-  final int connectedAccountCount;
-
-  factory StudioPlugin.fromJson(Map<String, dynamic> json) => StudioPlugin(
-        id: _string(json, 'id'),
-        name: _string(json, 'name'),
-        version: _string(json, 'version'),
-        status: _string(json, 'status'),
-        roles: _strings(json, 'roles'),
-        capabilities: _strings(json, 'capabilities'),
-        description: _string(json, 'description'),
-        publisher: _string(json, 'publisher'),
-        channel: _string(json, 'channel'),
-        permissions: _strings(json, 'permissions'),
-        supportedOS: _strings(json, 'supportedOS'),
-        supportedArchitecture: _strings(json, 'supportedArchitecture'),
-        installedAgentCount: json['installedAgentCount'] as int? ?? 0,
-        connectedAccountCount: json['connectedAccountCount'] as int? ?? 0,
       );
 }
 
@@ -1210,15 +972,20 @@ class StudioWorkspace {
   const StudioWorkspace({
     required this.id,
     required this.name,
-    required this.slug,
-    required this.status,
-    required this.role,
+    this.slug = '',
+    this.status = 'active',
+    this.role = 'owner',
     this.platform = '—',
     this.architecture = '—',
     this.hostname = '—',
     this.appVersion = '—',
     this.runtimeCapabilities = const [],
     this.factsUpdatedAt,
+    this.updateChannel = 'stable',
+    this.lastSeen = '—',
+    this.workerCount = 0,
+    this.activeTaskCount = 0,
+    this.projectGrantCount = 0,
   });
 
   final String id;
@@ -1232,6 +999,11 @@ class StudioWorkspace {
   final String appVersion;
   final List<String> runtimeCapabilities;
   final String? factsUpdatedAt;
+  final String updateChannel;
+  final String lastSeen;
+  final int workerCount;
+  final int activeTaskCount;
+  final int projectGrantCount;
 
   factory StudioWorkspace.fromJson(Map<String, dynamic> json) =>
       StudioWorkspace(
@@ -1247,6 +1019,37 @@ class StudioWorkspace {
         appVersion: _string(json, 'appVersion'),
         runtimeCapabilities: _jsonStrings(json, 'runtimeCapabilitiesJson'),
         factsUpdatedAt: json['factsUpdatedAt']?.toString(),
+        updateChannel: _string(json, 'updateChannel', 'stable'),
+        lastSeen: _string(json, 'lastSeen',
+            json['factsUpdatedAt']?.toString() ?? '—'),
+        workerCount: json['workerCount'] as int? ?? 0,
+        activeTaskCount: json['activeTaskCount'] as int? ?? 0,
+        projectGrantCount: json['projectGrantCount'] as int? ?? 0,
+      );
+
+  StudioWorkspace copyWith({
+    int? workerCount,
+    int? activeTaskCount,
+    int? projectGrantCount,
+    String? lastSeen,
+  }) =>
+      StudioWorkspace(
+        id: id,
+        name: name,
+        slug: slug,
+        status: status,
+        role: role,
+        platform: platform,
+        architecture: architecture,
+        hostname: hostname,
+        appVersion: appVersion,
+        runtimeCapabilities: runtimeCapabilities,
+        factsUpdatedAt: factsUpdatedAt,
+        updateChannel: updateChannel,
+        lastSeen: lastSeen ?? this.lastSeen,
+        workerCount: workerCount ?? this.workerCount,
+        activeTaskCount: activeTaskCount ?? this.activeTaskCount,
+        projectGrantCount: projectGrantCount ?? this.projectGrantCount,
       );
 }
 
@@ -1392,9 +1195,7 @@ class StudioSnapshot {
     this.activeChatId,
     this.run,
     required this.projects,
-    required this.workers,
-    this.agents = const [],
-    this.plugins = const [],
+    this.workspaces = const [],
     required this.tasks,
     required this.findings,
     required this.events,
@@ -1411,9 +1212,7 @@ class StudioSnapshot {
   final String? activeChatId;
   final StudioRun? run;
   final List<StudioProject> projects;
-  final List<StudioWorker> workers;
-  final List<StudioAgent> agents;
-  final List<StudioPlugin> plugins;
+  final List<StudioWorkspace> workspaces;
   final List<StudioTask> tasks;
   final List<StudioFinding> findings;
   final List<StudioEvent> events;
@@ -1425,8 +1224,7 @@ class StudioSnapshot {
 
   StudioSnapshot copyWith({
     List<StudioProject>? projects,
-    List<StudioAgent>? agents,
-    List<StudioWorker>? workers,
+    List<StudioWorkspace>? workspaces,
     List<StudioCredentialProfile>? accounts,
     String? activeChatId,
   }) =>
@@ -1437,9 +1235,7 @@ class StudioSnapshot {
         activeChatId: activeChatId ?? this.activeChatId,
         run: run,
         projects: projects ?? this.projects,
-        workers: workers ?? this.workers,
-        agents: agents ?? this.agents,
-        plugins: plugins,
+        workspaces: workspaces ?? this.workspaces,
         tasks: tasks,
         findings: findings,
         events: events,
@@ -1464,9 +1260,7 @@ class StudioSnapshot {
 
   static StudioSnapshot empty() => const StudioSnapshot(
       projects: [],
-      workers: [],
-      agents: [],
-      plugins: [],
+      workspaces: [],
       tasks: [],
       findings: [],
       events: [],
@@ -1488,17 +1282,9 @@ class StudioSnapshot {
             .map((item) =>
                 StudioProject.fromJson(Map<String, dynamic>.from(item as Map)))
             .toList(),
-        workers: (json['workers'] as List? ?? const [])
+        workspaces: (json['workspaces'] as List? ?? const [])
             .map((item) =>
-                StudioWorker.fromJson(Map<String, dynamic>.from(item as Map)))
-            .toList(),
-        agents: (json['hosts'] as List? ?? json['agents'] as List? ?? const [])
-            .map((item) =>
-                StudioAgent.fromJson(Map<String, dynamic>.from(item as Map)))
-            .toList(),
-        plugins: (json['plugins'] as List? ?? const [])
-            .map((item) =>
-                StudioPlugin.fromJson(Map<String, dynamic>.from(item as Map)))
+                StudioWorkspace.fromJson(Map<String, dynamic>.from(item as Map)))
             .toList(),
         tasks: (json['tasks'] as List? ?? const [])
             .map((item) =>

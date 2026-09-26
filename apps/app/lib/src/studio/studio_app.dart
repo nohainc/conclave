@@ -69,17 +69,13 @@ class _StudioAppState extends State<ConclaveAppShell> {
   String? selectedChatId;
   final Set<String> expandedProjectIds = <String>{};
   bool showNewGoal = false;
-  String? workerActionMessage;
-  List<StudioWorkspaceWorker> workspaceWorkers = const [];
+  List<StudioWorker> workspaceWorkers = const [];
   Map<String, int> workspaceProjectGrantCounts = const {};
-  StudioHostEnrollment? enrollmentResult;
+  StudioWorkspaceEnrollment? enrollmentResult;
   StudioQualityPreset selectedQuality = StudioQualityPreset.balanced;
-  String selectedExecutionWorker = 'Auto';
   String selectedExecutionModel = 'Auto';
-  String selectedExecutionHost = 'Auto';
   bool showAdvancedExecution = false;
   bool isSendingChat = false;
-  final Map<String, bool> workerEnabled = {};
   final objectiveController = TextEditingController();
   final revisionController = TextEditingController();
   final chatController = TextEditingController();
@@ -251,8 +247,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
         selectedProject: selectedProject,
         selectedWorkstream: selectedWorkstream,
         selectedRun: snapshot.run,
-        workspaces: snapshot.agents,
-        workers: snapshot.workers,
+        workspaces: snapshot.workspaces,
         unreadNotificationCount: unreadNotificationCount,
         isDarkTheme: _themeMode == ThemeMode.dark ||
             (_themeMode == ThemeMode.system &&
@@ -501,8 +496,10 @@ class _StudioAppState extends State<ConclaveAppShell> {
 
   Future<void> _loadWorkspaces() async {
     try {
-      await store.workspaces.list();
+      final loadedWorkspaces = await store.workspaces.list();
       if (!mounted) return;
+      setState(() =>
+          snapshot = snapshot.copyWith(workspaces: loadedWorkspaces));
       try {
         final localWorkers =
             await widget.dataSource.loadWorkspaceWorkerInventory();
@@ -583,13 +580,13 @@ class _StudioAppState extends State<ConclaveAppShell> {
       return;
     }
     try {
-      if (type.startsWith('host.') || type.startsWith('desired_state.')) {
-        final hosts = await store.agents.refresh(workspaceId);
+      if (type.startsWith('workspace.')) {
+        final workspaces = await store.workspaces.list();
         final localWorkers =
             await widget.dataSource.loadWorkspaceWorkerInventory();
         if (!mounted) return;
         setState(() {
-          snapshot = snapshot.copyWith(agents: hosts);
+          snapshot = snapshot.copyWith(workspaces: workspaces);
           workspaceWorkers = localWorkers;
         });
         return;
@@ -599,12 +596,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
             await widget.dataSource.loadWorkspaceWorkerInventory();
         if (!mounted) return;
         setState(() => workspaceWorkers = localWorkers);
-        return;
-      }
-      if (type.startsWith('worker.')) {
-        final workers = await store.workers.refresh(workspaceId);
-        if (!mounted) return;
-        setState(() => snapshot = snapshot.copyWith(workers: workers));
         return;
       }
       if (type.startsWith('project.') || type.startsWith('chat.')) {
@@ -681,7 +672,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                           StudioNotificationKind.failed => Icons.error_outline,
                           StudioNotificationKind.approvalRequired =>
                             Icons.help_outline,
-                          StudioNotificationKind.hostOffline =>
+                          StudioNotificationKind.workspaceOffline =>
                             Icons.cloud_off_outlined,
                           StudioNotificationKind.workerCredentialProblem =>
                             Icons.key_off_outlined,
@@ -746,14 +737,14 @@ class _StudioAppState extends State<ConclaveAppShell> {
           _navigateTo(StudioNavigation.run(
               notification.projectId!, notification.runId!));
         }
-      case StudioNotificationTarget.hosts:
+      case StudioNotificationTarget.workspaces:
       case StudioNotificationTarget.workspace:
         final workspaceId = notification.workspaceId ??
             workspaceWorkers
                 .where((worker) => worker.id == notification.workerId)
                 .map((worker) => worker.workspaceId)
                 .firstOrNull;
-        _navigateTo(StudioNavigation.hosts(workspaceId: workspaceId));
+        _navigateTo(StudioNavigation.workspaces(workspaceId: workspaceId));
       case null:
         break;
     }
@@ -1082,7 +1073,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
   Future<void> _revokeWorkspace(String workspaceId) async {
     if (workspaceId.isEmpty) return;
     try {
-      await store.agents.revokeWorkspace(workspaceId);
+      await store.workspaces.revoke(workspaceId);
       await _loadWorkspaces();
       await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
       if (mounted) {
@@ -1093,14 +1084,14 @@ class _StudioAppState extends State<ConclaveAppShell> {
     }
   }
 
-  Future<void> _announceAgentUpdate(StudioAgent agent) async {
+  Future<void> _announceWorkspaceUpdate(StudioWorkspace workspace) async {
     final workspaceId = snapshot.workspaceId;
     if (workspaceId == null || workspaceId.isEmpty) return;
     try {
-      await store.agents.announceUpdate(
+      await store.workspaces.announceUpdate(
         workspaceId,
-        agent.id,
-        channel: agent.updateChannel == '—' ? 'stable' : agent.updateChannel,
+        workspace.id,
+        channel: workspace.updateChannel,
       );
       await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
       if (!mounted) return;
@@ -1110,14 +1101,14 @@ class _StudioAppState extends State<ConclaveAppShell> {
     }
   }
 
-  Future<void> _renameHost(StudioAgent host) async {
-    var name = host.name;
+  Future<void> _renameWorkspace(StudioWorkspace workspace) async {
+    var name = workspace.name;
     final updated = await showDialog<String>(
       context: navigatorKey.currentContext ?? context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Rename Workspace'),
         content: TextFormField(
-          initialValue: host.name,
+          initialValue: workspace.name,
           autofocus: true,
           decoration: const InputDecoration(labelText: 'Workspace name'),
           onChanged: (value) => name = value,
@@ -1142,7 +1133,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
       return;
     }
     try {
-      await store.agents.updateHost(workspaceId, host.id, name: updated.trim());
+      await store.workspaces.update(workspace.id, updated.trim());
       await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
       if (mounted) _showSnackBar('Workspace renamed.');
     } catch (error) {
@@ -1150,20 +1141,56 @@ class _StudioAppState extends State<ConclaveAppShell> {
     }
   }
 
-  Future<void> _bindHost(StudioAgent host) async {
-    final workspaceId = snapshot.workspaceId;
-    if (workspaceId == null) return;
+  Future<void> _grantWorkspace(StudioWorkspace workspace) async {
+    if (snapshot.projects.isEmpty) {
+      _showSnackBar('Create a Project before granting Workspace access.');
+      return;
+    }
+    String? selectedProjectId = snapshot.projects.first.id;
+    final projectId = await showDialog<String>(
+      context: navigatorKey.currentContext ?? context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Grant Workspace to Project'),
+          content: DropdownButtonFormField<String>(
+            initialValue: selectedProjectId,
+            decoration: const InputDecoration(labelText: 'Project'),
+            items: snapshot.projects
+                .map((project) => DropdownMenuItem(
+                    value: project.id, child: Text(project.name)))
+                .toList(),
+            onChanged: (value) =>
+                setDialogState(() => selectedProjectId = value),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: selectedProjectId == null
+                  ? null
+                  : () => Navigator.pop(dialogContext, selectedProjectId),
+              child: const Text('Grant access'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (projectId == null) return;
     try {
-      await store.agents.bindWorkspace(workspaceId, host.id);
-      await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
+      await widget.dataSource.requestProjectWorkspace(
+        projectId: projectId,
+        workspaceId: workspace.id,
+      );
       await _refreshWorkspaceProjectGrantCounts();
-      if (mounted) _showSnackBar('Workspace grant saved.');
+      if (mounted) _showSnackBar('Workspace access request sent.');
     } catch (error) {
       if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
     }
   }
 
-  Future<void> _enrollAgent() async {
+  Future<void> _enrollWorkspace() async {
     var name = 'My Workspace';
     final selected = await showDialog<String>(
       context: navigatorKey.currentContext ?? context,
@@ -1211,9 +1238,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
     }
   }
 
-  Future<void> _connectWorkspace(StudioAgent workspace) async {
+  Future<void> _connectWorkspace(StudioWorkspace workspace) async {
     try {
-      var enrollment = await store.agents.createEnrollment(workspace.id);
+      var enrollment = await store.workspaces.createEnrollment(workspace.id);
       if (!mounted) return;
       setState(() => enrollmentResult = enrollment);
       await showDialog<void>(
@@ -1284,7 +1311,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   onPressed: () async {
                     try {
                       final refreshed =
-                          await store.agents.createEnrollment(workspace.id);
+                          await store.workspaces.createEnrollment(workspace.id);
                       if (dialogContext.mounted) {
                         setDialogState(() => enrollment = refreshed);
                         setState(() => enrollmentResult = refreshed);
@@ -1319,278 +1346,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
     if (remaining.isNegative) return 'Expired';
     final hours = (remaining.inMinutes / 60).ceil();
     return 'Expires in ${hours == 1 ? '1 hour' : '$hours hours'}';
-  }
-
-  // Retained only while the legacy data adapter is being retired. It
-  // is no longer reachable from the v4 catalog UI.
-  // ignore: unused_element
-  Future<void> _editWorker([StudioWorker? existing]) async {
-    if (snapshot.agents.isEmpty || snapshot.plugins.isEmpty) {
-      if (mounted) {
-        setState(() => workerActionMessage =
-            'Connect a Workspace and make a Worker available before starting work.');
-        await showDialog<void>(
-          context: navigatorKey.currentContext ?? context,
-          builder: (dialogContext) => AlertDialog(
-            title: const Text('Worker prerequisites missing'),
-            content: const Text(
-                'A Worker needs one connected Workspace and a ready connection. '
-                'Open Execution to finish setup, then return here.'),
-            actions: [
-              FilledButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Close'),
-              ),
-            ],
-          ),
-        );
-      }
-      return;
-    }
-    final workspaceId = executionWorkspaceId;
-    if (workspaceId == null || workspaceId.isEmpty) {
-      if (mounted) {
-        setState(() => workerActionMessage =
-            'Select a workspace before creating a Worker.');
-        await showDialog<void>(
-          context: navigatorKey.currentContext ?? context,
-          builder: (dialogContext) => AlertDialog(
-            title: const Text('Workspace required'),
-            content: const Text(
-                'Select a workspace from the sidebar, then try creating the '
-                'Worker again.'),
-            actions: [
-              FilledButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Close'),
-              ),
-            ],
-          ),
-        );
-      }
-      return;
-    }
-    var name = existing?.name ?? '';
-    var roles = (existing?.roles.isNotEmpty == true
-            ? existing!.roles
-            : const ['researcher'])
-        .join(', ');
-    var capabilities = (existing?.capabilities.isNotEmpty == true
-            ? existing!.capabilities
-            : const ['repository_read'])
-        .join(', ');
-    var config =
-        const JsonEncoder.withIndent('  ').convert(existing?.config ?? {});
-    var versionPolicy = existing?.workerVersionPolicy ?? 'latest';
-    var independenceKey = existing?.independenceKey ?? '';
-    var concurrency = '${existing?.concurrencyLimit ?? 1}';
-    final configuredAgentId = existing?.agentId;
-    var agentId = configuredAgentId != null &&
-            snapshot.agents.any((agent) => agent.id == configuredAgentId)
-        ? configuredAgentId
-        : snapshot.agents.firstOrNull?.id;
-    final configuredPluginId = existing?.workerCatalogId;
-    var workerCatalogId = configuredPluginId != null &&
-            snapshot.plugins.any((plugin) => plugin.id == configuredPluginId)
-        ? configuredPluginId
-        : snapshot.plugins.firstOrNull?.id;
-    var enabled = existing?.status.toLowerCase() != 'disabled';
-    var sessionPolicy = existing?.sessionPolicy ?? 'stateless';
-    var billingMode = existing?.billingMode ?? 'local_compute';
-    bool? saved;
-    try {
-      saved = await showDialog<bool>(
-        context: navigatorKey.currentContext ?? context,
-        builder: (dialogContext) => StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
-            title: Text(existing == null ? 'Create Worker' : 'Edit Worker'),
-            content: SingleChildScrollView(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                TextFormField(
-                    initialValue: name,
-                    onChanged: (val) => setDialogState(() => name = val),
-                    decoration: const InputDecoration(labelText: 'Name')),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: agentId,
-                  decoration: const InputDecoration(labelText: 'Workspace'),
-                  items: snapshot.agents
-                      .map((agent) => DropdownMenuItem(
-                          value: agent.id, child: Text(agent.name)))
-                      .toList(),
-                  onChanged: (value) => setDialogState(() => agentId = value),
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: workerCatalogId,
-                  decoration: const InputDecoration(labelText: 'Worker'),
-                  items: snapshot.plugins
-                      .map((plugin) => DropdownMenuItem(
-                          value: plugin.id, child: Text(plugin.name)))
-                      .toList(),
-                  onChanged: (value) =>
-                      setDialogState(() => workerCatalogId = value),
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                    initialValue: roles,
-                    onChanged: (val) => roles = val,
-                    decoration: const InputDecoration(
-                        labelText: 'Roles (comma separated)')),
-                const SizedBox(height: 10),
-                TextFormField(
-                    initialValue: capabilities,
-                    onChanged: (val) => capabilities = val,
-                    decoration: const InputDecoration(
-                        labelText: 'Capabilities (comma separated)')),
-                const SizedBox(height: 10),
-                TextFormField(
-                    initialValue: versionPolicy,
-                    onChanged: (val) => versionPolicy = val,
-                    decoration: const InputDecoration(
-                        labelText: 'Worker version policy')),
-                const SizedBox(height: 10),
-                TextFormField(
-                    initialValue: config,
-                    minLines: 2,
-                    maxLines: 5,
-                    onChanged: (val) => config = val,
-                    decoration: const InputDecoration(
-                        labelText: 'Model/config (JSON)')),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: sessionPolicy,
-                  decoration:
-                      const InputDecoration(labelText: 'Session policy'),
-                  items: const [
-                    DropdownMenuItem(
-                        value: 'stateless', child: Text('Stateless')),
-                    DropdownMenuItem(
-                        value: 'isolated_workspace',
-                        child: Text('Isolated workspace')),
-                    DropdownMenuItem(
-                        value: 'reuse_session', child: Text('Reuse session')),
-                    DropdownMenuItem(
-                        value: 'persistent_context',
-                        child: Text('Persistent context')),
-                  ],
-                  onChanged: (value) => setDialogState(() {
-                    if (value != null) sessionPolicy = value;
-                  }),
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                    initialValue: concurrency,
-                    keyboardType: TextInputType.number,
-                    onChanged: (val) => concurrency = val,
-                    decoration:
-                        const InputDecoration(labelText: 'Concurrency limit')),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: billingMode,
-                  decoration: const InputDecoration(labelText: 'Billing mode'),
-                  items: const [
-                    DropdownMenuItem(
-                        value: 'local_compute', child: Text('Local compute')),
-                    DropdownMenuItem(
-                        value: 'subscription', child: Text('Subscription')),
-                    DropdownMenuItem(
-                        value: 'api_metered', child: Text('API metered')),
-                    DropdownMenuItem(
-                        value: 'external', child: Text('External')),
-                    DropdownMenuItem(value: 'manual', child: Text('Manual')),
-                    DropdownMenuItem(value: 'free', child: Text('Free')),
-                  ],
-                  onChanged: (value) => setDialogState(() {
-                    if (value != null) billingMode = value;
-                  }),
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                    initialValue: independenceKey,
-                    onChanged: (val) => independenceKey = val,
-                    decoration: const InputDecoration(
-                        labelText: 'Independence key (optional)')),
-                SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Enabled'),
-                    value: enabled,
-                    onChanged: (value) =>
-                        setDialogState(() => enabled = value)),
-              ]),
-            ),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(dialogContext, false),
-                  child: const Text('Cancel')),
-              FilledButton(
-                onPressed: name.trim().isEmpty ||
-                        agentId == null ||
-                        workerCatalogId == null
-                    ? null
-                    : () => Navigator.pop(dialogContext, true),
-                child: const Text('Save'),
-              ),
-            ],
-          ),
-        ),
-      );
-    } catch (error) {
-      if (mounted) {
-        _showSnackBar('Could not open Worker editor: $error');
-      }
-      return;
-    }
-    if (saved != true || agentId == null || workerCatalogId == null) {
-      return;
-    }
-    try {
-      await store.workers.save(
-        workspaceId: workspaceId,
-        workerId: existing?.id,
-        name: name.trim(),
-        agentId: agentId!,
-        workerCatalogId: workerCatalogId!,
-        roles: roles
-            .split(',')
-            .map((value) => value.trim())
-            .where((value) => value.isNotEmpty)
-            .toList(),
-        capabilities: capabilities
-            .split(',')
-            .map((value) => value.trim())
-            .where((value) => value.isNotEmpty)
-            .toList(),
-        enabled: enabled,
-        workerVersionPolicy:
-            versionPolicy.trim().isEmpty ? 'latest' : versionPolicy.trim(),
-        config: _parseWorkerConfig(config),
-        sessionPolicy: sessionPolicy,
-        concurrencyLimit: _parseConcurrency(concurrency),
-        billingMode: billingMode,
-        independenceKey: independenceKey.trim(),
-      );
-      await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
-    } catch (error) {
-      if (mounted) setState(() => loadError = error.toString());
-    }
-  }
-
-  Map<String, dynamic> _parseWorkerConfig(String value) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) return <String, dynamic>{};
-    try {
-      final parsed = jsonDecode(trimmed);
-      if (parsed is Map) return Map<String, dynamic>.from(parsed);
-    } catch (_) {
-      // The API will not receive malformed config; the editor falls back to {}.
-    }
-    return <String, dynamic>{};
-  }
-
-  int _parseConcurrency(String value) {
-    final parsed = int.tryParse(value.trim()) ?? 1;
-    return parsed < 1 ? 1 : parsed;
   }
 
   @override
@@ -2450,16 +2205,15 @@ class _StudioAppState extends State<ConclaveAppShell> {
     });
   }
 
-  Widget _homeView() => HomePage(
+      Widget _homeView() => HomePage(
         projects: snapshot.projects,
-        hosts: snapshot.agents,
-        workers: snapshot.workers,
+        workspaces: snapshot.workspaces,
+        workers: workspaceWorkers,
         run: snapshot.run,
         openFindingCount: snapshot.findings
             .where((finding) => finding.status == FindingStatus.open)
             .length,
-        onOpenHosts: () => _navigateTo(const StudioNavigation.hosts()),
-        onOpenWorkers: () => _navigateTo(const StudioNavigation.hosts()),
+        onOpenWorkspaces: () => _navigateTo(const StudioNavigation.workspaces()),
         onOpenProject: (projectId) =>
             _navigateTo(StudioNavigation.project(projectId)),
         onOpenChat: (projectId, chatId) =>
@@ -2562,7 +2316,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
       onOpenWorkstream: (workstreamId) =>
           _openWorkstream(project.id, workstreamId),
       onOpenWorkspace: (workspaceId) =>
-          _navigateTo(StudioNavigation.hosts(workspaceId: workspaceId)),
+          _navigateTo(StudioNavigation.workspaces(workspaceId: workspaceId)),
       onEdit: () => _editProject(project),
       onArchive: () => _archiveProject(project),
       onDelete: () => _deleteProject(project.id),
@@ -2649,8 +2403,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
 
   Widget _runDetailsView(bool compact) {
     switch (navigation.kind) {
-      case StudioRouteKind.hosts:
-        return _hostsView();
+      case StudioRouteKind.workspaces:
+        return _workspacesView();
       case StudioRouteKind.profileSecurity:
         return _profileSecurityView();
       case StudioRouteKind.projects:
@@ -2934,19 +2688,12 @@ class _StudioAppState extends State<ConclaveAppShell> {
               selectedQuality: selectedQuality,
               onQualityChanged: (value) =>
                   setState(() => selectedQuality = value),
-              selectedWorker: selectedExecutionWorker,
-              onWorkerChanged: (value) =>
-                  setState(() => selectedExecutionWorker = value),
               selectedModel: selectedExecutionModel,
               onModelChanged: (value) =>
                   setState(() => selectedExecutionModel = value),
-              selectedHost: selectedExecutionHost,
-              onHostChanged: (value) =>
-                  setState(() => selectedExecutionHost = value),
               showAdvanced: showAdvancedExecution,
               onToggleAdvanced: () => setState(
                   () => showAdvancedExecution = !showAdvancedExecution),
-              snapshot: snapshot,
               isBusy: isSendingChat,
               discussionOnly: true,
             ),
@@ -3789,34 +3536,17 @@ class _StudioAppState extends State<ConclaveAppShell> {
                 color: color, fontSize: 10, fontWeight: FontWeight.w700))
       ]));
 
-  List<StudioAgent> _workspaceCards() =>
+  List<StudioWorkspace> _workspaceCards() =>
       store.workspaces.items.map((workspace) {
-        final legacy = snapshot.agents
-            .where((agent) => agent.id == workspace.id)
-            .firstOrNull;
         final inventoryCount = workspaceWorkers
             .where((worker) =>
                 worker.workspaceId == workspace.id &&
                 worker.status != 'removed')
             .length;
-        return StudioAgent(
-          id: workspace.id,
-          name: workspace.name,
-          hostname: workspace.hostname,
-          status: workspace.status,
-          version: workspace.appVersion,
-          pluginCount: 0,
-          workerCount:
-              inventoryCount > 0 ? inventoryCount : legacy?.workerCount ?? 0,
-          activeTaskCount: legacy?.activeTaskCount ?? 0,
-          os: workspace.platform,
-          architecture: workspace.architecture,
-          appVersion: workspace.appVersion,
-          runtimeCapabilities: workspace.runtimeCapabilities,
-          lastSeen: workspace.factsUpdatedAt ?? legacy?.lastSeen ?? '—',
-          workspaceBindings: legacy?.workspaceBindings ?? const [],
-          projectGrantCount: workspaceProjectGrantCounts[workspace.id] ??
-              legacy?.workspaceBindings.length,
+        return workspace.copyWith(
+          workerCount: inventoryCount,
+          projectGrantCount: workspaceProjectGrantCounts[workspace.id] ?? 0,
+          lastSeen: workspace.factsUpdatedAt ?? workspace.lastSeen,
         );
       }).toList(growable: false);
 
@@ -3844,7 +3574,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
   }
 
   Future<void> _setWorkspaceWorkerScheduling(
-      StudioWorkspaceWorker worker, String action) async {
+      StudioWorker worker, String action) async {
     try {
       await widget.dataSource
           .setWorkspaceWorkerScheduling(workerId: worker.id, action: action);
@@ -3859,31 +3589,27 @@ class _StudioAppState extends State<ConclaveAppShell> {
     }
   }
 
-  Widget _hostsView() => WorkspacesPage(
-        workspaces:
-            _workspaceCards().isNotEmpty ? _workspaceCards() : snapshot.agents,
+  Widget _workspacesView() => WorkspacesPage(
+        workspaces: _workspaceCards(),
         workspaceWorkers: workspaceWorkers,
         initialWorkspaceId: navigation.workspaceId,
         onSelectWorkspace: (workspaceId) {
           if (workspaceId != null) {
-            _navigateTo(StudioNavigation.hosts(workspaceId: workspaceId));
+            _navigateTo(StudioNavigation.workspaces(workspaceId: workspaceId));
           } else {
-            _navigateTo(const StudioNavigation.hosts());
+            _navigateTo(const StudioNavigation.workspaces());
           }
         },
-        onAdd: _enrollAgent,
-        onRename: _renameHost,
-        onUpdate: _announceAgentUpdate,
+        onAdd: _enrollWorkspace,
+        onRename: _renameWorkspace,
+        onUpdate: _announceWorkspaceUpdate,
         onRevoke: (workspace) => _revokeWorkspace(workspace.id),
         onConnect: _connectWorkspace,
         onOpenDownloads: () => browserNavigation.openExternal(
           Uri.parse(conclaveDownloadsUrl),
         ),
-        onGrant: _bindHost,
+        onGrant: _grantWorkspace,
         onWorkspaceWorkerScheduling: _setWorkspaceWorkerScheduling,
-        workerActionMessage: workerActionMessage,
-        onDismissWorkerActionMessage: () =>
-            setState(() => workerActionMessage = null),
       );
 
   Widget _profileSecurityView() {

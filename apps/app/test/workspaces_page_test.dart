@@ -49,7 +49,7 @@ void main() {
         (tester) async {
       final snapshot = studioFixtureSnapshot();
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
-        workspaces: snapshot.agents,
+        workspaces: snapshot.workspaces,
         onAdd: () {},
         onRename: (_) {},
         onUpdate: (_) {},
@@ -60,7 +60,7 @@ void main() {
 
       expect(find.text('Workspaces'), findsOneWidget);
       expect(find.byType(TabBar), findsNothing);
-      expect(find.text(snapshot.agents.first.name), findsOneWidget);
+      expect(find.text(snapshot.workspaces.first.name), findsOneWidget);
       expect(find.textContaining('AI Account'), findsNothing);
       expect(find.textContaining('Credential Profile'), findsNothing);
       expect(find.textContaining('desired state'), findsNothing);
@@ -73,7 +73,7 @@ void main() {
       var addWorkspaceCalled = false;
 
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
-        workspaces: snapshot.agents,
+        workspaces: snapshot.workspaces,
         onAdd: () => addWorkspaceCalled = true,
         onRename: (_) {},
         onUpdate: (_) {},
@@ -84,7 +84,7 @@ void main() {
 
       expect(find.text('Workspaces'), findsOneWidget);
       expect(find.byType(TabBar), findsNothing);
-      expect(find.text(snapshot.agents.first.name), findsOneWidget);
+      expect(find.text(snapshot.workspaces.first.name), findsOneWidget);
       expect(find.widgetWithText(Tab, 'AI Accounts'), findsNothing);
 
       await tester.tap(find.byTooltip('Add Workspace'));
@@ -100,7 +100,7 @@ void main() {
         (tester) async {
       final snapshot = studioFixtureSnapshot();
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
-        workspaces: snapshot.agents,
+        workspaces: snapshot.workspaces,
         onAdd: () {},
         onRename: (_) {},
         onUpdate: (_) {},
@@ -117,7 +117,7 @@ void main() {
 
     testWidgets('shows Workspace-owned inventory without credential details',
         (tester) async {
-      final worker = StudioWorkspaceWorker.fromJson({
+      final worker = StudioWorker.fromJson({
         'id': 'local-worker-1',
         'workspaceId': 'workspace-1',
         'workspaceName': 'Build Mac',
@@ -134,16 +134,14 @@ void main() {
       });
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: const [
-          StudioAgent(
+          StudioWorkspace(
             id: 'workspace-1',
             name: 'Build Mac',
             hostname: 'build-mac.local',
             status: 'online',
-            version: '1.2.0',
-            pluginCount: 0,
+            appVersion: '1.2.0',
             workerCount: 1,
             activeTaskCount: 0,
-            appVersion: '1.2.0',
           ),
         ],
         workspaceWorkers: [worker],
@@ -189,7 +187,7 @@ void main() {
         (tester) async {
       final snapshot = studioFixtureSnapshot();
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
-        workspaces: snapshot.agents,
+        workspaces: snapshot.workspaces,
         onAdd: () {},
         onRename: (_) {},
         onUpdate: (_) {},
@@ -207,13 +205,12 @@ void main() {
 
     testWidgets('expands one or two Workspaces and uses an accordion for more',
         (tester) async {
-      StudioAgent workspace(String id) => StudioAgent(
+      StudioWorkspace workspace(String id) => StudioWorkspace(
             id: id,
             name: 'Workspace $id',
             hostname: '$id.local',
             status: 'online',
-            version: '1.0.0',
-            pluginCount: 0,
+            appVersion: '1.0.0',
             workerCount: 0,
             activeTaskCount: 0,
           );
@@ -246,13 +243,12 @@ void main() {
 
     testWidgets('Workspace deep link expands and focuses the target card',
         (tester) async {
-      StudioAgent workspace(String id) => StudioAgent(
+      StudioWorkspace workspace(String id) => StudioWorkspace(
             id: id,
             name: 'Workspace $id',
             hostname: '$id.local',
             status: 'online',
-            version: '1.0.0',
-            pluginCount: 0,
+            appVersion: '1.0.0',
             workerCount: 0,
             activeTaskCount: 0,
           );
@@ -274,13 +270,13 @@ void main() {
       expect(targetShape.side.color, isNot(Colors.transparent));
     });
 
-    testWidgets('expanded Workspace lists its locally configured Workers',
+    testWidgets('expanded Workspace lists its V7 Worker projections',
         (tester) async {
       final snapshot = studioFixtureSnapshot();
-      const localWorker = StudioWorkspaceWorker(
+      const localWorker = StudioWorker(
         id: 'local-worker-1',
-        workspaceId: 'agent-macbook',
-        workspaceName: 'MacBook Pro',
+        workspaceId: 'workspace-macbook',
+        workspaceName: 'Development Workspace',
         workerTypeId: 'codex',
         name: 'Codex Local',
         status: 'ready',
@@ -292,7 +288,7 @@ void main() {
         allowedModels: ['gpt-5.5'],
       );
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
-        workspaces: snapshot.agents,
+        workspaces: snapshot.workspaces,
         workspaceWorkers: const [localWorker],
         onAdd: () {},
         onRename: (_) {},
@@ -309,7 +305,7 @@ void main() {
 
     testWidgets('Worker rows show V7 status and scheduling controls',
         (tester) async {
-      final worker = StudioWorkspaceWorker.fromJson({
+      final worker = StudioWorker.fromJson({
         'id': 'worker-claude',
         'workspaceId': 'workspace-1',
         'workspaceName': 'Build Mac',
@@ -328,13 +324,12 @@ void main() {
       final actions = <String>[];
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: const [
-          StudioAgent(
+          StudioWorkspace(
             id: 'workspace-1',
             name: 'Build Mac',
             hostname: 'build-mac.local',
             status: 'online',
-            version: '1.0.0',
-            pluginCount: 0,
+            appVersion: '1.0.0',
             workerCount: 1,
             activeTaskCount: 0,
           ),
@@ -380,18 +375,17 @@ void main() {
 
     testWidgets('Workers are grouped only under their owning Workspace ID',
         (tester) async {
-      StudioAgent workspace(String id) => StudioAgent(
+      StudioWorkspace workspace(String id) => StudioWorkspace(
             id: id,
             name: 'Workspace $id',
             hostname: '$id.local',
             status: 'online',
-            version: '1.0.0',
-            pluginCount: 0,
+            appVersion: '1.0.0',
             workerCount: 1,
             activeTaskCount: 0,
           );
-      StudioWorkspaceWorker worker(String id, String workspaceId) =>
-          StudioWorkspaceWorker(
+      StudioWorker worker(String id, String workspaceId) =>
+          StudioWorker(
             id: id,
             workspaceId: workspaceId,
             workspaceName: 'Workspace $workspaceId',
@@ -437,19 +431,18 @@ void main() {
       final actions = <String>[];
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: const [
-          StudioAgent(
+          StudioWorkspace(
             id: 'workspace-enable',
             name: 'Enable Workspace',
             hostname: 'enable.local',
             status: 'online',
-            version: '1.0.0',
-            pluginCount: 0,
+            appVersion: '1.0.0',
             workerCount: 1,
             activeTaskCount: 0,
           ),
         ],
         workspaceWorkers: const [
-          StudioWorkspaceWorker(
+          StudioWorker(
             id: 'worker-disabled',
             workspaceId: 'workspace-enable',
             workspaceName: 'Enable Workspace',
@@ -481,7 +474,7 @@ void main() {
         (tester) async {
       final snapshot = studioFixtureSnapshot();
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
-        workspaces: snapshot.agents,
+        workspaces: snapshot.workspaces,
         onAdd: () {},
         onRename: (_) {},
         onUpdate: (_) {},

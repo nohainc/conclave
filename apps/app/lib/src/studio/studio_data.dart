@@ -127,9 +127,7 @@ abstract interface class StudioDataSource {
     List<String> references = const [],
   }) async =>
       throw UnimplementedError('Discussion messages are not available');
-  Future<List<StudioAgent>> loadHosts({required String workspaceId});
-  Future<List<StudioWorker>> loadWorkers({required String workspaceId});
-  Future<List<StudioWorkspaceWorker>> loadWorkspaceWorkerInventory() async =>
+  Future<List<StudioWorker>> loadWorkspaceWorkerInventory() async =>
       const [];
   Future<void> setWorkspaceWorkerScheduling(
           {required String workerId, required String action}) async =>
@@ -193,12 +191,6 @@ abstract interface class StudioDataSource {
   }) async =>
       throw UnimplementedError(
           'Workstream checkout provisioning is not available');
-  Future<void> setWorkerEnabled({
-    required String workspaceId,
-    required String workerId,
-    required bool enabled,
-    String? hostId,
-  });
   Future<StudioCredentialProfile> createCredentialProfile({
     required String workspaceId,
     required String displayName,
@@ -217,49 +209,18 @@ abstract interface class StudioDataSource {
     required String workspaceId,
     required String profileId,
   });
-  Future<void> revokeAgent({
+  Future<void> revokeWorkspace({required String workspaceId});
+  Future<void> announceWorkspaceUpdate({
     required String workspaceId,
-    required String agentId,
-  });
-  Future<void> revokeWorkspace({required String workspaceId}) async =>
-      revokeAgent(workspaceId: workspaceId, agentId: workspaceId);
-  Future<void> updateHost({
-    required String workspaceId,
-    required String hostId,
-    String? name,
-    String? channel,
-  });
-  Future<void> bindHostWorkspace({
-    required String workspaceId,
-    required String hostId,
-  });
-  Future<void> announceAgentUpdate({
-    required String workspaceId,
-    required String agentId,
+    required String runtimeId,
     String? channel,
     String? version,
   });
-  Future<StudioHostEnrollment> createHostEnrollment({
+  Future<StudioWorkspaceEnrollment> createWorkspaceEnrollment({
     required String workspaceId,
     int expiresHours = 24,
   });
-  Future<void> saveWorker({
-    required String workspaceId,
-    String? workerId,
-    required String name,
-    required String agentId,
-    required String workerCatalogId,
-    required List<String> roles,
-    required List<String> capabilities,
-    required bool enabled,
-    String workerVersionPolicy = 'latest',
-    Map<String, dynamic> config = const {},
-    String sessionPolicy = 'stateless',
-    int concurrencyLimit = 1,
-    String billingMode = 'local_compute',
-    String independenceKey = '',
-    Map<String, dynamic> costMetadata = const {},
-  });
+
 }
 
 class StudioApiException implements Exception {
@@ -591,39 +552,12 @@ class StudioApiClient implements StudioDataSource {
   }
 
   @override
-  Future<List<StudioAgent>> loadHosts({required String workspaceId}) async {
-    final body =
-        await _getJson(Uri.parse('$baseUrl/workspaces/$workspaceId/hosts'));
-    return (body['hosts'] as List? ?? const [])
-        .whereType<Map>()
-        .map((item) => StudioAgent.fromJson(Map<String, dynamic>.from(item)))
-        .toList();
-  }
-
-  @override
-  Future<List<StudioWorker>> loadWorkers({required String workspaceId}) async {
-    final body =
-        await _getJson(Uri.parse('$baseUrl/workspaces/$workspaceId/workers'));
-    return (body['workers'] as List? ?? const []).whereType<Map>().map((item) {
-      final value = Map<String, dynamic>.from(item);
-      return StudioWorker.fromJson({
-        ...value,
-        'name': value['displayName'] ?? value['name'] ?? '',
-        'version': value['latestVersion'] ?? value['version'] ?? '—',
-        'roles': value['roles'] ?? const [],
-        'capabilities': value['capabilities'] ?? const [],
-        'status': value['status'] ?? 'available',
-      });
-    }).toList();
-  }
-
-  @override
-  Future<List<StudioWorkspaceWorker>> loadWorkspaceWorkerInventory() async {
+  Future<List<StudioWorker>> loadWorkspaceWorkerInventory() async {
     final body = await _getJson(Uri.parse('$baseUrl/v7/workers'));
     return (body['workers'] as List? ?? const [])
         .whereType<Map>()
         .map((item) =>
-            StudioWorkspaceWorker.fromJson(Map<String, dynamic>.from(item)))
+            StudioWorker.fromJson(Map<String, dynamic>.from(item)))
         .toList();
   }
 
@@ -1359,8 +1293,7 @@ class StudioApiClient implements StudioDataSource {
 
     final responses = await Future.wait([
       getJson(Uri.parse('$baseUrl/projects')),
-      getJson(Uri.parse('$baseUrl/workspaces/$selectedWorkspaceId/hosts')),
-      getJson(Uri.parse('$baseUrl/workspaces/$selectedWorkspaceId/workers')),
+      getJson(Uri.parse('$baseUrl/workspaces')),
       getJson(Uri.parse('$baseUrl/workspaces/$selectedWorkspaceId/accounts')),
     ]);
     final projects = (responses[0]['projects'] as List? ?? const [])
@@ -1382,19 +1315,8 @@ class StudioApiClient implements StudioDataSource {
     return StudioSnapshot.fromJson({
       'workspaceId': selectedWorkspaceId,
       'projects': mergedProjects,
-      'hosts': responses[1]['hosts'] ?? const [],
-      'plugins': (responses[2]['workers'] as List? ?? const []).map((worker) {
-        final value = Map<String, dynamic>.from(worker as Map);
-        return {
-          ...value,
-          'name': value['displayName'] ?? value['name'] ?? '',
-          'version': value['latestVersion'] ?? value['version'] ?? '—',
-          'roles': value['roles'] ?? const [],
-          'capabilities': value['capabilities'] ?? const [],
-          'status': value['status'] ?? 'available',
-        };
-      }).toList(),
-      'accounts': responses[3]['accounts'] ?? const [],
+      'workspaces': responses[1]['workspaces'] ?? const [],
+      'accounts': responses[2]['accounts'] ?? const [],
       'run': detail['run'],
       'activeRunId': detail['activeRunId'],
       'tasks': detail['tasks'] ?? const [],
@@ -1546,26 +1468,6 @@ class StudioApiClient implements StudioDataSource {
   }
 
   @override
-  Future<void> setWorkerEnabled({
-    required String workspaceId,
-    required String workerId,
-    required bool enabled,
-    String? hostId,
-  }) async {
-    final response = await client.put(
-      Uri.parse('$baseUrl/workspaces/$workspaceId/workers/$workerId'),
-      headers: _headers(contentType: 'application/json'),
-      body: jsonEncode({
-        'enabled': enabled,
-        if (hostId != null) 'hostId': hostId,
-      }),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StudioApiException('Worker update failed (${response.statusCode})');
-    }
-  }
-
-  @override
   Future<StudioCredentialProfile> createCredentialProfile({
     required String workspaceId,
     required String displayName,
@@ -1642,21 +1544,6 @@ class StudioApiClient implements StudioDataSource {
   }
 
   @override
-  Future<void> revokeAgent({
-    required String workspaceId,
-    required String agentId,
-  }) async {
-    final response = await client.delete(
-      Uri.parse('$baseUrl/workspaces/$workspaceId/hosts/$agentId'),
-      headers: _headers(),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StudioApiException(
-          'Workspace revoke failed (${response.statusCode})');
-    }
-  }
-
-  @override
   Future<void> revokeWorkspace({required String workspaceId}) async {
     final response = await client.delete(
       Uri.parse('$baseUrl/workspaces/$workspaceId'),
@@ -1672,53 +1559,14 @@ class StudioApiClient implements StudioDataSource {
   }
 
   @override
-  Future<void> updateHost({
+  Future<void> announceWorkspaceUpdate({
     required String workspaceId,
-    required String hostId,
-    String? name,
-    String? channel,
-  }) async {
-    final response = await client.patch(
-      Uri.parse('$baseUrl/workspaces/$workspaceId/hosts/$hostId'),
-      headers: _headers(contentType: 'application/json'),
-      body: jsonEncode({
-        if (name != null) 'name': name,
-        if (channel != null) 'channel': channel,
-      }),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StudioApiException(
-          'Workspace update failed (${response.statusCode})',
-          statusCode: response.statusCode);
-    }
-  }
-
-  @override
-  Future<void> bindHostWorkspace({
-    required String workspaceId,
-    required String hostId,
-  }) async {
-    final response = await client.post(
-      Uri.parse('$baseUrl/workspaces/$workspaceId/hosts/$hostId/bind'),
-      headers: _headers(contentType: 'application/json'),
-      body: jsonEncode({}),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StudioApiException(
-          'Workspace grant failed (${response.statusCode})',
-          statusCode: response.statusCode);
-    }
-  }
-
-  @override
-  Future<void> announceAgentUpdate({
-    required String workspaceId,
-    required String agentId,
+    required String runtimeId,
     String? channel,
     String? version,
   }) async {
     final response = await client.post(
-      Uri.parse('$baseUrl/workspaces/$workspaceId/hosts/$agentId/update'),
+      Uri.parse('$baseUrl/workspaces/$workspaceId/hosts/$runtimeId/update'),
       headers: _headers(contentType: 'application/json'),
       body: jsonEncode({
         if (channel != null) 'channel': channel,
@@ -1732,7 +1580,7 @@ class StudioApiClient implements StudioDataSource {
   }
 
   @override
-  Future<StudioHostEnrollment> createHostEnrollment({
+  Future<StudioWorkspaceEnrollment> createWorkspaceEnrollment({
     required String workspaceId,
     int expiresHours = 24,
   }) async {
@@ -1745,30 +1593,9 @@ class StudioApiClient implements StudioDataSource {
       throw StudioApiException(
           'Workspace enrollment failed (${response.statusCode})');
     }
-    return StudioHostEnrollment.fromJson(
+    return StudioWorkspaceEnrollment.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>);
   }
 
-  @override
-  Future<void> saveWorker({
-    required String workspaceId,
-    String? workerId,
-    required String name,
-    required String agentId,
-    required String workerCatalogId,
-    required List<String> roles,
-    required List<String> capabilities,
-    required bool enabled,
-    String workerVersionPolicy = 'latest',
-    Map<String, dynamic> config = const {},
-    String sessionPolicy = 'stateless',
-    int concurrencyLimit = 1,
-    String billingMode = 'local_compute',
-    String independenceKey = '',
-    Map<String, dynamic> costMetadata = const {},
-  }) async {
-    throw const StudioApiException(
-      'This Worker setup path is no longer available. Manage Workers through Execution.',
-    );
-  }
+
 }

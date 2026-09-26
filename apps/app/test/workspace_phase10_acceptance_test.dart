@@ -19,18 +19,16 @@ void main() {
         ),
       );
 
-  const initialWorkspace = StudioAgent(
+  const initialWorkspace = StudioWorkspace(
     id: 'workspace-1',
     name: 'MacBook Pro',
     hostname: '—',
     status: 'not_connected',
-    version: '—',
-    pluginCount: 0,
+    appVersion: '—',
     workerCount: 0,
     activeTaskCount: 0,
-    os: '—',
+    platform: '—',
     architecture: '—',
-    appVersion: '—',
   );
 
   group('Phase 10: Workspace Creation & Explicit Pairing Acceptance', () {
@@ -101,7 +99,7 @@ void main() {
         }),
       );
 
-      final enrollment = await api.createHostEnrollment(
+      final enrollment = await api.createWorkspaceEnrollment(
         workspaceId: initialWorkspace.id,
       );
 
@@ -135,18 +133,16 @@ void main() {
       expect(connectMachineTriggered, isTrue);
 
       // 2. Transition State: Pairing
-      const pairingWorkspace = StudioAgent(
+      const pairingWorkspace = StudioWorkspace(
         id: 'workspace-1',
         name: 'MacBook Pro',
         hostname: '—',
         status: 'pairing',
-        version: '—',
-        pluginCount: 0,
+        appVersion: '—',
         workerCount: 0,
         activeTaskCount: 0,
-        os: '—',
+        platform: '—',
         architecture: '—',
-        appVersion: '—',
       );
 
       await tester.pumpWidget(scaffold(WorkspacesPage(
@@ -162,18 +158,16 @@ void main() {
       expect(find.text('Machine'), findsOneWidget);
 
       // 3. Runtime Connected: Online with automatically populated platform facts
-      const onlineWorkspace = StudioAgent(
+      const onlineWorkspace = StudioWorkspace(
         id: 'workspace-1',
         name: 'MacBook Pro',
         hostname: 'Vitalii-MacBook-Pro',
         status: 'online',
-        version: '1.0.3',
-        pluginCount: 1,
+        appVersion: '1.0.3',
         workerCount: 2,
         activeTaskCount: 0,
-        os: 'macos',
+        platform: 'macos',
         architecture: 'arm64',
-        appVersion: '1.0.3',
         runtimeCapabilities: ['dart', 'shell'],
       );
 
@@ -224,10 +218,9 @@ void main() {
               children: [
                 GlobalAppMenu(
                   shellContext: const StudioShellContext(
-                    navigation: StudioNavigation.hosts(),
+                    navigation: StudioNavigation.workspaces(),
                     workspaces: [initialWorkspace],
-                    workers: [],
-                    projects: [],
+                                        projects: [],
                     themeMode: ThemeMode.system,
                   ),
                   onNavigateTo: (_) {},
@@ -262,18 +255,16 @@ void main() {
       ];
 
       for (final (os, arch, expectedLabel) in platforms) {
-        final agent = StudioAgent(
+        final agent = StudioWorkspace(
           id: 'ws-test',
           name: 'Target Machine',
           hostname: 'host-1',
           status: 'online',
-          version: '1.0.0',
-          pluginCount: 0,
+          appVersion: '1.0.0',
           workerCount: 0,
           activeTaskCount: 0,
-          os: os,
+          platform: os,
           architecture: arch,
-          appVersion: '1.0.0',
         );
 
         await tester.pumpWidget(scaffold(WorkspacesPage(

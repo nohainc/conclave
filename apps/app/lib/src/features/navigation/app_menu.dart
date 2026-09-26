@@ -124,7 +124,7 @@ class GlobalAppMenu extends StatelessWidget {
             color: menuIconColor,
           ),
           onPressed: () {
-            onNavigateTo(const StudioNavigation.hosts());
+            onNavigateTo(const StudioNavigation.workspaces());
             if (compact) Scaffold.maybeOf(context)?.closeDrawer();
           },
           child: const Text(

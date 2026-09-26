@@ -35,7 +35,6 @@ class StudioShellContext {
     this.selectedWorkstream,
     this.selectedRun,
     this.workspaces = const [],
-    this.workers = const [],
     this.accounts = const [],
     this.unreadNotificationCount = 0,
     this.isDarkTheme = true,
@@ -52,8 +51,7 @@ class StudioShellContext {
   final StudioProject? selectedProject;
   final StudioWorkstream? selectedWorkstream;
   final StudioRun? selectedRun;
-  final List<StudioAgent> workspaces;
-  final List<StudioWorker> workers;
+  final List<StudioWorkspace> workspaces;
   final List<StudioCredentialProfile> accounts;
   final int unreadNotificationCount;
   final bool isDarkTheme;
@@ -67,7 +65,7 @@ class StudioShellContext {
   int get onlineWorkspaceCount =>
       workspaces.where((w) => w.status.toLowerCase() == 'online').length;
 
-  StudioAgent? get targetedWorkspace {
+  StudioWorkspace? get targetedWorkspace {
     final workstream = selectedWorkstream;
     if (workstream != null &&
         workstream.primaryWorkspace.isNotEmpty &&
@@ -186,8 +184,8 @@ class StudioShellContext {
         return navigation.kind == StudioRouteKind.workstream &&
             target.workstreamId != null &&
             navigation.workstreamId == target.workstreamId;
-      case StudioRouteKind.hosts:
-        return navigation.kind == StudioRouteKind.hosts;
+      case StudioRouteKind.workspaces:
+        return navigation.kind == StudioRouteKind.workspaces;
       case StudioRouteKind.profileSecurity:
         return navigation.kind == StudioRouteKind.profileSecurity;
       case StudioRouteKind.run:

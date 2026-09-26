@@ -156,7 +156,7 @@ void main() {
 
       await tester.tap(find.byType(ListTile).first);
       await tester.pumpAndSettle();
-      expect(navigatedTo?.kind, StudioRouteKind.hosts);
+      expect(navigatedTo?.kind, StudioRouteKind.workspaces);
 
       // Search for Profile & Security
       await tester.enterText(find.byType(TextField), 'Profile');
@@ -193,7 +193,7 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
 
-      expect(navigatedTo?.kind, StudioRouteKind.hosts);
+      expect(navigatedTo?.kind, StudioRouteKind.workspaces);
     });
   });
 }

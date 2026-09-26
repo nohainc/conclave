@@ -41,7 +41,7 @@ void main() {
     final routes = <StudioNavigation>[
       const StudioNavigation.home(),
       const StudioNavigation.projects(),
-      const StudioNavigation.hosts(),
+      const StudioNavigation.workspaces(),
       const StudioNavigation.profileSecurity(),
     ];
 
@@ -51,7 +51,7 @@ void main() {
   });
 
   test('uses canonical Workspaces routes and preserves legacy aliases', () {
-    const workspace = StudioNavigation.hosts();
+    const workspace = StudioNavigation.workspaces();
     expect(workspace.toUri().path, '/workspaces');
     expect(StudioNavigation.fromUri(Uri.parse('/execution')), workspace);
     expect(StudioNavigation.fromUri(Uri.parse('/execution/workspaces')),
@@ -67,9 +67,9 @@ void main() {
     expect(StudioNavigation.fromUri(Uri.parse('/hosts/workers')), workspace);
     expect(StudioNavigation.fromUri(Uri.parse('/workers')), workspace);
     expect(StudioNavigation.fromUri(Uri.parse('/execution/workspaces/alpha')),
-        const StudioNavigation.hosts(workspaceId: 'alpha'));
+        const StudioNavigation.workspaces(workspaceId: 'alpha'));
     expect(StudioNavigation.fromUri(Uri.parse('/hosts/alpha')),
-        const StudioNavigation.hosts(workspaceId: 'alpha'));
+        const StudioNavigation.workspaces(workspaceId: 'alpha'));
     expect(StudioNavigation.fromUri(Uri.parse('/workspaces/alpha')).toUri().path,
         '/workspaces/alpha');
     expect(StudioNavigation.fromUri(Uri.parse('/workspaces?tab=workers')),

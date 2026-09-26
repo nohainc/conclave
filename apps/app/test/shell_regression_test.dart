@@ -46,13 +46,12 @@ void main() {
     workstreams: [wsRunning, wsIdle],
   );
 
-  const testAgent = StudioAgent(
+  const testAgent = StudioWorkspace(
     id: 'agent-1',
     name: 'MacBook Pro',
     hostname: 'macbook-pro.local',
     status: 'connected',
-    version: '1.0.0',
-    pluginCount: 2,
+    appVersion: '1.0.0',
     workerCount: 3,
     activeTaskCount: 1,
   );
@@ -207,7 +206,7 @@ void main() {
       // 1. Workspaces
       await tester.tap(find.text('Workspaces'));
       await tester.pumpAndSettle();
-      expect(navigated, const StudioNavigation.hosts());
+      expect(navigated, const StudioNavigation.workspaces());
 
       // Re-open and test Archived Projects
       await tester.tap(find.byTooltip('Application menu'));
@@ -303,30 +302,30 @@ void main() {
   group('Phase 13: Legacy URL Redirects & Canonical Routing', () {
     test('old /workers deep link canonicalizes to /workspaces', () {
       final parsed = StudioNavigation.fromUri(Uri.parse('/workers'));
-      expect(parsed, const StudioNavigation.hosts());
+      expect(parsed, const StudioNavigation.workspaces());
       expect(parsed.toUri().path, '/workspaces');
     });
 
     test('old /accounts deep link resolves to the Workers surface', () {
       final parsed = StudioNavigation.fromUri(Uri.parse('/accounts'));
-      expect(parsed, const StudioNavigation.hosts());
+      expect(parsed, const StudioNavigation.workspaces());
       expect(parsed.toUri().path, '/workspaces');
     });
 
     test('query param tabs canonicalize to nested routes', () {
       final workersQuery =
           StudioNavigation.fromUri(Uri.parse('/workspaces?tab=workers'));
-      expect(workersQuery, const StudioNavigation.hosts());
+      expect(workersQuery, const StudioNavigation.workspaces());
       expect(workersQuery.toUri().path, '/workspaces');
 
       final accountsQuery =
           StudioNavigation.fromUri(Uri.parse('/workspaces?tab=accounts'));
-      expect(accountsQuery, const StudioNavigation.hosts());
+      expect(accountsQuery, const StudioNavigation.workspaces());
       expect(accountsQuery.toUri().path, '/workspaces');
 
       final legacyHosts =
           StudioNavigation.fromUri(Uri.parse('/hosts?tab=ai_accounts'));
-      expect(legacyHosts, const StudioNavigation.hosts());
+      expect(legacyHosts, const StudioNavigation.workspaces());
       expect(legacyHosts.toUri().path, '/workspaces');
     });
   });

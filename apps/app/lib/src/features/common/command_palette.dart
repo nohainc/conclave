@@ -86,7 +86,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
         category: 'Navigation',
         onSelect: () {
           if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-          widget.onNavigateTo(const StudioNavigation.hosts());
+          widget.onNavigateTo(const StudioNavigation.workspaces());
         },
       ),
       CommandPaletteAction(
@@ -177,16 +177,17 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
       ));
     }
 
-    // Add Workspaces / Agents
-    for (final agent in widget.snapshot.agents) {
+    // Add Workspaces
+    for (final workspace in widget.snapshot.workspaces) {
       actions.add(CommandPaletteAction(
-        title: 'Workspace: ${agent.name}',
-        subtitle: '${agent.hostname} · ${agent.status}',
+        title: 'Workspace: ${workspace.name}',
+        subtitle: '${workspace.hostname} · ${workspace.status}',
         icon: Icons.computer_outlined,
         category: 'Workspaces',
         onSelect: () {
           if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-          widget.onNavigateTo(const StudioNavigation.hosts());
+          widget.onNavigateTo(
+              StudioNavigation.workspaces(workspaceId: workspace.id));
         },
       ));
     }

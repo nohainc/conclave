@@ -54,17 +54,6 @@ void main() {
             lastActivity: 'yesterday',
           ),
         ],
-        workers: [
-          const StudioWorker(
-            id: 'worker-1',
-            name: 'Codex AI',
-            provider: 'OpenAI',
-            role: 'Implementation',
-            capabilities: ['code'],
-            status: 'ready',
-            cost: '\$0.02',
-          ),
-        ],
       );
     });
 
@@ -77,7 +66,6 @@ void main() {
         navigation: const StudioNavigation.home(),
         projects: sampleSnapshot.projects,
         workspaces: const [],
-        workers: sampleSnapshot.workers,
         accounts: const [],
         unreadNotificationCount: 0,
         isDarkTheme: true,
