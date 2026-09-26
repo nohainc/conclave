@@ -1,7 +1,7 @@
 # Architecture v7 Completion Plan
 
 **Status:** Active completion plan  
-**Baseline:** `main@633fe705154e7de7a1f0ded79fd3958e5a08eb07`  
+**Baseline:** `main@2c740092fd0e558880873894fe997454a989fef2`  
 **Date:** 2026-09-26  
 **Architecture:** [Architecture v7](../architecture/ARCHITECTURE_V7.md)  
 **Decision:** [ADR-012](../decisions/ADR-012-workspace-owned-local-workers.md)  
@@ -57,6 +57,9 @@ one V7 Worker model
 ---
 
 # Phase 1 — Make Cloud execution purely V7-shaped
+
+**Status:** ✅ Implemented on `main@2c740092`  
+**Remaining verification:** behavioral end-to-end proof is Phase 2, not a Phase 1 code gap.
 
 ## Goal
 
@@ -207,32 +210,225 @@ V6 Worker bindings for a V7 assignment.
 
 ---
 
-# Phase 2 — Remove the V6 configured-Worker compatibility architecture
+# Phase 2 — Prove the real V7 end-to-end execution path
 
-## Prerequisite
+**Status:** 🔄 Next active phase
 
-Do not start destructive cleanup until the Phase 1 V7 scheduler path and a real
-V7 end-to-end assignment test pass.
+## Why this phase moved ahead of cleanup
+
+Phase 1 now proves at unit/integration level that a V7 inventory candidate can
+be selected without reading the V6 binding query, and that Cloud scheduling
+state is independent from local readiness.
+
+That is necessary but not sufficient before deleting the compatibility
+architecture.
+
+The existing `apps/cloud/test/v7-solo-acceptance.test.ts` remains primarily a
+schema/lifecycle test because it inserts Worker inventory and completed
+assignment state directly. It does not prove the real runtime path:
+
+~~~text
+scheduler
+-> Workspace Gateway
+-> Conclave Workspace
+-> local Worker registry
+-> admitted V7 adapter
+-> child process
+-> Workstream CWD
+-> result back to Cloud
+~~~
+
+Therefore Phase 2 is the mandatory **migration-safety gate** for Phase 3.
+
+## Goal
+
+Create a deterministic automated acceptance harness that executes the same V7
+control and runtime path used by the product without requiring a live/billable
+AI provider.
+
+## 2.1 Keep schema acceptance, but classify it correctly
+
+Keep the current solo/schema coverage because it validates valuable relational
+and ownership invariants.
+
+Rename it or document it clearly as schema/lifecycle acceptance so it is not
+used as evidence that the runtime execution path works end to end.
+
+It may continue to verify:
+- Workspace-owned Worker persistence;
+- Project/Workspace grants;
+- Workstream policy rows;
+- assignment attribution schema;
+- absence of legacy AI Account requirements.
+
+It must not be the Phase 2 exit test.
+
+## 2.2 Build a deterministic V7 test adapter
+
+Use a fake/test adapter package that implements the real V7 adapter protocol.
+
+The adapter must:
+- be admitted through the V7 package/admission path;
+- have a deterministic signed test manifest;
+- execute as a child process;
+- emit at least progress + result;
+- record/return its current working directory;
+- support cancellation if practical in the same harness;
+- require no provider account, external network, or billable API.
+
+Do not mock away adapter admission or child-process execution.
+
+## 2.3 Exercise the real Workspace runtime
+
+The test must create/use the same runtime components as production where
+practical:
+
+~~~text
+LocalConfiguredWorkerRegistry
+-> Workspace runtime
+-> Workspace Gateway connection
+-> workspace.hello
+-> full V7 Worker inventory sync
+~~~
+
+Verify that:
+- Worker ID is generated/owned locally;
+- safe inventory reaches Cloud;
+- no credential reference, API key, session token, cookie, or arbitrary local
+  path enters the Cloud projection;
+- the Worker is bound to exactly one Workspace;
+- Cloud scheduling is explicitly enabled before it becomes eligible.
+
+## 2.4 Exercise the real Cloud scheduling path
+
+Create the minimum real Cloud state required for work:
+- User/Project;
+- Workspace;
+- active Project Workspace Grant;
+- Workstream;
+- Workstream execution policy;
+- Work Request / Run or the current canonical execution entrypoint.
+
+Then call the real scheduler/candidate selection path.
+
+Verify:
+- selected `configuredWorkerId` is the local V7 Worker ID;
+- selected `workerTypeId` remains the adapter/integration type;
+- selected Workspace is the Worker's owning Workspace;
+- Cloud scheduling must be `enabled`;
+- locally disabled/unready Worker is rejected;
+- Cloud disabled/draining Worker is rejected for new work;
+- local and Cloud concurrency ceilings are respected;
+- V7 candidate selection succeeds when the V6 binding query has no usable
+  candidate and, ideally, is not read for that V7 selection.
+
+## 2.5 Dispatch through the real Workspace Gateway
+
+Do not manually mark the assignment complete.
+
+The test must:
+- create the assignment through the normal execution path;
+- dispatch it through the Workspace Gateway;
+- receive it in Conclave Workspace;
+- resolve the local Worker from the local registry;
+- resolve the admitted V7 adapter;
+- execute the adapter as a child process;
+- return progress/result through the Gateway;
+- persist the final Cloud assignment/result state.
+
+## 2.6 Verify the Workstream filesystem contract
+
+The child adapter must execute with the runtime-resolved ID-only Workstream CWD:
+
+~~~text
+<work-root>/<project-id>/<workstream-id>/
+~~~
+
+Verify:
+- Project/Workstream names do not define the path;
+- Workspace/Worker IDs do not define the path;
+- adapter input cannot override arbitrary CWD;
+- the fake adapter can read/write a deterministic test file when permissions
+  allow it.
+
+## 2.7 Add the minimum cleanup-safety scenarios
+
+Before Phase 3 begins, the automated harness must also cover:
+
+1. **No V6 dependency**
+   - V7 work completes with no usable V6 binding candidate.
+2. **Cloud scheduling**
+   - disabled and draining Workers receive no new work.
+3. **Local readiness**
+   - locally disabled / needs-attention Worker is ineligible.
+4. **Worker removal**
+   - local tombstone or authoritative snapshot omission makes the Worker
+     ineligible.
+5. **Inventory revisions**
+   - stale/equal invalid updates are rejected according to the V7 contract.
+6. **Reconnect**
+   - Workspace reconnect + authoritative inventory produces a usable V7 Worker
+     again without creating a second identity.
+7. **Cancellation**
+   - cancellation reaches the Workspace and terminates the adapter/process tree
+     where feasible in the harness.
+8. **Secret boundary**
+   - no provider/local secure-store secret is present in Cloud persistence,
+     assignment payloads, events, or captured logs.
+
+More exhaustive failure/security testing remains a later hardening phase; Phase
+2 contains the subset required to make V6 deletion safe.
+
+## 2.8 CI placement
+
+The deterministic fake-adapter E2E test should run in normal trusted CI and must
+not require:
+- Codex login;
+- Google/Antigravity login;
+- OpenAI/Gemini/Anthropic keys;
+- external provider quota.
+
+Keep real-provider acceptance opt-in and separate.
+
+## Phase 2 exit gate
+
+Phase 2 is complete only when a clean V7 Worker completes a real Work assignment
+through:
+
+~~~text
+scheduler
+-> Workspace Gateway
+-> Conclave Workspace
+-> local Worker registry
+-> V7 adapter admission/resolution
+-> adapter child process
+-> ID-only Workstream CWD
+-> result returned and persisted in Cloud
+~~~
+
+and that path does not require a V6 Worker binding.
+
+> **Do not start destructive Phase 3 cleanup before this gate passes.**
+
+---
+
+# Phase 3 — Remove the V6 configured-Worker compatibility architecture
+
+**Prerequisite:** Phase 2 E2E migration-safety gate passes.
 
 ## Goal
 
 Leave one configured Worker model in product code.
 
-## 2.1 Retire legacy Cloud Worker APIs
+## 3.1 Freeze legacy mutation before deletion
 
-Remove the normal legacy routes and handlers for:
-- Cloud-side Worker creation;
-- Worker update/revoke as Cloud-owned configuration;
-- Worker <-> Workspace binding CRUD;
-- per-binding credential setup;
-- per-binding reauthentication;
-- per-binding credential read/revoke;
-- legacy observability APIs that are meaningful only for V6 bindings.
+Before removing tables, make the compatibility boundary explicit:
+- Conclave AX must not call legacy Cloud Worker creation/binding APIs;
+- no new feature may add a dependency on V6 Worker bindings;
+- compatibility endpoints, if temporarily retained during the cleanup PR, must
+  be marked deprecated/internal.
 
-Where a temporary compatibility endpoint must remain for migration, mark it
-explicitly deprecated and ensure Conclave AX does not call it.
-
-## 2.2 Remove legacy scheduler candidate resolution
+## 3.2 Remove legacy scheduler fallback
 
 Delete candidate resolution based on:
 - `configured_workers`;
@@ -240,372 +436,270 @@ Delete candidate resolution based on:
 - `workspace_worker_credentials`.
 
 After removal, the scheduler must operate from:
-- V7 Worker inventory;
-- Cloud operational scheduling state;
-- Workspace/Project grants;
+- `workspace_worker_inventory`;
+- `v7_worker_scheduling`;
+- Workspace runtime identity/online state;
+- Project Workspace Grants;
 - Project/Workstream execution policy;
-- live Workspace runtime state;
 - assignment/run state.
 
-## 2.3 Migrate persistence
+Retain the Phase 2 E2E test unchanged as the regression gate.
 
-Do not rewrite already-applied production migrations.
+## 3.3 Retire legacy Cloud Worker APIs
 
-Add a forward migration that:
-- preserves required attribution/audit references;
-- migrates any remaining pre-production data if needed;
-- removes obsolete V6 tables/indexes once no runtime code reads them.
+Remove legacy handlers/routes for:
+- Cloud-side configured Worker creation;
+- configured Worker update/revoke as Cloud-owned configuration;
+- Worker <-> Workspace binding CRUD;
+- per-binding setup/reauthentication;
+- per-binding credential read/revoke;
+- legacy observability endpoints that only describe V6 binding state.
 
-For disposable development environments, a clean schema reset is preferred over
-maintaining permanent compatibility complexity.
+Do not remove catalog/Worker Type APIs that remain part of V7 infrastructure.
 
-## 2.4 Remove obsolete app/domain models
+## 3.4 Remove obsolete app/domain models
 
 Remove stale:
-- binding models;
+- configured Worker binding models;
 - credential-per-binding models;
 - callbacks;
-- UI copy;
+- migration-only UI copy;
 - fixtures;
-- tests whose only purpose is the removed V6 architecture.
+- tests whose sole purpose is the removed V6 architecture.
 
-Retain historical ADRs and migration documents when useful, but mark them
-historical rather than allowing them to define current behavior.
+Do not remove historical ADRs; mark superseded rules clearly instead.
 
-## 2.5 Remove obsolete Worker implementation paths
+## 3.5 Forward-migrate persistence
 
-Audit the legacy `workers/` packages and old package-management paths.
+Do not rewrite already-applied migrations.
 
-Delete only components that have no remaining runtime/release responsibility.
-Do not delete shared protocol or test utilities simply because their names are
-old.
+Add a forward migration that:
+- preserves assignment/audit attribution that must remain queryable;
+- migrates any still-required pre-production state if necessary;
+- drops obsolete V6 tables/indexes only after runtime/API code no longer reads
+  them.
 
-## Acceptance
+For disposable development environments, prefer a clean V7 schema over
+permanent compatibility complexity.
 
-- repository search finds no product code that creates a Cloud-owned configured
-  Worker;
-- scheduler has no V6 binding query;
-- Conclave AX has no legacy Worker creation/binding path;
-- clean schema starts with the V7 model;
-- upgrade migration succeeds on a representative previous schema;
-- all assignment attribution still resolves to Worker ID + Workspace ID +
-  Worker Type.
+## 3.6 Audit legacy `workers/` and package paths
 
-## Exit gate
+Classify each legacy package as:
+- still required shared infrastructure;
+- historical/test-only;
+- V6 runtime implementation that can be deleted.
 
-Exactly one Worker ownership model remains:
+Delete only confirmed obsolete code. Names alone are not sufficient evidence.
+
+## Phase 3 acceptance
+
+- Phase 2 E2E remains green;
+- scheduler contains no V6 binding candidate query;
+- repository contains no active Cloud-side configured Worker creation flow;
+- Conclave AX contains no Worker binding/setup path;
+- V7 assignments still preserve Worker ID + Workspace ID + Worker Type
+  attribution;
+- migration succeeds from a representative pre-cleanup schema;
+- no current runtime code reads dropped V6 tables.
+
+## Phase 3 exit gate
+
+Exactly one Worker ownership/execution model remains:
 
 ~~~text
 Conclave Workspace creates Worker
--> safe Cloud projection
--> Cloud authorizes/schedules
+-> safe Cloud inventory
+-> Cloud scheduling + authorization
 -> owning Workspace executes
 ~~~
 
 ---
 
-# Phase 3 — Production adapter trust and release pipeline
+# Phase 4 — Production adapter and application release trust
 
 ## Goal
 
-Make adapter packages safe to distribute to untrusted client machines without
+Make adapter and Workspace releases verifiable by a public client without
 shipping a signing secret.
 
-## 3.1 Replace shared-secret trust
+## 4.1 Replace production HMAC trust
 
-Replace HMAC-based production verification with asymmetric signatures.
+Replace shared-secret production verification with asymmetric signatures.
 
-Recommended default:
+Recommended:
 - Ed25519;
 - private key only in release infrastructure;
-- public verification keys embedded/configured in Conclave Workspace;
+- trusted public key(s) in Conclave Workspace;
 - explicit key IDs;
-- key rotation;
+- rotation;
 - revocation.
 
-The signed payload must continue to bind:
-- canonical manifest without its signature field;
+The signed adapter payload must continue to bind:
+- canonical manifest without the signature field;
 - package file-tree digest.
 
-Changing executable, permissions, auth strategy, secret requirements, platform,
-or package contents must invalidate the signature.
+Development fixture signing may remain separate, but production paths must fail
+closed without a trusted public key.
 
-Development-only fixture signing may remain separate, but production code must
-fail closed if no trusted public key exists.
+## 4.2 Apply equivalent trust to Workspace updates
 
-## 3.2 Apply the same trust principle to Workspace application updates
-
-The Workspace update channel must not depend on a verification secret shipped
-with the application.
-
-Define:
+Define release trust for the native Conclave Workspace application:
 - application release signing key;
-- adapter release signing key(s);
-- whether the same root trust anchors both;
-- independent rotation/revocation policy.
+- public verification key;
+- key ID/rotation policy;
+- interaction with Apple Developer ID + notarization.
 
-Apple Developer ID/notarization complements, but does not replace, Conclave
-release metadata verification.
+Apple platform signing complements Conclave release metadata verification; it
+does not replace it.
 
-## 3.3 Add first-party adapter release automation
+## 4.3 Add first-party release automation
 
-Add a GitHub Actions release workflow that:
+Add a repeatable GitHub Actions workflow:
 
 ~~~text
-build adapter
--> run protocol/provider-mock tests
--> create deterministic package
--> calculate archive + package digest
--> sign manifest
--> publish package to Cloud/R2
+build
+-> test
+-> deterministic package
+-> digest
+-> sign
+-> upload
 -> publish immutable catalog metadata
--> download it back
+-> download
 -> verify admission/health
 ~~~
 
-Support:
-- development;
-- beta;
-- stable;
-- revoke;
-- promote only by creating/verifying an appropriate immutable release record.
+Support development/beta/stable and revocation.
 
-Private signing keys must be GitHub/production release secrets and must never be
-committed or emitted in logs/artifacts.
-
-## 3.4 Background update/revocation reconciliation
+## 4.4 Background update/revocation reconciliation
 
 Workspace should periodically:
 - refresh adapter catalog state;
 - detect revoked active versions;
 - stage supported updates;
-- preserve last verified healthy rollback candidate;
-- never switch active version without full verification + health check.
+- retain the last verified healthy rollback candidate;
+- never activate without full signature/digest/platform/permission/health
+  verification.
 
-Define safe behavior when an active adapter becomes revoked during running work.
+## Phase 4 exit gate
 
-## Acceptance
-
-- tampered archive fails;
-- manifest-only tampering fails;
-- revoked key fails;
-- revoked release fails;
-- wrong publisher/key fails;
-- old trusted key can be rotated out;
-- release workflow produces a package that a clean Workspace can install;
-- no private signing key exists in desktop artifacts.
-
-## Exit gate
-
-Production adapter verification uses public-key trust and a repeatable
-first-party release pipeline.
+Production adapter/application verification uses asymmetric public-key trust and
+first-party release publication is repeatable.
 
 ---
 
-# Phase 4 — Complete first-party Worker coverage
+# Phase 5 — Complete production Worker Type coverage
 
 ## Goal
 
-Ensure every Worker Type shown as normally supported by Conclave Workspace can
-actually reach Ready and execute.
+Every Worker Type shown as production-supported in Conclave Workspace can
+actually become Ready and execute through V7.
 
-## 4.1 Claude Code
+## 5.1 Claude Code
 
-Current local setup exposes Claude Code but the V7 first-party adapter package
-and full authentication path are incomplete.
-
-Implement:
-- `claude-code` V7 adapter package;
-- supported CLI prerequisite/version policy;
-- local Claude authentication validation;
-- local authentication launch/remediation;
-- headless execution contract;
+Complete:
+- V7 adapter package;
+- CLI prerequisite/version validation;
+- local authentication validation/launch/remediation;
+- headless execution;
 - model/default handling;
 - cancellation;
 - Workstream CWD;
-- normalized progress/result/errors;
-- signed release.
+- normalized progress/result/error;
+- signed published release.
 
-Do not expose Claude Code as production-ready until this path passes.
+## 5.2 Ollama
 
-## 4.2 Ollama
-
-Implement:
-- Ollama V7 adapter package;
-- local endpoint reachability;
-- version/health detection;
+Complete:
+- V7 adapter package;
+- endpoint reachability;
+- version/health check;
 - model discovery;
 - model selection validation;
-- execution;
-- cancellation;
-- useful offline/error states.
+- execution/cancellation;
+- signed published release.
 
-Default local endpoints should be convenient but must remain explicit and safe.
+## 5.3 Codex and Antigravity
 
-## 4.3 Codex
+Run opt-in live acceptance against:
+- real Codex/ChatGPT local session;
+- real Google/Antigravity `agy` session.
 
-Complete live acceptance for:
-- real local ChatGPT/Codex session;
-- supported CLI version;
-- model selection;
-- Workstream mutation;
-- cancellation;
-- authentication expiry/remediation.
+Verify authentication expiry/remediation, model selection, cancellation and
+stateful Workstream execution.
 
-## 4.4 Antigravity
-
-Keep Worker Type naming as **Antigravity** and executable as `agy`.
-
-Complete live acceptance for:
-- real Google-account session;
-- supported `agy` version;
-- headless stream-json execution;
-- optional model selection;
-- cancellation;
-- authentication expiry/remediation.
-
-Do not reintroduce obsolete `antigravity auth status` instructions.
-
-## 4.5 API Workers
+## 5.4 API Workers
 
 For OpenAI API, Gemini API and Anthropic API:
-- publish signed first-party releases;
-- verify live credential acceptance with opt-in secrets;
-- normalize provider errors;
+- publish production-signed releases;
+- run opt-in credential acceptance;
+- normalize provider failures;
 - add model discovery where reliable;
-- add streaming when useful.
+- add streaming where product value justifies it.
 
-Advanced tool/function calling is not a V7 architecture release gate unless a
-core product workflow requires it.
+Advanced tool/function calling is not automatically a V7 architecture blocker.
 
-## Acceptance matrix
+## Phase 5 exit gate
 
-Every production-supported Worker Type must pass:
-
-| Capability | Tool-backed | API-backed | Local model |
-| --- | ---: | ---: | ---: |
-| prerequisite/endpoint validation | required | runtime validation | required |
-| local authentication | required | API key | none/local |
-| model validation | required | required | required |
-| V7 adapter execution | required | required | required |
-| cancellation | required | required | required |
-| bounded/redacted output | required | required | required |
-| signed release | required | required | required |
-
-## Exit gate
-
-Every Worker Type visible in the normal Add Worker production catalog can
-become Ready and execute through a supported V7 adapter.
+Every Worker Type exposed as production-supported can be installed/admitted,
+validated and executed through V7.
 
 ---
 
-# Phase 5 — Real V7 end-to-end acceptance
+# Phase 6 — Failure, recovery and security hardening
 
 ## Goal
 
-Replace schema-only confidence with behavioral acceptance of the actual product
-path.
+Extend the Phase 2 migration-safety harness into full operational/security
+acceptance.
 
-## 5.1 Reclassify the current solo acceptance test
+## Failure/recovery coverage
 
-The current Cloud `v7-solo-acceptance.test.ts` validates useful schema and
-lifecycle invariants, but it inserts inventory and a completed assignment
-directly.
-
-Keep that coverage, but rename/reclassify it as schema/lifecycle acceptance so
-it is not mistaken for full system acceptance.
-
-## 5.2 Add a true V7 integration harness
-
-The harness must exercise:
-
-~~~text
-local Worker registry
--> Workspace hello
--> full Worker inventory sync
--> Cloud persistence
--> Project Workspace Grant
--> Workstream policy
--> scheduler selection
--> assignment creation
--> Workspace Gateway dispatch
--> Workspace resolves local Worker
--> verified adapter child process
--> ID-only Workstream CWD
--> progress/result
--> Cloud assignment completion
--> Conclave AX/read model result
-~~~
-
-Use a deterministic fake V7 adapter for normal CI.
-
-Do not bypass:
-- scheduler;
-- Gateway;
-- local registry;
-- adapter admission/execution.
-
-## 5.3 Add failure/recovery scenarios
-
-Automate:
-- Workspace disconnect/reconnect;
-- duplicate hello;
-- duplicate inventory snapshot;
-- stale revision;
-- Worker removed locally;
-- credential becomes expired;
-- prerequisite disappears;
+Add:
+- repeated Cloud disconnect/reconnect;
+- duplicate hello/snapshot;
 - adapter crash;
-- child tool crash;
-- cancellation;
-- forced process-tree kill;
-- Cloud cancel during reconnect;
-- adapter update failure/rollback;
+- provider/tool crash;
+- credential expiry;
+- missing/outdated CLI after previously being Ready;
+- adapter update failure + rollback;
 - Workspace re-pair;
-- stateful Workstream lease/fencing conflict.
+- Cloud cancel during reconnect;
+- stateful lease/fencing conflict;
+- local Worker deletion during queued/running work;
+- app update while work is active.
 
-## 5.4 Add security acceptance
+## Security coverage
 
 Verify:
-- wrong Workspace cannot publish another Worker's inventory;
-- Cloud cannot override local Worker permissions;
-- Cloud cannot select arbitrary executable;
-- Cloud cannot select arbitrary CWD;
+- wrong Workspace cannot publish/update another Worker's inventory;
+- Cloud cannot broaden local permissions;
+- Cloud cannot choose arbitrary executable/CWD;
 - path traversal is rejected;
-- API keys/session tokens never appear in Cloud DB/event payloads/logs;
-- malicious/tampered adapter package is rejected;
-- cross-user scheduling without explicit authorization fails.
+- malicious/tampered adapter packages fail;
+- revoked keys/releases fail;
+- secret redaction holds in logs/progress/errors;
+- cross-user scheduling requires explicit authorization;
+- process-tree cancellation prevents escaped child execution.
 
-## 5.5 Add opt-in live acceptance
+## Observability
 
-Separate, non-default workflows may test:
-- real Codex;
-- real Antigravity;
-- real OpenAI API;
-- real Gemini API;
-- real Anthropic API.
+Ensure failures produce safe, actionable diagnostics without reintroducing token
+or cost Usage accounting.
 
-These jobs:
-- require explicitly configured secrets/accounts;
-- must never run on untrusted PRs;
-- must not log provider credentials;
-- are not required for ordinary contributor CI.
+## Phase 6 exit gate
 
-## Exit gate
-
-A clean V7 Worker can complete a real Work assignment through the same
-Cloud/Gateway/runtime/adapter path used by the product.
+Failure behavior is explicit/idempotent and Workspace remains the machine
+security boundary under adversarial acceptance tests.
 
 ---
 
-# Phase 6 — Finish Conclave Workspace as a production desktop runtime
+# Phase 7 — Finish Conclave Workspace as a production desktop runtime
 
 ## Goal
 
-Move from a functional desktop vertical slice to an always-on execution
-product.
+Move from a functional native vertical slice to an always-on execution product.
 
-## 6.1 macOS menu-bar/background lifecycle
+## 7.1 macOS menu-bar/background lifecycle
 
 Implement:
 - menu-bar status;
@@ -613,130 +707,108 @@ Implement:
 - active assignment count;
 - Open Conclave Workspace;
 - Open Conclave AX;
-- Pause new work;
-- Resume;
-- Drain;
-- Diagnostics/logs;
-- Quit.
+- pause/resume new work;
+- drain;
+- diagnostics/logs;
+- quit.
 
-Closing the main window must not stop execution.
+Closing the main window must not stop the runtime.
 
-Quit with active assignments must offer clear safe behavior:
-- cancel quit;
-- drain then quit;
-- explicit cancel-and-quit where allowed.
+## 7.2 Use the real packaged app version
 
-## 6.2 Workspace application version
+Use the build-injected Workspace version as the authoritative runtime version.
 
-Use the build-injected Workspace version as the runtime's authoritative current
-version.
+Remove hard-coded production update values such as `0.1.0`.
 
-Remove hard-coded update-version values such as `0.1.0` from production update
-checks.
-
-The same version must be reported consistently in:
-- machine facts;
+Report the same version in:
+- runtime facts;
 - diagnostics;
 - update checks;
-- package name;
-- release metadata.
+- package/release metadata.
 
-## 6.3 Complete native application update flow
+## 7.3 Complete native update/restart
 
-The existing update controller provides useful discovery, verification, staging
-and rollback primitives.
+Finish the macOS `.app` update flow:
+- download/verify;
+- drain active work;
+- stage;
+- replace/restart;
+- health-check;
+- rollback on failure.
 
-Complete the macOS product-specific flow for:
-- signed `.app` bundle update;
-- restart/bootstrap;
-- rollback;
-- active-assignment drain;
-- failure recovery;
-- version reporting after restart.
+## 7.4 Reauthentication/local attention UX
 
-## 6.4 Reauthentication and local attention UX
-
-Provide clear local actions for:
+Provide local actions for:
 - expired account/session;
-- missing CLI;
-- unsupported CLI version;
+- missing/outdated prerequisite;
 - revoked adapter;
 - missing local endpoint;
 - denied permission;
-- update required.
+- required update.
 
-AX may request attention, but the action is completed locally.
+## 7.5 Diagnostics
 
-## 6.5 Diagnostics
-
-Expose:
+Expose safe:
 - Cloud connection state;
-- Workspace/runtime IDs without secrets;
+- runtime/Workspace identity;
 - app version;
 - adapter versions;
 - Worker readiness;
 - prerequisite versions;
 - active assignments;
-- recent bounded errors;
+- bounded recent errors;
 - Work Root;
-- last inventory sync;
-- last update check.
+- last inventory sync/update check.
 
-## Exit gate
+## Phase 7 exit gate
 
-Conclave Workspace can run continuously and recover predictably without the main
-window remaining open.
+Conclave Workspace runs continuously, recovers predictably, and does not depend
+on the main window remaining open.
 
 ---
 
-# Phase 7 — Documentation and baseline convergence
+# Phase 8 — Documentation and V7 baseline declaration
 
 ## Goal
 
-Make the repository describe one current architecture after implementation
-converges.
+Make the repository describe one current implemented architecture.
 
 ## Update
 
 - Architecture v7 status;
 - V7 implementation audit;
-- V7 implementation roadmap/status checkboxes;
+- detailed implementation roadmap checkboxes;
 - technology stack;
-- application boundaries;
-- root roadmap;
-- README;
+- applications/product boundaries;
+- root roadmap/README;
 - deployment/release guidance;
-- adapter release instructions;
-- security/release-key rotation documentation.
+- key rotation/revocation procedures;
+- adapter release instructions.
 
-## Historical documents
+Keep historical ADRs/roadmaps, but clearly mark superseded ownership rules.
 
-Keep older ADRs and roadmaps where they explain evolution, but mark superseded
-ownership/cardinality rules clearly.
+## Protocol clarification
 
-## Adapter protocol clarification
+The initial implemented V7 protocol includes:
 
-The implemented initial protocol has:
-- initialize;
-- validate;
-- execute;
-- progress;
-- result;
-- error;
-- health;
-- version.
+~~~text
+initialize
+validate
+execute
+progress
+result
+error
+health
+version
+~~~
 
-`request-input` is not part of the initial V7 schema. Either:
-- add a versioned interactive input request/response contract when a supported
-  adapter needs it; or
-- keep it explicitly deferred in Architecture v7.
+Interactive request/response input remains a future versioned extension unless a
+production-supported adapter requires it.
 
-Do not imply it already exists.
+## Phase 8 exit gate
 
-## Exit gate
-
-Change V7 status to **Implemented baseline** only when all architecture release
-gates below pass.
+Only after all architecture release gates pass, change V7 from **active
+implementation target** to **implemented baseline**.
 
 ---
 
