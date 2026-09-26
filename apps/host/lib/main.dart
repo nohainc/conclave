@@ -2810,8 +2810,36 @@ class _HostRecoveryPanel extends StatelessWidget {
               style: TextStyle(
                   color: colors.onErrorContainer, fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
-          Text(issue ?? 'The Workspace needs attention.',
-              style: TextStyle(color: colors.onErrorContainer)),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: SelectableText(
+                  issue ?? 'The Workspace needs attention.',
+                  style: TextStyle(color: colors.onErrorContainer),
+                ),
+              ),
+              if (issue != null && issue!.isNotEmpty)
+                IconButton(
+                  tooltip: 'Copy error message',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 36,
+                    minHeight: 36,
+                  ),
+                  icon: const Icon(Icons.copy, size: 18),
+                  color: colors.onErrorContainer,
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: issue!));
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Error message copied')),
+                    );
+                  },
+                ),
+            ],
+          ),
           const SizedBox(height: 8),
           Text(
               'Your work is safe. The Workspace will not discard an assignment.',

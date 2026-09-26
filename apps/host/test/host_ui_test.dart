@@ -8,6 +8,7 @@ import 'package:conclave_host/secure_credentials.dart';
 import 'package:conclave_host/workspace_enrollment.dart';
 import 'package:conclave_host/workspace_pairing_dialog.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _TestPlatformRuntime implements PlatformRuntime {
@@ -277,6 +278,18 @@ void main() {
   testWidgets('offline Workspace displays recovery panel with retry',
       (tester) async {
     var retried = false;
+    String? copiedText;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copiedText = (call.arguments as Map)['text'] as String?;
+        }
+        return null;
+      },
+    );
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
     await pumpDashboard(
       tester,
       const HostUiSnapshot(
@@ -290,6 +303,11 @@ void main() {
 
     expect(find.text('Network unavailable'), findsOneWidget);
     expect(find.text('Retry connection'), findsOneWidget);
+    expect(find.byTooltip('Copy error message'), findsOneWidget);
+    await tester.tap(find.byTooltip('Copy error message'));
+    await tester.pump();
+    expect(copiedText, 'Network unavailable');
+    expect(find.text('Error message copied'), findsOneWidget);
     await tester.tap(find.text('Retry connection'));
     expect(retried, isTrue);
   });
