@@ -220,23 +220,30 @@ void main() {
       await tester.pumpAndSettle();
       expect(createProjectCalled, isTrue);
 
-      // Tap Project row to navigate to /projects/:projectId
+      // Tap Project row to navigate to /projects/:projectId and toggle expansion
       await tester.tap(find.text('Conclave AX').last);
       expect(navigatedTo?.kind, StudioRouteKind.project);
       expect(navigatedTo?.projectId, 'project-1');
+      expect(toggledProjectId, 'project-1');
 
       // Tap workstream row
       await tester.tap(find.text('Authentication redesign'));
       expect(navigatedTo?.kind, StudioRouteKind.workstream);
       expect(navigatedTo?.workstreamId, 'ws-1');
 
-      // Tap chevron to toggle expansion
-      await tester.tap(find.byIcon(Icons.expand_more_rounded));
-      expect(toggledProjectId, 'project-1');
+      // Verify folder open icon is displayed for expanded project
+      expect(
+        find.byWidgetPredicate(
+            (w) => w is ConclaveFolderIcon && w.isExpanded == true),
+        findsOneWidget,
+      );
+
+
 
       // Tap User Profile Button at bottom of sidebar -> navigates to /settings/profile
       await tester.tap(find.text('Vitalii Noha'));
       expect(navigatedTo?.kind, StudioRouteKind.profileSecurity);
+
 
       // Tap ⋯ Application menu at bottom of sidebar
       await tester.tap(find.byTooltip('Application menu'));
@@ -1038,6 +1045,7 @@ void main() {
       // Tapping Projects & Workstreams popup menu
       await tester.tap(find.byTooltip('Projects & Workstreams'));
       await tester.pumpAndSettle();
+      expect(find.byType(ConclaveFolderIcon), findsAtLeastNWidgets(1));
       expect(find.text(testProject.name), findsOneWidget);
       expect(find.text(testProject.workstreams.first.name), findsOneWidget);
       expect(find.text('Create Project'), findsNothing); // Removed from menu
@@ -1377,23 +1385,29 @@ void main() {
 
       // Workstreams should not be visible when collapsed
       expect(find.text('Engine optimization'), findsNothing);
+      // Collapsed project shows closed folder icon
+      expect(
+        find.byWidgetPredicate(
+            (w) => w is ConclaveFolderIcon && w.isExpanded == false),
+        findsOneWidget,
+      );
 
-      // Tap the project title text when not active -> should navigate to project without changing expansion
+      // Tap the project item -> should navigate to project and toggle expansion
       await tester.tap(find.text('Conclave Core'));
       expect(navigatedTo?.kind, StudioRouteKind.project);
       expect(navigatedTo?.projectId, 'p-1');
-      expect(toggledProjectId, isNull);
+      expect(toggledProjectId, 'p-1');
 
       // Reset
       navigatedTo = null;
       toggledProjectId = null;
 
-      // 2. When already on the active project
-      const activeProjectContext = StudioShellContext(
+      // 2. When expanded
+      const expandedProjectContext = StudioShellContext(
         navigation: StudioNavigation.project('p-1'),
         projects: [projectA],
         selectedProject: projectA,
-        expandedProjectIds: {},
+        expandedProjectIds: {'p-1'},
       );
 
       await tester.pumpWidget(
@@ -1401,7 +1415,7 @@ void main() {
           theme: ConclaveBrand.darkTheme(),
           home: Scaffold(
             body: StudioSidebar(
-              shellContext: activeProjectContext,
+              shellContext: expandedProjectContext,
               onNavigateTo: (nav) => navigatedTo = nav,
               onToggleProjectExpanded: (id) => toggledProjectId = id,
               onCreateProject: () {},
@@ -1414,20 +1428,21 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Tap the project title text again on current active project -> should toggle expand
+      // Expanded project shows open folder icon and workstreams
+      expect(
+        find.byWidgetPredicate(
+            (w) => w is ConclaveFolderIcon && w.isExpanded == true),
+        findsOneWidget,
+      );
+      expect(find.text('Engine optimization'), findsOneWidget);
+
+      // Tap the project item again -> toggles expansion to collapse and navigates
       await tester.tap(find.text('Conclave Core'));
       expect(navigatedTo?.kind, StudioRouteKind.project);
       expect(toggledProjectId, 'p-1');
-
-      // Reset
-      navigatedTo = null;
-      toggledProjectId = null;
-
-      // Tap the chevron icon -> should toggle expand, NOT navigate
-      await tester.tap(find.byIcon(Icons.chevron_right_rounded));
-      expect(toggledProjectId, 'p-1');
-      expect(navigatedTo, isNull);
     });
+
+
 
     testWidgets('Workstream status dot indicators render for each status',
         (tester) async {
@@ -1526,6 +1541,46 @@ void main() {
       expect(find.text('Conclave Core'), findsOneWidget);
       await tester.tap(find.text('Conclave Core'));
       expect(navigatedTo?.kind, StudioRouteKind.project);
+
+      // Test 1c: Workspace route -> "Execution / Workspace Name"
+      const testWs = StudioAgent(
+        id: 'ws-mac',
+        name: 'MacBook Pro',
+        hostname: 'macbook-pro',
+        status: 'online',
+        version: '1.0.0',
+        pluginCount: 0,
+        workerCount: 0,
+        activeTaskCount: 0,
+      );
+      final workspaceContext = StudioShellContext(
+        navigation: const StudioNavigation.workspace('ws-mac'),
+        projects: const [projectA],
+        workspaces: const [testWs],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ConclaveBrand.darkTheme(),
+          home: Scaffold(
+            body: StudioTopBar(
+              shellContext: workspaceContext,
+              onNavigateTo: (nav) => navigatedTo = nav,
+              onOpenCommandPalette: () {},
+              onToggleTheme: () {},
+              onOpenNotifications: () {},
+              onOpenAbout: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Execution'), findsOneWidget);
+      expect(find.text('MacBook Pro'), findsOneWidget);
+      await tester.tap(find.text('Execution'));
+      expect(navigatedTo?.kind, StudioRouteKind.hosts);
+      expect(navigatedTo?.workspaceId, isNull);
     });
 
     testWidgets(

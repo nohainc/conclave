@@ -19,6 +19,7 @@ class StudioNavigation {
     this.chatId,
     this.workstreamId,
     this.runId,
+    this.workspaceId,
     this.loginReturnTo,
     this.searchQuery,
   });
@@ -49,7 +50,11 @@ class StudioNavigation {
           workstreamId: workstreamId,
         );
 
-  const StudioNavigation.hosts() : this._(kind: StudioRouteKind.hosts);
+  const StudioNavigation.hosts({String? workspaceId})
+      : this._(kind: StudioRouteKind.hosts, workspaceId: workspaceId);
+
+  const StudioNavigation.workspace(String workspaceId)
+      : this._(kind: StudioRouteKind.hosts, workspaceId: workspaceId);
 
   const StudioNavigation.workers() : this._(kind: StudioRouteKind.workers);
 
@@ -71,6 +76,7 @@ class StudioNavigation {
   final String? chatId;
   final String? workstreamId;
   final String? runId;
+  final String? workspaceId;
   final String? loginReturnTo;
   final String? searchQuery;
 
@@ -93,6 +99,11 @@ class StudioNavigation {
             parts[1] == 'workspaces')) {
       return const StudioNavigation.hosts();
     }
+    if (parts.length == 3 &&
+        parts[0] == 'execution' &&
+        parts[1] == 'workspaces') {
+      return StudioNavigation.hosts(workspaceId: parts[2]);
+    }
     if (parts case ['execution', 'workers']) {
       return const StudioNavigation.workers();
     }
@@ -109,6 +120,7 @@ class StudioNavigation {
         (parts[0] == 'workspaces' || parts[0] == 'hosts')) {
       if (parts[1] == 'workers') return const StudioNavigation.workers();
       if (parts[1] == 'accounts') return const StudioNavigation.workers();
+      return StudioNavigation.hosts(workspaceId: parts[1]);
     }
     // Backward compatibility for standalone /workers and /accounts
     if (parts case ['workers']) return const StudioNavigation.workers();
@@ -157,7 +169,9 @@ class StudioNavigation {
               path:
                   '/projects/$projectId/workstreams/$workstreamId/runs/$runId')
           : Uri(path: '/projects/$projectId/runs/$runId'),
-      StudioRouteKind.hosts => Uri(path: '/execution/workspaces'),
+      StudioRouteKind.hosts => workspaceId != null
+          ? Uri(path: '/execution/workspaces/$workspaceId')
+          : Uri(path: '/execution/workspaces'),
       StudioRouteKind.workers => Uri(path: '/execution/workers'),
       StudioRouteKind.login => Uri(
           path: '/login',
@@ -181,10 +195,11 @@ class StudioNavigation {
       other.chatId == chatId &&
       other.workstreamId == workstreamId &&
       other.runId == runId &&
+      other.workspaceId == workspaceId &&
       other.loginReturnTo == loginReturnTo &&
       other.searchQuery == searchQuery;
 
   @override
-  int get hashCode => Object.hash(
-      kind, projectId, chatId, workstreamId, runId, loginReturnTo, searchQuery);
+  int get hashCode => Object.hash(kind, projectId, chatId, workstreamId, runId,
+      workspaceId, loginReturnTo, searchQuery);
 }

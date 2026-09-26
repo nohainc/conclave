@@ -355,18 +355,22 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Tapping the project chevron triggers expansion toggle
-      await tester.tap(find.byIcon(Icons.expand_more_rounded));
-      expect(toggledProjectId, 'p-1');
-      expect(navigated, isNull);
+      // Project tree displays open folder icon when expanded
+      expect(
+        find.byWidgetPredicate((w) => w is ConclaveFolderIcon && w.isExpanded == true),
+        findsOneWidget,
+      );
 
-      // Tapping the project title in project tree navigates to the project overview
+
+      // Tapping the project item in project tree toggles expansion and navigates to the project
       await tester.tap(find.descendant(
         of: find.byType(ProjectTree),
         matching: find.text('Conclave AX'),
       ));
+      expect(toggledProjectId, 'p-1');
       expect(navigated, const StudioNavigation.project('p-1'));
     });
+
 
     testWidgets('selecting a workstream triggers navigation with active state',
         (tester) async {

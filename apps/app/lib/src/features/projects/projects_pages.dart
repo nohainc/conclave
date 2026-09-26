@@ -1402,10 +1402,6 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   late TabController _tabController;
   final _requestController = TextEditingController();
   final _discussionController = TextEditingController();
-  final _briefPurposeController = TextEditingController();
-  final _briefStateController = TextEditingController();
-  final _briefConstraintsController = TextEditingController();
-  final _briefOutcomeController = TextEditingController();
   String _workflow = 'Full Cycle';
   String _quality = 'Balanced';
   String _workstreamBudget = 'No budget';
@@ -1415,9 +1411,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   bool _references = false;
   final List<_WorkTimelineItem> _timeline = [];
   final List<_DiscussionItem> _discussion = [];
-  final Set<String> _selectedDiscussionIds = <String>{};
   List<String> _draftReferences = <String>[];
-  bool _editingBrief = false;
 
   @override
   void initState() {
@@ -1427,12 +1421,6 @@ class _WorkstreamPageState extends State<WorkstreamPage>
       initialIndex: widget.initialTab.clamp(0, 1),
       vsync: this,
     );
-    _briefPurposeController.text = widget.workstream.brief;
-    _briefStateController.text = widget.workstream.status;
-    _briefConstraintsController.text =
-        'Use the Project policy and the Workstream Primary Workspace.';
-    _briefOutcomeController.text =
-        'A verified result with an understandable checkpoint and evidence.';
   }
 
   @override
@@ -1451,10 +1439,6 @@ class _WorkstreamPageState extends State<WorkstreamPage>
     _tabController.dispose();
     _requestController.dispose();
     _discussionController.dispose();
-    _briefPurposeController.dispose();
-    _briefStateController.dispose();
-    _briefConstraintsController.dispose();
-    _briefOutcomeController.dispose();
     super.dispose();
   }
 
@@ -1484,116 +1468,103 @@ class _WorkstreamPageState extends State<WorkstreamPage>
         ),
       );
 
-  Widget _discuss(BuildContext context) =>
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _ProjectPanel(
-          title: 'Brief',
-          subtitle: 'The shared context for this Workstream.',
-          child: _briefEditor(),
-        ),
-        _ProjectPanel(
-          title: 'Discuss',
-          subtitle:
-              'Talk with your team here. Send messages to Work when you are ready to ask AI to act.',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (_discussion.isEmpty)
-                const Text('No discussion messages yet.')
-              else
-                ..._discussion.map((message) => _DiscussionMessageCard(
-                      item: message,
-                      selected: _selectedDiscussionIds.contains(message.id),
-                      onSelected: () => setState(() {
-                        if (!_selectedDiscussionIds.add(message.id)) {
-                          _selectedDiscussionIds.remove(message.id);
-                        }
-                      }),
-                      onSendToWork: () => _sendToWork([message]),
-                    )),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _discussionController,
-                minLines: 2,
-                maxLines: 5,
-                decoration: const InputDecoration(
-                  labelText: 'Message the Workstream',
-                  hintText: 'Share context, a decision, or a question.',
-                  border: OutlineInputBorder(),
+  Widget _discuss(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_discussion.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 16),
+            alignment: Alignment.center,
+            child: Column(
+              children: [
+                Icon(
+                  Icons.chat_bubble_outline_rounded,
+                  size: 42,
+                  color: isDark ? Colors.white24 : Colors.black26,
                 ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(spacing: 8, children: [
-                FilledButton.icon(
-                  onPressed: _sendDiscussion,
-                  icon: const Icon(Icons.send),
-                  label: const Text('Send message'),
-                ),
-                if (_selectedDiscussionIds.isNotEmpty)
-                  OutlinedButton.icon(
-                    onPressed: () => _sendToWork(_discussion
-                        .where(
-                            (item) => _selectedDiscussionIds.contains(item.id))
-                        .toList()),
-                    icon: const Icon(Icons.playlist_add),
-                    label:
-                        Text('Send ${_selectedDiscussionIds.length} to Work'),
+                const SizedBox(height: 12),
+                Text(
+                  'No discussion messages yet',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? Colors.white60 : Colors.black54,
                   ),
-              ]),
-              const SizedBox(height: 8),
-              const Text(
-                  'Messages can be edited by their author. Edits remain visible in the activity history.'),
-            ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Share context, decisions, or questions with your team below.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.white38 : Colors.black38,
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _discussion.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final message = _discussion[index];
+              return _DiscussionMessageBubble(
+                key: ValueKey(message.id),
+                item: message,
+                onCopy: () {
+                  Clipboard.setData(ClipboardData(text: message.text));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Message copied to clipboard'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                },
+                onEdit: (newText) {
+                  setState(() {
+                    final idx =
+                        _discussion.indexWhere((m) => m.id == message.id);
+                    if (idx != -1) {
+                      _discussion[idx] = _DiscussionItem(
+                        id: message.id,
+                        author: message.author,
+                        text: newText,
+                        sentAt: message.sentAt,
+                        isMe: message.isMe,
+                      );
+                    }
+                  });
+                },
+              );
+            },
           ),
+        const SizedBox(height: 16),
+        _DiscussionInputBox(
+          controller: _discussionController,
+          onSend: _sendDiscussion,
         ),
-        if (_timeline.any((item) => item.status == 'completed'))
+        if (_timeline.any((item) => item.status == 'completed')) ...[
+          const SizedBox(height: 16),
           _ProjectPanel(
             title: 'Work completed',
-            subtitle: 'A compact activity notification from the Work timeline.',
+            subtitle:
+                'A compact activity notification from the Work timeline.',
             child: TextButton.icon(
               onPressed: () => _tabController.animateTo(1),
               icon: const Icon(Icons.open_in_new),
               label: const Text('View Work result'),
             ),
           ),
-      ]);
-
-  Widget _briefEditor() => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _briefField('Purpose', _briefPurposeController),
-          _briefField('State', _briefStateController),
-          _briefField('Constraints', _briefConstraintsController),
-          _briefField('Expected outcome', _briefOutcomeController),
-          const SizedBox(height: 8),
-          if (_canExecute)
-            Wrap(spacing: 8, children: [
-              OutlinedButton.icon(
-                onPressed: () => setState(() => _editingBrief = !_editingBrief),
-                icon: Icon(_editingBrief ? Icons.check : Icons.edit),
-                label: Text(_editingBrief ? 'Done editing' : 'Edit Brief'),
-              ),
-              if (_editingBrief)
-                const Text(
-                    'Changes are local until the Workstream API persists them.'),
-            ])
-          else
-            const Text('Viewer access can read the Brief but cannot edit it.'),
         ],
-      );
-
-  Widget _briefField(String label, TextEditingController controller) => Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: TextField(
-          controller: controller,
-          enabled: _editingBrief && _canExecute,
-          maxLines: 3,
-          decoration: InputDecoration(
-            labelText: label,
-            border: const OutlineInputBorder(),
-          ),
-        ),
-      );
+      ],
+    );
+  }
 
   Widget _work(BuildContext context) =>
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1679,36 +1650,31 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   void _sendDiscussion() {
     final text = _discussionController.text.trim();
     if (text.isEmpty) return;
+    final now = DateTime.now();
+    final hour = now.hour.toString().padLeft(2, '0');
+    final minute = now.minute.toString().padLeft(2, '0');
     setState(() {
-      _discussion.insert(
-        0,
+      _discussion.add(
         _DiscussionItem(
           id: 'message-${DateTime.now().microsecondsSinceEpoch}',
           author: 'You',
           text: text,
+          sentAt: '$hour:$minute',
+          isMe: true,
         ),
       );
       _discussionController.clear();
     });
   }
 
-  void _sendToWork(List<_DiscussionItem> messages) {
-    if (messages.isEmpty) return;
-    setState(() {
-      _requestController.text = messages.map((item) => item.text).join('\n\n');
-      _draftReferences = messages.map((item) => item.text).toList();
-      _references = true;
-      _selectedDiscussionIds.clear();
-    });
-    _tabController.animateTo(1);
-  }
-
   _WorkstreamContext _buildContext() => _WorkstreamContext.build(
         projectInstructions: widget.project.instructions,
-        purpose: _briefPurposeController.text,
-        state: _briefStateController.text,
-        constraints: _briefConstraintsController.text,
-        expectedOutcome: _briefOutcomeController.text,
+        purpose: widget.workstream.brief,
+        state: widget.workstream.status,
+        constraints:
+            'Use the Project policy and the Workstream Primary Workspace.',
+        expectedOutcome:
+            'A verified result with an understandable checkpoint and evidence.',
         checkpoint: widget.workstream.currentCheckpoint,
         workRequest: _requestController.text,
         references: _draftReferences,
@@ -2012,46 +1978,307 @@ class _ContextPreview extends StatelessWidget {
 }
 
 class _DiscussionItem {
-  const _DiscussionItem(
-      {required this.id, required this.author, required this.text});
+  const _DiscussionItem({
+    required this.id,
+    required this.author,
+    required this.text,
+    this.sentAt,
+    this.isMe = true,
+  });
+
   final String id;
   final String author;
   final String text;
+  final String? sentAt;
+  final bool isMe;
 }
 
-class _DiscussionMessageCard extends StatelessWidget {
-  const _DiscussionMessageCard({
+class _DiscussionMessageBubble extends StatefulWidget {
+  const _DiscussionMessageBubble({
+    super.key,
     required this.item,
-    required this.selected,
-    required this.onSelected,
-    required this.onSendToWork,
+    required this.onCopy,
+    required this.onEdit,
   });
 
   final _DiscussionItem item;
-  final bool selected;
-  final VoidCallback onSelected;
-  final VoidCallback onSendToWork;
+  final VoidCallback onCopy;
+  final ValueChanged<String> onEdit;
 
   @override
-  Widget build(BuildContext context) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Checkbox(value: selected, onChanged: (_) => onSelected()),
-              Expanded(
-                  child: Text(item.author,
-                      style: const TextStyle(fontWeight: FontWeight.w600))),
-              TextButton(
-                  onPressed: onSendToWork, child: const Text('Send to Work')),
-            ]),
-            Text(item.text),
-            const SizedBox(height: 4),
-            const Text('References · Reply · Edit'),
-          ]),
+  State<_DiscussionMessageBubble> createState() =>
+      _DiscussionMessageBubbleState();
+}
+
+class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
+  bool _isEditing = false;
+  late TextEditingController _editController;
+
+  @override
+  void initState() {
+    super.initState();
+    _editController = TextEditingController(text: widget.item.text);
+  }
+
+  @override
+  void didUpdateWidget(covariant _DiscussionMessageBubble oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.item.text != widget.item.text && !_isEditing) {
+      _editController.text = widget.item.text;
+    }
+  }
+
+  @override
+  void dispose() {
+    _editController.dispose();
+    super.dispose();
+  }
+
+  void _saveEdit() {
+    final text = _editController.text.trim();
+    if (text.isNotEmpty) {
+      widget.onEdit(text);
+    }
+    setState(() => _isEditing = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isMe = widget.item.isMe;
+
+    final initials = widget.item.author.isNotEmpty
+        ? widget.item.author
+            .trim()
+            .split(' ')
+            .where((s) => s.isNotEmpty)
+            .map((s) => s[0])
+            .take(2)
+            .join()
+            .toUpperCase()
+        : 'U';
+
+    final textColor =
+        isDark ? Colors.white : const Color(0xff1f1d2b);
+    final metaColor =
+        isDark ? Colors.white38 : Colors.black45;
+    final borderColor =
+        isDark ? const Color(0xff2d2b42) : const Color(0xffe2e0ed);
+
+    return Align(
+      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 640),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: borderColor,
+              width: 1,
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Column(
+            crossAxisAlignment:
+                isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!isMe) ...[
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircleAvatar(
+                      radius: 11,
+                      backgroundColor: isDark
+                          ? const Color(0xff3f3b61)
+                          : const Color(0xffd8d2ff),
+                      child: Text(
+                        initials,
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: isDark
+                              ? Colors.white70
+                              : const Color(0xff4238a0),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      widget.item.author,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+              ],
+              if (_isEditing) ...[
+                TextField(
+                  controller: _editController,
+                  minLines: 1,
+                  maxLines: 6,
+                  autofocus: true,
+                  style: TextStyle(fontSize: 13.5, color: textColor),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(vertical: 4),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextButton(
+                      onPressed: () => setState(() {
+                        _editController.text = widget.item.text;
+                        _isEditing = false;
+                      }),
+                      child: const Text('Cancel'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: _saveEdit,
+                      child: const Text('Save'),
+                    ),
+                  ],
+                ),
+              ] else ...[
+                SelectableText(
+                  widget.item.text,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    height: 1.45,
+                    color: textColor,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (widget.item.sentAt != null) ...[
+                      Text(
+                        widget.item.sentAt!,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: metaColor,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    Tooltip(
+                      message: 'Copy message',
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(4),
+                        onTap: widget.onCopy,
+                        child: Padding(
+                          padding: const EdgeInsets.all(2),
+                          child: Icon(
+                            Icons.copy_rounded,
+                            size: 14,
+                            color: metaColor,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Tooltip(
+                      message: 'Edit message',
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(4),
+                        onTap: () => setState(() {
+                          _editController.text = widget.item.text;
+                          _isEditing = true;
+                        }),
+                        child: Padding(
+                          padding: const EdgeInsets.all(2),
+                          child: Icon(
+                            Icons.edit_outlined,
+                            size: 14,
+                            color: metaColor,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
         ),
-      );
+      ),
+    );
+  }
+}
+
+class _DiscussionInputBox extends StatelessWidget {
+  const _DiscussionInputBox({
+    required this.controller,
+    required this.onSend,
+  });
+
+  final TextEditingController controller;
+  final VoidCallback onSend;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Focus(
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.enter) {
+          if (HardwareKeyboard.instance.isShiftPressed) {
+            return KeyEventResult.ignored;
+          } else {
+            onSend();
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: TextField(
+        controller: controller,
+        minLines: 1,
+        maxLines: 8,
+        keyboardType: TextInputType.multiline,
+        textCapitalization: TextCapitalization.sentences,
+        decoration: InputDecoration(
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(
+              color: isDark ? const Color(0xff2d2b42) : const Color(0xffe5e3f0),
+            ),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(
+              color: isDark ? const Color(0xff2d2b42) : const Color(0xffe5e3f0),
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(
+              color: Color(0xff7c3aed),
+              width: 1.5,
+            ),
+          ),
+          isDense: true,
+          contentPadding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+          suffixIcon: IconButton(
+            onPressed: onSend,
+            icon: const Icon(Icons.send_rounded, size: 18),
+            tooltip: 'Send message',
+            color: const Color(0xff7c3aed),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _WorkTimelineCard extends StatelessWidget {

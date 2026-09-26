@@ -659,6 +659,11 @@ class AppIconRail extends StatelessWidget {
             builder: (context, controller, child) {
               return _railIconButton(
                 icon: Icons.folder_outlined,
+                iconWidget: ConclaveFolderIcon(
+                  isExpanded: controller.isOpen,
+                  size: 20,
+                  color: Colors.white70,
+                ),
                 tooltip: 'Projects & Workstreams',
                 onPressed: () {
                   if (controller.isOpen) {
@@ -685,8 +690,8 @@ class AppIconRail extends StatelessWidget {
                 for (final project in shellContext.projects) ...[
                   MenuItemButton(
                     style: itemStyle(),
-                    leadingIcon: Icon(
-                      Icons.folder_outlined,
+                    leadingIcon: ConclaveFolderIcon(
+                      isExpanded: true,
                       size: 16,
                       color: shellContext
                               .isNavActive(StudioNavigation.project(project.id))

@@ -19,6 +19,8 @@ class WorkspacesPage extends StatefulWidget {
     this.workspaceWorkers = const [],
     this.plugins = const [],
     this.initialTab = 0,
+    this.initialWorkspaceId,
+    this.onSelectWorkspace,
     required this.onAdd,
     required this.onRename,
     required this.onUpdate,
@@ -40,6 +42,8 @@ class WorkspacesPage extends StatefulWidget {
   final List<StudioWorkspaceWorker> workspaceWorkers;
   final List<StudioPlugin> plugins;
   final int initialTab;
+  final String? initialWorkspaceId;
+  final ValueChanged<String?>? onSelectWorkspace;
   final VoidCallback onAdd;
   final ValueChanged<StudioAgent> onRename;
   final ValueChanged<StudioAgent> onUpdate;
@@ -75,6 +79,11 @@ class _WorkspacesPageState extends State<WorkspacesPage>
       initialIndex: widget.initialTab.clamp(0, 1),
       vsync: this,
     );
+    if (widget.initialWorkspaceId != null) {
+      selected = widget.workspaces
+          .where((item) => item.id == widget.initialWorkspaceId)
+          .firstOrNull;
+    }
   }
 
   @override
@@ -82,6 +91,17 @@ class _WorkspacesPageState extends State<WorkspacesPage>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.initialTab != widget.initialTab) {
       _tabController.animateTo(widget.initialTab.clamp(0, 1));
+    }
+    if (oldWidget.initialWorkspaceId != widget.initialWorkspaceId) {
+      setState(() {
+        if (widget.initialWorkspaceId != null) {
+          selected = widget.workspaces
+              .where((item) => item.id == widget.initialWorkspaceId)
+              .firstOrNull;
+        } else {
+          selected = null;
+        }
+      });
     }
   }
 
@@ -102,7 +122,10 @@ class _WorkspacesPageState extends State<WorkspacesPage>
     if (active != null) {
       return WorkspaceDetailView(
         workspace: active,
-        onBack: () => setState(() => selected = null),
+        onBack: () {
+          setState(() => selected = null);
+          widget.onSelectWorkspace?.call(null);
+        },
         onRename: widget.onRename,
         onUpdate: widget.onUpdate,
         onRevoke: widget.onRevoke,
@@ -152,7 +175,10 @@ class _WorkspacesPageState extends State<WorkspacesPage>
               WorkspacesOverview(
                 workspaces: widget.workspaces,
                 onAdd: widget.onAdd,
-                onSelectWorkspace: (ws) => setState(() => selected = ws),
+                onSelectWorkspace: (ws) {
+                  setState(() => selected = ws);
+                  widget.onSelectWorkspace?.call(ws.id);
+                },
                 onOpenDownloads: widget.onOpenDownloads,
               )
             else if (activeIndex == 1)

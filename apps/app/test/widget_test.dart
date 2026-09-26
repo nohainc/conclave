@@ -77,9 +77,9 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('Discuss'), findsWidgets);
+    expect(find.text('Discuss'), findsOneWidget);
     expect(find.text('Work'), findsOneWidget);
-    expect(find.text('Brief'), findsOneWidget);
+    expect(find.text('No discussion messages yet'), findsOneWidget);
     await tester.tap(find.text('Work'));
     await tester.pumpAndSettle();
     expect(find.text('No Work yet. Describe what you need, then press Run.'),

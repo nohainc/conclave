@@ -238,7 +238,7 @@ void main() {
     await tester.binding.setSurfaceSize(null);
   });
 
-  testWidgets('Discuss messages can create a Work draft without running it',
+  testWidgets('Discuss messages can be sent and copied to clipboard',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
     await tester.pumpWidget(const MaterialApp(
@@ -275,21 +275,42 @@ void main() {
 
     await tester.enterText(find.byType(TextField).last,
         'The login failure reproduces on a fresh checkout.');
-    await tester.scrollUntilVisible(find.text('Send message'), 500,
+    await tester.scrollUntilVisible(find.byTooltip('Send message'), 500,
         scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.text('Send message'));
+    await tester.tap(find.byTooltip('Send message'));
     await tester.pumpAndSettle();
     expect(find.text('The login failure reproduces on a fresh checkout.'),
         findsOneWidget);
-    await tester.ensureVisible(find.text('Send to Work'));
-    await tester.tap(find.text('Send to Work'));
-    await tester.pumpAndSettle();
+    expect(find.text('You'), findsNothing);
 
-    expect(find.text('What should Conclave do?'), findsOneWidget);
-    expect(find.text('References added'), findsOneWidget);
-    expect(find.text('No Work yet. Describe what you need, then press Run.'),
+    // Verify copy message button exists and triggers
+    expect(find.byTooltip('Copy message'), findsOneWidget);
+    await tester.tap(find.byTooltip('Copy message'));
+    await tester.pumpAndSettle();
+    expect(find.text('Message copied to clipboard'), findsOneWidget);
+
+    // Verify edit message button allows editing in-place
+    expect(find.byTooltip('Edit message'), findsOneWidget);
+    await tester.tap(find.byTooltip('Edit message'));
+    await tester.pumpAndSettle();
+    expect(find.text('Save'), findsOneWidget);
+    expect(find.text('Cancel'), findsOneWidget);
+
+    await tester.enterText(
+        find.widgetWithText(TextField, 'The login failure reproduces on a fresh checkout.'),
+        'The login failure reproduces on a fresh checkout. (Updated)');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('The login failure reproduces on a fresh checkout. (Updated)'),
         findsOneWidget);
-    expect(find.text('queued'), findsNothing);
+
+    // Test sending another message via Enter key (appears at the bottom)
+    await tester.enterText(find.byType(TextField).last,
+        'Line 1\nLine 2 details');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('Line 1\nLine 2 details'), findsOneWidget);
+
     await tester.binding.setSurfaceSize(null);
   });
 

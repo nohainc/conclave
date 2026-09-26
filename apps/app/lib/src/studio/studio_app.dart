@@ -2562,7 +2562,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
       onOpenWorkstream: (workstreamId) =>
           _openWorkstream(project.id, workstreamId),
       onOpenWorkspace: (workspaceId) =>
-          _navigateTo(const StudioNavigation.hosts()),
+          _navigateTo(StudioNavigation.hosts(workspaceId: workspaceId)),
       onEdit: () => _editProject(project),
       onArchive: () => _archiveProject(project),
       onDelete: () => _deleteProject(project.id),
@@ -4155,6 +4155,14 @@ class _StudioAppState extends State<ConclaveAppShell> {
         workspaceWorkers: workspaceWorkers,
         plugins: snapshot.plugins,
         initialTab: initialTab,
+        initialWorkspaceId: navigation.workspaceId,
+        onSelectWorkspace: (workspaceId) {
+          if (workspaceId != null) {
+            _navigateTo(StudioNavigation.hosts(workspaceId: workspaceId));
+          } else {
+            _navigateTo(const StudioNavigation.hosts());
+          }
+        },
         onAdd: _enrollAgent,
         onRename: _renameHost,
         onUpdate: _announceAgentUpdate,
