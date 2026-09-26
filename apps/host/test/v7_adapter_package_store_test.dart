@@ -205,7 +205,7 @@ Future<void> main() async {
       'installs, activates, and resolves a signed adapter with local secret scope',
       () async {
     await writeManifest('1.2.3');
-    final installed = await store.install(sourceDirectory: source);
+    await store.install(sourceDirectory: source);
     expect(await installed.exists(), isTrue);
     final launch = await store.resolve(
       worker: localWorker(),
