@@ -406,6 +406,8 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
   late LocalWorkerTypeOption _type;
   final Set<String> _permissions = {};
   bool _saving = false;
+  bool _probing = false;
+  bool _replaceApiKey = false;
   String? _error;
   String? _prerequisiteMessage;
   String? _adapterMessage;
@@ -426,6 +428,11 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
       _allowedModels.text = worker.allowedModels.join(', ');
       _endpointUrl.text = worker.adapterConfig['endpointUrl'] as String? ?? '';
       _permissions.addAll(worker.localPermissions);
+    } else {
+      _permissions.addAll(_type.permissions);
+      if (_type.id == 'ollama') {
+        _endpointUrl.text = 'http://localhost:11434';
+      }
     }
   }
 
@@ -583,45 +590,159 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
     }
   }
 
+  Future<void> _probeModels() async {
+    setState(() {
+      _probing = true;
+      _authenticationMessage = null;
+    });
+    try {
+      final permissions = _permissions.toList()..sort();
+      final models = await _validateApiCredential(
+        permissions,
+        localEndpoint: _type.authStrategy == 'local_endpoint',
+      );
+      if (mounted) {
+        if (models.isNotEmpty) {
+          setState(() {
+            _discoveredModels = models;
+            if (_defaultModel.text.isEmpty && models.isNotEmpty) {
+              _defaultModel.text = models.first;
+            }
+          });
+        }
+      }
+    } finally {
+      if (mounted) setState(() => _probing = false);
+    }
+  }
+
   @override
-  Widget build(BuildContext context) => AlertDialog(
-        title: Text(widget.worker == null ? 'Add Worker' : 'Edit Worker'),
-        content: SizedBox(
-          width: 500,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                DropdownButtonFormField<LocalWorkerTypeOption>(
-                  key: const Key('worker-type-selector'),
-                  initialValue: _type,
-                  decoration: const InputDecoration(labelText: 'Worker Type'),
-                  items: [
-                    for (final type in LocalWorkerTypeOption.supported)
-                      DropdownMenuItem(value: type, child: Text(type.name))
-                  ],
-                  onChanged: _saving || widget.worker != null
-                      ? null
-                      : (type) => setState(() {
-                            _type = type!;
-                            _endpointUrl.text = type.id == 'ollama'
-                                ? 'http://localhost:11434'
-                                : '';
-                            _permissions.clear();
-                            _error = null;
-                          }),
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final hasStoredKey = widget.worker?.credentialRef != null && !_replaceApiKey;
+
+    return AlertDialog(
+      title: Row(
+        children: [
+          Icon(
+            widget.worker == null ? Icons.add_circle_outline : Icons.edit_note,
+            size: 24,
+            color: theme.colorScheme.primary,
+          ),
+          const SizedBox(width: 10),
+          Text(widget.worker == null ? 'Add Worker' : 'Edit Worker'),
+        ],
+      ),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DropdownButtonFormField<LocalWorkerTypeOption>(
+                key: const Key('worker-type-selector'),
+                initialValue: _type,
+                decoration: const InputDecoration(
+                  labelText: 'Worker Type',
+                  border: OutlineInputBorder(),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 ),
-                const SizedBox(height: 8),
-                Text(_type.description),
-                const SizedBox(height: 12),
-                TextField(
-                    key: const Key('worker-name'),
-                    controller: _name,
-                    decoration:
-                        const InputDecoration(labelText: 'Worker name')),
-                if (_type.requiresApiKey) ...[
-                  const SizedBox(height: 12),
+                items: [
+                  for (final type in LocalWorkerTypeOption.supported)
+                    DropdownMenuItem(
+                      value: type,
+                      child: Row(
+                        children: [
+                          Icon(_typeIcon(type.id), size: 18),
+                          const SizedBox(width: 10),
+                          Text(type.name,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w500)),
+                        ],
+                      ),
+                    )
+                ],
+                onChanged: _saving || widget.worker != null
+                    ? null
+                    : (type) => setState(() {
+                          _type = type!;
+                          _endpointUrl.text = type.id == 'ollama'
+                              ? 'http://localhost:11434'
+                              : '';
+                          _permissions.clear();
+                          _permissions.addAll(type.permissions);
+                          _discoveredModels = const [];
+                          _error = null;
+                        }),
+              ),
+              const SizedBox(height: 6),
+              Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: Text(
+                  _type.description,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                key: const Key('worker-name'),
+                controller: _name,
+                decoration: const InputDecoration(
+                  labelText: 'Worker Name',
+                  hintText: 'e.g. Personal Claude, Local Ollama',
+                  border: OutlineInputBorder(),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (_type.requiresApiKey) ...[
+                if (hasStoredKey) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: theme.colorScheme.outlineVariant),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.check_circle,
+                            color: Colors.green, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'API key stored securely',
+                                style: TextStyle(fontWeight: FontWeight.w500),
+                              ),
+                              Text(
+                                'Encrypted on this machine.',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () =>
+                              setState(() => _replaceApiKey = true),
+                          child: const Text('Replace key'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else ...[
                   TextField(
                     key: const Key('worker-api-key'),
                     controller: _apiKey,
@@ -629,146 +750,298 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
                     enableSuggestions: false,
                     autocorrect: false,
                     decoration: InputDecoration(
-                        labelText: _type.authLabel,
-                        helperText:
-                            'Stored in this machine’s secure credential store.'),
+                      labelText: _type.authLabel,
+                      hintText: 'Enter secret API key',
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      helperText:
+                          'Stored in this machine’s secure credential store.',
+                    ),
                   ),
-                ] else ...[
-                  const SizedBox(height: 12),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.key),
-                    title: Text(_type.authLabel),
-                    subtitle: Text(_type.authStrategy == 'browser_auth'
-                        ? 'Sign in on this machine. Conclave checks the local session when you save.'
-                        : 'Uses a local service; no provider credential is stored.'),
+                ],
+              ] else ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest
+                        .withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                        color: theme.colorScheme.outlineVariant),
                   ),
-                  if (_type.authStrategy == 'browser_auth' &&
-                      (_type.id == 'codex' ||
-                          _type.id == 'antigravity' ||
-                          _type.id == 'claude-code') &&
-                      widget.launchAuthentication != null)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        onPressed: _saving
-                            ? null
-                            : () async {
-                                try {
-                                  await widget.launchAuthentication!(_type.id);
-                                  if (mounted) {
-                                    setState(() => _error =
-                                        'Sign-in opened. Complete it, then validate and save.');
+                  child: Row(
+                    children: [
+                      Icon(
+                        _type.authStrategy == 'browser_auth'
+                            ? Icons.account_circle_outlined
+                            : Icons.dns_outlined,
+                        size: 22,
+                        color: theme.colorScheme.primary,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(_type.authLabel,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 2),
+                            Text(
+                              _type.authStrategy == 'browser_auth'
+                                  ? 'Sign in locally on this machine.'
+                                  : 'Uses a local service; no external credential required.',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_type.authStrategy == 'browser_auth' &&
+                          (_type.id == 'codex' ||
+                              _type.id == 'antigravity' ||
+                              _type.id == 'claude-code') &&
+                          widget.launchAuthentication != null)
+                        FilledButton.tonalIcon(
+                          onPressed: _saving
+                              ? null
+                              : () async {
+                                  try {
+                                    await widget
+                                        .launchAuthentication!(_type.id);
+                                    if (mounted) {
+                                      setState(() => _error =
+                                          'Sign-in launched. Complete sign-in in browser/terminal, then save.');
+                                    }
+                                  } catch (error) {
+                                    if (mounted) {
+                                      setState(() => _error =
+                                          'Could not start sign-in: $error');
+                                    }
                                   }
-                                } catch (error) {
-                                  if (mounted) {
-                                    setState(() => _error =
-                                        'Could not start sign-in: $error');
-                                  }
-                                }
-                              },
-                        icon: const Icon(Icons.open_in_browser),
-                        label: Text('Sign in to ${_type.name}'),
+                                },
+                          icon: const Icon(Icons.open_in_new, size: 16),
+                          label: const Text('Sign in'),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+              if (_type.authStrategy == 'local_endpoint' ||
+                  _type.id == 'ollama') ...[
+                TextField(
+                  key: const Key('worker-endpoint'),
+                  controller: _endpointUrl,
+                  decoration: InputDecoration(
+                    labelText: 'Service Endpoint URL',
+                    hintText: 'http://localhost:11434',
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                    helperText:
+                        'Local Ollama endpoint accessible on this machine.',
+                  ),
+                ),
+              ] else ...[
+                TextField(
+                  key: const Key('worker-endpoint'),
+                  controller: _endpointUrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Custom Endpoint URL (optional)',
+                    hintText: 'Leave empty for default provider endpoint',
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                    helperText: 'Optional proxy or custom API base URL.',
+                  ),
+                ),
+              ],
+              if (widget.validateApiCredential != null &&
+                  (_type.requiresApiKey ||
+                      _type.authStrategy == 'local_endpoint')) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _saving || _probing ? null : _probeModels,
+                    icon: _probing
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.manage_search, size: 18),
+                    label: const Text('Discover available models'),
+                  ),
+                ),
+              ],
+              if (_authenticationMessage != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _authenticationMessage!,
+                  style:
+                      TextStyle(color: theme.colorScheme.error, fontSize: 13),
+                ),
+              ],
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('worker-default-model'),
+                controller: _defaultModel,
+                decoration: InputDecoration(
+                  labelText: _type.authStrategy == 'local_endpoint'
+                      ? 'Default Model'
+                      : 'Default Model (optional)',
+                  hintText: _type.id == 'openai-api'
+                      ? 'gpt-4o'
+                      : _type.id == 'gemini-api'
+                          ? 'gemini-2.5-flash'
+                          : _type.id == 'anthropic-api'
+                              ? 'claude-3-7-sonnet'
+                              : 'e.g. qwen2.5-coder',
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 12),
+                  helperText: _discoveredModels.isEmpty
+                      ? null
+                      : 'Discovered: ${_discoveredModels.take(8).join(', ')}',
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                key: const Key('worker-allowed-models'),
+                controller: _allowedModels,
+                decoration: const InputDecoration(
+                  labelText: 'Allowed Models (comma separated, optional)',
+                  hintText: 'e.g. gpt-4o, gpt-4o-mini',
+                  border: OutlineInputBorder(),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  helperText:
+                      'Limit assignments to specific approved models.',
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Local Permissions',
+                style: theme.textTheme.titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 4),
+              for (final permission in _type.permissions)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: Text(_permissionLabel(permission),
+                      style: const TextStyle(fontSize: 14)),
+                  value: _permissions.contains(permission),
+                  onChanged: _saving
+                      ? null
+                      : (allowed) => setState(() {
+                            if (allowed == true) {
+                              _permissions.add(permission);
+                            } else {
+                              _permissions.remove(permission);
+                            }
+                          }),
+                ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest
+                      .withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.info_outline,
+                        size: 16, color: theme.colorScheme.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Required tool: ${_type.prerequisite}. This Worker becomes Ready once adapter, prerequisite CLI/tools, authentication, and permissions are verified.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
-                ],
-                TextField(
-                    key: const Key('worker-endpoint'),
-                    controller: _endpointUrl,
-                    decoration: const InputDecoration(
-                        labelText: 'Endpoint URL (optional)',
-                        helperText:
-                            'Required for local model services. API overrides are optional.')),
-                if (_authenticationMessage != null) ...[
-                  const SizedBox(height: 8),
-                  Text(_authenticationMessage!,
-                      style: TextStyle(
-                          color: Theme.of(context).colorScheme.error)),
-                ],
-                if (_type.authStrategy == 'local_endpoint')
-                  TextField(
-                    key: const Key('worker-default-model'),
-                    controller: _defaultModel,
-                    decoration: InputDecoration(
-                      labelText: 'Default model',
-                      helperText: _discoveredModels.isEmpty
-                          ? 'Validate the endpoint to discover installed models.'
-                          : 'Installed models: ${_discoveredModels.take(12).join(', ')}',
-                    ),
-                  )
-                else
-                  TextField(
-                    key: const Key('worker-default-model'),
-                    controller: _defaultModel,
-                    decoration: InputDecoration(
-                      labelText: 'Default model (optional)',
-                      helperText: _discoveredModels.isEmpty
-                          ? null
-                          : 'Available models: ${_discoveredModels.take(12).join(', ')}',
-                    ),
-                  ),
-                TextField(
-                    key: const Key('worker-allowed-models'),
-                    controller: _allowedModels,
-                    decoration: const InputDecoration(
-                        labelText:
-                            'Allowed models (comma separated, optional)')),
-                const SizedBox(height: 12),
-                Text('Local permissions',
-                    style: Theme.of(context).textTheme.titleSmall),
-                for (final permission in _type.permissions)
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(_permissionLabel(permission)),
-                    value: _permissions.contains(permission),
-                    onChanged: _saving
-                        ? null
-                        : (allowed) => setState(() {
-                              if (allowed == true) {
-                                _permissions.add(permission);
-                              } else {
-                                _permissions.remove(permission);
-                              }
-                            }),
-                  ),
-                Text(
-                    'Required tool: ${_type.prerequisite}. This Worker will stay in Needs attention until its adapter, prerequisite, authentication, and permissions are ready.'),
-                if (_prerequisiteMessage != null) ...[
-                  const SizedBox(height: 8),
-                  Text('Prerequisite check: $_prerequisiteMessage'),
-                ],
-                if (_adapterMessage != null) ...[
-                  const SizedBox(height: 8),
-                  Text('Adapter check: $_adapterMessage'),
-                ],
-                if (_error != null) ...[
-                  const SizedBox(height: 8),
-                  Text(_error!,
-                      style: TextStyle(
-                          color: Theme.of(context).colorScheme.error)),
-                ],
+                  ],
+                ),
+              ),
+              if (_prerequisiteMessage != null) ...[
+                const SizedBox(height: 8),
+                Text('Prerequisite check: $_prerequisiteMessage',
+                    style: theme.textTheme.bodySmall),
               ],
-            ),
+              if (_adapterMessage != null) ...[
+                const SizedBox(height: 8),
+                Text('Adapter check: $_adapterMessage',
+                    style: theme.textTheme.bodySmall),
+              ],
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color:
+                        theme.colorScheme.errorContainer.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.error_outline,
+                          size: 16, color: theme.colorScheme.error),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _error!,
+                          style: TextStyle(
+                              color: theme.colorScheme.onErrorContainer,
+                              fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
-        actions: [
-          TextButton(
-              onPressed:
-                  _saving ? null : () => Navigator.of(context).pop(false),
-              child: const Text('Cancel')),
-          FilledButton(
-              onPressed: _saving ? null : _create,
-              child: Text(_saving
-                  ? 'Saving…'
-                  : widget.worker == null
-                      ? 'Validate and create'
-                      : 'Save changes')),
-        ],
-      );
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _create,
+          child: Text(
+            _saving
+                ? 'Saving…'
+                : widget.worker == null
+                    ? 'Validate and create'
+                    : 'Save changes',
+          ),
+        ),
+      ],
+    );
+  }
+
+  static IconData _typeIcon(String id) => switch (id) {
+        'codex' => Icons.terminal,
+        'antigravity' => Icons.auto_awesome,
+        'claude-code' => Icons.code,
+        'openai-api' || 'gemini-api' || 'anthropic-api' => Icons.cloud_queue,
+        'ollama' => Icons.memory,
+        _ => Icons.smart_toy_outlined,
+      };
 
   String _permissionLabel(String permission) => switch (permission) {
         'workstream_filesystem' => 'Read and modify Workstream files',
-        'shell_execution' => 'Run local shell tools',
+        'shell_execution' => 'Run local shell commands and tools',
         'network' => 'Connect to network services',
         'network_openai' => 'Send prompts to OpenAI API',
         'network_google' => 'Send prompts to Gemini API',
@@ -776,3 +1049,4 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
         _ => permission,
       };
 }
+

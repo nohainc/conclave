@@ -9,6 +9,7 @@ void main() {
     VoidCallback? onPair,
     VoidCallback? onAccountAction,
     Future<void> Function()? onRetry,
+    Future<void> Function()? onExportDiagnostics,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -18,6 +19,7 @@ void main() {
             onPair: onPair,
             onAccountAction: onAccountAction,
             onRetry: onRetry,
+            onExportDiagnostics: onExportDiagnostics,
           ),
         ),
       ),
@@ -53,26 +55,25 @@ void main() {
         detail: 'This machine is paired and ready to run assigned work.',
         paired: true,
         cloudConnected: true,
+        workspaceName: 'MacBook Pro',
+        workspaceId: 'ws-123',
         hostId: 'host-a',
-        repositorySummary: '2 repositories registered',
-        permissionSummary: 'Filesystem access is ready',
-        workerSummary: '2 Workers healthy',
+        workRootPath: '/Users/test/Work',
         logsPath: '/tmp/host.log',
         updateSummary: 'Up to date',
       ),
     );
 
-    expect(find.text('Repositories and permissions'), findsOneWidget);
-    expect(find.text('Workers'), findsOneWidget);
+    expect(find.text('Overview'), findsOneWidget);
+    expect(find.text('Workers'), findsWidgets);
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('Diagnostics'), findsOneWidget);
+    expect(find.text('Open Conclave AX'), findsOneWidget);
+    expect(find.text('Work Root'), findsOneWidget);
+    expect(find.text('Current Work'), findsOneWidget);
     expect(find.text('Add Worker'), findsOneWidget);
-    expect(find.text('Logs'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Updates'), 300);
-    expect(find.text('Updates'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Quit Workspace'), 300);
-    expect(find.text('Quit Workspace'), findsOneWidget);
     expect(find.text('Projects'), findsNothing);
     expect(find.text('Workspace management'), findsNothing);
-    expect(find.text('New Worker'), findsNothing);
   });
 
   testWidgets('auth needed exposes local account action', (tester) async {
@@ -103,9 +104,11 @@ void main() {
         title: 'Work in progress',
         detail: 'The Workspace is running assigned work.',
         activeAssignments: 2,
+        activeAssignmentIds: ['assignment-1', 'assignment-2'],
       ),
     );
-    expect(find.text('2 active assignments'), findsOneWidget);
+    expect(find.text('2 active'), findsOneWidget);
+    expect(find.text('assignment-1'), findsOneWidget);
 
     await pumpDashboard(
       tester,
@@ -128,8 +131,6 @@ void main() {
       ),
     );
     expect(find.text('Signature rejected'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Workers'), 300);
-    expect(find.text('Workers'), findsOneWidget);
   });
 
   testWidgets('install failure explains safety and offers recovery',
@@ -155,8 +156,9 @@ void main() {
     expect(retried, isTrue);
   });
 
-  testWidgets('advanced details are available through accessible labels',
+  testWidgets('diagnostics tab displays identity and connection metrics',
       (tester) async {
+    var exported = false;
     await pumpDashboard(
       tester,
       const HostUiSnapshot(
@@ -165,16 +167,61 @@ void main() {
         detail: 'Ready',
         paired: true,
         cloudConnected: true,
-        hostId: 'host-a',
+        workspaceId: 'ws-test-123',
+        hostId: 'runtime-host-a',
+        logsPath: '/var/logs/host.log',
       ),
+      onExportDiagnostics: () async => exported = true,
     );
 
     expect(find.bySemanticsLabel('Machine status'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Advanced details'), 300);
-    expect(find.text('Advanced details'), findsOneWidget);
-    await tester.tap(find.text('Advanced details'));
+    await tester.tap(find.text('Diagnostics'));
     await tester.pumpAndSettle();
+
+    expect(find.text('Machine & Runtime Identity'), findsOneWidget);
     expect(find.text('Workspace ID'), findsOneWidget);
-    expect(find.text('Connected'), findsOneWidget);
+    expect(find.text('ws-test-123'), findsOneWidget);
+    expect(find.text('Runtime ID'), findsOneWidget);
+    expect(find.text('runtime-host-a'), findsOneWidget);
+    expect(find.text('Cloud Gateway Connection'), findsOneWidget);
+    expect(find.text('Connected'), findsWidgets);
+
+    expect(find.text('Export Report'), findsOneWidget);
+    await tester.tap(find.text('Export Report'));
+    expect(exported, isTrue);
+  });
+
+  testWidgets('settings tab displays work root and cloud pairing',
+      (tester) async {
+    var paired = false;
+    await pumpDashboard(
+      tester,
+      const HostUiSnapshot(
+        mode: HostUiMode.ready,
+        title: 'Workspace is ready',
+        detail: 'Ready',
+        paired: true,
+        cloudConnected: true,
+        workspaceName: 'Office Mac',
+        workspaceId: 'ws-456',
+        hostId: 'host-456',
+        cloudUrl: 'https://app.conclaveax.com',
+        workRootPath: '/workspace/root',
+      ),
+      onPair: () => paired = true,
+    );
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Work Root Directory'), findsOneWidget);
+    expect(find.text('/workspace/root'), findsOneWidget);
+    expect(find.text('Cloud Pairing'), findsOneWidget);
+    expect(find.text('Office Mac'), findsWidgets);
+    expect(find.text('https://app.conclaveax.com'), findsOneWidget);
+
+    await tester.tap(find.text('Re-pair Workspace'));
+    expect(paired, isTrue);
   });
 }
+

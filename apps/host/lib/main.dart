@@ -39,7 +39,7 @@ Future<AdapterPrerequisiteResult> _probeLocalWorkerPrerequisite(
     final result = await probeAdapterExecutable(check);
     if (!result.satisfied) return result;
   }
-  return AdapterPrerequisiteResult(
+  return const AdapterPrerequisiteResult(
     satisfied: true,
     message: 'Required local tools are available.',
   );
@@ -167,16 +167,13 @@ class HostLifecycleController extends ChangeNotifier {
         break;
       case 'diagnostics':
         final file = await exportDiagnostics();
-        await _desktopChannel.invokeMethod<void>('openPath', file.path);
+        await openPath(file.path);
         break;
       case 'logs':
-        await _desktopChannel.invokeMethod<void>(
-          'openPath',
-          '${host.config.dataDirectory.path}/logs/host.log',
-        );
+        await openPath('${host.config.dataDirectory.path}/logs/host.log');
         break;
       case 'openAX':
-        await _desktopChannel.invokeMethod<void>('openAX');
+        await openAX();
         break;
       case 'quit':
         await quit();
@@ -189,14 +186,45 @@ class HostLifecycleController extends ChangeNotifier {
     notifyListeners();
   }
 
+  static Future<void> openPath(String path) async {
+    try {
+      await _desktopChannel.invokeMethod<void>('openPath', path);
+    } catch (_) {
+      if (Platform.isMacOS) {
+        await Process.run('open', [path]);
+      } else if (Platform.isLinux) {
+        await Process.run('xdg-open', [path]);
+      } else if (Platform.isWindows) {
+        await Process.run('explorer', [path]);
+      }
+    }
+  }
+
+  static Future<void> openAX([String? url]) async {
+    try {
+      await _desktopChannel.invokeMethod<void>('openAX');
+    } catch (_) {
+      final target = url ?? 'https://app.conclaveax.com';
+      if (Platform.isMacOS) {
+        await Process.run('open', [target]);
+      } else if (Platform.isLinux) {
+        await Process.run('xdg-open', [target]);
+      }
+    }
+  }
+
   void _publishMenuStatus() {
     final connection = host.cloudConnection;
     final attention = startupError != null || !running;
     final state = attention
         ? 'Attention'
-        : connection?.isConnected == true
-            ? 'Connected'
-            : 'Offline';
+        : _draining
+            ? 'Draining'
+            : !(connection?.acceptingNewWork ?? false)
+                ? 'Paused'
+                : connection?.isConnected == true
+                    ? 'Connected'
+                    : 'Offline';
     unawaited(_desktopChannel.invokeMethod<void>('status', {
       'state': state,
       'active': connection?.activeAssignmentCount ?? 0,
@@ -206,11 +234,27 @@ class HostLifecycleController extends ChangeNotifier {
   }
 
   HostUiSnapshot get uiSnapshot {
+    final registration =
+        HostRegistrationStore(host.config.dataDirectory).readSync();
+    final workspaceName = registration?.name ?? 'Conclave Workspace';
+    final workspaceId = host.config.workspaceId ?? registration?.workspaceId;
+    final hostId = host.config.hostId ?? registration?.hostId;
+    final hostname = registration?.hostname ?? Platform.localHostname;
+    final cloudUrl = host.config.cloudUri?.toString() ?? registration?.cloudUrl;
+    final workRootPath = host.workRoot?.path ?? host.config.workRootPath;
+
     if (quitting) {
-      return const HostUiSnapshot(
+      return HostUiSnapshot(
         mode: HostUiMode.stopped,
         title: 'Stopping Workspace',
         detail: 'Active local work is being reconciled safely.',
+        workspaceName: workspaceName,
+        workspaceId: workspaceId,
+        hostId: hostId,
+        hostname: hostname,
+        cloudUrl: cloudUrl,
+        workRootPath: workRootPath,
+        statusLabel: 'Stopping',
       );
     }
     if (startupError != null) {
@@ -219,35 +263,73 @@ class HostLifecycleController extends ChangeNotifier {
         title: 'Workspace is offline',
         detail: 'The Workspace could not connect. It will be safe to retry.',
         issue: startupError.toString(),
+        workspaceName: workspaceName,
+        workspaceId: workspaceId,
+        hostId: hostId,
+        hostname: hostname,
+        cloudUrl: cloudUrl,
+        workRootPath: workRootPath,
+        statusLabel: 'Offline',
       );
     }
     if (host.config.hostId == null) {
-      return const HostUiSnapshot(
+      return HostUiSnapshot(
         mode: HostUiMode.firstLaunch,
         title: 'Pair this Workspace',
         detail: 'Connect this machine to Conclave to begin.',
+        workspaceName: workspaceName,
+        hostname: hostname,
+        cloudUrl: cloudUrl,
+        workRootPath: workRootPath,
+        statusLabel: 'Not paired',
       );
     }
     if (!running) {
-      return const HostUiSnapshot(
+      return HostUiSnapshot(
         mode: HostUiMode.starting,
         title: 'Starting Workspace',
         detail: 'Checking this machine and reconnecting to Conclave.',
+        workspaceName: workspaceName,
+        workspaceId: workspaceId,
+        hostId: hostId,
+        hostname: hostname,
+        cloudUrl: cloudUrl,
+        workRootPath: workRootPath,
+        statusLabel: 'Starting',
       );
     }
     final connection = host.cloudConnection;
     final activeAssignments = connection?.activeAssignmentCount ?? 0;
+    final isConnected = connection?.isConnected ?? false;
+    final statusLabel = _draining
+        ? 'Draining'
+        : !(connection?.acceptingNewWork ?? true)
+            ? 'Paused'
+            : isConnected
+                ? 'Connected'
+                : 'Offline';
+
     return HostUiSnapshot(
       mode: activeAssignments > 0 ? HostUiMode.active : HostUiMode.ready,
       title: activeAssignments > 0 ? 'Work in progress' : 'Workspace is ready',
       detail: activeAssignments > 0
           ? 'The Workspace is running assigned work.'
           : 'This machine is paired and ready to run assigned work.',
-      hostId: host.config.hostId,
+      workspaceName: workspaceName,
+      workspaceId: workspaceId,
+      hostId: hostId,
+      hostname: hostname,
+      cloudUrl: cloudUrl,
+      workRootPath: workRootPath,
       paired: true,
-      cloudConnected: connection?.isConnected ?? false,
+      cloudConnected: isConnected,
+      statusLabel: statusLabel,
       logsPath: '${host.config.dataDirectory.path}/logs/host.log',
       activeAssignments: activeAssignments,
+      activeAssignmentIds: connection?.activeAssignmentIds ?? const [],
+      reconnectCount: connection?.reconnectCount ?? 0,
+      sessionId: connection?.sessionId,
+      lastInventorySyncAt: connection?.lastInventorySyncAt,
     );
   }
 
@@ -328,32 +410,50 @@ class HostUiSnapshot {
     required this.mode,
     required this.title,
     required this.detail,
+    this.workspaceName,
+    this.workspaceId,
     this.hostId,
+    this.hostname,
+    this.cloudUrl,
+    this.workRootPath,
+    this.statusLabel = 'Offline',
     this.paired = false,
     this.cloudConnected = false,
     this.accountsNeedingAction = const [],
-    this.repositorySummary = 'No repositories registered',
-    this.permissionSummary = 'Permissions have not been checked',
     this.workerSummary = 'Worker diagnostics are available after pairing',
     this.logsPath,
     this.updateSummary = 'Up to date',
     this.activeAssignments = 0,
+    this.activeAssignmentIds = const [],
+    this.reconnectCount = 0,
+    this.sessionId,
+    this.lastInventorySyncAt,
+    this.appVersion = conclaveWorkspaceAppVersion,
     this.issue,
   });
 
   final HostUiMode mode;
   final String title;
   final String detail;
+  final String? workspaceName;
+  final String? workspaceId;
   final String? hostId;
+  final String? hostname;
+  final String? cloudUrl;
+  final String? workRootPath;
+  final String statusLabel;
   final bool paired;
   final bool cloudConnected;
   final List<String> accountsNeedingAction;
-  final String repositorySummary;
-  final String permissionSummary;
   final String workerSummary;
   final String? logsPath;
   final String updateSummary;
   final int activeAssignments;
+  final List<String> activeAssignmentIds;
+  final int reconnectCount;
+  final String? sessionId;
+  final DateTime? lastInventorySyncAt;
+  final String appVersion;
   final String? issue;
 
   bool get hasLocalAction =>
@@ -380,6 +480,7 @@ class ConclaveHostApp extends StatefulWidget {
 
 class _ConclaveHostAppState extends State<ConclaveHostApp> {
   int _workerRevision = 0;
+
   @override
   void initState() {
     super.initState();
@@ -403,12 +504,17 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
   void _refresh() => setState(() {});
 
   Future<void> _confirmQuit() async {
+    final activeCount = widget.lifecycle.host.cloudConnection?.activeAssignmentCount ?? 0;
     final shouldQuit = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Quit Conclave Workspace?'),
-        content: const Text(
-            'Active work will be reconciled safely before this machine disconnects. You can start the Workspace again later.'),
+        content: Text(
+          activeCount > 0
+              ? 'There ${activeCount == 1 ? 'is 1 active assignment running' : 'are $activeCount active assignments running'}. '
+                  'Assignments will be safely reconciled and drained before the Workspace disconnects.'
+              : 'Active work will be reconciled safely before this machine disconnects. You can start the Workspace again anytime.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -482,8 +588,6 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       builder: (context) => AddLocalWorkerDialog(
         registry: registry,
         credentialStore: widget.lifecycle.host.credentialStore,
-        // A Worker is never marked Ready until a verified adapter is
-        // installed and its provider authentication can be validated.
         adapterAvailable: (workerTypeId, permissions) => widget
             .lifecycle.host.adapterPackageStore
             .hasVerifiedActivePackage(workerTypeId, permissions),
@@ -531,55 +635,28 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       darkTheme: ConclaveBrand.darkTheme(),
       themeMode: ThemeMode.system,
       home: Scaffold(
-        appBar: AppBar(
-          title: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ConclaveBrand.logoMark(size: 26),
-              const SizedBox(width: 10),
-              const Text('Conclave Workspace',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-            ],
-          ),
-          actions: [
-            IconButton(
-              tooltip: lifecycle.hidden ? 'Restore' : 'Minimize',
-              onPressed:
-                  lifecycle.hidden ? lifecycle.restore : lifecycle.minimize,
-              icon: Icon(
-                lifecycle.hidden ? Icons.open_in_full : Icons.remove,
+        body: lifecycle.hidden
+            ? const Center(
+                child: Text('Workspace is running in the background.'))
+            : HostDashboard(
+                snapshot: lifecycle.uiSnapshot,
+                onPair: _pairWorkspace,
+                onQuit: _confirmQuit,
+                onRetry: lifecycle.launch,
+                onExportDiagnostics: _exportDiagnostics,
+                workerRevision: _workerRevision,
+                localWorkerRegistry: lifecycle.host.localWorkerRegistry,
+                credentialStore: lifecycle.host.credentialStore,
+                adapterPackageStore: lifecycle.host.adapterPackageStore,
+                ensureAdapter: _ensureAdapterAvailable,
+                onAddWorker: () => _addLocalWorker(context),
               ),
-            ),
-            IconButton(
-              tooltip: 'Quit Workspace',
-              onPressed: _confirmQuit,
-              icon: const Icon(Icons.power_settings_new),
-            ),
-          ],
-        ),
-        body: Center(
-          child: lifecycle.hidden
-              ? const Text('Workspace is running in the background.')
-              : HostDashboard(
-                  snapshot: lifecycle.uiSnapshot,
-                  onPair: _pairWorkspace,
-                  onQuit: _confirmQuit,
-                  onRetry: lifecycle.launch,
-                  onExportDiagnostics: _exportDiagnostics,
-                  workerRevision: _workerRevision,
-                  localWorkerRegistry: lifecycle.host.localWorkerRegistry,
-                  credentialStore: lifecycle.host.credentialStore,
-                  adapterPackageStore: lifecycle.host.adapterPackageStore,
-                  ensureAdapter: _ensureAdapterAvailable,
-                  onAddWorker: () => _addLocalWorker(context),
-                ),
-        ),
       ),
     );
   }
 }
 
-class HostDashboard extends StatelessWidget {
+class HostDashboard extends StatefulWidget {
   const HostDashboard({
     required this.snapshot,
     this.onPair,
@@ -610,160 +687,555 @@ class HostDashboard extends StatelessWidget {
   final Future<void> Function()? onAddWorker;
 
   @override
+  State<HostDashboard> createState() => _HostDashboardState();
+}
+
+class _HostDashboardState extends State<HostDashboard> {
+  int _selectedTabIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final snapshot = widget.snapshot;
+
+    final statusColor = switch (snapshot.statusLabel) {
+      'Connected' => ConclaveBrand.success,
+      'Starting' => ConclaveBrand.info,
+      'Paused' || 'Draining' => ConclaveBrand.warning,
+      _ => snapshot.mode == HostUiMode.offline ||
+              snapshot.mode == HostUiMode.installFailure
+          ? ConclaveBrand.error
+          : theme.colorScheme.onSurface.withValues(alpha: 0.4),
+    };
+
+    return Column(
+      children: [
+        // App Header Bar
+        Container(
+          height: 56,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            border: Border(
+              bottom: BorderSide(
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              ConclaveBrand.logoMark(size: 24),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        snapshot.workspaceName ?? 'Conclave Workspace',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: statusColor.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.circle, size: 7, color: statusColor),
+                          const SizedBox(width: 5),
+                          Text(
+                            snapshot.statusLabel,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: statusColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.tonalIcon(
+                onPressed: () => HostLifecycleController.openAX(),
+                icon: const Icon(Icons.open_in_new, size: 14),
+                label: const Text('Open Conclave AX',
+                    style: TextStyle(fontSize: 12)),
+              ),
+              const SizedBox(width: 6),
+              IconButton(
+                tooltip: 'Quit Workspace',
+                icon: const Icon(Icons.power_settings_new, size: 18),
+                onPressed: widget.onQuit,
+              ),
+            ],
+          ),
+        ),
+
+        // Navigation and Content Area
+        Expanded(
+          child: Row(
+            children: [
+              NavigationRail(
+                selectedIndex: _selectedTabIndex,
+                onDestinationSelected: (index) =>
+                    setState(() => _selectedTabIndex = index),
+                labelType: NavigationRailLabelType.all,
+                minWidth: 72,
+                destinations: const [
+                  NavigationRailDestination(
+                    icon: Icon(Icons.dashboard_outlined),
+                    selectedIcon: Icon(Icons.dashboard),
+                    label: Text('Overview'),
+                  ),
+                  NavigationRailDestination(
+                    icon: Icon(Icons.memory_outlined),
+                    selectedIcon: Icon(Icons.memory),
+                    label: Text('Workers'),
+                  ),
+                  NavigationRailDestination(
+                    icon: Icon(Icons.settings_outlined),
+                    selectedIcon: Icon(Icons.settings),
+                    label: Text('Settings'),
+                  ),
+                  NavigationRailDestination(
+                    icon: Icon(Icons.analytics_outlined),
+                    selectedIcon: Icon(Icons.analytics),
+                    label: Text('Diagnostics'),
+                  ),
+                ],
+              ),
+              const VerticalDivider(thickness: 1, width: 1),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 820),
+                    child: switch (_selectedTabIndex) {
+                      0 => _OverviewTab(
+                          snapshot: snapshot,
+                          onPair: widget.onPair,
+                          onRetry: widget.onRetry,
+                          onAccountAction: widget.onAccountAction,
+                          onNavigateToWorkers: () =>
+                              setState(() => _selectedTabIndex = 1),
+                          localWorkerRegistry: widget.localWorkerRegistry,
+                          credentialStore: widget.credentialStore,
+                          adapterPackageStore: widget.adapterPackageStore,
+                          ensureAdapter: widget.ensureAdapter,
+                          onAddWorker: widget.onAddWorker,
+                          workerRevision: widget.workerRevision,
+                        ),
+                      1 => _WorkersTab(
+                          key: ValueKey(widget.workerRevision),
+                          registry: widget.localWorkerRegistry,
+                          credentialStore: widget.credentialStore,
+                          adapterPackageStore: widget.adapterPackageStore,
+                          ensureAdapter: widget.ensureAdapter,
+                          onAddWorker: widget.onAddWorker,
+                        ),
+                      2 => _SettingsTab(
+                          snapshot: snapshot,
+                          onPair: widget.onPair,
+                          onQuit: widget.onQuit,
+                        ),
+                      3 => _DiagnosticsTab(
+                          snapshot: snapshot,
+                          onExportDiagnostics: widget.onExportDiagnostics,
+                        ),
+                      _ => const SizedBox.shrink(),
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _OverviewTab extends StatelessWidget {
+  const _OverviewTab({
+    required this.snapshot,
+    this.onPair,
+    this.onRetry,
+    this.onAccountAction,
+    required this.onNavigateToWorkers,
+    this.localWorkerRegistry,
+    required this.credentialStore,
+    this.adapterPackageStore,
+    this.ensureAdapter,
+    this.onAddWorker,
+    this.workerRevision = 0,
+  });
+
+  final HostUiSnapshot snapshot;
+  final VoidCallback? onPair;
+  final Future<void> Function()? onRetry;
+  final VoidCallback? onAccountAction;
+  final VoidCallback onNavigateToWorkers;
+  final LocalConfiguredWorkerRegistry? localWorkerRegistry;
+  final SecureCredentialStore credentialStore;
+  final V7AdapterPackageStore? adapterPackageStore;
+  final Future<bool> Function(String workerTypeId)? ensureAdapter;
+  final Future<void> Function()? onAddWorker;
+  final int workerRevision;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isError = snapshot.mode == HostUiMode.offline ||
         snapshot.mode == HostUiMode.installFailure;
-    final statusColor = switch (snapshot.mode) {
-      HostUiMode.offline || HostUiMode.installFailure => ConclaveBrand.error,
-      HostUiMode.authNeeded => ConclaveBrand.warning,
-      HostUiMode.active => ConclaveBrand.accent,
-      HostUiMode.ready => ConclaveBrand.success,
-      HostUiMode.starting => ConclaveBrand.info,
-      HostUiMode.firstLaunch || HostUiMode.stopped =>
-        theme.colorScheme.onSurface.withValues(alpha: 0.4),
-    };
 
-    return Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 760),
-        child: ListView(
-          padding: const EdgeInsets.all(24),
-          children: [
-            Semantics(
-              header: true,
-              child: Text('Machine status', style: theme.textTheme.labelLarge),
-            ),
-            const SizedBox(height: 8),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        Semantics(
+          header: true,
+          child: Text('Machine status', style: theme.textTheme.labelLarge),
+        ),
+        const SizedBox(height: 8),
+
+        // Main Machine Status Card
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        Icon(Icons.circle, size: 14, color: statusColor),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(snapshot.title,
-                              style: theme.textTheme.headlineSmall),
-                        ),
-                      ],
+                    Icon(
+                      snapshot.cloudConnected
+                          ? Icons.cloud_done
+                          : Icons.cloud_off,
+                      size: 20,
+                      color: snapshot.cloudConnected
+                          ? ConclaveBrand.success
+                          : theme.colorScheme.onSurfaceVariant,
                     ),
-                    const SizedBox(height: 8),
-                    Text(snapshot.detail),
-                    if (isError)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 16),
-                        child: _HostRecoveryPanel(
-                          issue: snapshot.issue,
-                          retryLabel: snapshot.mode == HostUiMode.offline
-                              ? 'Retry connection'
-                              : 'Retry update',
-                          onRetry: onRetry,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        snapshot.title,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                    if (snapshot.mode == HostUiMode.firstLaunch) ...[
-                      const SizedBox(height: 16),
-                      FilledButton.icon(
-                        onPressed: onPair,
-                        icon: const Icon(Icons.link),
-                        label: const Text('Start pairing'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  snapshot.detail,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                if (isError)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: _HostRecoveryPanel(
+                      issue: snapshot.issue,
+                      retryLabel: snapshot.mode == HostUiMode.offline
+                          ? 'Retry connection'
+                          : 'Retry update',
+                      onRetry: onRetry,
+                    ),
+                  ),
+                if (snapshot.mode == HostUiMode.firstLaunch) ...[
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: onPair,
+                    icon: const Icon(Icons.link),
+                    label: const Text('Start pairing'),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+
+        if (snapshot.hasLocalAction) ...[
+          const SizedBox(height: 16),
+          _SectionCard(
+            title: 'Accounts needing attention',
+            icon: Icons.key,
+            summary: snapshot.accountsNeedingAction.isEmpty
+                ? 'Complete local sign-in to run work.'
+                : snapshot.accountsNeedingAction.join(', '),
+            actionLabel: 'Open account setup',
+            onAction: onAccountAction,
+          ),
+        ],
+
+        const SizedBox(height: 16),
+
+        // Current Work Card
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.work_outline, size: 20),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Current Work',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
                       ),
-                    ],
-                    if (snapshot.mode == HostUiMode.active)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 12),
+                    ),
+                    const Spacer(),
+                    if (snapshot.activeAssignments > 0)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: ConclaveBrand.accent.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                         child: Text(
-                            '${snapshot.activeAssignments} active assignment${snapshot.activeAssignments == 1 ? '' : 's'}'),
+                          '${snapshot.activeAssignments} active',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: ConclaveBrand.accent,
+                          ),
+                        ),
                       ),
                   ],
                 ),
-              ),
+                const SizedBox(height: 12),
+                if (snapshot.activeAssignments == 0)
+                  Text(
+                    'No assignments running. This Workspace is ready to run assigned work from Conclave Cloud.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  )
+                else ...[
+                  Text(
+                    '${snapshot.activeAssignments} active assignment${snapshot.activeAssignments == 1 ? '' : 's'} running on this machine:',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  for (final id in snapshot.activeAssignmentIds)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.play_arrow,
+                              size: 14, color: ConclaveBrand.accent),
+                          const SizedBox(width: 8),
+                          Text(id,
+                              style: const TextStyle(
+                                  fontFamily: 'monospace', fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                ],
+              ],
             ),
-            if (snapshot.hasLocalAction) ...[
-              const SizedBox(height: 16),
-              _SectionCard(
-                title: 'Accounts needing attention',
-                icon: Icons.key,
-                summary: snapshot.accountsNeedingAction.isEmpty
-                    ? 'Complete local sign-in to run work.'
-                    : snapshot.accountsNeedingAction.join(', '),
-                actionLabel: 'Open account setup',
-                onAction: onAccountAction,
-              ),
-            ],
-            const SizedBox(height: 16),
-            _SectionCard(
-              title: 'Repositories and permissions',
-              icon: Icons.folder_open,
-              summary:
-                  '${snapshot.repositorySummary}. ${snapshot.permissionSummary}.',
-            ),
-            const SizedBox(height: 12),
-            _LocalWorkersCard(
-              key: ValueKey(workerRevision),
-              registry: localWorkerRegistry,
-              credentialStore: credentialStore,
-              adapterPackageStore: adapterPackageStore,
-              ensureAdapter: ensureAdapter,
-              onAddWorker: onAddWorker,
-            ),
-            const SizedBox(height: 12),
-            _SectionCard(
-              title: 'Logs',
-              icon: Icons.receipt_long,
-              summary:
-                  snapshot.logsPath ?? 'Logs will appear after first launch.',
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: onExportDiagnostics,
-              icon: const Icon(Icons.download_outlined),
-              label: const Text('Export diagnostics'),
-            ),
-            const SizedBox(height: 12),
-            _SectionCard(
-              title: 'Updates',
-              icon: Icons.system_update_alt,
-              summary: snapshot.updateSummary,
-            ),
-            const SizedBox(height: 12),
-            ExpansionTile(
-              leading: const Icon(Icons.tune),
-              title: const Text('Advanced details'),
-              subtitle: Text(snapshot.paired
-                  ? 'Workspace ID and connection details'
-                  : 'Diagnostics become available after pairing'),
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // Workers Summary Card
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ListTile(
-                  title: const Text('Workspace ID'),
-                  subtitle: Text(snapshot.hostId ?? 'Not paired'),
+                Row(
+                  children: [
+                    const Icon(Icons.memory, size: 20),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Workers',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    FilledButton.tonalIcon(
+                      onPressed: onAddWorker,
+                      icon: const Icon(Icons.add, size: 16),
+                      label: const Text('Add Worker'),
+                    ),
+                  ],
                 ),
-                ListTile(
-                  title: const Text('Cloud connection'),
-                  subtitle: Text(
-                      snapshot.cloudConnected ? 'Connected' : 'Not connected'),
+                const SizedBox(height: 12),
+                if (localWorkerRegistry == null)
+                  const Text(
+                      'Pair this Workspace before configuring local Workers.')
+                else
+                  FutureBuilder<List<LocalConfiguredWorker>>(
+                    key: ValueKey(workerRevision),
+                    future: localWorkerRegistry!.list(),
+                    builder: (context, workerSnapshot) {
+                      final workers = workerSnapshot.data ?? const [];
+                      if (workers.isEmpty) {
+                        return Text(
+                          'No local Workers configured yet. Add a Worker to enable AI execution on this machine.',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        );
+                      }
+                      final readyCount = workers
+                          .where((w) => w.status == LocalWorkerStatus.ready)
+                          .length;
+                      final attentionCount = workers
+                          .where((w) =>
+                              w.status == LocalWorkerStatus.needsAttention)
+                          .length;
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              _StatusCountChip(
+                                count: readyCount,
+                                label: 'Ready',
+                                color: ConclaveBrand.success,
+                              ),
+                              const SizedBox(width: 8),
+                              if (attentionCount > 0)
+                                _StatusCountChip(
+                                  count: attentionCount,
+                                  label: 'Needs attention',
+                                  color: ConclaveBrand.warning,
+                                ),
+                              const Spacer(),
+                              TextButton(
+                                onPressed: onNavigateToWorkers,
+                                child: const Text('View all →'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // Machine & Work Root section
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.folder_outlined, size: 20),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Work Root',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (snapshot.workRootPath != null)
+                      TextButton.icon(
+                        onPressed: () =>
+                            HostLifecycleController.openPath(snapshot.workRootPath!),
+                        icon: const Icon(Icons.folder_open, size: 16),
+                        label: const Text('Open in Finder'),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  snapshot.workRootPath ?? 'Work root directory not initialized yet.',
+                  style: TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const Icon(Icons.system_update_alt, size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      'App Version: v${snapshot.appVersion} · ${snapshot.updateSummary}',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: onQuit,
-              icon: const Icon(Icons.power_settings_new),
-              label: const Text('Quit Workspace'),
-            ),
-          ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StatusCountChip extends StatelessWidget {
+  const _StatusCountChip({
+    required this.count,
+    required this.label,
+    required this.color,
+  });
+
+  final int count;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Text(
+        '$count $label',
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: color,
         ),
       ),
     );
   }
 }
 
-class _LocalWorkersCard extends StatefulWidget {
-  const _LocalWorkersCard({
+class _WorkersTab extends StatefulWidget {
+  const _WorkersTab({
     required this.registry,
     required this.credentialStore,
     required this.adapterPackageStore,
@@ -779,10 +1251,10 @@ class _LocalWorkersCard extends StatefulWidget {
   final Future<void> Function()? onAddWorker;
 
   @override
-  State<_LocalWorkersCard> createState() => _LocalWorkersCardState();
+  State<_WorkersTab> createState() => _WorkersTabState();
 }
 
-class _LocalWorkersCardState extends State<_LocalWorkersCard> {
+class _WorkersTabState extends State<_WorkersTab> {
   Future<List<LocalConfiguredWorker>>? _workers;
 
   @override
@@ -792,7 +1264,7 @@ class _LocalWorkersCardState extends State<_LocalWorkersCard> {
   }
 
   @override
-  void didUpdateWidget(covariant _LocalWorkersCard oldWidget) {
+  void didUpdateWidget(covariant _WorkersTab oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.registry != widget.registry) _loadWorkers();
   }
@@ -876,136 +1348,900 @@ class _LocalWorkersCardState extends State<_LocalWorkersCard> {
     if (saved == true && mounted) setState(_loadWorkers);
   }
 
+  void _showDetail(LocalConfiguredWorker worker) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => _WorkerDetailDialog(
+        worker: worker,
+        onEdit: () {
+          Navigator.pop(context);
+          _edit(worker);
+        },
+        onToggleDisable: (disabled) {
+          Navigator.pop(context);
+          _setDisabled(worker, disabled);
+        },
+        onRemove: () {
+          Navigator.pop(context);
+          _remove(worker);
+        },
+      ),
+    );
+  }
+
   @override
-  Widget build(BuildContext context) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.memory),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Text('Workers',
-                        style: Theme.of(context).textTheme.titleMedium),
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        Row(
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Configured Workers',
+                    style: theme.textTheme.titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                Text(
+                  'Local AI models and execution adapters running on this machine.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
-                  FilledButton.tonalIcon(
-                    onPressed:
-                        widget.registry == null ? null : widget.onAddWorker,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add Worker'),
+                ),
+              ],
+            ),
+            const Spacer(),
+            FilledButton.icon(
+              onPressed: widget.registry == null ? null : widget.onAddWorker,
+              icon: const Icon(Icons.add),
+              label: const Text('Add Worker'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        if (widget.registry == null)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Text(
+                  'Pair this Workspace before configuring local Workers.'),
+            ),
+          )
+        else
+          FutureBuilder<List<LocalConfiguredWorker>>(
+            future: _workers,
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Text(
+                      'Worker registry needs repair: ${snapshot.error}',
+                      style:
+                          TextStyle(color: Theme.of(context).colorScheme.error),
+                    ),
                   ),
-                ],
-              ),
-              if (widget.registry == null)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: Text(
-                      'Pair this Workspace before configuring local Workers.'),
-                )
-              else
-                FutureBuilder<List<LocalConfiguredWorker>>(
-                  future: _workers,
-                  builder: (context, snapshot) {
-                    if (snapshot.hasError) {
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                            'Worker registry needs repair: ${snapshot.error}',
-                            style: TextStyle(
-                                color: Theme.of(context).colorScheme.error)),
-                      );
-                    }
-                    if (!snapshot.hasData) {
-                      return const Padding(
-                        padding: EdgeInsets.only(top: 16),
-                        child: LinearProgressIndicator(),
-                      );
-                    }
-                    final workers = snapshot.data!;
-                    if (workers.isEmpty) {
-                      return const Padding(
-                        padding: EdgeInsets.only(top: 8),
-                        child: Text(
-                            'No local Workers yet. Add one to configure this machine.'),
-                      );
-                    }
-                    return Column(
+                );
+              }
+              if (!snapshot.hasData) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(32),
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+              }
+              final workers = snapshot.data!;
+              if (workers.isEmpty) {
+                return Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
                       children: [
-                        const SizedBox(height: 8),
-                        for (final worker in workers)
-                          ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(
-                              worker.status == LocalWorkerStatus.ready
-                                  ? Icons.check_circle_outline
-                                  : worker.status == LocalWorkerStatus.disabled
-                                      ? Icons.pause_circle_outline
-                                      : Icons.error_outline,
-                            ),
-                            title: Text(worker.name),
-                            subtitle: Text(
-                                '${worker.workerTypeId} · ${_statusLabel(worker.status)}'
-                                '${worker.defaultModel == null ? '' : ' · ${worker.defaultModel}'}'),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text('r${worker.revision}'),
-                                PopupMenuButton<String>(
-                                  tooltip: 'Worker actions',
-                                  onSelected: (action) {
-                                    if (action == 'edit') {
-                                      unawaited(_edit(worker));
-                                    } else if (action == 'disable') {
-                                      unawaited(_setDisabled(worker, true));
-                                    } else if (action == 'enable') {
-                                      unawaited(_setDisabled(worker, false));
-                                    } else if (action == 'remove') {
-                                      unawaited(_remove(worker));
-                                    }
-                                  },
-                                  itemBuilder: (context) => [
-                                    const PopupMenuItem(
-                                      value: 'edit',
-                                      child: Text('Edit configuration'),
+                        Icon(Icons.memory,
+                            size: 48,
+                            color: theme.colorScheme.onSurfaceVariant),
+                        const SizedBox(height: 12),
+                        Text(
+                          'No local Workers configured',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Add a Worker to configure local CLI tools, model endpoints, or API keys.',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        FilledButton.tonalIcon(
+                          onPressed: widget.onAddWorker,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Add Worker'),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              return Column(
+                children: [
+                  for (final worker in workers)
+                    Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () => _showDetail(worker),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.surfaceContainerHighest
+                                      .withValues(alpha: 0.5),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(
+                                  _workerTypeIcon(worker.workerTypeId),
+                                  size: 20,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(
+                                          worker.name,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 15,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        _WorkerStatusBadge(status: worker.status),
+                                      ],
                                     ),
-                                    if (worker.status ==
-                                        LocalWorkerStatus.disabled)
-                                      const PopupMenuItem(
-                                        value: 'enable',
-                                        child: Text('Enable scheduling'),
-                                      )
-                                    else
-                                      const PopupMenuItem(
-                                        value: 'disable',
-                                        child: Text('Disable locally'),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${_friendlyTypeName(worker.workerTypeId)}'
+                                      '${worker.defaultModel == null ? '' : ' · ${worker.defaultModel}'}',
+                                      style:
+                                          theme.textTheme.bodySmall?.copyWith(
+                                        color:
+                                            theme.colorScheme.onSurfaceVariant,
                                       ),
-                                    const PopupMenuItem(
-                                      value: 'remove',
-                                      child: Text('Remove Worker'),
                                     ),
                                   ],
                                 ),
-                              ],
-                            ),
+                              ),
+                              PopupMenuButton<String>(
+                                tooltip: 'Worker actions',
+                                onSelected: (action) {
+                                  if (action == 'detail') {
+                                    _showDetail(worker);
+                                  } else if (action == 'edit') {
+                                    unawaited(_edit(worker));
+                                  } else if (action == 'disable') {
+                                    unawaited(_setDisabled(worker, true));
+                                  } else if (action == 'enable') {
+                                    unawaited(_setDisabled(worker, false));
+                                  } else if (action == 'remove') {
+                                    unawaited(_remove(worker));
+                                  }
+                                },
+                                itemBuilder: (context) => [
+                                  const PopupMenuItem(
+                                    value: 'detail',
+                                    child: Text('View details'),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'edit',
+                                    child: Text('Edit configuration'),
+                                  ),
+                                  if (worker.status ==
+                                      LocalWorkerStatus.disabled)
+                                    const PopupMenuItem(
+                                      value: 'enable',
+                                      child: Text('Enable locally'),
+                                    )
+                                  else
+                                    const PopupMenuItem(
+                                      value: 'disable',
+                                      child: Text('Disable locally'),
+                                    ),
+                                  const PopupMenuItem(
+                                    value: 'remove',
+                                    child: Text('Remove Worker'),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
-                      ],
-                    );
-                  },
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  static IconData _workerTypeIcon(String id) => switch (id) {
+        'codex' => Icons.terminal,
+        'antigravity' => Icons.auto_awesome,
+        'claude-code' => Icons.code,
+        'openai-api' || 'gemini-api' || 'anthropic-api' => Icons.cloud_queue,
+        'ollama' => Icons.memory,
+        _ => Icons.smart_toy_outlined,
+      };
+
+  static String _friendlyTypeName(String id) => switch (id) {
+        'codex' => 'Codex',
+        'antigravity' => 'Antigravity',
+        'claude-code' => 'Claude Code',
+        'openai-api' => 'OpenAI API',
+        'gemini-api' => 'Gemini API',
+        'anthropic-api' => 'Anthropic API',
+        'ollama' => 'Ollama',
+        _ => id,
+      };
+}
+
+class _WorkerStatusBadge extends StatelessWidget {
+  const _WorkerStatusBadge({required this.status});
+
+  final LocalWorkerStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color) = switch (status) {
+      LocalWorkerStatus.ready => ('Ready', ConclaveBrand.success),
+      LocalWorkerStatus.needsAttention =>
+        ('Needs attention', ConclaveBrand.warning),
+      LocalWorkerStatus.disabled => ('Disabled', Colors.grey),
+      LocalWorkerStatus.removed => ('Removed', ConclaveBrand.error),
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      ),
+    );
+  }
+}
+
+class _WorkerDetailDialog extends StatelessWidget {
+  const _WorkerDetailDialog({
+    required this.worker,
+    required this.onEdit,
+    required this.onToggleDisable,
+    required this.onRemove,
+  });
+
+  final LocalConfiguredWorker worker;
+  final VoidCallback onEdit;
+  final ValueChanged<bool> onToggleDisable;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final friendlyType = _WorkersTabState._friendlyTypeName(worker.workerTypeId);
+
+    return AlertDialog(
+      title: Row(
+        children: [
+          Icon(
+            _WorkersTabState._workerTypeIcon(worker.workerTypeId),
+            size: 24,
+            color: theme.colorScheme.primary,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              worker.name,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          _WorkerStatusBadge(status: worker.status),
+        ],
+      ),
+      content: SizedBox(
+        width: 480,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Worker Type: $friendlyType',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 12),
+              _DetailRow(
+                label: 'Default Model',
+                value: worker.defaultModel ?? 'Not specified',
+              ),
+              if (worker.allowedModels.isNotEmpty)
+                _DetailRow(
+                  label: 'Allowed Models',
+                  value: worker.allowedModels.join(', '),
                 ),
+              _DetailRow(
+                label: 'Authentication',
+                value: switch (worker.authStrategy) {
+                  'api_key' => 'Encrypted API key on this machine',
+                  'browser_auth' => 'Signed in locally via browser / CLI',
+                  'local_endpoint' => 'Local service endpoint',
+                  _ => worker.authStrategy,
+                },
+              ),
+              if (worker.adapterConfig['endpointUrl'] != null)
+                _DetailRow(
+                  label: 'Endpoint URL',
+                  value: worker.adapterConfig['endpointUrl'] as String,
+                ),
+              const SizedBox(height: 8),
+              Text(
+                'Granted Local Permissions:',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              if (worker.localPermissions.isEmpty)
+                Text('No permissions granted',
+                    style: theme.textTheme.bodySmall)
+              else
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    for (final perm in worker.localPermissions)
+                      Chip(
+                        visualDensity: VisualDensity.compact,
+                        label: Text(perm, style: const TextStyle(fontSize: 11)),
+                      ),
+                  ],
+                ),
+              const SizedBox(height: 16),
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: const Text(
+                  'Advanced Technical Details',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                ),
+                children: [
+                  _DetailRow(label: 'Worker ID', value: worker.id),
+                  _DetailRow(
+                      label: 'Revision', value: 'r${worker.revision}'),
+                  if (worker.credentialRef != null)
+                    _DetailRow(
+                      label: 'Credential Reference',
+                      value: worker.credentialRef!,
+                    ),
+                ],
+              ),
             ],
           ),
         ),
-      );
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+        TextButton(
+          onPressed: () =>
+              onToggleDisable(worker.status != LocalWorkerStatus.disabled),
+          child: Text(worker.status == LocalWorkerStatus.disabled
+              ? 'Enable locally'
+              : 'Disable locally'),
+        ),
+        TextButton(
+          onPressed: onRemove,
+          style: TextButton.styleFrom(
+            foregroundColor: theme.colorScheme.error,
+          ),
+          child: const Text('Remove'),
+        ),
+        FilledButton.icon(
+          onPressed: onEdit,
+          icon: const Icon(Icons.edit, size: 16),
+          label: const Text('Edit Worker'),
+        ),
+      ],
+    );
+  }
+}
 
-  String _statusLabel(LocalWorkerStatus status) => switch (status) {
-        LocalWorkerStatus.ready => 'Ready',
-        LocalWorkerStatus.needsAttention => 'Needs attention',
-        LocalWorkerStatus.disabled => 'Disabled',
-        LocalWorkerStatus.removed => 'Removed',
-      };
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 130,
+            child: Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsTab extends StatelessWidget {
+  const _SettingsTab({
+    required this.snapshot,
+    this.onPair,
+    this.onQuit,
+  });
+
+  final HostUiSnapshot snapshot;
+  final VoidCallback? onPair;
+  final VoidCallback? onQuit;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        Text('Settings',
+            style: theme.textTheme.titleLarge
+                ?.copyWith(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 4),
+        Text(
+          'Workspace machine configuration and cloud pairing.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Work Root card
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.folder_open, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text('Work Root Directory',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          )),
+                    ),
+                    const SizedBox(width: 8),
+                    if (snapshot.workRootPath != null)
+                      FilledButton.tonalIcon(
+                        onPressed: () => HostLifecycleController.openPath(
+                            snapshot.workRootPath!),
+                        icon: const Icon(Icons.folder, size: 16),
+                        label: const Text('Open Folder'),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  snapshot.workRootPath ?? 'Not configured',
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Workstream checkouts and local code isolation reside under this path. Each assignment is executed within its dedicated ID-only directory.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // Application Updates card
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.system_update_alt, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text('Application Updates',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          )),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: ConclaveBrand.success.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'Up to date',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: ConclaveBrand.success,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text('Installed version: v${snapshot.appVersion}'),
+                Text('Update channel: Stable',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    )),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // Pairing details card
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.cloud_sync, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text('Cloud Pairing',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          )),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: onPair,
+                      icon: const Icon(Icons.link, size: 16),
+                      label: const Text('Re-pair Workspace'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _DetailRow(
+                  label: 'Cloud URL',
+                  value: snapshot.cloudUrl ?? 'Not configured',
+                ),
+                _DetailRow(
+                  label: 'Workspace Name',
+                  value: snapshot.workspaceName ?? 'Not configured',
+                ),
+                _DetailRow(
+                  label: 'Workspace ID',
+                  value: snapshot.workspaceId ?? snapshot.hostId ?? 'Not paired',
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 24),
+        OutlinedButton.icon(
+          onPressed: onQuit,
+          icon: const Icon(Icons.power_settings_new),
+          label: const Text('Quit Workspace'),
+        ),
+      ],
+    );
+  }
+}
+
+class _DiagnosticsTab extends StatelessWidget {
+  const _DiagnosticsTab({
+    required this.snapshot,
+    this.onExportDiagnostics,
+  });
+
+  final HostUiSnapshot snapshot;
+  final Future<void> Function()? onExportDiagnostics;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Diagnostics',
+                      style: theme.textTheme.titleLarge
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Runtime state, connection metrics, and system identity.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            FilledButton.tonalIcon(
+              onPressed: onExportDiagnostics,
+              icon: const Icon(Icons.download_outlined, size: 16),
+              label: const Text('Export Report'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Connection Telemetry
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.wifi_tethering, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text('Cloud Gateway Connection',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          )),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      snapshot.cloudConnected ? 'Connected' : 'Disconnected',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: snapshot.cloudConnected
+                            ? ConclaveBrand.success
+                            : ConclaveBrand.error,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _DetailRow(
+                  label: 'Gateway URL',
+                  value: snapshot.cloudUrl ?? 'Not configured',
+                ),
+                _DetailRow(
+                  label: 'Session ID',
+                  value: snapshot.sessionId ?? 'No active session',
+                ),
+                _DetailRow(
+                  label: 'Reconnect Count',
+                  value: '${snapshot.reconnectCount}',
+                ),
+                _DetailRow(
+                  label: 'Active Work',
+                  value: '${snapshot.activeAssignments} assignments',
+                ),
+                if (snapshot.lastInventorySyncAt != null)
+                  _DetailRow(
+                    label: 'Last Inventory Sync',
+                    value: snapshot.lastInventorySyncAt!.toLocal().toString(),
+                  ),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // Identity & Machine info
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.fingerprint, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text('Machine & Runtime Identity',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          )),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _CopyableDetailRow(
+                  label: 'Workspace ID',
+                  value: snapshot.workspaceId ?? snapshot.hostId ?? 'Not paired',
+                ),
+                _CopyableDetailRow(
+                  label: 'Runtime ID',
+                  value: snapshot.hostId ?? 'Not assigned',
+                ),
+                _CopyableDetailRow(
+                  label: 'Local Hostname',
+                  value: snapshot.hostname ?? Platform.localHostname,
+                ),
+                _DetailRow(
+                  label: 'OS Platform',
+                  value: '${Platform.operatingSystem} (${Platform.operatingSystemVersion})',
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // Logs viewer
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.receipt_long, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text('Runtime Logs',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          )),
+                    ),
+                    const SizedBox(width: 8),
+                    if (snapshot.logsPath != null)
+                      TextButton.icon(
+                        onPressed: () => HostLifecycleController.openPath(
+                            snapshot.logsPath!),
+                        icon: const Icon(Icons.open_in_new, size: 16),
+                        label: const Text('Open Log File'),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  snapshot.logsPath ?? 'Logs will appear after first launch.',
+                  style: TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CopyableDetailRow extends StatelessWidget {
+  const _CopyableDetailRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 130,
+            child: Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.copy, size: 14),
+            tooltip: 'Copy $label',
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: value));
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('$label copied to clipboard'),
+                  duration: const Duration(seconds: 1),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _SectionCard extends StatelessWidget {
