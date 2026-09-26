@@ -1003,6 +1003,7 @@ class StudioWorkspace {
     this.slug = '',
     this.status = 'active',
     this.role = 'owner',
+    this.hasRuntimeIdentity = false,
     this.platform = '—',
     this.architecture = '—',
     this.hostname = '—',
@@ -1021,6 +1022,7 @@ class StudioWorkspace {
   final String slug;
   final String status;
   final String role;
+  final bool hasRuntimeIdentity;
   final String platform;
   final String architecture;
   final String hostname;
@@ -1041,6 +1043,8 @@ class StudioWorkspace {
         status:
             _string(json, 'lifecycleStatus', _string(json, 'status', 'active')),
         role: _string(json, 'role', 'viewer'),
+        hasRuntimeIdentity: json['hasRuntimeIdentity'] == true ||
+            json['hasRuntimeIdentity'] == 1,
         platform: _string(json, 'platform'),
         architecture: _string(json, 'architecture'),
         hostname: _string(json, 'hostname'),
@@ -1067,6 +1071,7 @@ class StudioWorkspace {
         slug: slug,
         status: status,
         role: role,
+        hasRuntimeIdentity: hasRuntimeIdentity,
         platform: platform,
         architecture: architecture,
         hostname: hostname,

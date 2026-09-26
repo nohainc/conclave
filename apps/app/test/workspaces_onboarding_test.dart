@@ -63,4 +63,64 @@ void main() {
     expect(find.textContaining('macOS'), findsOneWidget);
     expect(find.text('Pair Workspace'), findsNothing);
   });
+
+  testWidgets('paired offline Workspace does not enter the legacy pairing flow',
+      (tester) async {
+    const workspace = StudioWorkspace(
+      id: 'workspace-offline',
+      name: 'Paired Mac',
+      status: 'offline',
+      hasRuntimeIdentity: true,
+      appVersion: '1.2.0',
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: WorkspacesPage(
+          workspaces: const [workspace],
+          onAdd: () {},
+          onRename: (_) {},
+          onUpdate: (_) {},
+          onRevoke: (_) {},
+          onGrant: (_) {},
+          onConnect: (_) async {},
+        ),
+      ),
+    ));
+
+    expect(find.text('Paired Mac'), findsOneWidget);
+    expect(find.text('Connect Machine'), findsNothing);
+  });
+
+  testWidgets('legacy unpaired placeholder retains Connect Machine',
+      (tester) async {
+    const workspace = StudioWorkspace(
+      id: 'workspace-placeholder',
+      name: 'Existing Workspace',
+      status: 'not_connected',
+    );
+    var connectCount = 0;
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: WorkspacesPage(
+          workspaces: const [workspace],
+          onAdd: () {},
+          onRename: (_) {},
+          onUpdate: (_) {},
+          onRevoke: (_) {},
+          onGrant: (_) {},
+          onConnect: (_) async {
+            connectCount++;
+          },
+        ),
+      ),
+    ));
+
+    expect(find.text('Existing Workspace'), findsOneWidget);
+    expect(find.text('Connect Machine'), findsOneWidget);
+    await tester.tap(find.text('Connect Machine'));
+    await tester.pump();
+    expect(connectCount, 1);
+  });
 }

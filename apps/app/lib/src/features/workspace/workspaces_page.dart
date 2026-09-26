@@ -276,10 +276,9 @@ class _WorkspaceCardBody extends StatelessWidget {
     final theme = Theme.of(context);
     final installed =
         workspace.appVersion.isNotEmpty && workspace.appVersion != '—';
-    final connected = switch (workspace.status.toLowerCase()) {
-      'online' || 'busy' || 'draining' => true,
-      _ => false,
-    };
+    final legacyPlaceholder = !workspace.hasRuntimeIdentity &&
+        const {'offline', 'enrolled', 'not_connected', 'pairing'}
+            .contains(workspace.status.toLowerCase());
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -335,7 +334,7 @@ class _WorkspaceCardBody extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: [
-            if ((!installed || !connected) && onConnect != null)
+            if (legacyPlaceholder && onConnect != null)
               OutlinedButton.icon(
                 onPressed: onConnect,
                 icon: const Icon(Icons.link_outlined),

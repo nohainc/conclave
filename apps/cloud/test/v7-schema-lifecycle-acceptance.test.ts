@@ -22,6 +22,7 @@ const migrationFiles = [
   "0019_worker_assignment_requester.sql",
   "0021_workspace_worker_inventory.sql",
   "0022_v7_adapter_releases.sql",
+  "0023_workspace_runtime_credentials.sql",
   "0024_v7_worker_scheduling.sql",
   "0025_v7_assignment_runtime.sql",
   "0026_remove_v6_configured_workers.sql",
@@ -30,6 +31,15 @@ const migrationFiles = [
 ];
 
 const schema = migrationFiles
+  .map((file) =>
+    readFileSync(
+      fileURLToPath(new URL(`../migrations-v6/${file}`, import.meta.url)),
+      "utf8",
+    ),
+  )
+  .join("\n");
+const schemaBeforePairingIntents = migrationFiles
+  .filter((file) => file !== "0028_workspace_pairing_intents.sql")
   .map((file) =>
     readFileSync(
       fileURLToPath(new URL(`../migrations-v6/${file}`, import.meta.url)),
@@ -86,6 +96,47 @@ describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
              (SELECT COUNT(*) FROM execution_workspaces) AS workspace_count;
     `) as { intent_count: number; workspace_count: number }[];
     expect(result).toEqual([{ intent_count: 1, workspace_count: 0 }]);
+  });
+
+  it("preserves paired Workspace state and runtime credentials during upgrade", () => {
+    const pairingMigration = readFileSync(
+      fileURLToPath(
+        new URL(
+          "../migrations-v6/0028_workspace_pairing_intents.sql",
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    );
+    const result = JSON.parse(
+      execFileSync("sqlite3", ["-json", ":memory:"], {
+        input: `${schemaBeforePairingIntents}
+          INSERT INTO users VALUES ('u1', 'paired@example.test', 'Paired', 'active', '2026-01-01', '2026-01-01');
+          INSERT INTO execution_workspaces VALUES ('ws1', 'u1', 'Paired Mac', 'offline', '2026-01-01', '2026-01-02');
+          INSERT INTO workspace_runtime_identities
+            (id, workspace_id, credential_key_ref, credential_token_hash, created_at, revoked_at)
+            VALUES ('rt1', 'ws1', 'runtime-key-ref', 'sha256:existing-token', '2026-01-01', NULL);
+          ${pairingMigration}
+          SELECT ew.status, ri.credential_key_ref, ri.credential_token_hash,
+                 ri.revoked_at, ri.installation_id,
+                 (SELECT COUNT(*) FROM workspace_pairing_intents) AS pairing_intent_count
+            FROM execution_workspaces ew
+            JOIN workspace_runtime_identities ri ON ri.workspace_id = ew.id
+           WHERE ew.id = 'ws1';`,
+        encoding: "utf8",
+      }),
+    ) as unknown[];
+
+    expect(result).toEqual([
+      {
+        status: "offline",
+        credential_key_ref: "runtime-key-ref",
+        credential_token_hash: "sha256:existing-token",
+        revoked_at: null,
+        installation_id: null,
+        pairing_intent_count: 0,
+      },
+    ]);
   });
 
   it("forward-migrates legacy assignment and audit attribution, then removes V6 tables", () => {

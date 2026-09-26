@@ -1,6 +1,6 @@
 # Conclave AX Workspaces UX and Data Contract
 
-**Status:** Phases 1–5 Workspaces UI and frontend model migration are implemented.
+**Status:** Phases 1–5 Workspaces UI/model migration and Phase A6 compatibility handling are implemented.
 
 **Applies to:** Conclave AX and its Cloud read models.
 
@@ -72,6 +72,7 @@ the normal card leads with the name.
 
 ```text
 connectionState      // connected | offline | not_connected | unknown
+hasActiveRuntimeIdentity // internal compatibility classification; never display identity data
 hostname?
 operatingSystem?
 architecture?
@@ -192,19 +193,44 @@ section, backed by real audit events.
   machine/settings sections. Workspace settings such as rename, reconnect,
   download, update status, and revoke live in the card's overflow menu or a
   focused dialog.
-- Empty state explains that a Workspace is a computer where Workers run and
-  offers **Pair a Workspace** as primary action and **Download Conclave
-  Workspace** as secondary action.
+- Empty state says **No Workspaces connected**, explains that connecting a
+  Conclave Workspace computer makes local Workers available to Projects, and
+  offers **Connect Workspace** plus **Download Conclave Workspace**.
 - Pairing creates a temporary owner-scoped intent, not a permanent Workspace.
   The desktop proposes an editable display name and claims the one-time code;
   Cloud creates the Workspace and runtime identity only after a successful
   claim. Existing paired Workspaces remain available during migration.
+- Legacy, unpaired Workspace placeholders are retained during migration. The
+  Workspace read model identifies whether an active runtime identity exists;
+  AX shows the old **Connect Machine** enrollment flow only for an unpaired
+  placeholder. Pairing it keeps its existing Workspace ID and owner. A new
+  pairing intent never adopts or renames that placeholder.
+- An offline Workspace with an active runtime identity remains paired. AX
+  keeps showing it as offline and does not ask it to claim a new code. Its
+  saved runtime credential and Gateway reconnect path remain authoritative.
 - Worker inventory appears only after the desktop has synchronized it.
 - Home may summarize Projects, Workspaces, and Active Runs. It must not make
   Workers a separate top-level destination; a Ready Workers metric, if kept,
   opens or focuses the Workspaces page.
 - Setup guidance is: install and configure Workers locally in Conclave
   Workspace, pair the installation, then grant Project access as needed.
+
+## Migration and backward compatibility
+
+Cloud migration `0028_workspace_pairing_intents.sql` is additive: it adds the
+temporary pairing-intent table and the installation ID/index without changing
+Workspace lifecycle rows or existing runtime credential hashes. Existing
+paired desktops keep authenticating with their saved runtime credential and
+reconnect through the same Workspace Gateway. They do not need to pair again
+after an upgrade.
+
+The selected placeholder policy is to keep legacy unpaired Workspace records
+and their owner-scoped **Connect Machine** enrollment flow until connected.
+Those records are not silently converted to a pairing intent or attached to a
+different account. Runtime enrollment rejects an installation that is already
+bound to a different active Workspace; explicitly unpaired/revoked installations
+follow the existing recovery rules. New users use pairing intents, which do not
+create a Workspace until a desktop claims one.
 
 ## Routing compatibility contract
 

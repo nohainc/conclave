@@ -993,16 +993,34 @@ async function handleListWorkspaces(
       ? await env.CONCLAVE_DB.prepare(
           `SELECT id, name,
                   CASE
-                    WHEN status IN ('enrolled', 'offline') AND EXISTS (
+                    WHEN status = 'enrolled' AND EXISTS (
+                      SELECT 1 FROM workspace_runtime_identities identity
+                      WHERE identity.workspace_id = execution_workspaces.id
+                        AND identity.revoked_at IS NULL
+                    ) THEN 'offline'
+                    WHEN status IN ('enrolled', 'offline') AND NOT EXISTS (
+                      SELECT 1 FROM workspace_runtime_identities identity
+                      WHERE identity.workspace_id = execution_workspaces.id
+                        AND identity.revoked_at IS NULL
+                    ) AND EXISTS (
                       SELECT 1 FROM workspace_enrollments e
                       WHERE e.workspace_id = execution_workspaces.id
                         AND e.used_at IS NULL AND e.revoked_at IS NULL
                         AND e.expires_at > ?2
                     ) THEN 'pairing'
-                    WHEN status = 'enrolled' THEN 'not_connected'
+                    WHEN status = 'enrolled' AND NOT EXISTS (
+                      SELECT 1 FROM workspace_runtime_identities identity
+                      WHERE identity.workspace_id = execution_workspaces.id
+                        AND identity.revoked_at IS NULL
+                    ) THEN 'not_connected'
                     ELSE status
                   END AS lifecycleStatus,
                   status, 'owner' AS role,
+                  EXISTS (
+                    SELECT 1 FROM workspace_runtime_identities identity
+                    WHERE identity.workspace_id = execution_workspaces.id
+                      AND identity.revoked_at IS NULL
+                  ) AS hasRuntimeIdentity,
                   f.platform, f.architecture, f.hostname,
                   f.app_version AS appVersion,
                   f.runtime_capabilities_json AS runtimeCapabilitiesJson,
@@ -5487,13 +5505,26 @@ async function handleListHosts(
     const workspace = await env.CONCLAVE_DB.prepare(
       `SELECT ew.id, ew.name,
               CASE
-                WHEN ew.status IN ('enrolled', 'offline') AND EXISTS (
+                WHEN ew.status = 'enrolled' AND EXISTS (
+                  SELECT 1 FROM workspace_runtime_identities identity
+                  WHERE identity.workspace_id = ew.id
+                    AND identity.revoked_at IS NULL
+                ) THEN 'offline'
+                WHEN ew.status IN ('enrolled', 'offline') AND NOT EXISTS (
+                  SELECT 1 FROM workspace_runtime_identities identity
+                  WHERE identity.workspace_id = ew.id
+                    AND identity.revoked_at IS NULL
+                ) AND EXISTS (
                   SELECT 1 FROM workspace_enrollments e
                   WHERE e.workspace_id = ew.id
                     AND e.used_at IS NULL AND e.revoked_at IS NULL
                     AND e.expires_at > ?3
                 ) THEN 'pairing'
-                WHEN ew.status = 'enrolled' THEN 'not_connected'
+                WHEN ew.status = 'enrolled' AND NOT EXISTS (
+                  SELECT 1 FROM workspace_runtime_identities identity
+                  WHERE identity.workspace_id = ew.id
+                    AND identity.revoked_at IS NULL
+                ) THEN 'not_connected'
                 ELSE ew.status
               END AS lifecycleStatus,
               ew.status, f.platform, f.architecture, f.hostname,
