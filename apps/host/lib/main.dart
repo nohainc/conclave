@@ -10,6 +10,9 @@ import 'local_worker_setup.dart';
 import 'secure_credentials.dart';
 import 'v7_adapter_package_store.dart';
 import 'v7_adapter_catalog.dart';
+import 'workspace_enrollment.dart';
+import 'workspace_pairing_dialog.dart';
+import 'workspace_runtime.dart';
 
 Future<AdapterPrerequisiteResult> _probeLocalWorkerPrerequisite(
     String workerTypeId) async {
@@ -103,7 +106,7 @@ Future<void> _launchLocalWorkerAuthentication(String workerTypeId) async {
 class HostLifecycleController extends ChangeNotifier {
   HostLifecycleController(this.host);
 
-  final Host host;
+  Host host;
   bool _hidden = false;
   bool _quitting = false;
   Object? _startupError;
@@ -160,6 +163,7 @@ class HostLifecycleController extends ChangeNotifier {
   }
 
   Future<void> launch() async {
+    _startupError = null;
     try {
       await host.start();
     } catch (error) {
@@ -168,6 +172,15 @@ class HostLifecycleController extends ChangeNotifier {
       rethrow;
     }
     notifyListeners();
+  }
+
+  Future<void> replaceHost(Host nextHost) async {
+    await host.stop();
+    host = nextHost;
+    _startupError = null;
+    _hidden = false;
+    notifyListeners();
+    await launch();
   }
 
   void minimize() {
@@ -247,8 +260,10 @@ class HostUiSnapshot {
       mode == HostUiMode.installFailure;
 }
 
-void main() {
-  final host = Host(config: HostConfig.fromArgs(const []));
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final config = HostConfig.fromArgs(const []);
+  final host = await buildWorkspaceRuntime(config);
   runApp(ConclaveHostApp(lifecycle: HostLifecycleController(host)));
 }
 
@@ -307,6 +322,49 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Diagnostics exported to ${file.path}')),
     );
+  }
+
+  Future<void> _pairWorkspace() async {
+    final lifecycle = widget.lifecycle;
+    final currentRegistration =
+        HostRegistrationStore(lifecycle.host.config.dataDirectory).readSync();
+    final request = await showWorkspacePairingDialog(
+      context,
+      initialCloudUrl:
+          currentRegistration?.cloudUrl ??
+              Platform.environment['CONCLAVE_HOST_CLOUD_URL'] ??
+              conclaveProductionCloudUrl,
+    );
+    if (request == null || !mounted) return;
+
+    try {
+      final service = WorkspacePairingService(
+        dataDirectory: lifecycle.host.config.dataDirectory,
+        credentialStore: lifecycle.host.credentialStore,
+      );
+      await service.pair(
+        cloudUrl: request.cloudUrl,
+        token: request.token,
+        hostname: Platform.localHostname,
+      );
+      final config = HostConfig.fromArgs(
+        const [],
+        credentialStore: lifecycle.host.credentialStore,
+      );
+      final replacement = await buildWorkspaceRuntime(config);
+      await lifecycle.replaceHost(replacement);
+      if (mounted) {
+        setState(() => _workerRevision++);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Workspace paired and connected.')),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Pairing failed: $error')),
+      );
+    }
   }
 
   Future<void> _addLocalWorker(BuildContext context) async {
@@ -415,7 +473,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
               ? const Text('Workspace is running in the background.')
               : HostDashboard(
                   snapshot: lifecycle.uiSnapshot,
-                  onPair: lifecycle.restore,
+                  onPair: _pairWorkspace,
                   onQuit: _confirmQuit,
                   onRetry: lifecycle.launch,
                   onExportDiagnostics: _exportDiagnostics,
