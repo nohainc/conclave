@@ -43,8 +43,8 @@ function apply(sql: string): unknown[] {
   ) as unknown[];
 }
 
-describe("V7 Workspace-Owned Worker solo acceptance", () => {
-  it("completes the V7 lifecycle: local worker -> synced inventory -> project grant -> work assignment without leaking secrets", () => {
+describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
+  it("validates ownership, grants, workstream policy, and assignment attribution schema without claiming runtime execution", () => {
     const result = apply(`
       INSERT INTO users VALUES ('u1', 'owner@example.test', 'Owner', 'active', '2026-01-01', '2026-01-01');
       INSERT INTO execution_workspaces VALUES ('ws1', 'u1', 'MacBook Pro', 'online', '2026-01-01', '2026-01-01');

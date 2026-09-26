@@ -334,7 +334,7 @@ Verify:
 
 ### 9. V7 solo acceptance is schema-oriented, not behavioral E2E
 
-The current `apps/cloud/test/v7-solo-acceptance.test.ts` directly inserts:
+The schema-only `apps/cloud/test/v7-schema-lifecycle-acceptance.test.ts` directly inserts:
 - V7 Worker inventory;
 - Project/grant/workstream state;
 - completed Worker assignment.

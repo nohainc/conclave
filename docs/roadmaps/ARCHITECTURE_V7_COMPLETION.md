@@ -223,9 +223,13 @@ state is independent from local readiness.
 That is necessary but not sufficient before deleting the compatibility
 architecture.
 
-The existing `apps/cloud/test/v7-solo-acceptance.test.ts` remains primarily a
+`apps/cloud/test/v7-schema-lifecycle-acceptance.test.ts` is explicitly a
 schema/lifecycle test because it inserts Worker inventory and completed
-assignment state directly. It does not prove the real runtime path:
+assignment state directly. The Workspace-side
+`apps/host/test/v7_runtime_execution_acceptance_test.dart` now proves local
+registry ownership, signed V7 admission, child-process progress/result, and
+ID-only Workstream execution. These tests still do not prove the complete Cloud
+dispatch round trip. The remaining path is:
 
 ~~~text
 scheduler

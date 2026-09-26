@@ -40,7 +40,7 @@
 - [~] **V7-19 — release/update maturity.** Adapter rollback exists and macOS package/sign/notarize support now exists; app self-update and production adapter key rotation remain.
 - [~] **V7-21 — observability.** Useful runtime/Worker status and audit exist without Usage accounting; desktop diagnostics can be expanded.
 - [ ] **V7-22 — remove legacy v6 Worker compatibility.**
-- [~] **V7-23…V7-27 — acceptance.** Phase 1 unit/integration coverage now proves scheduling-state separation, drain semantics, snapshot omission and a V7 candidate path that avoids the V6 binding query. The current `v7-solo-acceptance.test.ts` still inserts inventory/completed assignment state directly. The next required gate is the Phase 2 real scheduler -> Workspace Gateway -> local Worker registry -> adapter child-process -> result acceptance harness; broader failure/security, signed macOS and live-provider acceptance follow later.
+- [~] **V7-23…V7-27 — acceptance.** Phase 1 tests cover scheduling state, inventory reconciliation, and the V7 candidate path. `v7-schema-lifecycle-acceptance.test.ts` is schema-only. `v7_runtime_execution_acceptance_test.dart` now proves local registry ownership, signed V7 admission, child-process progress/result, and ID-only Workstream execution. The Cloud scheduler -> Workspace Gateway -> runtime -> Cloud result round trip remains the required Phase 2 gate; Phase 3 cleanup stays blocked until it passes.
 
 See [V7 Implementation Audit](../architecture/V7_IMPLEMENTATION_AUDIT.md) for the current convergence and release gates. The ordered remaining work is maintained in [Architecture v7 Completion Plan](ARCHITECTURE_V7_COMPLETION.md).
 
