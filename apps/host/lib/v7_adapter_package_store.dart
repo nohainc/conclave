@@ -427,15 +427,15 @@ class V7AdapterPackageStore {
   /// Uses the admitted provider adapter to check an API credential without
   /// generating model output. The key is passed only through the adapter's
   /// declared scoped process environment.
-  Future<void> validateApiCredential({
+  Future<List<String>> validateApiCredential({
     required String workerTypeId,
     required String apiKey,
     required String endpointUrl,
     required List<String> localPermissions,
   }) async {
-    if (!const {'openai-api', 'gemini-api', 'anthropic-api'}
+    if (!const {'openai-api', 'gemini-api', 'anthropic-api', 'ollama'}
             .contains(workerTypeId) ||
-        apiKey.isEmpty) {
+        (workerTypeId != 'ollama' && apiKey.isEmpty)) {
       throw ArgumentError('API Worker credential validation input is invalid.');
     }
     final activeFile = File(
@@ -481,7 +481,7 @@ class V7AdapterPackageStore {
       localConcurrencyLimit: 1,
       availableSecrets: secrets,
     );
-    await executor.executeV7Adapter(
+    final result = await executor.executeV7Adapter(
       spec,
       workerTypeId: workerTypeId,
       adapterVersion: admitted.adapterVersion,
@@ -494,6 +494,7 @@ class V7AdapterPackageStore {
           'setup-validation:$workerTypeId:${DateTime.now().microsecondsSinceEpoch}',
       timeout: const Duration(seconds: 20),
     );
+    return List<String>.from(result['models'] as List? ?? const []);
   }
 
   /// Returns true only when the active package still passes digest, signature,

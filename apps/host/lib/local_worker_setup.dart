@@ -52,8 +52,8 @@ class LocalWorkerTypeOption {
       authStrategy: 'browser_auth',
       authLabel: 'Google account',
       prerequisite: 'Antigravity CLI',
-      executablePrerequisite:
-          AdapterExecutablePrerequisite(executable: 'agy', minimumVersion: '1.0.0'),
+      executablePrerequisite: AdapterExecutablePrerequisite(
+          executable: 'agy', minimumVersion: '1.0.0'),
       additionalPrerequisites: [
         AdapterExecutablePrerequisite(executable: 'node'),
       ],
@@ -66,8 +66,12 @@ class LocalWorkerTypeOption {
       authStrategy: 'browser_auth',
       authLabel: 'Claude account',
       prerequisite: 'Claude Code CLI',
-      executablePrerequisite:
-          AdapterExecutablePrerequisite(executable: 'claude'),
+      executablePrerequisite: AdapterExecutablePrerequisite(
+          executable: 'claude', minimumVersion: '2.1.41'),
+      additionalPrerequisites: [
+        AdapterExecutablePrerequisite(
+            executable: 'node', minimumVersion: '18.0.0'),
+      ],
       permissions: ['workstream_filesystem', 'shell_execution'],
     ),
     LocalWorkerTypeOption(
@@ -113,9 +117,9 @@ class LocalWorkerTypeOption {
       authStrategy: 'local_endpoint',
       authLabel: 'Local service',
       prerequisite: 'Ollama CLI',
-      executablePrerequisite:
-          AdapterExecutablePrerequisite(executable: 'ollama'),
-      permissions: ['workstream_filesystem', 'network'],
+      executablePrerequisite: AdapterExecutablePrerequisite(
+          executable: 'node', minimumVersion: '18.0.0'),
+      permissions: ['network'],
     ),
   ];
 }
@@ -177,9 +181,14 @@ class LocalWorkerSetupService {
       throw ArgumentError(
           'Set a default model or allow at least one model for this API Worker.');
     }
+    if (type.id == 'ollama' &&
+        defaultModel.trim().isEmpty &&
+        allowedModels.isEmpty) {
+      throw ArgumentError('Select an installed Ollama model.');
+    }
     final authReady = switch (type.authStrategy) {
       'api_key' => apiKey.isNotEmpty && authenticationReady,
-      'local_endpoint' => parsedEndpoint != null,
+      'local_endpoint' => parsedEndpoint != null && authenticationReady,
       'none' => true,
       'browser_auth' => authenticationReady,
       _ => false,
@@ -274,6 +283,11 @@ class LocalWorkerSetupService {
       throw ArgumentError(
           'Set a default model or allow at least one model for this API Worker.');
     }
+    if (type.id == 'ollama' &&
+        defaultModel.trim().isEmpty &&
+        allowedModels.isEmpty) {
+      throw ArgumentError('Select an installed Ollama model.');
+    }
     if (type.requiresApiKey &&
         apiKey.isEmpty &&
         current.credentialRef == null) {
@@ -292,7 +306,7 @@ class LocalWorkerSetupService {
       }
       final authReady = switch (type.authStrategy) {
         'api_key' => credentialRef != null && authenticationReady,
-        'local_endpoint' => parsedEndpoint != null,
+        'local_endpoint' => parsedEndpoint != null && authenticationReady,
         'none' => true,
         'browser_auth' => authenticationReady ||
             current.credentialStatus == LocalWorkerCredentialStatus.ready,
@@ -370,7 +384,7 @@ class AddLocalWorkerDialog extends StatefulWidget {
       probePrerequisite;
   final Future<void> Function(String workerTypeId)? launchAuthentication;
   final Future<bool> Function(String workerTypeId)? validateAuthentication;
-  final Future<bool> Function(
+  final Future<List<String>> Function(
     String workerTypeId,
     String apiKey,
     String endpointUrl,
@@ -396,6 +410,7 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
   String? _prerequisiteMessage;
   String? _adapterMessage;
   String? _authenticationMessage;
+  List<String> _discoveredModels = const [];
 
   @override
   void initState() {
@@ -475,10 +490,24 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
         'browser_auth' =>
           await widget.validateAuthentication?.call(_type.id) ?? false,
         'api_key' => adapterReady && prerequisiteReady
-            ? await _validateApiCredential(permissions)
+            ? (await _validateApiCredential(permissions)).isNotEmpty
+            : false,
+        'local_endpoint' => adapterReady && prerequisiteReady
+            ? (await _validateApiCredential(permissions, localEndpoint: true))
+                .isNotEmpty
             : false,
         _ => false,
       };
+      final selectedModels = {
+        if (_defaultModel.text.trim().isNotEmpty) _defaultModel.text.trim(),
+        ...allowedModels,
+      };
+      if (selectedModels.isNotEmpty &&
+          _discoveredModels.isNotEmpty &&
+          selectedModels.any((model) => !_discoveredModels.contains(model))) {
+        throw ArgumentError(
+            'Choose a model reported by the provider or Ollama endpoint.');
+      }
       if (mounted) {
         setState(() => _prerequisiteMessage = prerequisiteResult.message);
       }
@@ -518,34 +547,39 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
     }
   }
 
-  Future<bool> _validateApiCredential(List<String> permissions) async {
-    final apiKey = _apiKey.text.isNotEmpty
-        ? _apiKey.text
-        : widget.worker?.credentialRef == null
-            ? ''
-            : widget.credentialStore.readSync(widget.worker!.credentialRef!) ??
-                '';
-    if (apiKey.isEmpty) return false;
+  Future<List<String>> _validateApiCredential(List<String> permissions,
+      {bool localEndpoint = false}) async {
+    final apiKey = localEndpoint
+        ? ''
+        : _apiKey.text.isNotEmpty
+            ? _apiKey.text
+            : widget.worker?.credentialRef == null
+                ? ''
+                : widget.credentialStore
+                        .readSync(widget.worker!.credentialRef!) ??
+                    '';
+    if (!localEndpoint && apiKey.isEmpty) return const [];
     final validator = widget.validateApiCredential;
-    if (validator == null) return false;
+    if (validator == null) return const [];
     try {
-      final valid = await validator(
+      final models = await validator(
         _type.id,
         apiKey,
         _endpointUrl.text,
         permissions,
       );
-      if (!valid && mounted) {
+      if (models.isEmpty && mounted) {
         setState(() => _authenticationMessage =
             'The API key could not be validated. Check it, then save again.');
       }
-      return valid;
+      if (mounted) setState(() => _discoveredModels = models);
+      return models;
     } on Object {
       if (mounted) {
         setState(() => _authenticationMessage =
             'The API key could not be validated. Check the key and endpoint, then save again.');
       }
-      return false;
+      return const [];
     }
   }
 
@@ -610,7 +644,9 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
                         : 'Uses a local service; no provider credential is stored.'),
                   ),
                   if (_type.authStrategy == 'browser_auth' &&
-                      (_type.id == 'codex' || _type.id == 'antigravity') &&
+                      (_type.id == 'codex' ||
+                          _type.id == 'antigravity' ||
+                          _type.id == 'claude-code') &&
                       widget.launchAuthentication != null)
                     Align(
                       alignment: Alignment.centerLeft,
@@ -649,11 +685,28 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
                       style: TextStyle(
                           color: Theme.of(context).colorScheme.error)),
                 ],
-                TextField(
+                if (_type.authStrategy == 'local_endpoint')
+                  TextField(
                     key: const Key('worker-default-model'),
                     controller: _defaultModel,
-                    decoration: const InputDecoration(
-                        labelText: 'Default model (optional)')),
+                    decoration: InputDecoration(
+                      labelText: 'Default model',
+                      helperText: _discoveredModels.isEmpty
+                          ? 'Validate the endpoint to discover installed models.'
+                          : 'Installed models: ${_discoveredModels.take(12).join(', ')}',
+                    ),
+                  )
+                else
+                  TextField(
+                    key: const Key('worker-default-model'),
+                    controller: _defaultModel,
+                    decoration: InputDecoration(
+                      labelText: 'Default model (optional)',
+                      helperText: _discoveredModels.isEmpty
+                          ? null
+                          : 'Available models: ${_discoveredModels.take(12).join(', ')}',
+                    ),
+                  ),
                 TextField(
                     key: const Key('worker-allowed-models'),
                     controller: _allowedModels,

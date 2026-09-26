@@ -1,0 +1,28 @@
+{
+  "workerTypeId": "ollama",
+  "adapterVersion": "1.0.0",
+  "protocolVersion": "1.0",
+  "publisher": "conclave",
+  "displayName": "Ollama",
+  "supportedPlatforms": [
+    "macos-arm64",
+    "macos-x64",
+    "linux-arm64",
+    "linux-x64"
+  ],
+  "capabilities": ["text_generation"],
+  "permissions": ["network:outbound"],
+  "authStrategies": ["local_endpoint"],
+  "modelSelectionMode": "allow_list",
+  "prerequisites": [
+    { "kind": "executable", "executable": "node", "minimumVersion": "18.0.0" }
+  ],
+  "executable": "bin/conclave-ollama-adapter.mjs",
+  "launchArgs": [],
+  "secretRequirements": [],
+  "healthCheck": { "mode": "protocol", "timeoutMs": 5000 },
+  "packageDigest": "<calculated-from-package-contents-on-publish>",
+  "signingKeyId": "<key-id-on-publish>",
+  "signature": "<publisher-signature-on-publish>",
+  "releaseChannel": "stable"
+}

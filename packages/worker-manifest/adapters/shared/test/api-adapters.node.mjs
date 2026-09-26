@@ -153,14 +153,56 @@ test("provider failures do not leak response bodies or local credentials", async
 
 test("API key validation uses provider model-list endpoints without generating content", async () => {
   const providers = [
-    [validateOpenAI, `${endpoint}/v1`, "authorization", "openai-key"],
-    [validateGemini, `${endpoint}/v1beta`, "x-goog-api-key", "gemini-key"],
-    [validateAnthropic, endpoint, "x-api-key", "anthropic-key"],
+    [
+      validateOpenAI,
+      `${endpoint}/v1`,
+      "authorization",
+      "openai-key",
+      { data: [{ id: "gpt-test" }] },
+      ["gpt-test"],
+    ],
+    [
+      validateGemini,
+      `${endpoint}/v1beta`,
+      "x-goog-api-key",
+      "gemini-key",
+      {
+        models: [
+          {
+            name: "models/gemini-test",
+            supportedGenerationMethods: ["generateContent"],
+          },
+          {
+            name: "models/embed-test",
+            supportedGenerationMethods: ["embedContent"],
+          },
+        ],
+      },
+      ["gemini-test"],
+    ],
+    [
+      validateAnthropic,
+      endpoint,
+      "x-api-key",
+      "anthropic-key",
+      { data: [{ id: "claude-test" }] },
+      ["claude-test"],
+    ],
   ];
-  for (const [validate, endpointUrl, header, key] of providers) {
-    const mock = mockFetch(200, { data: [] });
+  for (const [
+    validate,
+    endpointUrl,
+    header,
+    key,
+    body,
+    expectedModels,
+  ] of providers) {
+    const mock = mockFetch(200, body);
     try {
-      await validate({ apiKey: key, config: { endpointUrl } });
+      assert.deepEqual(
+        await validate({ apiKey: key, config: { endpointUrl } }),
+        expectedModels,
+      );
       const request = mock.request();
       assert.equal(request.method, "GET");
       assert.equal(

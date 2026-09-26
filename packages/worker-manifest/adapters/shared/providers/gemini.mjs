@@ -4,7 +4,16 @@ export async function validateCredential({ apiKey, config }) {
   const base =
     config.endpointUrl ?? "https://generativelanguage.googleapis.com/v1beta";
   const url = endpointFor(base, base, "models");
-  await getJson(url, { "x-goog-api-key": apiKey }, 15_000);
+  const response = await getJson(url, { "x-goog-api-key": apiKey }, 15_000);
+  return (response.models ?? [])
+    .filter(
+      (model) =>
+        Array.isArray(model.supportedGenerationMethods) &&
+        model.supportedGenerationMethods.includes("generateContent"),
+    )
+    .map((model) => String(model.name ?? "").replace(/^models\//, ""))
+    .filter(Boolean)
+    .slice(0, 500);
 }
 
 export async function generate({ apiKey, model, prompt, config }) {

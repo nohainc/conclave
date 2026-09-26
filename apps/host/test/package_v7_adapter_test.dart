@@ -208,4 +208,59 @@ void main() {
       expect((active as Map)['version'], '1.0.0');
     }
   });
+
+  test('packages and installs Claude Code and Ollama V7 adapters', () async {
+    final output =
+        await Directory.systemTemp.createTemp('local-adapters-test-');
+    addTearDown(() => output.delete(recursive: true));
+    const publisher = 'conclave';
+    final fixture = await Ed25519ReleaseFixture.create(publisher: publisher);
+    final store = V7AdapterPackageStore(
+      root: Directory('${output.path}/store'),
+      trustPolicy: fixture.trustPolicy,
+      allowedPermissions: WorkerPermission.values.toSet(),
+      platform: '${Platform.isMacOS ? 'macos' : 'linux'}-'
+          '${Platform.version.toLowerCase().contains('arm64') ? 'arm64' : 'x64'}',
+    );
+    for (final workerTypeId in ['claude-code', 'ollama']) {
+      final archive = File('${output.path}/$workerTypeId.tgz');
+      final packaged = await Process.run(
+        'dart',
+        [
+          'run',
+          'bin/package_v7_adapter.dart',
+          '--source',
+          '../../packages/worker-manifest/adapters/$workerTypeId',
+          '--output',
+          archive.path,
+          '--channel',
+          'beta',
+        ],
+        workingDirectory: Directory.current.path,
+        environment: {
+          ...Platform.environment,
+          'CONCLAVE_WORKER_TRUST_PUBLISHER': publisher,
+          'CONCLAVE_RELEASE_SIGNING_SEED': fixture.seedBase64,
+          'CONCLAVE_RELEASE_SIGNING_KEY_ID': fixtureKeyId,
+        },
+      );
+      expect(packaged.exitCode, 0, reason: packaged.stderr.toString());
+      final manifest = Map<String, Object?>.from(
+        jsonDecode(await File('${archive.path}.manifest.json').readAsString())
+            as Map,
+      );
+      expect(manifest['workerTypeId'], workerTypeId);
+      expect(manifest['releaseChannel'], 'beta');
+      final installed = await store.installArchive(
+        archiveBytes: await archive.readAsBytes(),
+        expectedManifest: manifest,
+      );
+      expect(await File('${installed.path}/manifest.json').exists(), isTrue);
+      expect(
+          await File(
+                  '${installed.path}/bin/${workerTypeId == 'claude-code' ? 'conclave-claude-code-adapter.mjs' : 'conclave-ollama-adapter.mjs'}')
+              .exists(),
+          isTrue);
+    }
+  });
 }

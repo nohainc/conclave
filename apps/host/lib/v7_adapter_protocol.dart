@@ -29,8 +29,8 @@ Map<String, Object?> parseV7AdapterFrame(String frame) {
         <String>{},
       ),
     'validate.result' => (
-        {'type', 'protocolVersion', 'requestId', 'ready', 'issues'},
-        <String>{},
+        {'type', 'protocolVersion', 'requestId', 'ready', 'issues', 'models'},
+        {'models'},
       ),
     'progress' => (
         {
@@ -94,6 +94,7 @@ Map<String, Object?> parseV7AdapterFrame(String frame) {
   }
   if (type == 'validate.result') {
     final issues = value['issues'];
+    final models = value['models'] ?? const <String>[];
     if (value['ready'] is! bool ||
         issues is! List ||
         issues.length > 128 ||
@@ -102,9 +103,14 @@ Map<String, Object?> parseV7AdapterFrame(String frame) {
             issue.keys.toSet().difference({'code', 'message'}).isNotEmpty ||
             issue.keys.toSet().length != 2 ||
             !_boundedString(issue['code'], 128) ||
-            !_boundedString(issue['message'], 16384))) {
+            !_boundedString(issue['message'], 16384)) ||
+        models is! List ||
+        models.length > 500 ||
+        models
+            .any((model) => !_boundedString(model, 256) || !_nonEmpty(model))) {
       throw const FormatException('adapter validation result is invalid');
     }
+    value['models'] = models;
   }
   if (type == 'progress' &&
       (!_nonEmpty(value['assignmentId']) ||

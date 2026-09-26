@@ -167,11 +167,15 @@ async function handle(frame) {
         });
       } else {
         try {
-          await provider.validateCredential({
+          const models = await provider.validateCredential({
             apiKey: process.env.CONCLAVE_PROVIDER_API_KEY,
             config,
           });
-          send("validate.result", frame.requestId, { ready: true, issues: [] });
+          send("validate.result", frame.requestId, {
+            ready: true,
+            issues: [],
+            models: Array.isArray(models) ? models.slice(0, 500) : [],
+          });
         } catch (error) {
           send("validate.result", frame.requestId, {
             ready: false,

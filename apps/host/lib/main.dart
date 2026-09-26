@@ -65,27 +65,36 @@ Future<bool> _validateLocalWorkerAuthentication(String workerTypeId) async {
       return false;
     }
   }
+  if (workerTypeId == 'claude-code') {
+    try {
+      final result =
+          await Process.run('claude', ['auth', 'status'], runInShell: false)
+              .timeout(const Duration(seconds: 10));
+      return result.exitCode == 0;
+    } on Object {
+      return false;
+    }
+  }
   return false;
 }
 
-Future<bool> _validateLocalApiCredential(
+Future<List<String>> _validateLocalApiCredential(
   V7AdapterPackageStore? packageStore,
   String workerTypeId,
   String apiKey,
   String endpointUrl,
   List<String> permissions,
 ) async {
-  if (packageStore == null) return false;
+  if (packageStore == null) return const [];
   try {
-    await packageStore.validateApiCredential(
+    return await packageStore.validateApiCredential(
       workerTypeId: workerTypeId,
       apiKey: apiKey,
       endpointUrl: endpointUrl,
       localPermissions: permissions,
     );
-    return true;
   } on Object {
-    return false;
+    return const [];
   }
 }
 
@@ -100,8 +109,12 @@ Future<void> _launchLocalWorkerAuthentication(String workerTypeId) async {
         runInShell: false, mode: ProcessStartMode.detached);
     return;
   }
-  throw StateError(
-      'Sign-in setup is not available for this Worker Type yet.');
+  if (workerTypeId == 'claude-code') {
+    await Process.start('claude', ['auth', 'login'],
+        runInShell: false, mode: ProcessStartMode.detached);
+    return;
+  }
+  throw StateError('Sign-in setup is not available for this Worker Type yet.');
 }
 
 class HostLifecycleController extends ChangeNotifier {
@@ -331,10 +344,9 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         HostRegistrationStore(lifecycle.host.config.dataDirectory).readSync();
     final request = await showWorkspacePairingDialog(
       context,
-      initialCloudUrl:
-          currentRegistration?.cloudUrl ??
-              Platform.environment['CONCLAVE_HOST_CLOUD_URL'] ??
-              conclaveProductionCloudUrl,
+      initialCloudUrl: currentRegistration?.cloudUrl ??
+          Platform.environment['CONCLAVE_HOST_CLOUD_URL'] ??
+          conclaveProductionCloudUrl,
     );
     if (request == null || !mounted) return;
 

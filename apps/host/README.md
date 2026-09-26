@@ -116,7 +116,16 @@ CONCLAVE_ENROLLMENT_TOKEN='conclave_enroll_...' \
 
 - **Codex** Worker Type invokes Codex CLI; authentication may be a ChatGPT account.
 - **Antigravity** Worker Type invokes the `agy` CLI; authentication may be a Google account.
+- **Claude Code** invokes the locally authenticated `claude` CLI in headless mode. The CLI session is validated locally, and the adapter inherits the active Workstream directory.
+- **Ollama** connects to the configured local service, checks its version and installed models, and runs the selected model without storing a provider credential.
 - **OpenAI API**, **Gemini API**, and **Anthropic API** are direct API Worker Types.
+
+API Workers validate locally stored credentials against provider model-list
+endpoints where available; the setup flow exposes returned model IDs for
+selection. Claude Code and Ollama adapter packages are installed only from
+trusted, signed catalog releases. Their protocol, mock-service and signed
+package admission tests run with `pnpm worker-adapters:test` and the Host adapter
+package tests.
 
 Worker Type names describe the integration Conclave invokes, not the model or
 subscription brand.

@@ -425,7 +425,11 @@ class WorkerProcessExecutor {
         if (exitCode != 0) {
           throw StateError('adapter exited after credential validation');
         }
-        return {'validated': true};
+        return {
+          'validated': true,
+          'models':
+              List<String>.from(validation['models'] as List? ?? const []),
+        };
       }
       expectedAssignmentId = operationId;
       final executeId =

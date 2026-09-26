@@ -6,7 +6,7 @@ export async function validateCredential({ apiKey, config }) {
     "https://api.anthropic.com",
     "v1/models",
   );
-  await getJson(
+  const response = await getJson(
     url,
     {
       "x-api-key": apiKey,
@@ -14,6 +14,10 @@ export async function validateCredential({ apiKey, config }) {
     },
     15_000,
   );
+  return (response.data ?? [])
+    .map((model) => model.id)
+    .filter((id) => typeof id === "string")
+    .slice(0, 500);
 }
 
 export async function generate({ apiKey, model, prompt, config }) {

@@ -10,7 +10,11 @@ export async function validateCredential({ apiKey, config }) {
   if (config.projectId) headers["openai-project"] = config.projectId;
   if (config.organizationId)
     headers["openai-organization"] = config.organizationId;
-  await getJson(url, headers, 15_000);
+  const response = await getJson(url, headers, 15_000);
+  return (response.data ?? [])
+    .map((model) => model.id)
+    .filter((id) => typeof id === "string")
+    .slice(0, 500);
 }
 
 export async function generate({ apiKey, model, prompt, config }) {
