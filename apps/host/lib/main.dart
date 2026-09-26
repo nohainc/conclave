@@ -6,6 +6,7 @@ import 'brand.dart';
 import 'adapter_prerequisite.dart';
 import 'diagnostics.dart';
 import 'host.dart';
+import 'host_configuration.dart';
 import 'local_worker_setup.dart';
 import 'secure_credentials.dart';
 import 'v7_adapter_package_store.dart';
