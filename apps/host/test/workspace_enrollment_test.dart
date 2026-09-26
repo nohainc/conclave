@@ -120,6 +120,7 @@ void main() {
       expect(body['name'], "Vitalii's MacBook Pro");
       expect(body['installationId'],
           'install_12345678-1234-4234-8234-123456789abc');
+      expect(body['allowRecovery'], isTrue);
       request.response.statusCode = HttpStatus.created;
       request.response.headers.contentType = ContentType.json;
       request.response.write(jsonEncode({
@@ -142,21 +143,76 @@ void main() {
       hostname: 'test-mac.local',
       proposedWorkspaceName: "Vitalii's MacBook Pro",
       installationId: 'install_12345678-1234-4234-8234-123456789abc',
+      allowRecovery: true,
     );
     await requestFuture;
 
     expect(registration.hostId, 'runtime-2');
+    expect(registration.runtimeId, 'runtime-2');
     expect(registration.workspaceId, 'workspace-2');
     expect(registration.name, "Vitalii's MacBook Pro");
+    expect(registration.workspaceName, "Vitalii's MacBook Pro");
     expect(registration.hostname, 'test-mac.local');
     expect(registration.installationId,
         'install_12345678-1234-4234-8234-123456789abc');
+    expect(registration.credentialRef, 'workspace-runtime:runtime-2');
+    expect(registration.pairedAt, isNotNull);
 
     final saved = HostRegistrationStore(temp).readSync();
     expect(saved?.name, "Vitalii's MacBook Pro");
+    expect(saved?.workspaceName, "Vitalii's MacBook Pro");
     expect(saved?.hostname, 'test-mac.local');
     expect(
         saved?.installationId, 'install_12345678-1234-4234-8234-123456789abc');
+    expect(saved?.credentialRef, 'workspace-runtime:runtime-2');
+    expect(saved?.pairedAt, isNotNull);
+  });
+
+  test('HostRegistration serializes and deserializes canonical identity', () {
+    final reg = const HostRegistration(
+      hostId: 'runtime-abc',
+      workspaceId: 'workspace-xyz',
+      cloudUrl: 'https://app.conclaveax.com',
+      name: 'My Workspace',
+      hostname: 'my-mac',
+      installationId: 'install_123',
+      credentialRef: 'workspace-runtime:runtime-abc',
+      pairedAt: '2026-09-26T20:00:00.000Z',
+    );
+
+    expect(reg.runtimeId, 'runtime-abc');
+    expect(reg.workspaceName, 'My Workspace');
+
+    final json = reg.toJson();
+    expect(json['hostId'], 'runtime-abc');
+    expect(json['workspaceId'], 'workspace-xyz');
+    expect(json['cloudUrl'], 'https://app.conclaveax.com');
+    expect(json['name'], 'My Workspace');
+    expect(json['hostname'], 'my-mac');
+    expect(json['installationId'], 'install_123');
+    expect(json['credentialRef'], 'workspace-runtime:runtime-abc');
+    expect(json['pairedAt'], '2026-09-26T20:00:00.000Z');
+
+    final deserialized = HostRegistration.fromJson(json);
+    expect(deserialized.hostId, 'runtime-abc');
+    expect(deserialized.workspaceId, 'workspace-xyz');
+    expect(deserialized.cloudUrl, 'https://app.conclaveax.com');
+    expect(deserialized.name, 'My Workspace');
+    expect(deserialized.hostname, 'my-mac');
+    expect(deserialized.installationId, 'install_123');
+    expect(deserialized.credentialRef, 'workspace-runtime:runtime-abc');
+    expect(deserialized.pairedAt, '2026-09-26T20:00:00.000Z');
+
+    // Deserializing legacy payload without credentialRef or pairedAt
+    final legacy = HostRegistration.fromJson({
+      'hostId': 'runtime-legacy',
+      'workspaceId': 'ws-legacy',
+      'cloudUrl': 'https://app.conclaveax.com',
+      'name': 'Legacy',
+      'hostname': 'host-legacy',
+    });
+    expect(legacy.credentialRef, 'workspace-runtime:runtime-legacy');
+    expect(legacy.pairedAt, isNull);
   });
 
   test('blocks pairing if installation is already paired locally', () async {
@@ -186,13 +242,140 @@ void main() {
         hostname: 'test-mac',
       ),
       throwsA(
-        isA<StateError>().having(
-          (e) => e.message,
-          'message',
-          contains('This installation is already connected to a Workspace'),
-        ),
+        isA<WorkspacePairingException>()
+            .having(
+              (e) => e.kind,
+              'kind',
+              WorkspacePairingErrorKind.installationAlreadyPaired,
+            )
+            .having(
+              (e) => e.message,
+              'message',
+              'This installation is already connected to a Workspace.',
+            )
+            .having(
+              (e) => e.action,
+              'action',
+              'Disconnect the current Workspace before connecting to another account.',
+            ),
       ),
     );
+  });
+
+  group('WorkspacePairingException failure state classification', () {
+    test('classifies expired code', () {
+      final fromStatus = WorkspacePairingException.fromError(
+        statusCode: 410,
+        serverError: 'Pairing code has expired',
+      );
+      expect(fromStatus.kind, WorkspacePairingErrorKind.expiredCode);
+      expect(fromStatus.message, 'This pairing code has expired.');
+      expect(fromStatus.action,
+          'Generate a new code in Conclave AX and try again.');
+
+      final fromCode = WorkspacePairingException.fromError(
+        serverCode: 'pairing_code_expired',
+      );
+      expect(fromCode.kind, WorkspacePairingErrorKind.expiredCode);
+    });
+
+    test('classifies already claimed / used code', () {
+      final fromCode = WorkspacePairingException.fromError(
+        statusCode: 409,
+        serverCode: 'pairing_already_claimed',
+        serverError: 'Pairing code was already claimed',
+      );
+      expect(fromCode.kind, WorkspacePairingErrorKind.alreadyUsed);
+      expect(fromCode.message, 'This pairing code has already been used.');
+      expect(fromCode.action,
+          'Generate a fresh pairing code in Conclave AX to connect this Workspace.');
+    });
+
+    test('classifies already paired installation from server', () {
+      final ex = WorkspacePairingException.fromError(
+        statusCode: 409,
+        serverCode: 'installation_already_paired',
+      );
+      expect(ex.kind, WorkspacePairingErrorKind.installationAlreadyPaired);
+      expect(ex.message,
+          'This installation is already connected to a Workspace.');
+      expect(ex.action,
+          'Disconnect the current Workspace before connecting to another account.');
+    });
+
+    test('explains when explicit installation recovery is required', () {
+      final ex = WorkspacePairingException.fromError(
+        statusCode: 409,
+        serverCode: 'installation_recovery_required',
+        serverError: 'This installation was previously paired',
+      );
+      expect(ex.kind, WorkspacePairingErrorKind.installationAlreadyPaired);
+      expect(ex.message, 'This installation needs explicit pairing recovery.');
+      expect(ex.action, contains('Disconnect in Conclave Workspace'));
+    });
+
+    test('classifies revoked / inactive account', () {
+      final ex = WorkspacePairingException.fromError(
+        statusCode: 403,
+        serverCode: 'account_revoked',
+        serverError: 'Pairing owner is no longer active',
+      );
+      expect(ex.kind, WorkspacePairingErrorKind.workspaceOrAccountRevoked);
+      expect(ex.message,
+          'The associated account or Workspace is inactive or revoked.');
+      expect(ex.action,
+          'Sign in to Conclave AX to verify your account status.');
+    });
+
+    test('classifies unsupported version', () {
+      final ex = WorkspacePairingException.fromError(
+        serverCode: 'version_unsupported',
+        serverError: 'Workspace app version is unsupported',
+      );
+      expect(ex.kind, WorkspacePairingErrorKind.versionUnsupported);
+      expect(ex.message,
+          'This version of Conclave Workspace is no longer supported.');
+      expect(ex.action,
+          'Please update Conclave Workspace to the latest version.');
+    });
+
+    test('classifies invalid pairing code', () {
+      final ex = WorkspacePairingException.fromError(
+        statusCode: 401,
+        serverCode: 'invalid_pairing_code',
+        serverError: 'Invalid, expired, revoked, or already used enrollment token',
+      );
+      expect(ex.kind, WorkspacePairingErrorKind.invalidCode);
+      expect(ex.message, 'The pairing code is invalid.');
+      expect(ex.action, 'Check the code in Conclave AX and try again.');
+    });
+
+    test('classifies cloud unavailable on network exceptions or 5xx', () {
+      final fromSocket = WorkspacePairingException.fromError(
+        underlyingError: const SocketException('Connection refused'),
+      );
+      expect(fromSocket.kind, WorkspacePairingErrorKind.cloudUnavailable);
+      expect(fromSocket.message, 'Unable to connect to Conclave Cloud.');
+      expect(fromSocket.action,
+          'Check your internet connection or verify the Cloud URL.');
+
+      final from502 = WorkspacePairingException.fromError(
+        statusCode: 502,
+        serverError: 'Bad Gateway',
+      );
+      expect(from502.kind, WorkspacePairingErrorKind.cloudUnavailable);
+    });
+
+    test('classifies server validation failure on 400', () {
+      final ex = WorkspacePairingException.fromError(
+        statusCode: 400,
+        serverError: 'Workspace name is invalid or exceeds 120 characters',
+      );
+      expect(ex.kind, WorkspacePairingErrorKind.serverValidationFailure);
+      expect(ex.message, 'Registration details were rejected by the server.');
+      expect(ex.action,
+          'Workspace name is invalid or exceeds 120 characters');
+    });
   });
 
   group('SafeMachineFacts', () {

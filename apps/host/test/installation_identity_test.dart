@@ -111,5 +111,20 @@ void main() {
       await store.clear();
       expect(store.readSync(), isNull);
     });
+
+    test('explicit recovery authorization survives pairing screen restart',
+        () async {
+      final store = InstallationIdentityStore(tempDir);
+      final installationId = await store.getOrCreate();
+      expect(store.recoveryAuthorizedSync(), isFalse);
+
+      await store.authorizeRecovery();
+      final restarted = InstallationIdentityStore(tempDir);
+      expect(restarted.recoveryAuthorizedSync(), isTrue);
+      expect(await restarted.getOrCreate(), installationId);
+
+      await restarted.clearRecoveryAuthorization();
+      expect(store.recoveryAuthorizedSync(), isFalse);
+    });
   });
 }

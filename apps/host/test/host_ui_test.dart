@@ -5,6 +5,7 @@ import 'package:conclave_host/configured_worker_registry.dart';
 import 'package:conclave_host/main.dart';
 import 'package:conclave_host/platform_runtime.dart';
 import 'package:conclave_host/secure_credentials.dart';
+import 'package:conclave_host/workspace_enrollment.dart';
 import 'package:conclave_host/workspace_pairing_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -86,7 +87,9 @@ void main() {
     HostUiSnapshot snapshot, {
     VoidCallback? onPair,
     Future<void> Function(WorkspacePairingRequest request)? onPairRequest,
+    VoidCallback? onDisconnect,
     VoidCallback? onUnpair,
+    VoidCallback? onReset,
     VoidCallback? onAccountAction,
     VoidCallback? onQuit,
     Future<void> Function()? onRetry,
@@ -102,7 +105,9 @@ void main() {
             snapshot: snapshot,
             onPair: onPair,
             onPairRequest: onPairRequest,
+            onDisconnect: onDisconnect,
             onUnpair: onUnpair,
+            onReset: onReset,
             onAccountAction: onAccountAction,
             onQuit: onQuit,
             onRetry: onRetry,
@@ -162,6 +167,88 @@ void main() {
     expect(capturedRequest, isNotNull);
     expect(capturedRequest!.workspaceName, "Vitalii's MacBook Pro");
     expect(capturedRequest!.token, 'code-987');
+  });
+
+  testWidgets(
+      'first-launch pairing form displays differentiated error messages and actions on failure',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    Object? pairingErrorToThrow;
+
+    await pumpDashboard(
+      tester,
+      const HostUiSnapshot(
+        mode: HostUiMode.ready,
+        paired: false,
+        title: 'Pair this Workspace',
+        detail: 'Connect this machine to Conclave to begin.',
+        hostname: 'test-mac',
+        workspaceName: "Vitalii's Custom Mac",
+      ),
+      onPairRequest: (request) async {
+        final error = pairingErrorToThrow;
+        if (error != null) {
+          throw error;
+        }
+      },
+    );
+
+    // 1. Expired code
+    pairingErrorToThrow = const WorkspacePairingException(
+      kind: WorkspacePairingErrorKind.expiredCode,
+      message: 'This pairing code has expired.',
+      action: 'Generate a new code in Conclave AX and try again.',
+    );
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Pairing code'),
+      'expired-token-123',
+    );
+    await tester.tap(find.text('Connect'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('This pairing code has expired.'), findsOneWidget);
+    expect(find.textContaining('Generate a new code in Conclave AX and try again.'), findsOneWidget);
+    // Custom name is retained
+    expect(find.text("Vitalii's Custom Mac"), findsOneWidget);
+
+    // 2. Already used code
+    pairingErrorToThrow = const WorkspacePairingException(
+      kind: WorkspacePairingErrorKind.alreadyUsed,
+      message: 'This pairing code has already been used.',
+      action: 'Generate a fresh pairing code in Conclave AX to connect this Workspace.',
+    );
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Pairing code'),
+      'used-token-456',
+    );
+    await tester.tap(find.text('Connect'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('This pairing code has already been used.'), findsOneWidget);
+    expect(find.textContaining('Generate a fresh pairing code in Conclave AX to connect this Workspace.'), findsOneWidget);
+
+    // 3. Cloud unavailable
+    pairingErrorToThrow = const WorkspacePairingException(
+      kind: WorkspacePairingErrorKind.cloudUnavailable,
+      message: 'Unable to connect to Conclave Cloud.',
+      action: 'Check your internet connection or verify the Cloud URL.',
+    );
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Pairing code'),
+      'valid-looking-code',
+    );
+    await tester.tap(find.text('Connect'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Unable to connect to Conclave Cloud.'), findsOneWidget);
+    expect(find.textContaining('Check your internet connection or verify the Cloud URL.'), findsOneWidget);
   });
 
   testWidgets('offline Workspace displays recovery panel with retry',
@@ -374,9 +461,11 @@ void main() {
     expect(exported, isTrue);
   });
 
-  testWidgets('workspace tab displays work root and expandable unpair',
+  testWidgets(
+      'workspace tab displays work root, disconnect from AX, and reset local workspace',
       (tester) async {
-    var unpaired = false;
+    var disconnected = false;
+    var reset = false;
     tester.view.physicalSize = const Size(800, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -396,7 +485,8 @@ void main() {
         cloudUrl: 'https://app.conclaveax.com',
         workRootPath: '/workspace/root',
       ),
-      onUnpair: () => unpaired = true,
+      onDisconnect: () => disconnected = true,
+      onReset: () => reset = true,
     );
 
     expect(find.text('Work Root'), findsOneWidget);
@@ -406,15 +496,66 @@ void main() {
     await tester.tap(find.text('Advanced & Diagnostics'));
     await tester.pumpAndSettle();
 
-    final unpairBtn = find.text('Unpair Workspace');
-    await tester.ensureVisible(unpairBtn);
+    final disconnectBtn = find.text('Disconnect from Conclave AX');
+    await tester.ensureVisible(disconnectBtn);
     await tester.pumpAndSettle();
-    expect(unpairBtn, findsOneWidget);
-    await tester.tap(unpairBtn);
-    expect(unpaired, isTrue);
+    expect(disconnectBtn, findsOneWidget);
+    await tester.tap(disconnectBtn);
+    expect(disconnected, isTrue);
+
+    final resetBtn = find.text('Reset local Workspace');
+    await tester.ensureVisible(resetBtn);
+    await tester.pumpAndSettle();
+    expect(resetBtn, findsOneWidget);
+    await tester.tap(resetBtn);
+    expect(reset, isTrue);
   });
 
-  testWidgets('switching to workers surface displays configured workers area',
+  testWidgets(
+      'workers surface before pairing shows Connect this Workspace before adding Workers and switches to Workspace tab',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await pumpDashboard(
+      tester,
+      const HostUiSnapshot(
+        mode: HostUiMode.ready,
+        title: 'Pair this Workspace',
+        detail: 'Pairing needed',
+        paired: false,
+        hostname: 'test-mac',
+      ),
+    );
+
+    // Switch to Workers tab
+    await tester.tap(find.text('Workers').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Connect this Workspace before adding Workers.'),
+        findsOneWidget);
+    expect(
+        find.text(
+            'Local Workers execute assignments from Conclave AX once this computer is connected.'),
+        findsOneWidget);
+
+    // Add Worker button is disabled
+    final addWorkerBtn = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Add Worker'),
+    );
+    expect(addWorkerBtn.onPressed, isNull);
+
+    // Tap Connect Workspace button to return to Workspace tab
+    await tester.tap(find.widgetWithText(FilledButton, 'Connect Workspace'));
+    await tester.pumpAndSettle();
+
+    // Verifies we are back on Workspace tab showing Connect this Workspace form
+    expect(find.text('Connect this computer to Conclave AX.'), findsOneWidget);
+  });
+
+  testWidgets('switching to workers surface when paired displays configured workers area',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;

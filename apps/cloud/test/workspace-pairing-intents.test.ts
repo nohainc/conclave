@@ -361,6 +361,102 @@ describe("Workspace pairing intents", () => {
     ).toMatchObject({ count: 0 });
   });
 
+  it("requires explicit recovery after revocation and permits a new account only after that policy", async () => {
+    const { sqlite, env } = setup();
+    const firstIntent = await handleCreateWorkspacePairingIntent(
+      new Request("https://conclave.test/api/workspace-pairing-intents", {
+        method: "POST",
+        body: "{}",
+      }),
+      env,
+    );
+    const firstCode = (await firstIntent.json()) as { token: string };
+    const installationId = "install_12345678-1234-4234-8234-123456789abc";
+    const capabilities = {
+      os: "macos",
+      arch: "arm64",
+      appVersion: "1.0.0",
+      supportedRuntimes: ["dart"],
+      maxConcurrentWorkers: 1,
+    };
+    const claimRequest = (token: string, allowRecovery = false) =>
+      new Request("https://conclave.test/api/workspace-runtime/enroll", {
+        method: "POST",
+        body: JSON.stringify({
+          token,
+          installationId,
+          name: "Test Computer",
+          hostname: "test.local",
+          platform: "macos",
+          architecture: "arm64",
+          appVersion: "1.0.0",
+          runtimeCapabilities: capabilities,
+          allowRecovery,
+        }),
+      });
+    const firstClaim = await handleRedeemWorkspaceEnrollment(
+      claimRequest(firstCode.token),
+      env,
+    );
+    const original = (await firstClaim.json()) as { workspaceId: string };
+    expect(firstClaim.status).toBe(201);
+
+    const copiedIntent = await handleCreateWorkspacePairingIntent(
+      new Request("https://conclave.test/api/workspace-pairing-intents", {
+        method: "POST",
+        headers: { "x-test-user": "other" },
+        body: "{}",
+      }),
+      env,
+    );
+    const copiedCode = (await copiedIntent.json()) as { token: string };
+    const copiedClaim = await handleRedeemWorkspaceEnrollment(
+      claimRequest(copiedCode.token, true),
+      env,
+    );
+    expect(copiedClaim.status).toBe(409);
+    expect(await copiedClaim.json()).toMatchObject({
+      code: "installation_already_paired",
+      workspaceId: original.workspaceId,
+    });
+
+    sqlite
+      .prepare(
+        "UPDATE execution_workspaces SET status = 'revoked' WHERE id = ?",
+      )
+      .run(original.workspaceId);
+    sqlite
+      .prepare(
+        "UPDATE workspace_runtime_identities SET revoked_at = 'now' WHERE workspace_id = ?",
+      )
+      .run(original.workspaceId);
+
+    const recoveryRequired = await handleRedeemWorkspaceEnrollment(
+      claimRequest(copiedCode.token),
+      env,
+    );
+    expect(recoveryRequired.status).toBe(409);
+    expect(await recoveryRequired.json()).toMatchObject({
+      code: "installation_recovery_required",
+    });
+    expect(
+      sqlite
+        .prepare("SELECT COUNT(*) AS count FROM execution_workspaces")
+        .get(),
+    ).toMatchObject({ count: 1 });
+
+    const recovered = await handleRedeemWorkspaceEnrollment(
+      claimRequest(copiedCode.token, true),
+      env,
+    );
+    expect(recovered.status).toBe(201);
+    expect(
+      sqlite
+        .prepare("SELECT COUNT(*) AS count FROM execution_workspaces")
+        .get(),
+    ).toMatchObject({ count: 2 });
+  });
+
   it("rolls back the Workspace and intent claim if any transaction write fails", async () => {
     const { sqlite, env } = setup();
     const created = await handleCreateWorkspacePairingIntent(

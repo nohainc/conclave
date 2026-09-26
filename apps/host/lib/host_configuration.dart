@@ -12,6 +12,8 @@ class HostRegistration {
     required this.name,
     required this.hostname,
     this.installationId,
+    this.credentialRef,
+    this.pairedAt,
   });
 
   final String hostId;
@@ -20,6 +22,11 @@ class HostRegistration {
   final String name;
   final String hostname;
   final String? installationId;
+  final String? credentialRef;
+  final String? pairedAt;
+
+  String get runtimeId => hostId;
+  String get workspaceName => name;
 
   factory HostRegistration.fromJson(Map<String, dynamic> json) {
     String required(String key) {
@@ -30,14 +37,21 @@ class HostRegistration {
       return value;
     }
 
+    final hostId = required('hostId');
     return HostRegistration(
-      hostId: required('hostId'),
+      hostId: hostId,
       workspaceId: required('workspaceId'),
       cloudUrl: required('cloudUrl'),
       name: required('name'),
       hostname: required('hostname'),
       installationId: json['installationId'] is String
           ? (json['installationId'] as String).trim()
+          : null,
+      credentialRef: json['credentialRef'] is String
+          ? (json['credentialRef'] as String).trim()
+          : 'workspace-runtime:$hostId',
+      pairedAt: json['pairedAt'] is String
+          ? (json['pairedAt'] as String).trim()
           : null,
     );
   }
@@ -49,6 +63,8 @@ class HostRegistration {
         'name': name,
         'hostname': hostname,
         if (installationId != null) 'installationId': installationId,
+        if (credentialRef != null) 'credentialRef': credentialRef,
+        if (pairedAt != null) 'pairedAt': pairedAt,
       };
 }
 
@@ -96,6 +112,8 @@ class InstallationIdentityStore {
 
   File get file =>
       File('${dataDirectory.path}${Platform.pathSeparator}installation-id');
+  File get recoveryAuthorizationFile => File(
+      '${dataDirectory.path}${Platform.pathSeparator}installation-recovery-authorized');
 
   String? readSync() {
     if (!file.existsSync()) return null;
@@ -124,6 +142,28 @@ class InstallationIdentityStore {
 
   Future<void> clear() async {
     if (await file.exists()) await file.delete();
+  }
+
+  bool recoveryAuthorizedSync() {
+    try {
+      return recoveryAuthorizationFile.existsSync() &&
+          recoveryAuthorizationFile.readAsStringSync().trim() == 'authorized';
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<void> authorizeRecovery() async {
+    await dataDirectory.create(recursive: true);
+    await recoveryAuthorizationFile.writeAsString('authorized', flush: true);
+    await (platform ?? currentPlatformRuntime)
+        .restrictPermissions(recoveryAuthorizationFile.path, directory: false);
+  }
+
+  Future<void> clearRecoveryAuthorization() async {
+    if (await recoveryAuthorizationFile.exists()) {
+      await recoveryAuthorizationFile.delete();
+    }
   }
 
   static String generateInstallationId() {
@@ -162,6 +202,10 @@ class LocalWorkspaceIdentityStore {
     await (platform ?? currentPlatformRuntime)
         .restrictPermissions(file.path, directory: false);
     return identity;
+  }
+
+  Future<void> clear() async {
+    if (await file.exists()) await file.delete();
   }
 
   static String _randomToken() {

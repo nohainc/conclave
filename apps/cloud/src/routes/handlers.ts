@@ -4699,6 +4699,7 @@ async function handleRedeemWorkspaceEnrollment(
     name?: string;
     hostname?: string;
     installationId?: string;
+    allowRecovery?: boolean;
     platform?: string;
     architecture?: string;
     appVersion?: string;
@@ -4730,10 +4731,16 @@ async function handleRedeemWorkspaceEnrollment(
     }>();
   if (pairingIntent) {
     if (pairingIntent.expiresAt <= now) {
-      return json({ error: "Pairing code has expired" }, { status: 410 });
+      return json(
+        { error: "Pairing code has expired", code: "pairing_code_expired" },
+        { status: 410 },
+      );
     }
     if (pairingIntent.cancelledAt) {
-      return json({ error: "Pairing code was cancelled" }, { status: 409 });
+      return json(
+        { error: "Pairing code was cancelled", code: "pairing_code_cancelled" },
+        { status: 409 },
+      );
     }
     if (pairingIntent.usedAt) {
       return json(
@@ -4754,7 +4761,7 @@ async function handleRedeemWorkspaceEnrollment(
       .first<{ status: string }>();
     if (!owner || owner.status !== "active") {
       return json(
-        { error: "Pairing owner is no longer active" },
+        { error: "Pairing owner is no longer active", code: "account_revoked" },
         { status: 403 },
       );
     }
@@ -4772,28 +4779,54 @@ async function handleRedeemWorkspaceEnrollment(
         { status: 400 },
       );
     }
-    const existingInstallation = await env.CONCLAVE_DB.prepare(
-      `SELECT identity.workspace_id AS workspaceId
+    const installationHistory = await env.CONCLAVE_DB.prepare(
+      `SELECT identity.workspace_id AS workspaceId,
+              identity.revoked_at AS revokedAt,
+              workspace.status AS workspaceStatus,
+              workspace.owner_user_id AS ownerUserId
          FROM workspace_runtime_identities identity
          JOIN execution_workspaces workspace
            ON workspace.id = identity.workspace_id
         WHERE identity.installation_id = ?1
-          AND identity.revoked_at IS NULL
-          AND workspace.status <> 'revoked'
-        LIMIT 1`,
+        ORDER BY identity.created_at DESC`,
     )
       .bind(installationId)
-      .first<{ workspaceId: string }>();
-    if (existingInstallation) {
+      .all<{
+        workspaceId: string;
+        revokedAt: string | null;
+        workspaceStatus: string;
+        ownerUserId: string;
+      }>();
+    const historicalBindings = installationHistory.results ?? [];
+    const activeBinding = historicalBindings.find(
+      (binding) =>
+        binding.revokedAt === null && binding.workspaceStatus !== "revoked",
+    );
+    if (activeBinding) {
+      const sameOwner = activeBinding.ownerUserId === pairingIntent.ownerUserId;
       return json(
         {
-          error:
-            "This installation is already paired; unpair it before pairing another Workspace",
+          error: sameOwner
+            ? "This installation is already paired to a Workspace owned by this account. Reconnect with its saved runtime credential."
+            : "This Conclave Workspace installation is already paired. Disconnect it before pairing with another account.",
           code: "installation_already_paired",
-          workspaceId: existingInstallation.workspaceId,
+          workspaceId: activeBinding.workspaceId,
         },
         { status: 409 },
       );
+    }
+    if (historicalBindings.length > 0) {
+      if (body.allowRecovery !== true) {
+        return json(
+          {
+            error:
+              "This installation was previously paired. Explicitly unpair it in Conclave Workspace before recovering its pairing",
+            code: "installation_recovery_required",
+            workspaceId: historicalBindings[0]?.workspaceId,
+          },
+          { status: 409 },
+        );
+      }
     }
 
     const hostname = body.hostname?.trim();
@@ -4967,6 +5000,9 @@ async function handleRedeemWorkspaceEnrollment(
         JSON.stringify({
           pairingId: pairingIntent.pairingId,
           installationId,
+          recoveredFromWorkspaceIds: historicalBindings.map(
+            (binding) => binding.workspaceId,
+          ),
           hostname,
           platform,
           architecture,
@@ -5010,7 +5046,8 @@ async function handleRedeemWorkspaceEnrollment(
   }
 
   const enrollment = await env.CONCLAVE_DB.prepare(
-    `SELECT e.id, e.workspace_id AS workspaceId, ew.name AS workspaceName
+    `SELECT e.id, e.workspace_id AS workspaceId, ew.name AS workspaceName,
+            ew.owner_user_id AS ownerUserId
        FROM workspace_enrollments e
        JOIN execution_workspaces ew ON ew.id = e.workspace_id
       WHERE e.token_hash = ?1
@@ -5020,12 +5057,77 @@ async function handleRedeemWorkspaceEnrollment(
         AND ew.status <> 'revoked'`,
   )
     .bind(tokenHash, now)
-    .first<{ id: string; workspaceId: string; workspaceName: string }>();
+    .first<{
+      id: string;
+      workspaceId: string;
+      workspaceName: string;
+      ownerUserId: string;
+    }>();
 
   if (!enrollment) {
     return json(
-      { error: "Invalid, expired, revoked, or already used enrollment token" },
+      {
+        error: "Invalid, expired, revoked, or already used enrollment token",
+        code: "invalid_pairing_code",
+      },
       { status: 401 },
+    );
+  }
+
+  const legacyInstallationId = body.installationId?.trim();
+  if (
+    !legacyInstallationId ||
+    !/^install_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      legacyInstallationId,
+    )
+  ) {
+    return json(
+      { error: "A valid stable installationId is required to claim pairing" },
+      { status: 400 },
+    );
+  }
+  const legacyBindings = await env.CONCLAVE_DB.prepare(
+    `SELECT identity.workspace_id AS workspaceId,
+            identity.revoked_at AS revokedAt,
+            workspace.status AS workspaceStatus
+       FROM workspace_runtime_identities identity
+       JOIN execution_workspaces workspace
+         ON workspace.id = identity.workspace_id
+      WHERE identity.installation_id = ?1
+      ORDER BY identity.created_at DESC`,
+  )
+    .bind(legacyInstallationId)
+    .all<{
+      workspaceId: string;
+      revokedAt: string | null;
+      workspaceStatus: string;
+    }>();
+  const priorBindings = legacyBindings.results ?? [];
+  const activePriorBinding = priorBindings.find(
+    (binding) =>
+      binding.revokedAt === null && binding.workspaceStatus !== "revoked",
+  );
+  if (activePriorBinding) {
+    return json(
+      {
+        error:
+          activePriorBinding.workspaceId === enrollment.workspaceId
+            ? "This installation is already paired to a Workspace owned by this account. Reconnect with its saved runtime credential."
+            : "This Conclave Workspace installation is already paired. Disconnect it before pairing with another account.",
+        code: "installation_already_paired",
+        workspaceId: activePriorBinding.workspaceId,
+      },
+      { status: 409 },
+    );
+  }
+  if (priorBindings.length > 0 && body.allowRecovery !== true) {
+    return json(
+      {
+        error:
+          "This installation was previously paired. Explicitly unpair it in Conclave Workspace before recovering its pairing",
+        code: "installation_recovery_required",
+      },
+      { status: 409 },
     );
   }
 

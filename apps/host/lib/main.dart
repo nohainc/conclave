@@ -599,6 +599,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       );
       final installationIdStore = InstallationIdentityStore(dataDirectory);
       final installationId = await installationIdStore.getOrCreate();
+      final allowRecovery = installationIdStore.recoveryAuthorizedSync();
 
       await service.pair(
         cloudUrl: request.cloudUrl,
@@ -606,6 +607,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         hostname: Platform.localHostname,
         proposedWorkspaceName: request.workspaceName,
         installationId: installationId,
+        allowRecovery: allowRecovery,
       );
       final config = HostConfig.fromArgs(
         const [],
@@ -621,14 +623,20 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       }
     } catch (error) {
       if (!mounted) return;
+      final displayMessage = error is WorkspacePairingException
+          ? '${error.message}\n${error.action}'
+          : 'Pairing failed: $error';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Pairing failed: $error')),
+        SnackBar(
+          content: Text(displayMessage),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
       );
       rethrow;
     }
   }
 
-  Future<void> _unpairWorkspace() async {
+  Future<void> _disconnectWorkspace() async {
     final lifecycle = widget.lifecycle;
     final registration =
         HostRegistrationStore(lifecycle.host.config.dataDirectory).readSync();
@@ -636,7 +644,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     if ((lifecycle.host.cloudConnection?.activeAssignmentCount ?? 0) > 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Wait for active work to finish before unpairing.'),
+          content: Text('Wait for active work to finish before disconnecting.'),
         ),
       );
       return;
@@ -644,11 +652,12 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Unpair this Workspace?'),
+        title: const Text('Disconnect from Conclave AX?'),
         content: const Text(
-          'This disconnects this machine from its current Cloud Workspace. '
-          'Local Workers, credentials, and Workstream files stay on this machine. '
-          'You can pair it with another Workspace afterward.',
+          'This computer will stop accepting Cloud work.\n\n'
+          'Local Worker credentials, configurations, and Workstream files remain on this machine unless '
+          'you explicitly choose to remove them.\n\n'
+          'You can reconnect to a Workspace at any time.',
         ),
         actions: [
           TextButton(
@@ -657,7 +666,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Unpair'),
+            child: const Text('Disconnect'),
           ),
         ],
       ),
@@ -674,6 +683,8 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         cloudUrl: registration.cloudUrl,
         token: token,
       );
+      await InstallationIdentityStore(lifecycle.host.config.dataDirectory)
+          .authorizeRecovery();
       await lifecycle.host.credentialStore.delete(registration.hostId);
       await HostRegistrationStore(lifecycle.host.config.dataDirectory).clear();
       final replacement = await buildWorkspaceRuntime(
@@ -687,14 +698,115 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         setState(() => _workerRevision++);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Workspace unpaired. Local Workers are preserved.'),
+            content: Text(
+              'Disconnected from Conclave AX. Local Workers and credentials are preserved.',
+            ),
           ),
         );
       }
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not unpair Workspace: $error')),
+        SnackBar(content: Text('Could not disconnect Workspace: $error')),
+      );
+    }
+  }
+
+  Future<void> _resetLocalWorkspace() async {
+    final lifecycle = widget.lifecycle;
+    if ((lifecycle.host.cloudConnection?.activeAssignmentCount ?? 0) > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Wait for active work to finish before resetting.'),
+        ),
+      );
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset Local Workspace?'),
+        content: const Text(
+          'This completely resets this Conclave Workspace installation on this machine.\n\n'
+          'This will revoke Cloud pairing and permanently remove:\n'
+          '• Runtime identity & registration\n'
+          '• All configured local Workers\n'
+          '• All stored credentials and API keys\n'
+          '• Installed adapter packages\n\n'
+          'This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Reset Everything'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      final registration =
+          HostRegistrationStore(lifecycle.host.config.dataDirectory).readSync();
+      if (registration != null) {
+        final token =
+            lifecycle.host.credentialStore.readSync(registration.hostId);
+        if (token != null) {
+          try {
+            await WorkspacePairingService.unpair(
+              cloudUrl: registration.cloudUrl,
+              token: token,
+            );
+          } catch (_) {
+            // Proceed with local reset even if cloud endpoint is unreachable
+          }
+        }
+        await lifecycle.host.credentialStore.delete(registration.hostId);
+      }
+      final workers = await lifecycle.host.localWorkerRegistry
+              ?.list(includeRemoved: true) ??
+          const [];
+      for (final worker in workers) {
+        if (worker.credentialRef != null && worker.credentialRef!.isNotEmpty) {
+          await lifecycle.host.credentialStore.delete(worker.credentialRef!);
+        }
+      }
+      final dataDir = lifecycle.host.config.dataDirectory;
+      await HostRegistrationStore(dataDir).clear();
+      await InstallationIdentityStore(dataDir).clear();
+      await LocalWorkspaceIdentityStore(dataDir).clear();
+      final workersFile = File(
+          '${dataDir.path}${Platform.pathSeparator}configured-workers.json');
+      if (await workersFile.exists()) await workersFile.delete();
+      final adaptersDir =
+          Directory('${dataDir.path}${Platform.pathSeparator}adapters');
+      if (await adaptersDir.exists()) await adaptersDir.delete(recursive: true);
+
+      final replacement = await buildWorkspaceRuntime(
+        HostConfig.fromArgs(
+          const [],
+          credentialStore: lifecycle.host.credentialStore,
+        ),
+      );
+      await lifecycle.replaceHost(replacement);
+      if (mounted) {
+        setState(() => _workerRevision++);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Local Workspace has been reset.')),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not reset Workspace: $error')),
       );
     }
   }
@@ -761,7 +873,9 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
                 snapshot: lifecycle.uiSnapshot,
                 onPair: () => _pairWorkspace(),
                 onPairRequest: _pairWorkspace,
-                onUnpair: _unpairWorkspace,
+                onDisconnect: _disconnectWorkspace,
+                onUnpair: _disconnectWorkspace,
+                onReset: _resetLocalWorkspace,
                 onQuit: _confirmQuit,
                 onRetry: lifecycle.launch,
                 onExportDiagnostics: _exportDiagnostics,
@@ -782,7 +896,9 @@ class HostDashboard extends StatefulWidget {
     required this.snapshot,
     this.onPair,
     this.onPairRequest,
+    this.onDisconnect,
     this.onUnpair,
+    this.onReset,
     this.onAccountAction,
     this.onQuit,
     this.onRetry,
@@ -799,7 +915,9 @@ class HostDashboard extends StatefulWidget {
   final HostUiSnapshot snapshot;
   final VoidCallback? onPair;
   final Future<void> Function(WorkspacePairingRequest request)? onPairRequest;
+  final VoidCallback? onDisconnect;
   final VoidCallback? onUnpair;
+  final VoidCallback? onReset;
   final VoidCallback? onAccountAction;
   final VoidCallback? onQuit;
   final Future<void> Function()? onRetry;
@@ -1032,7 +1150,9 @@ class _HostDashboardState extends State<HostDashboard> {
                     onPairRequest: widget.onPairRequest,
                     onRetry: widget.onRetry,
                     onExportDiagnostics: widget.onExportDiagnostics,
+                    onDisconnect: widget.onDisconnect,
                     onUnpair: widget.onUnpair,
+                    onReset: widget.onReset,
                   ),
                   _WorkersTab(
                     key: ValueKey(widget.workerRevision),
@@ -1041,6 +1161,9 @@ class _HostDashboardState extends State<HostDashboard> {
                     adapterPackageStore: widget.adapterPackageStore,
                     ensureAdapter: widget.ensureAdapter,
                     onAddWorker: widget.onAddWorker,
+                    isPaired: snapshot.paired,
+                    onSwitchToWorkspace: () =>
+                        setState(() => _selectedSurface = HostSurface.workspace),
                   ),
                 ],
               ),
@@ -1118,7 +1241,9 @@ class _WorkspaceTab extends StatelessWidget {
     this.onPairRequest,
     this.onRetry,
     this.onExportDiagnostics,
+    this.onDisconnect,
     this.onUnpair,
+    this.onReset,
   });
 
   final HostUiSnapshot snapshot;
@@ -1126,7 +1251,9 @@ class _WorkspaceTab extends StatelessWidget {
   final Future<void> Function(WorkspacePairingRequest request)? onPairRequest;
   final Future<void> Function()? onRetry;
   final Future<void> Function()? onExportDiagnostics;
+  final VoidCallback? onDisconnect;
   final VoidCallback? onUnpair;
+  final VoidCallback? onReset;
 
   @override
   Widget build(BuildContext context) {
@@ -1222,7 +1349,9 @@ class _WorkspaceTab extends StatelessWidget {
         _WorkspaceDiagnosticsSection(
           snapshot: snapshot,
           onExportDiagnostics: onExportDiagnostics,
+          onDisconnect: onDisconnect,
           onUnpair: onUnpair,
+          onReset: onReset,
         ),
       ],
     );
@@ -1313,7 +1442,21 @@ class _ConnectWorkspaceCardState extends State<_ConnectWorkspaceCard> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+        setState(() {
+          if (e is WorkspacePairingException) {
+            _error = '${e.message}\n\n${e.action}';
+            if (e.kind == WorkspacePairingErrorKind.invalidCode ||
+                e.kind == WorkspacePairingErrorKind.expiredCode ||
+                e.kind == WorkspacePairingErrorKind.alreadyUsed) {
+              _codeController.clear();
+            }
+          } else {
+            _error = e
+                .toString()
+                .replaceFirst('Exception: ', '')
+                .replaceFirst('StateError: ', '');
+          }
+        });
       }
     } finally {
       if (mounted) {
@@ -1467,10 +1610,37 @@ class _ConnectWorkspaceCardState extends State<_ConnectWorkspaceCard> {
               ],
             ),
             if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                _error!,
-                style: TextStyle(color: theme.colorScheme.error),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color:
+                      theme.colorScheme.errorContainer.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: theme.colorScheme.error.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.error_outline_rounded,
+                      size: 18,
+                      color: theme.colorScheme.error,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _error!,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onErrorContainer,
+                          height: 1.3,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
             const SizedBox(height: 20),
@@ -1571,16 +1741,22 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
   const _WorkspaceDiagnosticsSection({
     required this.snapshot,
     this.onExportDiagnostics,
+    this.onDisconnect,
     this.onUnpair,
+    this.onReset,
   });
 
   final HostUiSnapshot snapshot;
   final Future<void> Function()? onExportDiagnostics;
+  final VoidCallback? onDisconnect;
   final VoidCallback? onUnpair;
+  final VoidCallback? onReset;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final disconnectAction = onDisconnect ?? onUnpair;
+
     return Card(
       child: Theme(
         data: theme.copyWith(dividerColor: Colors.transparent),
@@ -1720,20 +1896,37 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            Row(
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 FilledButton.tonalIcon(
                   onPressed: onExportDiagnostics,
                   icon: const Icon(Icons.download_outlined, size: 16),
                   label: const Text('Export Report'),
                 ),
-                const Spacer(),
-                if (snapshot.paired && onUnpair != null)
-                  TextButton.icon(
-                    onPressed: onUnpair,
+                if (snapshot.paired && disconnectAction != null)
+                  OutlinedButton.icon(
+                    onPressed: disconnectAction,
                     icon: const Icon(Icons.link_off, size: 14),
-                    label: const Text('Unpair Workspace',
-                        style: TextStyle(fontSize: 12)),
+                    label: const Text(
+                      'Disconnect from Conclave AX',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                if (onReset != null)
+                  TextButton.icon(
+                    onPressed: onReset,
+                    icon: Icon(Icons.delete_forever_outlined,
+                        size: 14, color: theme.colorScheme.error),
+                    label: Text(
+                      'Reset local Workspace',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.error,
+                      ),
+                    ),
                   ),
               ],
             ),
@@ -1751,6 +1944,8 @@ class _WorkersTab extends StatefulWidget {
     required this.adapterPackageStore,
     this.ensureAdapter,
     required this.onAddWorker,
+    this.isPaired = true,
+    this.onSwitchToWorkspace,
     super.key,
   });
 
@@ -1759,6 +1954,8 @@ class _WorkersTab extends StatefulWidget {
   final V7AdapterPackageStore? adapterPackageStore;
   final Future<bool> Function(String workerTypeId)? ensureAdapter;
   final Future<void> Function()? onAddWorker;
+  final bool isPaired;
+  final VoidCallback? onSwitchToWorkspace;
 
   @override
   State<_WorkersTab> createState() => _WorkersTabState();
@@ -1907,14 +2104,56 @@ class _WorkersTabState extends State<_WorkersTab> {
             ),
             const SizedBox(width: 12),
             FilledButton.icon(
-              onPressed: widget.registry == null ? null : widget.onAddWorker,
+              onPressed:
+                  (widget.registry == null || !widget.isPaired)
+                      ? null
+                      : widget.onAddWorker,
               icon: const Icon(Icons.add),
               label: const Text('Add Worker'),
             ),
           ],
         ),
         const SizedBox(height: 16),
-        if (widget.registry == null)
+        if (!widget.isPaired)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.link_off_rounded,
+                    size: 48,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Connect this Workspace before adding Workers.',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Local Workers execute assignments from Conclave AX once this computer is connected.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  if (widget.onSwitchToWorkspace != null) ...[
+                    const SizedBox(height: 20),
+                    FilledButton.icon(
+                      onPressed: widget.onSwitchToWorkspace,
+                      icon: const Icon(Icons.link_rounded, size: 16),
+                      label: const Text('Connect Workspace'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          )
+        else if (widget.registry == null)
           const Card(
             child: Padding(
               padding: EdgeInsets.all(20),

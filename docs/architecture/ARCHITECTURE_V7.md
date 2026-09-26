@@ -202,6 +202,14 @@ successful claim returns `409 pairing_already_claimed` with the existing
 Workspace ID and does not mint a second Workspace or credential; the desktop
 must retain the credential from the successful response.
 
+The installation ID is a random persisted desktop identifier, never a hostname
+or hardware fingerprint. An active installation uses its saved runtime
+credential to reconnect; another pairing claim is rejected, including a copied
+code. After explicit local unpair, a recovery marker authorizes a new claim
+against revoked installation history. A revoked installation without that
+marker cannot be re-paired. Workspace revocation also revokes its active
+runtime binding.
+
 ### 5.2 Runtime reports machine facts
 
 After pairing, Workspace reports:
