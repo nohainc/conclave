@@ -39,6 +39,9 @@ void main() {
     final exported = jsonEncode(export);
     expect(exported, contains('assignment-1'));
     expect(exported, contains('run-1'));
+    expect(exported, contains('appVersion'));
+    expect(exported, contains('activeAssignmentCount'));
+    expect(exported, contains('workRoot'));
     expect(exported, isNot(contains('secret-value')));
     expect(exported, contains('[redacted]'));
     await directory.delete(recursive: true);

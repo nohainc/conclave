@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'brand.dart';
 import 'adapter_prerequisite.dart';
@@ -118,17 +119,91 @@ Future<void> _launchLocalWorkerAuthentication(String workerTypeId) async {
 }
 
 class HostLifecycleController extends ChangeNotifier {
-  HostLifecycleController(this.host);
+  HostLifecycleController(this.host) {
+    _statusTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      _publishMenuStatus();
+      notifyListeners();
+    });
+  }
 
   Host host;
   bool _hidden = false;
   bool _quitting = false;
   Object? _startupError;
+  Timer? _statusTimer;
+  bool _draining = false;
+  static const _desktopChannel =
+      MethodChannel('com.conclave.workspace/desktop');
 
   bool get hidden => _hidden;
   bool get quitting => _quitting;
   bool get running => host.isRunning;
   Object? get startupError => _startupError;
+  bool get acceptingNewWork => host.cloudConnection?.acceptingNewWork ?? false;
+  bool get draining => _draining;
+
+  Future<void> handleDesktopAction(String action) async {
+    switch (action) {
+      case 'openWorkspace':
+        restore();
+        break;
+      case 'pause':
+        host.cloudConnection?.pauseNewWork();
+        _draining = false;
+        break;
+      case 'resume':
+        host.cloudConnection?.resumeNewWork();
+        break;
+      case 'drain':
+        final connection = host.cloudConnection;
+        if (connection == null) break;
+        connection.beginDrain();
+        _draining = true;
+        notifyListeners();
+        while (connection.activeAssignmentCount > 0 && !_quitting) {
+          await Future<void>.delayed(const Duration(milliseconds: 250));
+        }
+        _draining = false;
+        break;
+      case 'diagnostics':
+        final file = await exportDiagnostics();
+        await _desktopChannel.invokeMethod<void>('openPath', file.path);
+        break;
+      case 'logs':
+        await _desktopChannel.invokeMethod<void>(
+          'openPath',
+          '${host.config.dataDirectory.path}/logs/host.log',
+        );
+        break;
+      case 'openAX':
+        await _desktopChannel.invokeMethod<void>('openAX');
+        break;
+      case 'quit':
+        await quit();
+        await _desktopChannel.invokeMethod<void>('terminate');
+        break;
+      default:
+        return;
+    }
+    _publishMenuStatus();
+    notifyListeners();
+  }
+
+  void _publishMenuStatus() {
+    final connection = host.cloudConnection;
+    final attention = startupError != null || !running;
+    final state = attention
+        ? 'Attention'
+        : connection?.isConnected == true
+            ? 'Connected'
+            : 'Offline';
+    unawaited(_desktopChannel.invokeMethod<void>('status', {
+      'state': state,
+      'active': connection?.activeAssignmentCount ?? 0,
+      'accepting': connection?.acceptingNewWork ?? false,
+      'draining': _draining,
+    }).catchError((_) {}));
+  }
 
   HostUiSnapshot get uiSnapshot {
     if (quitting) {
@@ -212,16 +287,29 @@ class HostLifecycleController extends ChangeNotifier {
   Future<void> quit() async {
     if (_quitting) return;
     _quitting = true;
+    _statusTimer?.cancel();
     notifyListeners();
     await host.stop();
     notifyListeners();
   }
 
-  Future<File> exportDiagnostics() => writeHostDiagnostics(
-        config: host.config,
-        connection: host.cloudConnection,
-        journal: host.cloudConnection?.assignmentJournal,
-      );
+  Future<File> exportDiagnostics() async {
+    final status = await host.statusProvider?.call() ?? const {};
+    final update = await host.updateStatusProvider?.call() ?? const {};
+    final checkAt =
+        DateTime.tryParse(status['lastUpdateCheckAt'] as String? ?? '');
+    return writeHostDiagnostics(
+      config: host.config,
+      connection: host.cloudConnection,
+      journal: host.cloudConnection?.assignmentJournal,
+      workerRegistry: host.localWorkerRegistry,
+      adapterPackageStore: host.adapterPackageStore,
+      lastUpdateCheckStatus: status['lastUpdateCheckStatus'] as String?,
+      lastUpdateCheckAt: checkAt,
+      updateStatus: update['phase'] as String?,
+      workRootPath: host.workRoot?.path,
+    );
+  }
 }
 
 enum HostUiMode {
@@ -296,6 +384,12 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
   void initState() {
     super.initState();
     widget.lifecycle.addListener(_refresh);
+    const desktopChannel = MethodChannel('com.conclave.workspace/desktop');
+    desktopChannel.setMethodCallHandler((call) async {
+      if (call.method == 'menuAction' && call.arguments is String) {
+        await widget.lifecycle.handleDesktopAction(call.arguments as String);
+      }
+    });
     unawaited(widget.lifecycle.launch());
   }
 

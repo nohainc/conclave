@@ -494,6 +494,55 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('paused or draining Workspace rejects new assignments', () async {
+    final socket = FakeSocket();
+    var executions = 0;
+    final connection = HostCloudConnection(
+      uri: Uri.parse('wss://cloud.test/workspace-gateway'),
+      hostId: 'host-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      assignmentHandler: (_) async {
+        executions++;
+        return const HostAssignmentResult(summary: 'unexpected');
+      },
+    );
+    await connection.connect();
+    connection.beginDrain();
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'server-assignment-paused',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'assignment.start',
+      'executionWorkspaceId': 'workspace-1',
+      'workspaceRuntimeId': 'host-1',
+      'workerId': 'worker-1',
+      'runId': 'run-paused',
+      'taskId': 'task-paused',
+      'attemptId': 'attempt-paused',
+      'assignmentId': 'assignment-paused',
+      'idempotencyKey': 'idem-paused',
+      'payload': {
+        'objective': 'inspect',
+        'role': 'research',
+        'workerId': 'worker-1',
+        'resolvedWorkerVersion': '1.0.0',
+        'input': {},
+        'contextArtifactIds': [],
+        'timeoutMs': 1000,
+      },
+    }));
+    await waitFor(() => socket.sent.any((message) {
+          final decoded = jsonDecode(message as String) as Map<String, dynamic>;
+          return decoded['type'] == 'assignment.ack' &&
+              (decoded['payload'] as Map?)?['accepted'] == false;
+        }));
+    expect(executions, 0);
+    expect(connection.isDraining, isTrue);
+    await connection.close();
+  });
+
   test('allows stateful Work without checkout provisioning', () async {
     final socket = FakeSocket();
     var executed = false;
@@ -1035,7 +1084,7 @@ void main() {
         'assignment-still-running:cancelled after reconnect');
     await waitFor(() => recovered.sent.any((message) =>
         (jsonDecode(message as String) as Map<String, dynamic>)['type'] ==
-            'assignment.cancel.ack'));
+        'assignment.cancel.ack'));
     await connection.close();
   });
 }

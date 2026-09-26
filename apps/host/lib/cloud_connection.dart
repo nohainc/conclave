@@ -6,6 +6,7 @@ import 'assignment_journal.dart';
 import 'runtime_capabilities.dart';
 import 'package:conclave_protocol/conclave_protocol.dart';
 import 'worker_protocol.dart';
+import 'workspace_enrollment.dart';
 
 abstract interface class HostCloudSocket {
   Stream<Object?> get messages;
@@ -117,7 +118,7 @@ class HostCloudConnection {
     Set<String>? authorizedWorkspaceIds,
     this.name = 'Conclave Workspace',
     String? hostname,
-    this.hostVersion = '1.0.3',
+    this.hostVersion = conclaveWorkspaceAppVersion,
     Map<String, Object?>? capabilities,
     this.activeWorkerIds = const [],
     this.unreconciledAssignmentIds = const [],
@@ -171,6 +172,25 @@ class HostCloudConnection {
   String? sessionId;
   bool get isConnected => sessionId != null;
   int get activeAssignmentCount => _activeAssignments.length;
+  bool acceptingNewWork = true;
+  bool get isDraining => _draining;
+  bool _draining = false;
+  DateTime? lastInventorySyncAt;
+
+  void pauseNewWork() {
+    acceptingNewWork = false;
+    _draining = false;
+  }
+
+  void resumeNewWork() {
+    _draining = false;
+    acceptingNewWork = true;
+  }
+
+  void beginDrain() {
+    acceptingNewWork = false;
+    _draining = true;
+  }
 
   Future<void> refreshWorkerInventory() => _reportCurrentWorkerInventory();
   List<String> get activeAssignmentIds => _activeAssignments.toList()..sort();
@@ -194,6 +214,7 @@ class HostCloudConnection {
     if (provider == null || !isConnected) return;
     try {
       reportWorkerInventory(await provider());
+      lastInventorySyncAt = DateTime.now().toUtc();
     } on Object {
       // A local inventory read failure must not tear down the runtime link.
     }
@@ -330,7 +351,7 @@ class HostCloudConnection {
     return {
       'os': operatingSystem,
       'arch': _architecture(),
-      'hostVersion': '1.0.3',
+      'hostVersion': conclaveWorkspaceAppVersion,
       'supportedRuntimes': <String>['dart'],
       'maxConcurrentWorkers': 1,
     };
@@ -709,6 +730,17 @@ class HostCloudConnection {
       payload: Map<String, Object?>.from(assignmentPayload),
     );
     final correlation = _assignmentCorrelation(message);
+    if (!acceptingNewWork) {
+      socket.send(jsonEncode(_assignmentEnvelope(
+        'assignment.ack',
+        correlation,
+        {
+          'accepted': false,
+          'reason': _draining ? 'workspace_draining' : 'workspace_paused'
+        },
+      )));
+      return;
+    }
     final journalState = await assignmentJournal?.reconcile();
     final previous = journalState?[context.assignmentId];
     if (previous != null) {

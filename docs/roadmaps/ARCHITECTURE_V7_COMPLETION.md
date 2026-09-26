@@ -723,6 +723,12 @@ security boundary under adversarial acceptance tests.
 
 # Phase 7 — Finish Conclave Workspace as a production desktop runtime
 
+**Status:** In progress. The menu-bar lifecycle, build-injected version, safe
+diagnostics, and production Workstream directory wiring are implemented. The
+native `.app` staged replacement/restart/health-check/rollback flow is still
+open; the current updater targets a standalone executable and must not be
+treated as a completed macOS app updater.
+
 ## Goal
 
 Move from a functional native vertical slice to an always-on execution product.
@@ -883,7 +889,7 @@ V7 is implemented when all of the following are true:
 | 4 — Production release trust | Pending | Required for public distribution |
 | 5 — Production Worker coverage | Pending | Required for supported catalog |
 | 6 — Failure/security hardening | Pending | Required for V7 baseline |
-| 7 — Desktop runtime maturity | Pending | Required for production UX |
+| 7 — Desktop runtime maturity | In progress | Menu bar/version/diagnostics implemented; native `.app` updater remains open |
 | 8 — Baseline/docs declaration | Pending | Requires all release gates |
 
 ## Recommended PR sequence from current main

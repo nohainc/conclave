@@ -40,7 +40,7 @@ The remaining sequence is intentionally:
    automate release publication;
 2. **Phase 5:** finish production Worker coverage and live-provider acceptance;
 3. **Phase 6:** harden failure/recovery/security behavior;
-4. **Phase 7:** finish macOS background/update/diagnostics UX;
+4. **Phase 7:** menu-bar lifecycle, runtime version reporting, diagnostics, and Workstream execution wiring are implemented; native `.app` replacement/restart/rollback remains open;
 5. **Phase 8:** declare v7 the implemented baseline only after all release
    gates pass.
 

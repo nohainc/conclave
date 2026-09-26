@@ -5,12 +5,15 @@ import 'package:conclave_host/host.dart';
 import 'package:conclave_host/assignment_journal.dart';
 import 'package:conclave_host/cloud_connection.dart';
 import 'package:conclave_host/worker_executor.dart';
+import 'package:conclave_host/workstream_directory.dart';
+import 'package:conclave_host/workstream_path.dart';
 import 'package:conclave_host/repository_registry.dart';
 import 'package:conclave_host/self_update.dart';
 import 'package:conclave_host/secure_credentials.dart';
 import 'package:conclave_host/worker_trust_policy.dart';
 import 'package:conclave_host/v7_adapter_package_store.dart';
 import 'package:conclave_host/v7_adapter_catalog.dart';
+import 'package:conclave_host/workspace_enrollment.dart';
 
 Set<WorkerPermission> _configuredPermissions() {
   final configured = Platform.environment['CONCLAVE_WORKER_PERMISSIONS'];
@@ -59,6 +62,7 @@ Future<Host> buildWorkspaceRuntime(
   final repositoryRegistry = await LocalRepositoryRegistry.load(File(
     config.repositoriesFile ?? '${config.dataDirectory.path}/repositories.json',
   ));
+  final workRoot = await config.workRootResolver.resolve();
   final workerHandler = WorkerAssignmentHandler(
     executor: workerExecutor,
     resolve: (_) async => null,
@@ -106,6 +110,9 @@ Future<Host> buildWorkspaceRuntime(
       final worker = await localWorkerRegistry?.find(workerId);
       return worker?.localConcurrencyLimit;
     },
+    workstreamDirectoryLifecycle: WorkstreamDirectoryLifecycle(
+      pathResolver: WorkstreamPathResolver(workRoot),
+    ),
   );
   HostUpdateController? updateController;
   String? updateAvailable;
@@ -113,7 +120,7 @@ Future<Host> buildWorkspaceRuntime(
   if (config.cloudUri != null) {
     updateController = HostUpdateController(
       cloudUri: config.cloudUri!,
-      currentVersion: '0.1.0',
+      currentVersion: conclaveWorkspaceAppVersion,
       client: const HostReleaseClient(),
       updater: HostUpdater(
         Directory('${config.dataDirectory.path}/updates'),
@@ -254,11 +261,15 @@ Future<Host> buildWorkspaceRuntime(
       await refreshUpdateAvailability();
       final workers = await localWorkerRegistry?.list() ?? const [];
       return {
+        'appVersion': conclaveWorkspaceAppVersion,
         'workers': workers.length,
         'workerIds': workers.map((worker) => worker.id).toList(),
         'activeTasks': connection?.activeAssignmentCount ?? 0,
         'activeAssignmentIds': connection?.activeAssignmentIds ?? const [],
         'cloudConnected': connection?.isConnected ?? false,
+        'lastUpdateCheckAt': lastUpdateCheck.toUtc().toIso8601String(),
+        'lastUpdateCheckStatus':
+            updateController?.status.phase ?? 'unconfigured',
         if (updateAvailable != null) 'updateAvailable': updateAvailable,
       };
     },
