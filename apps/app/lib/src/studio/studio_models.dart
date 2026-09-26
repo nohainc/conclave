@@ -163,16 +163,26 @@ String _string(Map<String, dynamic> json, String key, [String fallback = '—'])
 List<String> _strings(Map<String, dynamic> json, String key) =>
     List<String>.from(json[key] as List? ?? const []);
 
-List<String> _jsonStrings(Map<String, dynamic> json, String key) {
-  final value = json[key];
-  if (value is List) return value.whereType<String>().toList();
-  if (value is! String) return const [];
-  try {
-    final decoded = jsonDecode(value);
-    return decoded is List ? decoded.whereType<String>().toList() : const [];
-  } catch (_) {
-    return const [];
+List<String> _runtimeCapabilityLabels(Map<String, dynamic> json, String key) {
+  dynamic value = json[key];
+  if (value is String) {
+    try {
+      value = jsonDecode(value);
+    } catch (_) {
+      return const [];
+    }
   }
+  if (value is List) return value.whereType<String>().toList();
+  if (value is! Map) return const [];
+
+  final labels = (value['supportedRuntimes'] as List? ?? const [])
+      .whereType<String>()
+      .toList();
+  final maxConcurrentWorkers = value['maxConcurrentWorkers'];
+  if (maxConcurrentWorkers is int) {
+    labels.add('Up to $maxConcurrentWorkers concurrent Workers');
+  }
+  return labels;
 }
 
 enum StudioMessageSender { user, conclave, system }
@@ -1049,7 +1059,8 @@ class StudioWorkspace {
         architecture: _string(json, 'architecture'),
         hostname: _string(json, 'hostname'),
         appVersion: _string(json, 'appVersion'),
-        runtimeCapabilities: _jsonStrings(json, 'runtimeCapabilitiesJson'),
+        runtimeCapabilities:
+            _runtimeCapabilityLabels(json, 'runtimeCapabilitiesJson'),
         factsUpdatedAt: json['factsUpdatedAt']?.toString(),
         updateChannel: _string(json, 'updateChannel', 'stable'),
         lastSeen: _string(

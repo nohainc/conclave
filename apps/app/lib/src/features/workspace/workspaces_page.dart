@@ -194,7 +194,7 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
                             ],
                           ),
                           subtitle: Text(
-                            '${_machine(workspace)}  ·  ${localWorkers.length} Workers  ·  ${_grantCount(workspace)} Project grants  ·  ${workspace.activeTaskCount} active work',
+                            '${_machine(workspace)}  ·  ${workspace.workerCount} Workers  ·  ${_grantCount(workspace)} Project grants  ·  ${workspace.activeTaskCount} active work',
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -295,7 +295,13 @@ class _WorkspaceCardBody extends StatelessWidget {
             _Fact(label: 'Hostname', value: _display(workspace.hostname)),
             _Fact(label: 'App version', value: _display(workspace.appVersion)),
             _Fact(label: 'Last seen', value: _display(workspace.lastSeen)),
-            _Fact(label: 'Workers', value: '${workers.length}'),
+            _Fact(
+              label: 'Runtime capabilities',
+              value: workspace.runtimeCapabilities.isEmpty
+                  ? 'Not reported'
+                  : workspace.runtimeCapabilities.join(' · '),
+            ),
+            _Fact(label: 'Workers', value: '${workspace.workerCount}'),
             _Fact(label: 'Project grants', value: '${_grantCount(workspace)}'),
             _Fact(label: 'Active work', value: '${workspace.activeTaskCount}'),
           ],
@@ -322,7 +328,9 @@ class _WorkspaceCardBody extends StatelessWidget {
         ),
         if (workers.isEmpty)
           Text(
-              'No Workers have synced yet. Configure your first Worker in Conclave Workspace on this computer.',
+              workspace.workerCount > 0
+                  ? 'Worker details are temporarily unavailable. Refresh the Workspace inventory to see its Workers.'
+                  : 'No Workers have synced yet. Configure your first Worker in Conclave Workspace on this computer.',
               style: TextStyle(color: theme.colorScheme.onSurfaceVariant))
         else
           ...workers.map((worker) => _WorkerRow(

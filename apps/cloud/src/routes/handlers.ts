@@ -1021,6 +1021,22 @@ async function handleListWorkspaces(
                     WHERE identity.workspace_id = execution_workspaces.id
                       AND identity.revoked_at IS NULL
                   ) AS hasRuntimeIdentity,
+                  (SELECT COUNT(*) FROM workspace_worker_inventory worker
+                    WHERE worker.workspace_id = execution_workspaces.id
+                      AND worker.status <> 'removed') AS workerCount,
+                  (SELECT COUNT(*) FROM worker_assignments assignment
+                    WHERE assignment.execution_workspace_id = execution_workspaces.id
+                      AND assignment.status IN ('created', 'dispatched', 'acknowledged', 'running')) AS activeTaskCount,
+                  CASE
+                    WHEN NOT EXISTS (
+                      SELECT 1 FROM workspace_runtime_identities identity
+                      WHERE identity.workspace_id = execution_workspaces.id
+                        AND identity.revoked_at IS NULL
+                    ) THEN NULL
+                    WHEN f.updated_at IS NULL OR execution_workspaces.updated_at > f.updated_at
+                      THEN execution_workspaces.updated_at
+                    ELSE f.updated_at
+                  END AS lastSeen,
                   f.platform, f.architecture, f.hostname,
                   f.app_version AS appVersion,
                   f.runtime_capabilities_json AS runtimeCapabilitiesJson,
@@ -1039,6 +1055,16 @@ async function handleListWorkspaces(
             slug: string;
             status: string;
             role: string;
+            hasRuntimeIdentity: number;
+            workerCount: number;
+            activeTaskCount: number;
+            lastSeen: string | null;
+            platform: string | null;
+            architecture: string | null;
+            hostname: string | null;
+            appVersion: string | null;
+            runtimeCapabilitiesJson: string;
+            factsUpdatedAt: string | null;
             createdAt: string;
             updatedAt: string;
           }>()

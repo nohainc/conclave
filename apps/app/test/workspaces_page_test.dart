@@ -45,6 +45,46 @@ void main() {
       expect(workspace.runtimeCapabilities, ['dart', 'shell']);
     });
 
+    testWidgets('shows the paired machine facts and live Workspace summary',
+        (tester) async {
+      final workspace = StudioWorkspace.fromJson({
+        'id': 'workspace-paired',
+        'name': 'Vitalii’s MacBook Pro',
+        'status': 'online',
+        'platform': 'macos',
+        'architecture': 'arm64',
+        'hostname': 'vitalii-macbook.local',
+        'appVersion': '1.4.2',
+        'runtimeCapabilitiesJson':
+            '{"os":"macos","arch":"arm64","appVersion":"1.4.2","supportedRuntimes":["dart"],"maxConcurrentWorkers":2}',
+        'lastSeen': '2026-09-26T12:30:00.000Z',
+        'workerCount': 3,
+        'activeTaskCount': 2,
+        'hasRuntimeIdentity': 1,
+      });
+
+      expect(workspace.runtimeCapabilities,
+          ['dart', 'Up to 2 concurrent Workers']);
+
+      await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
+        workspaces: [workspace],
+        onAdd: () {},
+        onRename: (_) {},
+        onUpdate: (_) {},
+        onRevoke: (_) {},
+        onGrant: (_) {},
+      )));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Vitalii’s MacBook Pro'), findsOneWidget);
+      expect(find.text('vitalii-macbook.local'), findsOneWidget);
+      expect(find.text('1.4.2'), findsOneWidget);
+      expect(find.text('dart · Up to 2 concurrent Workers'), findsOneWidget);
+      expect(find.textContaining('3 Workers'), findsOneWidget);
+      expect(find.text('2'), findsOneWidget);
+      expect(find.text('2026-09-26T12:30:00.000Z'), findsOneWidget);
+    });
+
     testWidgets('shows Workspaces as the single execution destination',
         (tester) async {
       final snapshot = studioFixtureSnapshot();

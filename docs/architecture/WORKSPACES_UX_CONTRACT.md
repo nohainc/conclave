@@ -77,6 +77,7 @@ hostname?
 operatingSystem?
 architecture?
 appVersion?
+runtimeCapabilities?
 lastSeenAt?
 runtimeFactsUpdatedAt?
 ```
@@ -162,6 +163,14 @@ Cloud assignment/run state and Workspace heartbeat state are the source for
 these summary values. The card does not require a dedicated Activity tab for
 these counts. A full audit timeline can be added later as an expandable
 section, backed by real audit events.
+
+The Workspace list read model includes the runtime facts, latest available
+last-seen time, count of non-removed V7 inventory Workers, and count of active
+V7 assignments. AX refreshes the safe V7 Worker inventory separately to render
+each Worker row; if that request fails, it retains the Cloud count instead of
+showing a false zero. The desktop pairing claim supplies the Workspace name
+and initial machine facts, which are persisted before the new Workspace is
+returned to AX.
 
 ## Cloud and desktop ownership
 

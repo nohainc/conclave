@@ -70,6 +70,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
   final Set<String> expandedProjectIds = <String>{};
   bool showNewGoal = false;
   List<StudioWorker> workspaceWorkers = const [];
+  bool workspaceWorkerInventoryLoaded = false;
   Map<String, int> workspaceProjectGrantCounts = const {};
   StudioWorkspaceEnrollment? enrollmentResult;
   StudioQualityPreset selectedQuality = StudioQualityPreset.balanced;
@@ -503,7 +504,12 @@ class _StudioAppState extends State<ConclaveAppShell> {
       try {
         final localWorkers =
             await widget.dataSource.loadWorkspaceWorkerInventory();
-        if (mounted) setState(() => workspaceWorkers = localWorkers);
+        if (mounted) {
+          setState(() {
+            workspaceWorkers = localWorkers;
+            workspaceWorkerInventoryLoaded = true;
+          });
+        }
       } catch (_) {
         // V7 inventory remains independently optional during migration.
       }
@@ -588,6 +594,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
         setState(() {
           snapshot = snapshot.copyWith(workspaces: workspaces);
           workspaceWorkers = localWorkers;
+          workspaceWorkerInventoryLoaded = true;
         });
         return;
       }
@@ -595,7 +602,10 @@ class _StudioAppState extends State<ConclaveAppShell> {
         final localWorkers =
             await widget.dataSource.loadWorkspaceWorkerInventory();
         if (!mounted) return;
-        setState(() => workspaceWorkers = localWorkers);
+        setState(() {
+          workspaceWorkers = localWorkers;
+          workspaceWorkerInventoryLoaded = true;
+        });
         return;
       }
       if (type.startsWith('project.') || type.startsWith('chat.')) {
@@ -3695,9 +3705,11 @@ class _StudioAppState extends State<ConclaveAppShell> {
                 worker.status != 'removed')
             .length;
         return workspace.copyWith(
-          workerCount: inventoryCount,
+          workerCount: workspaceWorkerInventoryLoaded
+              ? inventoryCount
+              : workspace.workerCount,
           projectGrantCount: workspaceProjectGrantCounts[workspace.id] ?? 0,
-          lastSeen: workspace.factsUpdatedAt ?? workspace.lastSeen,
+          lastSeen: workspace.lastSeen,
         );
       }).toList(growable: false);
 
@@ -3730,7 +3742,12 @@ class _StudioAppState extends State<ConclaveAppShell> {
       await widget.dataSource
           .setWorkspaceWorkerScheduling(workerId: worker.id, action: action);
       final refreshed = await widget.dataSource.loadWorkspaceWorkerInventory();
-      if (mounted) setState(() => workspaceWorkers = refreshed);
+      if (mounted) {
+        setState(() {
+          workspaceWorkers = refreshed;
+          workspaceWorkerInventoryLoaded = true;
+        });
+      }
       if (mounted) {
         _showSnackBar(
             'Worker scheduling ${action == 'drain' ? 'drain requested' : '${action}d'}.');

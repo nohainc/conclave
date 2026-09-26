@@ -20,6 +20,7 @@ const migrationFiles = [
   "0017_configured_worker_observability.sql",
   "0018_migrate_legacy_ai_accounts.sql",
   "0019_worker_assignment_requester.sql",
+  "0020_workspace_runtime_facts.sql",
   "0021_workspace_worker_inventory.sql",
   "0022_v7_adapter_releases.sql",
   "0023_workspace_runtime_credentials.sql",
@@ -135,6 +136,63 @@ describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
         revoked_at: null,
         installation_id: null,
         pairing_intent_count: 0,
+      },
+    ]);
+  });
+
+  it("projects paired runtime facts and V7 inventory/activity counts", () => {
+    const result = apply(`
+      INSERT INTO users VALUES ('u1', 'owner@example.test', 'Owner', 'active', '2026-01-01', '2026-01-01');
+      INSERT INTO execution_workspaces VALUES ('ws1', 'u1', 'Vitalii’s MacBook Pro', 'online', '2026-01-01', '2026-09-26T12:30:00.000Z');
+      INSERT INTO workspace_runtime_identities
+        (id, workspace_id, credential_key_ref, credential_token_hash, created_at, revoked_at)
+        VALUES ('rt1', 'ws1', 'runtime-key', 'sha256:token', '2026-01-01', NULL);
+      INSERT INTO workspace_runtime_facts
+        (workspace_id, platform, architecture, hostname, app_version, runtime_capabilities_json, updated_at)
+        VALUES ('ws1', 'macos', 'arm64', 'vitalii-macbook.local', '1.4.2',
+                '{"os":"macos","arch":"arm64","appVersion":"1.4.2","supportedRuntimes":["dart"],"maxConcurrentWorkers":2}',
+                '2026-09-26T12:29:00.000Z');
+      INSERT INTO workers VALUES ('codex', 'Codex', 'active', '2026-01-01', '2026-01-01');
+      INSERT INTO workspace_worker_inventory (
+        workspace_id, worker_id, owner_user_id, name, worker_type_id, auth_strategy,
+        local_concurrency_limit, credential_status, status, revision, created_at,
+        updated_at, last_seen_at
+      ) VALUES
+        ('ws1', 'worker-1', 'u1', 'Worker 1', 'codex', 'none', 1, 'not_required', 'ready', 1, 'now', 'now', 'now'),
+        ('ws1', 'worker-2', 'u1', 'Worker 2', 'codex', 'none', 1, 'not_required', 'ready', 1, 'now', 'now', 'now'),
+        ('ws1', 'worker-3', 'u1', 'Worker 3', 'codex', 'none', 1, 'not_required', 'ready', 1, 'now', 'now', 'now');
+      INSERT INTO projects (id, owner_user_id, name, created_at, updated_at)
+        VALUES ('p1', 'u1', 'Project', 'now', 'now');
+      INSERT INTO worker_assignments
+        (id, project_id, execution_workspace_id, runtime_identity_id, worker_id, status, created_at, updated_at)
+        VALUES ('a1', 'p1', 'ws1', 'rt1', 'codex', 'running', 'now', 'now'),
+               ('a2', 'p1', 'ws1', 'rt1', 'codex', 'created', 'now', 'now'),
+               ('a3', 'p1', 'ws1', 'rt1', 'codex', 'completed', 'now', 'now');
+      SELECT ew.name, f.hostname, f.platform, f.architecture, f.app_version,
+             f.runtime_capabilities_json,
+             (SELECT COUNT(*) FROM workspace_worker_inventory worker
+               WHERE worker.workspace_id = ew.id AND worker.status <> 'removed') AS workerCount,
+             (SELECT COUNT(*) FROM worker_assignments assignment
+               WHERE assignment.execution_workspace_id = ew.id
+                 AND assignment.status IN ('created', 'dispatched', 'acknowledged', 'running')) AS activeTaskCount,
+             CASE WHEN ew.updated_at > f.updated_at THEN ew.updated_at ELSE f.updated_at END AS lastSeen
+        FROM execution_workspaces ew
+        JOIN workspace_runtime_facts f ON f.workspace_id = ew.id
+       WHERE ew.id = 'ws1';
+    `) as unknown[];
+
+    expect(result).toEqual([
+      {
+        name: "Vitalii’s MacBook Pro",
+        hostname: "vitalii-macbook.local",
+        platform: "macos",
+        architecture: "arm64",
+        app_version: "1.4.2",
+        runtime_capabilities_json:
+          '{"os":"macos","arch":"arm64","appVersion":"1.4.2","supportedRuntimes":["dart"],"maxConcurrentWorkers":2}',
+        workerCount: 3,
+        activeTaskCount: 2,
+        lastSeen: "2026-09-26T12:30:00.000Z",
       },
     ]);
   });
