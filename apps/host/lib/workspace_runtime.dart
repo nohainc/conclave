@@ -29,12 +29,16 @@ Future<Host> buildWorkspaceRuntime(
 }) async {
   final workerTrustPolicy = workspaceReleaseTrustPolicy();
   const credentialStore = PlatformSecureCredentialStore();
+  final workerExecutor = WorkerProcessExecutor();
   final releaseTrustPolicy = workerTrustPolicy;
   final localWorkerRegistry = config.workspaceId == null
       ? null
       : LocalConfiguredWorkerRegistry(
           dataDirectory: config.dataDirectory,
           workspaceId: config.workspaceId!,
+          onWorkerRemoving: (workerId) async {
+            await workerExecutor.cancelWorker(workerId);
+          },
         );
   final v7AdapterPackageStore = V7AdapterPackageStore(
     root: Directory('${config.dataDirectory.path}/v7-adapters'),
@@ -56,7 +60,7 @@ Future<Host> buildWorkspaceRuntime(
     config.repositoriesFile ?? '${config.dataDirectory.path}/repositories.json',
   ));
   final workerHandler = WorkerAssignmentHandler(
-    executor: WorkerProcessExecutor(),
+    executor: workerExecutor,
     resolve: (_) async => null,
     resolveV7Adapter: (workerId) async {
       final registry = localWorkerRegistry;
@@ -243,6 +247,7 @@ Future<Host> buildWorkspaceRuntime(
   }
   final engine = Host(
     config: config,
+    localWorkerRegistry: localWorkerRegistry,
     cloudConnection: connection,
     adapterPackageStore: v7AdapterPackageStore,
     statusProvider: () async {

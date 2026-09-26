@@ -483,6 +483,40 @@ Future<void> main() async {
     }
   });
 
+  test('Worker removal cancels both running and queued assignments', () async {
+    final directory = await createSilentWorker();
+    final executor = WorkerProcessExecutor();
+    final spec = WorkerProcessSpec(
+      workerId: 'worker-to-remove',
+      executable: 'dart',
+      arguments: ['run', '${directory.path}/silent.dart'],
+      maxConcurrentAssignments: 1,
+    );
+    try {
+      final running = executor.execute(
+        spec,
+        {},
+        operationId: 'remove-running',
+        timeout: const Duration(seconds: 10),
+      );
+      final queued = executor.execute(
+        spec,
+        {},
+        operationId: 'remove-queued',
+        timeout: const Duration(seconds: 10),
+      );
+      final runningFailure =
+          expectLater(running, throwsA(isA<ProcessException>()));
+      final queuedFailure =
+          expectLater(queued, throwsA(isA<ProcessException>()));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(await executor.cancelWorker('worker-to-remove'), 2);
+      await Future.wait([runningFailure, queuedFailure]);
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
   test('cancelling a Worker terminates its nested child process', () async {
     final directory = await Directory.systemTemp.createTemp('worker-tree-');
     addTearDown(() => directory.delete(recursive: true));

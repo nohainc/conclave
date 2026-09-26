@@ -130,6 +130,7 @@ class WorkerProcessExecutor {
   final _queuedOperations = <String, _QueuedWorkerExecution>{};
   final _reservedOperations = <String>{};
   final _cancelledBeforeLaunch = <String>{};
+  final _operationWorkers = <String, String>{};
 
   static Future<Process> _launch(WorkerProcessSpec spec) {
     final executableName = spec.executable.split(Platform.pathSeparator).last;
@@ -822,6 +823,7 @@ class WorkerProcessExecutor {
     if (process == null) {
       final queued = _queuedOperations.remove(operationId);
       if (queued != null) {
+        _operationWorkers.remove(operationId);
         _WorkerExecutionGate? owningGate;
         for (final gate in _workerGates.values) {
           if (gate.waiting.remove(queued)) {
@@ -851,6 +853,20 @@ class WorkerProcessExecutor {
     return true;
   }
 
+  /// Cancels every active, starting, or locally queued operation owned by a
+  /// Worker before Workspace removes that Worker and its credentials.
+  Future<int> cancelWorker(String workerId) async {
+    final operations = _operationWorkers.entries
+        .where((entry) => entry.value == workerId)
+        .map((entry) => entry.key)
+        .toList(growable: false);
+    var cancelled = 0;
+    for (final operationId in operations) {
+      if (await cancel(operationId)) cancelled++;
+    }
+    return cancelled;
+  }
+
   Future<void> _acquireWorkerSlot(
     String workerId,
     int requestedLimit,
@@ -862,6 +878,7 @@ class WorkerProcessExecutor {
         _reservedOperations.contains(operationId)) {
       throw StateError('operation ID is already active: $operationId');
     }
+    _operationWorkers[operationId] = workerId;
     final gate = _workerGates.putIfAbsent(
       workerId,
       () => _WorkerExecutionGate(requestedLimit),
@@ -881,6 +898,7 @@ class WorkerProcessExecutor {
         onTimeout: () {
           if (gate.waiting.remove(queued)) {
             _queuedOperations.remove(operationId);
+            _operationWorkers.remove(operationId);
             if (gate.active == 0 && gate.waiting.isEmpty) {
               _workerGates.remove(workerId);
             }
@@ -897,6 +915,7 @@ class WorkerProcessExecutor {
   }
 
   void _releaseWorkerSlot(String workerId, String operationId) {
+    _operationWorkers.remove(operationId);
     _reservedOperations.remove(operationId);
     _cancelledBeforeLaunch.remove(operationId);
     final gate = _workerGates[workerId];

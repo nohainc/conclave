@@ -137,10 +137,7 @@ export function workspaceAssignmentContextMatches(
   return (
     message.executionWorkspaceId === String(row.execution_workspace_id) &&
     message.workspaceRuntimeId === String(row.runtime_identity_id) &&
-    message.workerId ===
-      String(
-        row.workspace_worker_id ?? row.worker_id,
-      ) &&
+    message.workerId === String(row.workspace_worker_id ?? row.worker_id) &&
     message.runId === String(row.run_id) &&
     message.taskId === String(row.task_id) &&
     message.attemptId === String(row.attempt_id) &&
@@ -546,7 +543,6 @@ export class WorkspaceGateway implements DurableObject {
       const status = item.status;
       const revision = item.revision;
       const concurrency = item.localConcurrencyLimit;
-      if (typeof workerId === "string") reportedWorkerIds.add(workerId);
       if (
         typeof workerId !== "string" ||
         typeof workerTypeId !== "string" ||
@@ -559,6 +555,9 @@ export class WorkspaceGateway implements DurableObject {
       ) {
         continue;
       }
+      // Only structurally valid entries count as reported by an authoritative
+      // snapshot. Malformed items must not keep omitted Workers alive.
+      reportedWorkerIds.add(workerId);
       const previous = await this.env.CONCLAVE_DB.prepare(
         "SELECT workspace_id, revision, removed_by_snapshot FROM workspace_worker_inventory WHERE worker_id = ?1",
       )

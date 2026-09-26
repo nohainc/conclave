@@ -997,4 +997,45 @@ void main() {
     expect(connection.reconnectCount, greaterThanOrEqualTo(2));
     await connection.close();
   });
+
+  test('applies Cloud cancellation delivered on the reconnected socket',
+      () async {
+    final first = FakeSocket();
+    final recovered = FakeSocket();
+    final cancelled = Completer<String>();
+    var factoryCalls = 0;
+    final connection = HostCloudConnection(
+      uri: Uri.parse('wss://cloud.test/workspace-gateway'),
+      hostId: 'runtime-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => ++factoryCalls == 1 ? first : recovered,
+      assignmentCancellationHandler: (assignmentId, reason) async {
+        cancelled.complete('$assignmentId:$reason');
+        return true;
+      },
+      heartbeat: const Duration(hours: 1),
+      reconnectBaseDelay: const Duration(milliseconds: 1),
+      reconnectMaxDelay: const Duration(milliseconds: 5),
+    );
+    await connection.connect();
+    await first.controller.close();
+    await waitFor(() => connection.reconnectCount > 0);
+    recovered.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'cancel-after-reconnect',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'assignment.cancel',
+      'executionWorkspaceId': 'workspace-1',
+      'workspaceRuntimeId': 'runtime-1',
+      'assignmentId': 'assignment-still-running',
+      'payload': {'reason': 'cancelled after reconnect', 'gracePeriodMs': 100},
+    }));
+    expect(await cancelled.future.timeout(const Duration(seconds: 2)),
+        'assignment-still-running:cancelled after reconnect');
+    await waitFor(() => recovered.sent.any((message) =>
+        (jsonDecode(message as String) as Map<String, dynamic>)['type'] ==
+            'assignment.cancel.ack'));
+    await connection.close();
+  });
 }

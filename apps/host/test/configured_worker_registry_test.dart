@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -174,5 +175,37 @@ void main() {
       authStrategy: 'browser_auth',
     );
     expect(replacement.id, isNot(worker.id));
+  });
+
+  test('Worker removal awaits cancellation before writing its tombstone',
+      () async {
+    final cancellationStarted = Completer<void>();
+    final allowCancellation = Completer<void>();
+    final removingRegistry = LocalConfiguredWorkerRegistry(
+      dataDirectory: directory,
+      workspaceId: 'workspace-1',
+      idGenerator: () => 'worker-cancel-on-remove',
+      onWorkerRemoving: (_) async {
+        cancellationStarted.complete();
+        await allowCancellation.future;
+      },
+    );
+    final worker = await removingRegistry.create(
+      name: 'Worker',
+      workerTypeId: 'codex',
+      authStrategy: 'browser_auth',
+      status: LocalWorkerStatus.ready,
+      credentialStatus: LocalWorkerCredentialStatus.ready,
+    );
+    final removal = removingRegistry.remove(worker.id);
+    await cancellationStarted.future;
+    expect(
+        (await File('${directory.path}/configured-workers.json')
+            .readAsString()),
+        contains('ready'));
+    allowCancellation.complete();
+    await removal;
+    expect((await removingRegistry.find(worker.id))?.status,
+        LocalWorkerStatus.removed);
   });
 }

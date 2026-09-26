@@ -28,7 +28,7 @@ jobs:
       - run: flutter pub get
         working-directory: apps/host
       - name: Real V7 Cloud to Workspace execution
-        run: DART_EXECUTABLE="$(command -v dart)" pnpm exec vitest run apps/cloud/test/v7-runtime-e2e.acceptance.test.ts
+        run: DART_EXECUTABLE="$(command -v dart)" pnpm exec vitest run apps/cloud/test/v7-runtime-e2e.acceptance.test.ts apps/cloud/test/v7-inventory-recovery.acceptance.test.ts
 
   typescript:
     runs-on: ubuntu-latest

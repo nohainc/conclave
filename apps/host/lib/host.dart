@@ -170,6 +170,7 @@ class Host {
     this.updateHandler,
     SecureCredentialStore? credentialStore,
     V7AdapterPackageStore? adapterPackageStore,
+    LocalConfiguredWorkerRegistry? localWorkerRegistry,
     String Function(String)? redactLog,
     this.logFileMaxBytes = 1024 * 1024,
   })  : _configuredLogOutput = logOutput,
@@ -182,12 +183,13 @@ class Host {
               allowedPermissions: parseConfiguredWorkerPermissions(
                   Platform.environment['CONCLAVE_WORKER_PERMISSIONS']),
             ),
-        localWorkerRegistry = config.workspaceId == null
-            ? null
-            : LocalConfiguredWorkerRegistry(
-                dataDirectory: config.dataDirectory,
-                workspaceId: config.workspaceId!,
-              ),
+        localWorkerRegistry = localWorkerRegistry ??
+            (config.workspaceId == null
+                ? null
+                : LocalConfiguredWorkerRegistry(
+                    dataDirectory: config.dataDirectory,
+                    workspaceId: config.workspaceId!,
+                  )),
         _log = HostLogger(logOutput ?? stdout,
             redact: redactLog ?? HostLogger._identity) {
     if (logFileMaxBytes <= 0) {

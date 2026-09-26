@@ -5,6 +5,16 @@
 **Decision:** [ADR-012](../decisions/ADR-012-workspace-owned-local-workers.md)  
 **Date:** 2026-09-26
 
+### Phase 6 hardening status
+
+The Phase 2 V7 execution acceptance is now paired with adversarial inventory
+recovery coverage in the dedicated CI job. See
+[V7 Failure and Security Acceptance Coverage](../architecture/V7_FAILURE_RECOVERY_ACCEPTANCE.md)
+for the current regression-test map and explicit limits. The Phase 6 exit gate
+remains open until the listed failure modes are covered at the required
+operational boundary, including reconnect-time cancellation and real platform
+update/provider-expiry acceptance.
+
 ## Implementation status
 
 ### Implemented / substantially implemented

@@ -232,6 +232,7 @@ class LocalConfiguredWorkerRegistry {
     PlatformRuntime? platform,
     DateTime Function()? clock,
     String Function()? idGenerator,
+    this.onWorkerRemoving,
   })  : platform = platform ?? currentPlatformRuntime,
         clock = clock ?? DateTime.now,
         idGenerator = idGenerator ?? _newWorkerId {
@@ -246,6 +247,7 @@ class LocalConfiguredWorkerRegistry {
   final PlatformRuntime platform;
   final DateTime Function() clock;
   final String Function() idGenerator;
+  final Future<void> Function(String workerId)? onWorkerRemoving;
   Future<void> _tail = Future<void>.value();
 
   File get file => File(
@@ -384,6 +386,7 @@ class LocalConfiguredWorkerRegistry {
         if (index < 0 || workers[index].status == LocalWorkerStatus.removed) {
           return;
         }
+        await onWorkerRemoving?.call(workerId);
         workers[index] = workers[index].copyWith(
           status: LocalWorkerStatus.removed,
           credentialStatus: const {'none', 'local_endpoint'}
