@@ -978,41 +978,28 @@ class _HostDashboardState extends State<HostDashboard> {
               ConclaveBrand.logoMark(size: 26),
               const SizedBox(width: 12),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        const Text(
-                          'Conclave Workspace',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Icon(Icons.circle, size: 7, color: statusColor),
-                        const SizedBox(width: 4),
-                        Text(
-                          snapshot.statusLabel,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: statusColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      snapshot.hostname ?? Platform.localHostname,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontSize: 12,
+                    const Text(
+                      'Conclave Workspace',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
                       ),
                     ),
+                    if (snapshot.paired) ...[
+                      const SizedBox(width: 8),
+                      Icon(Icons.circle, size: 7, color: statusColor),
+                      const SizedBox(width: 4),
+                      Text(
+                        snapshot.statusLabel,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: statusColor,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -1280,7 +1267,7 @@ class _WorkspaceTab extends StatelessWidget {
           const SizedBox(height: 16),
         ],
 
-        // Pairing / Connection Section
+        // Section 1: Pairing / Connection Section (Flat light design)
         if (!snapshot.paired)
           _ConnectWorkspaceCard(
             snapshot: snapshot,
@@ -1291,61 +1278,49 @@ class _WorkspaceTab extends StatelessWidget {
           _PairedWorkspaceCard(
             snapshot: snapshot,
           ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
 
-        // Work Root Card
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.folder_open, size: 20),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Work Root',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+        // Section 2: Work Root Path with Open Folder Button (Flat light design)
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Work Root',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
                     ),
-                    const SizedBox(width: 8),
-                    if (snapshot.workRootPath != null)
-                      OutlinedButton.icon(
-                        onPressed: () => HostLifecycleController.openPath(
-                            snapshot.workRootPath!),
-                        icon: const Icon(Icons.folder_open, size: 14),
-                        label: const Text('Open Folder',
-                            style: TextStyle(fontSize: 12)),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  snapshot.workRootPath ?? 'Not configured',
-                  style: const TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 12,
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Workstream files and local execution are stored here.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+                  const SizedBox(height: 6),
+                  SelectableText(
+                    snapshot.workRootPath ?? 'Not configured',
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
+            if (snapshot.workRootPath != null) ...[
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
+                onPressed: () => HostLifecycleController.openPath(
+                    snapshot.workRootPath!),
+                icon: const Icon(Icons.folder_open, size: 16),
+                label: const Text('Open folder'),
+              ),
+            ],
+          ],
         ),
 
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
 
-        // Advanced & Diagnostics (Expandable Accordion)
+        // Section 3: Advanced & Diagnostics (Expandable Accordion)
         _WorkspaceDiagnosticsSection(
           snapshot: snapshot,
           onExportDiagnostics: onExportDiagnostics,
@@ -1376,7 +1351,6 @@ class _ConnectWorkspaceCard extends StatefulWidget {
 class _ConnectWorkspaceCardState extends State<_ConnectWorkspaceCard> {
   late final TextEditingController _nameController;
   late final TextEditingController _codeController;
-  late final TextEditingController _cloudUrlController;
   bool _isConnecting = false;
   String? _error;
 
@@ -1389,24 +1363,21 @@ class _ConnectWorkspaceCardState extends State<_ConnectWorkspaceCard> {
         );
     _nameController = TextEditingController(text: defaultName);
     _codeController = TextEditingController();
-    _cloudUrlController = TextEditingController(
-      text: widget.snapshot.cloudUrl ?? conclaveProductionCloudUrl,
-    );
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _codeController.dispose();
-    _cloudUrlController.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     final name = _nameController.text.trim();
     final code = _codeController.text.trim();
-    final cloudUrl = _cloudUrlController.text.trim();
-    final uri = Uri.tryParse(cloudUrl);
+    final cloudUrl = widget.snapshot.cloudUrl ??
+        Platform.environment['CONCLAVE_HOST_CLOUD_URL'] ??
+        conclaveProductionCloudUrl;
 
     if (name.isEmpty) {
       setState(() => _error = 'Enter a workspace name.');
@@ -1414,12 +1385,6 @@ class _ConnectWorkspaceCardState extends State<_ConnectWorkspaceCard> {
     }
     if (code.isEmpty) {
       setState(() => _error = 'Enter the pairing code from Conclave AX.');
-      return;
-    }
-    if (uri == null ||
-        !const {'https', 'http'}.contains(uri.scheme) ||
-        uri.host.isEmpty) {
-      setState(() => _error = 'Enter a valid Conclave Cloud URL.');
       return;
     }
 
@@ -1468,204 +1433,82 @@ class _ConnectWorkspaceCardState extends State<_ConnectWorkspaceCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _nameController,
+          autocorrect: false,
+          textInputAction: TextInputAction.next,
+          decoration: const InputDecoration(
+            labelText: 'Workspace name',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 14),
+        TextField(
+          controller: _codeController,
+          autocorrect: false,
+          enableSuggestions: false,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _submit(),
+          decoration: const InputDecoration(
+            labelText: 'Pairing code',
+            hintText: 'Enter pairing code from Conclave AX',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color:
+                  theme.colorScheme.errorContainer.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: theme.colorScheme.error.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    Icons.link_rounded,
-                    size: 24,
-                    color: theme.colorScheme.primary,
-                  ),
+                Icon(
+                  Icons.error_outline_rounded,
+                  size: 18,
+                  color: theme.colorScheme.error,
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 10),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Connect this Workspace',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.2,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Connect this computer to Conclave AX.',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    _error!,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onErrorContainer,
+                      height: 1.3,
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.04)
-                    : Colors.black.withValues(alpha: 0.03),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.info_outline_rounded,
-                    size: 16,
-                    color: theme.colorScheme.primary,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'You create the pairing code in Conclave AX → Workspaces → Connect Workspace.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  TextButton.icon(
-                    onPressed: () => HostLifecycleController.openAX(),
-                    icon: const Icon(Icons.open_in_new, size: 13),
-                    label: const Text(
-                      'Open Conclave AX',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _nameController,
-              autocorrect: false,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(
-                labelText: 'Workspace name',
-                helperText:
-                    'Proposed from your computer name. You can customize it before pairing.',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: _codeController,
-              autocorrect: false,
-              enableSuggestions: false,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _submit(),
-              decoration: const InputDecoration(
-                labelText: 'Pairing code',
-                hintText: 'Paste pairing code from Conclave AX',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 14),
-            ExpansionTile(
-              tilePadding: EdgeInsets.zero,
-              childrenPadding: EdgeInsets.zero,
-              title: Text(
-                'Advanced options',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w500,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-              children: [
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _cloudUrlController,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  decoration: const InputDecoration(
-                    labelText: 'Conclave Cloud URL',
-                    helperText:
-                        'Change this only for development or self-hosted environments.',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ],
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 14),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color:
-                      theme.colorScheme.errorContainer.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: theme.colorScheme.error.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.error_outline_rounded,
-                      size: 18,
-                      color: theme.colorScheme.error,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        _error!,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onErrorContainer,
-                          height: 1.3,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                FilledButton.icon(
-                  onPressed: _isConnecting ? null : _submit,
-                  icon: _isConnecting
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.link, size: 16),
-                  label: Text(_isConnecting ? 'Connecting...' : 'Connect'),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 12),
-                  ),
-                ),
-              ],
-            ),
-          ],
+          ),
+        ],
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          onPressed: _isConnecting ? null : _submit,
+          icon: _isConnecting
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.link, size: 16),
+          label: Text(_isConnecting ? 'Connecting...' : 'Connect'),
+          style: FilledButton.styleFrom(
+            padding: const EdgeInsets.symmetric(
+                horizontal: 20, vertical: 12),
+          ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -1685,54 +1528,50 @@ class _PairedWorkspaceCard extends StatelessWidget {
     final isConnected =
         snapshot.mode == HostUiMode.ready || snapshot.cloudConnected;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Workspace',
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          workspaceName,
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
           children: [
-            Text(
-              'Workspace',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: isConnected ? Colors.green : Colors.orange,
+                shape: BoxShape.circle,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(width: 6),
             Text(
-              workspaceName,
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w600,
+              isConnected ? 'Connected' : 'Connecting...',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: isConnected
+                    ? (theme.brightness == Brightness.dark
+                        ? Colors.greenAccent
+                        : Colors.green.shade700)
+                    : Colors.orange.shade700,
               ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: isConnected ? Colors.green : Colors.orange,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  isConnected ? 'Connected' : 'Connecting...',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: isConnected
-                        ? (theme.brightness == Brightness.dark
-                            ? Colors.greenAccent
-                            : Colors.green.shade700)
-                        : Colors.orange.shade700,
-                  ),
-                ),
-              ],
             ),
           ],
         ),
-      ),
+      ],
     );
   }
 }
@@ -2086,74 +1925,23 @@ class _WorkersTabState extends State<_WorkersTab> {
         Row(
           children: [
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Configured Workers',
-                      style: theme.textTheme.titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Local AI models and execution adapters running on this machine.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
+              child: Text(
+                'Local AI models and execution adapters running on this machine.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
             const SizedBox(width: 12),
             FilledButton.icon(
-              onPressed:
-                  (widget.registry == null || !widget.isPaired)
-                      ? null
-                      : widget.onAddWorker,
+              onPressed: widget.registry == null ? null : widget.onAddWorker,
               icon: const Icon(Icons.add),
               label: const Text('Add Worker'),
             ),
           ],
         ),
         const SizedBox(height: 16),
-        if (!widget.isPaired)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.link_off_rounded,
-                    size: 48,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Connect this Workspace before adding Workers.',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Local Workers execute assignments from Conclave AX once this computer is connected.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  if (widget.onSwitchToWorkspace != null) ...[
-                    const SizedBox(height: 20),
-                    FilledButton.icon(
-                      onPressed: widget.onSwitchToWorkspace,
-                      icon: const Icon(Icons.link_rounded, size: 16),
-                      label: const Text('Connect Workspace'),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          )
-        else if (widget.registry == null)
+        if (widget.registry == null)
           const Card(
             child: Padding(
               padding: EdgeInsets.all(20),

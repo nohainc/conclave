@@ -142,16 +142,13 @@ void main() {
       onPairRequest: (request) async => capturedRequest = request,
     );
 
-    expect(find.text('Connect this Workspace'), findsOneWidget);
-    expect(find.text('Connect this computer to Conclave AX.'), findsOneWidget);
     expect(find.text('Workspace name'), findsOneWidget);
     expect(find.text("Vitalii's MacBook Pro"), findsOneWidget);
     expect(find.text('Pairing code'), findsOneWidget);
-    expect(find.text('You create the pairing code in Conclave AX → Workspaces → Connect Workspace.'), findsOneWidget);
-    expect(find.text('Open Conclave AX'), findsOneWidget);
-    expect(find.text('Advanced options'), findsOneWidget);
+    expect(find.text('Advanced options'), findsNothing);
     expect(find.text('Connect'), findsOneWidget);
     expect(find.text('Work Root'), findsOneWidget);
+    expect(find.text('Open folder'), findsOneWidget);
     expect(find.text('Advanced & Diagnostics'), findsOneWidget);
     expect(find.text('Projects'), findsNothing);
     expect(find.text('Chats'), findsNothing);
@@ -348,7 +345,7 @@ void main() {
     );
 
     expect(find.text('Conclave Workspace'), findsOneWidget);
-    expect(find.text('MacBook Pro'), findsWidgets);
+    expect(find.text('MacBook Pro'), findsOneWidget);
     expect(find.text('Connected'), findsWidgets);
 
     // Open overflow menu (3 lines icon)
@@ -512,12 +509,16 @@ void main() {
   });
 
   testWidgets(
-      'workers surface before pairing shows Connect this Workspace before adding Workers and switches to Workspace tab',
+      'workers surface before pairing allows adding workers at any time without blocking',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+
+    var addWorkerCalled = false;
+    final registry = _FakeWorkerRegistry([]);
+    final credentials = _MemoryCredentialStore();
 
     await pumpDashboard(
       tester,
@@ -528,31 +529,30 @@ void main() {
         paired: false,
         hostname: 'test-mac',
       ),
+      localWorkerRegistry: registry,
+      credentialStore: credentials,
+      onAddWorker: () async => addWorkerCalled = true,
     );
 
     // Switch to Workers tab
     await tester.tap(find.text('Workers').first);
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.text('Connect this Workspace before adding Workers.'),
-        findsOneWidget);
+        findsNothing);
     expect(
         find.text(
-            'Local Workers execute assignments from Conclave AX once this computer is connected.'),
+            'Local AI models and execution adapters running on this machine.'),
         findsOneWidget);
+    expect(find.text('Configured Workers'), findsNothing);
 
-    // Add Worker button is disabled
-    final addWorkerBtn = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Add Worker'),
-    );
-    expect(addWorkerBtn.onPressed, isNull);
-
-    // Tap Connect Workspace button to return to Workspace tab
-    await tester.tap(find.widgetWithText(FilledButton, 'Connect Workspace'));
-    await tester.pumpAndSettle();
-
-    // Verifies we are back on Workspace tab showing Connect this Workspace form
-    expect(find.text('Connect this computer to Conclave AX.'), findsOneWidget);
+    // Add Worker button is enabled and clickable
+    final addWorkerBtn = find.widgetWithText(FilledButton, 'Add Worker');
+    expect(addWorkerBtn, findsWidgets);
+    await tester.tap(addWorkerBtn.first);
+    await tester.pump();
+    expect(addWorkerCalled, isTrue);
   });
 
   testWidgets('switching to workers surface when paired displays configured workers area',
@@ -577,7 +577,11 @@ void main() {
     await tester.tap(find.text('Workers').first);
     await tester.pumpAndSettle();
 
-    expect(find.text('Configured Workers'), findsOneWidget);
+    expect(find.text('Configured Workers'), findsNothing);
+    expect(
+        find.text(
+            'Local AI models and execution adapters running on this machine.'),
+        findsOneWidget);
     expect(find.text('Add Worker'), findsOneWidget);
   });
 
