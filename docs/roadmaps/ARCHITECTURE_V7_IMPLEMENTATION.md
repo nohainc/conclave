@@ -14,7 +14,7 @@
 - [x] **V7-2 — local Worker registry.** Conclave Workspace persists revisioned, checksum-protected Worker configuration without plaintext/provider credentials.
 - [x] **V7-5 — child-process execution foundation.** Adapter execution has CWD isolation, bounded output, process-tree cancellation and per-Worker concurrency control.
 - [x] **V7-6 — Codex adapter foundation.** Codex CLI is the Worker Type; local authentication is a ChatGPT account/session. The adapter uses the supported Codex execution boundary rather than a generic "ChatGPT adapter".
-- [x] **V7-9 — safe Worker inventory transport.** Workspace reports credential-free local Worker inventory and Cloud persists owner-scoped projections with revisions.
+- [x] **V7-9 — safe Worker inventory transport.** Workspace reports credential-free local Worker inventory; Cloud persists owner-scoped projections with revisions, rejects cross-Workspace Worker-ID reuse, and reconciles authoritative full-snapshot omissions into tombstone/disabled state. Behavioral reconnect acceptance is part of the Phase 2 E2E gate.
 - [x] **V7-16 — adapter/package sharing.** Adapter package identity is separate from configured Worker identity, so one admitted package can serve multiple local Workers of the same type.
 
 ### Implemented in the desktop-convergence slice
@@ -32,15 +32,15 @@
 - [~] **V7-4 — production adapter trust.** Manifest/package admission, digest checks, health checks and rollback exist, but release trust still uses a shared HMAC secret. Public desktop distribution requires asymmetric signing: private key in release infrastructure, public verification key(s) in Conclave Workspace.
 - [~] **V7-7 — Antigravity live acceptance.** Adapter now targets official `agy` headless mode. Real Google-account acceptance remains opt-in/manual because it requires a provider account/quota.
 - [~] **V7-8 — API adapters.** OpenAI/Gemini/Anthropic provider adapters and mocked validation exist; opt-in live-provider acceptance and richer streaming/tool behavior remain.
-- [~] **V7-10/V7-11 — Cloud model/control cleanup.** V7 Worker inventory exists, but legacy V6 configured-Worker/binding persistence and APIs remain. V7 also still needs independent Cloud-owned scheduling state (`enabled` / `disabled` / `draining`) rather than deriving remote schedulability from local readiness.
-- [~] **V7-12/V7-13 — web execution UX cleanup.** Normal AX Worker setup is now local-only. Add the V7 scheduling controls and remove obsolete legacy data models/callbacks after backend migration.
-- [~] **V7-14/V7-15 — scheduler/authorization cleanup.** Scheduler can use Workspace-owned inventory and respects local permission ceilings, but still merges V7 candidates with V6 binding candidates. V7 must become sufficient for scheduling before the fallback is removed.
+- [~] **V7-10/V7-11 — Cloud model/control cleanup.** Independent Cloud-owned scheduling state (`enabled` / `disabled` / `draining`), drain auditing and V7 operational-control routes are implemented. Legacy V6 configured-Worker/binding persistence and APIs remain for compatibility and are removed only after the Phase 2 real E2E gate passes.
+- [~] **V7-12/V7-13 — web execution UX cleanup.** Normal AX Worker setup is local-only and AX now exposes V7 scheduling state plus enable/disable/drain controls. Obsolete legacy data models/callbacks and activity gaps remain until the V6 backend path is removed.
+- [~] **V7-14/V7-15 — scheduler/authorization cleanup.** The V7 candidate contract now requires local readiness plus independent Cloud scheduling state and has a test proving V7 selection can skip the V6 binding query. The legacy V6 fallback still exists; do not remove it until the Phase 2 scheduler -> Gateway -> Workspace -> adapter E2E gate passes.
 - [~] **V7-17 — background desktop UX.** macOS no longer terminates when the main window closes; a real menu-bar/tray/reopen/drain UX remains.
 - [~] **V7-18 — local permission/auth maturity.** Local credential storage and permission ceilings are enforced; provider-specific reauthentication/attention UX remains uneven.
 - [~] **V7-19 — release/update maturity.** Adapter rollback exists and macOS package/sign/notarize support now exists; app self-update and production adapter key rotation remain.
 - [~] **V7-21 — observability.** Useful runtime/Worker status and audit exist without Usage accounting; desktop diagnostics can be expanded.
 - [ ] **V7-22 — remove legacy v6 Worker compatibility.**
-- [~] **V7-23…V7-27 — acceptance.** Automated unit/protocol/schema tests cover major pieces, but the current `v7-solo-acceptance.test.ts` inserts inventory and completed assignment state directly. A real scheduler -> Workspace Gateway -> local Worker -> adapter child-process -> result integration harness, plus signed macOS and live-provider acceptance, must pass before declaring v7 production-ready.
+- [~] **V7-23…V7-27 — acceptance.** Phase 1 unit/integration coverage now proves scheduling-state separation, drain semantics, snapshot omission and a V7 candidate path that avoids the V6 binding query. The current `v7-solo-acceptance.test.ts` still inserts inventory/completed assignment state directly. The next required gate is the Phase 2 real scheduler -> Workspace Gateway -> local Worker registry -> adapter child-process -> result acceptance harness; broader failure/security, signed macOS and live-provider acceptance follow later.
 
 See [V7 Implementation Audit](../architecture/V7_IMPLEMENTATION_AUDIT.md) for the current convergence and release gates. The ordered remaining work is maintained in [Architecture v7 Completion Plan](ARCHITECTURE_V7_COMPLETION.md).
 
@@ -606,10 +606,12 @@ Cloud Worker inventory can be reconstructed entirely from Workspace sync.
 The Workspace sends a full safe inventory after each successful hello and
 every fourth heartbeat. Cloud binds every entry to the authenticated runtime's
 Workspace, rejects cross-Workspace ID reuse and stale/equal revisions, and
-persists removal tombstones. The authenticated `/api/v7/workers` read returns
-only the signed-in user's projection and never includes secure-store references
-or local paths. Snapshot omission reconciliation and reconnect/stale-revision
-end-to-end acceptance remain open.
+persists removal tombstones. Full snapshots are authoritative: omitted Workers
+are tombstoned and disabled while Worker IDs remain bound to their original
+Workspace. The authenticated `/api/v7/workers` read returns only the signed-in
+user's projection and never includes secure-store references or local paths.
+Reconnect/stale-revision behavior still needs behavioral coverage through the
+Phase 2 E2E harness.
 
 ---
 
@@ -754,17 +756,12 @@ Optionally deep-link/open local app when on same machine later.
 
 AX clearly communicates that Worker setup happens on the machine.
 
-The AX Workers tab currently reads the owner-scoped V7 inventory API and
-displays Workspace, Worker Type, readiness, model/capability summary, and local
-concurrency. V6 Cloud-created Workers are explicitly labeled as legacy during
-the migration. V7 Worker inventory cards now open a detail view with Overview,
-Workspace, Local attention, Scheduling, and Activity/Audit sections. The current
-inventory contract omits remote scheduling state and recent activity, so those
-sections state that limitation explicitly. When no local Workers are synced,
-the primary CTA directs the user to add one in Conclave Workspace and explains
-that it will appear after sync; legacy Cloud creation remains a secondary
-migration action. Live scheduling controls and synced activity remain
-outstanding.
+The AX Workers tab reads the owner-scoped V7 inventory API and displays
+Workspace, Worker Type, readiness, model/capability summary, local concurrency,
+Cloud scheduling state, and optional Cloud concurrency limit. Worker detail now
+provides enable/disable/drain controls. When no local Workers are synced, the
+primary CTA directs the user to add one in Conclave Workspace. Recent activity
+and final removal of legacy backend models/callbacks remain outstanding.
 
 ---
 
@@ -815,9 +812,10 @@ Cloud concurrency may only narrow local ceiling.
 
 The detail view is driven by the safe V7 inventory projection and shows Worker
 Type, owning Workspace, readiness, credential status, adapter version,
-model/capability summary, and local concurrency. Auth/prerequisite attention
-points the user back to Conclave Workspace on the owning machine. Scheduling
-state and recent audit data are not yet present in the inventory contract.
+model/capability summary, local concurrency, Cloud scheduling state and optional
+Cloud concurrency limit. Auth/prerequisite attention points the user back to
+Conclave Workspace on the owning machine. Enable/disable/drain controls are
+implemented; richer recent activity/audit presentation remains outstanding.
 
 ## Exit
 

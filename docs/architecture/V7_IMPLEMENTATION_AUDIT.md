@@ -1,6 +1,6 @@
 # Architecture v7 Implementation Audit — Current Main
 
-**Reviewed baseline:** `main@633fe705154e7de7a1f0ded79fd3958e5a08eb07`  
+**Reviewed baseline:** `main@2c740092fd0e558880873894fe997454a989fef2`  
 **Audit date:** 2026-09-26  
 **Target:** [Architecture v7](ARCHITECTURE_V7.md)  
 **Completion plan:** [Architecture v7 completion plan](../roadmaps/ARCHITECTURE_V7_COMPLETION.md)
@@ -24,24 +24,34 @@ The latest desktop-convergence work closed the earlier vertical-slice gaps:
 - Antigravity uses the `agy` integration contract;
 - safe Workspace-owned Worker inventory is visible in Conclave AX.
 
-The remaining work is now concentrated in five architectural/release areas:
+Phase 1 Cloud scheduling convergence is implemented:
 
-1. **The V7 scheduler path needs independent verification.** Inventory
-   candidates now use Cloud-owned scheduling state and Workspace-owned local
-   readiness. The legacy V6 candidate query remains for compatibility.
-2. **Full Cloud-to-AX operational acceptance remains open.** Enable/disable/
-   drain routes and snapshot reconciliation exist, but need executable tests
-   across state transitions and reconnect scenarios.
-3. **Legacy V6 APIs and persistence remain active.** Cloud still exposes
-   configured Worker creation/binding/credential routes and retains the V6
-   configured Worker tables.
-4. **Production adapter trust is not ready for public distribution.** Package
-   verification is still based on shared-secret HMAC trust rather than
-   asymmetric signatures with public verification keys.
-5. **Acceptance is not yet end to end.** The current V7 solo acceptance test is
-   a useful schema/lifecycle test, but it inserts inventory and completed
-   assignment state directly rather than exercising scheduler -> Gateway ->
-   Workspace -> adapter execution.
+- V7 Workers have independent Cloud scheduling state (`enabled`, `disabled`,
+  `draining`);
+- drain requests preserve active work and complete to disabled with audit;
+- local readiness and Cloud scheduling are intersected rather than conflated;
+- full inventory snapshots reconcile omissions into tombstone/disabled state;
+- AX exposes V7 scheduling state and enable/disable/drain controls;
+- scheduler tests prove a V7 candidate can be selected without reading the V6
+  binding query.
+
+The remaining work is now concentrated in four architectural/release areas:
+
+1. **Behavioral V7 end-to-end proof is the next gate.** The current V7 solo
+   acceptance test is useful schema/lifecycle coverage, but it still inserts
+   inventory and completed assignment state directly. Before deleting V6, a
+   deterministic test must exercise scheduler -> Workspace Gateway -> Workspace
+   runtime -> local Worker registry -> V7 adapter child process -> result.
+2. **Legacy V6 APIs, fallback and persistence remain active.** The V7 path can
+   operate independently for candidate selection, but the compatibility query,
+   configured Worker routes and V6 tables still exist and should be removed only
+   after the real E2E gate passes.
+3. **Production adapter/application trust is not ready for public
+   distribution.** Package verification still relies on shared-secret HMAC
+   trust rather than asymmetric signatures with public verification keys.
+4. **Production coverage/maturity remains incomplete.** Claude Code/Ollama,
+   live provider acceptance, broader failure/security coverage and background
+   desktop/update UX remain.
 
 v7 should therefore be described as:
 
@@ -392,19 +402,20 @@ add it through an explicit versioned protocol extension.
 Use the dedicated
 [Architecture v7 completion plan](../roadmaps/ARCHITECTURE_V7_COMPLETION.md).
 
-The short sequence is:
+Current status and sequence:
 
-1. V7 scheduling state + complete V7 Cloud candidate model;
-2. real V7 end-to-end integration harness;
-3. remove V6 scheduler/API/persistence compatibility;
-4. asymmetric adapter/update trust;
-5. automated first-party adapter releases;
-6. complete Claude Code/Ollama and live provider acceptance;
-7. failure/security/reconciliation hardening;
-8. macOS menu-bar/update/diagnostics maturity;
-9. final documentation convergence and V7 baseline declaration.
+1. **Phase 1 — complete:** V7 scheduling state, snapshot reconciliation and
+   V7-only candidate contract.
+2. **Phase 2 — next:** real V7 scheduler -> Gateway -> Workspace -> adapter E2E
+   migration-safety gate.
+3. **Phase 3:** remove V6 scheduler/API/persistence compatibility.
+4. **Phase 4:** asymmetric adapter/application trust and release automation.
+5. **Phase 5:** complete production Worker Type coverage and live acceptance.
+6. **Phase 6:** broader failure/recovery/security hardening.
+7. **Phase 7:** macOS menu-bar/update/diagnostics maturity.
+8. **Phase 8:** final documentation convergence and V7 baseline declaration.
 
-The E2E harness intentionally comes before destructive V6 cleanup.
+The E2E harness is a hard prerequisite for destructive V6 cleanup.
 
 ## Definition of V7 complete
 
