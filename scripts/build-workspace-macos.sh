@@ -28,8 +28,10 @@ fi
 echo "Building Conclave Workspace $VERSION for macOS"
 cd "$HOST_DIR"
 flutter pub get
-flutter analyze
-flutter test
+if [[ "${CONCLAVE_WORKSPACE_SKIP_CHECKS:-0}" != "1" ]]; then
+  flutter analyze
+  flutter test
+fi
 flutter build macos --release \
   --dart-define=CONCLAVE_WORKSPACE_VERSION="$VERSION"
 
