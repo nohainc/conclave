@@ -89,11 +89,11 @@ This supersedes the ADR-010 rule that one configured Worker may bind to multiple
 
 ### 3. Configured Worker identity is local-first and Cloud-synced
 
-The Workspace runtime generates the configured Worker ID and persists its local configuration.
+The Workspace runtime generates the configured Worker ID and persists its local configuration. Local Worker setup is available before Cloud pairing. A stable local installation identity owns the registry; after pairing, Cloud associates the safe inventory snapshot with the Cloud Workspace authenticated by that runtime. Re-pairing can associate the same local Workers with another Cloud Workspace without moving credentials off the machine.
 
 Local authoritative properties include:
 - Worker ID;
-- Workspace ID association;
+- local Workspace installation association;
 - display name;
 - Worker Type;
 - authentication method/credential reference;
@@ -315,6 +315,12 @@ No hardware fingerprint is required.
 Workspace re-enrollment may create a new Cloud Workspace ID while preserving local Work Root data as defined by ADR-011.
 
 Configured Worker continuity across re-enrollment is allowed only when the local Worker configuration remains present and is safely re-associated during pairing/sync.
+
+Unpairing explicitly revokes the active Cloud runtime credential and disconnects
+the Cloud projection. It preserves local Workers, provider credentials, and
+Workstream files so the user can pair this installation with a different Cloud
+Workspace. Project access remains controlled by Cloud Workspace Grants in
+Conclave AX; a Workspace does not need a separate pairing for each Project.
 
 ### 13. Conclave Workspace has a minimal GUI, not a duplicate Conclave AX
 

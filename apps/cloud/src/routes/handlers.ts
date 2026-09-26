@@ -4602,6 +4602,117 @@ async function handleRedeemWorkspaceEnrollment(
   );
 }
 
+async function handleUnpairWorkspaceRuntime(
+  request: Request,
+  env: SecurityEnv,
+): Promise<Response> {
+  const token = extractBearerToken(request.headers);
+  if (!token)
+    return json(
+      { error: "Workspace runtime credential is required" },
+      { status: 401 },
+    );
+
+  const tokenHash = await hashToken(token);
+  const runtime = await env.CONCLAVE_DB.prepare(
+    `SELECT id, workspace_id AS workspaceId, revoked_at AS revokedAt
+       FROM workspace_runtime_identities
+      WHERE credential_token_hash = ?1`,
+  )
+    .bind(tokenHash)
+    .first<{ id: string; workspaceId: string; revokedAt: string | null }>();
+  if (!runtime) {
+    return json(
+      { error: "Invalid or already revoked Workspace credential" },
+      { status: 401 },
+    );
+  }
+  if (runtime.revokedAt) {
+    const gatewayDisconnected = await disconnectWorkspaceRuntime(
+      env,
+      runtime.workspaceId,
+      runtime.id,
+    );
+    return json({
+      unpaired: true,
+      alreadyUnpaired: true,
+      workspaceId: runtime.workspaceId,
+      gatewayDisconnected,
+    });
+  }
+
+  const now = new Date().toISOString();
+  await env.CONCLAVE_DB.batch([
+    env.CONCLAVE_DB.prepare(
+      `UPDATE workspace_runtime_identities SET revoked_at = ?1
+        WHERE id = ?2 AND credential_token_hash = ?3 AND revoked_at IS NULL`,
+    ).bind(now, runtime.id, tokenHash),
+    env.CONCLAVE_DB.prepare(
+      `UPDATE execution_workspaces SET status = 'offline', updated_at = ?1
+        WHERE id = ?2 AND status <> 'revoked'
+          AND NOT EXISTS (
+            SELECT 1 FROM workspace_runtime_identities
+             WHERE workspace_id = ?2 AND revoked_at IS NULL
+          )`,
+    ).bind(now, runtime.workspaceId),
+    env.CONCLAVE_DB.prepare(
+      `UPDATE worker_assignments SET status = 'cancelled', error_json = ?1, updated_at = ?2
+        WHERE execution_workspace_id = ?3 AND status IN ('created', 'dispatched')`,
+    ).bind(
+      JSON.stringify({
+        code: "workspace_unpaired",
+        message: "Workspace runtime unpaired",
+      }),
+      now,
+      runtime.workspaceId,
+    ),
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO workspace_audit_log
+        (id, workspace_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
+       VALUES (?1, ?2, 'workspace', ?3, 'workspace.runtime.unpaired', 'workspace_runtime', ?3, ?4, ?5)`,
+    ).bind(
+      `audit-${crypto.randomUUID()}`,
+      runtime.workspaceId,
+      runtime.id,
+      JSON.stringify({ unpairedAt: now }),
+      now,
+    ),
+  ]);
+  const gatewayDisconnected = await disconnectWorkspaceRuntime(
+    env,
+    runtime.workspaceId,
+    runtime.id,
+  );
+  return json({
+    unpaired: true,
+    workspaceId: runtime.workspaceId,
+    completedAt: now,
+    gatewayDisconnected,
+  });
+}
+
+async function disconnectWorkspaceRuntime(
+  env: SecurityEnv,
+  workspaceId: string,
+  runtimeId: string,
+): Promise<boolean> {
+  const gateway = env.CONCLAVE_WORKSPACE_GATEWAY;
+  if (!gateway) return false;
+  try {
+    const response = await gateway
+      .getByName(workspaceId)
+      .fetch("https://workspace-gateway/disconnect-runtime", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ runtimeId }),
+      });
+    if (!response.ok) return false;
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 async function handleEnrollHost(
   request: Request,
   env: SecurityEnv,
@@ -10373,6 +10484,7 @@ export {
   handleInternalDispatchTaskAssignment,
   handleWorkspaceGatewayConnect,
   handleRedeemWorkspaceEnrollment,
+  handleUnpairWorkspaceRuntime,
   handleEnrollHost,
   handleBindHostWorkspace,
   handleListHostEnrollments,

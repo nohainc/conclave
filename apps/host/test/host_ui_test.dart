@@ -7,6 +7,7 @@ void main() {
     WidgetTester tester,
     HostUiSnapshot snapshot, {
     VoidCallback? onPair,
+    VoidCallback? onUnpair,
     VoidCallback? onAccountAction,
     Future<void> Function()? onRetry,
     Future<void> Function()? onExportDiagnostics,
@@ -17,6 +18,7 @@ void main() {
           body: HostDashboard(
             snapshot: snapshot,
             onPair: onPair,
+            onUnpair: onUnpair,
             onAccountAction: onAccountAction,
             onRetry: onRetry,
             onExportDiagnostics: onExportDiagnostics,
@@ -38,11 +40,30 @@ void main() {
       onPair: () => paired = true,
     );
 
-    expect(find.text('Start pairing'), findsOneWidget);
+    expect(find.text('Pair with Conclave AX'), findsOneWidget);
     expect(find.text('Projects'), findsNothing);
     expect(find.text('Chats'), findsNothing);
-    await tester.tap(find.text('Start pairing'));
+    await tester.tap(find.text('Pair with Conclave AX'));
     expect(paired, isTrue);
+  });
+
+  testWidgets('unpaired offline Workspace can still open pairing',
+      (tester) async {
+    var opened = false;
+    await pumpDashboard(
+      tester,
+      const HostUiSnapshot(
+        mode: HostUiMode.offline,
+        title: 'Workspace is offline',
+        detail: 'The Workspace could not connect.',
+        issue: 'Network unavailable',
+      ),
+      onPair: () => opened = true,
+    );
+
+    expect(find.text('Pair with Conclave AX'), findsOneWidget);
+    await tester.tap(find.text('Pair with Conclave AX'));
+    expect(opened, isTrue);
   });
 
   testWidgets('paired Workspace shows machine controls, not orchestration',
@@ -194,6 +215,11 @@ void main() {
   testWidgets('settings tab displays work root and cloud pairing',
       (tester) async {
     var paired = false;
+    var unpaired = false;
+    tester.view.physicalSize = const Size(800, 1100);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await pumpDashboard(
       tester,
       const HostUiSnapshot(
@@ -209,6 +235,7 @@ void main() {
         workRootPath: '/workspace/root',
       ),
       onPair: () => paired = true,
+      onUnpair: () => unpaired = true,
     );
 
     await tester.tap(find.text('Settings'));
@@ -222,6 +249,9 @@ void main() {
 
     await tester.tap(find.text('Re-pair Workspace'));
     expect(paired, isTrue);
+    await tester.drag(find.byType(ListView).last, const Offset(0, -360));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Unpair this Workspace'));
+    expect(unpaired, isTrue);
   });
 }
-

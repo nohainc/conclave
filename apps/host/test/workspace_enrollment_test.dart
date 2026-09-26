@@ -24,9 +24,32 @@ class _MemoryCredentials implements SecureCredentialStore {
 }
 
 void main() {
+  test('unpair revokes the runtime credential before local unlinking',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    final requestFuture = server.first.then((request) async {
+      expect(request.method, 'POST');
+      expect(request.uri.path, '/api/workspace-runtime/unpair');
+      expect(request.headers.value(HttpHeaders.authorizationHeader),
+          'Bearer runtime-secret');
+      request.response.statusCode = HttpStatus.ok;
+      request.response.headers.contentType = ContentType.json;
+      request.response.write('{"unpaired":true}');
+      await request.response.close();
+    });
+
+    await WorkspacePairingService.unpair(
+      cloudUrl: 'http://127.0.0.1:${server.port}',
+      token: 'runtime-secret',
+    );
+    await requestFuture;
+  });
+
   test('pairs a desktop Workspace and persists only the runtime token locally',
       () async {
-    final temp = await Directory.systemTemp.createTemp('conclave-pairing-test-');
+    final temp =
+        await Directory.systemTemp.createTemp('conclave-pairing-test-');
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() async {
       await server.close(force: true);
@@ -36,8 +59,8 @@ void main() {
     final requestFuture = server.first.then((request) async {
       expect(request.method, 'POST');
       expect(request.uri.path, '/api/workspace-runtime/enroll');
-      final body =
-          jsonDecode(await utf8.decoder.bind(request).join()) as Map<String, dynamic>;
+      final body = jsonDecode(await utf8.decoder.bind(request).join())
+          as Map<String, dynamic>;
       expect(body['token'], 'one-time-code');
       expect(body['hostname'], 'test-mac');
       expect(body['platform'], isNotEmpty);

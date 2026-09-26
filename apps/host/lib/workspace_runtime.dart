@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:conclave_host/host.dart';
+import 'package:conclave_host/host_configuration.dart';
 import 'package:conclave_host/assignment_journal.dart';
 import 'package:conclave_host/cloud_connection.dart';
 import 'package:conclave_host/worker_executor.dart';
@@ -34,15 +35,16 @@ Future<Host> buildWorkspaceRuntime(
   const credentialStore = PlatformSecureCredentialStore();
   final workerExecutor = WorkerProcessExecutor();
   final releaseTrustPolicy = workerTrustPolicy;
-  final localWorkerRegistry = config.workspaceId == null
-      ? null
-      : LocalConfiguredWorkerRegistry(
-          dataDirectory: config.dataDirectory,
-          workspaceId: config.workspaceId!,
-          onWorkerRemoving: (workerId) async {
-            await workerExecutor.cancelWorker(workerId);
-          },
-        );
+  final localWorkspaceId = await LocalWorkspaceIdentityStore(
+    config.dataDirectory,
+  ).getOrCreate(initialIdentity: config.workspaceId);
+  final localWorkerRegistry = LocalConfiguredWorkerRegistry(
+    dataDirectory: config.dataDirectory,
+    workspaceId: localWorkspaceId,
+    onWorkerRemoving: (workerId) async {
+      await workerExecutor.cancelWorker(workerId);
+    },
+  );
   final v7AdapterPackageStore = V7AdapterPackageStore(
     root: Directory('${config.dataDirectory.path}/v7-adapters'),
     trustPolicy: workerTrustPolicy,
@@ -55,7 +57,7 @@ Future<Host> buildWorkspaceRuntime(
           packageStore: v7AdapterPackageStore,
           authToken: config.authToken,
         );
-  final activeWorkerIds = (await localWorkerRegistry?.list() ?? const [])
+  final activeWorkerIds = (await localWorkerRegistry.list())
       .where((worker) => worker.status == LocalWorkerStatus.ready)
       .map((worker) => worker.id)
       .toList();
@@ -67,11 +69,7 @@ Future<Host> buildWorkspaceRuntime(
     executor: workerExecutor,
     resolve: (_) async => null,
     resolveV7Adapter: (workerId) async {
-      final registry = localWorkerRegistry;
-      if (registry == null) {
-        throw StateError('Workspace-owned Worker inventory is unavailable');
-      }
-      final worker = await registry.find(workerId);
+      final worker = await localWorkerRegistry.find(workerId);
       if (worker == null) {
         throw StateError('Workspace-owned Worker is not present locally');
       }
@@ -92,7 +90,7 @@ Future<Host> buildWorkspaceRuntime(
     },
     resolveRepositoryPath: repositoryRegistry.resolve,
     resolvePermissions: (workerId) async {
-      final worker = await localWorkerRegistry?.find(workerId);
+      final worker = await localWorkerRegistry.find(workerId);
       if (worker == null) {
         throw StateError('Workspace-owned Worker is not present locally');
       }
@@ -107,7 +105,7 @@ Future<Host> buildWorkspaceRuntime(
       };
     },
     resolveConcurrencyLimit: (workerId) async {
-      final worker = await localWorkerRegistry?.find(workerId);
+      final worker = await localWorkerRegistry.find(workerId);
       return worker?.localConcurrencyLimit;
     },
     workstreamDirectoryLifecycle: WorkstreamDirectoryLifecycle(
@@ -159,8 +157,7 @@ Future<Host> buildWorkspaceRuntime(
           assignmentCancellationHandler: workerHandler.cancel,
           workerInventoryProvider: () async {
             final localWorkers =
-                await localWorkerRegistry?.list(includeRemoved: true) ??
-                    const [];
+                await localWorkerRegistry.list(includeRemoved: true);
             final lastSeenAt = DateTime.now().toUtc().toIso8601String();
             return Future.wait(localWorkers.map((worker) async {
               Map<String, Object?>? adapterSummary;
@@ -232,7 +229,7 @@ Future<Host> buildWorkspaceRuntime(
         reconcilingAdapters = true;
         try {
           final canActivate = (connection?.activeAssignmentCount ?? 0) == 0;
-          final workers = await localWorkerRegistry?.list() ?? const [];
+          final workers = await localWorkerRegistry.list();
           for (final worker in workers.where((item) =>
               item.status == LocalWorkerStatus.ready &&
               item.adapterVersionPolicy != null)) {
@@ -259,7 +256,7 @@ Future<Host> buildWorkspaceRuntime(
     adapterPackageStore: v7AdapterPackageStore,
     statusProvider: () async {
       await refreshUpdateAvailability();
-      final workers = await localWorkerRegistry?.list() ?? const [];
+      final workers = await localWorkerRegistry.list();
       return {
         'appVersion': conclaveWorkspaceAppVersion,
         'workers': workers.length,

@@ -210,6 +210,9 @@ export class WorkspaceGateway implements DurableObject {
         sessionId: this.sessionId,
       });
     }
+    if (request.method === "POST" && url.pathname === "/disconnect-runtime") {
+      return this.disconnectRuntime(request);
+    }
     if (request.method === "POST" && url.pathname === "/dispatch-assignment") {
       return this.dispatchAssignment(request);
     }
@@ -229,6 +232,25 @@ export class WorkspaceGateway implements DurableObject {
       return this.sendCheckoutCommand(request, "checkout.finalize");
     }
     return Response.json({ error: "Not found" }, { status: 404 });
+  }
+
+  private async disconnectRuntime(request: Request): Promise<Response> {
+    const body = (await request.json()) as Record<string, unknown>;
+    const runtimeId =
+      typeof body.runtimeId === "string" ? body.runtimeId : null;
+    if (!runtimeId) {
+      return Response.json({ error: "runtimeId is required" }, { status: 400 });
+    }
+    if (this.workspaceRuntimeId !== runtimeId || !this.socket) {
+      return Response.json({ disconnected: false });
+    }
+    try {
+      this.socket.close(1000, "Workspace runtime unpaired");
+    } catch {
+      // The runtime credential is already revoked; a failed close cannot
+      // restore authorization or permit future reconnects.
+    }
+    return Response.json({ disconnected: true });
   }
 
   private async connectSocket(request: Request, url: URL): Promise<Response> {

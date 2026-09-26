@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'platform_runtime.dart';
 
@@ -71,5 +72,43 @@ class HostRegistrationStore {
     await file.writeAsString(jsonEncode(registration.toJson()), flush: true);
     await (platform ?? currentPlatformRuntime)
         .restrictPermissions(file.path, directory: false);
+  }
+
+  Future<void> clear() async {
+    if (await file.exists()) await file.delete();
+  }
+}
+
+/// Stable local identity for Worker ownership. It exists before Cloud pairing
+/// and survives re-pairing this machine to another Cloud Workspace.
+class LocalWorkspaceIdentityStore {
+  const LocalWorkspaceIdentityStore(this.dataDirectory, {this.platform});
+
+  final Directory dataDirectory;
+  final PlatformRuntime? platform;
+
+  File get file =>
+      File('${dataDirectory.path}${Platform.pathSeparator}local-workspace-id');
+
+  Future<String> getOrCreate({String? initialIdentity}) async {
+    if (await file.exists()) {
+      final existing = (await file.readAsString()).trim();
+      if (existing.isNotEmpty) return existing;
+    }
+    final identity = initialIdentity?.trim().isNotEmpty == true
+        ? initialIdentity!.trim()
+        : 'local-${_randomToken()}';
+    await dataDirectory.create(recursive: true);
+    await file.writeAsString(identity, flush: true);
+    await (platform ?? currentPlatformRuntime)
+        .restrictPermissions(file.path, directory: false);
+    return identity;
+  }
+
+  static String _randomToken() {
+    final random = Random.secure();
+    return List<int>.generate(24, (_) => random.nextInt(256))
+        .map((value) => value.toRadixString(16).padLeft(2, '0'))
+        .join();
   }
 }

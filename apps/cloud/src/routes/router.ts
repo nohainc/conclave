@@ -30,8 +30,12 @@ export async function routeWorkerRequest(
     const workspaceEnrollmentRedeem =
       request.method === "POST" &&
       url.pathname === "/api/workspace-runtime/enroll";
+    const workspaceRuntimeUnpair =
+      request.method === "POST" &&
+      url.pathname === "/api/workspace-runtime/unpair";
     if (
       !workspaceEnrollmentRedeem &&
+      !workspaceRuntimeUnpair &&
       (request.method === "POST" ||
         request.method === "PUT" ||
         request.method === "PATCH" ||
@@ -41,6 +45,9 @@ export async function routeWorkerRequest(
     }
     if (workspaceEnrollmentRedeem) {
       return await handlers.handleRedeemWorkspaceEnrollment!(request, env, ctx);
+    }
+    if (workspaceRuntimeUnpair) {
+      return await handlers.handleUnpairWorkspaceRuntime!(request, env);
     }
     if (request.method === "GET" && url.pathname === "/api/session") {
       return await handlers.handleSession!(request, env, ctx);

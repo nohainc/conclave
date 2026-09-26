@@ -82,8 +82,11 @@ class _WorkspacePairingDialogState extends State<_WorkspacePairingDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'In Conclave AX, open the Workspace and choose Connect machine. '
-                'Paste the one-time pairing code here.',
+                'In Conclave AX, open the Workspace you want this machine to use '
+                'and choose Connect machine. Paste the one-time pairing code here. '
+                'You can configure local Workers before pairing; pairing shares '
+                'only safe Worker inventory with Cloud. To switch an already '
+                'paired machine to a different Workspace, unpair it first in Settings.',
               ),
               const SizedBox(height: 18),
               TextField(

@@ -43,6 +43,28 @@ describe("Workspace desktop enrollment route", () => {
     expect(sameOrigin).not.toHaveBeenCalled();
   });
 
+  it("revokes a paired runtime using bearer auth without cookie CSRF", async () => {
+    const sameOrigin = vi.fn();
+    const unpair = vi.fn(async () =>
+      Response.json({ unpaired: true }, { status: 200 }),
+    );
+
+    const response = await routeWorkerRequest(
+      new Request("https://app.conclaveax.com/api/workspace-runtime/unpair", {
+        method: "POST",
+        headers: { authorization: "Bearer runtime-token" },
+      }),
+      {} as Env,
+      undefined,
+      { handleUnpairWorkspaceRuntime: unpair },
+      dependencies(sameOrigin),
+    );
+
+    expect(response.status).toBe(200);
+    expect(unpair).toHaveBeenCalledOnce();
+    expect(sameOrigin).not.toHaveBeenCalled();
+  });
+
   it("keeps same-origin enforcement for normal mutation routes", async () => {
     const sameOrigin = vi.fn();
     const createWorkspace = vi.fn(async () =>

@@ -109,7 +109,9 @@ class WorkspaceEnrollmentClient {
 
   static String _architecture() {
     final version = Platform.version.toLowerCase();
-    if (version.contains('arm64') || version.contains('aarch64')) return 'arm64';
+    if (version.contains('arm64') || version.contains('aarch64')) {
+      return 'arm64';
+    }
     return 'x64';
   }
 }
@@ -117,11 +119,64 @@ class WorkspaceEnrollmentClient {
 class WorkspacePairingService {
   WorkspacePairingService({
     required this.dataDirectory,
-    SecureCredentialStore credentialStore = const PlatformSecureCredentialStore(),
+    SecureCredentialStore credentialStore =
+        const PlatformSecureCredentialStore(),
   }) : _credentialStore = credentialStore;
 
   final Directory dataDirectory;
   final SecureCredentialStore _credentialStore;
+
+  static Future<void> unpair({
+    required String cloudUrl,
+    required String token,
+  }) async {
+    final base = Uri.tryParse(cloudUrl.trim());
+    if (base == null ||
+        !const {'https', 'http'}.contains(base.scheme) ||
+        base.host.isEmpty) {
+      throw ArgumentError('Cloud URL must be an HTTP(S) origin.');
+    }
+    if (token.trim().isEmpty) {
+      throw ArgumentError('Workspace runtime credential is required.');
+    }
+    final uri = base.replace(
+      path: '${base.path.replaceFirst(RegExp(r'/$'), '')}'
+          '/api/workspace-runtime/unpair',
+      query: null,
+      fragment: null,
+    );
+    final client = HttpClient();
+    try {
+      final request = await client.postUrl(uri).timeout(
+            const Duration(seconds: 20),
+          );
+      request.headers
+          .set(HttpHeaders.authorizationHeader, 'Bearer ${token.trim()}');
+      final response = await request.close().timeout(
+            const Duration(seconds: 20),
+          );
+      final body = await utf8.decoder.bind(response).join().timeout(
+            const Duration(seconds: 20),
+          );
+      if (response.statusCode != HttpStatus.ok) {
+        var detail = body.trim();
+        try {
+          final parsed = jsonDecode(body);
+          if (parsed is Map && parsed['error'] is String) {
+            detail = parsed['error'] as String;
+          }
+        } on Object {
+          // Use the response text when Cloud returns a non-JSON error.
+        }
+        throw StateError(
+          'Unpair failed (HTTP ${response.statusCode})'
+          '${detail.isEmpty ? '' : ': $detail'}',
+        );
+      }
+    } finally {
+      client.close(force: true);
+    }
+  }
 
   Future<HostRegistration> pair({
     required String cloudUrl,

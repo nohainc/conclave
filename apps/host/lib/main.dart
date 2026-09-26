@@ -504,7 +504,8 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
   void _refresh() => setState(() {});
 
   Future<void> _confirmQuit() async {
-    final activeCount = widget.lifecycle.host.cloudConnection?.activeAssignmentCount ?? 0;
+    final activeCount =
+        widget.lifecycle.host.cloudConnection?.activeAssignmentCount ?? 0;
     final shouldQuit = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -580,6 +581,77 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     }
   }
 
+  Future<void> _unpairWorkspace() async {
+    final lifecycle = widget.lifecycle;
+    final registration =
+        HostRegistrationStore(lifecycle.host.config.dataDirectory).readSync();
+    if (registration == null) return;
+    if ((lifecycle.host.cloudConnection?.activeAssignmentCount ?? 0) > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Wait for active work to finish before unpairing.'),
+        ),
+      );
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Unpair this Workspace?'),
+        content: const Text(
+          'This disconnects this machine from its current Cloud Workspace. '
+          'Local Workers, credentials, and Workstream files stay on this machine. '
+          'You can pair it with another Workspace afterward.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Unpair'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      final token =
+          lifecycle.host.credentialStore.readSync(registration.hostId);
+      if (token == null) {
+        throw StateError('Workspace credential is missing; reconnect first.');
+      }
+      await WorkspacePairingService.unpair(
+        cloudUrl: registration.cloudUrl,
+        token: token,
+      );
+      await lifecycle.host.credentialStore.delete(registration.hostId);
+      await HostRegistrationStore(lifecycle.host.config.dataDirectory).clear();
+      final replacement = await buildWorkspaceRuntime(
+        HostConfig.fromArgs(
+          const [],
+          credentialStore: lifecycle.host.credentialStore,
+        ),
+      );
+      await lifecycle.replaceHost(replacement);
+      if (mounted) {
+        setState(() => _workerRevision++);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Workspace unpaired. Local Workers are preserved.'),
+          ),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not unpair Workspace: $error')),
+      );
+    }
+  }
+
   Future<void> _addLocalWorker(BuildContext context) async {
     final registry = widget.lifecycle.host.localWorkerRegistry;
     if (registry == null) return;
@@ -611,8 +683,8 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
 
   Future<bool> _ensureAdapterAvailable(String workerTypeId) async {
     final host = widget.lifecycle.host;
-    final cloudUri = host.config.cloudUri;
-    if (cloudUri == null) return false;
+    final cloudUri =
+        host.config.cloudUri ?? Uri.parse(conclaveProductionCloudUrl);
     final catalog = V7AdapterCatalogClient(
       cloudUri: cloudUri,
       authToken: host.config.authToken,
@@ -641,6 +713,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
             : HostDashboard(
                 snapshot: lifecycle.uiSnapshot,
                 onPair: _pairWorkspace,
+                onUnpair: _unpairWorkspace,
                 onQuit: _confirmQuit,
                 onRetry: lifecycle.launch,
                 onExportDiagnostics: _exportDiagnostics,
@@ -660,6 +733,7 @@ class HostDashboard extends StatefulWidget {
   const HostDashboard({
     required this.snapshot,
     this.onPair,
+    this.onUnpair,
     this.onAccountAction,
     this.onQuit,
     this.onRetry,
@@ -675,6 +749,7 @@ class HostDashboard extends StatefulWidget {
 
   final HostUiSnapshot snapshot;
   final VoidCallback? onPair;
+  final VoidCallback? onUnpair;
   final VoidCallback? onAccountAction;
   final VoidCallback? onQuit;
   final Future<void> Function()? onRetry;
@@ -741,8 +816,8 @@ class _HostDashboardState extends State<HostDashboard> {
                     ),
                     const SizedBox(width: 8),
                     Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
                         color: statusColor.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(12),
@@ -851,6 +926,7 @@ class _HostDashboardState extends State<HostDashboard> {
                       2 => _SettingsTab(
                           snapshot: snapshot,
                           onPair: widget.onPair,
+                          onUnpair: widget.onUnpair,
                           onQuit: widget.onQuit,
                         ),
                       3 => _DiagnosticsTab(
@@ -959,12 +1035,12 @@ class _OverviewTab extends StatelessWidget {
                       onRetry: onRetry,
                     ),
                   ),
-                if (snapshot.mode == HostUiMode.firstLaunch) ...[
+                if (!snapshot.paired && onPair != null) ...[
                   const SizedBox(height: 16),
                   FilledButton.icon(
                     onPressed: onPair,
                     icon: const Icon(Icons.link),
-                    label: const Text('Start pairing'),
+                    label: const Text('Pair with Conclave AX'),
                   ),
                 ],
               ],
@@ -1088,7 +1164,7 @@ class _OverviewTab extends StatelessWidget {
                 const SizedBox(height: 12),
                 if (localWorkerRegistry == null)
                   const Text(
-                      'Pair this Workspace before configuring local Workers.')
+                      'Local Worker setup is unavailable. Restart Workspace and check Diagnostics.')
                 else
                   FutureBuilder<List<LocalConfiguredWorker>>(
                     key: ValueKey(workerRevision),
@@ -1166,8 +1242,8 @@ class _OverviewTab extends StatelessWidget {
                     const Spacer(),
                     if (snapshot.workRootPath != null)
                       TextButton.icon(
-                        onPressed: () =>
-                            HostLifecycleController.openPath(snapshot.workRootPath!),
+                        onPressed: () => HostLifecycleController.openPath(
+                            snapshot.workRootPath!),
                         icon: const Icon(Icons.folder_open, size: 16),
                         label: const Text('Open in Finder'),
                       ),
@@ -1175,7 +1251,8 @@ class _OverviewTab extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  snapshot.workRootPath ?? 'Work root directory not initialized yet.',
+                  snapshot.workRootPath ??
+                      'Work root directory not initialized yet.',
                   style: TextStyle(
                     fontFamily: 'monospace',
                     fontSize: 12,
@@ -1407,7 +1484,7 @@ class _WorkersTabState extends State<_WorkersTab> {
             child: Padding(
               padding: EdgeInsets.all(20),
               child: Text(
-                  'Pair this Workspace before configuring local Workers.'),
+                  'Local Worker setup is unavailable. Restart Workspace and check Diagnostics.'),
             ),
           )
         else
@@ -1486,7 +1563,8 @@ class _WorkersTabState extends State<_WorkersTab> {
                                 width: 40,
                                 height: 40,
                                 decoration: BoxDecoration(
-                                  color: theme.colorScheme.surfaceContainerHighest
+                                  color: theme
+                                      .colorScheme.surfaceContainerHighest
                                       .withValues(alpha: 0.5),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
@@ -1499,8 +1577,7 @@ class _WorkersTabState extends State<_WorkersTab> {
                               const SizedBox(width: 14),
                               Expanded(
                                 child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Row(
                                       children: [
@@ -1512,7 +1589,8 @@ class _WorkersTabState extends State<_WorkersTab> {
                                           ),
                                         ),
                                         const SizedBox(width: 8),
-                                        _WorkerStatusBadge(status: worker.status),
+                                        _WorkerStatusBadge(
+                                            status: worker.status),
                                       ],
                                     ),
                                     const SizedBox(height: 4),
@@ -1612,8 +1690,10 @@ class _WorkerStatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final (label, color) = switch (status) {
       LocalWorkerStatus.ready => ('Ready', ConclaveBrand.success),
-      LocalWorkerStatus.needsAttention =>
-        ('Needs attention', ConclaveBrand.warning),
+      LocalWorkerStatus.needsAttention => (
+          'Needs attention',
+          ConclaveBrand.warning
+        ),
       LocalWorkerStatus.disabled => ('Disabled', Colors.grey),
       LocalWorkerStatus.removed => ('Removed', ConclaveBrand.error),
     };
@@ -1653,7 +1733,8 @@ class _WorkerDetailDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final friendlyType = _WorkersTabState._friendlyTypeName(worker.workerTypeId);
+    final friendlyType =
+        _WorkersTabState._friendlyTypeName(worker.workerTypeId);
 
     return AlertDialog(
       title: Row(
@@ -1717,8 +1798,7 @@ class _WorkerDetailDialog extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               if (worker.localPermissions.isEmpty)
-                Text('No permissions granted',
-                    style: theme.textTheme.bodySmall)
+                Text('No permissions granted', style: theme.textTheme.bodySmall)
               else
                 Wrap(
                   spacing: 6,
@@ -1740,8 +1820,7 @@ class _WorkerDetailDialog extends StatelessWidget {
                 ),
                 children: [
                   _DetailRow(label: 'Worker ID', value: worker.id),
-                  _DetailRow(
-                      label: 'Revision', value: 'r${worker.revision}'),
+                  _DetailRow(label: 'Revision', value: 'r${worker.revision}'),
                   if (worker.credentialRef != null)
                     _DetailRow(
                       label: 'Credential Reference',
@@ -1824,11 +1903,13 @@ class _SettingsTab extends StatelessWidget {
   const _SettingsTab({
     required this.snapshot,
     this.onPair,
+    this.onUnpair,
     this.onQuit,
   });
 
   final HostUiSnapshot snapshot;
   final VoidCallback? onPair;
+  final VoidCallback? onUnpair;
   final VoidCallback? onQuit;
 
   @override
@@ -1843,7 +1924,7 @@ class _SettingsTab extends StatelessWidget {
                 ?.copyWith(fontWeight: FontWeight.w700)),
         const SizedBox(height: 4),
         Text(
-          'Workspace machine configuration and cloud pairing.',
+          'Pair once to a Cloud Workspace. Manage its access to one or more Projects in Conclave AX. Unpair before connecting this machine to a different Workspace.',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
@@ -1981,8 +2062,17 @@ class _SettingsTab extends StatelessWidget {
                 ),
                 _DetailRow(
                   label: 'Workspace ID',
-                  value: snapshot.workspaceId ?? snapshot.hostId ?? 'Not paired',
+                  value:
+                      snapshot.workspaceId ?? snapshot.hostId ?? 'Not paired',
                 ),
+                if (snapshot.paired) ...[
+                  const SizedBox(height: 12),
+                  TextButton.icon(
+                    onPressed: onUnpair,
+                    icon: const Icon(Icons.link_off, size: 16),
+                    label: const Text('Unpair this Workspace'),
+                  ),
+                ],
               ],
             ),
           ),
@@ -2124,7 +2214,8 @@ class _DiagnosticsTab extends StatelessWidget {
                 const SizedBox(height: 12),
                 _CopyableDetailRow(
                   label: 'Workspace ID',
-                  value: snapshot.workspaceId ?? snapshot.hostId ?? 'Not paired',
+                  value:
+                      snapshot.workspaceId ?? snapshot.hostId ?? 'Not paired',
                 ),
                 _CopyableDetailRow(
                   label: 'Runtime ID',
@@ -2136,7 +2227,8 @@ class _DiagnosticsTab extends StatelessWidget {
                 ),
                 _DetailRow(
                   label: 'OS Platform',
-                  value: '${Platform.operatingSystem} (${Platform.operatingSystemVersion})',
+                  value:
+                      '${Platform.operatingSystem} (${Platform.operatingSystemVersion})',
                 ),
               ],
             ),
