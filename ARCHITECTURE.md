@@ -54,6 +54,7 @@ not describe V7 as the implemented baseline until all release gates pass.
 - [Architecture v7](docs/architecture/ARCHITECTURE_V7.md)
 - [ADR-012: Workspace-owned Workers](docs/decisions/ADR-012-workspace-owned-local-workers.md)
 - [Applications and product boundaries](docs/architecture/APPLICATIONS.md)
+- [AX Workspaces UX and data contract](docs/architecture/WORKSPACES_UX_CONTRACT.md)
 - [Technology stack](docs/architecture/TECH_STACK.md)
 - [V7 implementation audit](docs/architecture/V7_IMPLEMENTATION_AUDIT.md)
 - [V7 completion plan and release gates](docs/roadmaps/ARCHITECTURE_V7_COMPLETION.md)

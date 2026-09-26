@@ -26,6 +26,10 @@ Conclave AX is the web application. It is not packaged as the machine-side execu
 
 Conclave AX communicates only with Conclave Cloud.
 
+The canonical execution-capacity destination in AX is **Workspaces**. Workers
+appear inside their owning Workspace rather than as an independent top-level
+page. See the [Workspaces UX and data contract](WORKSPACES_UX_CONTRACT.md).
+
 Workspace-owned Worker inventory and V7 remote scheduling enable/disable/drain
 controls are implemented. Cloud schedules only Workers owned by their paired
 Workspace and cannot modify local credentials or permissions.
@@ -129,7 +133,7 @@ Models such as GPT, Gemini Pro/Flash or Claude Sonnet/Opus are configuration, no
 
 Use:
 - Conclave AX;
-- Execution;
+- Workspaces for the top-level AX execution-capacity page;
 - Workspace;
 - Worker;
 - Worker Type when referring to adapter/catalog infrastructure;

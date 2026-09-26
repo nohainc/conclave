@@ -21,10 +21,9 @@ Conclave AX
        -> Workstreams
             -> Discuss
             -> Work
-
-Execution
   -> Workspaces
-  -> Workers
+       -> Workspace
+            -> Workers
 ~~~
 
 The execution implementation becomes simpler and more machine-native:
@@ -55,6 +54,12 @@ The user does not need to understand:
 - AI Accounts;
 - package desired state;
 - Worker Workspace bindings.
+
+AX presents Workspaces as the single top-level execution-capacity page.
+Workers remain visible as children of their owning Workspace and have no
+independent top-level page. The canonical page composition, view model, data
+ownership, and route compatibility contract are defined in the
+[Workspaces UX contract](WORKSPACES_UX_CONTRACT.md).
 
 ## 3. Product topology
 
