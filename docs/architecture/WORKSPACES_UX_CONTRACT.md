@@ -127,6 +127,14 @@ change an endpoint, or change local model configuration. For local attention,
 AX says what needs attention and identifies the owning Workspace where the
 user can complete it.
 
+The current Cloud Worker API is V7-shaped: `GET /api/v7/workers` reads the
+safe inventory projection, `GET /api/v7/workers/:id/scheduling` reads the
+Cloud scheduling state, and `POST /api/v7/workers/:id/scheduling/:action`
+applies `enable`, `disable`, or `drain`. The former
+`/api[/v2]/workspaces/:id/workers` catalog and desired-state routes are retired.
+Workspace account and credential-profile APIs remain separate and are not
+covered by this Worker-route retirement.
+
 ### `WorkspaceProjectGrantSummary`
 
 ```text

@@ -402,21 +402,6 @@ describe("clean-room first-user acceptance", () => {
     );
     expect(host.workspaceId).toBe(workspaceId);
 
-    await expectOk(
-      alice.put(`/api/workspaces/${workspaceId}/workers/codex`, {
-        enabled: true,
-        hostId: host.hostId,
-        version: "1.0.0",
-      }),
-    );
-    expect(
-      sqlite
-        .prepare(
-          "SELECT required_version FROM host_desired_workers WHERE host_id = 'host-alice' AND worker_id = 'codex'",
-        )
-        .get(),
-    ).toEqual({ required_version: "1.0.0" });
-
     const account = await expectOk(
       alice.post(`/api/workspaces/${workspaceId}/accounts`, {
         displayName: "Alice Codex",

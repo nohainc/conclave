@@ -96,8 +96,6 @@ const routeHandlers = {
   handleRevokeHost: handlers.handleRevokeHost,
   handleAnnounceHostUpdate: handlers.handleAnnounceHostUpdate,
   handleSetHostDesiredState: handlers.handleSetHostDesiredState,
-  handleListWorkerCatalog: handlers.handleListWorkerCatalog,
-  handleGetWorkerCatalog: handlers.handleGetWorkerCatalog,
   handleListWorkspaceWorkerInventory:
     handlers.handleListWorkspaceWorkerInventory,
   handleV7WorkerScheduling: handlers.handleV7WorkerScheduling,
@@ -107,10 +105,6 @@ const routeHandlers = {
   handleRevokeV7Adapter: handlers.handleRevokeV7Adapter,
   handleGetReleaseTrustState: handlers.handleGetReleaseTrustState,
   handleRevokeReleaseSigningKey: handlers.handleRevokeReleaseSigningKey,
-  handleSetWorkspaceWorkerAvailability:
-    handlers.handleSetWorkspaceWorkerAvailability,
-  handleSetWorkspaceDesiredWorkerState:
-    handlers.handleSetWorkspaceDesiredWorkerState,
   handleListWorkspaceProjectGrants: handlers.handleListWorkspaceProjectGrants,
   handleCreateWorkspaceProjectGrant: handlers.handleCreateWorkspaceProjectGrant,
   handleListProjectWorkspaces: handlers.handleListProjectWorkspaces,

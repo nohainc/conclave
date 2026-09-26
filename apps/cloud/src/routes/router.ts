@@ -442,64 +442,6 @@ export async function routeWorkerRequest(
       );
     }
 
-    // Workspace Workers Fleet (Architecture v2)
-    const workersMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/workers$/,
-    );
-    if (request.method === "GET" && workersMatch?.[1]) {
-      return await handlers.handleListWorkerCatalog!(
-        request,
-        env,
-        workersMatch[1],
-        ctx,
-      );
-    }
-    if (request.method === "POST" && workersMatch?.[1]) {
-      return deps.json(
-        { error: "Configured Worker instances were removed in v4" },
-        { status: 410 },
-      );
-    }
-    const singleWorkerMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/workers\/([^/]+)$/,
-    );
-    if (
-      request.method === "GET" &&
-      singleWorkerMatch?.[1] &&
-      singleWorkerMatch?.[2]
-    ) {
-      return await handlers.handleGetWorkerCatalog!(
-        request,
-        env,
-        singleWorkerMatch[1],
-        singleWorkerMatch[2],
-        ctx,
-      );
-    }
-    if (
-      request.method === "PUT" &&
-      singleWorkerMatch?.[1] &&
-      singleWorkerMatch?.[2]
-    ) {
-      return await handlers.handleSetWorkspaceDesiredWorkerState!(
-        request,
-        env,
-        singleWorkerMatch[1],
-        singleWorkerMatch[2],
-        ctx,
-      );
-    }
-    if (
-      request.method === "DELETE" &&
-      singleWorkerMatch?.[1] &&
-      singleWorkerMatch?.[2]
-    ) {
-      return deps.json(
-        { error: "Configured Worker instances were removed in v4" },
-        { status: 410 },
-      );
-    }
-
     // Task Assignment Dispatcher (Architecture v2)
     const taskEnsembleDispatchMatch = url.pathname.match(
       /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/tasks\/([^/]+)\/ensemble-dispatch$/,
