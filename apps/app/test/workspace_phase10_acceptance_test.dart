@@ -123,6 +123,7 @@ void main() {
       expect(find.text('Machine'), findsOneWidget);
       expect(find.text('Connect Machine'), findsOneWidget);
 
+      await tester.ensureVisible(find.text('Connect Machine'));
       await tester.tap(find.text('Connect Machine'));
       expect(connectMachineTriggered, isTrue);
 
@@ -201,6 +202,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Download Conclave Workspace'), findsOneWidget);
+      await tester
+          .ensureVisible(find.text('Download Conclave Workspace').first);
       await tester.tap(find.text('Download Conclave Workspace').first);
       expect(downloadsOpenedCount, 1);
 

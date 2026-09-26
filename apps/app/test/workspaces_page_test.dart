@@ -410,7 +410,9 @@ void main() {
           findsOneWidget);
       expect(find.text('Allowed models'), findsNothing);
 
+      await tester.ensureVisible(find.text('Disable'));
       await tester.tap(find.text('Disable'));
+      await tester.ensureVisible(find.text('Drain'));
       await tester.tap(find.text('Drain'));
       expect(actions, ['disable', 'drain']);
     });
@@ -534,6 +536,7 @@ void main() {
 
       expect(find.text('Offline'), findsNWidgets(2));
       expect(find.text('Connect Machine'), findsOneWidget);
+      await tester.ensureVisible(find.text('Connect Machine'));
       await tester.tap(find.text('Connect Machine'));
       expect(connectedWorkspace?.id, 'workspace-offline');
     });
@@ -600,6 +603,7 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
+      await tester.ensureVisible(find.text('Enable'));
       await tester.tap(find.text('Enable'));
       expect(actions, ['enable']);
     });

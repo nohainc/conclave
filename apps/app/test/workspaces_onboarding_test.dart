@@ -9,13 +9,16 @@ void main() {
       (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-        body: WorkspacesPage(
-          workspaces: const [],
-          onAdd: () {},
-          onRename: (_) {},
-          onUpdate: (_) {},
-          onRevoke: (_) {},
-          onGrant: (_) {},
+        body: SingleChildScrollView(
+          child: WorkspacesPage(
+            workspaces: const [],
+            onAdd: () {},
+            onRename: (_) {},
+            onUpdate: (_) {},
+            onRevoke: (_) {},
+            onGrant: (_) {},
+            onOpenDownloads: () {},
+          ),
         ),
       ),
     ));
@@ -48,19 +51,21 @@ void main() {
 
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-        body: WorkspacesPage(
-          workspaces: const [workspace],
-          onAdd: () {},
-          onRename: (_) {},
-          onUpdate: (_) {},
-          onRevoke: (_) {},
-          onGrant: (_) {},
+        body: SingleChildScrollView(
+          child: WorkspacesPage(
+            workspaces: const [workspace],
+            onAdd: () {},
+            onRename: (_) {},
+            onUpdate: (_) {},
+            onRevoke: (_) {},
+            onGrant: (_) {},
+          ),
         ),
       ),
     ));
 
     expect(find.text('Vitalii’s MacBook Pro'), findsOneWidget);
-    expect(find.textContaining('macOS'), findsOneWidget);
+    expect(find.textContaining('macOS'), findsNWidgets(2));
     expect(find.text('Pair Workspace'), findsNothing);
   });
 
@@ -76,14 +81,16 @@ void main() {
 
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-        body: WorkspacesPage(
-          workspaces: const [workspace],
-          onAdd: () {},
-          onRename: (_) {},
-          onUpdate: (_) {},
-          onRevoke: (_) {},
-          onGrant: (_) {},
-          onConnect: (_) async {},
+        body: SingleChildScrollView(
+          child: WorkspacesPage(
+            workspaces: const [workspace],
+            onAdd: () {},
+            onRename: (_) {},
+            onUpdate: (_) {},
+            onRevoke: (_) {},
+            onGrant: (_) {},
+            onConnect: (_) async {},
+          ),
         ),
       ),
     ));
@@ -103,22 +110,25 @@ void main() {
 
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-        body: WorkspacesPage(
-          workspaces: const [workspace],
-          onAdd: () {},
-          onRename: (_) {},
-          onUpdate: (_) {},
-          onRevoke: (_) {},
-          onGrant: (_) {},
-          onConnect: (_) async {
-            connectCount++;
-          },
+        body: SingleChildScrollView(
+          child: WorkspacesPage(
+            workspaces: const [workspace],
+            onAdd: () {},
+            onRename: (_) {},
+            onUpdate: (_) {},
+            onRevoke: (_) {},
+            onGrant: (_) {},
+            onConnect: (_) async {
+              connectCount++;
+            },
+          ),
         ),
       ),
     ));
 
     expect(find.text('Existing Workspace'), findsOneWidget);
     expect(find.text('Connect Machine'), findsOneWidget);
+    await tester.ensureVisible(find.text('Connect Machine'));
     await tester.tap(find.text('Connect Machine'));
     await tester.pump();
     expect(connectCount, 1);
