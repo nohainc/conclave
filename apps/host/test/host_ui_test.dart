@@ -65,13 +65,14 @@ class _FakeWorkerRegistry extends LocalConfiguredWorkerRegistry {
   Future<List<LocalConfiguredWorker>> list(
           {bool includeRemoved = false}) async =>
       workers
-          .where((w) =>
-              includeRemoved || w.status != LocalWorkerStatus.removed)
+          .where((w) => includeRemoved || w.status != LocalWorkerStatus.removed)
           .toList();
 
   @override
-  Future<LocalConfiguredWorker> update(String id,
-      LocalConfiguredWorker Function(LocalConfiguredWorker current) updater) async {
+  Future<LocalConfiguredWorker> update(
+      String id,
+      LocalConfiguredWorker Function(LocalConfiguredWorker current)
+          updater) async {
     final idx = workers.indexWhere((w) => w.id == id);
     if (idx != -1) {
       workers[idx] = updater(workers[idx]);
@@ -94,9 +95,11 @@ void main() {
     VoidCallback? onQuit,
     Future<void> Function()? onRetry,
     Future<void> Function()? onExportDiagnostics,
+    Future<void> Function(String path)? onChangeWorkRoot,
     LocalConfiguredWorkerRegistry? localWorkerRegistry,
     SecureCredentialStore? credentialStore,
     Future<void> Function()? onAddWorker,
+    Future<String> Function()? resolveComputerName,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -112,17 +115,21 @@ void main() {
             onQuit: onQuit,
             onRetry: onRetry,
             onExportDiagnostics: onExportDiagnostics,
+            onChangeWorkRoot: onChangeWorkRoot,
             localWorkerRegistry: localWorkerRegistry,
             credentialStore:
                 credentialStore ?? const PlatformSecureCredentialStore(),
             onAddWorker: onAddWorker,
+            resolveComputerName: resolveComputerName,
           ),
         ),
       ),
     );
   }
 
-  testWidgets('first launch presents clean workspace tab with inline connect card, work root, and diagnostics', (tester) async {
+  testWidgets(
+      'first launch presents clean workspace tab with inline connect card, work root, and diagnostics',
+      (tester) async {
     tester.view.physicalSize = const Size(800, 1400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -140,15 +147,20 @@ void main() {
         workRootPath: '/Users/test/Work',
       ),
       onPairRequest: (request) async => capturedRequest = request,
+      resolveComputerName: () async => "Vitalii's MacBook Pro",
     );
 
     expect(find.text('Workspace name'), findsOneWidget);
     expect(find.text("Vitalii's MacBook Pro"), findsOneWidget);
     expect(find.text('Pairing code'), findsOneWidget);
     expect(find.text('Advanced options'), findsNothing);
-    expect(find.text('Connect'), findsOneWidget);
-    expect(find.text('Work Root'), findsOneWidget);
-    expect(find.text('Open folder'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Connect'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Work Root'), findsOneWidget);
+    final workRootField =
+        tester.widget<TextField>(find.widgetWithText(TextField, 'Work Root'));
+    expect(workRootField.readOnly, isTrue);
+    expect(find.text('Browse'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Open folder'), findsOneWidget);
     expect(find.text('Advanced & Diagnostics'), findsOneWidget);
     expect(find.text('Projects'), findsNothing);
     expect(find.text('Chats'), findsNothing);
@@ -192,6 +204,7 @@ void main() {
           throw error;
         }
       },
+      resolveComputerName: () async => "Vitalii's Custom Mac",
     );
 
     // 1. Expired code
@@ -208,8 +221,12 @@ void main() {
     await tester.tap(find.text('Connect'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('This pairing code has expired.'), findsOneWidget);
-    expect(find.textContaining('Generate a new code in Conclave AX and try again.'), findsOneWidget);
+    expect(
+        find.textContaining('This pairing code has expired.'), findsOneWidget);
+    expect(
+        find.textContaining(
+            'Generate a new code in Conclave AX and try again.'),
+        findsOneWidget);
     // Custom name is retained
     expect(find.text("Vitalii's Custom Mac"), findsOneWidget);
 
@@ -217,7 +234,8 @@ void main() {
     pairingErrorToThrow = const WorkspacePairingException(
       kind: WorkspacePairingErrorKind.alreadyUsed,
       message: 'This pairing code has already been used.',
-      action: 'Generate a fresh pairing code in Conclave AX to connect this Workspace.',
+      action:
+          'Generate a fresh pairing code in Conclave AX to connect this Workspace.',
     );
 
     await tester.enterText(
@@ -227,8 +245,12 @@ void main() {
     await tester.tap(find.text('Connect'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('This pairing code has already been used.'), findsOneWidget);
-    expect(find.textContaining('Generate a fresh pairing code in Conclave AX to connect this Workspace.'), findsOneWidget);
+    expect(find.textContaining('This pairing code has already been used.'),
+        findsOneWidget);
+    expect(
+        find.textContaining(
+            'Generate a fresh pairing code in Conclave AX to connect this Workspace.'),
+        findsOneWidget);
 
     // 3. Cloud unavailable
     pairingErrorToThrow = const WorkspacePairingException(
@@ -244,8 +266,12 @@ void main() {
     await tester.tap(find.text('Connect'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Unable to connect to Conclave Cloud.'), findsOneWidget);
-    expect(find.textContaining('Check your internet connection or verify the Cloud URL.'), findsOneWidget);
+    expect(find.textContaining('Unable to connect to Conclave Cloud.'),
+        findsOneWidget);
+    expect(
+        find.textContaining(
+            'Check your internet connection or verify the Cloud URL.'),
+        findsOneWidget);
   });
 
   testWidgets('offline Workspace displays recovery panel with retry',
@@ -348,6 +374,11 @@ void main() {
     expect(find.text('MacBook Pro'), findsOneWidget);
     expect(find.text('Connected'), findsWidgets);
 
+    // Verify HUD Quit icon button is visible and clickable
+    expect(find.byTooltip('Quit Conclave Workspace'), findsOneWidget);
+    await tester.tap(find.byTooltip('Quit Conclave Workspace'));
+    expect(quitCalled, isTrue);
+
     // Open overflow menu (3 lines icon)
     await tester.tap(find.byIcon(Icons.menu));
     await tester.pumpAndSettle();
@@ -355,7 +386,6 @@ void main() {
     expect(find.text('Open Conclave AX'), findsOneWidget);
     expect(find.text('Check for Updates'), findsOneWidget);
     expect(find.text('About'), findsOneWidget);
-    expect(find.text('Quit Conclave Workspace'), findsOneWidget);
     expect(find.text('Advanced Diagnostics'), findsNothing);
 
     // Tap Check for Updates
@@ -369,21 +399,15 @@ void main() {
     await tester.tap(find.text('About'));
     await tester.pumpAndSettle();
     expect(find.byType(AboutDialog), findsOneWidget);
-    expect(
-        find.text('Conclave Workspace Runtime and Local Worker Manager.'),
+    expect(find.text('Conclave Workspace Runtime and Local Worker Manager.'),
         findsOneWidget);
     // Dismiss about dialog
     await tester.tap(find.text('Close'));
     await tester.pumpAndSettle();
-
-    // Open overflow menu again and tap Quit
-    await tester.tap(find.byIcon(Icons.menu));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Quit Conclave Workspace'));
-    expect(quitCalled, isTrue);
   });
 
-  testWidgets('install failure explains safety and offers recovery in recovery panel',
+  testWidgets(
+      'install failure explains safety and offers recovery in recovery panel',
       (tester) async {
     var retried = false;
     await pumpDashboard(
@@ -509,6 +533,42 @@ void main() {
   });
 
   testWidgets(
+      'workspace tab renders read-only work root field with browse button and open folder button below',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await pumpDashboard(
+      tester,
+      const HostUiSnapshot(
+        mode: HostUiMode.ready,
+        title: 'Workspace is ready',
+        detail: 'Ready',
+        paired: true,
+        cloudConnected: true,
+        workspaceName: 'Office Mac',
+        workRootPath: '/custom/work/root',
+      ),
+    );
+
+    // Verify read-only TextField
+    final textFieldFinder = find.widgetWithText(TextField, 'Work Root');
+    expect(textFieldFinder, findsOneWidget);
+    final textField = tester.widget<TextField>(textFieldFinder);
+    expect(textField.readOnly, isTrue);
+    expect(find.text('/custom/work/root'), findsOneWidget);
+
+    // Verify Browse button
+    expect(find.text('Browse'), findsOneWidget);
+
+    // Verify Open folder button below with FilledButton style
+    final openFolderBtn = find.widgetWithText(FilledButton, 'Open folder');
+    expect(openFolderBtn, findsOneWidget);
+  });
+
+  testWidgets(
       'workers surface before pairing allows adding workers at any time without blocking',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
@@ -555,7 +615,8 @@ void main() {
     expect(addWorkerCalled, isTrue);
   });
 
-  testWidgets('switching to workers surface when paired displays configured workers area',
+  testWidgets(
+      'switching to workers surface when paired displays configured workers area',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;
@@ -712,12 +773,14 @@ void main() {
       expect(deriveLocalWorkerHealth(worker), 'Disabled');
     });
 
-    test('derives Sign in required when authentication is needed or expired', () {
+    test('derives Sign in required when authentication is needed or expired',
+        () {
       expect(
         deriveLocalWorkerHealth(
           makeWorker(
               status: LocalWorkerStatus.needsAttention,
-              credentialStatus: LocalWorkerCredentialStatus.needsAuthentication),
+              credentialStatus:
+                  LocalWorkerCredentialStatus.needsAuthentication),
         ),
         'Sign in required',
       );

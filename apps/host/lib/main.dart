@@ -177,6 +177,20 @@ class HostLifecycleController extends ChangeNotifier {
         await openAX();
         break;
       case 'quit':
+        final connection = host.cloudConnection;
+        if (connection != null && connection.activeAssignmentCount > 0) {
+          connection.beginDrain();
+          var elapsed = 0;
+          while (connection.activeAssignmentCount > 0 &&
+              !_quitting &&
+              elapsed < 15000) {
+            await Future<void>.delayed(const Duration(milliseconds: 250));
+            elapsed += 250;
+          }
+          if (connection.activeAssignmentCount > 0) {
+            break;
+          }
+        }
         await quit();
         await _desktopChannel.invokeMethod<void>('terminate');
         break;
@@ -199,6 +213,55 @@ class HostLifecycleController extends ChangeNotifier {
         await Process.run('explorer', [path]);
       }
     }
+  }
+
+  static Future<String?> chooseDirectory({String? initialPath}) async {
+    try {
+      final result = await _desktopChannel.invokeMethod<String>(
+          'chooseDirectory', initialPath);
+      if (result != null && result.trim().isNotEmpty) return result.trim();
+    } catch (_) {}
+    if (Platform.isMacOS) {
+      try {
+        final script = initialPath != null &&
+                Directory(initialPath).existsSync()
+            ? 'POSIX path of (choose folder with prompt "Select Work Root Directory" default location POSIX file "$initialPath")'
+            : 'POSIX path of (choose folder with prompt "Select Work Root Directory")';
+        final result = await Process.run('osascript', ['-e', script]);
+        if (result.exitCode == 0) {
+          final path = result.stdout.toString().trim();
+          if (path.isNotEmpty) return path;
+        }
+      } catch (_) {}
+    } else if (Platform.isLinux) {
+      try {
+        final result = await Process.run('zenity', [
+          '--file-selection',
+          '--directory',
+          '--title=Select Work Root Directory'
+        ]);
+        if (result.exitCode == 0) {
+          final path = result.stdout.toString().trim();
+          if (path.isNotEmpty) return path;
+        }
+      } catch (_) {}
+    } else if (Platform.isWindows) {
+      try {
+        final ps = '''
+Add-Type -AssemblyName System.Windows.Forms
+\$f = New-Object System.Windows.Forms.FolderBrowserDialog
+\$f.Description = "Select Work Root Directory"
+if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.SelectedPath }
+''';
+        final result =
+            await Process.run('powershell', ['-NoProfile', '-Command', ps]);
+        if (result.exitCode == 0) {
+          final path = result.stdout.toString().trim();
+          if (path.isNotEmpty) return path;
+        }
+      } catch (_) {}
+    }
+    return null;
   }
 
   static Future<void> openAX([String? url]) async {
@@ -492,6 +555,7 @@ class ConclaveHostApp extends StatefulWidget {
 
 class _ConclaveHostAppState extends State<ConclaveHostApp> {
   int _workerRevision = 0;
+  final _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
@@ -500,7 +564,12 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     const desktopChannel = MethodChannel('com.conclave.workspace/desktop');
     desktopChannel.setMethodCallHandler((call) async {
       if (call.method == 'menuAction' && call.arguments is String) {
-        await widget.lifecycle.handleDesktopAction(call.arguments as String);
+        final action = call.arguments as String;
+        if (action == 'quit') {
+          await _confirmQuit();
+        } else {
+          await widget.lifecycle.handleDesktopAction(action);
+        }
       }
     });
     unawaited(widget.lifecycle.launch());
@@ -516,15 +585,22 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
   void _refresh() => setState(() {});
 
   Future<void> _confirmQuit() async {
+    // Use the navigator's context (below MaterialApp) so showDialog can find
+    // a valid Overlay.  The state's own `context` sits *above* MaterialApp and
+    // has no Navigator ancestor, which silently prevents the dialog from being
+    // shown.
+    final dialogContext = _navigatorKey.currentContext;
+    if (dialogContext == null) return;
+
     final activeCount =
         widget.lifecycle.host.cloudConnection?.activeAssignmentCount ?? 0;
     final shouldQuit = await showDialog<bool>(
-      context: context,
+      context: dialogContext,
       builder: (context) => AlertDialog(
         title: const Text('Quit Conclave Workspace?'),
         content: Text(
           activeCount > 0
-              ? 'There ${activeCount == 1 ? 'is 1 active assignment running' : 'are $activeCount active assignments running'}. '
+              ? 'There ${activeCount == 1 ? 'is 1 active assignment running' : 'are $activeCount active assignments running'}.\n\n'
                   'Assignments will be safely reconciled and drained before the Workspace disconnects.'
               : 'Active work will be reconciled safely before this machine disconnects. You can start the Workspace again anytime.',
         ),
@@ -540,13 +616,75 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         ],
       ),
     );
-    if (shouldQuit == true) await widget.lifecycle.quit();
+    if (shouldQuit != true || !mounted) return;
+
+    if (activeCount > 0) {
+      final connection = widget.lifecycle.host.cloudConnection;
+      connection?.beginDrain();
+      var drained = false;
+      final deadline = DateTime.now().add(const Duration(seconds: 15));
+      while (DateTime.now().isBefore(deadline)) {
+        if ((connection?.activeAssignmentCount ?? 0) == 0) {
+          drained = true;
+          break;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+
+      if (!drained && (connection?.activeAssignmentCount ?? 0) > 0) {
+        if (mounted) {
+          await showDialog<void>(
+            context: dialogContext,
+            builder: (context) => AlertDialog(
+              title: const Text('Unable to Close Safely'),
+              content: Text(
+                'Running processes could not be safely stopped within the timeout (${connection?.activeAssignmentCount ?? 0} active assignments remaining).\n\n'
+                'Conclave Workspace did not close to protect your work and files from corruption.',
+              ),
+              actions: [
+                FilledButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    try {
+      await widget.lifecycle.quit();
+      const desktopChannel = MethodChannel('com.conclave.workspace/desktop');
+      await desktopChannel.invokeMethod<void>('terminate');
+    } catch (error) {
+      if (mounted) {
+        await showDialog<void>(
+          context: dialogContext,
+          builder: (context) => AlertDialog(
+            title: const Text('Unable to Close Safely'),
+            content: Text(
+              'An error occurred while stopping the Workspace: $error\n\n'
+              'Conclave Workspace did not close.',
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _exportDiagnostics() async {
     final file = await widget.lifecycle.exportDiagnostics();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    final ctx = _navigatorKey.currentContext;
+    if (!mounted || ctx == null) return;
+    ScaffoldMessenger.of(ctx).showSnackBar(
       SnackBar(content: Text('Diagnostics exported to ${file.path}')),
     );
   }
@@ -556,10 +694,13 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     final dataDirectory = lifecycle.host.config.dataDirectory;
     final currentRegistration = HostRegistrationStore(dataDirectory).readSync();
 
+    final dialogContext = _navigatorKey.currentContext;
+    if (dialogContext == null) return;
+
     if (currentRegistration != null && lifecycle.uiSnapshot.paired) {
       if (mounted) {
         await showDialog<void>(
-          context: context,
+          context: dialogContext,
           builder: (context) => AlertDialog(
             title: const Text('Already Connected'),
             content: const Text(
@@ -578,13 +719,11 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       return;
     }
 
-    final proposedName = currentRegistration?.name.isNotEmpty == true
-        ? currentRegistration!.name
-        : await resolveFriendlyComputerName();
+    final proposedName = await resolveFriendlyComputerName();
 
     final request = directRequest ??
         await showWorkspacePairingDialog(
-          context,
+          dialogContext,
           initialCloudUrl: currentRegistration?.cloudUrl ??
               Platform.environment['CONCLAVE_HOST_CLOUD_URL'] ??
               conclaveProductionCloudUrl,
@@ -617,7 +756,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       await lifecycle.replaceHost(replacement);
       if (mounted) {
         setState(() => _workerRevision++);
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(dialogContext).showSnackBar(
           const SnackBar(content: Text('Workspace paired and connected.')),
         );
       }
@@ -626,10 +765,10 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       final displayMessage = error is WorkspacePairingException
           ? '${error.message}\n${error.action}'
           : 'Pairing failed: $error';
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(dialogContext).showSnackBar(
         SnackBar(
           content: Text(displayMessage),
-          backgroundColor: Theme.of(context).colorScheme.error,
+          backgroundColor: Theme.of(dialogContext).colorScheme.error,
         ),
       );
       rethrow;
@@ -641,8 +780,11 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     final registration =
         HostRegistrationStore(lifecycle.host.config.dataDirectory).readSync();
     if (registration == null) return;
+    final dialogContext = _navigatorKey.currentContext;
+    if (dialogContext == null) return;
+
     if ((lifecycle.host.cloudConnection?.activeAssignmentCount ?? 0) > 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(dialogContext).showSnackBar(
         const SnackBar(
           content: Text('Wait for active work to finish before disconnecting.'),
         ),
@@ -650,7 +792,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       return;
     }
     final confirmed = await showDialog<bool>(
-      context: context,
+      context: dialogContext,
       builder: (context) => AlertDialog(
         title: const Text('Disconnect from Conclave AX?'),
         content: const Text(
@@ -696,7 +838,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       await lifecycle.replaceHost(replacement);
       if (mounted) {
         setState(() => _workerRevision++);
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(dialogContext).showSnackBar(
           const SnackBar(
             content: Text(
               'Disconnected from Conclave AX. Local Workers and credentials are preserved.',
@@ -706,7 +848,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       }
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(dialogContext).showSnackBar(
         SnackBar(content: Text('Could not disconnect Workspace: $error')),
       );
     }
@@ -714,8 +856,11 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
 
   Future<void> _resetLocalWorkspace() async {
     final lifecycle = widget.lifecycle;
+    final dialogContext = _navigatorKey.currentContext;
+    if (dialogContext == null) return;
+
     if ((lifecycle.host.cloudConnection?.activeAssignmentCount ?? 0) > 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(dialogContext).showSnackBar(
         const SnackBar(
           content: Text('Wait for active work to finish before resetting.'),
         ),
@@ -723,7 +868,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       return;
     }
     final confirmed = await showDialog<bool>(
-      context: context,
+      context: dialogContext,
       builder: (context) => AlertDialog(
         title: const Text('Reset Local Workspace?'),
         content: const Text(
@@ -799,23 +944,25 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       await lifecycle.replaceHost(replacement);
       if (mounted) {
         setState(() => _workerRevision++);
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(dialogContext).showSnackBar(
           const SnackBar(content: Text('Local Workspace has been reset.')),
         );
       }
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(dialogContext).showSnackBar(
         SnackBar(content: Text('Could not reset Workspace: $error')),
       );
     }
   }
 
-  Future<void> _addLocalWorker(BuildContext context) async {
+  Future<void> _addLocalWorker(BuildContext _) async {
     final registry = widget.lifecycle.host.localWorkerRegistry;
     if (registry == null) return;
+    final dialogContext = _navigatorKey.currentContext;
+    if (dialogContext == null) return;
     final added = await showDialog<bool>(
-      context: context,
+      context: dialogContext,
       builder: (context) => AddLocalWorkerDialog(
         registry: registry,
         credentialStore: widget.lifecycle.host.credentialStore,
@@ -856,36 +1003,66 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     }
   }
 
+  Future<void> _changeWorkRoot(String newPath) async {
+    final currentHost = widget.lifecycle.host;
+    final updatedConfig = HostConfig(
+      dataDirectory: currentHost.config.dataDirectory,
+      cloudUri: currentHost.config.cloudUri,
+      hostId: currentHost.config.hostId,
+      installationId: currentHost.config.installationId,
+      workspaceId: currentHost.config.workspaceId,
+      repositoriesFile: currentHost.config.repositoriesFile,
+      authToken: currentHost.config.authToken,
+      workRootPath: newPath,
+    );
+    final replacement = await buildWorkspaceRuntime(updatedConfig);
+    await widget.lifecycle.replaceHost(replacement);
+    if (mounted) {
+      setState(() {});
+      final ctx = _navigatorKey.currentContext;
+      if (ctx != null) {
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          SnackBar(content: Text('Work Root changed to: $newPath')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final lifecycle = widget.lifecycle;
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: 'Conclave Workspace',
       debugShowCheckedModeBanner: false,
       theme: ConclaveBrand.lightTheme(),
       darkTheme: ConclaveBrand.darkTheme(),
       themeMode: ThemeMode.system,
       home: Scaffold(
-        body: lifecycle.hidden
-            ? const Center(
-                child: Text('Workspace is running in the background.'))
-            : HostDashboard(
-                snapshot: lifecycle.uiSnapshot,
-                onPair: () => _pairWorkspace(),
-                onPairRequest: _pairWorkspace,
-                onDisconnect: _disconnectWorkspace,
-                onUnpair: _disconnectWorkspace,
-                onReset: _resetLocalWorkspace,
-                onQuit: _confirmQuit,
-                onRetry: lifecycle.launch,
-                onExportDiagnostics: _exportDiagnostics,
-                workerRevision: _workerRevision,
-                localWorkerRegistry: lifecycle.host.localWorkerRegistry,
-                credentialStore: lifecycle.host.credentialStore,
-                adapterPackageStore: lifecycle.host.adapterPackageStore,
-                ensureAdapter: _ensureAdapterAvailable,
-                onAddWorker: () => _addLocalWorker(context),
-              ),
+        body: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 400, minHeight: 600),
+          child: lifecycle.hidden
+              ? const Center(
+                  child: Text('Workspace is running in the background.'))
+              : HostDashboard(
+                  snapshot: lifecycle.uiSnapshot,
+                  onPair: () => _pairWorkspace(),
+                  onPairRequest: _pairWorkspace,
+                  onDisconnect: _disconnectWorkspace,
+                  onUnpair: _disconnectWorkspace,
+                  onReset: _resetLocalWorkspace,
+                  onQuit: _confirmQuit,
+                  onRetry: lifecycle.launch,
+                  onExportDiagnostics: _exportDiagnostics,
+                  onChangeWorkRoot: _changeWorkRoot,
+                  workerRevision: _workerRevision,
+                  localWorkerRegistry: lifecycle.host.localWorkerRegistry,
+                  credentialStore: lifecycle.host.credentialStore,
+                  adapterPackageStore: lifecycle.host.adapterPackageStore,
+                  ensureAdapter: _ensureAdapterAvailable,
+                  onAddWorker: () => _addLocalWorker(context),
+                ),
+        ),
       ),
     );
   }
@@ -903,12 +1080,14 @@ class HostDashboard extends StatefulWidget {
     this.onQuit,
     this.onRetry,
     this.onExportDiagnostics,
+    this.onChangeWorkRoot,
     this.workerRevision = 0,
     this.localWorkerRegistry,
     this.credentialStore = const PlatformSecureCredentialStore(),
     this.adapterPackageStore,
     this.ensureAdapter,
     this.onAddWorker,
+    this.resolveComputerName,
     super.key,
   });
 
@@ -922,12 +1101,14 @@ class HostDashboard extends StatefulWidget {
   final VoidCallback? onQuit;
   final Future<void> Function()? onRetry;
   final Future<void> Function()? onExportDiagnostics;
+  final Future<void> Function(String path)? onChangeWorkRoot;
   final int workerRevision;
   final LocalConfiguredWorkerRegistry? localWorkerRegistry;
   final SecureCredentialStore credentialStore;
   final V7AdapterPackageStore? adapterPackageStore;
   final Future<bool> Function(String workerTypeId)? ensureAdapter;
   final Future<void> Function()? onAddWorker;
+  final Future<String> Function()? resolveComputerName;
 
   @override
   State<HostDashboard> createState() => _HostDashboardState();
@@ -939,7 +1120,6 @@ enum _HeaderMenuAction {
   openConclaveAX,
   checkForUpdates,
   about,
-  quit,
 }
 
 class _HostDashboardState extends State<HostDashboard> {
@@ -1004,6 +1184,16 @@ class _HostDashboardState extends State<HostDashboard> {
                 ),
               ),
               const SizedBox(width: 8),
+              IconButton(
+                icon: Icon(
+                  Icons.power_settings_new,
+                  size: 20,
+                  color: theme.colorScheme.error,
+                ),
+                tooltip: 'Quit Conclave Workspace',
+                onPressed: widget.onQuit,
+              ),
+              const SizedBox(width: 4),
               PopupMenuButton<_HeaderMenuAction>(
                 icon: const Icon(Icons.menu, size: 20),
                 tooltip: 'Menu',
@@ -1031,9 +1221,6 @@ class _HostDashboardState extends State<HostDashboard> {
                           ),
                         ],
                       );
-                      break;
-                    case _HeaderMenuAction.quit:
-                      widget.onQuit?.call();
                       break;
                   }
                 },
@@ -1068,22 +1255,6 @@ class _HostDashboardState extends State<HostDashboard> {
                         Icon(Icons.info_outline, size: 16),
                         SizedBox(width: 10),
                         Text('About'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuDivider(),
-                  PopupMenuItem(
-                    value: _HeaderMenuAction.quit,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.power_settings_new,
-                            size: 16, color: theme.colorScheme.error),
-                        const SizedBox(width: 10),
-                        Text(
-                          'Quit Conclave Workspace',
-                          style: TextStyle(color: theme.colorScheme.error),
-                        ),
                       ],
                     ),
                   ),
@@ -1135,8 +1306,10 @@ class _HostDashboardState extends State<HostDashboard> {
                     snapshot: snapshot,
                     onPair: widget.onPair,
                     onPairRequest: widget.onPairRequest,
+                    resolveComputerName: widget.resolveComputerName,
                     onRetry: widget.onRetry,
                     onExportDiagnostics: widget.onExportDiagnostics,
+                    onChangeWorkRoot: widget.onChangeWorkRoot,
                     onDisconnect: widget.onDisconnect,
                     onUnpair: widget.onUnpair,
                     onReset: widget.onReset,
@@ -1149,8 +1322,8 @@ class _HostDashboardState extends State<HostDashboard> {
                     ensureAdapter: widget.ensureAdapter,
                     onAddWorker: widget.onAddWorker,
                     isPaired: snapshot.paired,
-                    onSwitchToWorkspace: () =>
-                        setState(() => _selectedSurface = HostSurface.workspace),
+                    onSwitchToWorkspace: () => setState(
+                        () => _selectedSurface = HostSurface.workspace),
                   ),
                 ],
               ),
@@ -1226,8 +1399,10 @@ class _WorkspaceTab extends StatelessWidget {
     required this.snapshot,
     this.onPair,
     this.onPairRequest,
+    this.resolveComputerName,
     this.onRetry,
     this.onExportDiagnostics,
+    this.onChangeWorkRoot,
     this.onDisconnect,
     this.onUnpair,
     this.onReset,
@@ -1236,15 +1411,16 @@ class _WorkspaceTab extends StatelessWidget {
   final HostUiSnapshot snapshot;
   final VoidCallback? onPair;
   final Future<void> Function(WorkspacePairingRequest request)? onPairRequest;
+  final Future<String> Function()? resolveComputerName;
   final Future<void> Function()? onRetry;
   final Future<void> Function()? onExportDiagnostics;
+  final Future<void> Function(String path)? onChangeWorkRoot;
   final VoidCallback? onDisconnect;
   final VoidCallback? onUnpair;
   final VoidCallback? onReset;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final isError = snapshot.mode == HostUiMode.offline ||
         snapshot.mode == HostUiMode.installFailure;
 
@@ -1253,6 +1429,7 @@ class _WorkspaceTab extends StatelessWidget {
       children: [
         if (isError) ...[
           Card(
+            margin: EdgeInsets.zero,
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: _HostRecoveryPanel(
@@ -1273,6 +1450,7 @@ class _WorkspaceTab extends StatelessWidget {
             snapshot: snapshot,
             onPair: onPair,
             onPairRequest: onPairRequest,
+            resolveComputerName: resolveComputerName,
           )
         else
           _PairedWorkspaceCard(
@@ -1280,42 +1458,10 @@ class _WorkspaceTab extends StatelessWidget {
           ),
         const SizedBox(height: 24),
 
-        // Section 2: Work Root Path with Open Folder Button (Flat light design)
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Work Root',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  SelectableText(
-                    snapshot.workRootPath ?? 'Not configured',
-                    style: const TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (snapshot.workRootPath != null) ...[
-              const SizedBox(width: 12),
-              OutlinedButton.icon(
-                onPressed: () => HostLifecycleController.openPath(
-                    snapshot.workRootPath!),
-                icon: const Icon(Icons.folder_open, size: 16),
-                label: const Text('Open folder'),
-              ),
-            ],
-          ],
+        // Section 2: Work Root Path with Browse & Open Folder Button (Flat light design)
+        _WorkRootSection(
+          workRootPath: snapshot.workRootPath,
+          onChangeWorkRoot: onChangeWorkRoot,
         ),
 
         const SizedBox(height: 24),
@@ -1333,16 +1479,106 @@ class _WorkspaceTab extends StatelessWidget {
   }
 }
 
+class _WorkRootSection extends StatefulWidget {
+  const _WorkRootSection({
+    required this.workRootPath,
+    this.onChangeWorkRoot,
+  });
+
+  final String? workRootPath;
+  final Future<void> Function(String path)? onChangeWorkRoot;
+
+  @override
+  State<_WorkRootSection> createState() => _WorkRootSectionState();
+}
+
+class _WorkRootSectionState extends State<_WorkRootSection> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.workRootPath ?? '');
+  }
+
+  @override
+  void didUpdateWidget(covariant _WorkRootSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.workRootPath != widget.workRootPath) {
+      _controller.text = widget.workRootPath ?? '';
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _browse() async {
+    final selected = await HostLifecycleController.chooseDirectory(
+      initialPath: widget.workRootPath,
+    );
+    if (selected != null && selected.isNotEmpty) {
+      if (widget.onChangeWorkRoot != null) {
+        await widget.onChangeWorkRoot!(selected);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasPath =
+        widget.workRootPath != null && widget.workRootPath!.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _controller,
+          readOnly: true,
+          decoration: InputDecoration(
+            labelText: 'Work Root',
+            hintText: 'Not configured',
+            border: const OutlineInputBorder(),
+            suffixIcon: Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: TextButton.icon(
+                onPressed: _browse,
+                icon: const Icon(Icons.folder_open, size: 16),
+                label: const Text('Browse'),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          onPressed: hasPath
+              ? () => HostLifecycleController.openPath(widget.workRootPath!)
+              : null,
+          icon: const Icon(Icons.folder_open, size: 16),
+          label: const Text('Open folder'),
+          style: FilledButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _ConnectWorkspaceCard extends StatefulWidget {
   const _ConnectWorkspaceCard({
     required this.snapshot,
     this.onPair,
     this.onPairRequest,
+    this.resolveComputerName,
   });
 
   final HostUiSnapshot snapshot;
   final VoidCallback? onPair;
   final Future<void> Function(WorkspacePairingRequest request)? onPairRequest;
+  final Future<String> Function()? resolveComputerName;
 
   @override
   State<_ConnectWorkspaceCard> createState() => _ConnectWorkspaceCardState();
@@ -1352,17 +1588,47 @@ class _ConnectWorkspaceCardState extends State<_ConnectWorkspaceCard> {
   late final TextEditingController _nameController;
   late final TextEditingController _codeController;
   bool _isConnecting = false;
+  bool _workspaceNameWasEdited = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    final defaultName = widget.snapshot.workspaceName ??
-        resolveFriendlyComputerNameSync(
-          localHostname: widget.snapshot.hostname,
-        );
+    // This form is shown only while unpaired: use this computer's name, not a
+    // stale Workspace display name. Resolve the OS-friendly name asynchronously
+    // and retain a fallback immediately while the OS lookup completes.
+    final defaultName = resolveFriendlyComputerNameSync(
+      localHostname: widget.snapshot.hostname,
+    );
     _nameController = TextEditingController(text: defaultName);
+    _nameController.addListener(_onWorkspaceNameEdited);
     _codeController = TextEditingController();
+    // Only resolve the OS name when this card can actually initiate pairing.
+    // Read-only dashboard states (including recovery panels) should not spawn
+    // a subprocess just to populate an unused form field.
+    if (widget.onPair != null || widget.onPairRequest != null) {
+      unawaited(_loadComputerName());
+    }
+  }
+
+  void _onWorkspaceNameEdited() => _workspaceNameWasEdited = true;
+
+  Future<void> _loadComputerName() async {
+    try {
+      final resolver = widget.resolveComputerName ??
+          () => resolveFriendlyComputerName(
+                localHostname: widget.snapshot.hostname,
+              );
+      final computerName = await resolver();
+      final proposedName = computerName.trim();
+      if (!mounted || _workspaceNameWasEdited || proposedName.isEmpty) return;
+      _nameController.value = TextEditingValue(
+        text: proposedName,
+        selection: TextSelection.collapsed(offset: proposedName.length),
+      );
+    } on Object {
+      // Keep the cleaned hostname fallback if the OS name cannot be read.
+    }
   }
 
   @override
@@ -1442,6 +1708,7 @@ class _ConnectWorkspaceCardState extends State<_ConnectWorkspaceCard> {
           textInputAction: TextInputAction.next,
           decoration: const InputDecoration(
             labelText: 'Workspace name',
+            helperText: 'Suggested from this computer. You can change it.',
             border: OutlineInputBorder(),
           ),
         ),
@@ -1463,8 +1730,7 @@ class _ConnectWorkspaceCardState extends State<_ConnectWorkspaceCard> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color:
-                  theme.colorScheme.errorContainer.withValues(alpha: 0.5),
+              color: theme.colorScheme.errorContainer.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: theme.colorScheme.error.withValues(alpha: 0.3),
@@ -1504,8 +1770,7 @@ class _ConnectWorkspaceCardState extends State<_ConnectWorkspaceCard> {
               : const Icon(Icons.link, size: 16),
           label: Text(_isConnecting ? 'Connecting...' : 'Connect'),
           style: FilledButton.styleFrom(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 20, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           ),
         ),
       ],
@@ -1597,6 +1862,7 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
     final disconnectAction = onDisconnect ?? onUnpair;
 
     return Card(
+      margin: EdgeInsets.zero,
       child: Theme(
         data: theme.copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(

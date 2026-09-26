@@ -49,6 +49,27 @@ class _ReadModelClient extends http.BaseClient {
 }
 
 void main() {
+  test('pairing status refresh retains the one-time copyable code', () {
+    const created = StudioWorkspacePairingIntent(
+      id: 'pair-1',
+      status: 'pending',
+      expiresAt: '2026-09-27T12:00:00.000Z',
+      createdAt: '2026-09-27T11:45:00.000Z',
+      token: 'conclave_pair_one-time-code',
+    );
+    const status = StudioWorkspacePairingIntent(
+      id: 'pair-1',
+      status: 'pending',
+      expiresAt: '2026-09-27T12:00:00.000Z',
+      createdAt: '2026-09-27T11:45:00.000Z',
+    );
+
+    final refreshed = created.withStatus(status);
+
+    expect(refreshed.token, created.token);
+    expect(refreshed.status, 'pending');
+  });
+
   test('loads and clears the Cloud session boundary', () async {
     final client = _JsonClient({
       'authenticated': true,

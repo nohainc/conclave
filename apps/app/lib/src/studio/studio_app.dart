@@ -1216,10 +1216,20 @@ class _StudioAppState extends State<ConclaveAppShell> {
               if (!dialogContext.mounted || completing || pollInFlight) return;
               pollInFlight = true;
               try {
-                final updated =
+                final current = pairingIntent;
+                final response =
                     await store.workspaces.pairingIntent(pairingIntent.id);
                 if (!dialogContext.mounted) return;
-                setDialogState(() => pairingIntent = updated);
+                // The status endpoint intentionally never returns the raw
+                // one-time token. Keep the token from creation in memory, and
+                // avoid rebuilding the selectable code on every unchanged poll
+                // (which interrupts browser text selection).
+                final updated = current.withStatus(response);
+                if (updated.status != current.status ||
+                    updated.workspaceId != current.workspaceId ||
+                    updated.expiresAt != current.expiresAt) {
+                  setDialogState(() => pairingIntent = updated);
+                }
                 if (updated.status == 'claimed' &&
                     updated.workspaceId != null) {
                   completing = true;

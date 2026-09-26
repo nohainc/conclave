@@ -647,6 +647,20 @@ class StudioWorkspacePairingIntent {
   final String? token;
   final String? workspaceId;
 
+  /// Applies a status poll while retaining the one-time token returned only
+  /// by create/regenerate responses.
+  StudioWorkspacePairingIntent withStatus(
+    StudioWorkspacePairingIntent status,
+  ) =>
+      StudioWorkspacePairingIntent(
+        id: status.id,
+        status: status.status,
+        expiresAt: status.expiresAt,
+        createdAt: status.createdAt,
+        token: status.token ?? token,
+        workspaceId: status.workspaceId,
+      );
+
   factory StudioWorkspacePairingIntent.fromJson(Map<String, dynamic> json) =>
       StudioWorkspacePairingIntent(
         id: _string(json, 'id'),

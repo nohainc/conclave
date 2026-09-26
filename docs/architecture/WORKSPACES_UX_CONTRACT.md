@@ -215,7 +215,9 @@ credentials.
   Conclave Workspace computer makes local Workers available to Projects, and
   offers **Connect Workspace** plus **Download Conclave Workspace**.
 - Pairing creates a temporary owner-scoped intent, not a permanent Workspace.
-  The desktop proposes an editable display name and claims the one-time code;
+  While unpaired, the desktop proposes the OS-friendly computer name as an
+  editable Workspace display name (falling back to the cleaned hostname when
+  unavailable). The user can change it before claiming the one-time code;
   Cloud creates the Workspace and runtime identity only after a successful
   claim. Existing paired Workspaces remain available during migration.
 - New V7 execution Workspaces cannot be created with `POST /api/workspaces`;
