@@ -1194,98 +1194,194 @@ class _StudioAppState extends State<ConclaveAppShell> {
     try {
       var pairingIntent = await store.workspaces.createPairingIntent();
       if (!mounted) return;
-      await showDialog<void>(
+      Timer? statusTimer;
+      var completing = false;
+      var pollInFlight = false;
+      final workspaceId = await showDialog<String>(
         context: navigatorKey.currentContext ?? context,
         builder: (dialogContext) => StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
-            title: const Text('Connect a Workspace'),
-            content: SizedBox(
-              width: 420,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Open Conclave Workspace on the computer you want to pair. Enter this one-time code and choose the Workspace name there.',
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: SelectableText(
-                          pairingIntent.token ?? 'Pairing code unavailable',
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.2,
-                          ),
+          builder: (context, setDialogState) {
+            statusTimer ??=
+                Timer.periodic(const Duration(seconds: 2), (_) async {
+              if (!dialogContext.mounted || completing || pollInFlight) return;
+              pollInFlight = true;
+              try {
+                final updated =
+                    await store.workspaces.pairingIntent(pairingIntent.id);
+                if (!dialogContext.mounted) return;
+                setDialogState(() => pairingIntent = updated);
+                if (updated.status == 'claimed' &&
+                    updated.workspaceId != null) {
+                  completing = true;
+                  await _loadWorkspaces();
+                  if (!dialogContext.mounted) return;
+                  setDialogState(() {});
+                  await Future<void>.delayed(
+                      const Duration(milliseconds: 1400));
+                  if (dialogContext.mounted) {
+                    Navigator.pop(dialogContext, updated.workspaceId);
+                  }
+                }
+              } catch (_) {
+                // Keep the code visible; the next poll can recover from transient failures.
+              } finally {
+                pollInFlight = false;
+              }
+            });
+            final claimed = pairingIntent.status == 'claimed';
+            return AlertDialog(
+              title: const Text('Connect a Workspace'),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (claimed) ...[
+                      const Text('✓ Workspace connected',
+                          style: TextStyle(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 12),
+                      Text(store.workspaces.items
+                              .where((item) =>
+                                  item.id == pairingIntent.workspaceId)
+                              .map((item) => item.name)
+                              .firstOrNull ??
+                          'Workspace'),
+                      const SizedBox(height: 4),
+                      Text(_connectedWorkspaceDetails(
+                          pairingIntent.workspaceId)),
+                    ] else ...[
+                      const Text(
+                        'Install and open Conclave Workspace on the computer you want to connect. Choose its Workspace name on that computer.',
+                      ),
+                      const SizedBox(height: 16),
+                      const Text('Pairing code',
+                          style: TextStyle(fontWeight: FontWeight.w700)),
+                    ],
+                    const SizedBox(height: 20),
+                    if (!claimed)
+                      SelectableText(
+                        pairingIntent.token ?? 'Pairing code unavailable',
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2,
                         ),
                       ),
-                      IconButton(
-                        tooltip: 'Copy code',
-                        onPressed: pairingIntent.token == null
-                            ? null
-                            : () async {
-                                await Clipboard.setData(
-                                    ClipboardData(text: pairingIntent.token!));
-                                if (context.mounted) {
-                                  _showSnackBar('Pairing code copied.');
-                                }
-                              },
-                        icon: const Icon(Icons.copy_rounded),
-                      ),
+                    if (!claimed) ...[
+                      const SizedBox(height: 4),
+                      Text(_enrollmentExpiryLabel(pairingIntent.expiresAt)),
+                      const SizedBox(height: 14),
+                      Text(pairingIntent.status == 'expired'
+                          ? 'This code expired. Generate a new code to continue.'
+                          : pairingIntent.status == 'cancelled'
+                              ? 'This pairing code was cancelled.'
+                              : 'Waiting for Conclave Workspace…'),
                     ],
+                  ],
+                ),
+              ),
+              actions: [
+                if (!claimed)
+                  OutlinedButton.icon(
+                    onPressed: () => browserNavigation.openExternal(
+                      Uri.parse(conclaveDownloadsUrl),
+                    ),
+                    icon: const Icon(Icons.download_rounded),
+                    label: const Text('Download Conclave Workspace'),
                   ),
-                  const SizedBox(height: 4),
-                  Text(_enrollmentExpiryLabel(pairingIntent.expiresAt)),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () async {
-                  try {
-                    await store.workspaces
-                        .cancelPairingIntent(pairingIntent.id);
-                    if (dialogContext.mounted) {
-                      Navigator.pop(dialogContext);
-                    }
-                  } catch (error) {
-                    if (dialogContext.mounted) {
-                      _showSnackBar('$error', type: ToastType.error);
-                    }
-                  }
-                },
-                child: const Text('Cancel pairing'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  try {
-                    final replacement = await store.workspaces
-                        .regeneratePairingIntent(pairingIntent.id);
-                    if (dialogContext.mounted) {
-                      setDialogState(() => pairingIntent = replacement);
-                    }
-                  } catch (error) {
-                    if (dialogContext.mounted) {
-                      _showSnackBar('$error', type: ToastType.error);
-                    }
-                  }
-                },
-                child: const Text('Generate new code'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Done'),
-              ),
-            ],
-          ),
+                if (!claimed)
+                  TextButton.icon(
+                    onPressed: pairingIntent.token == null
+                        ? null
+                        : () async {
+                            await Clipboard.setData(
+                                ClipboardData(text: pairingIntent.token!));
+                            if (dialogContext.mounted) {
+                              _showSnackBar('Pairing code copied.');
+                            }
+                          },
+                    icon: const Icon(Icons.copy_rounded),
+                    label: const Text('Copy code'),
+                  ),
+                if (!claimed)
+                  TextButton(
+                    onPressed: () async {
+                      try {
+                        await store.workspaces
+                            .cancelPairingIntent(pairingIntent.id);
+                        if (dialogContext.mounted) {
+                          Navigator.pop(dialogContext);
+                        }
+                      } catch (error) {
+                        if (dialogContext.mounted) {
+                          _showSnackBar('$error', type: ToastType.error);
+                        }
+                      }
+                    },
+                    child: const Text('Cancel'),
+                  ),
+                if (!claimed)
+                  TextButton(
+                    onPressed: () async {
+                      try {
+                        final replacement = await store.workspaces
+                            .regeneratePairingIntent(pairingIntent.id);
+                        if (dialogContext.mounted) {
+                          setDialogState(() => pairingIntent = replacement);
+                        }
+                      } catch (error) {
+                        if (dialogContext.mounted) {
+                          _showSnackBar('$error', type: ToastType.error);
+                        }
+                      }
+                    },
+                    child: const Text('Generate new code'),
+                  ),
+                if (claimed)
+                  FilledButton(
+                    onPressed: () =>
+                        Navigator.pop(dialogContext, pairingIntent.workspaceId),
+                    child: const Text('Open Workspace'),
+                  ),
+              ],
+            );
+          },
         ),
       );
-      await _loadWorkspaces();
+      statusTimer?.cancel();
+      if (workspaceId != null && mounted) {
+        await _loadWorkspaces();
+        _navigateTo(StudioNavigation.workspaces(workspaceId: workspaceId));
+      }
     } catch (error) {
       if (mounted) _showSnackBar('$error', type: ToastType.error);
     }
+  }
+
+  String _connectedWorkspaceDetails(String? workspaceId) {
+    final workspace = store.workspaces.items
+        .where((item) => item.id == workspaceId)
+        .firstOrNull;
+    if (workspace == null) return 'Connected';
+    final workers = workspaceWorkers
+        .where((worker) =>
+            worker.workspaceId == workspace.id && worker.status != 'removed')
+        .length;
+    final platform = switch (workspace.platform.toLowerCase()) {
+      'macos' => 'macOS',
+      'windows' => 'Windows',
+      'linux' => 'Linux',
+      _ => workspace.platform,
+    };
+    final architectureName = switch (workspace.architecture.toLowerCase()) {
+      'arm64' || 'aarch64' => 'Apple Silicon',
+      'x64' || 'x86_64' || 'amd64' => 'Intel / x64',
+      '—' || '' => '',
+      _ => workspace.architecture,
+    };
+    final architecture = architectureName.isEmpty ? '' : ' · $architectureName';
+    return '$platform$architecture\n$workers ${workers == 1 ? 'Worker' : 'Workers'}';
   }
 
   Future<void> _connectWorkspace(StudioWorkspace workspace) async {
@@ -1394,7 +1490,11 @@ class _StudioAppState extends State<ConclaveAppShell> {
     if (expiresAt == null) return 'Expiration: $value';
     final remaining = expiresAt.difference(DateTime.now());
     if (remaining.isNegative) return 'Expired';
-    final hours = (remaining.inMinutes / 60).ceil();
+    final minutes = remaining.inMinutes;
+    if (minutes < 60) {
+      return 'Expires in ${minutes == 1 ? '1 minute' : '$minutes minutes'}';
+    }
+    final hours = (minutes / 60).ceil();
     return 'Expires in ${hours == 1 ? '1 hour' : '$hours hours'}';
   }
 
