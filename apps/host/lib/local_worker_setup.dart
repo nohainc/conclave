@@ -46,14 +46,14 @@ class LocalWorkerTypeOption {
       permissions: ['workstream_filesystem', 'shell_execution'],
     ),
     LocalWorkerTypeOption(
-      id: 'agy',
+      id: 'antigravity',
       name: 'Antigravity',
       description: 'Use Antigravity on this machine.',
       authStrategy: 'browser_auth',
       authLabel: 'Google account',
       prerequisite: 'Antigravity CLI',
       executablePrerequisite:
-          AdapterExecutablePrerequisite(executable: 'antigravity'),
+          AdapterExecutablePrerequisite(executable: 'agy', minimumVersion: '1.0.0'),
       additionalPrerequisites: [
         AdapterExecutablePrerequisite(executable: 'node'),
       ],
