@@ -62,19 +62,19 @@ test("validates local Antigravity login and streams a sandboxed execution result
   const bin = join(temp, "bin");
   await import("node:fs/promises").then(({ mkdir }) => mkdir(bin));
   const argsFile = join(temp, "args.txt");
-  const fakeAntigravity = join(bin, "antigravity");
+  const fakeAgy = join(bin, "agy");
   await writeFile(
-    fakeAntigravity,
+    fakeAgy,
     `#!/bin/sh
-if [ "$1" = "auth" ] && [ "$2" = "status" ]; then exit 0; fi
+if [ "$1" = "-p" ] && [ "$2" = "/usage" ]; then exit 0; fi
 printf '%s\\n' "$*" > "$FAKE_ARGS_FILE"
 cat >/dev/null
-printf '%s\\n' '{"type":"item.completed","item":{"type":"command_execution","aggregated_output":"working"}}'
-printf '%s\\n' '{"type":"item.completed","item":{"type":"agent_message","text":"Antigravity applied the change."}}'
-printf '%s\\n' '{"type":"turn.completed"}'
+printf '%s\\n' '{"event":"init","conversation_id":"c1","init":{"cwd":"."}}'
+printf '%s\\n' '{"event":"step_update","step_update":{"state":"RUNNING"}}'
+printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"Antigravity applied the change."}}'
 `,
   );
-  await chmod(fakeAntigravity, 0o755);
+  await chmod(fakeAgy, 0o755);
   const adapterProcess = await startAdapter({
     ...process.env,
     PATH: `${bin}:${process.env.PATH}`,
@@ -90,7 +90,7 @@ printf '%s\\n' '{"type":"turn.completed"}'
     type: "initialize.request",
     protocolVersion: "1.0",
     requestId: "i1",
-    workerTypeId: "antigravity",
+    workerTypeId: "agy",
     adapterVersion: "1.0.0",
   });
   assert.equal(
@@ -125,8 +125,9 @@ printf '%s\\n' '{"type":"turn.completed"}'
   assert.equal(result.output, "Antigravity applied the change.");
   assert.equal(result.requestId, "e1");
   const args = await readFile(argsFile, "utf8");
-  assert.match(args, /--ask-for-approval never/);
-  assert.match(args, /--sandbox workspace-write/);
+  assert.match(args, /--input-format stream-json/);
+  assert.match(args, /--output-format stream-json/);
+  assert.match(args, /--sandbox/);
   assert.match(args, /--model gemini-3\.7-flash/);
 });
 
@@ -135,9 +136,9 @@ test("reports local Antigravity authentication required without exposing provide
   t.after(() => rm(temp, { recursive: true, force: true }));
   const bin = join(temp, "bin");
   await import("node:fs/promises").then(({ mkdir }) => mkdir(bin));
-  const fakeAntigravity = join(bin, "antigravity");
-  await writeFile(fakeAntigravity, "#!/bin/sh\nexit 1\n");
-  await chmod(fakeAntigravity, 0o755);
+  const fakeAgy = join(bin, "agy");
+  await writeFile(fakeAgy, "#!/bin/sh\nexit 1\n");
+  await chmod(fakeAgy, 0o755);
   const adapterProcess = await startAdapter({
     ...process.env,
     PATH: `${bin}:${process.env.PATH}`,
