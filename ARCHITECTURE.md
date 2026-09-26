@@ -1,8 +1,6 @@
 # Conclave AX Architecture
 
-Architecture v5 remains the implemented baseline. Architecture v6 is the current Workstream/filesystem implementation baseline; v7 is the active migration target defined by ADR-012.
-
-Architecture v6 is the implemented Workstream/filesystem baseline. Architecture v7 is the active execution migration for Workspace-owned local Workers and managed adapter processes.
+Architecture v6 is the implemented Workstream/filesystem baseline. Architecture v7 is the active execution migration for Workspace-owned local Workers and managed adapter processes, defined by ADR-012.
 
 ## Current v5 model
 
@@ -39,10 +37,9 @@ Execution
 └── Workers
 ```
 
-Worker Type is catalog/infrastructure. Worker is the configured user resource
-with one logical external AI identity and zero or more Workspace bindings.
-AI Account and Credential Profile remain internal credential/readiness terms;
-they are not equal first-class product resources.
+Worker Type is adapter/catalog infrastructure. Under the active v7 target, a
+Worker is created/authenticated in Conclave Workspace and belongs to exactly one
+Workspace. AI Account and Credential Profile are not peer product resources.
 
 Architecture v4 and earlier are historical only.
 
@@ -58,4 +55,4 @@ Read:
 - [ADR-012](docs/decisions/ADR-012-workspace-owned-local-workers.md)
 - [v7 implementation roadmap](docs/roadmaps/ARCHITECTURE_V7_IMPLEMENTATION.md)
 
-The existing v6 Cloud-created, multi-Workspace Worker path remains operational during migration. New Worker architecture work follows v7 ownership rules. Retire v6 bindings only after local Worker creation, inventory sync, scheduling, and a real adapter execute end to end.
+The existing v6 Cloud-created, multi-Workspace Worker backend remains compatibility-only during migration and is no longer exposed as the normal Conclave AX Worker setup UX. New Worker architecture work follows v7 ownership rules.
