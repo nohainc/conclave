@@ -1376,6 +1376,8 @@ class WorkstreamPage extends StatefulWidget {
     super.key,
     required this.project,
     required this.workstream,
+    this.dataSource,
+    this.currentUserId,
     required this.onBackToProject,
     required this.onArchive,
     required this.onProvisionCheckout,
@@ -1386,6 +1388,8 @@ class WorkstreamPage extends StatefulWidget {
 
   final StudioProject project;
   final StudioWorkstream workstream;
+  final StudioDataSource? dataSource;
+  final String? currentUserId;
   final VoidCallback onBackToProject;
   final VoidCallback onArchive;
   final VoidCallback onProvisionCheckout;
@@ -1421,6 +1425,39 @@ class _WorkstreamPageState extends State<WorkstreamPage>
       initialIndex: widget.initialTab.clamp(0, 1),
       vsync: this,
     );
+    _loadDiscussion();
+  }
+
+  Future<void> _loadDiscussion() async {
+    final ds = widget.dataSource;
+    if (ds == null) return;
+    try {
+      final messages =
+          await ds.loadDiscussionMessages(workstreamId: widget.workstream.id);
+      if (!mounted) return;
+      setState(() {
+        _discussion
+          ..clear()
+          ..addAll(messages.map((m) {
+            final dt = DateTime.tryParse(m.createdAt)?.toLocal();
+            final timeStr = dt != null
+                ? '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}'
+                : null;
+            final isMe = widget.currentUserId != null &&
+                widget.currentUserId!.isNotEmpty &&
+                m.authorUserId == widget.currentUserId;
+            return _DiscussionItem(
+              id: m.id,
+              author: isMe ? 'You' : (m.authorName ?? 'Member'),
+              text: m.body,
+              sentAt: timeStr,
+              isMe: isMe,
+            );
+          }));
+      });
+    } catch (_) {
+      // Ignore network errors on initial load
+    }
   }
 
   @override
@@ -1526,21 +1563,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
                     ),
                   );
                 },
-                onEdit: (newText) {
-                  setState(() {
-                    final idx =
-                        _discussion.indexWhere((m) => m.id == message.id);
-                    if (idx != -1) {
-                      _discussion[idx] = _DiscussionItem(
-                        id: message.id,
-                        author: message.author,
-                        text: newText,
-                        sentAt: message.sentAt,
-                        isMe: message.isMe,
-                      );
-                    }
-                  });
-                },
+                onEdit: (newText) => _editDiscussion(message.id, newText),
               );
             },
           ),
@@ -1647,24 +1670,94 @@ class _WorkstreamPageState extends State<WorkstreamPage>
     widget.onRunWork?.call(text);
   }
 
-  void _sendDiscussion() {
+  Future<void> _sendDiscussion() async {
     final text = _discussionController.text.trim();
     if (text.isEmpty) return;
+    _discussionController.clear();
     final now = DateTime.now();
     final hour = now.hour.toString().padLeft(2, '0');
     final minute = now.minute.toString().padLeft(2, '0');
+    final tempId = 'temp-${DateTime.now().microsecondsSinceEpoch}';
     setState(() {
       _discussion.add(
         _DiscussionItem(
-          id: 'message-${DateTime.now().microsecondsSinceEpoch}',
+          id: tempId,
           author: 'You',
           text: text,
           sentAt: '$hour:$minute',
           isMe: true,
         ),
       );
-      _discussionController.clear();
     });
+
+    final ds = widget.dataSource;
+    if (ds != null) {
+      try {
+        final saved = await ds.sendDiscussionMessage(
+          workstreamId: widget.workstream.id,
+          text: text,
+        );
+        if (!mounted) return;
+        setState(() {
+          final idx = _discussion.indexWhere((item) => item.id == tempId);
+          if (idx != -1) {
+            final dt = DateTime.tryParse(saved.createdAt)?.toLocal();
+            final timeStr = dt != null
+                ? '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}'
+                : '$hour:$minute';
+            _discussion[idx] = _DiscussionItem(
+              id: saved.id,
+              author: 'You',
+              text: saved.body,
+              sentAt: timeStr,
+              isMe: true,
+            );
+          }
+        });
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save message: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _editDiscussion(String messageId, String newText) async {
+    setState(() {
+      final idx = _discussion.indexWhere((m) => m.id == messageId);
+      if (idx != -1) {
+        final old = _discussion[idx];
+        _discussion[idx] = _DiscussionItem(
+          id: old.id,
+          author: old.author,
+          text: newText,
+          sentAt: old.sentAt,
+          isMe: old.isMe,
+        );
+      }
+    });
+
+    final ds = widget.dataSource;
+    if (ds != null && !messageId.startsWith('temp-')) {
+      try {
+        await ds.editDiscussionMessage(
+          messageId: messageId,
+          text: newText,
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update message: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
   }
 
   _WorkstreamContext _buildContext() => _WorkstreamContext.build(

@@ -91,6 +91,47 @@ class StudioFixtureDataSource implements StudioDataSource {
   }) async {}
 
   @override
+  Future<List<StudioDiscussionMessage>> loadDiscussionMessages({
+    required String workstreamId,
+  }) async =>
+      const [];
+
+  @override
+  Future<StudioDiscussionMessage> sendDiscussionMessage({
+    required String workstreamId,
+    required String text,
+    List<String> references = const [],
+  }) async =>
+      StudioDiscussionMessage(
+        id: 'msg-${DateTime.now().microsecondsSinceEpoch}',
+        workstreamId: workstreamId,
+        authorUserId: 'user-owner',
+        authorName: 'Vitalii',
+        body: text,
+        references: references,
+        createdAt: DateTime.now().toIso8601String(),
+        isMe: true,
+      );
+
+  @override
+  Future<StudioDiscussionMessage> editDiscussionMessage({
+    required String messageId,
+    required String text,
+    List<String> references = const [],
+  }) async =>
+      StudioDiscussionMessage(
+        id: messageId,
+        workstreamId: 'workstream-1',
+        authorUserId: 'user-owner',
+        authorName: 'Vitalii',
+        body: text,
+        references: references,
+        editedAt: DateTime.now().toIso8601String(),
+        createdAt: DateTime.now().toIso8601String(),
+        isMe: true,
+      );
+
+  @override
   Future<List<StudioProjectMember>> loadProjectMembers({
     required String projectId,
   }) async =>

@@ -2582,8 +2582,11 @@ class _StudioAppState extends State<ConclaveAppShell> {
     final workstream = selectedWorkstream;
     if (project == null || workstream == null) return _homeView();
     return WorkstreamPage(
+      key: ValueKey(workstream.id),
       project: project,
       workstream: workstream,
+      dataSource: widget.dataSource,
+      currentUserId: _session?.viewer?.id,
       onBackToProject: () => _navigateTo(StudioNavigation.project(project.id)),
       onArchive: () async {
         try {

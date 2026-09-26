@@ -315,6 +315,100 @@ void main() {
   });
 
   testWidgets(
+      'WorkstreamPage loads and persists discussions via dataSource and updates when switching workstreams',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    final dataSource = StudioFixtureDataSource();
+    const project = StudioProject(
+      id: 'project-1',
+      name: 'Project One',
+      branch: '',
+      activeGoals: 0,
+      lastActivity: 'today',
+      role: 'collaborator',
+    );
+    const ws1 = StudioWorkstream(
+      id: 'ws-1',
+      projectId: 'project-1',
+      name: 'Alpha Workstream',
+      lead: 'Owner',
+      status: 'active',
+      brief: '',
+      primaryWorkspace: 'Workspace One',
+      currentCheckpoint: 'main',
+      queueStatus: 'Idle',
+    );
+    const ws2 = StudioWorkstream(
+      id: 'ws-2',
+      projectId: 'project-1',
+      name: 'Beta Workstream',
+      lead: 'Owner',
+      status: 'active',
+      brief: '',
+      primaryWorkspace: 'Workspace One',
+      currentCheckpoint: 'main',
+      queueStatus: 'Idle',
+    );
+
+    var activeWorkstream = ws1;
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: StatefulBuilder(
+          builder: (context, setState) => WorkstreamPage(
+            key: ValueKey(activeWorkstream.id),
+            project: project,
+            workstream: activeWorkstream,
+            dataSource: dataSource,
+            currentUserId: 'user-owner',
+            onBackToProject: _noop,
+            onArchive: _noop,
+            onProvisionCheckout: _noop,
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Verify initial empty state for ws1
+    expect(find.text('No discussion messages yet'), findsOneWidget);
+
+    // Send a message on ws1
+    await tester.enterText(find.byType(TextField).last, 'Message for Alpha');
+    await tester.tap(find.byTooltip('Send message'));
+    await tester.pumpAndSettle();
+    expect(find.text('Message for Alpha'), findsOneWidget);
+
+    // Switch to ws2
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: StatefulBuilder(
+          builder: (context, setState) {
+            activeWorkstream = ws2;
+            return WorkstreamPage(
+              key: ValueKey(activeWorkstream.id),
+              project: project,
+              workstream: activeWorkstream,
+              dataSource: dataSource,
+              currentUserId: 'user-owner',
+              onBackToProject: _noop,
+              onArchive: _noop,
+              onProvisionCheckout: _noop,
+            );
+          },
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Verify ws2 does not have ws1's message and shows empty state
+    expect(find.text('Message for Alpha'), findsNothing);
+    expect(find.text('No discussion messages yet'), findsOneWidget);
+
+    await tester.binding.setSurfaceSize(null);
+  });
+
+  testWidgets(
       'Workstream rename keeps its position and Move Up/Down reorders correctly',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));

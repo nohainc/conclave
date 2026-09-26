@@ -111,6 +111,22 @@ abstract interface class StudioDataSource {
     String? status,
   });
   Future<void> deleteWorkstream({required String workstreamId});
+  Future<List<StudioDiscussionMessage>> loadDiscussionMessages({
+    required String workstreamId,
+  }) async =>
+      const [];
+  Future<StudioDiscussionMessage> sendDiscussionMessage({
+    required String workstreamId,
+    required String text,
+    List<String> references = const [],
+  }) async =>
+      throw UnimplementedError('Discussion messages are not available');
+  Future<StudioDiscussionMessage> editDiscussionMessage({
+    required String messageId,
+    required String text,
+    List<String> references = const [],
+  }) async =>
+      throw UnimplementedError('Discussion messages are not available');
   Future<List<StudioAgent>> loadHosts({required String workspaceId});
   Future<List<StudioWorker>> loadWorkers({required String workspaceId});
   Future<List<StudioConfiguredWorker>> loadConfiguredWorkers() async =>
@@ -510,6 +526,97 @@ class StudioApiClient implements StudioDataSource {
         statusCode: response.statusCode,
       );
     }
+  }
+
+  @override
+  Future<List<StudioDiscussionMessage>> loadDiscussionMessages({
+    required String workstreamId,
+  }) async {
+    final body = await _getJson(
+      Uri.parse('$baseUrl/workstreams/$workstreamId/discussion-messages'),
+    );
+    return (body['messages'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) => StudioDiscussionMessage.fromJson(
+              Map<String, dynamic>.from(item),
+            ))
+        .toList();
+  }
+
+  @override
+  Future<StudioDiscussionMessage> sendDiscussionMessage({
+    required String workstreamId,
+    required String text,
+    List<String> references = const [],
+  }) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/workstreams/$workstreamId/discussion-messages'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({
+        'body': text,
+        'references': references,
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      var detail = '';
+      try {
+        final errorBody = jsonDecode(response.body);
+        if (errorBody is Map && errorBody['error'] is String) {
+          detail = ': ${errorBody['error']}';
+        }
+      } on Object {
+        // Keep status-only message
+      }
+      throw StudioApiException(
+        'Discussion message submission failed (${response.statusCode})$detail',
+        statusCode: response.statusCode,
+      );
+    }
+    final body = jsonDecode(response.body);
+    final message = body is Map ? body['message'] : null;
+    if (message is! Map) {
+      throw const StudioApiException(
+          'Discussion message response is malformed');
+    }
+    return StudioDiscussionMessage.fromJson(Map<String, dynamic>.from(message));
+  }
+
+  @override
+  Future<StudioDiscussionMessage> editDiscussionMessage({
+    required String messageId,
+    required String text,
+    List<String> references = const [],
+  }) async {
+    final response = await client.patch(
+      Uri.parse('$baseUrl/discussion-messages/$messageId'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({
+        'body': text,
+        'references': references,
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      var detail = '';
+      try {
+        final errorBody = jsonDecode(response.body);
+        if (errorBody is Map && errorBody['error'] is String) {
+          detail = ': ${errorBody['error']}';
+        }
+      } on Object {
+        // Keep status-only message
+      }
+      throw StudioApiException(
+        'Discussion message edit failed (${response.statusCode})$detail',
+        statusCode: response.statusCode,
+      );
+    }
+    final body = jsonDecode(response.body);
+    final message = body is Map ? body['message'] : null;
+    if (message is! Map) {
+      throw const StudioApiException(
+          'Discussion message edit response is malformed');
+    }
+    return StudioDiscussionMessage.fromJson(Map<String, dynamic>.from(message));
   }
 
   @override

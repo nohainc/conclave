@@ -395,6 +395,61 @@ class StudioWorkstream {
       );
 }
 
+class StudioDiscussionMessage {
+  const StudioDiscussionMessage({
+    required this.id,
+    required this.workstreamId,
+    required this.authorUserId,
+    this.authorName,
+    required this.body,
+    this.references = const [],
+    this.editedAt,
+    required this.createdAt,
+    this.isMe = false,
+  });
+
+  final String id;
+  final String workstreamId;
+  final String authorUserId;
+  final String? authorName;
+  final String body;
+  final List<String> references;
+  final String? editedAt;
+  final String createdAt;
+  final bool isMe;
+
+  factory StudioDiscussionMessage.fromJson(
+    Map<String, dynamic> json, {
+    String? currentUserId,
+    Map<String, String>? memberNames,
+  }) {
+    final authorId =
+        _string(json, 'authorUserId', _string(json, 'author_user_id'));
+    final author = memberNames?[authorId] ??
+        (json['authorName'] as String? ??
+            (json['author_name'] as String? ??
+                (authorId.isNotEmpty ? authorId : 'Member')));
+    final rawRefs = json['references'];
+    final refs = rawRefs is List
+        ? rawRefs.map((e) => e.toString()).toList()
+        : <String>[];
+    return StudioDiscussionMessage(
+      id: _string(json, 'id'),
+      workstreamId:
+          _string(json, 'workstreamId', _string(json, 'workstream_id')),
+      authorUserId: authorId,
+      authorName: author,
+      body: _string(json, 'body', _string(json, 'content')),
+      references: refs,
+      editedAt: json['editedAt'] as String? ?? json['edited_at'] as String?,
+      createdAt: _string(json, 'createdAt', _string(json, 'created_at')),
+      isMe: currentUserId != null &&
+          currentUserId.isNotEmpty &&
+          authorId == currentUserId,
+    );
+  }
+}
+
 class StudioProject {
   const StudioProject({
     required this.id,
