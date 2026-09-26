@@ -765,8 +765,10 @@ class HostDashboard extends StatefulWidget {
   State<HostDashboard> createState() => _HostDashboardState();
 }
 
+enum HostSurface { workspace, workers }
+
 class _HostDashboardState extends State<HostDashboard> {
-  int _selectedTabIndex = 0;
+  HostSurface _selectedSurface = HostSurface.workspace;
 
   @override
   Widget build(BuildContext context) {
@@ -879,16 +881,16 @@ class _HostDashboardState extends State<HostDashboard> {
                 icon: Icons.computer_outlined,
                 selectedIcon: Icons.computer,
                 label: 'Workspace',
-                selected: _selectedTabIndex == 0,
-                onTap: () => setState(() => _selectedTabIndex = 0),
+                selected: _selectedSurface == HostSurface.workspace,
+                onTap: () => setState(() => _selectedSurface = HostSurface.workspace),
               ),
               const SizedBox(width: 12),
               _SurfaceTabButton(
                 icon: Icons.memory_outlined,
                 selectedIcon: Icons.memory,
                 label: 'Workers',
-                selected: _selectedTabIndex == 1,
-                onTap: () => setState(() => _selectedTabIndex = 1),
+                selected: _selectedSurface == HostSurface.workers,
+                onTap: () => setState(() => _selectedSurface = HostSurface.workers),
               ),
             ],
           ),
@@ -901,7 +903,7 @@ class _HostDashboardState extends State<HostDashboard> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 820),
               child: IndexedStack(
-                index: _selectedTabIndex,
+                index: _selectedSurface.index,
                 children: [
                   _WorkspaceTab(
                     snapshot: snapshot,
@@ -909,7 +911,7 @@ class _HostDashboardState extends State<HostDashboard> {
                     onUnpair: widget.onUnpair,
                     onRetry: widget.onRetry,
                     onNavigateToWorkers: () =>
-                        setState(() => _selectedTabIndex = 1),
+                        setState(() => _selectedSurface = HostSurface.workers),
                     localWorkerRegistry: widget.localWorkerRegistry,
                     credentialStore: widget.credentialStore,
                     adapterPackageStore: widget.adapterPackageStore,
@@ -1428,164 +1430,186 @@ class _WorkspaceTab extends StatelessWidget {
         const SizedBox(height: 16),
 
         // 7. ADVANCED & DIAGNOSTICS (Expandable Accordion)
-        Card(
-          child: Theme(
-            data: theme.copyWith(dividerColor: Colors.transparent),
-            child: ExpansionTile(
-              leading: const Icon(Icons.analytics_outlined, size: 20),
-              title: const Text(
-                'Advanced & Diagnostics',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-              ),
-              childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-              children: [
-                const Divider(height: 16),
-                // Connection
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('Connection',
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(fontWeight: FontWeight.w700)),
-                ),
-                const SizedBox(height: 6),
-                _DetailRow(
-                  label: 'Gateway state',
-                  value: snapshot.cloudConnected ? 'Connected' : 'Disconnected',
-                ),
-                _DetailRow(
-                  label: 'Gateway URL',
-                  value: snapshot.cloudUrl ?? 'Not configured',
-                ),
-                _DetailRow(
-                  label: 'Session ID',
-                  value: snapshot.sessionId ?? 'No active session',
-                ),
-                _DetailRow(
-                  label: 'Reconnect count',
-                  value: '${snapshot.reconnectCount}',
-                ),
-                _DetailRow(
-                  label: 'Last inventory sync',
-                  value: snapshot.lastInventorySyncAt != null
-                      ? '${snapshot.lastInventorySyncAt!.toLocal()}'
-                      : 'Never',
-                ),
-                _DetailRow(
-                  label: 'Active assignments',
-                  value: '${snapshot.activeAssignments}',
-                ),
-                if (snapshot.activeAssignmentIds.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  for (final id in snapshot.activeAssignmentIds)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 138, bottom: 2),
-                      child: Text(id,
-                          style: const TextStyle(
-                              fontFamily: 'monospace', fontSize: 11)),
-                    ),
-                ],
-                const SizedBox(height: 12),
-
-                // Identity
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('Identity',
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(fontWeight: FontWeight.w700)),
-                ),
-                const SizedBox(height: 6),
-                _CopyableDetailRow(
-                  label: 'Workspace ID',
-                  value: snapshot.workspaceId ??
-                      snapshot.hostId ??
-                      'Not paired',
-                ),
-                _CopyableDetailRow(
-                  label: 'Runtime ID',
-                  value: snapshot.hostId ?? 'Not assigned',
-                ),
-                const SizedBox(height: 12),
-
-                // System
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('System',
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(fontWeight: FontWeight.w700)),
-                ),
-                const SizedBox(height: 6),
-                _CopyableDetailRow(
-                  label: 'Hostname',
-                  value: snapshot.hostname ?? Platform.localHostname,
-                ),
-                _DetailRow(
-                  label: 'OS',
-                  value:
-                      '${Platform.operatingSystem} (${Platform.operatingSystemVersion})',
-                ),
-                const SizedBox(height: 12),
-
-                // Logs
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('Logs',
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(fontWeight: FontWeight.w700)),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 130,
-                      child: Text(
-                        'Logs Path',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        snapshot.logsPath ?? 'Not available',
-                        style: const TextStyle(
-                            fontFamily: 'monospace', fontSize: 11),
-                      ),
-                    ),
-                    if (snapshot.logsPath != null)
-                      TextButton.icon(
-                        onPressed: () => HostLifecycleController.openPath(
-                            snapshot.logsPath!),
-                        icon: const Icon(Icons.open_in_new, size: 14),
-                        label: const Text('Open Log File',
-                            style: TextStyle(fontSize: 11)),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    FilledButton.tonalIcon(
-                      onPressed: onExportDiagnostics,
-                      icon: const Icon(Icons.download_outlined, size: 16),
-                      label: const Text('Export Report'),
-                    ),
-                    const Spacer(),
-                    if (snapshot.paired && onUnpair != null)
-                      TextButton.icon(
-                        onPressed: onUnpair,
-                        icon: const Icon(Icons.link_off, size: 14),
-                        label: const Text('Unpair Workspace',
-                            style: TextStyle(fontSize: 12)),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+        _WorkspaceDiagnosticsSection(
+          snapshot: snapshot,
+          onExportDiagnostics: onExportDiagnostics,
+          onUnpair: onUnpair,
         ),
       ],
+    );
+  }
+}
+
+class _WorkspaceDiagnosticsSection extends StatelessWidget {
+  const _WorkspaceDiagnosticsSection({
+    required this.snapshot,
+    this.onExportDiagnostics,
+    this.onUnpair,
+  });
+
+  final HostUiSnapshot snapshot;
+  final Future<void> Function()? onExportDiagnostics;
+  final VoidCallback? onUnpair;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Theme(
+        data: theme.copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          leading: const Icon(Icons.analytics_outlined, size: 20),
+          title: const Text(
+            'Advanced & Diagnostics',
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+          ),
+          childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          children: [
+            const Divider(height: 16),
+            // Connection
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Connection',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(fontWeight: FontWeight.w700)),
+            ),
+            const SizedBox(height: 6),
+            _DetailRow(
+              label: 'Gateway state',
+              value: snapshot.cloudConnected ? 'Connected' : 'Disconnected',
+            ),
+            _DetailRow(
+              label: 'Gateway URL',
+              value: snapshot.cloudUrl ?? 'Not configured',
+            ),
+            _DetailRow(
+              label: 'Session ID',
+              value: snapshot.sessionId ?? 'No active session',
+            ),
+            _DetailRow(
+              label: 'Reconnect count',
+              value: '${snapshot.reconnectCount}',
+            ),
+            _DetailRow(
+              label: 'Last inventory sync',
+              value: snapshot.lastInventorySyncAt != null
+                  ? '${snapshot.lastInventorySyncAt!.toLocal()}'
+                  : 'Never',
+            ),
+            _DetailRow(
+              label: 'Active assignments',
+              value: '${snapshot.activeAssignments}',
+            ),
+            if (snapshot.activeAssignmentIds.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              for (final id in snapshot.activeAssignmentIds)
+                Padding(
+                  padding: const EdgeInsets.only(left: 138, bottom: 2),
+                  child: Text(id,
+                      style: const TextStyle(
+                          fontFamily: 'monospace', fontSize: 11)),
+                ),
+            ],
+            const SizedBox(height: 12),
+
+            // Identity
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Identity',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(fontWeight: FontWeight.w700)),
+            ),
+            const SizedBox(height: 6),
+            _CopyableDetailRow(
+              label: 'Workspace ID',
+              value: snapshot.workspaceId ??
+                  snapshot.hostId ??
+                  'Not paired',
+            ),
+            _CopyableDetailRow(
+              label: 'Runtime ID',
+              value: snapshot.hostId ?? 'Not assigned',
+            ),
+            const SizedBox(height: 12),
+
+            // System
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text('System',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(fontWeight: FontWeight.w700)),
+            ),
+            const SizedBox(height: 6),
+            _CopyableDetailRow(
+              label: 'Hostname',
+              value: snapshot.hostname ?? Platform.localHostname,
+            ),
+            _DetailRow(
+              label: 'OS',
+              value:
+                  '${Platform.operatingSystem} (${Platform.operatingSystemVersion})',
+            ),
+            const SizedBox(height: 12),
+
+            // Logs
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Logs',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(fontWeight: FontWeight.w700)),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 130,
+                  child: Text(
+                    'Logs Path',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    snapshot.logsPath ?? 'Not available',
+                    style: const TextStyle(
+                        fontFamily: 'monospace', fontSize: 11),
+                  ),
+                ),
+                if (snapshot.logsPath != null)
+                  TextButton.icon(
+                    onPressed: () => HostLifecycleController.openPath(
+                        snapshot.logsPath!),
+                    icon: const Icon(Icons.open_in_new, size: 14),
+                    label: const Text('Open Log File',
+                        style: TextStyle(fontSize: 11)),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: onExportDiagnostics,
+                  icon: const Icon(Icons.download_outlined, size: 16),
+                  label: const Text('Export Report'),
+                ),
+                const Spacer(),
+                if (snapshot.paired && onUnpair != null)
+                  TextButton.icon(
+                    onPressed: onUnpair,
+                    icon: const Icon(Icons.link_off, size: 14),
+                    label: const Text('Unpair Workspace',
+                        style: TextStyle(fontSize: 12)),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
