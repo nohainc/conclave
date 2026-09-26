@@ -2586,7 +2586,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
       project: project,
       workstream: workstream,
       dataSource: widget.dataSource,
-      currentUserId: _session?.viewer?.id,
+      currentUserId: store.auth.viewer?.id ?? snapshot.viewer?.id,
       onBackToProject: () => _navigateTo(StudioNavigation.project(project.id)),
       onArchive: () async {
         try {
