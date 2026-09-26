@@ -526,37 +526,19 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     final lifecycle = widget.lifecycle;
     return MaterialApp(
       title: 'Conclave Workspace',
-      theme: ThemeData(
-        useMaterial3: true,
-        scaffoldBackgroundColor: ConclaveBrand.paper,
-        colorScheme: ColorScheme.fromSeed(seedColor: ConclaveBrand.accent),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: ConclaveBrand.paper,
-          foregroundColor: ConclaveBrand.ink,
-          elevation: 0,
-        ),
-      ),
+      debugShowCheckedModeBanner: false,
+      theme: ConclaveBrand.lightTheme(),
+      darkTheme: ConclaveBrand.darkTheme(),
+      themeMode: ThemeMode.system,
       home: Scaffold(
         appBar: AppBar(
           title: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 30,
-                height: 30,
-                decoration: const BoxDecoration(
-                  color: ConclaveBrand.accent,
-                  borderRadius: BorderRadius.all(Radius.circular(9)),
-                ),
-                alignment: Alignment.center,
-                child: const Text('C',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 17)),
-              ),
+              ConclaveBrand.logoMark(size: 26),
               const SizedBox(width: 10),
-              const Text('Conclave Workspace'),
+              const Text('Conclave Workspace',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
             ],
           ),
           actions: [
@@ -632,11 +614,15 @@ class HostDashboard extends StatelessWidget {
     final theme = Theme.of(context);
     final isError = snapshot.mode == HostUiMode.offline ||
         snapshot.mode == HostUiMode.installFailure;
-    final statusColor = isError
-        ? theme.colorScheme.error
-        : snapshot.mode == HostUiMode.active
-            ? theme.colorScheme.primary
-            : theme.colorScheme.tertiary;
+    final statusColor = switch (snapshot.mode) {
+      HostUiMode.offline || HostUiMode.installFailure => ConclaveBrand.error,
+      HostUiMode.authNeeded => ConclaveBrand.warning,
+      HostUiMode.active => ConclaveBrand.accent,
+      HostUiMode.ready => ConclaveBrand.success,
+      HostUiMode.starting => ConclaveBrand.info,
+      HostUiMode.firstLaunch || HostUiMode.stopped =>
+        theme.colorScheme.onSurface.withValues(alpha: 0.4),
+    };
 
     return Align(
       alignment: Alignment.topCenter,
