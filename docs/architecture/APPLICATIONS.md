@@ -1,6 +1,6 @@
 # Conclave AX Applications
 
-**Status:** v6 baseline with proposed v7 execution/runtime changes
+**Status:** v7 active product/application boundary
 
 Conclave AX has three primary applications and one extension type.
 
@@ -22,7 +22,7 @@ Conclave AX has three primary applications and one extension type.
 - remote Worker inventory and scheduling controls;
 - approvals, evidence and artifacts.
 
-Conclave AX is web-first in v5. Desktop distribution of the main application is not a v5 requirement. Native mobile applications may be added later.
+Conclave AX is the web application. It is not packaged as the machine-side executor. Native mobile clients may be added later without changing the Workspace runtime boundary.
 
 Conclave AX communicates only with Conclave Cloud.
 
@@ -62,7 +62,8 @@ Conclave Cloud never executes an external AI/model/tool directly.
 **Technology**
 - Flutter;
 - Dart;
-- native desktop application/runtime.
+- native desktop application/runtime;
+- macOS first, then Windows/Linux.
 
 **Targets**
 - macOS first;
@@ -144,3 +145,20 @@ Architecture v5 does not expose:
 - Plugin;
 - configured Worker instance;
 - Connection.
+
+
+## Build and pairing references
+
+macOS package:
+
+~~~text
+bash scripts/build-workspace-macos.sh
+~~~
+
+Real desktop-to-Cloud smoke:
+
+~~~text
+CONCLAVE_ENROLLMENT_TOKEN=... bash scripts/test-workspace-cloud-connection.sh
+~~~
+
+See [Architecture v7](ARCHITECTURE_V7.md) and [V7 Implementation Audit](V7_IMPLEMENTATION_AUDIT.md).
