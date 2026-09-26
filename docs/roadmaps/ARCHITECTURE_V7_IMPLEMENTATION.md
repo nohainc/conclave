@@ -7,19 +7,42 @@
 
 ## Implementation status
 
-- [x] V7-0 — v7 vocabulary/ownership is the active direction; the existing v6 execution path remains in service during migration. A source guard rejects newly added v6-style binding UX, Cloud Add Worker flows, AI Account peer resources, and model-specific Worker Types.
-- [x] V7-1 — additive canonical v7 Worker and Worker Type contracts are available in `@conclave/core`; the legacy v6 contracts remain intact during migration. Contract checks cover Workspace ownership, name uniqueness scope, integration/model distinction, and immutable IDs.
-- [~] V7-2 — local Workspace-scoped Worker registry with schema version 4, checksum verification, atomic replacement, revisioned mutations, lifecycle operations, credential-free removal tombstones, and credential-reference-free backup export. Cloud user attribution is not fabricated in local state.
-- [~] V7-3 — local Add Worker catalog/form is wired into Conclave Workspace; existing Worker configuration can be edited, API credentials can be retained or rotated securely, and local disable/remove actions are available. Codex and Antigravity check their respective CLI and Node launcher prerequisites and offer local sign-in validation; Claude Code and Ollama executables are also checked. OpenAI/Gemini/Anthropic API credentials are verified through their admitted adapter's model-list request before the Worker is marked Ready. Fresh Workspaces still need API adapter releases published to Cloud; Ollama execution adapter remains.
-- [~] V7-4 — strict v7 adapter manifest and bounded structured protocol schemas are defined with path checks; publisher signatures bind both the canonical file-tree digest and every manifest field other than the signature. The Host enforces platform and machine/Worker permission ceilings, resolves package-contained executables, and creates scoped process specs. The production resolver loads active packages from the Workspace-owned V7 store, looks up credentials only in the OS secure store, and dispatches V7 assignments through the framed executor. Staged installs run the declared protocol/process-exit health check before atomic activation, and rollback re-verifies and health-checks a selected installed version. The store extracts bounded gzip-compressed tar archives with traversal, link, duplicate-path, expanded-size, and catalog-manifest consistency checks before normal verification. Cloud provides owner-authorized immutable V7 release publishing, platform/channel-filtered catalog reads, publisher-scoped revocation, and R2 downloads. Add Worker can acquire the latest supported channel release; periodic update/revocation reconciliation remains.
-- [~] V7-5 — existing child-process isolation now has a local per-Worker concurrency gate and queued cancellation; the configured Worker registry limit is wired into assignment resolution, and shutdown forces process-tree cleanup after graceful termination. Full acceptance coverage remains.
-- [~] V7-7 — first-party Antigravity V7 protocol adapter wraps the local Antigravity CLI using JSONL execution, resolved Workstream CWD, model configuration, and CLI sandboxing. Google-account local authentication status is checked without exposing credentials. The Host package release packager signs, admits, and installs the package archive.
-- [~] V7-8 — first-party OpenAI API, Gemini API, and Anthropic API adapters use separate provider implementations behind a shared V7 JSONL runtime. API keys enter only through the Host's scoped secure-credential environment injection, and provider model-list requests validate credentials before generation. Mocked provider tests and signed-package install/health tests pass. Streaming, provider tools, Workspace publication of release packages, and end-to-end scheduled execution remain.
-- [~] V7-9 — version 5.1 Workspace Runtime messages carry bounded safe Worker inventory snapshots; Workspace runtime ownership, monotonic per-Worker revisions, and credential-free Cloud tombstones are persisted in an additive table. `/api/v7/workers` exposes an owner-scoped safe inventory projection; the Host reports adapter version and capabilities only from a digest/signature/permission-verified active manifest. The AX Workers tab reads and displays that inventory without credential references and rereads it after a lightweight realtime inventory-updated signal. Runtime reconnect/stale-revision end-to-end acceptance remains.
-- [~] V7-14 — scheduler selects candidate Workers directly from synced Workspace inventory alongside legacy bindings during migration. Stateful assignments enforce Primary Workspace affinity and active execution leases, while stateless tasks discover any online, granted Workspace with matching capabilities.
-- [~] V7-15 — Cloud Project and Workstream policies explicitly narrow candidate Workers by configured Worker ID, Worker Type, provider, and model without expanding local permissions. Effective permissions are strictly bounded by the intersection of member, grant, and local Worker grants.
-- [~] V7-16 — adapter packages are decoupled from individual configured Worker identities. One verified adapter release in the Workspace package store serves all local Workers of that Worker Type with separate scoped credentials and per-Worker concurrency limits.
+### Implemented / substantially implemented
 
+- [x] **V7-0 — vocabulary/ownership.** v7 is the active Worker direction: Conclave AX is the web control app; Conclave Workspace is the desktop execution app; configured Workers originate locally and belong to one Workspace.
+- [x] **V7-1 — canonical contracts.** Core has additive Workspace-owned Worker/Worker Type contracts and guards against model-as-Worker-Type drift.
+- [x] **V7-2 — local Worker registry.** Conclave Workspace persists revisioned, checksum-protected Worker configuration without plaintext/provider credentials.
+- [x] **V7-5 — child-process execution foundation.** Adapter execution has CWD isolation, bounded output, process-tree cancellation and per-Worker concurrency control.
+- [x] **V7-6 — Codex adapter foundation.** Codex CLI is the Worker Type; local authentication is a ChatGPT account/session. The adapter uses the supported Codex execution boundary rather than a generic "ChatGPT adapter".
+- [x] **V7-9 — safe Worker inventory transport.** Workspace reports credential-free local Worker inventory and Cloud persists owner-scoped projections with revisions.
+- [x] **V7-16 — adapter/package sharing.** Adapter package identity is separate from configured Worker identity, so one admitted package can serve multiple local Workers of the same type.
+
+### Implemented in the desktop-convergence slice
+
+- [x] **Desktop pairing.** The Flutter desktop app now redeems the one-time `workspace_enrollments` code into a Workspace Runtime identity, stores the bearer token only in the OS secure store, and persists only non-secret registration metadata locally.
+- [x] **Real desktop runtime composition.** Flutter desktop and the headless entrypoint use the same Workspace runtime factory, so the GUI owns the actual Cloud connection, Worker inventory sync, assignments and adapters.
+- [x] **macOS build path.** `scripts/build-workspace-macos.sh` builds/packages the native app and optionally Developer-ID signs/notarizes it; macOS CI also builds the desktop app.
+- [x] **Cloud connection smoke path.** `scripts/test-workspace-cloud-connection.sh` consumes a disposable real enrollment code and verifies both pairing and Workspace Gateway connection.
+- [x] **Conclave AX Worker setup boundary.** Normal web UX no longer creates/authenticates/binds legacy Cloud Workers; it shows the safe Worker inventory reported by Conclave Workspace.
+- [x] **Antigravity CLI contract correction.** Worker Type remains **Antigravity**; the adapter uses Google's supported `agy` executable/headless stream contract rather than a generic "Gemini adapter" or Codex-style flags.
+
+### Partial / remaining v7 convergence
+
+- [~] **V7-3 — local Add Worker UX.** Desktop setup/edit/disable/remove exists for Codex, Antigravity and API-backed Workers. First-party adapter releases still require a repeatable production publication pipeline; Claude Code/Ollama execution coverage is incomplete.
+- [~] **V7-4 — production adapter trust.** Manifest/package admission, digest checks, health checks and rollback exist, but release trust still uses a shared HMAC secret. Public desktop distribution requires asymmetric signing: private key in release infrastructure, public verification key(s) in Conclave Workspace.
+- [~] **V7-7 — Antigravity live acceptance.** Adapter now targets official `agy` headless mode. Real Google-account acceptance remains opt-in/manual because it requires a provider account/quota.
+- [~] **V7-8 — API adapters.** OpenAI/Gemini/Anthropic provider adapters and mocked validation exist; opt-in live-provider acceptance and richer streaming/tool behavior remain.
+- [~] **V7-10/V7-11 — Cloud model cleanup.** v7 Worker inventory exists, but legacy v6 configured-Worker/binding persistence and APIs remain for migration compatibility.
+- [~] **V7-12/V7-13 — web execution UX cleanup.** Normal AX Worker setup is now local-only, but obsolete legacy data models/callbacks can still be removed after backend migration.
+- [~] **V7-14/V7-15 — scheduler/authorization cleanup.** Scheduler can use Workspace-owned inventory and respects local permission ceilings, but still carries compatibility resolution for v6 bindings.
+- [~] **V7-17 — background desktop UX.** macOS no longer terminates when the main window closes; a real menu-bar/tray/reopen/drain UX remains.
+- [~] **V7-18 — local permission/auth maturity.** Local credential storage and permission ceilings are enforced; provider-specific reauthentication/attention UX remains uneven.
+- [~] **V7-19 — release/update maturity.** Adapter rollback exists and macOS package/sign/notarize support now exists; app self-update and production adapter key rotation remain.
+- [~] **V7-21 — observability.** Useful runtime/Worker status and audit exist without Usage accounting; desktop diagnostics can be expanded.
+- [ ] **V7-22 — remove legacy v6 Worker compatibility.**
+- [~] **V7-23…V7-27 — acceptance.** Automated unit/protocol tests cover major pieces; real signed macOS + real Cloud + real Codex/Antigravity/provider acceptance must pass before declaring v7 production-ready.
+
+See [V7 Implementation Audit](../architecture/V7_IMPLEMENTATION_AUDIT.md) for the current convergence and release gates.
 
 ## Objective
 
