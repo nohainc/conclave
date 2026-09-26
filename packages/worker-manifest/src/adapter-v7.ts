@@ -70,6 +70,7 @@ export const V7AdapterManifestSchema = z
       })
       .strict(),
     packageDigest: nonEmpty.regex(/^[a-f0-9]{64}$/i),
+    signingKeyId: nonEmpty.regex(/^[A-Za-z0-9._-]{1,64}$/),
     signature: nonEmpty,
     releaseChannel: z.enum(["stable", "beta", "development"]),
   })

@@ -105,6 +105,8 @@ const routeHandlers = {
   handlePublishV7Adapter: handlers.handlePublishV7Adapter,
   handleDownloadV7Adapter: handlers.handleDownloadV7Adapter,
   handleRevokeV7Adapter: handlers.handleRevokeV7Adapter,
+  handleGetReleaseTrustState: handlers.handleGetReleaseTrustState,
+  handleRevokeReleaseSigningKey: handlers.handleRevokeReleaseSigningKey,
   handleSetWorkspaceWorkerAvailability:
     handlers.handleSetWorkspaceWorkerAvailability,
   handleSetWorkspaceDesiredWorkerState:

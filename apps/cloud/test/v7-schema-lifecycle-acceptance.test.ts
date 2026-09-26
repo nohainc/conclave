@@ -25,24 +25,31 @@ const migrationFiles = [
   "0024_v7_worker_scheduling.sql",
   "0025_v7_assignment_runtime.sql",
   "0026_remove_v6_configured_workers.sql",
+  "0027_public_key_release_trust.sql",
 ];
 
 const schema = migrationFiles
-  .map((file) =>
-    readFileSync(
+  .map((file) => {
+    const migration = readFileSync(
       fileURLToPath(new URL(`../migrations-v6/${file}`, import.meta.url)),
       "utf8",
-    ),
-  )
+    );
+    return file === "0027_public_key_release_trust.sql"
+      ? `CREATE TABLE host_releases (version TEXT PRIMARY KEY, package_digest TEXT, is_revoked INTEGER);\n${migration}`
+      : migration;
+  })
   .join("\n");
 const preCleanupSchema = migrationFiles
   .filter((file) => file !== "0026_remove_v6_configured_workers.sql")
-  .map((file) =>
-    readFileSync(
+  .map((file) => {
+    const migration = readFileSync(
       fileURLToPath(new URL(`../migrations-v6/${file}`, import.meta.url)),
       "utf8",
-    ),
-  )
+    );
+    return file === "0027_public_key_release_trust.sql"
+      ? `CREATE TABLE host_releases (version TEXT PRIMARY KEY, package_digest TEXT, is_revoked INTEGER);\n${migration}`
+      : migration;
+  })
   .join("\n");
 
 function apply(sql: string): unknown[] {

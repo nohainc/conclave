@@ -33,7 +33,8 @@ if [[ "${CONCLAVE_WORKSPACE_SKIP_CHECKS:-0}" != "1" ]]; then
   flutter test
 fi
 flutter build macos --release \
-  --dart-define=CONCLAVE_WORKSPACE_VERSION="$VERSION"
+  --dart-define=CONCLAVE_WORKSPACE_VERSION="$VERSION" \
+  --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON="${CONCLAVE_RELEASE_TRUST_KEYS_JSON:-{}}"
 
 APP="$HOST_DIR/build/macos/Build/Products/Release/Conclave Workspace.app"
 if [[ ! -d "$APP" ]]; then

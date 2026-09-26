@@ -30,6 +30,7 @@
   ],
   "healthCheck": { "mode": "protocol", "timeoutMs": 5000 },
   "packageDigest": "<calculated-from-package-contents-on-publish>",
+  "signingKeyId": "<key-id-on-publish>",
   "signature": "<publisher-signature-on-publish>",
   "releaseChannel": "stable"
 }

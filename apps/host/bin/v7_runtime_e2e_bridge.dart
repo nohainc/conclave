@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:conclave_host/cloud_connection.dart';
+import 'package:cryptography/cryptography.dart';
 import 'package:conclave_host/configured_worker_registry.dart';
 import 'package:conclave_host/v7_adapter_package_store.dart';
 import 'package:conclave_host/worker_executor.dart';
@@ -50,13 +51,49 @@ Future<void> main(List<String> args) async {
   const runtimeId = 'runtime-v7-e2e';
   const workerId = 'worker-local-v7-e2e';
   const typeId = 'fixture-worker';
-  const fixtureSecret = 'test-only-adapter-signing-secret';
+  const signingSeed = <int>[
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+  ];
   const allowedPermissions = {
     WorkerPermission.readWorkspace,
     WorkerPermission.writeWorkspace,
   };
-  const trust =
-      WorkerTrustPolicy(trustedSecrets: {'Conclave Test': fixtureSecret});
+  final signer = await Ed25519().newKeyPairFromSeed(signingSeed);
+  final publicKey = await signer.extractPublicKey();
+  final trust = WorkerTrustPolicy(trustedPublicKeys: {
+    'Conclave Test': {'test-ed25519-v1': base64.encode(publicKey.bytes)},
+  });
   final registry = LocalConfiguredWorkerRegistry(
     dataDirectory: Directory('${root.path}/workspace-data'),
     workspaceId: workspaceId,
@@ -136,11 +173,18 @@ exec __DART__ "$(dirname "$0")/adapter.dart"
     'secretRequirements': <Object>[],
     'healthCheck': {'mode': 'protocol', 'timeoutMs': 5000},
     'packageDigest': digest,
+    'signingKeyId': 'test-ed25519-v1',
     'signature': '',
     'releaseChannel': 'stable',
   };
-  manifest['signature'] =
-      trust.signAdapterManifest('Conclave Test', digest, manifest);
+  final unsigned = Map<String, Object?>.from(manifest)..remove('signature');
+  final signature = await Ed25519().sign(
+    utf8.encode(
+      'conclave-v7-adapter-release-v1\n$digest\n${canonicalJson(unsigned)}',
+    ),
+    keyPair: signer,
+  );
+  manifest['signature'] = base64.encode(signature.bytes);
   await File('${source.path}/manifest.json')
       .writeAsString(jsonEncode(manifest));
   await store.install(sourceDirectory: source);

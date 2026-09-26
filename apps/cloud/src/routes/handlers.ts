@@ -16,6 +16,10 @@ export {
 } from "../ensemble-dispatcher.js";
 export { handleConnectorRequest } from "../interactive-connector.js";
 import { handleConnectorTaskRequest } from "../interactive-connector.js";
+import {
+  canonicalReleaseJson,
+  verifyEd25519ReleaseSignature,
+} from "../release-trust.js";
 import { isTrustedOrigin } from "../observability.js";
 import {
   identityService,
@@ -193,7 +197,6 @@ function workflowInstanceId(idempotencyKey: string): string {
   return `workflow-${idempotencyKey}`;
 }
 
-
 async function resolveWorkflowInstanceId(
   env: Env,
   runId: string,
@@ -252,6 +255,8 @@ class HttpError extends Error {
 }
 
 type SecurityEnv = Env & {
+  readonly CONCLAVE_RELEASE_TRUST_KEYS_JSON?: string;
+  readonly CONCLAVE_RELEASE_PUBLISHER?: string;
   readonly BETTER_AUTH_SECRET?: string;
   readonly BETTER_AUTH_URL?: string;
   readonly CONCLAVE_AUTH_GITHUB_CLIENT_ID?: string;
@@ -259,8 +264,8 @@ type SecurityEnv = Env & {
   readonly CONCLAVE_AUTH_GOOGLE_CLIENT_ID?: string;
   readonly CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET?: string;
   readonly CONCLAVE_PLUGIN_PUBLISHER_EMAIL?: string;
+  /** Legacy V2 plugin catalog only; V7 adapter and Workspace releases use Ed25519. */
   readonly CONCLAVE_PLUGIN_SIGNING_KEY?: string;
-  readonly CONCLAVE_HOST_SIGNING_KEY?: string;
   readonly CONCLAVE_SECURITY_KEY?: string;
   readonly TEST_AUTHENTICATION?: (
     request: Request,
@@ -5098,9 +5103,13 @@ async function handleAnnounceHostUpdate(
     `SELECT version, channel, min_supported_host_version as minSupportedHostVersion,
             supported_os_json as supportedOsJson, supported_arch_json as supportedArchJson,
             package_digest as packageDigest, package_r2_key as packageR2Key,
-            signature, release_notes as releaseNotes
+            signature, signing_key_id as signingKeyId, release_notes as releaseNotes
      FROM host_releases
-     WHERE channel = ?1 AND is_revoked = 0`,
+     WHERE channel = ?1 AND is_revoked = 0 AND signing_key_id IS NOT NULL
+       AND NOT EXISTS (
+         SELECT 1 FROM release_signing_key_revocations revoked
+         WHERE revoked.key_id = host_releases.signing_key_id
+       )`,
   )
     .bind(channel)
     .all<{
@@ -5112,6 +5121,7 @@ async function handleAnnounceHostUpdate(
       packageDigest: string;
       packageR2Key: string;
       signature: string;
+      signingKeyId: string | null;
       releaseNotes: string | null;
     }>();
 
@@ -5155,6 +5165,10 @@ async function handleAnnounceHostUpdate(
       packageR2Key: release.packageR2Key,
       packageDigest: release.packageDigest,
       signature: release.signature,
+      publisher: env.CONCLAVE_RELEASE_PUBLISHER ?? "conclave",
+      signingKeyId: release.signingKeyId,
+      supportedOS: parseJson<string[]>(release.supportedOsJson, []),
+      supportedArch: parseJson<string[]>(release.supportedArchJson, []),
       ...(release.releaseNotes ? { releaseNotes: release.releaseNotes } : {}),
       ...(release.minSupportedHostVersion
         ? { minSupportedHostVersion: release.minSupportedHostVersion }
@@ -9334,10 +9348,14 @@ async function handleGetLatestHostRelease(
     `SELECT version, channel, min_supported_agent_version as minSupportedAgentVersion,
             supported_os_json as supportedOsJson, supported_arch_json as supportedArchJson,
             package_digest as packageDigest, package_r2_key as packageR2Key,
-            signature, release_notes as releaseNotes, is_revoked as isRevoked,
+            signature, signing_key_id as signingKeyId, release_notes as releaseNotes, is_revoked as isRevoked,
             created_at as createdAt
      FROM host_releases
-     WHERE channel = ?1 AND is_revoked = 0
+     WHERE channel = ?1 AND is_revoked = 0 AND signing_key_id IS NOT NULL
+       AND NOT EXISTS (
+         SELECT 1 FROM release_signing_key_revocations revoked
+         WHERE revoked.key_id = host_releases.signing_key_id
+       )
      ORDER BY created_at DESC`,
   )
     .bind(channel)
@@ -9350,6 +9368,7 @@ async function handleGetLatestHostRelease(
       packageDigest: string;
       packageR2Key: string;
       signature: string;
+      signingKeyId: string | null;
       releaseNotes: string | null;
       isRevoked: number;
       createdAt: string;
@@ -9388,6 +9407,7 @@ async function handleGetLatestHostRelease(
       supportedArch: parseJson<string[]>(latest.supportedArchJson, []),
       packageDigest: latest.packageDigest,
       packageR2Key: latest.packageR2Key,
+      signingKeyId: latest.signingKeyId,
       // Agent releases use the Cloud-managed signing identity. Keep the
       // publisher explicit so Agents can apply their trust policy rather than
       // treating a missing publisher as an unsigned release.
@@ -9407,7 +9427,7 @@ async function handleGetHostRelease(
     `SELECT version, channel, min_supported_agent_version as minSupportedAgentVersion,
             supported_os_json as supportedOsJson, supported_arch_json as supportedArchJson,
             package_digest as packageDigest, package_r2_key as packageR2Key,
-            signature, release_notes as releaseNotes, is_revoked as isRevoked,
+            signature, signing_key_id as signingKeyId, release_notes as releaseNotes, is_revoked as isRevoked,
             revoked_at as revokedAt, revocation_reason as revocationReason,
             created_at as createdAt
      FROM host_releases WHERE version = ?1`,
@@ -9422,6 +9442,7 @@ async function handleGetHostRelease(
       packageDigest: string;
       packageR2Key: string;
       signature: string;
+      signingKeyId: string | null;
       releaseNotes: string | null;
       isRevoked: number;
       revokedAt: string | null;
@@ -9445,6 +9466,7 @@ async function handleGetHostRelease(
     packageDigest: row.packageDigest,
     packageR2Key: row.packageR2Key,
     signature: row.signature,
+    signingKeyId: row.signingKeyId,
     releaseNotes: row.releaseNotes,
     isRevoked: Boolean(row.isRevoked),
     revokedAt: row.revokedAt,
@@ -9471,17 +9493,17 @@ async function handleDownloadHostRelease(
         .bind(tokenHash)
         .first<{ id: string }>();
       if (!agent) {
-        return json(
-          { error: "Invalid or revoked Agent credential" },
-          { status: 401 },
-        );
+        // Release publishers may use a normal authenticated owner token for
+        // readback. Fall through to the standard host.view authorization.
+        await authorizeRequest(request, env, "host.view", undefined, ctx);
       }
     } else {
       await authorizeRequest(request, env, "host.view", undefined, ctx);
     }
   }
   const row = await env.CONCLAVE_DB.prepare(
-    `SELECT package_r2_key, package_digest, is_revoked, revocation_reason FROM host_releases WHERE version = ?1`,
+    `SELECT package_r2_key, package_digest, is_revoked, revocation_reason,
+            signing_key_id as signingKeyId FROM host_releases WHERE version = ?1`,
   )
     .bind(version)
     .first<{
@@ -9489,6 +9511,7 @@ async function handleDownloadHostRelease(
       package_digest: string;
       is_revoked: number;
       revocation_reason: string | null;
+      signingKeyId: string | null;
     }>();
 
   if (!row) {
@@ -9498,12 +9521,24 @@ async function handleDownloadHostRelease(
     );
   }
 
-  if (row.is_revoked) {
+  if (row.is_revoked || row.signingKeyId == null) {
     return json(
       {
         error: `Agent release '${version}' has been revoked`,
         revocationReason: row.revocation_reason || "Security revocation",
       },
+      { status: 410 },
+    );
+  }
+
+  const revokedKey = await env.CONCLAVE_DB.prepare(
+    "SELECT key_id FROM release_signing_key_revocations WHERE key_id = ?1",
+  )
+    .bind(row.signingKeyId)
+    .first();
+  if (revokedKey) {
+    return json(
+      { error: `Agent release '${version}' signing key is revoked` },
       { status: 410 },
     );
   }
@@ -9562,6 +9597,7 @@ async function handlePublishHostRelease(
   let packageData: ArrayBuffer | null = null;
   let providedDigest: string | null = null;
   let providedSignature: string | null = null;
+  let signingKeyId: string | null = null;
 
   const contentType = request.headers.get("content-type") || "";
   if (contentType.includes("multipart/form-data")) {
@@ -9595,6 +9631,8 @@ async function handlePublishHostRelease(
     if (dig && typeof dig === "string") providedDigest = dig;
     const sig = formData.get("signature");
     if (sig && typeof sig === "string") providedSignature = sig;
+    const keyId = formData.get("signingKeyId");
+    if (keyId && typeof keyId === "string") signingKeyId = keyId;
 
     const file = formData.get("package");
     if (file && typeof file === "object" && "arrayBuffer" in file) {
@@ -9627,6 +9665,7 @@ async function handlePublishHostRelease(
     if (typeof body.packageDigest === "string")
       providedDigest = body.packageDigest;
     if (typeof body.signature === "string") providedSignature = body.signature;
+    if (typeof body.signingKeyId === "string") signingKeyId = body.signingKeyId;
     if (typeof body.packageBase64 === "string") {
       packageData = Uint8Array.from(atob(body.packageBase64), (c) =>
         c.charCodeAt(0),
@@ -9652,29 +9691,74 @@ async function handlePublishHostRelease(
   }
   const digest = computedDigest;
 
-  const secretKey =
-    env.CONCLAVE_HOST_SIGNING_KEY ||
-    (env as unknown as { CONCLAVE_SECURITY_KEY?: string })
-      .CONCLAVE_SECURITY_KEY;
-  if (!secretKey) {
+  const publisher = env.CONCLAVE_RELEASE_PUBLISHER ?? "conclave";
+  if (!signingKeyId || !providedSignature) {
     return json(
-      { error: "Agent signing key is not configured" },
-      { status: 503 },
+      { error: "signingKeyId and signature are required" },
+      { status: 400 },
     );
   }
-  let signature: string;
-  if (providedSignature) {
-    const valid = await verifyPackageDigestSignature(
-      digest,
-      providedSignature,
-      secretKey,
+  const revokedSigningKey = await env.CONCLAVE_DB.prepare(
+    "SELECT key_id FROM release_signing_key_revocations WHERE key_id = ?1",
+  )
+    .bind(signingKeyId)
+    .first();
+  const signedMetadata = {
+    version,
+    channel,
+    minSupportedHostVersion: minSupportedAgentVersion,
+    supportedOS,
+    supportedArch,
+    releaseNotes,
+    publisher,
+    signingKeyId,
+    packageDigest: digest,
+  };
+  if (
+    revokedSigningKey ||
+    !(await verifyEd25519ReleaseSignature({
+      trustKeysJson: env.CONCLAVE_RELEASE_TRUST_KEYS_JSON,
+      publisher,
+      signingKeyId,
+      signature: providedSignature,
+      message: `conclave-workspace-release-metadata-v1\n${canonicalReleaseJson(signedMetadata)}`,
+    }))
+  ) {
+    return json(
+      { error: "Workspace release signature is invalid or revoked" },
+      { status: 400 },
     );
-    if (!valid) {
-      return json({ error: "Invalid package signature" }, { status: 400 });
+  }
+  const signature = providedSignature;
+
+  const previous = await env.CONCLAVE_DB.prepare(
+    "SELECT package_digest, signature, signing_key_id FROM host_releases WHERE version = ?1",
+  )
+    .bind(version)
+    .first<{
+      package_digest: string;
+      signature: string;
+      signing_key_id: string | null;
+    }>();
+  if (previous) {
+    if (
+      previous.package_digest === digest &&
+      previous.signature === signature &&
+      previous.signing_key_id === signingKeyId
+    ) {
+      return json({
+        version,
+        channel,
+        packageDigest: digest,
+        signature,
+        signingKeyId,
+        status: "already_published",
+      });
     }
-    signature = providedSignature;
-  } else {
-    signature = await signPackageDigest(digest, secretKey);
+    return json(
+      { error: "Workspace release version is immutable" },
+      { status: 409 },
+    );
   }
 
   const bucket =
@@ -9712,21 +9796,9 @@ async function handlePublishHostRelease(
   await env.CONCLAVE_DB.prepare(
     `INSERT INTO host_releases (
        version, channel, min_supported_agent_version, supported_os_json,
-       supported_arch_json, package_digest, package_r2_key, signature,
+       supported_arch_json, package_digest, package_r2_key, signature, signing_key_id,
        release_notes, is_revoked, created_at
-     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, ?10)
-     ON CONFLICT(version) DO UPDATE SET
-       channel = excluded.channel,
-       min_supported_agent_version = excluded.min_supported_agent_version,
-       supported_os_json = excluded.supported_os_json,
-       supported_arch_json = excluded.supported_arch_json,
-       package_digest = excluded.package_digest,
-       package_r2_key = excluded.package_r2_key,
-       signature = excluded.signature,
-       release_notes = excluded.release_notes,
-       is_revoked = 0,
-       revoked_at = NULL,
-       revocation_reason = NULL`,
+     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0, ?11)`,
   )
     .bind(
       version,
@@ -9737,6 +9809,7 @@ async function handlePublishHostRelease(
       digest,
       r2Key,
       signature,
+      signingKeyId,
       releaseNotes,
       now,
     )
@@ -9749,6 +9822,7 @@ async function handlePublishHostRelease(
       packageDigest: digest,
       packageR2Key: r2Key,
       signature,
+      signingKeyId,
       status: "published",
       publishedAt: now,
     },
@@ -9818,11 +9892,14 @@ async function handleListV7Adapters(
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT worker_type_id, version, release_channel, protocol_version,
             supported_platforms_json, manifest_json, package_digest,
-            archive_sha256, created_at
+            archive_sha256, is_revoked, revoked_at, created_at
      FROM v7_adapter_releases
-     WHERE is_revoked = 0
-       AND (?1 IS NULL OR worker_type_id = ?1)
+     WHERE (?1 IS NULL OR worker_type_id = ?1)
        AND (?2 IS NULL OR release_channel = ?2)
+       AND NOT EXISTS (
+         SELECT 1 FROM release_signing_key_revocations revoked
+         WHERE revoked.key_id = json_extract(v7_adapter_releases.manifest_json, '$.signingKeyId')
+       )
      ORDER BY worker_type_id ASC, created_at DESC
      LIMIT 500`,
   )
@@ -9836,6 +9913,8 @@ async function handleListV7Adapters(
       manifest_json: string;
       package_digest: string;
       archive_sha256: string;
+      is_revoked: number;
+      revoked_at: string | null;
       created_at: string;
     }>();
   const releases = (rows.results ?? [])
@@ -9859,6 +9938,8 @@ async function handleListV7Adapters(
       manifest: parseJson<Record<string, unknown>>(row.manifest_json, {}),
       packageDigest: row.package_digest,
       archiveSha256: row.archive_sha256,
+      isRevoked: row.is_revoked === 1,
+      revokedAt: row.revoked_at,
       downloadPath: `/api/v7/adapters/${encodeURIComponent(row.worker_type_id)}/versions/${encodeURIComponent(row.version)}/download`,
       publishedAt: row.created_at,
     }));
@@ -9946,6 +10027,30 @@ async function handlePublishV7Adapter(
     throw new HttpError(400, "V7 adapter manifest is invalid");
   }
   const manifestJson = JSON.stringify(value.manifest);
+  const signingKeyId = manifest.signingKeyId;
+  const trustedPublisher = env.CONCLAVE_RELEASE_PUBLISHER ?? "conclave";
+  if (manifest.publisher !== trustedPublisher) {
+    throw new HttpError(400, "adapter publisher is not trusted");
+  }
+  const signingKeyRevocation = await env.CONCLAVE_DB.prepare(
+    "SELECT key_id FROM release_signing_key_revocations WHERE key_id = ?1",
+  )
+    .bind(signingKeyId)
+    .first<{ key_id: string }>();
+  const unsignedManifest = { ...(value.manifest as Record<string, unknown>) };
+  delete unsignedManifest.signature;
+  const signatureValid =
+    !signingKeyRevocation &&
+    (await verifyEd25519ReleaseSignature({
+      trustKeysJson: env.CONCLAVE_RELEASE_TRUST_KEYS_JSON,
+      publisher: manifest.publisher,
+      signingKeyId,
+      signature: manifest.signature,
+      message: `conclave-v7-adapter-release-v1\n${manifest.packageDigest.toLowerCase()}\n${canonicalReleaseJson(unsignedManifest)}`,
+    }));
+  if (!signatureValid) {
+    throw new HttpError(400, "adapter Ed25519 signature is invalid or revoked");
+  }
   if (
     typeof value.packageBase64 !== "string" ||
     value.packageBase64.length === 0
@@ -10170,6 +10275,69 @@ async function handleRevokeV7Adapter(
   return json({ workerTypeId, version, status: "revoked", revokedAt });
 }
 
+async function handleGetReleaseTrustState(env: SecurityEnv): Promise<Response> {
+  const [keys, adapters, workspaceReleases] = await Promise.all([
+    env.CONCLAVE_DB.prepare(
+      "SELECT key_id FROM release_signing_key_revocations ORDER BY key_id",
+    ).all<{ key_id: string }>(),
+    env.CONCLAVE_DB.prepare(
+      "SELECT worker_type_id, version, package_digest FROM v7_adapter_releases WHERE is_revoked = 1",
+    ).all<{
+      worker_type_id: string;
+      version: string;
+      package_digest: string;
+    }>(),
+    env.CONCLAVE_DB.prepare(
+      "SELECT version, package_digest FROM host_releases WHERE is_revoked = 1",
+    ).all<{ version: string; package_digest: string }>(),
+  ]);
+  return json({
+    revokedKeyIds: (keys.results ?? []).map((row) => row.key_id),
+    revokedAdapters: (adapters.results ?? []).map((row) => ({
+      workerTypeId: row.worker_type_id,
+      version: row.version,
+      packageDigest: row.package_digest,
+    })),
+    revokedWorkspaceReleases: (workspaceReleases.results ?? []).map((row) => ({
+      version: row.version,
+      packageDigest: row.package_digest,
+    })),
+  });
+}
+
+async function handleRevokeReleaseSigningKey(
+  request: Request,
+  env: SecurityEnv,
+  keyId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  if (!/^[A-Za-z0-9._-]{1,64}$/.test(keyId)) {
+    throw new HttpError(400, "release signing key ID is invalid");
+  }
+  const actor = await authorizeRequest(
+    request,
+    env,
+    "workspace:manage",
+    undefined,
+    ctx,
+  );
+  if (!actor.roles.some((role) => role === "owner" || role === "admin")) {
+    throw new HttpError(403, "owner or administrator role is required");
+  }
+  const body = (await request.json().catch(() => ({}))) as { reason?: unknown };
+  const reason =
+    typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
+  if (!reason) throw new HttpError(400, "revocation reason is required");
+  const now = new Date().toISOString();
+  await env.CONCLAVE_DB.prepare(
+    `INSERT INTO release_signing_key_revocations (key_id, revoked_at, revoked_by_user_id, reason)
+     VALUES (?1, ?2, ?3, ?4) ON CONFLICT(key_id) DO NOTHING`,
+  )
+    .bind(keyId, now, actor.userId, reason)
+    .run();
+  return json({ keyId, isRevoked: true, revokedAt: now });
+}
+
 export {
   json,
   errorMessage,
@@ -10188,6 +10356,8 @@ export {
   handlePublishV7Adapter,
   handleDownloadV7Adapter,
   handleRevokeV7Adapter,
+  handleGetReleaseTrustState,
+  handleRevokeReleaseSigningKey,
   handleCreateWorkspace,
   handleUploadArtifact,
   handleGetArtifact,

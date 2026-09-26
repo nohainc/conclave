@@ -1,36 +1,53 @@
+import 'dart:convert';
+
+import 'package:cryptography/cryptography.dart';
 import 'package:conclave_host/worker_trust_policy.dart';
 import 'package:test/test.dart';
 
+import 'support/ed25519_release_fixture.dart';
+
 void main() {
-  test('verifies publisher signatures and rejects revoked digests', () {
-    const policy = WorkerTrustPolicy(trustedSecrets: {'conclave': 'root-key'});
-    final signature = policy.sign('conclave', 'sha256:abc');
+  test('verifies Ed25519 signatures and rejects revoked digests', () async {
+    final fixture = await Ed25519ReleaseFixture.create();
+    final message = 'conclave-workspace-release-v1\nsha256:abc';
+    // The fixture signer signs with its private key. The production policy
+    // receives only the corresponding public key.
+    final signed =
+        await Ed25519().sign(message.codeUnits, keyPair: fixture.pair);
+    final encoded = base64.encode(signed.bytes);
     expect(
-        policy.verify(
-            publisher: 'conclave', digest: 'sha256:abc', signature: signature),
-        isTrue);
-    expect(
-        policy.verify(
-          publisher: 'conclave',
-          digest: 'sha256:abc',
-          signature: 'sig_pkg_${signature.substring(4)}',
-        ),
-        isTrue);
+      await fixture.trustPolicy.verify(
+        publisher: fixturePublisher,
+        signingKeyId: fixtureKeyId,
+        digest: 'sha256:abc',
+        signature: encoded,
+      ),
+      isTrue,
+    );
     final revoked = WorkerTrustPolicy(
-        trustedSecrets: {'conclave': 'root-key'},
-        revokedDigests: {'sha256:abc'});
+      trustedPublicKeys: fixture.trustPolicy.trustedPublicKeys,
+      revokedDigests: {'sha256:abc'},
+    );
     expect(
-        revoked.verify(
-            publisher: 'conclave', digest: 'sha256:abc', signature: signature),
-        isFalse);
+      await revoked.verify(
+        publisher: fixturePublisher,
+        signingKeyId: fixtureKeyId,
+        digest: 'sha256:abc',
+        signature: encoded,
+      ),
+      isFalse,
+    );
   });
 
   test('enforces worker permissions and redacts secrets', () {
-    const policy = WorkerTrustPolicy(trustedSecrets: {'conclave': 'root-key'});
+    final policy = WorkerTrustPolicy();
     expect(
-        () => policy.requirePermissions(
-            [WorkerPermission.shell], [WorkerPermission.readWorkspace]),
-        throwsStateError);
+      () => policy.requirePermissions(
+        [WorkerPermission.shell],
+        [WorkerPermission.readWorkspace],
+      ),
+      throwsStateError,
+    );
     expect(redactSecrets('Authorization: secret', ['secret']),
         'Authorization: [REDACTED]');
   });
@@ -40,50 +57,35 @@ void main() {
       parseConfiguredWorkerPermissions('workspace:read,network:outbound'),
       {WorkerPermission.readWorkspace, WorkerPermission.network},
     );
-    expect(
-      parseConfiguredWorkerPermissions('readWorkspace'),
-      {WorkerPermission.readWorkspace},
-    );
-    expect(
-      () => parseConfiguredWorkerPermissions('unknown'),
-      throwsStateError,
-    );
+    expect(parseConfiguredWorkerPermissions('readWorkspace'),
+        {WorkerPermission.readWorkspace});
+    expect(() => parseConfiguredWorkerPermissions('unknown'), throwsStateError);
     expect(
       parseConfiguredWorkerPermissions('network:openai,network:anthropic'),
       {WorkerPermission.networkOpenAi, WorkerPermission.networkAnthropic},
     );
   });
 
-  test('supports signing-key rotation and key revocation', () {
-    const policy = WorkerTrustPolicy(
-      trustedKeys: {
-        'conclave': {'old': 'old-key', 'new': 'new-key'},
-      },
+  test('supports overlapping key rotation and immediate key revocation',
+      () async {
+    final fixture = await Ed25519ReleaseFixture.create();
+    final signed = await Ed25519().sign(
+      'release'.codeUnits,
+      keyPair: fixture.pair,
     );
-    final oldSignature = policy.sign('conclave', 'digest', keyId: 'old');
-    final newSignature = policy.sign('conclave', 'digest', keyId: 'new');
+    final signature = base64.encode(signed.bytes);
+    fixture.trustPolicy.updateRevocations(keyIds: {fixtureKeyId});
     expect(
-        policy.verify(
-            publisher: 'conclave', digest: 'digest', signature: oldSignature),
-        isTrue);
-    expect(
-        policy.verify(
-            publisher: 'conclave', digest: 'digest', signature: newSignature),
-        isTrue);
-
-    const rotated = WorkerTrustPolicy(
-      trustedKeys: {
-        'conclave': {'old': 'old-key', 'new': 'new-key'},
-      },
-      revokedKeyIds: {'old'},
+      await fixture.trustPolicy.verify(
+        publisher: fixturePublisher,
+        signingKeyId: fixtureKeyId,
+        digest: 'digest',
+        signature: signature,
+      ),
+      isFalse,
     );
-    expect(
-        rotated.verify(
-            publisher: 'conclave', digest: 'digest', signature: oldSignature),
-        isFalse);
-    expect(
-        rotated.verify(
-            publisher: 'conclave', digest: 'digest', signature: newSignature),
-        isTrue);
+    fixture.trustPolicy.updateRevocations();
+    expect(fixture.trustPolicy.trustedPublicKeys[fixturePublisher],
+        contains(fixtureKeyId));
   });
 }

@@ -10,6 +10,7 @@ import 'package:conclave_host/self_update.dart';
 import 'package:conclave_host/secure_credentials.dart';
 import 'package:conclave_host/worker_trust_policy.dart';
 import 'package:conclave_host/v7_adapter_package_store.dart';
+import 'package:conclave_host/v7_adapter_catalog.dart';
 
 Set<WorkerPermission> _configuredPermissions() {
   final configured = Platform.environment['CONCLAVE_WORKER_PERMISSIONS'];
@@ -22,25 +23,13 @@ Set<WorkerPermission> _configuredPermissions() {
   return parseConfiguredWorkerPermissions(configured);
 }
 
-WorkerTrustPolicy _releaseTrustPolicy(String publisher) {
-  final secret = Platform.environment['CONCLAVE_HOST_RELEASE_TRUST_SECRET'];
-  return WorkerTrustPolicy(
-    trustedSecrets: secret == null ? {} : {publisher: secret},
-  );
-}
-
 Future<Host> buildWorkspaceRuntime(
   HostConfig config, {
   List<String> restartArgs = const [],
 }) async {
-  final publisher =
-      Platform.environment['CONCLAVE_WORKER_TRUST_PUBLISHER'] ?? 'conclave';
-  final trustSecret = Platform.environment['CONCLAVE_WORKER_TRUST_SECRET'];
-  final workerTrustPolicy = WorkerTrustPolicy(
-    trustedSecrets: trustSecret == null ? {} : {publisher: trustSecret},
-  );
+  final workerTrustPolicy = workspaceReleaseTrustPolicy();
   const credentialStore = PlatformSecureCredentialStore();
-  final releaseTrustPolicy = _releaseTrustPolicy(publisher);
+  final releaseTrustPolicy = workerTrustPolicy;
   final localWorkerRegistry = config.workspaceId == null
       ? null
       : LocalConfiguredWorkerRegistry(
@@ -52,6 +41,13 @@ Future<Host> buildWorkspaceRuntime(
     trustPolicy: workerTrustPolicy,
     allowedPermissions: _configuredPermissions(),
   );
+  final adapterCatalog = config.cloudUri == null
+      ? null
+      : V7AdapterCatalogClient(
+          cloudUri: config.cloudUri!,
+          packageStore: v7AdapterPackageStore,
+          authToken: config.authToken,
+        );
   final activeWorkerIds = (await localWorkerRegistry?.list() ?? const [])
       .where((worker) => worker.status == LocalWorkerStatus.ready)
       .map((worker) => worker.id)
@@ -168,12 +164,15 @@ Future<Host> buildWorkspaceRuntime(
                 'workerId': worker.id,
                 'workerTypeId': worker.workerTypeId,
                 'name': worker.name,
-                'status': switch (worker.status) {
-                  LocalWorkerStatus.ready => 'ready',
-                  LocalWorkerStatus.needsAttention => 'needs_attention',
-                  LocalWorkerStatus.disabled => 'disabled',
-                  LocalWorkerStatus.removed => 'removed',
-                },
+                'status': worker.status == LocalWorkerStatus.ready &&
+                        adapterSummary == null
+                    ? 'needs_attention'
+                    : switch (worker.status) {
+                        LocalWorkerStatus.ready => 'ready',
+                        LocalWorkerStatus.needsAttention => 'needs_attention',
+                        LocalWorkerStatus.disabled => 'disabled',
+                        LocalWorkerStatus.removed => 'removed',
+                      },
                 'authStrategy': worker.authStrategy,
                 'defaultModel': worker.defaultModel,
                 'allowedModels': worker.allowedModels,
@@ -214,6 +213,34 @@ Future<Host> buildWorkspaceRuntime(
           ),
         )
       : null;
+  if (adapterCatalog != null) {
+    var reconcilingAdapters = false;
+    Timer.periodic(const Duration(minutes: 10), (_) {
+      unawaited(() async {
+        if (reconcilingAdapters) return;
+        reconcilingAdapters = true;
+        try {
+          final canActivate = (connection?.activeAssignmentCount ?? 0) == 0;
+          final workers = await localWorkerRegistry?.list() ?? const [];
+          for (final worker in workers.where((item) =>
+              item.status == LocalWorkerStatus.ready &&
+              item.adapterVersionPolicy != null)) {
+            await adapterCatalog.reconcileWorker(
+              worker.workerTypeId,
+              channel:
+                  worker.adapterVersionPolicy == 'beta' ? 'beta' : 'stable',
+              allowActivation: canActivate,
+            );
+          }
+          await connection?.refreshWorkerInventory();
+        } on Object {
+          // Preserve the last usable adapter and retry on the next interval.
+        } finally {
+          reconcilingAdapters = false;
+        }
+      }());
+    });
+  }
   final engine = Host(
     config: config,
     cloudConnection: connection,

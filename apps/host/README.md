@@ -26,24 +26,45 @@ they are not separately installed desktop applications.
 
 ## Packaging a V7 adapter release
 
-Use the release publisher's signing key from a protected environment. The
-packager validates the V7 manifest, computes the file-tree digest, signs the
-digest and canonical manifest, and emits a gzip-tar archive plus the exact
-manifest for the Cloud catalog request. The key is read only from the process
-environment and is not written into either output.
+Use `.github/workflows/release-v7-adapter.yml` for development, beta, stable,
+and revocation operations. Its Ed25519 private seed is a protected GitHub
+environment secret. The packager computes the file-tree digest and signs the
+canonical manifest and digest. Workspace receives only public trust roots.
 
 ```sh
 cd apps/host
-CONCLAVE_WORKER_TRUST_SECRET="$V7_ADAPTER_PUBLISHER_KEY" \
+CONCLAVE_RELEASE_SIGNING_SEED="$V7_ADAPTER_ED25519_SEED" \
+CONCLAVE_RELEASE_SIGNING_KEY_ID="adapter-2026-01" \
   dart run bin/package_v7_adapter.dart \
   --source ../../packages/worker-manifest/adapters/codex \
-  --output ../../dist/codex-1.0.0.tgz
+  --output ../../dist/codex-1.0.0.tgz \
+  --channel development
 ```
 
-The archive must remain under Cloud's 20 MiB release-upload limit. Publish its
-manifest and base64 archive to `POST /api/v7/adapters/publish` using an
-authenticated owner session. Cloud stores the immutable catalog entry and
-archive; Workspace verifies the release locally before use.
+Never copy private seeds to Workspace or desktop builds. Configure the public-
+only `CONCLAVE_RELEASE_TRUST_KEYS_JSON` build define with publisher/key IDs and
+base64 raw Ed25519 public keys. Use distinct adapter and Workspace key IDs and
+rotate them independently; ship overlapping public keys during rotation.
+Workspace refreshes key and release revocations, blocks new assignments for a
+revoked adapter, and lets active work finish before replacing it.
+
+Workspace update metadata is signed by an independent Ed25519 application
+release key and binds the archive digest, version, channel, supported platform,
+minimum supported version, and release notes. macOS Developer ID signing and
+notarization complement this verification; they do not replace it. Publish
+macOS builds through `.github/workflows/release-workspace-macos.yml`; it checks
+the downloaded release metadata signature and archive digest.
+
+Before enabling either workflow, configure `CONCLAVE_RELEASE_TRUST_KEYS_JSON`
+as a public Cloud Worker variable and as a GitHub environment variable. It must
+contain the same raw public keys embedded into Workspace builds. The release
+environments also require `CLOUD_API_URL`, `CONCLAVE_RELEASE_PUBLISH_TOKEN`,
+`CONCLAVE_ADAPTER_ED25519_SEED`, `CONCLAVE_ADAPTER_SIGNING_KEY_ID`,
+`CONCLAVE_WORKSPACE_ED25519_SEED`, and
+`CONCLAVE_WORKSPACE_SIGNING_KEY_ID`. Keep the two private seeds separate.
+The macOS environment additionally needs the Developer ID certificate and
+Apple notarization credentials used by its workflow. Workflows fail closed
+when required keys or credentials are absent.
 
 ## Desktop development and macOS build
 
@@ -63,6 +84,8 @@ Optional release environment:
 - `CONCLAVE_MACOS_SIGN_IDENTITY` — Developer ID Application identity;
 - `CONCLAVE_MACOS_NOTARY_PROFILE` — `notarytool` keychain profile;
 - `CONCLAVE_WORKSPACE_VERSION` — override build version.
+- `CONCLAVE_RELEASE_TRUST_KEYS_JSON` — public Ed25519 roots; an empty value
+  intentionally trusts no release signer.
 
 The output ZIP is written under `dist/conclave-workspace/macos`.
 

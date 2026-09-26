@@ -58,6 +58,7 @@ class V7AdapterAdmission {
       'secretRequirements',
       'healthCheck',
       'packageDigest',
+      'signingKeyId',
       'signature',
       'releaseChannel',
     };
@@ -80,6 +81,7 @@ class V7AdapterAdmission {
     text('displayName');
     final digest = text('packageDigest').toLowerCase();
     final signature = text('signature');
+    final signingKeyId = text('signingKeyId');
     if (workerTypeId != expectedWorkerTypeId ||
         !RegExp(r'^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$')
             .hasMatch(version) ||
@@ -89,8 +91,9 @@ class V7AdapterAdmission {
       throw const FormatException(
           'adapter identity or package digest mismatch');
     }
-    if (!trustPolicy.verifyAdapterManifest(
+    if (!await trustPolicy.verifyAdapterManifest(
       publisher: publisher,
+      signingKeyId: signingKeyId,
       digest: digest,
       signature: signature,
       manifest: value,

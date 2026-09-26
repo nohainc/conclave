@@ -1,5 +1,6 @@
 import 'dart:convert';
-import 'package:crypto/crypto.dart';
+
+import 'package:cryptography/cryptography.dart';
 
 enum WorkerPermission {
   readWorkspace,
@@ -25,19 +26,17 @@ extension WorkerPermissionWire on WorkerPermission {
       };
 }
 
-WorkerPermission parseWorkerPermission(String value) {
-  return switch (value) {
-    'readWorkspace' || 'workspace:read' => WorkerPermission.readWorkspace,
-    'writeWorkspace' || 'workspace:write' => WorkerPermission.writeWorkspace,
-    'shell' || 'shell:execute' => WorkerPermission.shell,
-    'network' || 'network:outbound' => WorkerPermission.network,
-    'network:openai' => WorkerPermission.networkOpenAi,
-    'network:google' => WorkerPermission.networkGoogle,
-    'network:anthropic' => WorkerPermission.networkAnthropic,
-    'credentials' || 'credentials:read' => WorkerPermission.credentials,
-    _ => throw StateError('unknown worker permission: $value'),
-  };
-}
+WorkerPermission parseWorkerPermission(String value) => switch (value) {
+      'readWorkspace' || 'workspace:read' => WorkerPermission.readWorkspace,
+      'writeWorkspace' || 'workspace:write' => WorkerPermission.writeWorkspace,
+      'shell' || 'shell:execute' => WorkerPermission.shell,
+      'network' || 'network:outbound' => WorkerPermission.network,
+      'network:openai' => WorkerPermission.networkOpenAi,
+      'network:google' => WorkerPermission.networkGoogle,
+      'network:anthropic' => WorkerPermission.networkAnthropic,
+      'credentials' || 'credentials:read' => WorkerPermission.credentials,
+      _ => throw StateError('unknown worker permission: $value'),
+    };
 
 Set<WorkerPermission> parseConfiguredWorkerPermissions(String? configured) {
   if (configured == null || configured.trim().isEmpty) return {};
@@ -49,107 +48,144 @@ Set<WorkerPermission> parseConfiguredWorkerPermissions(String? configured) {
       .toSet();
 }
 
+/// Public verification roots shipped with Workspace. Values are base64 raw
+/// Ed25519 public keys, keyed by publisher and explicit key ID. This class
+/// never accepts signing secrets.
 class WorkerTrustPolicy {
-  const WorkerTrustPolicy({
-    this.trustedSecrets = const {},
-    this.trustedKeys = const {},
-    this.revokedDigests = const {},
-    this.revokedPublishers = const {},
-    this.revokedKeyIds = const {},
-  });
-  final Map<String, String> trustedSecrets;
-  final Map<String, Map<String, String>> trustedKeys;
-  final Set<String> revokedDigests;
-  final Set<String> revokedPublishers;
-  final Set<String> revokedKeyIds;
+  WorkerTrustPolicy({
+    Map<String, Map<String, String>> trustedPublicKeys = const {},
+    Set<String> revokedDigests = const {},
+    Set<String> revokedPublishers = const {},
+    Set<String> revokedKeyIds = const {},
+    Set<String> revokedReleaseIds = const {},
+  })  : trustedPublicKeys = Map.unmodifiable({
+          for (final entry in trustedPublicKeys.entries)
+            entry.key: Map<String, String>.unmodifiable(entry.value),
+        }),
+        _revokedDigests = Set.of(revokedDigests),
+        _revokedPublishers = Set.of(revokedPublishers),
+        _revokedKeyIds = Set.of(revokedKeyIds),
+        _revokedReleaseIds = Set.of(revokedReleaseIds);
 
-  String sign(String publisher, String digest, {String? keyId}) {
-    final keySet = trustedKeys[publisher];
-    if (keySet != null && keySet.isNotEmpty) {
-      final resolvedKeyId = keyId ?? (keySet.keys.toList()..sort()).first;
-      final secret = keySet[resolvedKeyId];
-      if (secret == null || revokedKeyIds.contains(resolvedKeyId)) {
-        throw StateError('publisher key is not trusted');
-      }
-      return 'sig_${resolvedKeyId}_${_mac(secret, digest)}';
-    }
-    final secret = trustedSecrets[publisher];
-    if (secret == null) throw StateError('publisher is not trusted');
-    return 'sig_${_mac(secret, digest)}';
+  final Map<String, Map<String, String>> trustedPublicKeys;
+  Set<String> _revokedDigests;
+  Set<String> _revokedPublishers;
+  Set<String> _revokedKeyIds;
+  Set<String> _revokedReleaseIds;
+
+  Set<String> get revokedDigests => Set.unmodifiable(_revokedDigests);
+  Set<String> get revokedPublishers => Set.unmodifiable(_revokedPublishers);
+  Set<String> get revokedKeyIds => Set.unmodifiable(_revokedKeyIds);
+  Set<String> get revokedReleaseIds => Set.unmodifiable(_revokedReleaseIds);
+
+  void updateRevocations({
+    Set<String> digests = const {},
+    Set<String> publishers = const {},
+    Set<String> keyIds = const {},
+    Set<String> releaseIds = const {},
+  }) {
+    _revokedDigests = Set.of(digests);
+    _revokedPublishers = Set.of(publishers);
+    _revokedKeyIds = Set.of(keyIds);
+    _revokedReleaseIds = Set.of(releaseIds);
   }
 
-  bool verify({
+  Future<bool> verify({
     required String publisher,
+    required String signingKeyId,
     required String digest,
     required String signature,
-  }) {
-    if (revokedDigests.contains(digest) ||
-        revokedPublishers.contains(publisher)) {
+  }) async {
+    if (_revokedDigests.contains(digest) ||
+        _revokedPublishers.contains(publisher) ||
+        _revokedKeyIds.contains(signingKeyId)) {
       return false;
     }
-    final legacy = trustedSecrets[publisher];
-    if (legacy != null &&
-        (signature == 'sig_${_mac(legacy, digest)}' ||
-            signature == 'sig_pkg_${_mac(legacy, digest)}')) {
-      return true;
-    }
-    final keySet = trustedKeys[publisher];
-    if (keySet == null) return false;
-    return keySet.entries.any((entry) =>
-        !revokedKeyIds.contains(entry.key) &&
-        (signature == 'sig_${entry.key}_${_mac(entry.value, digest)}' ||
-            signature == 'sig_pkg_${entry.key}_${_mac(entry.value, digest)}'));
+    return _verifySignature(
+      publisher: publisher,
+      signingKeyId: signingKeyId,
+      signature: signature,
+      message: utf8.encode('conclave-workspace-release-v1\n$digest'),
+    );
   }
 
-  /// Signs the package file-tree digest together with every manifest field
-  /// except `signature`. V7 manifests control executable paths, permissions,
-  /// and credentials, so signing only the package files would allow those
-  /// declarations to be changed independently of the signature.
-  String signAdapterManifest(
-    String publisher,
-    String digest,
-    Map<String, Object?> manifest, {
-    String? keyId,
-  }) {
-    final payload = _adapterManifestPayload(digest, manifest);
-    final keySet = trustedKeys[publisher];
-    if (keySet != null && keySet.isNotEmpty) {
-      final resolvedKeyId = keyId ?? (keySet.keys.toList()..sort()).first;
-      final secret = keySet[resolvedKeyId];
-      if (secret == null || revokedKeyIds.contains(resolvedKeyId)) {
-        throw StateError('publisher key is not trusted');
-      }
-      return 'sig_${resolvedKeyId}_m_${_mac(secret, payload)}';
-    }
-    final secret = trustedSecrets[publisher];
-    if (secret == null) throw StateError('publisher is not trusted');
-    return 'sig_m_${_mac(secret, payload)}';
-  }
-
-  bool verifyAdapterManifest({
+  Future<bool> verifyAdapterManifest({
     required String publisher,
+    required String signingKeyId,
     required String digest,
     required String signature,
     required Map<String, Object?> manifest,
-  }) {
-    if (revokedDigests.contains(digest) ||
-        revokedPublishers.contains(publisher)) {
+  }) async {
+    final releaseId =
+        '${manifest['workerTypeId']}@${manifest['adapterVersion']}';
+    if (_revokedDigests.contains(digest) ||
+        _revokedPublishers.contains(publisher) ||
+        _revokedKeyIds.contains(signingKeyId) ||
+        _revokedReleaseIds.contains(releaseId)) {
       return false;
     }
-    final payload = _adapterManifestPayload(digest, manifest);
-    final legacy = trustedSecrets[publisher];
-    if (legacy != null && signature == 'sig_m_${_mac(legacy, payload)}') {
-      return true;
-    }
-    final keySet = trustedKeys[publisher];
-    if (keySet == null) return false;
-    return keySet.entries.any((entry) =>
-        !revokedKeyIds.contains(entry.key) &&
-        signature == 'sig_${entry.key}_m_${_mac(entry.value, payload)}');
+    final unsigned = Map<String, Object?>.from(manifest)..remove('signature');
+    final payload = 'conclave-v7-adapter-release-v1\n$digest\n'
+        '${canonicalJson(unsigned)}';
+    return _verifySignature(
+      publisher: publisher,
+      signingKeyId: signingKeyId,
+      signature: signature,
+      message: utf8.encode(payload),
+    );
   }
 
-  String _mac(String secret, String digest) =>
-      Hmac(sha256, utf8.encode(secret)).convert(utf8.encode(digest)).toString();
+  Future<bool> verifyHostRelease({
+    required String publisher,
+    required String signingKeyId,
+    required String digest,
+    required String signature,
+    required Map<String, Object?> metadata,
+  }) async {
+    if (_revokedDigests.contains(digest) ||
+        _revokedPublishers.contains(publisher) ||
+        _revokedKeyIds.contains(signingKeyId) ||
+        _revokedReleaseIds.contains('workspace@${metadata['version']}')) {
+      return false;
+    }
+    final payload = 'conclave-workspace-release-metadata-v1\n'
+        '${canonicalJson({
+          ...metadata,
+          'publisher': publisher,
+          'signingKeyId': signingKeyId,
+          'packageDigest': digest
+        })}';
+    return _verifySignature(
+      publisher: publisher,
+      signingKeyId: signingKeyId,
+      signature: signature,
+      message: utf8.encode(payload),
+    );
+  }
+
+  Future<bool> _verifySignature({
+    required String publisher,
+    required String signingKeyId,
+    required String signature,
+    required List<int> message,
+  }) async {
+    final encodedKey = trustedPublicKeys[publisher]?[signingKeyId];
+    if (encodedKey == null || signature.isEmpty) return false;
+    try {
+      final publicBytes = base64.decode(encodedKey);
+      final signatureBytes = base64.decode(signature);
+      if (publicBytes.length != 32 || signatureBytes.length != 64) return false;
+      return await Ed25519().verify(
+        message,
+        signature: Signature(
+          signatureBytes,
+          publicKey: SimplePublicKey(publicBytes, type: KeyPairType.ed25519),
+        ),
+      );
+    } on Object {
+      return false;
+    }
+  }
 
   void requirePermissions(
       Iterable<WorkerPermission> declared, Iterable<WorkerPermission> allowed) {
@@ -160,19 +196,14 @@ class WorkerTrustPolicy {
   }
 }
 
-String _adapterManifestPayload(String digest, Map<String, Object?> manifest) {
-  final unsigned = Map<String, Object?>.from(manifest)..remove('signature');
-  return '$digest\n${_canonicalJson(unsigned)}';
-}
-
-String _canonicalJson(Object? value) {
+String canonicalJson(Object? value) {
   if (value is Map) {
-    final keys = value.keys.map((key) => key.toString()).toList()..sort();
-    return '{${keys.map((key) => '${jsonEncode(key)}:${_canonicalJson(value[key])}').join(',')}}';
+    final entries = value.entries.toList()
+      ..sort(
+          (left, right) => left.key.toString().compareTo(right.key.toString()));
+    return '{${entries.map((entry) => '${jsonEncode(entry.key.toString())}:${canonicalJson(entry.value)}').join(',')}}';
   }
-  if (value is List) {
-    return '[${value.map(_canonicalJson).join(',')}]';
-  }
+  if (value is List) return '[${value.map(canonicalJson).join(',')}]';
   return jsonEncode(value);
 }
 

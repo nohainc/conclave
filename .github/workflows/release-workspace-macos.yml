@@ -1,0 +1,86 @@
+name: Release Conclave Workspace for macOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Immutable Workspace release version
+        type: string
+        required: true
+      channel:
+        description: Release channel
+        type: choice
+        options: [development, beta, stable]
+        default: development
+        required: true
+      release_notes:
+        description: Release notes included in signed metadata
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: macos-15
+    environment: workspace-release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Configure Developer ID and notarization
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.CONCLAVE_MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.CONCLAVE_MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.CONCLAVE_APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.CONCLAVE_APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.CONCLAVE_APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          test -n "$MACOS_CERTIFICATE_P12" && test -n "$MACOS_CERTIFICATE_PASSWORD"
+          test -n "$APPLE_ID" && test -n "$APPLE_TEAM_ID" && test -n "$APPLE_APP_SPECIFIC_PASSWORD"
+          KEYCHAIN_PATH="$RUNNER_TEMP/conclave-release.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          CERT_PATH="$RUNNER_TEMP/conclave-developer-id.p12"
+          echo "$MACOS_CERTIFICATE_P12" | base64 --decode > "$CERT_PATH"
+          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk -F '"' '/Developer ID Application/ { print $2; exit }')"
+          test -n "$IDENTITY"
+          echo "CONCLAVE_MACOS_SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          xcrun notarytool store-credentials conclave-notary --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --keychain "$KEYCHAIN_PATH"
+          echo 'CONCLAVE_MACOS_NOTARY_PROFILE=conclave-notary' >> "$GITHUB_ENV"
+      - name: Build, test, sign, and notarize Workspace
+        env:
+          CONCLAVE_WORKSPACE_VERSION: ${{ inputs.version }}
+          CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON }}
+        run: bash scripts/build-workspace-macos.sh
+      - name: Verify notarized app archive
+        env:
+          WORKSPACE_VERSION: ${{ inputs.version }}
+        run: |
+          ARCHIVE="dist/conclave-workspace/macos/Conclave-Workspace-$WORKSPACE_VERSION-macos.zip"
+          mkdir -p "$RUNNER_TEMP/workspace-app-check"
+          ditto -x -k "$ARCHIVE" "$RUNNER_TEMP/workspace-app-check"
+          APP="$RUNNER_TEMP/workspace-app-check/Conclave Workspace.app"
+          test -d "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          spctl --assess --type execute --verbose "$APP"
+      - name: Sign, publish, download, and verify immutable metadata
+        env:
+          WORKSPACE_ARCHIVE: dist/conclave-workspace/macos/Conclave-Workspace-${{ inputs.version }}-macos.zip
+          WORKSPACE_VERSION: ${{ inputs.version }}
+          RELEASE_CHANNEL: ${{ inputs.channel }}
+          RELEASE_NOTES: ${{ inputs.release_notes }}
+          CLOUD_API_URL: ${{ vars.CLOUD_API_URL }}
+          RELEASE_PUBLISH_TOKEN: ${{ secrets.CONCLAVE_RELEASE_PUBLISH_TOKEN }}
+          CONCLAVE_WORKSPACE_SIGNING_SEED: ${{ secrets.CONCLAVE_WORKSPACE_ED25519_SEED }}
+          CONCLAVE_WORKSPACE_SIGNING_KEY_ID: ${{ vars.CONCLAVE_WORKSPACE_SIGNING_KEY_ID }}
+          CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON }}
+        run: node scripts/release/publish-workspace-release.mjs

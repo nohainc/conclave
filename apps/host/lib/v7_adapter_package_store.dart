@@ -258,6 +258,44 @@ class V7AdapterPackageStore {
     );
   }
 
+  /// Restores the last previously active adapter only after independently
+  /// rechecking its current signature, digest, permissions, platform and health.
+  Future<bool> restoreLastHealthyVersion(String workerTypeId) async {
+    _safeTypeId(workerTypeId);
+    final typeRoot =
+        Directory('${root.path}${Platform.pathSeparator}$workerTypeId');
+    final rollbackFile =
+        File('${typeRoot.path}${Platform.pathSeparator}last-healthy.json');
+    if (!await rollbackFile.exists()) return false;
+    try {
+      final pointer = jsonDecode(await rollbackFile.readAsString());
+      if (pointer is! Map || pointer['version'] is! String) return false;
+      final version = _safeVersion(pointer['version']);
+      final packageRoot =
+          Directory('${typeRoot.path}${Platform.pathSeparator}$version');
+      final manifestFile =
+          File('${packageRoot.path}${Platform.pathSeparator}manifest.json');
+      final rawManifest = jsonDecode(await manifestFile.readAsString());
+      if (rawManifest is! Map) return false;
+      final manifest = Map<String, Object?>.from(rawManifest);
+      final digest = await digestDirectory(packageRoot);
+      final admitted = await V7AdapterAdmission.admit(
+        input: manifest,
+        packageRoot: packageRoot,
+        expectedWorkerTypeId: workerTypeId,
+        verifiedPackageDigest: digest,
+        platform: platform,
+        trustPolicy: trustPolicy,
+        allowedPermissions: allowedPermissions,
+      );
+      await _healthCheck(packageRoot, admitted);
+      await _activate(typeRoot, version, rememberPrevious: false);
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
   Future<V7AdapterLaunch?> resolve({
     required LocalConfiguredWorker worker,
     required SecureCredentialReader readCredential,
@@ -502,7 +540,7 @@ class V7AdapterPackageStore {
 
   Future<String> digestDirectory(Directory directory) async {
     final rootPath = await directory.resolveSymbolicLinks();
-    final files = <(String, File)>[];
+    final files = <(String, File, int)>[];
     var totalBytes = 0;
     await for (final entity
         in Directory(rootPath).list(recursive: true, followLinks: false)) {
@@ -523,16 +561,20 @@ class V7AdapterPackageStore {
       if (totalBytes > maxPackageBytes) {
         throw StateError('adapter package exceeds size limit');
       }
-      files.add((relative, entity));
+      final mode =
+          Platform.isWindows ? 0x1ff : (await entity.stat()).mode & 0x1ff;
+      files.add((relative, entity, mode));
       if (files.length > 10000) {
         throw StateError('adapter package contains too many files');
       }
     }
     files.sort((left, right) => left.$1.compareTo(right.$1));
     final bytes = BytesBuilder(copy: false);
-    for (final (relative, file) in files) {
+    for (final (relative, file, mode) in files) {
       bytes
         ..add(utf8.encode(relative))
+        ..add([0])
+        ..add(utf8.encode(mode.toRadixString(8)))
         ..add([0])
         ..add(await file.readAsBytes())
         ..add([0]);
@@ -578,8 +620,46 @@ class V7AdapterPackageStore {
     );
   }
 
-  Future<void> _activate(Directory typeRoot, String version) async {
+  Future<void> _activate(Directory typeRoot, String version,
+      {bool rememberPrevious = true}) async {
     final target = File('${typeRoot.path}${Platform.pathSeparator}active.json');
+    final rollback =
+        File('${typeRoot.path}${Platform.pathSeparator}last-healthy.json');
+    if (rememberPrevious && await target.exists()) {
+      try {
+        final current = jsonDecode(await target.readAsString());
+        if (current is Map &&
+            current['version'] is String &&
+            current['version'] != version) {
+          final previousVersion = _safeVersion(current['version']);
+          final previousRoot = Directory(
+              '${typeRoot.path}${Platform.pathSeparator}$previousVersion');
+          final manifestFile = File(
+              '${previousRoot.path}${Platform.pathSeparator}manifest.json');
+          final manifestValue = jsonDecode(await manifestFile.readAsString());
+          if (manifestValue is Map) {
+            final manifest = Map<String, Object?>.from(manifestValue);
+            final digest = await digestDirectory(previousRoot);
+            final admitted = await V7AdapterAdmission.admit(
+              input: manifest,
+              packageRoot: previousRoot,
+              expectedWorkerTypeId:
+                  typeRoot.path.split(Platform.pathSeparator).last,
+              verifiedPackageDigest: digest,
+              platform: platform,
+              trustPolicy: trustPolicy,
+              allowedPermissions: allowedPermissions,
+            );
+            await _healthCheck(previousRoot, admitted);
+            await rollback.writeAsString(
+                jsonEncode({'version': previousVersion}),
+                flush: true);
+          }
+        }
+      } on Object {
+        // A failed old version is not a rollback candidate.
+      }
+    }
     final temporary = File(
         '${typeRoot.path}${Platform.pathSeparator}.active-${DateTime.now().microsecondsSinceEpoch}.tmp');
     await temporary.writeAsString(jsonEncode({'version': version}),

@@ -61,6 +61,7 @@ class V7AdapterCatalogClient {
         .where((entry) =>
             entry['workerTypeId'] == workerTypeId &&
             entry['channel'] == channel &&
+            entry['isRevoked'] != true &&
             entry['supportedPlatforms'] is List &&
             (entry['supportedPlatforms'] as List).contains(_currentPlatform()))
         .toList();
@@ -99,6 +100,70 @@ class V7AdapterCatalogClient {
       archiveBytes: archiveBytes,
       expectedManifest: Map<String, Object?>.from(manifest),
     );
+  }
+
+  /// Refreshes release/key revocations. Revocation state is separate from the
+  /// signed catalog so clients can immediately distrust already installed
+  /// packages without a new application build.
+  Future<void> refreshTrustState() async {
+    final response = await _get(_baseUri().replace(
+      path: _apiPath('/api/v7/release-trust'),
+    ));
+    if (response.statusCode != HttpStatus.ok) {
+      throw StateError(
+          'release trust endpoint returned HTTP ${response.statusCode}');
+    }
+    final decoded =
+        jsonDecode(utf8.decode(await _readBounded(response, 1024 * 1024)));
+    if (decoded is! Map || decoded['revokedKeyIds'] is! List) {
+      throw const FormatException('release trust response is invalid');
+    }
+    final digests = <String>{};
+    final releases = <String>{};
+    final adapterRows = decoded['revokedAdapters'];
+    if (adapterRows is! List) {
+      throw const FormatException('adapter revocation list is invalid');
+    }
+    for (final row in adapterRows.whereType<Map>()) {
+      if (row['packageDigest'] is String) {
+        digests.add(row['packageDigest'] as String);
+      }
+      if (row['workerTypeId'] is String && row['version'] is String) {
+        releases.add('${row['workerTypeId']}@${row['version']}');
+      }
+    }
+    final hostRows = decoded['revokedWorkspaceReleases'];
+    if (hostRows is! List) {
+      throw const FormatException('Workspace revocation list is invalid');
+    }
+    for (final row in hostRows.whereType<Map>()) {
+      if (row['packageDigest'] is String) {
+        digests.add(row['packageDigest'] as String);
+      }
+      if (row['version'] is String) releases.add('workspace@${row['version']}');
+    }
+    packageStore.trustPolicy.updateRevocations(
+      digests: digests,
+      keyIds: (decoded['revokedKeyIds'] as List).whereType<String>().toSet(),
+      releaseIds: releases,
+    );
+  }
+
+  /// Keeps a verified rollback candidate, restores it if the active release
+  /// was revoked, and activates catalog updates only when no work is running.
+  Future<void> reconcileWorker(
+    String workerTypeId, {
+    String channel = 'stable',
+    required bool allowActivation,
+  }) async {
+    await refreshTrustState();
+    // Revocation immediately blocks new assignments through inventory health,
+    // but never swaps the process underneath an in-flight assignment.
+    if (!allowActivation) return;
+    if (!await packageStore.hasVerifiedActivePackage(workerTypeId)) {
+      await packageStore.restoreLastHealthyVersion(workerTypeId);
+    }
+    await installLatest(workerTypeId, channel: channel);
   }
 
   Future<HttpClientResponse> _get(Uri uri) async {

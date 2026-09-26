@@ -10,17 +10,13 @@ import 'platform_runtime.dart';
 import 'work_root.dart';
 import 'v7_adapter_package_store.dart';
 import 'worker_trust_policy.dart';
+import 'release_trust_roots.dart';
 
 export 'configured_worker_registry.dart';
+export 'release_trust_roots.dart';
 
-WorkerTrustPolicy _configuredAdapterTrustPolicy() {
-  final secret = Platform.environment['CONCLAVE_WORKER_TRUST_SECRET'];
-  final publisher =
-      Platform.environment['CONCLAVE_WORKER_TRUST_PUBLISHER'] ?? 'conclave';
-  return WorkerTrustPolicy(
-    trustedSecrets: secret == null ? const {} : {publisher: secret},
-  );
-}
+WorkerTrustPolicy _configuredAdapterTrustPolicy() =>
+    workspaceReleaseTrustPolicy();
 
 typedef HostStatusProvider = Future<Map<String, Object?>> Function();
 typedef HostUpdateHandler = Future<Map<String, Object?>> Function(

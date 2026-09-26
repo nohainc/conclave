@@ -8,6 +8,7 @@ import 'package:test/test.dart';
 import 'package:conclave_host/v7_adapter_catalog.dart';
 import 'package:conclave_host/v7_adapter_package_store.dart';
 import 'package:conclave_host/worker_trust_policy.dart';
+import 'support/ed25519_release_fixture.dart';
 
 void main() {
   late Directory temp;
@@ -15,14 +16,14 @@ void main() {
   late V7AdapterPackageStore store;
   late WorkerTrustPolicy trustPolicy;
   late String platform;
+  late Ed25519ReleaseFixture fixture;
 
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('v7-adapter-catalog-');
     packageSource = Directory('${temp.path}/package');
     await Directory('${packageSource.path}/bin').create(recursive: true);
-    trustPolicy = const WorkerTrustPolicy(
-      trustedSecrets: {'conclave': 'local-test-publisher-key'},
-    );
+    fixture = await Ed25519ReleaseFixture.create(publisher: 'conclave');
+    trustPolicy = fixture.trustPolicy;
     final os = switch (Platform.operatingSystem) {
       'macos' => 'macos',
       'linux' => 'linux',
@@ -92,11 +93,11 @@ exec dart "$(dirname "$0")/adapter.dart"
       'secretRequirements': <Object>[],
       'healthCheck': {'mode': 'protocol', 'timeoutMs': 5000},
       'packageDigest': digest,
+      'signingKeyId': fixtureKeyId,
       'signature': '',
       'releaseChannel': 'stable',
     };
-    manifest['signature'] =
-        trustPolicy.signAdapterManifest('conclave', digest, manifest);
+    await fixture.signAdapterManifest(manifest, digest, publisher: 'conclave');
     await File('${packageSource.path}/manifest.json')
         .writeAsString(jsonEncode(manifest));
 
@@ -106,7 +107,7 @@ exec dart "$(dirname "$0")/adapter.dart"
       if (entity is! File) continue;
       final name = entity.path.substring(packageSource.path.length + 1);
       final entry = ArchiveFile.bytes(name, await entity.readAsBytes());
-      if (name == 'bin/adapter') entry.mode = 0x1ed;
+      entry.mode = (await entity.stat()).mode & 0x1ff;
       archive.addFile(entry);
     }
     final archiveBytes = GZipEncoder().encode(TarEncoder().encode(archive));

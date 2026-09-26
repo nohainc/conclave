@@ -116,6 +116,20 @@ export async function routeWorkerRequest(
     if (request.method === "GET" && url.pathname === "/api/v7/adapters") {
       return await handlers.handleListV7Adapters!(request, env, ctx);
     }
+    if (request.method === "GET" && url.pathname === "/api/v7/release-trust") {
+      return await handlers.handleGetReleaseTrustState!(request, env, ctx);
+    }
+    const releaseKeyRevocation = url.pathname.match(
+      /^\/api\/v7\/release-trust\/keys\/([^/]+)\/revoke$/,
+    );
+    if (request.method === "POST" && releaseKeyRevocation?.[1]) {
+      return await handlers.handleRevokeReleaseSigningKey!(
+        request,
+        env,
+        decodeURIComponent(releaseKeyRevocation[1]),
+        ctx,
+      );
+    }
     if (
       request.method === "POST" &&
       url.pathname === "/api/v7/adapters/publish"

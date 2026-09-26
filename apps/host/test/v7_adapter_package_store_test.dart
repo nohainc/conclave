@@ -7,12 +7,13 @@ import 'package:conclave_host/configured_worker_registry.dart';
 import 'package:conclave_host/v7_adapter_package_store.dart';
 import 'package:conclave_host/worker_trust_policy.dart';
 import 'package:test/test.dart';
+import 'support/ed25519_release_fixture.dart';
 
 void main() {
   late Directory temp;
   late Directory source;
   late V7AdapterPackageStore store;
-  const policy = WorkerTrustPolicy(trustedSecrets: {'Conclave': 'test-root'});
+  late Ed25519ReleaseFixture fixture;
   final permissions = {
     WorkerPermission.readWorkspace,
     WorkerPermission.writeWorkspace,
@@ -47,13 +48,14 @@ Future<void> main() async {
   }
 
   setUp(() async {
+    fixture = await Ed25519ReleaseFixture.create(publisher: 'Conclave');
     temp = await Directory.systemTemp.createTemp('v7-package-store-');
     source = Directory('${temp.path}/source');
     await Directory('${source.path}/bin').create(recursive: true);
     await writeAdapterProgram();
     store = V7AdapterPackageStore(
       root: Directory('${temp.path}/installed'),
-      trustPolicy: policy,
+      trustPolicy: fixture.trustPolicy,
       allowedPermissions: permissions,
       platform: 'linux-x64',
     );
@@ -91,11 +93,11 @@ Future<void> main() async {
       ],
       'healthCheck': {'mode': healthMode, 'timeoutMs': 5000},
       'packageDigest': digest,
+      'signingKeyId': fixtureKeyId,
       'signature': '',
       'releaseChannel': releaseChannel,
     };
-    manifest['signature'] =
-        policy.signAdapterManifest('Conclave', digest, manifest);
+    await fixture.signAdapterManifest(manifest, digest, publisher: 'Conclave');
     await File('${source.path}/manifest.json')
         .writeAsString(jsonEncode(manifest));
     return digest;
@@ -127,7 +129,6 @@ Future<void> main() async {
         updatedAt: '2026-09-26T00:00:00.000Z',
       );
 
-
   Future<List<int>> packSource({String? extraPath}) async {
     final archive = Archive();
     await for (final entity
@@ -135,7 +136,7 @@ Future<void> main() async {
       if (entity is! File) continue;
       final name = entity.path.substring(source.path.length + 1);
       final entry = ArchiveFile.bytes(name, await entity.readAsBytes());
-      if (name == 'bin/adapter') entry.mode = 0x1ed;
+      entry.mode = (await entity.stat()).mode & 0x1ff;
       archive.addFile(entry);
     }
     if (extraPath != null) {
@@ -309,7 +310,9 @@ Future<void> main() async {
     );
   });
 
-  test('one installed adapter release serves multiple configured workers of the same type', () async {
+  test(
+      'one installed adapter release serves multiple configured workers of the same type',
+      () async {
     await writeManifest('1.2.3');
     await store.install(sourceDirectory: source);
 
@@ -327,18 +330,20 @@ Future<void> main() async {
       allowedModels: const ['o3-mini', 'gpt-5.5'],
     );
 
-
     final launchA = await store.resolve(
       worker: workerA,
-      readCredential: (key) => key == 'worker-credential/worker-a' ? 'secret-a' : null,
+      readCredential: (key) =>
+          key == 'worker-credential/worker-a' ? 'secret-a' : null,
     );
     final launchB = await store.resolve(
       worker: workerB,
-      readCredential: (key) => key == 'worker-credential/worker-b' ? 'secret-b' : null,
+      readCredential: (key) =>
+          key == 'worker-credential/worker-b' ? 'secret-b' : null,
     );
 
     expect(launchA?.processSpec.executable, launchB?.processSpec.executable);
-    expect(launchA?.processSpec.executable, endsWith('/codex/1.2.3/bin/adapter'));
+    expect(
+        launchA?.processSpec.executable, endsWith('/codex/1.2.3/bin/adapter'));
     expect(launchA?.processSpec.environment['PROVIDER_API_KEY'], 'secret-a');
 
     expect(launchB?.processSpec.environment['PROVIDER_API_KEY'], 'secret-b');
@@ -346,4 +351,3 @@ Future<void> main() async {
     expect(launchB?.allowedModels, {'o3-mini', 'gpt-5.5'});
   });
 }
-

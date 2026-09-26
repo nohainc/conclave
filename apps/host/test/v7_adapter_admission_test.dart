@@ -3,13 +3,14 @@ import 'dart:io';
 import 'package:test/test.dart';
 import 'package:conclave_host/v7_adapter_admission.dart';
 import 'package:conclave_host/worker_trust_policy.dart';
+import 'support/ed25519_release_fixture.dart';
 
 void main() {
   late Directory root;
   final digest = 'a' * 64;
-  const policy = WorkerTrustPolicy(trustedSecrets: {'Conclave': 'test-root'});
+  late Ed25519ReleaseFixture fixture;
 
-  Map<String, Object?> manifest(String executable) {
+  Future<Map<String, Object?>> manifest(String executable) async {
     final value = <String, Object?>{
       'workerTypeId': 'codex',
       'adapterVersion': '1.2.3',
@@ -35,14 +36,16 @@ void main() {
       ],
       'healthCheck': {'mode': 'protocol', 'timeoutMs': 5000},
       'packageDigest': digest,
+      'signingKeyId': fixtureKeyId,
       'signature': '',
       'releaseChannel': 'stable',
     };
-    value['signature'] = policy.signAdapterManifest('Conclave', digest, value);
+    await fixture.signAdapterManifest(value, digest, publisher: 'Conclave');
     return value;
   }
 
   setUp(() async {
+    fixture = await Ed25519ReleaseFixture.create(publisher: 'Conclave');
     root = await Directory.systemTemp.createTemp('conclave-v7-adapter-');
     await Directory('${root.path}/bin').create();
     await File('${root.path}/bin/adapter').writeAsString('#!/bin/false');
@@ -53,12 +56,12 @@ void main() {
 
   test('admits trusted package and produces a scoped executor spec', () async {
     final admitted = await V7AdapterAdmission.admit(
-      input: manifest('bin/adapter'),
+      input: await manifest('bin/adapter'),
       packageRoot: root,
       expectedWorkerTypeId: 'codex',
       verifiedPackageDigest: digest,
       platform: 'linux-x64',
-      trustPolicy: policy,
+      trustPolicy: fixture.trustPolicy,
       allowedPermissions: WorkerPermission.values.toSet(),
     );
     final spec = admitted.createProcessSpec(
@@ -76,7 +79,7 @@ void main() {
   });
 
   test('rejects manifest permission changes without a new signature', () async {
-    final changed = manifest('bin/adapter')
+    final changed = await manifest('bin/adapter')
       ..['permissions'] = ['workspace:read'];
     await expectLater(
       V7AdapterAdmission.admit(
@@ -85,7 +88,7 @@ void main() {
         expectedWorkerTypeId: 'codex',
         verifiedPackageDigest: digest,
         platform: 'linux-x64',
-        trustPolicy: policy,
+        trustPolicy: fixture.trustPolicy,
         allowedPermissions: WorkerPermission.values.toSet(),
       ),
       throwsStateError,
@@ -96,10 +99,10 @@ void main() {
       'rejects digest mismatch, untrusted publisher, unsupported platform and permissions',
       () async {
     final cases = [
-      (manifest('bin/adapter')..['packageDigest'] = 'b' * 64, 'digest'),
-      (manifest('bin/adapter')..['signature'] = 'forged', 'signature'),
-      (manifest('bin/adapter'), 'platform'),
-      (manifest('bin/adapter'), 'permission'),
+      ((await manifest('bin/adapter'))..['packageDigest'] = 'b' * 64, 'digest'),
+      ((await manifest('bin/adapter'))..['signature'] = 'forged', 'signature'),
+      (await manifest('bin/adapter'), 'platform'),
+      (await manifest('bin/adapter'), 'permission'),
     ];
     for (var i = 0; i < cases.length; i++) {
       final input = cases[i].$1;
@@ -111,7 +114,7 @@ void main() {
           expectedWorkerTypeId: 'codex',
           verifiedPackageDigest: digest,
           platform: reason == 'platform' ? 'macos-arm64' : 'linux-x64',
-          trustPolicy: policy,
+          trustPolicy: fixture.trustPolicy,
           allowedPermissions: reason == 'permission'
               ? {WorkerPermission.readWorkspace}
               : WorkerPermission.values.toSet(),
@@ -125,23 +128,23 @@ void main() {
       () async {
     await expectLater(
       V7AdapterAdmission.admit(
-        input: manifest('../escape'),
+        input: await manifest('../escape'),
         packageRoot: root,
         expectedWorkerTypeId: 'codex',
         verifiedPackageDigest: digest,
         platform: 'linux-x64',
-        trustPolicy: policy,
+        trustPolicy: fixture.trustPolicy,
         allowedPermissions: WorkerPermission.values.toSet(),
       ),
       throwsFormatException,
     );
     final admitted = await V7AdapterAdmission.admit(
-      input: manifest('bin/adapter'),
+      input: await manifest('bin/adapter'),
       packageRoot: root,
       expectedWorkerTypeId: 'codex',
       verifiedPackageDigest: digest,
       platform: 'linux-x64',
-      trustPolicy: policy,
+      trustPolicy: fixture.trustPolicy,
       allowedPermissions: WorkerPermission.values.toSet(),
     );
     expect(

@@ -1,0 +1,129 @@
+name: Release V7 Worker adapter
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Publish an immutable release or revoke an existing release
+        type: choice
+        options: [publish, revoke]
+        required: true
+      source:
+        description: Adapter package source directory (for example packages/worker-manifest/adapters/codex)
+        type: string
+        required: false
+      worker_type_id:
+        description: Worker Type ID (required for revoke)
+        type: string
+        required: false
+      channel:
+        description: Release channel for publish
+        type: choice
+        options: [development, beta, stable]
+        default: development
+        required: true
+      version:
+        description: Version to revoke (required for revoke)
+        type: string
+        required: false
+      reason:
+        description: Revocation reason
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  adapter-release:
+    runs-on: ubuntu-latest
+    environment: adapter-release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: pnpm install --frozen-lockfile
+      - run: flutter pub get
+        working-directory: apps/host
+      - name: Run adapter protocol/provider mock tests
+        run: pnpm worker-adapters:test
+      - name: Run Workspace package trust tests
+        run: |
+          flutter test test/v7_adapter_admission_test.dart
+          flutter test test/v7_adapter_package_store_test.dart
+          flutter test test/v7_adapter_catalog_test.dart
+        working-directory: apps/host
+      - name: Revoke immutable release
+        if: inputs.action == 'revoke'
+        env:
+          CLOUD_API_URL: ${{ vars.CLOUD_API_URL }}
+          RELEASE_PUBLISH_TOKEN: ${{ secrets.CONCLAVE_RELEASE_PUBLISH_TOKEN }}
+          WORKER_TYPE_ID: ${{ inputs.worker_type_id }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          REVOCATION_REASON: ${{ inputs.reason }}
+        run: |
+          test -n "$WORKER_TYPE_ID" && test -n "$RELEASE_VERSION" && test -n "$REVOCATION_REASON"
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $RELEASE_PUBLISH_TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d "$(node -e 'process.stdout.write(JSON.stringify({reason:process.env.REVOCATION_REASON}))')" \
+            "$CLOUD_API_URL/api/v7/adapters/$WORKER_TYPE_ID/versions/$RELEASE_VERSION/revoke"
+      - name: Create deterministic signed package
+        if: inputs.action == 'publish'
+        env:
+          CONCLAVE_RELEASE_SIGNING_SEED: ${{ secrets.CONCLAVE_ADAPTER_ED25519_SEED }}
+          CONCLAVE_RELEASE_SIGNING_KEY_ID: ${{ vars.CONCLAVE_ADAPTER_SIGNING_KEY_ID }}
+          CONCLAVE_WORKER_TRUST_PUBLISHER: conclave
+          ADAPTER_SOURCE: ${{ inputs.source }}
+          RELEASE_CHANNEL: ${{ inputs.channel }}
+        run: |
+          test -n "$CONCLAVE_RELEASE_SIGNING_SEED"
+          test -n "$CONCLAVE_RELEASE_SIGNING_KEY_ID"
+          pnpm host:package-adapter --source "$ADAPTER_SOURCE" --output "$RUNNER_TEMP/adapter.tgz" --channel "$RELEASE_CHANNEL"
+      - name: Publish, download, and verify release admission
+        if: inputs.action == 'publish'
+        env:
+          CLOUD_API_URL: ${{ vars.CLOUD_API_URL }}
+          RELEASE_PUBLISH_TOKEN: ${{ secrets.CONCLAVE_RELEASE_PUBLISH_TOKEN }}
+          RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON }}
+          ARCHIVE_PATH: ${{ runner.temp }}/adapter.tgz
+        run: |
+          test -n "$CLOUD_API_URL" && test -n "$RELEASE_PUBLISH_TOKEN"
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto';
+          import { readFile, writeFile } from 'node:fs/promises';
+          const base = process.env.CLOUD_API_URL.replace(/\/$/, '');
+          const archive = await readFile(process.env.ARCHIVE_PATH);
+          const manifest = JSON.parse(await readFile(`${process.env.ARCHIVE_PATH}.manifest.json`, 'utf8'));
+          const response = await fetch(`${base}/api/v7/adapters/publish`, {
+            method: 'POST',
+            headers: { authorization: `Bearer ${process.env.RELEASE_PUBLISH_TOKEN}`, 'content-type': 'application/json' },
+            body: JSON.stringify({ manifest, packageBase64: archive.toString('base64') }),
+          });
+          if (!response.ok) throw new Error(`publish failed: HTTP ${response.status}`);
+          const result = await response.json();
+          const catalogResponse = await fetch(`${base}/api/v7/adapters?workerTypeId=${encodeURIComponent(manifest.workerTypeId)}&platform=${encodeURIComponent(manifest.supportedPlatforms[0])}&channel=${encodeURIComponent(manifest.releaseChannel)}`);
+          if (!catalogResponse.ok) throw new Error(`catalog readback failed: HTTP ${catalogResponse.status}`);
+          const catalog = await catalogResponse.json();
+          const release = catalog.releases.find(item => item.version === manifest.adapterVersion);
+          if (!release || release.isRevoked) throw new Error('published release missing or revoked in catalog');
+          const downloaded = await fetch(`${base}${release.downloadPath}`);
+          if (!downloaded.ok) throw new Error(`download-back failed: HTTP ${downloaded.status}`);
+          const bytes = Buffer.from(await downloaded.arrayBuffer());
+          const digest = createHash('sha256').update(bytes).digest('hex');
+          if (digest !== release.archiveSha256) throw new Error('download-back archive digest mismatch');
+          await writeFile(`${process.env.RUNNER_TEMP}/downloaded-adapter.tgz`, bytes);
+          await writeFile(`${process.env.RUNNER_TEMP}/downloaded-manifest.json`, JSON.stringify(release.manifest));
+          console.log(`Published and downloaded ${manifest.workerTypeId} ${manifest.adapterVersion} (${result.status}).`);
+          NODE
+          flutter pub get
+          dart run -DCONCLAVE_RELEASE_TRUST_KEYS_JSON="$RELEASE_TRUST_KEYS_JSON" bin/verify_v7_adapter_release.dart "$RUNNER_TEMP/downloaded-adapter.tgz" "$RUNNER_TEMP/downloaded-manifest.json"

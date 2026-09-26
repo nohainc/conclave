@@ -32,6 +32,7 @@ const manifest = {
   secretRequirements: [],
   healthCheck: { mode: "protocol", timeoutMs: 5000 },
   packageDigest: "a".repeat(64),
+  signingKeyId: "fixture-v1",
   signature: "signature",
   releaseChannel: "stable",
 };

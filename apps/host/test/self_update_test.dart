@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:conclave_host/self_update.dart';
 import 'package:crypto/crypto.dart';
 import 'package:conclave_host/worker_trust_policy.dart';
+import 'support/ed25519_release_fixture.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -127,7 +128,7 @@ void main() {
   test('reports the complete update lifecycle through activation', () async {
     final root = await Directory.systemTemp.createTemp('conclave-update-');
     final bytes = [31, 41, 59];
-    final digest = sha256.convert(bytes).toString();
+    final digest = 'sha256:${sha256.convert(bytes)}';
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final subscription = server.listen((request) {
       if (request.uri.path.endsWith('/latest')) {
@@ -279,7 +280,9 @@ void main() {
   test('rejects an invalid signed release', () async {
     final root = await Directory.systemTemp.createTemp('conclave-update-');
     final bytes = [4, 5, 6];
-    const policy = WorkerTrustPolicy(trustedSecrets: {'release': 'root'});
+    final policy = WorkerTrustPolicy(trustedPublicKeys: {
+      'release': {'test-key': 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='},
+    });
     await expectLater(
       HostUpdater(root, trustPolicy: policy).apply(
         ReleasePackage(
@@ -288,12 +291,53 @@ void main() {
           bytes: bytes,
           digest: sha256.convert(bytes).toString(),
           publisher: 'release',
+          signingKeyId: 'test-key',
           signature: 'invalid',
         ),
         healthCheck: (_) async => true,
       ),
       throwsA(isA<StateError>()),
     );
+    await root.delete(recursive: true);
+  });
+
+  test('verifies signed Workspace metadata before activation', () async {
+    final fixture = await Ed25519ReleaseFixture.create(publisher: 'conclave');
+    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final bytes = [1, 3, 3, 7];
+    final digest = sha256.convert(bytes).toString();
+    final metadata = <String, Object?>{
+      'version': '2.0.0',
+      'channel': 'stable',
+      'minSupportedHostVersion': null,
+      'supportedOS': [Platform.operatingSystem],
+      'supportedArch': [
+        Platform.version.toLowerCase().contains('arm64') ? 'arm64' : 'x64'
+      ],
+      'releaseNotes': 'verified update',
+    };
+    final signature = await fixture.signHostRelease(
+      publisher: 'conclave',
+      keyId: fixtureKeyId,
+      digest: digest,
+      metadata: metadata,
+    );
+    await HostUpdater(root, trustPolicy: fixture.trustPolicy).apply(
+      ReleasePackage(
+        version: '2.0.0',
+        channel: 'stable',
+        bytes: bytes,
+        digest: digest,
+        publisher: 'conclave',
+        signingKeyId: fixtureKeyId,
+        signature: signature,
+        supportedOS: metadata['supportedOS'] as List<String>,
+        supportedArch: metadata['supportedArch'] as List<String>,
+        releaseNotes: 'verified update',
+      ),
+      healthCheck: (_) async => true,
+    );
+    expect(await File('${root.path}/host.active').readAsBytes(), bytes);
     await root.delete(recursive: true);
   });
 

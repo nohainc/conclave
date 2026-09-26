@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_host/configured_worker_registry.dart';
 import 'package:conclave_host/v7_adapter_package_store.dart';
 import 'package:conclave_host/worker_trust_policy.dart';
+import 'support/ed25519_release_fixture.dart';
 
 void main() {
   test('packages and installs the first-party Codex manifest template',
@@ -13,7 +14,7 @@ void main() {
     addTearDown(() => output.delete(recursive: true));
     final archive = File('${output.path}/codex.tgz');
     const publisher = 'conclave';
-    const signingSecret = 'test-only-v7-release-key';
+    final fixture = await Ed25519ReleaseFixture.create(publisher: publisher);
 
     final packaged = await Process.run(
       'dart',
@@ -24,12 +25,15 @@ void main() {
         '../../packages/worker-manifest/adapters/codex',
         '--output',
         archive.path,
+        '--channel',
+        'beta',
       ],
       workingDirectory: Directory.current.path,
       environment: {
         ...Platform.environment,
         'CONCLAVE_WORKER_TRUST_PUBLISHER': publisher,
-        'CONCLAVE_WORKER_TRUST_SECRET': signingSecret,
+        'CONCLAVE_RELEASE_SIGNING_SEED': fixture.seedBase64,
+        'CONCLAVE_RELEASE_SIGNING_KEY_ID': fixtureKeyId,
       },
     );
     expect(packaged.exitCode, 0, reason: packaged.stderr.toString());
@@ -40,14 +44,13 @@ void main() {
       jsonDecode(await manifestFile.readAsString()) as Map,
     );
     expect(manifest['workerTypeId'], 'codex');
+    expect(manifest['releaseChannel'], 'beta');
     expect(manifest['packageDigest'], matches(RegExp(r'^[a-f0-9]{64}$')));
     expect(manifest['signature'], isNotEmpty);
 
     final store = V7AdapterPackageStore(
       root: Directory('${output.path}/store'),
-      trustPolicy: WorkerTrustPolicy(
-        trustedSecrets: {publisher: signingSecret},
-      ),
+      trustPolicy: fixture.trustPolicy,
       allowedPermissions: WorkerPermission.values.toSet(),
       platform: '${Platform.isMacOS ? 'macos' : 'linux'}-'
           '${Platform.version.toLowerCase().contains('arm64') ? 'arm64' : 'x64'}',
@@ -69,7 +72,7 @@ void main() {
     addTearDown(() => output.delete(recursive: true));
     final archive = File('${output.path}/antigravity.tgz');
     const publisher = 'conclave';
-    const signingSecret = 'test-only-v7-release-key';
+    final fixture = await Ed25519ReleaseFixture.create(publisher: publisher);
 
     final packaged = await Process.run(
       'dart',
@@ -85,7 +88,8 @@ void main() {
       environment: {
         ...Platform.environment,
         'CONCLAVE_WORKER_TRUST_PUBLISHER': publisher,
-        'CONCLAVE_WORKER_TRUST_SECRET': signingSecret,
+        'CONCLAVE_RELEASE_SIGNING_SEED': fixture.seedBase64,
+        'CONCLAVE_RELEASE_SIGNING_KEY_ID': fixtureKeyId,
       },
     );
     expect(packaged.exitCode, 0, reason: packaged.stderr.toString());
@@ -101,9 +105,7 @@ void main() {
 
     final store = V7AdapterPackageStore(
       root: Directory('${output.path}/store'),
-      trustPolicy: WorkerTrustPolicy(
-        trustedSecrets: {publisher: signingSecret},
-      ),
+      trustPolicy: fixture.trustPolicy,
       allowedPermissions: WorkerPermission.values.toSet(),
       platform: '${Platform.isMacOS ? 'macos' : 'linux'}-'
           '${Platform.version.toLowerCase().contains('arm64') ? 'arm64' : 'x64'}',
@@ -113,9 +115,9 @@ void main() {
       expectedManifest: manifest,
     );
     expect(await File('${installed.path}/manifest.json').exists(), isTrue);
-    final active = jsonDecode(await File(
-            '${output.path}/store/antigravity/active.json')
-        .readAsString());
+    final active = jsonDecode(
+        await File('${output.path}/store/antigravity/active.json')
+            .readAsString());
     expect((active as Map)['version'], '1.0.0');
   });
 
@@ -123,14 +125,12 @@ void main() {
     final output = await Directory.systemTemp.createTemp('api-releases-test-');
     addTearDown(() => output.delete(recursive: true));
     const publisher = 'conclave';
-    const signingSecret = 'test-only-v7-api-release-key';
+    final fixture = await Ed25519ReleaseFixture.create(publisher: publisher);
     final platform = '${Platform.isMacOS ? 'macos' : 'linux'}-'
         '${Platform.version.toLowerCase().contains('arm64') ? 'arm64' : 'x64'}';
     final store = V7AdapterPackageStore(
       root: Directory('${output.path}/store'),
-      trustPolicy: WorkerTrustPolicy(
-        trustedSecrets: {publisher: signingSecret},
-      ),
+      trustPolicy: fixture.trustPolicy,
       allowedPermissions: WorkerPermission.values.toSet(),
       platform: platform,
     );
@@ -155,7 +155,8 @@ void main() {
         environment: {
           ...Platform.environment,
           'CONCLAVE_WORKER_TRUST_PUBLISHER': publisher,
-          'CONCLAVE_WORKER_TRUST_SECRET': signingSecret,
+          'CONCLAVE_RELEASE_SIGNING_SEED': fixture.seedBase64,
+          'CONCLAVE_RELEASE_SIGNING_KEY_ID': fixtureKeyId,
         },
       );
       expect(packaged.exitCode, 0, reason: packaged.stderr.toString());

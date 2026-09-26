@@ -10,6 +10,7 @@ import 'package:conclave_host/worker_trust_policy.dart';
 import 'package:conclave_host/workstream_directory.dart';
 import 'package:conclave_host/workstream_path.dart';
 import 'package:test/test.dart';
+import 'support/ed25519_release_fixture.dart';
 
 void main() {
   test(
@@ -18,8 +19,8 @@ void main() {
     final temp =
         await Directory.systemTemp.createTemp('v7-runtime-acceptance-');
     addTearDown(() => temp.delete(recursive: true));
-    const trust =
-        WorkerTrustPolicy(trustedSecrets: {'Conclave Test': 'fixture-only'});
+    final fixture = await Ed25519ReleaseFixture.create();
+    final trust = fixture.trustPolicy;
     const permissions = {
       WorkerPermission.readWorkspace,
       WorkerPermission.writeWorkspace
@@ -98,11 +99,11 @@ exec __DART__ "$(dirname "$0")/adapter.dart"
       'secretRequirements': <Object>[],
       'healthCheck': {'mode': 'protocol', 'timeoutMs': 5000},
       'packageDigest': digest,
+      'signingKeyId': fixtureKeyId,
       'signature': '',
       'releaseChannel': 'stable',
     };
-    manifest['signature'] =
-        trust.signAdapterManifest('Conclave Test', digest, manifest);
+    await fixture.signAdapterManifest(manifest, digest);
     await File('${source.path}/manifest.json')
         .writeAsString(jsonEncode(manifest));
     await store.install(sourceDirectory: source);

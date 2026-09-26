@@ -535,33 +535,39 @@ Conclave Workspace creates Worker
 
 # Phase 4 — Production adapter and application release trust
 
+**Implementation status:** Ed25519 verification, revocation refresh, adapter
+release automation, and signed Workspace release metadata are implemented.
+The macOS workflow also applies Developer ID signing and notarization before
+publishing and verifies the release metadata and archive after download.
+
 ## Goal
 
 Make adapter and Workspace releases verifiable by a public client without
 shipping a signing secret.
 
-## 4.1 Replace production HMAC trust
+## 4.1 Replace production HMAC trust — implemented
 
 Replace shared-secret production verification with asymmetric signatures.
 
-Recommended:
+Implemented with:
 - Ed25519;
 - private key only in release infrastructure;
 - trusted public key(s) in Conclave Workspace;
 - explicit key IDs;
-- rotation;
-- revocation.
+- overlapping key IDs for rotation;
+- independently refreshed key and release revocation.
 
 The signed adapter payload must continue to bind:
 - canonical manifest without the signature field;
 - package file-tree digest.
 
-Development fixture signing may remain separate, but production paths must fail
-closed without a trusted public key.
+Development fixture signing uses a deterministic test-only key. Production
+paths fail closed without a trusted public key.
 
-## 4.2 Apply equivalent trust to Workspace updates
+## 4.2 Apply equivalent trust to Workspace updates — implemented
 
-Define release trust for the native Conclave Workspace application:
+Workspace update metadata uses an independent Ed25519 application key and the
+same public-root format as adapters:
 - application release signing key;
 - public verification key;
 - key ID/rotation policy;
@@ -570,7 +576,7 @@ Define release trust for the native Conclave Workspace application:
 Apple platform signing complements Conclave release metadata verification; it
 does not replace it.
 
-## 4.3 Add first-party release automation
+## 4.3 Add first-party release automation — implemented
 
 Add a repeatable GitHub Actions workflow:
 
@@ -586,9 +592,13 @@ build
 -> verify admission/health
 ~~~
 
-Support development/beta/stable and revocation.
+The adapter workflow supports development, beta, stable, and revocation. It
+reads immutable catalog metadata and package bytes back, then runs normal
+Workspace signature, digest, platform, permission, and health admission. The
+macOS Workspace workflow signs and notarizes the app, publishes its separately
+signed immutable Cloud release metadata, then downloads and verifies it.
 
-## 4.4 Background update/revocation reconciliation
+## 4.4 Background update/revocation reconciliation — implemented
 
 Workspace should periodically:
 - refresh adapter catalog state;

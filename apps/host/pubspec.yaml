@@ -14,6 +14,7 @@ dependencies:
   archive: ^4.3.0
   conclave_protocol:
     path: ../../packages/dart/protocol
+  cryptography: ^2.9.0
 
 dev_dependencies:
   flutter_test:

@@ -1044,6 +1044,11 @@ export const AgentUpdateAvailablePayloadSchema = z
     packageR2Key: nonEmptyStr,
     packageDigest: nonEmptyStr,
     signature: nonEmptyStr,
+    publisher: nonEmptyStr.optional(),
+    signingKeyId: nonEmptyStr.optional(),
+    minSupportedHostVersion: nonEmptyStr.optional(),
+    supportedOS: z.array(nonEmptyStr).optional(),
+    supportedArch: z.array(nonEmptyStr).optional(),
     releaseNotes: z.string().optional(),
   })
   .strict();

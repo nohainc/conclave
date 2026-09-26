@@ -171,6 +171,8 @@ class HostCloudConnection {
   String? sessionId;
   bool get isConnected => sessionId != null;
   int get activeAssignmentCount => _activeAssignments.length;
+
+  Future<void> refreshWorkerInventory() => _reportCurrentWorkerInventory();
   List<String> get activeAssignmentIds => _activeAssignments.toList()..sort();
   int _messageSequence = 0;
   int _heartbeatCount = 0;

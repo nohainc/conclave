@@ -10,10 +10,14 @@ class ReleasePackage {
       required this.bytes,
       required this.digest,
       this.publisher,
+      this.signingKeyId,
       this.signature,
       this.minimumProtocolVersion,
+      this.minSupportedHostVersion,
       this.operatingSystem,
       this.architecture,
+      this.supportedOS = const [],
+      this.supportedArch = const [],
       this.releaseNotes,
       this.packageUrl});
   final String version;
@@ -21,10 +25,14 @@ class ReleasePackage {
   final List<int> bytes;
   final String digest;
   final String? publisher;
+  final String? signingKeyId;
   final String? signature;
   final String? minimumProtocolVersion;
+  final String? minSupportedHostVersion;
   final String? operatingSystem;
   final String? architecture;
+  final List<String> supportedOS;
+  final List<String> supportedArch;
   final String? releaseNotes;
   final String? packageUrl;
 }
@@ -36,11 +44,14 @@ class HostReleaseDescriptor {
     required this.packageDigest,
     required this.packageR2Key,
     this.publisher,
+    this.signingKeyId,
     this.signature,
     this.minimumProtocolVersion,
     this.minSupportedHostVersion,
     this.operatingSystem,
     this.architecture,
+    this.supportedOS = const [],
+    this.supportedArch = const [],
     this.releaseNotes,
     this.packageUrl,
   });
@@ -50,11 +61,14 @@ class HostReleaseDescriptor {
   final String packageDigest;
   final String packageR2Key;
   final String? publisher;
+  final String? signingKeyId;
   final String? signature;
   final String? minimumProtocolVersion;
   final String? minSupportedHostVersion;
   final String? operatingSystem;
   final String? architecture;
+  final List<String> supportedOS;
+  final List<String> supportedArch;
   final String? releaseNotes;
   final String? packageUrl;
 
@@ -76,11 +90,19 @@ class HostReleaseDescriptor {
       packageDigest: requiredString('packageDigest'),
       packageR2Key: requiredString('packageR2Key'),
       publisher: optionalString('publisher'),
+      signingKeyId: optionalString('signingKeyId'),
       signature: optionalString('signature'),
       minimumProtocolVersion: optionalString('minimumProtocolVersion'),
-      minSupportedHostVersion: optionalString('minSupportedHostVersion'),
+      minSupportedHostVersion: optionalString('minSupportedHostVersion') ??
+          optionalString('minSupportedAgentVersion'),
       operatingSystem: optionalString('operatingSystem'),
       architecture: optionalString('architecture'),
+      supportedOS: json['supportedOS'] is List
+          ? (json['supportedOS'] as List).whereType<String>().toList()
+          : const [],
+      supportedArch: json['supportedArch'] is List
+          ? (json['supportedArch'] as List).whereType<String>().toList()
+          : const [],
       releaseNotes: optionalString('releaseNotes'),
       packageUrl: optionalString('packageUrl'),
     );
@@ -91,6 +113,55 @@ class HostReleaseClient {
   const HostReleaseClient({this.timeout = const Duration(seconds: 30)});
 
   final Duration timeout;
+
+  Future<void> refreshRevocations({
+    required Uri cloudUri,
+    required String? authToken,
+    required WorkerTrustPolicy policy,
+  }) async {
+    final owned = await _request(
+      cloudUri.replace(
+        scheme: _httpScheme(cloudUri),
+        pathSegments: ['api', 'v7', 'release-trust'],
+      ),
+      authToken: authToken,
+    );
+    try {
+      if (owned.response.statusCode != HttpStatus.ok) {
+        throw StateError(
+            'release trust refresh failed with HTTP ${owned.response.statusCode}');
+      }
+      final decoded = jsonDecode(await _readBody(owned, 1024 * 1024));
+      if (decoded is! Map ||
+          decoded['revokedKeyIds'] is! List ||
+          decoded['revokedAdapters'] is! List ||
+          decoded['revokedWorkspaceReleases'] is! List) {
+        throw const FormatException('release trust response is invalid');
+      }
+      final digests = <String>{};
+      final releases = <String>{};
+      for (final row in [
+        ...decoded['revokedAdapters'] as List,
+        ...decoded['revokedWorkspaceReleases'] as List
+      ].whereType<Map>()) {
+        if (row['packageDigest'] is String) {
+          digests.add(row['packageDigest'] as String);
+        }
+        if (row['workerTypeId'] is String && row['version'] is String) {
+          releases.add('${row['workerTypeId']}@${row['version']}');
+        } else if (row['version'] is String) {
+          releases.add('workspace@${row['version']}');
+        }
+      }
+      policy.updateRevocations(
+        digests: digests,
+        keyIds: (decoded['revokedKeyIds'] as List).whereType<String>().toSet(),
+        releaseIds: releases,
+      );
+    } finally {
+      owned.close();
+    }
+  }
 
   Future<HostReleaseDescriptor?> latest({
     required Uri cloudUri,
@@ -163,10 +234,14 @@ class HostReleaseClient {
         bytes: bytes,
         digest: release.packageDigest,
         publisher: release.publisher,
+        signingKeyId: release.signingKeyId,
         signature: release.signature,
         minimumProtocolVersion: release.minimumProtocolVersion,
+        minSupportedHostVersion: release.minSupportedHostVersion,
         operatingSystem: release.operatingSystem,
         architecture: release.architecture,
+        supportedOS: release.supportedOS,
+        supportedArch: release.supportedArch,
         releaseNotes: release.releaseNotes,
         packageUrl: release.packageUrl,
       );
@@ -295,6 +370,14 @@ class HostUpdateController {
   Future<HostReleaseDescriptor?> check() async {
     _publish(const HostUpdateStatus(phase: 'checking'));
     try {
+      final policy = updater.trustPolicy;
+      if (policy != null) {
+        await client.refreshRevocations(
+          cloudUri: cloudUri,
+          authToken: authToken,
+          policy: policy,
+        );
+      }
       final release = await client.latest(
         cloudUri: cloudUri,
         channel: channel,
@@ -330,6 +413,14 @@ class HostUpdateController {
     }
     _publish(HostUpdateStatus(phase: 'downloading', version: release.version));
     try {
+      final policy = updater.trustPolicy;
+      if (policy != null) {
+        await client.refreshRevocations(
+          cloudUri: cloudUri,
+          authToken: authToken,
+          policy: policy,
+        );
+      }
       final package = await client.download(
         cloudUri: cloudUri,
         release: release,
@@ -454,8 +545,18 @@ class HostUpdater {
           'host release update is waiting for active assignments to finish');
     }
     final actual = sha256.convert(release.bytes).toString();
-    if (actual != release.digest) {
+    final canonicalDigest = 'sha256:$actual';
+    if (release.digest != actual && release.digest != canonicalDigest) {
       throw StateError('host release digest mismatch');
+    }
+    final hostOs = Platform.operatingSystem;
+    final hostArch =
+        Platform.version.toLowerCase().contains('arm64') ? 'arm64' : 'x64';
+    if ((release.supportedOS.isNotEmpty &&
+            !release.supportedOS.contains(hostOs)) ||
+        (release.supportedArch.isNotEmpty &&
+            !release.supportedArch.contains(hostArch))) {
+      throw StateError('host release does not support this platform');
     }
     final policy = trustPolicy;
     if (requireSignature && policy == null) {
@@ -464,12 +565,23 @@ class HostUpdater {
     if (policy != null) {
       final publisher = release.publisher;
       final signature = release.signature;
+      final signingKeyId = release.signingKeyId;
       if (publisher == null ||
+          signingKeyId == null ||
           signature == null ||
-          !policy.verify(
+          !await policy.verifyHostRelease(
             publisher: publisher,
-            digest: actual,
+            signingKeyId: signingKeyId,
+            digest: release.digest,
             signature: signature,
+            metadata: {
+              'version': release.version,
+              'channel': release.channel,
+              'minSupportedHostVersion': release.minSupportedHostVersion,
+              'supportedOS': release.supportedOS,
+              'supportedArch': release.supportedArch,
+              'releaseNotes': release.releaseNotes,
+            },
           )) {
         throw StateError('host release signature is not trusted');
       }
@@ -491,10 +603,12 @@ class HostUpdater {
           throw StateError(
               'host release rollback is not permitted: ${release.version} < $activeVersion');
         }
-        if (activeVersion == release.version && metadata['digest'] == actual) {
+        if (activeVersion == release.version &&
+            metadata['digest'] == release.digest) {
           return;
         }
-        if (activeVersion == release.version && metadata['digest'] != actual) {
+        if (activeVersion == release.version &&
+            metadata['digest'] != release.digest) {
           throw StateError('host release version is already installed');
         }
       } on StateError {
@@ -538,8 +652,10 @@ class HostUpdater {
           jsonEncode({
             'version': release.version,
             'channel': release.channel,
-            'digest': actual,
+            'digest': release.digest,
             if (release.publisher != null) 'publisher': release.publisher,
+            if (release.signingKeyId != null)
+              'signingKeyId': release.signingKeyId,
             if (release.signature != null) 'signature': release.signature,
             if (minimumProtocol != null)
               'minimumProtocolVersion': minimumProtocol,
@@ -547,6 +663,10 @@ class HostUpdater {
               'operatingSystem': release.operatingSystem,
             if (release.architecture != null)
               'architecture': release.architecture,
+            'supportedOS': release.supportedOS,
+            'supportedArch': release.supportedArch,
+            if (release.minSupportedHostVersion != null)
+              'minSupportedHostVersion': release.minSupportedHostVersion,
             if (release.releaseNotes != null)
               'releaseNotes': release.releaseNotes,
             if (release.packageUrl != null) 'packageUrl': release.packageUrl,

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
+import 'package:cryptography/cryptography.dart';
 
 import 'package:conclave_host/v7_adapter_admission.dart';
 import 'package:conclave_host/v7_adapter_package_store.dart';
@@ -16,18 +17,29 @@ Future<void> main(List<String> args) async {
     final output = File(options['output']!).absolute;
     final publisher =
         Platform.environment['CONCLAVE_WORKER_TRUST_PUBLISHER'] ?? 'conclave';
-    final signingSecret = Platform.environment['CONCLAVE_WORKER_TRUST_SECRET'];
-    if (signingSecret == null || signingSecret.isEmpty) {
+    final signingSeed = Platform.environment['CONCLAVE_RELEASE_SIGNING_SEED'];
+    final signingKeyId =
+        Platform.environment['CONCLAVE_RELEASE_SIGNING_KEY_ID'];
+    if (signingSeed == null ||
+        signingSeed.isEmpty ||
+        signingKeyId == null ||
+        signingKeyId.isEmpty) {
       throw StateError(
-          'Set CONCLAVE_WORKER_TRUST_SECRET in the release environment.');
+          'Set CONCLAVE_RELEASE_SIGNING_SEED and CONCLAVE_RELEASE_SIGNING_KEY_ID in the release environment.');
     }
     if (!await source.exists()) {
       throw ArgumentError('Adapter source directory does not exist.');
     }
 
-    final trustPolicy = WorkerTrustPolicy(
-      trustedSecrets: {publisher: signingSecret},
-    );
+    final seed = base64.decode(signingSeed);
+    if (seed.length != 32) {
+      throw StateError('Ed25519 signing seed must be 32 bytes.');
+    }
+    final signer = await Ed25519().newKeyPairFromSeed(seed);
+    final publicKey = await signer.extractPublicKey();
+    final trustPolicy = WorkerTrustPolicy(trustedPublicKeys: {
+      publisher: {signingKeyId: base64.encode(publicKey.bytes)},
+    });
     final store = V7AdapterPackageStore(
       root: Directory('${Directory.systemTemp.path}/conclave-package-check'),
       trustPolicy: trustPolicy,
@@ -64,9 +76,17 @@ Future<void> main(List<String> args) async {
       }
       final digest = await store.digestDirectory(staging);
       manifest['packageDigest'] = digest;
+      final channel = options['channel'];
+      if (channel != null) manifest['releaseChannel'] = channel;
+      manifest['signingKeyId'] = signingKeyId;
       manifest['signature'] = '';
-      manifest['signature'] =
-          trustPolicy.signAdapterManifest(publisher, digest, manifest);
+      final unsigned = Map<String, Object?>.from(manifest)..remove('signature');
+      final signature = await Ed25519().sign(
+        utf8.encode(
+            'conclave-v7-adapter-release-v1\n$digest\n${canonicalJson(unsigned)}'),
+        keyPair: signer,
+      );
+      manifest['signature'] = base64.encode(signature.bytes);
       await manifestFile.writeAsString(jsonEncode(manifest), flush: true);
 
       final platforms = manifest['supportedPlatforms'];
@@ -85,15 +105,21 @@ Future<void> main(List<String> args) async {
         allowedPermissions: WorkerPermission.values.toSet(),
       );
       final archive = Archive();
+      final files = <File>[];
       await for (final entity
           in staging.list(recursive: true, followLinks: false)) {
         if (entity is! File) continue;
+        files.add(entity);
+      }
+      files.sort((left, right) => left.path.compareTo(right.path));
+      for (final entity in files) {
         final relative = entity.path
             .substring(staging.path.length + 1)
             .replaceAll(Platform.pathSeparator, '/');
         final stat = await entity.stat();
         final entry = ArchiveFile.bytes(relative, await entity.readAsBytes());
         entry.mode = stat.mode & 0x1ff;
+        entry.lastModTime = 0;
         archive.addFile(entry);
       }
       final tar = TarEncoder().encode(archive);
@@ -127,14 +153,24 @@ Future<void> main(List<String> args) async {
 }
 
 Map<String, String> _arguments(List<String> args) {
-  if (args.length != 4 || args[0] != '--source' || args[2] != '--output') {
+  if (args.length < 4 || args[0] != '--source' || args[2] != '--output') {
     throw ArgumentError(
         'Usage: dart run bin/package_v7_adapter.dart --source <adapter-dir> --output <release.tgz>');
   }
   if (args[1].trim().isEmpty || args[3].trim().isEmpty) {
     throw ArgumentError('Source and output paths must not be empty.');
   }
-  return {'source': args[1], 'output': args[3]};
+  final result = {'source': args[1], 'output': args[3]};
+  if (args.length > 4) {
+    if (args.length != 6 ||
+        args[4] != '--channel' ||
+        !const {'development', 'beta', 'stable'}.contains(args[5])) {
+      throw ArgumentError(
+          'Optional channel must be development, beta, or stable.');
+    }
+    result['channel'] = args[5];
+  }
+  return result;
 }
 
 Future<void> _copyPackage(Directory source, Directory target) async {
