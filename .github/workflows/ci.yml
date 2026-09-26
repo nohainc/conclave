@@ -105,6 +105,12 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
+      - name: Build Conclave Workspace for macOS
+        if: runner.os == 'macOS'
+        working-directory: .
+        env:
+          CONCLAVE_WORKSPACE_SKIP_CHECKS: '1'
+        run: bash scripts/build-workspace-macos.sh
       - name: Compile native Host
         shell: bash
         run: |
