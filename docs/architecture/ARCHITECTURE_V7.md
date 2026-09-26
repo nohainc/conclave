@@ -1,6 +1,6 @@
 # Conclave AX Architecture v7 — Local Worker Runtime and Adapter Execution
 
-**Status:** Proposed next architecture  
+**Status:** Active implementation target — desktop runtime convergence in progress  
 **Date:** 2026-09-26  
 **Builds on:** Architecture v6 Workstreams + ADR-011 filesystem model  
 **Primary decision:** [ADR-012](../decisions/ADR-012-workspace-owned-local-workers.md)
@@ -78,7 +78,7 @@ Each configured Worker exists on one Workspace only.
 
 ### 4.1 Conclave AX
 
-Conclave AX is the human orchestration/control application.
+Conclave AX is the **web application** and human orchestration/control surface. It is not the machine executor and it does not configure provider credentials locally.
 
 It owns UX for:
 - authentication;
@@ -115,7 +115,7 @@ Cloud does not execute an external AI/tool directly.
 
 ### 4.3 Conclave Workspace
 
-Conclave Workspace is the persistent local execution/security runtime.
+Conclave Workspace is the **desktop application/runtime** installed on the execution computer. It is the persistent local execution/security boundary. All configured Workers are created/authenticated here.
 
 It owns:
 - pairing;
@@ -190,6 +190,60 @@ Contextual links may appear:
 - Connect machine flow;
 - global app menu;
 - Workspace update prompt.
+
+### 5.5 Pairing protocol
+
+The web application creates a one-time `workspace_enrollments` code.
+
+Conclave Workspace redeems it through:
+
+~~~text
+POST /api/workspace-runtime/enroll
+~~~
+
+Cloud returns:
+- Workspace Runtime ID;
+- Workspace ID/name;
+- one runtime bearer token.
+
+The desktop app stores the bearer token only in the OS secure credential store and writes only non-secret registration metadata to disk. It then opens:
+
+~~~text
+/api/workspace-gateway/connect?workspaceRuntimeId=<runtime-id>
+~~~
+
+and authenticates with the bearer token.
+
+The first successful `workspace.hello` establishes the live session and publishes real machine facts and Worker inventory.
+
+### 5.6 macOS distribution
+
+macOS is the first desktop release target.
+
+The supported repository build entrypoint is:
+
+~~~text
+bash scripts/build-workspace-macos.sh
+~~~
+
+The script:
+- resolves Flutter dependencies;
+- runs analyze/tests unless explicitly skipped;
+- builds the native release app;
+- injects the Workspace version;
+- optionally signs with a Developer ID identity and hardened runtime;
+- optionally notarizes with Apple;
+- produces a ZIP under `dist/conclave-workspace/macos`.
+
+Conclave Workspace is distributed directly rather than through Mac App Store sandboxing because it must execute local CLI/tool child processes and operate in persistent Workstream directories.
+
+A real Cloud smoke procedure is available through:
+
+~~~text
+CONCLAVE_ENROLLMENT_TOKEN=... bash scripts/test-workspace-cloud-connection.sh
+~~~
+
+Use a disposable Workspace because the test consumes a real one-time enrollment and establishes a real runtime identity.
 
 ## 6. Conclave Workspace UI
 
@@ -356,6 +410,17 @@ Examples:
 - vLLM endpoint.
 
 Same Worker protocol; no Cloud architecture change.
+
+### 8.4 Worker Type naming rule
+
+Name a Worker Type after the execution integration that Conclave invokes.
+
+- **Codex** invokes Codex CLI. A user may authenticate Codex with a **ChatGPT account**. Do not call this a ChatGPT adapter.
+- **Antigravity** invokes Google Antigravity CLI, whose executable is `agy`. It may use a Google-account subscription/session. Do not rename it Gemini merely because its model family is Gemini.
+- **Gemini API** means direct Gemini API integration.
+- A future distinct **Gemini CLI** integration may be added as its own Worker Type if Conclave explicitly supports that product.
+
+Subscription/account brand, Worker Type and model are separate concepts.
 
 ## 9. Model selection
 
@@ -806,3 +871,15 @@ Use them from Projects and Workstreams.
 ~~~
 
 No additional infrastructure vocabulary should be required.
+
+
+## 30. Implementation audit and release gates
+
+The current source-level convergence is tracked in [V7 Implementation Audit](V7_IMPLEMENTATION_AUDIT.md).
+
+Do not declare v7 production-complete until:
+- desktop pairing + Workspace Gateway smoke succeeds against the target Cloud;
+- signed/notarized macOS build passes;
+- at least one real Codex and one real Antigravity execution succeed from locally configured Workers;
+- legacy Cloud-created/multi-Workspace Worker execution is no longer required;
+- adapter package verification no longer requires shipping the signing secret and uses asymmetric public-key trust.
