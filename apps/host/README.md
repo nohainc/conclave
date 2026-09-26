@@ -66,6 +66,8 @@ Conclave Workspace is the native desktop product. The Flutter GUI and the
 headless entrypoint share the same runtime composition in
 `lib/workspace_runtime.dart`.
 
+The current macOS release target requires macOS 12 or newer.
+
 Build a macOS release package from repository root:
 
 ~~~text

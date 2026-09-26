@@ -8,13 +8,13 @@ function dependencies(
   requireSameOriginForCookieMutation: (request: Request) => void,
 ): WorkerRouteDependencies {
   return {
-    json: (data, init) => Response.json(data, init),
+    json: (data: unknown, init?: ResponseInit) => Response.json(data, init),
     requireSameOriginForCookieMutation,
     testAuthenticationEnabled: () => false,
     runProjectId: async () => undefined,
     authorizeRequest: async () => undefined,
     resolveWorkflowInstanceId: async () => "workflow-test",
-    errorMessage: (error) => String(error),
+    errorMessage: (error: unknown) => String(error),
     HttpError: Error,
   } as unknown as WorkerRouteDependencies;
 }

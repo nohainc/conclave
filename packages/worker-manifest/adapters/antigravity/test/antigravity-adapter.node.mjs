@@ -90,7 +90,7 @@ printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"Antig
     type: "initialize.request",
     protocolVersion: "1.0",
     requestId: "i1",
-    workerTypeId: "agy",
+    workerTypeId: "antigravity",
     adapterVersion: "1.0.0",
   });
   assert.equal(

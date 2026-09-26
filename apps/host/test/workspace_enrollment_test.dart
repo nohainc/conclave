@@ -73,7 +73,7 @@ void main() {
     final saved = HostRegistrationStore(temp).readSync();
     expect(saved?.hostId, 'runtime-1');
     expect(saved?.workspaceId, 'workspace-1');
-    final raw = await File('${temp.path}/host-registration.json').readAsString();
+    final raw = await File('${temp.path}/host-config.json').readAsString();
     expect(raw, isNot(contains('runtime-secret')));
   });
 }
