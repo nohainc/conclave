@@ -182,6 +182,29 @@ async function recordAudit(
   }
 }
 
+async function recordPairingAuditEvent(
+  env: SecurityEnv,
+  userId: string | null,
+  action: "pairing.created" | "pairing.rejected",
+  outcome: "success" | "failure" | "denied",
+  details: Record<string, unknown>,
+): Promise<void> {
+  await env.CONCLAVE_DB.prepare(
+    `INSERT INTO auth_audit_events
+       (id, user_id, session_id, action, outcome, details_json, created_at)
+     VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6)`,
+  )
+    .bind(
+      `audit-${crypto.randomUUID()}`,
+      userId,
+      action,
+      outcome,
+      JSON.stringify(details),
+      new Date().toISOString(),
+    )
+    .run();
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Workflow operation failed";
 }
@@ -1181,19 +1204,30 @@ async function handleCreateWorkspacePairingIntent(
   const expiresAt = new Date(
     now.getTime() + expiresMinutes * 60_000,
   ).toISOString();
-  await env.CONCLAVE_DB.prepare(
-    `INSERT INTO workspace_pairing_intents
-       (pairing_id, owner_user_id, token_hash, created_at, expires_at)
-     VALUES (?1, ?2, ?3, ?4, ?5)`,
-  )
-    .bind(
+  await env.CONCLAVE_DB.batch([
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO workspace_pairing_intents
+         (pairing_id, owner_user_id, token_hash, created_at, expires_at)
+       VALUES (?1, ?2, ?3, ?4, ?5)`,
+    ).bind(
       pairingId,
       context.userId,
       await hashToken(token),
       createdAt,
       expiresAt,
-    )
-    .run();
+    ),
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO auth_audit_events
+         (id, user_id, session_id, action, outcome, details_json, created_at)
+       VALUES (?1, ?2, ?3, 'pairing.created', 'success', ?4, ?5)`,
+    ).bind(
+      `audit-${crypto.randomUUID()}`,
+      context.userId,
+      context.sessionId ?? null,
+      JSON.stringify({ pairingId, expiresAt }),
+      createdAt,
+    ),
+  ]);
 
   return json(
     {
@@ -1496,6 +1530,7 @@ async function handleRevokeWorkspace(
       "workspace",
       workspaceId,
       { revokedAt: now },
+      workspaceId,
     );
   }
   return json({ ok: true, revokedAt: now, alreadyRevoked });
@@ -4768,6 +4803,9 @@ async function handleRedeemWorkspaceEnrollment(
 
   const token = body.token?.trim();
   if (!token) {
+    await recordPairingAuditEvent(env, null, "pairing.rejected", "failure", {
+      reason: "missing_token",
+    });
     return json({ error: "Enrollment token is required" }, { status: 400 });
   }
 
@@ -4791,18 +4829,39 @@ async function handleRedeemWorkspaceEnrollment(
     }>();
   if (pairingIntent) {
     if (pairingIntent.expiresAt <= now) {
+      await recordPairingAuditEvent(
+        env,
+        pairingIntent.ownerUserId,
+        "pairing.rejected",
+        "failure",
+        { pairingId: pairingIntent.pairingId, reason: "expired" },
+      );
       return json(
         { error: "Pairing code has expired", code: "pairing_code_expired" },
         { status: 410 },
       );
     }
     if (pairingIntent.cancelledAt) {
+      await recordPairingAuditEvent(
+        env,
+        pairingIntent.ownerUserId,
+        "pairing.rejected",
+        "failure",
+        { pairingId: pairingIntent.pairingId, reason: "cancelled" },
+      );
       return json(
         { error: "Pairing code was cancelled", code: "pairing_code_cancelled" },
         { status: 409 },
       );
     }
     if (pairingIntent.usedAt) {
+      await recordPairingAuditEvent(
+        env,
+        pairingIntent.ownerUserId,
+        "pairing.rejected",
+        "failure",
+        { pairingId: pairingIntent.pairingId, reason: "already_claimed" },
+      );
       return json(
         {
           error:
@@ -4820,6 +4879,13 @@ async function handleRedeemWorkspaceEnrollment(
       .bind(pairingIntent.ownerUserId)
       .first<{ status: string }>();
     if (!owner || owner.status !== "active") {
+      await recordPairingAuditEvent(
+        env,
+        pairingIntent.ownerUserId,
+        "pairing.rejected",
+        "denied",
+        { pairingId: pairingIntent.pairingId, reason: "owner_inactive" },
+      );
       return json(
         { error: "Pairing owner is no longer active", code: "account_revoked" },
         { status: 403 },
@@ -4834,6 +4900,16 @@ async function handleRedeemWorkspaceEnrollment(
         installationId,
       )
     ) {
+      await recordPairingAuditEvent(
+        env,
+        pairingIntent.ownerUserId,
+        "pairing.rejected",
+        "failure",
+        {
+          pairingId: pairingIntent.pairingId,
+          reason: "invalid_installation_id",
+        },
+      );
       return json(
         { error: "A valid stable installationId is required to claim pairing" },
         { status: 400 },
@@ -4864,6 +4940,17 @@ async function handleRedeemWorkspaceEnrollment(
     );
     if (activeBinding) {
       const sameOwner = activeBinding.ownerUserId === pairingIntent.ownerUserId;
+      await recordPairingAuditEvent(
+        env,
+        pairingIntent.ownerUserId,
+        "pairing.rejected",
+        "denied",
+        {
+          pairingId: pairingIntent.pairingId,
+          reason: "installation_already_paired",
+          workspaceId: activeBinding.workspaceId,
+        },
+      );
       return json(
         {
           error: sameOwner
@@ -4877,6 +4964,17 @@ async function handleRedeemWorkspaceEnrollment(
     }
     if (historicalBindings.length > 0) {
       if (body.allowRecovery !== true) {
+        await recordPairingAuditEvent(
+          env,
+          pairingIntent.ownerUserId,
+          "pairing.rejected",
+          "denied",
+          {
+            pairingId: pairingIntent.pairingId,
+            reason: "installation_recovery_required",
+            workspaceId: historicalBindings[0]?.workspaceId,
+          },
+        );
         return json(
           {
             error:
@@ -4903,12 +5001,32 @@ async function handleRedeemWorkspaceEnrollment(
       appVersion.length > 64 ||
       !/^[0-9A-Za-z.+-]+$/.test(appVersion)
     ) {
+      await recordPairingAuditEvent(
+        env,
+        pairingIntent.ownerUserId,
+        "pairing.rejected",
+        "failure",
+        {
+          pairingId: pairingIntent.pairingId,
+          reason: "invalid_machine_metadata",
+        },
+      );
       return json(
         { error: "Machine metadata is invalid or exceeds supported bounds" },
         { status: 400 },
       );
     }
     if (!name || name.length > 120 || /[\u0000-\u001f\u007f]/.test(name)) {
+      await recordPairingAuditEvent(
+        env,
+        pairingIntent.ownerUserId,
+        "pairing.rejected",
+        "failure",
+        {
+          pairingId: pairingIntent.pairingId,
+          reason: "invalid_workspace_name",
+        },
+      );
       return json(
         { error: "Workspace name is invalid or exceeds 120 characters" },
         { status: 400 },
@@ -4927,6 +5045,16 @@ async function handleRedeemWorkspaceEnrollment(
       typeof capabilities !== "object" ||
       Array.isArray(capabilities)
     ) {
+      await recordPairingAuditEvent(
+        env,
+        pairingIntent.ownerUserId,
+        "pairing.rejected",
+        "failure",
+        {
+          pairingId: pairingIntent.pairingId,
+          reason: "invalid_runtime_capabilities",
+        },
+      );
       return json(
         { error: "Runtime capabilities must be an object" },
         { status: 400 },
@@ -4963,6 +5091,16 @@ async function handleRedeemWorkspaceEnrollment(
       (capabilityObject.maxConcurrentWorkers as number) < 1 ||
       (capabilityObject.maxConcurrentWorkers as number) > 256
     ) {
+      await recordPairingAuditEvent(
+        env,
+        pairingIntent.ownerUserId,
+        "pairing.rejected",
+        "failure",
+        {
+          pairingId: pairingIntent.pairingId,
+          reason: "invalid_runtime_capabilities",
+        },
+      );
       return json(
         {
           error: "Runtime capabilities are invalid or exceed supported bounds",
@@ -5074,7 +5212,7 @@ async function handleRedeemWorkspaceEnrollment(
         `INSERT INTO workspace_audit_log
            (id, workspace_id, actor_type, actor_id, action, target_type,
             target_id, details_json, created_at)
-         VALUES (?1, ?2, 'user', ?3, 'workspace.pairing.claimed',
+         VALUES (?1, ?2, 'user', ?3, 'pairing.claimed',
                  'workspace_pairing_intent', ?4, ?5, ?6)`,
       ).bind(
         `audit-${crypto.randomUUID()}`,
@@ -5084,11 +5222,45 @@ async function handleRedeemWorkspaceEnrollment(
         JSON.stringify({ installationId, runtimeId }),
         now,
       ),
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO workspace_audit_log
+           (id, workspace_id, actor_type, actor_id, action, target_type,
+            target_id, details_json, created_at)
+         VALUES (?1, ?2, 'user', ?3, 'workspace.created', 'workspace', ?2, ?4, ?5)`,
+      ).bind(
+        `audit-${crypto.randomUUID()}`,
+        workspaceId,
+        pairingIntent.ownerUserId,
+        JSON.stringify({ pairingId: pairingIntent.pairingId, name }),
+        now,
+      ),
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO workspace_audit_log
+           (id, workspace_id, actor_type, actor_id, action, target_type,
+            target_id, details_json, created_at)
+         VALUES (?1, ?2, 'workspace', ?3, 'runtime.enrolled', 'workspace_runtime', ?3, ?4, ?5)`,
+      ).bind(
+        `audit-${crypto.randomUUID()}`,
+        workspaceId,
+        runtimeId,
+        JSON.stringify({ installationId }),
+        now,
+      ),
     ]);
     if (
       (results[0]?.meta?.changes ?? 0) !== 1 ||
       (results[1]?.meta?.changes ?? 0) !== 1
     ) {
+      await recordPairingAuditEvent(
+        env,
+        pairingIntent.ownerUserId,
+        "pairing.rejected",
+        "failure",
+        {
+          pairingId: pairingIntent.pairingId,
+          reason: "claim_race_or_invalidated",
+        },
+      );
       return json(
         { error: "Pairing code was already used or is no longer valid" },
         { status: 409 },
@@ -5125,6 +5297,9 @@ async function handleRedeemWorkspaceEnrollment(
     }>();
 
   if (!enrollment) {
+    await recordPairingAuditEvent(env, null, "pairing.rejected", "failure", {
+      reason: "invalid_token",
+    });
     return json(
       {
         error: "Invalid, expired, revoked, or already used enrollment token",
@@ -5345,7 +5520,7 @@ async function handleUnpairWorkspaceRuntime(
     env.CONCLAVE_DB.prepare(
       `INSERT INTO workspace_audit_log
         (id, workspace_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
-       VALUES (?1, ?2, 'workspace', ?3, 'workspace.runtime.unpaired', 'workspace_runtime', ?3, ?4, ?5)`,
+       VALUES (?1, ?2, 'workspace', ?3, 'workspace.unpaired', 'workspace_runtime', ?3, ?4, ?5)`,
     ).bind(
       `audit-${crypto.randomUUID()}`,
       runtime.workspaceId,

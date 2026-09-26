@@ -188,6 +188,15 @@ returned to AX.
 | Active assignments, run attribution, audit | Cloud | Summarize activity; retain detailed audit views as needed |
 | Work Root, local files, process state, logs | Conclave Workspace | Do not expose local paths or secrets in ordinary AX UI |
 
+Pairing lifecycle audit is split by ownership boundary. Cloud records
+`pairing.created` and `pairing.rejected` in account security audit events,
+without storing pairing tokens. A successful claim records `pairing.claimed`,
+`workspace.created`, and `runtime.enrolled` in the new Workspace audit stream.
+Runtime removal and Workspace revocation record `workspace.unpaired` and
+`workspace.revoked` respectively. Audit details may include pairing/Workspace/
+runtime IDs and bounded machine facts, but never pairing tokens or runtime
+credentials.
+
 ## Workspaces page behavior
 
 - Application navigation calls the destination **Workspaces**, not Execution.
