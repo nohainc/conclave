@@ -191,20 +191,6 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
       ));
     }
 
-    // Add Workers
-    for (final worker in widget.snapshot.workers) {
-      actions.add(CommandPaletteAction(
-        title: 'Worker: ${worker.name}',
-        subtitle: '${worker.provider} · ${worker.role}',
-        icon: Icons.extension_outlined,
-        category: 'Workers',
-        onSelect: () {
-          if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-          widget.onNavigateTo(const StudioNavigation.hosts());
-        },
-      ));
-    }
-
     if (_query.isEmpty) return actions;
 
     return actions.where((action) {

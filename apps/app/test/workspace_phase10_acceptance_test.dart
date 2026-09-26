@@ -117,7 +117,6 @@ void main() {
       // 1. Initial State: Not connected
       await tester.pumpWidget(scaffold(WorkspacesPage(
         workspaces: const [initialWorkspace],
-        workers: const [],
         onAdd: () {},
         onRename: (_) {},
         onUpdate: (_) {},
@@ -152,7 +151,6 @@ void main() {
 
       await tester.pumpWidget(scaffold(WorkspacesPage(
         workspaces: const [pairingWorkspace],
-        workers: const [],
         onAdd: () {},
         onRename: (_) {},
         onUpdate: (_) {},
@@ -181,7 +179,6 @@ void main() {
 
       await tester.pumpWidget(scaffold(WorkspacesPage(
         workspaces: const [onlineWorkspace],
-        workers: const [],
         onAdd: () {},
         onRename: (_) {},
         onUpdate: (_) {},
@@ -206,7 +203,6 @@ void main() {
       // 1. Download link from Connect Machine flow in Workspace Detail
       await tester.pumpWidget(scaffold(WorkspacesPage(
         workspaces: const [initialWorkspace],
-        workers: const [],
         onAdd: () {},
         onRename: (_) {},
         onUpdate: (_) {},
@@ -282,7 +278,6 @@ void main() {
 
         await tester.pumpWidget(scaffold(WorkspacesPage(
           workspaces: [agent],
-          workers: const [],
           onAdd: () {},
           onRename: (_) {},
           onUpdate: (_) {},

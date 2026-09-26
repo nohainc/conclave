@@ -95,14 +95,13 @@ void main() {
       expect(hostsCtx.isNavActive(const StudioNavigation.projects()), isFalse);
       expect(hostsCtx.isNavActive(const StudioNavigation.home()), isFalse);
 
-      // Workers route
-      const workersCtx = StudioShellContext(
-        navigation: StudioNavigation.workers(),
+      // Legacy Worker routes resolve to Workspaces.
+      const legacyWorkersCtx = StudioShellContext(
+        navigation: StudioNavigation.hosts(),
         projects: [],
       );
-      expect(workersCtx.isNavActive(const StudioNavigation.workers()), isTrue);
-      expect(workersCtx.isNavActive(const StudioNavigation.hosts()), isTrue);
-      expect(workersCtx.isNavActive(const StudioNavigation.home()), isFalse);
+      expect(legacyWorkersCtx.isNavActive(const StudioNavigation.hosts()), isTrue);
+      expect(legacyWorkersCtx.isNavActive(const StudioNavigation.home()), isFalse);
 
       // Profile & Security route
       const profileCtx = StudioShellContext(
@@ -871,7 +870,7 @@ void main() {
       StudioNavigation? navigatedTo;
 
       const workersContext = StudioShellContext(
-        navigation: StudioNavigation.workers(),
+        navigation: StudioNavigation.hosts(),
         projects: [testProject],
       );
 
@@ -1313,7 +1312,7 @@ void main() {
         StudioNavigation.workstream('p-1', 'ws-running'),
         StudioNavigation.run('p-1', 'run-1', workstreamId: 'ws-running'),
         StudioNavigation.hosts(),
-        StudioNavigation.workers(),
+        StudioNavigation.hosts(),
         StudioNavigation.profileSecurity(),
       ];
 

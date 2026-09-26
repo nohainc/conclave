@@ -49,8 +49,14 @@ void main() {
   test('maps operational attention events to prioritized destinations', () {
     final events = <Map<String, dynamic>>[
       {'type': 'host.offline'},
-      {'type': 'credential.expired'},
-      {'type': 'worker.install.failed'},
+      {
+        'type': 'credential.expired',
+        'payload': {'workspaceId': 'workspace-1', 'workerId': 'worker-1'},
+      },
+      {
+        'type': 'worker.install.failed',
+        'payload': {'workspace_id': 'workspace-2', 'worker_id': 'worker-2'},
+      },
       {'type': 'workspace.invitation.received'},
     ];
     final notifications = events
@@ -66,7 +72,12 @@ void main() {
     ]);
     expect(notifications[0].target, StudioNotificationTarget.hosts);
     expect(notifications[1].priority, StudioNotificationPriority.high);
-    expect(notifications[2].target, StudioNotificationTarget.workers);
+    expect(notifications[1].target, StudioNotificationTarget.workspace);
+    expect(notifications[1].workspaceId, 'workspace-1');
+    expect(notifications[1].workerId, 'worker-1');
+    expect(notifications[2].target, StudioNotificationTarget.workspace);
+    expect(notifications[2].workspaceId, 'workspace-2');
+    expect(notifications[2].workerId, 'worker-2');
     expect(notifications[3].target, StudioNotificationTarget.workspace);
   });
 }

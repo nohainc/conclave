@@ -199,8 +199,8 @@ section, backed by real audit events.
 ## Routing compatibility contract
 
 New navigation emits only `/workspaces` and `/workspaces/:workspaceId` for
-Workspace management. During later migration, these historical Workspace
-collection/detail routes redirect to their canonical equivalents:
+Workspace management. These historical Workspace collection/detail routes
+resolve to their canonical equivalents:
 
 ```text
 /execution                         -> /workspaces
@@ -217,28 +217,30 @@ global Worker page:
 /execution/workers
 /workers
 /workspaces/workers
+/hosts/workers
 ```
 
 Account/profile routes are not Worker aliases and retain their independent
-account/security behavior. Compatibility parsing can remain until a later
-phase removes it deliberately.
+account/security behavior. Legacy URLs are replaced in browser history with
+their canonical URL. A Workspace ID focuses and expands that Workspace card on
+the shared page.
 
 ## Implementation notes
 
 The page now shows runtime facts, synchronized Workspace Workers, Project grant
 counts, and activity inline in expandable cards. Worker rows are filtered
 exclusively by `workspaceId`, are sourced from the V7 inventory, and do not
-expose credential strategy or local permission details. The old global
-Workers widget is compatibility-only and displays no separate inventory or
-controls. Grant counts are refreshed from Project Workspace Grant read models;
-runtime activity continues to use the current available assignment summary.
+expose credential strategy or local permission details. There is no separate
+Workers tab, global Worker page, or Workspace detail page. Grant counts are
+refreshed from Project Workspace Grant read models; runtime activity continues
+to use the current available assignment summary.
 
 `StudioAgent` remains as a transitional UI adapter for Workspace cards and
-legacy callers. Historical routes remain parseable, and the old detail and
-global Worker widgets remain in the codebase for compatibility; they are no
-longer destinations from the unified Workspaces page. Later phases can replace
-the adapter with the explicit `StudioWorkspaceOverview` model without changing
-this UX contract.
+legacy callers. Historical routes remain parseable and redirect to the shared
+Workspaces page; Worker-targeted notifications resolve the owning Workspace
+when an inventory identity is available. Later phases can replace the adapter
+with the explicit `StudioWorkspaceOverview` model without changing this UX
+contract.
 
 ## Phase 1 exit checks
 

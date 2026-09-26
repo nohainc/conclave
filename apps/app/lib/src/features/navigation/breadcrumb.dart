@@ -95,14 +95,6 @@ class AppBreadcrumb extends StatelessWidget {
           : [
               _breadcrumbText('Workspaces', isCurrent: true),
             ],
-      StudioRouteKind.workers => [
-          _breadcrumbLink(
-            'Workspaces',
-            () => onNavigateTo(const StudioNavigation.hosts()),
-          ),
-          _divider(),
-          _breadcrumbText('Workers', isCurrent: true),
-        ],
       StudioRouteKind.profileSecurity => [
           _breadcrumbText('Profile & Security', isCurrent: true),
         ],

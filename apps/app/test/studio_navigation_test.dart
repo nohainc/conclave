@@ -42,7 +42,6 @@ void main() {
       const StudioNavigation.home(),
       const StudioNavigation.projects(),
       const StudioNavigation.hosts(),
-      const StudioNavigation.workers(),
       const StudioNavigation.profileSecurity(),
     ];
 
@@ -60,15 +59,19 @@ void main() {
     expect(StudioNavigation.fromUri(Uri.parse('/workspaces')), workspace);
     expect(StudioNavigation.fromUri(Uri.parse('/hosts')), workspace);
 
-    const workers = StudioNavigation.workers();
-    expect(workers, workspace);
-    expect(workers.toUri().path, '/workspaces');
+    expect(workspace.toUri().path, '/workspaces');
     expect(
         StudioNavigation.fromUri(Uri.parse('/execution/workers')), workspace);
     expect(
         StudioNavigation.fromUri(Uri.parse('/workspaces/workers')), workspace);
     expect(StudioNavigation.fromUri(Uri.parse('/hosts/workers')), workspace);
     expect(StudioNavigation.fromUri(Uri.parse('/workers')), workspace);
+    expect(StudioNavigation.fromUri(Uri.parse('/execution/workspaces/alpha')),
+        const StudioNavigation.hosts(workspaceId: 'alpha'));
+    expect(StudioNavigation.fromUri(Uri.parse('/hosts/alpha')),
+        const StudioNavigation.hosts(workspaceId: 'alpha'));
+    expect(StudioNavigation.fromUri(Uri.parse('/workspaces/alpha')).toUri().path,
+        '/workspaces/alpha');
     expect(StudioNavigation.fromUri(Uri.parse('/workspaces?tab=workers')),
         workspace);
     expect(

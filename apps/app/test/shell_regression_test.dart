@@ -303,30 +303,30 @@ void main() {
   group('Phase 13: Legacy URL Redirects & Canonical Routing', () {
     test('old /workers deep link canonicalizes to /workspaces', () {
       final parsed = StudioNavigation.fromUri(Uri.parse('/workers'));
-      expect(parsed, const StudioNavigation.workers());
+      expect(parsed, const StudioNavigation.hosts());
       expect(parsed.toUri().path, '/workspaces');
     });
 
     test('old /accounts deep link resolves to the Workers surface', () {
       final parsed = StudioNavigation.fromUri(Uri.parse('/accounts'));
-      expect(parsed, const StudioNavigation.workers());
+      expect(parsed, const StudioNavigation.hosts());
       expect(parsed.toUri().path, '/workspaces');
     });
 
     test('query param tabs canonicalize to nested routes', () {
       final workersQuery =
           StudioNavigation.fromUri(Uri.parse('/workspaces?tab=workers'));
-      expect(workersQuery, const StudioNavigation.workers());
+      expect(workersQuery, const StudioNavigation.hosts());
       expect(workersQuery.toUri().path, '/workspaces');
 
       final accountsQuery =
           StudioNavigation.fromUri(Uri.parse('/workspaces?tab=accounts'));
-      expect(accountsQuery, const StudioNavigation.workers());
+      expect(accountsQuery, const StudioNavigation.hosts());
       expect(accountsQuery.toUri().path, '/workspaces');
 
       final legacyHosts =
           StudioNavigation.fromUri(Uri.parse('/hosts?tab=ai_accounts'));
-      expect(legacyHosts, const StudioNavigation.workers());
+      expect(legacyHosts, const StudioNavigation.hosts());
       expect(legacyHosts.toUri().path, '/workspaces');
     });
   });

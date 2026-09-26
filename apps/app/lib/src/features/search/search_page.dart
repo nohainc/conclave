@@ -168,20 +168,6 @@ class SearchPage extends StatelessWidget {
       ));
     }
 
-    // Workers
-    for (final worker in snapshot.workers) {
-      actions.add(CommandPaletteAction(
-        title: worker.name,
-        subtitle: '${worker.provider} · ${worker.role}',
-        icon: Icons.extension_outlined,
-        category: 'Workers',
-        onSelect: () {
-          onClearSearch();
-          onNavigateTo(const StudioNavigation.hosts());
-        },
-      ));
-    }
-
     final trimmed = query.trim().toLowerCase();
     if (trimmed.isEmpty) return actions;
 

@@ -2,22 +2,16 @@ import 'package:flutter/material.dart';
 
 import '../../studio/studio_models.dart';
 
-export 'workers_tab.dart';
-export 'workspace_detail.dart';
 export 'workspaces_overview.dart';
 
 /// Workspace-owned execution capacity and the Workers configured on it.
 ///
-/// Legacy constructor properties remain during the route migration, while the
-/// page itself presents one Workspace-first view with no page-level tabs.
+/// Workspace collection page. Workspace routes always render this view.
 class WorkspacesPage extends StatefulWidget {
   const WorkspacesPage({
     super.key,
     required this.workspaces,
-    required this.workers,
     this.workspaceWorkers = const [],
-    this.plugins = const [],
-    this.initialTab = 0,
     this.initialWorkspaceId,
     this.onSelectWorkspace,
     required this.onAdd,
@@ -33,10 +27,7 @@ class WorkspacesPage extends StatefulWidget {
   });
 
   final List<StudioAgent> workspaces;
-  final List<StudioWorker> workers;
   final List<StudioWorkspaceWorker> workspaceWorkers;
-  final List<StudioPlugin> plugins;
-  final int initialTab;
   final String? initialWorkspaceId;
   final ValueChanged<String?>? onSelectWorkspace;
   final VoidCallback onAdd;
@@ -57,6 +48,7 @@ class WorkspacesPage extends StatefulWidget {
 
 class _WorkspacesPageState extends State<WorkspacesPage> {
   final Set<String> _expanded = <String>{};
+  final Map<String, GlobalKey> _workspaceCardKeys = <String, GlobalKey>{};
   bool _initializedExpansion = false;
   bool? _wideLayout;
 
@@ -70,6 +62,7 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
     if (oldWidget.initialWorkspaceId != widget.initialWorkspaceId &&
         widget.initialWorkspaceId != null) {
       _expanded.add(widget.initialWorkspaceId!);
+      _focusWorkspaceCard(widget.initialWorkspaceId!);
     }
   }
 
@@ -100,6 +93,10 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
               _expanded.add(selected);
             } else if (widget.workspaces.isNotEmpty) {
               _expanded.add(widget.workspaces.first.id);
+            }
+            if (selected != null &&
+                widget.workspaces.any((item) => item.id == selected)) {
+              _focusWorkspaceCard(selected);
             }
           }
 
@@ -154,9 +151,20 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
                           worker.workspaceId == workspace.id &&
                           worker.status != 'removed')
                       .toList(growable: false);
+                  final isTarget = widget.initialWorkspaceId == workspace.id;
                   return Card(
+                    key: _workspaceCardKeys.putIfAbsent(
+                        workspace.id, GlobalKey.new),
                     margin: const EdgeInsets.only(bottom: 10),
                     clipBehavior: Clip.antiAlias,
+                    shape: RoundedRectangleBorder(
+                      side: BorderSide(
+                        color: isTarget
+                            ? Theme.of(context).colorScheme.primary
+                            : Colors.transparent,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     child: Column(
                       children: [
                         ListTile(
@@ -241,6 +249,19 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
       }
     });
     widget.onSelectWorkspace?.call(isExpanded ? null : workspace.id);
+  }
+
+  void _focusWorkspaceCard(String workspaceId) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final cardContext = _workspaceCardKeys[workspaceId]?.currentContext;
+      if (cardContext == null) return;
+      Scrollable.ensureVisible(
+        cardContext,
+        alignment: 0.08,
+        duration: const Duration(milliseconds: 220),
+      );
+    });
   }
 }
 

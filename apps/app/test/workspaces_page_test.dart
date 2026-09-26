@@ -50,7 +50,6 @@ void main() {
       final snapshot = studioFixtureSnapshot();
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: snapshot.agents,
-        workers: snapshot.workers,
         onAdd: () {},
         onRename: (_) {},
         onUpdate: (_) {},
@@ -75,8 +74,6 @@ void main() {
 
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: snapshot.agents,
-        workers: snapshot.workers,
-        plugins: snapshot.plugins,
         onAdd: () => addWorkspaceCalled = true,
         onRename: (_) {},
         onUpdate: (_) {},
@@ -99,14 +96,11 @@ void main() {
       expect(find.text('View capabilities'), findsNothing);
     });
 
-    testWidgets('legacy Worker tab links land on the Workspace page',
+    testWidgets('Workspace page has no detached global Worker inventory',
         (tester) async {
       final snapshot = studioFixtureSnapshot();
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: snapshot.agents,
-        workers: snapshot.workers,
-        plugins: snapshot.plugins,
-        initialTab: 2,
         onAdd: () {},
         onRename: (_) {},
         onUpdate: (_) {},
@@ -152,9 +146,7 @@ void main() {
             appVersion: '1.2.0',
           ),
         ],
-        workers: const [],
         workspaceWorkers: [worker],
-        initialTab: 1,
         onAdd: () {},
         onRename: (_) {},
         onUpdate: (_) {},
@@ -177,7 +169,6 @@ void main() {
       var downloadsOpened = false;
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: const [],
-        workers: const [],
         onAdd: () => addWorkspaceCalled = true,
         onOpenDownloads: () => downloadsOpened = true,
         onRename: (_) {},
@@ -199,8 +190,6 @@ void main() {
       final snapshot = studioFixtureSnapshot();
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: snapshot.agents,
-        workers: snapshot.workers,
-        plugins: snapshot.plugins,
         onAdd: () {},
         onRename: (_) {},
         onUpdate: (_) {},
@@ -231,7 +220,6 @@ void main() {
 
       WorkspacesPage page(int count) => WorkspacesPage(
             workspaces: List.generate(count, (index) => workspace('$index')),
-            workers: const [],
             onAdd: () {},
             onRename: (_) {},
             onUpdate: (_) {},
@@ -256,6 +244,36 @@ void main() {
       expect(find.text('2.local'), findsOneWidget);
     });
 
+    testWidgets('Workspace deep link expands and focuses the target card',
+        (tester) async {
+      StudioAgent workspace(String id) => StudioAgent(
+            id: id,
+            name: 'Workspace $id',
+            hostname: '$id.local',
+            status: 'online',
+            version: '1.0.0',
+            pluginCount: 0,
+            workerCount: 0,
+            activeTaskCount: 0,
+          );
+
+      await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
+        workspaces: List.generate(3, (index) => workspace('$index')),
+        initialWorkspaceId: '2',
+        onAdd: () {},
+        onRename: (_) {},
+        onUpdate: (_) {},
+        onRevoke: (_) {},
+        onGrant: (_) {},
+      )));
+      await tester.pumpAndSettle();
+
+      expect(find.text('2.local'), findsOneWidget);
+      final targetCard = tester.widget<Card>(find.byType(Card).last);
+      final targetShape = targetCard.shape! as RoundedRectangleBorder;
+      expect(targetShape.side.color, isNot(Colors.transparent));
+    });
+
     testWidgets('expanded Workspace lists its locally configured Workers',
         (tester) async {
       final snapshot = studioFixtureSnapshot();
@@ -275,7 +293,6 @@ void main() {
       );
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: snapshot.agents,
-        workers: snapshot.workers,
         workspaceWorkers: const [localWorker],
         onAdd: () {},
         onRename: (_) {},
@@ -322,7 +339,6 @@ void main() {
             activeTaskCount: 0,
           ),
         ],
-        workers: const [],
         workspaceWorkers: [worker],
         onAdd: () {},
         onRename: (_) {},
@@ -392,7 +408,6 @@ void main() {
 
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: [workspace('one'), workspace('two')],
-        workers: const [],
         workspaceWorkers: [worker('one', 'one'), worker('two', 'two')],
         onAdd: () {},
         onRename: (_) {},
@@ -433,7 +448,6 @@ void main() {
             activeTaskCount: 0,
           ),
         ],
-        workers: const [],
         workspaceWorkers: const [
           StudioWorkspaceWorker(
             id: 'worker-disabled',
@@ -468,8 +482,6 @@ void main() {
       final snapshot = studioFixtureSnapshot();
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: snapshot.agents,
-        workers: snapshot.workers,
-        plugins: snapshot.plugins,
         onAdd: () {},
         onRename: (_) {},
         onUpdate: (_) {},
