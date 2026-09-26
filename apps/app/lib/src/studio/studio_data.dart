@@ -1240,7 +1240,12 @@ class StudioApiClient implements StudioDataSource {
       {String? projectId, String? workspaceId}) async {
     final selectedWorkspaceId = workspaceId;
     if (selectedWorkspaceId == null || selectedWorkspaceId.isEmpty) {
-      return loadSnapshot(projectId: projectId, workspaceId: workspaceId);
+      final results = await Future.wait([
+        loadSnapshot(projectId: projectId, workspaceId: workspaceId),
+        loadWorkspaces(),
+      ]);
+      return (results[0] as StudioSnapshot)
+          .copyWith(workspaces: results[1] as List<StudioWorkspace>);
     }
 
     Future<Map<String, dynamic>> getJson(Uri uri) async {

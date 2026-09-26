@@ -270,6 +270,42 @@ void main() {
         isNot(contains('/api/workspaces/workspace-1/workers')));
   });
 
+  test('keeps the full Workspace list when the legacy snapshot omits it',
+      () async {
+    final client = _ReadModelClient({
+      '/api/studio/snapshot': {
+        'workspaceId': null,
+        'projects': [],
+        'workers': [],
+        'hosts': [],
+        'plugins': [],
+        'tasks': [],
+        'findings': [],
+        'events': [],
+        'artifacts': [],
+      },
+      '/api/workspaces': {
+        'workspaces': [
+          {'id': 'workspace-a', 'name': 'Connected Mac', 'status': 'online'},
+          {'id': 'workspace-b', 'name': 'Build Machine', 'status': 'offline'},
+        ],
+      },
+    });
+    final api = StudioApiClient(
+      baseUrl: 'https://conclave.test/api',
+      client: client,
+    );
+
+    final snapshot = await api.loadReadModels();
+
+    expect(snapshot.workspaces.map((workspace) => workspace.id), [
+      'workspace-a',
+      'workspace-b',
+    ]);
+    expect(client.requests, contains('/api/studio/snapshot'));
+    expect(client.requests, contains('/api/workspaces'));
+  });
+
   test('normalizes the Cloud chat creation wrapper', () async {
     final client = StudioApiClient(
       baseUrl: 'https://conclave.test/api',
