@@ -34,7 +34,8 @@ void main() {
   );
 
   group('Phase 10: Workspace Creation & Explicit Pairing Acceptance', () {
-    test('Workspace creation requires only a name and does not imply a platform',
+    test(
+        'Workspace creation requires only a name and does not imply a platform',
         () async {
       final requests = <http.BaseRequest>[];
       final client = MockClient((request) async {
@@ -126,11 +127,9 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('MacBook Pro'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Status: Not connected'), findsOneWidget);
-      expect(find.text('Machine: —'), findsOneWidget);
+      expect(find.text('Connection status'), findsOneWidget);
+      expect(find.text('Not connected'), findsNWidgets(2));
+      expect(find.text('Machine'), findsOneWidget);
       expect(find.text('Connect machine'), findsOneWidget);
 
       await tester.tap(find.text('Connect machine'));
@@ -161,11 +160,8 @@ void main() {
         onGrant: (_) {},
       )));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('MacBook Pro'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Status: Pairing'), findsOneWidget);
-      expect(find.text('Machine: —'), findsOneWidget);
+      expect(find.text('Pairing'), findsNWidgets(2));
+      expect(find.text('Machine'), findsOneWidget);
 
       // 3. Runtime Connected: Online with automatically populated platform facts
       const onlineWorkspace = StudioAgent(
@@ -193,14 +189,13 @@ void main() {
         onGrant: (_) {},
       )));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('MacBook Pro'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Status: Online'), findsOneWidget);
-      expect(find.text('Machine: macOS · Apple Silicon'), findsOneWidget);
-      expect(find.text('Hostname: Vitalii-MacBook-Pro'), findsOneWidget);
-      expect(find.text('Conclave Workspace: 1.0.3'), findsOneWidget);
-      expect(find.text('Runtime capabilities: dart, shell'), findsOneWidget);
+      expect(find.text('Online'), findsNWidgets(2));
+      expect(find.text('Machine'), findsOneWidget);
+      expect(find.text('macOS · Apple Silicon'), findsOneWidget);
+      expect(find.text('Hostname'), findsOneWidget);
+      expect(find.text('Vitalii-MacBook-Pro'), findsOneWidget);
+      expect(find.text('App version'), findsOneWidget);
+      expect(find.text('1.0.3'), findsOneWidget);
     });
 
     testWidgets('Download navigation resolves consistently across entrypoints',
@@ -221,10 +216,7 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('MacBook Pro'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Download Conclave Workspace'), findsNWidgets(2));
+      expect(find.text('Download Conclave Workspace'), findsOneWidget);
       await tester.tap(find.text('Download Conclave Workspace').first);
       expect(downloadsOpenedCount, 1);
 
@@ -259,7 +251,8 @@ void main() {
 
       await tester.tap(find.text('Documentation'));
       await tester.pumpAndSettle();
-      expect(openedExternalUri, Uri.parse('https://conclaveax.com/how-it-works/'));
+      expect(
+          openedExternalUri, Uri.parse('https://conclaveax.com/how-it-works/'));
     });
 
     testWidgets('Platform reporting maps runtime OS and architectures cleanly',
@@ -297,14 +290,12 @@ void main() {
           onGrant: (_) {},
         )));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Target Machine'));
-        await tester.pumpAndSettle();
-
-        expect(find.text('Machine: $expectedLabel'), findsOneWidget);
+        expect(find.text(expectedLabel), findsWidgets);
       }
     });
 
-    test('Re-enrollment refreshes machine facts while preserving logical entity',
+    test(
+        'Re-enrollment refreshes machine facts while preserving logical entity',
         () {
       final initial = StudioWorkspace.fromJson({
         'id': 'workspace-1',

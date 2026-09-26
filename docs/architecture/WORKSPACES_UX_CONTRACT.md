@@ -1,6 +1,6 @@
 # Conclave AX Workspaces UX and Data Contract
 
-**Status:** Phase 1 contract; implementation changes are pending later phases.
+**Status:** Phase 1 contract; Phase 2 Workspaces page is implemented.
 
 **Applies to:** Conclave AX and its Cloud read models.
 
@@ -32,9 +32,10 @@ Workspaces
   work may use another Workspace only when its grant and execution policy allow
   it.
 
-This contract defines the target UX and frontend read model. It does not claim
-that the current screens, route parser, or app models already conform. Phase 1
-does not restructure application code or delete compatibility paths.
+This contract defines the UX and frontend read model. Phase 2 replaces the
+two-tab Execution surface and separate Workspace detail screen with expandable
+Workspace cards. Compatibility parsing remains while old links continue to
+resolve to the Workspaces page.
 
 ## Canonical Workspace overview model
 
@@ -218,19 +219,20 @@ Account/profile routes are not Worker aliases and retain their independent
 account/security behavior. Compatibility parsing can remain until a later
 phase removes it deliberately.
 
-## Known implementation gaps for later phases
+## Implementation notes
 
-The current AX implementation still has a two-tab Execution surface, a global
-Workers tab, a separate Workspace detail page, and uses a `StudioAgent`
-projection for Workspace overview cards. Some displayed Workspace counts are
-currently hard-coded/defaulted rather than composed from V7 inventory,
-runtime facts, grants, and assignment state. Current navigation also retains
-historical route aliases and the app still carries both legacy and V7 Worker
-models.
+The page now shows runtime facts, synchronized Workspace Workers, Project grant
+counts, and activity inline in expandable cards. Worker rows are sourced from
+the V7 inventory and do not expose credential strategy or local permission
+details. Grant counts are refreshed from Project Workspace Grant read models;
+runtime activity continues to use the current available assignment summary.
 
-These are migration targets, not permission to remove code in Phase 1. Later
-implementation phases must preserve run-composer/selector behavior until its
-remaining consumers are audited and migrated to V7 Worker inventory.
+`StudioAgent` remains as a transitional UI adapter for Workspace cards and
+legacy callers. Historical routes remain parseable, and the old detail and
+global Worker widgets remain in the codebase for compatibility; they are no
+longer destinations from the unified Workspaces page. Later phases can replace
+the adapter with the explicit `StudioWorkspaceOverview` model without changing
+this UX contract.
 
 ## Phase 1 exit checks
 
@@ -241,4 +243,4 @@ remaining consumers are audited and migrated to V7 Worker inventory.
 - Cloud scheduling state remains separate from Workspace local readiness.
 - AX cannot use its Worker UI to mutate local credentials, permissions, or
   Worker configuration.
-- Existing code remains intact until a later approved restructuring phase.
+- Historical route aliases remain supported during migration.

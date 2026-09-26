@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../../studio/studio_models.dart';
-import 'workers_tab.dart';
-import 'workspace_detail.dart';
-import 'workspaces_overview.dart';
 
 export 'workers_tab.dart';
 export 'workspace_detail.dart';
 export 'workspaces_overview.dart';
 
-/// Execution area for Workspaces and configured Workers.
+/// Workspace-owned execution capacity and the Workers configured on it.
+///
+/// Legacy constructor properties remain during the route migration, while the
+/// page itself presents one Workspace-first view with no page-level tabs.
 class WorkspacesPage extends StatefulWidget {
   const WorkspacesPage({
     super.key,
@@ -55,152 +55,425 @@ class WorkspacesPage extends StatefulWidget {
   State<WorkspacesPage> createState() => _WorkspacesPageState();
 }
 
-class _WorkspacesPageState extends State<WorkspacesPage>
-    with SingleTickerProviderStateMixin {
-  StudioAgent? selected;
-  late TabController _tabController;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(
-      length: 2,
-      initialIndex: widget.initialTab.clamp(0, 1),
-      vsync: this,
-    );
-    if (widget.initialWorkspaceId != null) {
-      selected = widget.workspaces
-          .where((item) => item.id == widget.initialWorkspaceId)
-          .firstOrNull;
-    }
-  }
+class _WorkspacesPageState extends State<WorkspacesPage> {
+  final Set<String> _expanded = <String>{};
+  bool _initializedExpansion = false;
+  bool? _wideLayout;
 
   @override
   void didUpdateWidget(WorkspacesPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.initialTab != widget.initialTab) {
-      _tabController.animateTo(widget.initialTab.clamp(0, 1));
+    if (oldWidget.workspaces.length != widget.workspaces.length) {
+      _expanded.clear();
+      _initializedExpansion = false;
     }
-    if (oldWidget.initialWorkspaceId != widget.initialWorkspaceId) {
-      setState(() {
-        if (widget.initialWorkspaceId != null) {
-          selected = widget.workspaces
-              .where((item) => item.id == widget.initialWorkspaceId)
-              .firstOrNull;
-        } else {
-          selected = null;
-        }
-      });
+    if (oldWidget.initialWorkspaceId != widget.initialWorkspaceId &&
+        widget.initialWorkspaceId != null) {
+      _expanded.add(widget.initialWorkspaceId!);
     }
   }
 
   @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, constraints) {
+          final wideLayout = constraints.maxWidth >= 760;
+          if (widget.workspaces.length == 2 &&
+              _wideLayout != null &&
+              _wideLayout != wideLayout) {
+            if (wideLayout) {
+              _expanded.addAll(widget.workspaces.map((item) => item.id));
+            } else {
+              _expanded
+                ..clear()
+                ..add(widget.initialWorkspaceId ?? widget.workspaces.first.id);
+            }
+          }
+          _wideLayout = wideLayout;
+          if (!_initializedExpansion) {
+            _initializedExpansion = true;
+            final selected = widget.initialWorkspaceId;
+            if (widget.workspaces.length == 1 ||
+                (widget.workspaces.length == 2 && wideLayout)) {
+              _expanded.addAll(widget.workspaces.map((item) => item.id));
+            } else if (selected != null &&
+                widget.workspaces.any((item) => item.id == selected)) {
+              _expanded.add(selected);
+            } else if (widget.workspaces.isNotEmpty) {
+              _expanded.add(widget.workspaces.first.id);
+            }
+          }
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text('Workspaces',
+                        style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.3)),
+                  ),
+                  Tooltip(
+                    message: 'Add Workspace',
+                    child: FilledButton.icon(
+                      onPressed: widget.onAdd,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add Workspace'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Execution capacity, Workers, project access, and recent activity.',
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
+              if (widget.workerActionMessage case final message?)
+                MaterialBanner(
+                  content: Text(message),
+                  actions: [
+                    TextButton(
+                      onPressed: widget.onDismissWorkerActionMessage,
+                      child: const Text('Dismiss'),
+                    ),
+                  ],
+                ),
+              const SizedBox(height: 12),
+              if (widget.workspaces.isEmpty)
+                _EmptyWorkspaces(
+                    onAdd: widget.onAdd,
+                    onOpenDownloads: widget.onOpenDownloads)
+              else
+                ...widget.workspaces.map((workspace) {
+                  final expanded = _expanded.contains(workspace.id);
+                  final localWorkers = widget.workspaceWorkers
+                      .where((worker) =>
+                          worker.workspaceId == workspace.id &&
+                          worker.status != 'removed')
+                      .toList(growable: false);
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    clipBehavior: Clip.antiAlias,
+                    child: Column(
+                      children: [
+                        ListTile(
+                          onTap: () => _toggle(workspace),
+                          title: Row(
+                            children: [
+                              Expanded(
+                                child: Text(workspace.name,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700)),
+                              ),
+                              _StatusPill(
+                                  status: _statusLabel(workspace.status)),
+                              PopupMenuButton<String>(
+                                tooltip: 'Workspace actions',
+                                onSelected: (action) => switch (action) {
+                                  'rename' => widget.onRename(workspace),
+                                  'update' => widget.onUpdate(workspace),
+                                  'grant' => widget.onGrant(workspace),
+                                  'revoke' => widget.onRevoke(workspace),
+                                  _ => null,
+                                },
+                                itemBuilder: (_) => const [
+                                  PopupMenuItem(
+                                      value: 'rename', child: Text('Rename')),
+                                  PopupMenuItem(
+                                      value: 'update',
+                                      child: Text('Update Workspace')),
+                                  PopupMenuItem(
+                                      value: 'grant',
+                                      child: Text('Grant to Project')),
+                                  PopupMenuItem(
+                                      value: 'revoke',
+                                      child: Text('Unpair Workspace')),
+                                ],
+                              ),
+                              Icon(expanded
+                                  ? Icons.expand_less
+                                  : Icons.expand_more),
+                            ],
+                          ),
+                          subtitle: Text(
+                            '${_machine(workspace)}  ·  ${localWorkers.length} Workers  ·  ${_grantCount(workspace)} Project grants  ·  ${workspace.activeTaskCount} active work',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (expanded)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            child: _WorkspaceCardBody(
+                              workspace: workspace,
+                              workers: localWorkers,
+                              onGrant: () => widget.onGrant(workspace),
+                              onUpdate: () => widget.onUpdate(workspace),
+                              onConnect: widget.onConnect == null
+                                  ? null
+                                  : () => widget.onConnect!(workspace),
+                              onOpenDownloads: widget.onOpenDownloads,
+                              onScheduling: widget.onWorkspaceWorkerScheduling,
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                }),
+            ],
+          );
+        },
+      );
+
+  void _toggle(StudioAgent workspace) {
+    final isExpanded = _expanded.contains(workspace.id);
+    setState(() {
+      if (isExpanded) {
+        _expanded.remove(workspace.id);
+      } else {
+        // Three or more Workspaces behave as an accordion. With one or two,
+        // users can keep both cards open on wide layouts.
+        if (widget.workspaces.length >= 3) _expanded.clear();
+        _expanded.add(workspace.id);
+      }
+    });
+    widget.onSelectWorkspace?.call(isExpanded ? null : workspace.id);
   }
+}
+
+class _WorkspaceCardBody extends StatelessWidget {
+  const _WorkspaceCardBody({
+    required this.workspace,
+    required this.workers,
+    required this.onGrant,
+    required this.onUpdate,
+    required this.onConnect,
+    required this.onOpenDownloads,
+    required this.onScheduling,
+  });
+
+  final StudioAgent workspace;
+  final List<StudioWorkspaceWorker> workers;
+  final VoidCallback onGrant;
+  final VoidCallback onUpdate;
+  final Future<void> Function()? onConnect;
+  final VoidCallback? onOpenDownloads;
+  final Future<void> Function(StudioWorkspaceWorker, String)? onScheduling;
 
   @override
   Widget build(BuildContext context) {
-    final active = selected == null
-        ? null
-        : widget.workspaces
-            .where((item) => item.id == selected!.id)
-            .firstOrNull;
-
-    if (active != null) {
-      return WorkspaceDetailView(
-        workspace: active,
-        onBack: () {
-          setState(() => selected = null);
-          widget.onSelectWorkspace?.call(null);
-        },
-        onRename: widget.onRename,
-        onUpdate: widget.onUpdate,
-        onRevoke: widget.onRevoke,
-        onGrant: widget.onGrant,
-        onConnect: widget.onConnect ?? (_) async {},
-        onOpenDownloads: widget.onOpenDownloads,
-        workspaceWorkers: widget.workspaceWorkers,
-      );
-    }
-
-    return _buildExecutionCenter(context);
-  }
-
-  Widget _buildExecutionCenter(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _tabController,
-      builder: (context, _) {
-        final activeIndex = _tabController.index;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    final theme = Theme.of(context);
+    final installed =
+        workspace.appVersion.isNotEmpty && workspace.appVersion != '—';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(height: 1),
+        const SizedBox(height: 14),
+        Wrap(
+          spacing: 24,
+          runSpacing: 14,
           children: [
-            _buildHeader(
-              context,
-              'Execution',
-              'Workspaces are where AI runs. Workers are configured AI/tool identities. Projects and Workstreams are what they work on.',
-            ),
-            const SizedBox(height: 16),
-            Center(
-              child: TabBar(
-                controller: _tabController,
-                tabAlignment: TabAlignment.center,
-                isScrollable: true,
-                tabs: const [
-                  Tab(text: 'Workspaces'),
-                  Tab(text: 'Workers'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (activeIndex == 0)
-              WorkspacesOverview(
-                workspaces: widget.workspaces,
-                onAdd: widget.onAdd,
-                onSelectWorkspace: (ws) {
-                  setState(() => selected = ws);
-                  widget.onSelectWorkspace?.call(ws.id);
-                },
-                onOpenDownloads: widget.onOpenDownloads,
-              )
-            else if (activeIndex == 1)
-              WorkersTab(
-                workspaces: widget.workspaces,
-                plugins: widget.plugins,
-                workspaceWorkers: widget.workspaceWorkers,
-                onScheduling: widget.onWorkspaceWorkerScheduling,
-              )
+            _Fact(
+                label: 'Connection status',
+                value: _statusLabel(workspace.status)),
+            _Fact(label: 'Machine', value: _machine(workspace)),
+            _Fact(label: 'Hostname', value: _display(workspace.hostname)),
+            _Fact(label: 'App version', value: _display(workspace.appVersion)),
+            _Fact(label: 'Last seen', value: _display(workspace.lastSeen)),
+            _Fact(label: 'Workers', value: '${workers.length}'),
+            _Fact(label: 'Project grants', value: '${_grantCount(workspace)}'),
+            _Fact(label: 'Active work', value: '${workspace.activeTaskCount}'),
           ],
-        );
-      },
+        ),
+        const SizedBox(height: 18),
+        Row(
+          children: [
+            Text('Workers',
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700)),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: onGrant,
+              icon: const Icon(Icons.add_link),
+              label: const Text('Project access'),
+            ),
+          ],
+        ),
+        if (workers.isEmpty)
+          Text('No Workers have synced from this Workspace.',
+              style: TextStyle(color: theme.colorScheme.onSurfaceVariant))
+        else
+          ...workers.map((worker) => _WorkerRow(
+                worker: worker,
+                onScheduling: onScheduling,
+              )),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            if (!installed && onConnect != null)
+              OutlinedButton.icon(
+                onPressed: onConnect,
+                icon: const Icon(Icons.link_outlined),
+                label: const Text('Connect machine'),
+              ),
+            if (onOpenDownloads != null)
+              OutlinedButton.icon(
+                onPressed: onOpenDownloads,
+                icon: const Icon(Icons.download_outlined),
+                label: Text(installed
+                    ? 'Workspace downloads'
+                    : 'Download Conclave Workspace'),
+              ),
+            TextButton.icon(
+              onPressed: onUpdate,
+              icon: const Icon(Icons.system_update_outlined),
+              label: const Text('Update'),
+            ),
+          ],
+        ),
+      ],
     );
   }
+}
 
-  Widget _buildHeader(
-    BuildContext context,
-    String title,
-    String subtitle,
-  ) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.3,
+class _WorkerRow extends StatelessWidget {
+  const _WorkerRow({required this.worker, required this.onScheduling});
+  final StudioWorkspaceWorker worker;
+  final Future<void> Function(StudioWorkspaceWorker, String)? onScheduling;
+
+  @override
+  Widget build(BuildContext context) {
+    final ready = worker.status == 'ready' &&
+        const {'ready', 'not_required'}.contains(worker.credentialStatus);
+    final action = switch (worker.schedulingState) {
+      'enabled' => 'disable',
+      'draining' => null,
+      _ => 'enable',
+    };
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(ready ? Icons.check_circle_outline : Icons.warning_amber),
+      title: Text(worker.name),
+      subtitle: Text(
+          '${worker.workerTypeId} · ${ready ? 'Ready' : worker.status == 'disabled' ? 'Disabled locally' : 'Needs attention'} · Scheduling ${worker.schedulingState}'),
+      trailing: onScheduling == null
+          ? null
+          : Wrap(
+              spacing: 2,
+              children: [
+                if (action != null)
+                  TextButton(
+                    onPressed: () => onScheduling!(worker, action),
+                    child: Text(action == 'enable' ? 'Enable' : 'Disable'),
+                  ),
+                if (worker.schedulingState == 'enabled')
+                  TextButton(
+                    onPressed: () => onScheduling!(worker, 'drain'),
+                    child: const Text('Drain'),
+                  ),
+              ],
             ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            subtitle,
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontSize: 13,
-            ),
-          ),
-        ],
+    );
+  }
+}
+
+class _Fact extends StatelessWidget {
+  const _Fact({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: 170,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label,
+              style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          const SizedBox(height: 3),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+        ]),
       );
 }
+
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({required this.status});
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final online = status.toLowerCase() == 'online';
+    return Chip(
+      visualDensity: VisualDensity.compact,
+      avatar: Icon(Icons.circle,
+          size: 9, color: online ? const Color(0xff3ca879) : Colors.grey),
+      label: Text(_display(status)),
+    );
+  }
+}
+
+class _EmptyWorkspaces extends StatelessWidget {
+  const _EmptyWorkspaces({required this.onAdd, required this.onOpenDownloads});
+  final VoidCallback onAdd;
+  final VoidCallback? onOpenDownloads;
+
+  @override
+  Widget build(BuildContext context) => Card(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('No Workspaces yet'),
+            const SizedBox(height: 10),
+            Wrap(spacing: 8, children: [
+              FilledButton(
+                  onPressed: onAdd, child: const Text('Add Workspace')),
+              if (onOpenDownloads != null)
+                OutlinedButton(
+                    onPressed: onOpenDownloads,
+                    child: const Text('Download Conclave Workspace')),
+            ]),
+          ]),
+        ),
+      );
+}
+
+String _machine(StudioAgent workspace) {
+  final os = switch (workspace.os.toLowerCase()) {
+    'macos' => 'macOS',
+    'windows' => 'Windows',
+    'linux' => 'Linux',
+    _ => workspace.os,
+  };
+  final architecture = switch (workspace.architecture.toLowerCase()) {
+    'arm64' => 'Apple Silicon',
+    'x64' => 'x64',
+    _ => workspace.architecture,
+  };
+  final parts = [os, architecture]
+      .where((value) => value.isNotEmpty && value != '—')
+      .toList();
+  return parts.isEmpty ? '—' : parts.join(' · ');
+}
+
+String _display(String value) => value.isEmpty ? '—' : value;
+
+String _statusLabel(String status) => switch (status.toLowerCase()) {
+      'enrolled' || 'not_connected' => 'Not connected',
+      'online' => 'Online',
+      'pairing' => 'Pairing',
+      'offline' => 'Offline',
+      'busy' => 'Busy',
+      'draining' => 'Draining',
+      'revoked' => 'Revoked',
+      _ => status,
+    };
+
+int _grantCount(StudioAgent workspace) =>
+    workspace.projectGrantCount ?? workspace.workspaceBindings.length;

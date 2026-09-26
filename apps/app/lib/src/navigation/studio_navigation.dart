@@ -56,7 +56,8 @@ class StudioNavigation {
   const StudioNavigation.workspace(String workspaceId)
       : this._(kind: StudioRouteKind.hosts, workspaceId: workspaceId);
 
-  const StudioNavigation.workers() : this._(kind: StudioRouteKind.workers);
+  /// Compatibility alias: Workers now live within Workspaces.
+  const StudioNavigation.workers() : this._(kind: StudioRouteKind.hosts);
 
   const StudioNavigation.login({String? returnTo})
       : this._(kind: StudioRouteKind.login, loginReturnTo: returnTo);
@@ -105,26 +106,26 @@ class StudioNavigation {
       return StudioNavigation.hosts(workspaceId: parts[2]);
     }
     if (parts case ['execution', 'workers']) {
-      return const StudioNavigation.workers();
+      return const StudioNavigation.hosts();
     }
     if (parts.length == 1 &&
         (parts[0] == 'workspaces' || parts[0] == 'hosts')) {
       final tab = uri.queryParameters['tab']?.toLowerCase();
-      if (tab == 'workers') return const StudioNavigation.workers();
+      if (tab == 'workers') return const StudioNavigation.hosts();
       if (tab == 'accounts' || tab == 'ai_accounts') {
-        return const StudioNavigation.workers();
+        return const StudioNavigation.hosts();
       }
       return const StudioNavigation.hosts();
     }
     if (parts.length == 2 &&
         (parts[0] == 'workspaces' || parts[0] == 'hosts')) {
-      if (parts[1] == 'workers') return const StudioNavigation.workers();
-      if (parts[1] == 'accounts') return const StudioNavigation.workers();
+      if (parts[1] == 'workers') return const StudioNavigation.hosts();
+      if (parts[1] == 'accounts') return const StudioNavigation.hosts();
       return StudioNavigation.hosts(workspaceId: parts[1]);
     }
     // Backward compatibility for standalone /workers and /accounts
-    if (parts case ['workers']) return const StudioNavigation.workers();
-    if (parts case ['accounts']) return const StudioNavigation.workers();
+    if (parts case ['workers']) return const StudioNavigation.hosts();
+    if (parts case ['accounts']) return const StudioNavigation.hosts();
     if (parts case ['search']) {
       return StudioNavigation.search(uri.queryParameters['q']);
     }
@@ -170,8 +171,8 @@ class StudioNavigation {
                   '/projects/$projectId/workstreams/$workstreamId/runs/$runId')
           : Uri(path: '/projects/$projectId/runs/$runId'),
       StudioRouteKind.hosts => workspaceId != null
-          ? Uri(path: '/execution/workspaces/$workspaceId')
-          : Uri(path: '/execution/workspaces'),
+          ? Uri(path: '/workspaces/$workspaceId')
+          : Uri(path: '/workspaces'),
       StudioRouteKind.workers => Uri(path: '/execution/workers'),
       StudioRouteKind.login => Uri(
           path: '/login',

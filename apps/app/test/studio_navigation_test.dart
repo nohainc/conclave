@@ -51,9 +51,9 @@ void main() {
     }
   });
 
-  test('uses canonical Execution routes and preserves legacy aliases', () {
+  test('uses canonical Workspaces routes and preserves legacy aliases', () {
     const workspace = StudioNavigation.hosts();
-    expect(workspace.toUri().path, '/execution/workspaces');
+    expect(workspace.toUri().path, '/workspaces');
     expect(StudioNavigation.fromUri(Uri.parse('/execution')), workspace);
     expect(StudioNavigation.fromUri(Uri.parse('/execution/workspaces')),
         workspace);
@@ -61,15 +61,18 @@ void main() {
     expect(StudioNavigation.fromUri(Uri.parse('/hosts')), workspace);
 
     const workers = StudioNavigation.workers();
-    expect(workers.toUri().path, '/execution/workers');
-    expect(StudioNavigation.fromUri(Uri.parse('/execution/workers')), workers);
-    expect(StudioNavigation.fromUri(Uri.parse('/workspaces/workers')), workers);
-    expect(StudioNavigation.fromUri(Uri.parse('/hosts/workers')), workers);
-    expect(StudioNavigation.fromUri(Uri.parse('/workers')), workers);
+    expect(workers, workspace);
+    expect(workers.toUri().path, '/workspaces');
+    expect(
+        StudioNavigation.fromUri(Uri.parse('/execution/workers')), workspace);
+    expect(
+        StudioNavigation.fromUri(Uri.parse('/workspaces/workers')), workspace);
+    expect(StudioNavigation.fromUri(Uri.parse('/hosts/workers')), workspace);
+    expect(StudioNavigation.fromUri(Uri.parse('/workers')), workspace);
     expect(StudioNavigation.fromUri(Uri.parse('/workspaces?tab=workers')),
-        workers);
-    expect(StudioNavigation.fromUri(Uri.parse('/hosts?tab=workers')), workers);
-
+        workspace);
+    expect(
+        StudioNavigation.fromUri(Uri.parse('/hosts?tab=workers')), workspace);
   });
 
   test('each browser tab can own an independent navigation state', () {

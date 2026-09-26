@@ -159,7 +159,7 @@ void main() {
 
   group('Phase 13: Global Application Menu Regressions', () {
     testWidgets(
-        'menu contains Execution, Archived Projects, Appearance, Downloads, Documentation, About Conclave AX, Log out in correct order',
+        'menu contains Workspaces, Archived Projects, Appearance, Downloads, Documentation, About Conclave AX, Log out in correct order',
         (tester) async {
       StudioNavigation? navigated;
       bool aboutOpened = false;
@@ -190,7 +190,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify all required items are present in the menu
-      expect(find.text('Execution'), findsOneWidget);
+      expect(find.text('Workspaces'), findsOneWidget);
       expect(find.text('Archived Projects'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
       expect(find.text('Downloads'), findsOneWidget);
@@ -204,8 +204,8 @@ void main() {
       expect(find.text('Website'), findsNothing);
 
       // Verify destructive / action callbacks:
-      // 1. Execution
-      await tester.tap(find.text('Execution'));
+      // 1. Workspaces
+      await tester.tap(find.text('Workspaces'));
       await tester.pumpAndSettle();
       expect(navigated, const StudioNavigation.hosts());
 
@@ -301,33 +301,33 @@ void main() {
   });
 
   group('Phase 13: Legacy URL Redirects & Canonical Routing', () {
-    test('old /workers deep link canonicalizes to /execution/workers', () {
+    test('old /workers deep link canonicalizes to /workspaces', () {
       final parsed = StudioNavigation.fromUri(Uri.parse('/workers'));
       expect(parsed, const StudioNavigation.workers());
-      expect(parsed.toUri().path, '/execution/workers');
+      expect(parsed.toUri().path, '/workspaces');
     });
 
     test('old /accounts deep link resolves to the Workers surface', () {
       final parsed = StudioNavigation.fromUri(Uri.parse('/accounts'));
       expect(parsed, const StudioNavigation.workers());
-      expect(parsed.toUri().path, '/execution/workers');
+      expect(parsed.toUri().path, '/workspaces');
     });
 
     test('query param tabs canonicalize to nested routes', () {
       final workersQuery =
           StudioNavigation.fromUri(Uri.parse('/workspaces?tab=workers'));
       expect(workersQuery, const StudioNavigation.workers());
-      expect(workersQuery.toUri().path, '/execution/workers');
+      expect(workersQuery.toUri().path, '/workspaces');
 
       final accountsQuery =
           StudioNavigation.fromUri(Uri.parse('/workspaces?tab=accounts'));
       expect(accountsQuery, const StudioNavigation.workers());
-      expect(accountsQuery.toUri().path, '/execution/workers');
+      expect(accountsQuery.toUri().path, '/workspaces');
 
       final legacyHosts =
           StudioNavigation.fromUri(Uri.parse('/hosts?tab=ai_accounts'));
       expect(legacyHosts, const StudioNavigation.workers());
-      expect(legacyHosts.toUri().path, '/execution/workers');
+      expect(legacyHosts.toUri().path, '/workspaces');
     });
   });
 
@@ -357,10 +357,10 @@ void main() {
 
       // Project tree displays open folder icon when expanded
       expect(
-        find.byWidgetPredicate((w) => w is ConclaveFolderIcon && w.isExpanded == true),
+        find.byWidgetPredicate(
+            (w) => w is ConclaveFolderIcon && w.isExpanded == true),
         findsOneWidget,
       );
-
 
       // Tapping the project item in project tree toggles expansion and navigates to the project
       await tester.tap(find.descendant(
@@ -370,7 +370,6 @@ void main() {
       expect(toggledProjectId, 'p-1');
       expect(navigated, const StudioNavigation.project('p-1'));
     });
-
 
     testWidgets('selecting a workstream triggers navigation with active state',
         (tester) async {
@@ -540,7 +539,7 @@ void main() {
       // Open menu via button tap
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
-      expect(find.text('Execution'), findsOneWidget);
+      expect(find.text('Workspaces'), findsOneWidget);
 
       // Tap outside to dismiss
       await tester.tapAt(const Offset(400, 400));

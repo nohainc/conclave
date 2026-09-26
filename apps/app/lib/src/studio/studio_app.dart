@@ -70,6 +70,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
   bool showNewGoal = false;
   String? workerActionMessage;
   List<StudioWorkspaceWorker> workspaceWorkers = const [];
+  Map<String, int> workspaceProjectGrantCounts = const {};
   StudioHostEnrollment? enrollmentResult;
   StudioQualityPreset selectedQuality = StudioQualityPreset.balanced;
   String selectedExecutionWorker = 'Auto';
@@ -307,6 +308,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
       }
       await _loadWorkspaces();
       await _loadSnapshot();
+      unawaited(_refreshWorkspaceProjectGrantCounts());
       if (navigation.kind == StudioRouteKind.profileSecurity) {
         await _loadAccountSecurity();
       }
@@ -607,6 +609,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
         store.chats
             .replace(projects.expand((project) => project.chats).toList());
         setState(() => snapshot = snapshot.copyWith(projects: projects));
+        unawaited(_refreshWorkspaceProjectGrantCounts());
         return;
       }
       // Run/Task/Assignment events refresh only the focused execution read
@@ -1139,6 +1142,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
     try {
       await store.agents.bindWorkspace(workspaceId, host.id);
       await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
+      await _refreshWorkspaceProjectGrantCounts();
       if (mounted) _showSnackBar('Workspace grant saved.');
     } catch (error) {
       if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
@@ -2634,7 +2638,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
       case StudioRouteKind.hosts:
         return _hostsView(initialTab: 0);
       case StudioRouteKind.workers:
-        return _hostsView(initialTab: 1);
+        // Historical Worker URLs continue to resolve while Workers move
+        // beneath their owning Workspace in the unified page.
+        return _hostsView(initialTab: 0);
       case StudioRouteKind.profileSecurity:
         return _profileSecurityView();
       case StudioRouteKind.projects:
@@ -2698,7 +2704,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
       ),
       const SizedBox(height: 16),
       _runSection(
-        title: 'Execution',
+        title: 'Workspaces',
         subtitle: 'Task DAG, progress, and active Worker details',
         icon: Icons.account_tree_outlined,
         child: compact
@@ -3773,25 +3779,59 @@ class _StudioAppState extends State<ConclaveAppShell> {
                 color: color, fontSize: 10, fontWeight: FontWeight.w700))
       ]));
 
-  List<StudioAgent> _workspaceCards() => store.workspaces.items
-      .map(
-        (workspace) => StudioAgent(
+  List<StudioAgent> _workspaceCards() =>
+      store.workspaces.items.map((workspace) {
+        final legacy = snapshot.agents
+            .where((agent) => agent.id == workspace.id)
+            .firstOrNull;
+        final inventoryCount = workspaceWorkers
+            .where((worker) =>
+                worker.workspaceId == workspace.id &&
+                worker.status != 'removed')
+            .length;
+        return StudioAgent(
           id: workspace.id,
           name: workspace.name,
           hostname: workspace.hostname,
           status: workspace.status,
           version: workspace.appVersion,
           pluginCount: 0,
-          workerCount: 0,
-          activeTaskCount: 0,
+          workerCount:
+              inventoryCount > 0 ? inventoryCount : legacy?.workerCount ?? 0,
+          activeTaskCount: legacy?.activeTaskCount ?? 0,
           os: workspace.platform,
           architecture: workspace.architecture,
           appVersion: workspace.appVersion,
           runtimeCapabilities: workspace.runtimeCapabilities,
-          lastSeen: '—',
-        ),
-      )
-      .toList(growable: false);
+          lastSeen: workspace.factsUpdatedAt ?? legacy?.lastSeen ?? '—',
+          workspaceBindings: legacy?.workspaceBindings ?? const [],
+          projectGrantCount: workspaceProjectGrantCounts[workspace.id] ??
+              legacy?.workspaceBindings.length,
+        );
+      }).toList(growable: false);
+
+  Future<void> _refreshWorkspaceProjectGrantCounts() async {
+    final projects = snapshot.projects;
+    if (projects.isEmpty) return;
+    final counts = <String, int>{};
+    await Future.wait(projects.map((project) async {
+      try {
+        final grants = await widget.dataSource
+            .loadProjectWorkspaces(projectId: project.id);
+        for (final grant in grants) {
+          final workspaceId = grant['workspaceId']?.toString();
+          if (workspaceId != null &&
+              workspaceId.isNotEmpty &&
+              grant['status']?.toString() == 'active') {
+            counts.update(workspaceId, (count) => count + 1, ifAbsent: () => 1);
+          }
+        }
+      } catch (_) {
+        // Some Projects may not be readable; keep counts from readable ones.
+      }
+    }));
+    if (mounted) setState(() => workspaceProjectGrantCounts = counts);
+  }
 
   Future<void> _setWorkspaceWorkerScheduling(
       StudioWorkspaceWorker worker, String action) async {

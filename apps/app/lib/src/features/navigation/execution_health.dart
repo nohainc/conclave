@@ -24,8 +24,7 @@ class ExecutionStatusPopover extends StatelessWidget {
         isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine;
     final surfaceColor =
         isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface;
-    final cardBg =
-        isDark ? ConclaveBrand.darkPaper : ConclaveBrand.lightPaper;
+    final cardBg = isDark ? ConclaveBrand.darkPaper : ConclaveBrand.lightPaper;
     final inkColor = isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk;
     final mutedInk =
         isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted;
@@ -71,7 +70,7 @@ class ExecutionStatusPopover extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'Execution',
+                      'Workspaces',
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
@@ -272,7 +271,8 @@ class ExecutionStatusPopover extends StatelessWidget {
   }) {
     final statusLower = ws.status.toLowerCase();
     final isOnline = statusLower == 'online';
-    final isDegraded = statusLower == 'degraded' || statusLower == 'reconnecting';
+    final isDegraded =
+        statusLower == 'degraded' || statusLower == 'reconnecting';
     final dotColor = isOnline
         ? ConclaveBrand.success
         : isDegraded

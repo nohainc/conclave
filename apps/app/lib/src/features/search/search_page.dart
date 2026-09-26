@@ -42,23 +42,13 @@ class SearchPage extends StatelessWidget {
         },
       ),
       CommandPaletteAction(
-        title: 'Execution',
-        subtitle: 'Manage Workspaces and configured Workers',
+        title: 'Workspaces',
+        subtitle: 'Execution capacity and Workers configured on each Workspace',
         icon: Icons.computer_outlined,
         category: 'Navigation',
         onSelect: () {
           onClearSearch();
           onNavigateTo(const StudioNavigation.hosts());
-        },
-      ),
-      CommandPaletteAction(
-        title: 'Workers',
-        subtitle: 'View worker catalog and capabilities',
-        icon: Icons.extension_outlined,
-        category: 'Navigation',
-        onSelect: () {
-          onClearSearch();
-          onNavigateTo(const StudioNavigation.workers());
         },
       ),
       CommandPaletteAction(
@@ -170,7 +160,7 @@ class SearchPage extends StatelessWidget {
         title: agent.name,
         subtitle: '${agent.hostname} · ${agent.status}',
         icon: Icons.computer_outlined,
-        category: 'Execution',
+        category: 'Workspaces',
         onSelect: () {
           onClearSearch();
           onNavigateTo(const StudioNavigation.hosts());
@@ -187,7 +177,7 @@ class SearchPage extends StatelessWidget {
         category: 'Workers',
         onSelect: () {
           onClearSearch();
-          onNavigateTo(const StudioNavigation.workers());
+          onNavigateTo(const StudioNavigation.hosts());
         },
       ));
     }

@@ -79,7 +79,7 @@ class AppBreadcrumb extends StatelessWidget {
       StudioRouteKind.hosts => nav.workspaceId != null
           ? [
               _breadcrumbLink(
-                'Execution',
+                'Workspaces',
                 () => onNavigateTo(const StudioNavigation.hosts()),
               ),
               _divider(),
@@ -93,11 +93,11 @@ class AppBreadcrumb extends StatelessWidget {
               ),
             ]
           : [
-              _breadcrumbText('Execution', isCurrent: true),
+              _breadcrumbText('Workspaces', isCurrent: true),
             ],
       StudioRouteKind.workers => [
           _breadcrumbLink(
-            'Execution',
+            'Workspaces',
             () => onNavigateTo(const StudioNavigation.hosts()),
           ),
           _divider(),

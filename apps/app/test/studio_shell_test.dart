@@ -238,17 +238,14 @@ void main() {
         findsOneWidget,
       );
 
-
-
       // Tap User Profile Button at bottom of sidebar -> navigates to /settings/profile
       await tester.tap(find.text('Vitalii Noha'));
       expect(navigatedTo?.kind, StudioRouteKind.profileSecurity);
 
-
       // Tap ⋯ Application menu at bottom of sidebar
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
-      expect(find.text('Execution'), findsOneWidget);
+      expect(find.text('Workspaces'), findsOneWidget);
       expect(find.text('Archived Projects'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
       expect(find.text('Documentation'), findsOneWidget);
@@ -259,7 +256,7 @@ void main() {
       expect(find.text('Website'), findsNothing);
 
       // Tap Execution in Application menu
-      await tester.tap(find.text('Execution'));
+      await tester.tap(find.text('Workspaces'));
       await tester.pumpAndSettle();
       expect(navigatedTo?.kind, StudioRouteKind.hosts);
     });
@@ -314,7 +311,7 @@ void main() {
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
       expect(navigatedTo, isNull);
-      expect(find.text('Execution'), findsOneWidget);
+      expect(find.text('Workspaces'), findsOneWidget);
       expect(find.text('Archived Projects'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
       expect(find.text('Documentation'), findsOneWidget);
@@ -442,7 +439,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Check items exist
-      expect(find.text('Execution'), findsOneWidget);
+      expect(find.text('Workspaces'), findsOneWidget);
       expect(find.text('Archived Projects'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
       expect(find.text('Documentation'), findsOneWidget);
@@ -453,7 +450,7 @@ void main() {
       expect(find.text('Website'), findsNothing);
 
       // Click Execution
-      await tester.tap(find.text('Execution'));
+      await tester.tap(find.text('Workspaces'));
       await tester.pumpAndSettle();
       expect(navigatedTo?.kind, StudioRouteKind.hosts);
 
@@ -869,7 +866,8 @@ void main() {
       expect(navigatedTo?.projectId, 'project-1');
     });
 
-    testWidgets('renders Workers breadcrumbs', (tester) async {
+    testWidgets('legacy Worker route resolves to Workspaces breadcrumbs',
+        (tester) async {
       StudioNavigation? navigatedTo;
 
       const workersContext = StudioShellContext(
@@ -892,11 +890,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Execution'), findsOneWidget);
-      expect(find.text('Workers'), findsOneWidget);
-
-      await tester.tap(find.text('Execution'));
-      expect(navigatedTo?.kind, StudioRouteKind.hosts);
+      expect(find.text('Workspaces'), findsOneWidget);
+      expect(find.text('Workers'), findsNothing);
+      expect(navigatedTo, isNull);
     });
 
     testWidgets('compact HUD displays full breadcrumb path for run',
@@ -1061,15 +1057,15 @@ void main() {
       // Tapping Application menu opens menu with Workspaces
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
-      expect(find.text('Execution'), findsOneWidget);
+      expect(find.text('Workspaces'), findsOneWidget);
       expect(find.text('Usage'), findsNothing);
-      await tester.tap(find.text('Execution'));
+      await tester.tap(find.text('Workspaces'));
       await tester.pumpAndSettle();
       expect(navigatedTo?.kind, StudioRouteKind.hosts);
     });
 
     testWidgets(
-        'Execution status popover opens and displays workspaces and workers',
+        'Workspaces status popover opens and displays workspaces and workers',
         (tester) async {
       tester.view.physicalSize = const Size(1200, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -1159,7 +1155,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Check Popover content
-      expect(find.text('Execution'), findsOneWidget);
+      expect(find.text('Workspaces'), findsOneWidget);
       expect(find.text('2 / 3 Online'), findsOneWidget);
       expect(find.text('MacBook Pro'), findsOneWidget);
       expect(find.text('4 Workers ready'), findsOneWidget);
@@ -1442,8 +1438,6 @@ void main() {
       expect(toggledProjectId, 'p-1');
     });
 
-
-
     testWidgets('Workstream status dot indicators render for each status',
         (tester) async {
       const expandedContext = StudioShellContext(
@@ -1542,7 +1536,7 @@ void main() {
       await tester.tap(find.text('Conclave Core'));
       expect(navigatedTo?.kind, StudioRouteKind.project);
 
-      // Test 1c: Workspace route -> "Execution / Workspace Name"
+      // Test 1c: Workspace route -> "Workspaces / Workspace Name"
       const testWs = StudioAgent(
         id: 'ws-mac',
         name: 'MacBook Pro',
@@ -1576,15 +1570,15 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Execution'), findsOneWidget);
+      expect(find.text('Workspaces'), findsOneWidget);
       expect(find.text('MacBook Pro'), findsOneWidget);
-      await tester.tap(find.text('Execution'));
+      await tester.tap(find.text('Workspaces'));
       expect(navigatedTo?.kind, StudioRouteKind.hosts);
       expect(navigatedTo?.workspaceId, isNull);
     });
 
     testWidgets(
-        'Execution status popover shows degraded/reconnecting and failed status',
+        'Workspaces status popover shows degraded/reconnecting and failed status',
         (tester) async {
       tester.view.physicalSize = const Size(1200, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -1639,7 +1633,7 @@ void main() {
       await tester.tap(find.text('0 / 1 Workspace online'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Execution'), findsOneWidget);
+      expect(find.text('Workspaces'), findsOneWidget);
       expect(find.text('Build Server'), findsOneWidget);
       expect(find.text('Offline'), findsOneWidget);
     });

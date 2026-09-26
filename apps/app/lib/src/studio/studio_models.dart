@@ -694,6 +694,7 @@ class StudioAgent {
     this.lastSeen = '—',
     this.runtimeCapabilities = const [],
     this.workspaceBindings = const [],
+    this.projectGrantCount,
     this.desiredWorkers = const [],
     this.installedWorkers = const [],
   });
@@ -713,6 +714,7 @@ class StudioAgent {
   final String lastSeen;
   final List<String> runtimeCapabilities;
   final List<String> workspaceBindings;
+  final int? projectGrantCount;
   final List<StudioDesiredWorker> desiredWorkers;
   final List<StudioInstalledWorker> installedWorkers;
 
