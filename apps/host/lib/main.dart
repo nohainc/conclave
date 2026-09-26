@@ -767,6 +767,12 @@ class HostDashboard extends StatefulWidget {
 
 enum HostSurface { workspace, workers }
 
+enum _HeaderMenuAction {
+  checkForUpdates,
+  advancedDiagnostics,
+  quit,
+}
+
 class _HostDashboardState extends State<HostDashboard> {
   HostSurface _selectedSurface = HostSurface.workspace;
 
@@ -789,8 +795,7 @@ class _HostDashboardState extends State<HostDashboard> {
       children: [
         // App Header Bar
         Container(
-          height: 56,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
           decoration: BoxDecoration(
             color: theme.colorScheme.surface,
             border: Border(
@@ -801,46 +806,44 @@ class _HostDashboardState extends State<HostDashboard> {
           ),
           child: Row(
             children: [
-              ConclaveBrand.logoMark(size: 24),
-              const SizedBox(width: 10),
+              ConclaveBrand.logoMark(size: 26),
+              const SizedBox(width: 12),
               Expanded(
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Flexible(
-                      child: Text(
-                        snapshot.workspaceName ?? 'Conclave Workspace',
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: statusColor.withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.circle, size: 7, color: statusColor),
-                          const SizedBox(width: 5),
-                          Text(
-                            snapshot.statusLabel,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: statusColor,
-                            ),
+                    Row(
+                      children: [
+                        const Text(
+                          'Conclave Workspace',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
                           ),
-                        ],
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(Icons.circle, size: 7, color: statusColor),
+                        const SizedBox(width: 4),
+                        Text(
+                          snapshot.statusLabel,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: statusColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      snapshot.workspaceName ??
+                          snapshot.hostname ??
+                          Platform.localHostname,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontSize: 12,
                       ),
                     ),
                   ],
@@ -853,11 +856,68 @@ class _HostDashboardState extends State<HostDashboard> {
                 label: const Text('Open Conclave AX',
                     style: TextStyle(fontSize: 12)),
               ),
-              const SizedBox(width: 6),
-              IconButton(
-                tooltip: 'Quit Workspace',
-                icon: const Icon(Icons.power_settings_new, size: 18),
-                onPressed: widget.onQuit,
+              const SizedBox(width: 4),
+              PopupMenuButton<_HeaderMenuAction>(
+                icon: const Icon(Icons.more_horiz, size: 20),
+                tooltip: 'More options',
+                constraints: const BoxConstraints(minWidth: 230),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                onSelected: (action) {
+                  switch (action) {
+                    case _HeaderMenuAction.checkForUpdates:
+                      widget.onRetry?.call();
+                      break;
+                    case _HeaderMenuAction.advancedDiagnostics:
+                      setState(() => _selectedSurface = HostSurface.workspace);
+                      widget.onExportDiagnostics?.call();
+                      break;
+                    case _HeaderMenuAction.quit:
+                      widget.onQuit?.call();
+                      break;
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: _HeaderMenuAction.checkForUpdates,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.system_update_alt, size: 16),
+                        SizedBox(width: 10),
+                        Text('Check for Updates'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: _HeaderMenuAction.advancedDiagnostics,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.analytics_outlined, size: 16),
+                        SizedBox(width: 10),
+                        Text('Advanced Diagnostics'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuDivider(),
+                  PopupMenuItem(
+                    value: _HeaderMenuAction.quit,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.power_settings_new,
+                            size: 16, color: theme.colorScheme.error),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Quit Conclave Workspace',
+                          style: TextStyle(color: theme.colorScheme.error),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

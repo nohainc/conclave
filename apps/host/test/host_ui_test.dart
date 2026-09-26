@@ -86,6 +86,7 @@ void main() {
     VoidCallback? onPair,
     VoidCallback? onUnpair,
     VoidCallback? onAccountAction,
+    VoidCallback? onQuit,
     Future<void> Function()? onRetry,
     Future<void> Function()? onExportDiagnostics,
     LocalConfiguredWorkerRegistry? localWorkerRegistry,
@@ -100,6 +101,7 @@ void main() {
             onPair: onPair,
             onUnpair: onUnpair,
             onAccountAction: onAccountAction,
+            onQuit: onQuit,
             onRetry: onRetry,
             onExportDiagnostics: onExportDiagnostics,
             localWorkerRegistry: localWorkerRegistry,
@@ -186,6 +188,7 @@ void main() {
 
     // Header actions
     expect(find.text('Open Conclave AX'), findsOneWidget);
+    expect(find.byIcon(Icons.more_horiz), findsOneWidget);
 
     // 7-card sequence on single Workspace page - verify zero duplication
     expect(find.text('Current Work'), findsOneWidget);
@@ -194,6 +197,59 @@ void main() {
     expect(find.text('Application'), findsOneWidget);
     expect(find.text('Cloud Pairing'), findsOneWidget);
     expect(find.text('Advanced & Diagnostics'), findsOneWidget);
+  });
+
+  testWidgets('header overflow menu provides updates, diagnostics, and quit',
+      (tester) async {
+    var quitCalled = false;
+    var retryCalled = false;
+    var exportedCalled = false;
+
+    await pumpDashboard(
+      tester,
+      const HostUiSnapshot(
+        mode: HostUiMode.ready,
+        title: 'Workspace is ready',
+        detail: 'Ready',
+        paired: true,
+        cloudConnected: true,
+        statusLabel: 'Connected',
+        workspaceName: 'MacBook Pro',
+      ),
+      onQuit: () => quitCalled = true,
+      onRetry: () async => retryCalled = true,
+      onExportDiagnostics: () async => exportedCalled = true,
+    );
+
+    expect(find.text('Conclave Workspace'), findsOneWidget);
+    expect(find.text('MacBook Pro'), findsOneWidget);
+    expect(find.text('Connected'), findsWidgets);
+
+    // Open overflow menu
+    await tester.tap(find.byIcon(Icons.more_horiz));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Check for Updates'), findsOneWidget);
+    expect(find.text('Advanced Diagnostics'), findsOneWidget);
+    expect(find.text('Quit Conclave Workspace'), findsOneWidget);
+
+    // Tap Check for Updates
+    await tester.tap(find.text('Check for Updates'));
+    await tester.pumpAndSettle();
+    expect(retryCalled, isTrue);
+
+    // Open overflow menu and tap Advanced Diagnostics
+    await tester.tap(find.byIcon(Icons.more_horiz));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Advanced Diagnostics'));
+    await tester.pumpAndSettle();
+    expect(exportedCalled, isTrue);
+
+    // Open overflow menu again and tap Quit
+    await tester.tap(find.byIcon(Icons.more_horiz));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Quit Conclave Workspace'));
+    expect(quitCalled, isTrue);
   });
 
   testWidgets('active, offline, and install failure states stay understandable',
