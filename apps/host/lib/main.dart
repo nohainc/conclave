@@ -54,7 +54,7 @@ Future<bool> _validateLocalWorkerAuthentication(String workerTypeId) async {
   if (workerTypeId == 'antigravity') {
     try {
       final result =
-          await Process.run('antigravity', ['auth', 'status'], runInShell: false)
+          await Process.run('agy', ['-p', '/usage'], runInShell: false)
               .timeout(const Duration(seconds: 10));
       return result.exitCode == 0;
     } on Object {
@@ -92,7 +92,7 @@ Future<void> _launchLocalWorkerAuthentication(String workerTypeId) async {
     return;
   }
   if (workerTypeId == 'antigravity') {
-    await Process.start('antigravity', ['auth', 'login'],
+    await Process.start('agy', const [],
         runInShell: false, mode: ProcessStartMode.detached);
     return;
   }
