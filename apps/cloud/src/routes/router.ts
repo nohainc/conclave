@@ -133,6 +133,22 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
+    const v7WorkerSchedulingMatch = url.pathname.match(
+      /^\/api\/v7\/workers\/([^/]+)\/scheduling(?:\/(enable|disable|drain))?$/,
+    );
+    if (
+      v7WorkerSchedulingMatch?.[1] &&
+      ((request.method === "GET" && !v7WorkerSchedulingMatch[2]) ||
+        (request.method === "POST" && v7WorkerSchedulingMatch[2]))
+    ) {
+      return await handlers.handleV7WorkerScheduling!(
+        request,
+        env,
+        v7WorkerSchedulingMatch[1],
+        v7WorkerSchedulingMatch[2],
+        ctx,
+      );
+    }
     if (request.method === "GET" && url.pathname === "/api/v7/adapters") {
       return await handlers.handleListV7Adapters!(request, env, ctx);
     }

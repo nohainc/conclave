@@ -770,7 +770,7 @@ V7 is implemented when all of the following are true:
 
 Keep completion work reviewable and reversible:
 
-1. **PR A — V7 scheduling state + V7-only candidate contract**
+1. **Phase 1 — V7 scheduling state + V7-only candidate contract**
 2. **PR B — real V7 end-to-end integration harness**
 3. **PR C — remove V6 scheduler/API/persistence compatibility**
 4. **PR D — asymmetric adapter/release trust**

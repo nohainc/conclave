@@ -496,6 +496,8 @@ describe("V5 Project execution scheduler", () => {
       permissions_json: JSON.stringify(["repository:read", "repository:write"]),
       package_status: "ready",
       desired_enabled: 1,
+      local_worker_status: "ready",
+      cloud_scheduling_state: "enabled",
       version_policy: "latest",
       credential_id: null,
       credential_status: "ready",
@@ -559,6 +561,8 @@ describe("V5 Project execution scheduler", () => {
       permissions_json: JSON.stringify(["repository:read"]),
       package_status: "ready",
       desired_enabled: 1,
+      local_worker_status: "ready",
+      cloud_scheduling_state: "enabled",
       version_policy: "latest",
       credential_id: null,
       credential_status: "ready",
@@ -701,6 +705,8 @@ describe("V5 Project execution scheduler", () => {
       permissions_json: JSON.stringify(["repository:read"]),
       package_status: "ready",
       desired_enabled: 1,
+      local_worker_status: "ready",
+      cloud_scheduling_state: "enabled",
       version_policy: "latest",
       credential_id: null,
       credential_status: "ready",
@@ -724,5 +730,135 @@ describe("V5 Project execution scheduler", () => {
     expect(target?.effectivePermissions).toEqual(["repository:read"]);
     expect(target?.effectivePermissions).not.toContain("shell:execute");
     expect(target?.effectivePermissions).not.toContain("network:use");
+  });
+
+  it("requires independent Cloud enablement and local readiness for V7 scheduling", async () => {
+    const base = {
+      ...candidate(),
+      workspace_id: "workspace-v7",
+      configured_worker_id: "worker-v7",
+      worker_type_id: "codex",
+      capabilities_json: '["repository"]',
+      permissions_json: '["repository:read"]',
+      credential_status: "ready",
+      local_worker_status: "ready",
+      cloud_scheduling_state: "disabled",
+      configured_concurrency_limit: 2,
+      active_assignments: 0,
+    };
+    const request = {
+      projectId: "project-a",
+      requesterUserId: "user-requester",
+      role: "implementer",
+      capabilities: ["repository"],
+    };
+    await expect(
+      selectProjectExecutionTarget(db([base]), request),
+    ).resolves.toBeNull();
+    await expect(
+      selectProjectExecutionTarget(
+        db([{ ...base, cloud_scheduling_state: "draining" }]),
+        request,
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      selectProjectExecutionTarget(
+        db([
+          {
+            ...base,
+            cloud_scheduling_state: "enabled",
+            local_worker_status: "disabled",
+          },
+        ]),
+        request,
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      selectProjectExecutionTarget(
+        db([
+          {
+            ...base,
+            cloud_scheduling_state: "enabled",
+            local_worker_status: "needs_attention",
+          },
+        ]),
+        request,
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      selectProjectExecutionTarget(
+        db([{ ...base, cloud_scheduling_state: "enabled" }]),
+        request,
+      ),
+    ).resolves.toMatchObject({ configuredWorkerId: "worker-v7" });
+    await expect(
+      selectProjectExecutionTarget(
+        db([
+          { ...base, cloud_scheduling_state: "enabled", active_assignments: 2 },
+        ]),
+        request,
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      selectProjectExecutionTarget(
+        db([
+          {
+            ...base,
+            cloud_scheduling_state: "enabled",
+            cloud_concurrency_limit: 1,
+            active_assignments: 1,
+          },
+        ]),
+        request,
+      ),
+    ).resolves.toBeNull();
+  });
+
+  it("selects V7 inventory without reading V6 Worker bindings", async () => {
+    const v7Row = {
+      ...candidate(),
+      worker_id: "workspace-worker",
+      configured_worker_id: undefined,
+      worker_type_id: "codex",
+      local_worker_status: "ready",
+      cloud_scheduling_state: "enabled",
+      local_concurrency_limit: 1,
+      local_permissions_json: '["repository:read"]',
+      provider: "codex",
+      credential_status: "ready",
+      active_assignments: 0,
+    };
+    let legacyBindingsRead = false;
+    const v7OnlyDb = {
+      prepare(query: string) {
+        const statement = {
+          bind() {
+            return statement;
+          },
+          async first<T>() {
+            if (query.includes("project_memberships"))
+              return { role: "owner" } as T;
+            if (query.includes("AS has_v7")) return { has_v7: 1 } as T;
+            return null;
+          },
+          async all<T>() {
+            if (query.includes("workspace_worker_inventory"))
+              return { results: [v7Row] as T[] };
+            if (query.includes("worker_workspace_bindings"))
+              legacyBindingsRead = true;
+            return { results: [] as T[] };
+          },
+        };
+        return statement;
+      },
+    } as never;
+    const target = await selectProjectExecutionTarget(v7OnlyDb, {
+      projectId: "project-a",
+      requesterUserId: "user-requester",
+      role: "implementer",
+      capabilities: ["repository"],
+    });
+    expect(target?.configuredWorkerId).toBe("workspace-worker");
+    expect(legacyBindingsRead).toBe(false);
   });
 });

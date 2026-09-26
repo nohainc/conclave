@@ -736,6 +736,8 @@ class StudioWorkspaceWorker {
     required this.revision,
     required this.capabilities,
     required this.allowedModels,
+    this.schedulingState = 'disabled',
+    this.cloudConcurrencyLimit,
     this.defaultModel,
     this.adapterVersion,
   });
@@ -754,6 +756,8 @@ class StudioWorkspaceWorker {
   final String? adapterVersion;
   final List<String> capabilities;
   final List<String> allowedModels;
+  final String schedulingState;
+  final int? cloudConcurrencyLimit;
 
   factory StudioWorkspaceWorker.fromJson(Map<String, dynamic> json) =>
       StudioWorkspaceWorker(
@@ -771,6 +775,8 @@ class StudioWorkspaceWorker {
         adapterVersion: json['adapterVersion']?.toString(),
         capabilities: _strings(json, 'capabilities'),
         allowedModels: _strings(json, 'allowedModels'),
+        schedulingState: _string(json, 'schedulingState', 'disabled'),
+        cloudConcurrencyLimit: json['cloudConcurrencyLimit'] as int?,
       );
 }
 

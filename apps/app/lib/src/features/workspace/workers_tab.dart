@@ -12,6 +12,7 @@ class WorkersTab extends StatelessWidget {
     required this.workspaces,
     required this.plugins,
     this.workspaceWorkers = const [],
+    this.onScheduling,
   });
 
   // Kept in the widget contract for the migration period. Catalog and
@@ -19,6 +20,8 @@ class WorkersTab extends StatelessWidget {
   final List<StudioAgent> workspaces;
   final List<StudioPlugin> plugins;
   final List<StudioWorkspaceWorker> workspaceWorkers;
+  final Future<void> Function(StudioWorkspaceWorker worker, String action)?
+      onScheduling;
 
   @override
   Widget build(BuildContext context) {
@@ -177,7 +180,9 @@ class WorkersTab extends StatelessWidget {
                     'Complete authentication or prerequisite setup in Conclave Workspace on ${worker.workspaceName}.',
                   ]),
                 _detailSection('Scheduling', [
-                  'Remote scheduling state is not included in the current Worker inventory.',
+                  'Cloud scheduling · ${worker.schedulingState}',
+                  if (worker.cloudConcurrencyLimit != null)
+                    'Cloud concurrency · ${worker.cloudConcurrencyLimit}',
                 ]),
                 _detailSection('Activity and audit', [
                   'Recent Worker activity is not included in the current Worker inventory.',
@@ -188,6 +193,20 @@ class WorkersTab extends StatelessWidget {
           ),
         ),
         actions: [
+          if (onScheduling != null && status != 'Removed') ...[
+            if (worker.schedulingState == 'enabled')
+              TextButton(
+                  onPressed: () => _runScheduling(context, worker, 'drain'),
+                  child: const Text('Drain')),
+            if (worker.schedulingState != 'disabled')
+              TextButton(
+                  onPressed: () => _runScheduling(context, worker, 'disable'),
+                  child: const Text('Disable scheduling')),
+            if (worker.schedulingState == 'disabled' && status == 'Ready')
+              TextButton(
+                  onPressed: () => _runScheduling(context, worker, 'enable'),
+                  child: const Text('Enable scheduling')),
+          ],
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Close'),
@@ -195,6 +214,12 @@ class WorkersTab extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _runScheduling(
+      BuildContext context, StudioWorkspaceWorker worker, String action) async {
+    Navigator.of(context).pop();
+    await onScheduling?.call(worker, action);
   }
 
   Widget _detailSection(String title, List<String> values) => Padding(
@@ -211,6 +236,4 @@ class WorkersTab extends StatelessWidget {
           ],
         ),
       );
-
-
 }

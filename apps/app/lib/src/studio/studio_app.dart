@@ -4150,6 +4150,22 @@ class _StudioAppState extends State<ConclaveAppShell> {
     }
   }
 
+  Future<void> _setWorkspaceWorkerScheduling(
+      StudioWorkspaceWorker worker, String action) async {
+    try {
+      await widget.dataSource
+          .setWorkspaceWorkerScheduling(workerId: worker.id, action: action);
+      final refreshed = await widget.dataSource.loadWorkspaceWorkerInventory();
+      if (mounted) setState(() => workspaceWorkers = refreshed);
+      if (mounted) {
+        _showSnackBar(
+            'Worker scheduling ${action == 'drain' ? 'drain requested' : '${action}d'}.');
+      }
+    } catch (error) {
+      if (mounted) _showSnackBar('$error', type: ToastType.error);
+    }
+  }
+
   Widget _hostsView({int initialTab = 0}) => WorkspacesPage(
         workspaces:
             _workspaceCards().isNotEmpty ? _workspaceCards() : snapshot.agents,
@@ -4179,6 +4195,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
         onOpenConfiguredWorker: _openConfiguredWorker,
         onSetupConfiguredWorkerWorkspace: _setupConfiguredWorkerWorkspace,
         onRemoveConfiguredWorkerWorkspace: _removeConfiguredWorkerWorkspace,
+        onWorkspaceWorkerScheduling: _setWorkspaceWorkerScheduling,
         workerActionMessage: workerActionMessage,
         onDismissWorkerActionMessage: () =>
             setState(() => workerActionMessage = null),

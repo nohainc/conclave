@@ -22,6 +22,7 @@ const migrationFiles = [
   "0019_worker_assignment_requester.sql",
   "0021_workspace_worker_inventory.sql",
   "0022_v7_adapter_releases.sql",
+  "0024_v7_worker_scheduling.sql",
 ];
 
 const schema = migrationFiles

@@ -34,6 +34,7 @@ class WorkspacesPage extends StatefulWidget {
     this.onOpenConfiguredWorker,
     this.onSetupConfiguredWorkerWorkspace,
     this.onRemoveConfiguredWorkerWorkspace,
+    this.onWorkspaceWorkerScheduling,
   });
 
   final List<StudioAgent> workspaces;
@@ -61,6 +62,8 @@ class WorkspacesPage extends StatefulWidget {
   final Future<void> Function(
           StudioConfiguredWorker worker, String workspaceId)?
       onRemoveConfiguredWorkerWorkspace;
+  final Future<void> Function(StudioWorkspaceWorker worker, String action)?
+      onWorkspaceWorkerScheduling;
 
   @override
   State<WorkspacesPage> createState() => _WorkspacesPageState();
@@ -180,6 +183,7 @@ class _WorkspacesPageState extends State<WorkspacesPage>
                 workspaces: widget.workspaces,
                 plugins: widget.plugins,
                 workspaceWorkers: widget.workspaceWorkers,
+                onScheduling: widget.onWorkspaceWorkerScheduling,
               )
           ],
         );

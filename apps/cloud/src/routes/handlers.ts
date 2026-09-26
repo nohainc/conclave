@@ -6201,9 +6201,11 @@ export async function handleListWorkspaceWorkerInventory(
             i.default_model, i.allowed_models_json, i.capabilities_json,
             i.local_permissions_summary_json, i.local_concurrency_limit,
             i.adapter_version, i.credential_status, i.revision,
-            i.created_at, i.updated_at, i.last_seen_at, i.removed_at
+            i.created_at, i.updated_at, i.last_seen_at, i.removed_at,
+            s.state AS scheduling_state, s.cloud_concurrency_limit
        FROM workspace_worker_inventory i
        JOIN execution_workspaces ew ON ew.id = i.workspace_id
+       LEFT JOIN v7_worker_scheduling s ON s.worker_id = i.worker_id
       WHERE i.owner_user_id = ?1
         AND (?2 IS NULL OR i.workspace_id = ?2)
       ORDER BY ew.name, i.name, i.worker_id`,
@@ -6241,7 +6243,166 @@ export async function handleListWorkspaceWorkerInventory(
       updatedAt: String(row.updated_at),
       lastSeenAt: String(row.last_seen_at),
       removedAt: row.removed_at == null ? null : String(row.removed_at),
+      schedulingState:
+        row.scheduling_state == null
+          ? "disabled"
+          : String(row.scheduling_state),
+      cloudConcurrencyLimit:
+        row.cloud_concurrency_limit == null
+          ? null
+          : Number(row.cloud_concurrency_limit),
     })),
+  });
+}
+
+/** Cloud controls only affect scheduling; local readiness and credentials remain Workspace-owned. */
+export async function handleV7WorkerScheduling(
+  request: Request,
+  env: SecurityEnv,
+  workerId: string,
+  action?: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  const worker = await env.CONCLAVE_DB.prepare(
+    `SELECT i.workspace_id, i.status, i.credential_status
+       FROM workspace_worker_inventory i WHERE i.worker_id = ?1 AND i.owner_user_id = ?2`,
+  )
+    .bind(workerId, context.userId)
+    .first<{
+      workspace_id: string;
+      status: string;
+      credential_status: string;
+    }>();
+  if (!worker) throw new HttpError(404, "Workspace Worker not found");
+  const now = new Date().toISOString();
+  if (request.method === "POST") {
+    if (!action || !["enable", "disable", "drain"].includes(action)) {
+      throw new HttpError(400, "Unknown Worker scheduling action");
+    }
+    if (
+      action === "enable" &&
+      (worker.status !== "ready" ||
+        !["ready", "not_required"].includes(worker.credential_status))
+    ) {
+      throw new HttpError(409, "Worker is not locally ready");
+    }
+    const state =
+      action === "enable"
+        ? "enabled"
+        : action === "drain"
+          ? "draining"
+          : "disabled";
+    await env.CONCLAVE_DB.prepare(
+      `INSERT INTO v7_worker_scheduling (worker_id, state, updated_by_user_id, updated_at,
+          drain_requested_by_user_id, drain_requested_at, drain_completed_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL)
+       ON CONFLICT(worker_id) DO UPDATE SET state = excluded.state,
+         updated_by_user_id = excluded.updated_by_user_id, updated_at = excluded.updated_at,
+         drain_requested_by_user_id = CASE WHEN excluded.state = 'draining' THEN excluded.updated_by_user_id ELSE NULL END,
+         drain_requested_at = CASE WHEN excluded.state = 'draining' THEN excluded.updated_at ELSE NULL END,
+         drain_completed_at = NULL`,
+    )
+      .bind(
+        workerId,
+        state,
+        context.userId,
+        now,
+        action === "drain" ? context.userId : null,
+        action === "drain" ? now : null,
+      )
+      .run();
+    const active =
+      action === "drain"
+        ? await env.CONCLAVE_DB.prepare(
+            `SELECT COUNT(*) AS count FROM worker_assignments WHERE configured_worker_id = ?1
+        AND status IN ('created','dispatched','acknowledged','running')`,
+          )
+            .bind(workerId)
+            .first<{ count: number }>()
+        : null;
+    const complete = action === "drain" && Number(active?.count ?? 0) === 0;
+    if (complete) {
+      await env.CONCLAVE_DB.prepare(
+        "UPDATE v7_worker_scheduling SET state = 'disabled', drain_completed_at = ?2 WHERE worker_id = ?1",
+      )
+        .bind(workerId, now)
+        .run();
+    }
+    const auditId = crypto.randomUUID();
+    await env.CONCLAVE_DB.prepare(
+      `INSERT INTO v7_worker_scheduling_audit (id, worker_id, actor_user_id, action, requested_at, completed_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
+    )
+      .bind(
+        auditId,
+        workerId,
+        context.userId,
+        action === "drain" ? "drain_requested" : `${action}d`,
+        now,
+        complete ? now : null,
+      )
+      .run();
+    if (complete)
+      await env.CONCLAVE_DB.prepare(
+        `INSERT INTO v7_worker_scheduling_audit (id, worker_id, actor_user_id, action, requested_at, completed_at)
+       VALUES (?1, ?2, ?3, 'drain_completed', ?4, ?4)`,
+      )
+        .bind(crypto.randomUUID(), workerId, context.userId, now)
+        .run();
+    return json({
+      workerId,
+      state: complete ? "disabled" : state,
+      drainCompletedAt: complete ? now : null,
+    });
+  }
+  if (request.method !== "GET") throw new HttpError(405, "Method not allowed");
+  let state = await env.CONCLAVE_DB.prepare(
+    "SELECT state, cloud_concurrency_limit, drain_requested_by_user_id, drain_requested_at, drain_completed_at FROM v7_worker_scheduling WHERE worker_id = ?1",
+  )
+    .bind(workerId)
+    .first<Record<string, unknown>>();
+  if (!state) {
+    await env.CONCLAVE_DB.prepare(
+      "INSERT OR IGNORE INTO v7_worker_scheduling (worker_id, state, updated_at) VALUES (?1, 'disabled', ?2)",
+    )
+      .bind(workerId, now)
+      .run();
+    state = { state: "disabled" };
+  }
+  if (state.state === "draining") {
+    const active = await env.CONCLAVE_DB.prepare(
+      `SELECT COUNT(*) AS count FROM worker_assignments WHERE configured_worker_id = ?1
+        AND status IN ('created','dispatched','acknowledged','running')`,
+    )
+      .bind(workerId)
+      .first<{ count: number }>();
+    if (Number(active?.count ?? 0) === 0) {
+      await env.CONCLAVE_DB.prepare(
+        "UPDATE v7_worker_scheduling SET state = 'disabled', drain_completed_at = ?2 WHERE worker_id = ?1 AND state = 'draining'",
+      )
+        .bind(workerId, now)
+        .run();
+      await env.CONCLAVE_DB.prepare(
+        `INSERT INTO v7_worker_scheduling_audit (id, worker_id, actor_user_id, action, requested_at, completed_at) VALUES (?1, ?2, ?3, 'drain_completed', ?4, ?4)`,
+      )
+        .bind(
+          crypto.randomUUID(),
+          workerId,
+          state.drain_requested_by_user_id ?? null,
+          now,
+        )
+        .run();
+      state = { ...state, state: "disabled", drain_completed_at: now };
+    }
+  }
+  return json({
+    workerId,
+    state: state.state,
+    cloudConcurrencyLimit: state.cloud_concurrency_limit ?? null,
+    drainRequestedByUserId: state.drain_requested_by_user_id ?? null,
+    drainRequestedAt: state.drain_requested_at ?? null,
+    drainCompletedAt: state.drain_completed_at ?? null,
   });
 }
 

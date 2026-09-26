@@ -540,6 +540,19 @@ Cloud may synchronize:
 
 Cloud policy may narrow local Worker ability, never broaden it.
 
+Cloud persists a separate scheduling state (`enabled`, `disabled`, or
+`draining`) for each synchronized Worker. New and migrated inventory starts
+disabled. Scheduling requires local `ready` status and ready credentials as
+well as Cloud `enabled`; the Cloud control cannot change local credentials,
+permissions, ownership, or readiness. Drain rejects new assignments, lets
+active assignments finish, and transitions to disabled when a state read
+observes that active count has reached zero. The request and completion are
+audited with actor and time. A full inventory snapshot is authoritative:
+omitted Workers become tombstones and are disabled; a later source revision (or
+the same revision after an omission tombstone) may restore an omitted Worker.
+Explicit Worker tombstones continue to use strictly increasing source
+revisions. Worker IDs remain permanently bound to their first Workspace.
+
 ### 12.3 Conflict rule
 
 Split ownership prevents generic last-write-wins.

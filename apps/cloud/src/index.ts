@@ -102,6 +102,7 @@ const routeHandlers = {
   handleListConfiguredWorkers: handlers.handleListConfiguredWorkers,
   handleListWorkspaceWorkerInventory:
     handlers.handleListWorkspaceWorkerInventory,
+  handleV7WorkerScheduling: handlers.handleV7WorkerScheduling,
   handleListV7Adapters: handlers.handleListV7Adapters,
   handlePublishV7Adapter: handlers.handlePublishV7Adapter,
   handleDownloadV7Adapter: handlers.handleDownloadV7Adapter,

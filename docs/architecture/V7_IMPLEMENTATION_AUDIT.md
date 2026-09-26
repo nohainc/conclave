@@ -26,12 +26,12 @@ The latest desktop-convergence work closed the earlier vertical-slice gaps:
 
 The remaining work is now concentrated in five architectural/release areas:
 
-1. **Cloud execution is still hybrid.** The scheduler can use V7
-   `workspace_worker_inventory`, but it still resolves V6 configured
-   Worker/Workspace binding candidates as a compatibility path.
-2. **Cloud-owned Worker scheduling state is incomplete.** Local readiness is
-   currently used as a proxy for remote scheduling availability; V7 requires
-   independent enabled/disabled/draining controls.
+1. **The V7 scheduler path needs independent verification.** Inventory
+   candidates now use Cloud-owned scheduling state and Workspace-owned local
+   readiness. The legacy V6 candidate query remains for compatibility.
+2. **Full Cloud-to-AX operational acceptance remains open.** Enable/disable/
+   drain routes and snapshot reconciliation exist, but need executable tests
+   across state transitions and reconnect scenarios.
 3. **Legacy V6 APIs and persistence remain active.** Cloud still exposes
    configured Worker creation/binding/credential routes and retains the V6
    configured Worker tables.

@@ -163,10 +163,16 @@ const workspaceRuntimeCredentialSchema = readFileSync(
   ),
   "utf8",
 );
+const workerSchedulingSchema = readFileSync(
+  fileURLToPath(
+    new URL("../migrations-v6/0024_v7_worker_scheduling.sql", import.meta.url),
+  ),
+  "utf8",
+);
 
 function apply(sql: string): string {
   return execFileSync("sqlite3", ["-json", ":memory:"], {
-    input: `${schema}\n${integrationSchema}\n${observabilitySchema}\n${chatMigrationSchema}\n${executionFoundationSchema}\n${projectSettingsSchema}\n${grantPolicySchema}\n${invitationsSchema}\n${repositoryRemovalSchema}\n${configuredWorkerSchema}\n${configuredWorkerRuntimeSchema}\n${configuredWorkerAssignmentsSchema}\n${workerFirstExecutionPolicySchema}\n${configuredWorkerObservabilitySchema}\n${legacyAccountConversionSchema}\n${workerAssignmentRequesterSchema}\n${workspaceRuntimeFactsSchema}\n${workspaceWorkerInventorySchema}\n${adapterReleaseSchema}\n${workspaceRuntimeCredentialSchema}\n${sql}`,
+    input: `${schema}\n${integrationSchema}\n${observabilitySchema}\n${chatMigrationSchema}\n${executionFoundationSchema}\n${projectSettingsSchema}\n${grantPolicySchema}\n${invitationsSchema}\n${repositoryRemovalSchema}\n${configuredWorkerSchema}\n${configuredWorkerRuntimeSchema}\n${configuredWorkerAssignmentsSchema}\n${workerFirstExecutionPolicySchema}\n${configuredWorkerObservabilitySchema}\n${legacyAccountConversionSchema}\n${workerAssignmentRequesterSchema}\n${workspaceRuntimeFactsSchema}\n${workspaceWorkerInventorySchema}\n${adapterReleaseSchema}\n${workspaceRuntimeCredentialSchema}\n${workerSchedulingSchema}\n${sql}`,
     encoding: "utf8",
   });
 }
@@ -222,6 +228,8 @@ describe("v6 D1 schema", () => {
         { name: "configured_worker_observability_metrics" },
         { name: "workspace_runtime_facts" },
         { name: "workspace_worker_inventory" },
+        { name: "v7_worker_scheduling" },
+        { name: "v7_worker_scheduling_audit" },
         { name: "v7_adapter_releases" },
       ]),
     );
@@ -240,6 +248,7 @@ describe("v6 D1 schema", () => {
         "status",
         "credential_status",
         "revision",
+        "removed_by_snapshot",
       ]),
     );
     expect(columns).not.toEqual(

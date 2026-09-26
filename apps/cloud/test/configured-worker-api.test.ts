@@ -8,6 +8,7 @@ import {
   handleGetConfiguredWorkerWorkspaceCredential,
   handleListConfiguredWorkerWorkspaces,
   handleListWorkspaceWorkerInventory,
+  handleV7WorkerScheduling,
   handleListV7Adapters,
   handlePublishV7Adapter,
   handleDownloadV7Adapter,
@@ -16,6 +17,7 @@ import {
   handleRevokeConfiguredWorker,
   handleUpdateConfiguredWorkerWorkspaces,
 } from "../src/routes/handlers.js";
+import { WorkspaceGateway } from "../src/workspace-gateway.js";
 
 const migrationFiles = [
   "0001_conclave_v6.sql",
@@ -36,6 +38,8 @@ const migrationFiles = [
   "0019_worker_assignment_requester.sql",
   "0021_workspace_worker_inventory.sql",
   "0022_v7_adapter_releases.sql",
+  "0023_workspace_runtime_credentials.sql",
+  "0024_v7_worker_scheduling.sql",
 ];
 
 class LocalD1Statement {
@@ -193,6 +197,206 @@ function request(method: string, body?: Record<string, unknown>): Request {
 }
 
 describe("configured Worker API", () => {
+  it("reconciles authoritative inventory omission and reconnect idempotently", async () => {
+    const test = createEnvironment();
+    const gateway = new WorkspaceGateway(
+      {} as never,
+      { CONCLAVE_DB: test.db } as never,
+    ) as unknown as {
+      executionWorkspaceId: string | null;
+      recordWorkerInventory(payload: unknown): Promise<void>;
+    };
+    gateway.executionWorkspaceId = "workspace-a";
+    const worker = {
+      workerId: "snapshot-worker",
+      workerTypeId: "worker-type-codex",
+      name: "Codex",
+      status: "ready",
+      revision: 1,
+      localConcurrencyLimit: 2,
+      credentialStatus: "ready",
+    };
+    await gateway.recordWorkerInventory({
+      fullSnapshot: true,
+      workers: [worker],
+    });
+    expect(
+      test.db.sqlite
+        .prepare(
+          "SELECT status, revision FROM workspace_worker_inventory WHERE worker_id = 'snapshot-worker'",
+        )
+        .get(),
+    ).toEqual({ status: "ready", revision: 1 });
+    await gateway.recordWorkerInventory({ fullSnapshot: true, workers: [] });
+    await gateway.recordWorkerInventory({ fullSnapshot: true, workers: [] });
+    expect(
+      test.db.sqlite
+        .prepare(
+          "SELECT status, removed_by_snapshot FROM workspace_worker_inventory WHERE worker_id = 'snapshot-worker'",
+        )
+        .get(),
+    ).toEqual({ status: "removed", removed_by_snapshot: 1 });
+    await gateway.recordWorkerInventory({
+      fullSnapshot: true,
+      workers: [worker],
+    });
+    expect(
+      test.db.sqlite
+        .prepare(
+          "SELECT status, revision FROM workspace_worker_inventory WHERE worker_id = 'snapshot-worker'",
+        )
+        .get(),
+    ).toEqual({ status: "ready", revision: 1 });
+    await gateway.recordWorkerInventory({
+      fullSnapshot: true,
+      workers: [{ ...worker, revision: 2 }],
+    });
+    await gateway.recordWorkerInventory({
+      fullSnapshot: true,
+      workers: [{ ...worker, revision: 1, status: "needs_attention" }],
+    });
+    expect(
+      test.db.sqlite
+        .prepare(
+          "SELECT status, revision FROM workspace_worker_inventory WHERE worker_id = 'snapshot-worker'",
+        )
+        .get(),
+    ).toEqual({ status: "ready", revision: 2 });
+    gateway.executionWorkspaceId = "workspace-b";
+    await gateway.recordWorkerInventory({
+      fullSnapshot: true,
+      workers: [{ ...worker, revision: 99 }],
+    });
+    expect(
+      test.db.sqlite
+        .prepare(
+          "SELECT workspace_id, revision FROM workspace_worker_inventory WHERE worker_id = 'snapshot-worker'",
+        )
+        .get(),
+    ).toEqual({ workspace_id: "workspace-a", revision: 2 });
+  });
+
+  it("keeps Cloud scheduling separate and drains to disabled with an audit", async () => {
+    const test = createEnvironment();
+    test.db.sqlite.exec(`INSERT INTO workspace_worker_inventory
+      (worker_id, workspace_id, owner_user_id, worker_type_id, name, status, auth_strategy,
+       local_concurrency_limit, credential_status, revision, created_at, updated_at, last_seen_at)
+      VALUES ('local-worker', 'workspace-a', 'owner', 'worker-type-codex', 'Codex', 'ready', 'browser_auth', 2, 'ready', 1, 'now', 'now', 'now');`);
+    test.db.sqlite.exec(`
+      INSERT INTO projects (id, owner_user_id, name, created_at, updated_at) VALUES ('project-a', 'owner', 'Project', 'now', 'now');
+      INSERT INTO configured_workers (id, owner_user_id, name, worker_type_id, concurrency_limit, created_at, updated_at)
+        VALUES ('local-worker', 'owner', 'Codex Local', 'worker-type-codex', 2, 'now', 'now');
+      INSERT INTO workspace_runtime_identities (id, workspace_id, credential_key_ref, credential_token_hash, created_at)
+        VALUES ('runtime-a', 'workspace-a', 'key-ref', 'token-hash', 'now');
+      INSERT INTO worker_assignments (id, project_id, execution_workspace_id, runtime_identity_id, worker_id,
+        configured_worker_id, status, created_at, updated_at)
+        VALUES ('assignment-a', 'project-a', 'workspace-a', 'runtime-a', 'worker-type-codex', 'local-worker', 'running', 'now', 'now');
+    `);
+    const get = () =>
+      handleV7WorkerScheduling(
+        new Request(
+          "https://conclave.test/api/v7/workers/local-worker/scheduling",
+        ),
+        test.env,
+        "local-worker",
+      );
+    expect(((await (await get()).json()) as { state: string }).state).toBe(
+      "disabled",
+    );
+    const enable = await handleV7WorkerScheduling(
+      new Request(
+        "https://conclave.test/api/v7/workers/local-worker/scheduling/enable",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: "{}",
+        },
+      ),
+      test.env,
+      "local-worker",
+      "enable",
+    );
+    expect(enable.status).toBe(200);
+    expect(((await (await get()).json()) as { state: string }).state).toBe(
+      "enabled",
+    );
+    const drain = await handleV7WorkerScheduling(
+      new Request(
+        "https://conclave.test/api/v7/workers/local-worker/scheduling/drain",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: "{}",
+        },
+      ),
+      test.env,
+      "local-worker",
+      "drain",
+    );
+    expect(((await drain.json()) as { state: string }).state).toBe("draining");
+    expect(
+      test.db.sqlite
+        .prepare(
+          "SELECT status FROM worker_assignments WHERE id = 'assignment-a'",
+        )
+        .get(),
+    ).toEqual({ status: "running" });
+    expect(((await (await get()).json()) as { state: string }).state).toBe(
+      "draining",
+    );
+    test.db.sqlite
+      .prepare(
+        "UPDATE worker_assignments SET status = 'completed' WHERE id = 'assignment-a'",
+      )
+      .run();
+    expect(((await (await get()).json()) as { state: string }).state).toBe(
+      "disabled",
+    );
+    expect(
+      test.db.sqlite
+        .prepare(
+          "SELECT action FROM v7_worker_scheduling_audit ORDER BY requested_at, action",
+        )
+        .all(),
+    ).toEqual(
+      expect.arrayContaining([
+        { action: "enabled" },
+        { action: "drain_requested" },
+        { action: "drain_completed" },
+      ]),
+    );
+  });
+
+  it("cannot enable Cloud scheduling for a locally unready Worker", async () => {
+    const test = createEnvironment();
+    test.db.sqlite.exec(`INSERT INTO workspace_worker_inventory
+      (worker_id, workspace_id, owner_user_id, worker_type_id, name, status, auth_strategy,
+       local_concurrency_limit, credential_status, revision, created_at, updated_at, last_seen_at)
+      VALUES ('unready-worker', 'workspace-a', 'owner', 'worker-type-codex', 'Codex', 'needs_attention', 'browser_auth', 1, 'ready', 1, 'now', 'now', 'now');`);
+    await expect(
+      handleV7WorkerScheduling(
+        new Request(
+          "https://conclave.test/api/v7/workers/unready-worker/scheduling/enable",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: "{}",
+          },
+        ),
+        test.env,
+        "unready-worker",
+        "enable",
+      ),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(
+      test.db.sqlite
+        .prepare(
+          "SELECT state FROM v7_worker_scheduling WHERE worker_id = 'unready-worker'",
+        )
+        .get(),
+    ).toBeUndefined();
+  });
+
   it("lists safe local Worker inventory only for the signed-in owner", async () => {
     const test = createEnvironment();
     test.db.sqlite.exec(`

@@ -133,6 +133,9 @@ abstract interface class StudioDataSource {
       const [];
   Future<List<StudioWorkspaceWorker>> loadWorkspaceWorkerInventory() async =>
       const [];
+  Future<void> setWorkspaceWorkerScheduling(
+          {required String workerId, required String action}) async =>
+      throw UnimplementedError('Workspace Worker scheduling is not available');
   Future<StudioConfiguredWorker> createConfiguredWorker({
     required String name,
     required String workerTypeId,
@@ -664,6 +667,16 @@ class StudioApiClient implements StudioDataSource {
         .map((item) =>
             StudioWorkspaceWorker.fromJson(Map<String, dynamic>.from(item)))
         .toList();
+  }
+
+  @override
+  Future<void> setWorkspaceWorkerScheduling(
+      {required String workerId, required String action}) async {
+    await _configuredWorkerMutation(
+        'POST',
+        Uri.parse(
+            '$baseUrl/v7/workers/${Uri.encodeComponent(workerId)}/scheduling/${Uri.encodeComponent(action)}'),
+        const {});
   }
 
   Future<Map<String, dynamic>> _configuredWorkerMutation(

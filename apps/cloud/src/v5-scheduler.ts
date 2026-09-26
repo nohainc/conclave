@@ -204,9 +204,30 @@ export async function selectProjectExecutionTarget(
       return null;
   }
 
-  const legacyRows = await db
+  const hasV7CandidateRows = await db
     .prepare(
-      `SELECT g.id AS grant_id, g.project_id, g.workspace_id, g.status AS grant_status,
+      `SELECT EXISTS (
+         SELECT 1 FROM workspace_project_grants g
+         JOIN execution_workspaces ew ON ew.id = g.workspace_id
+         JOIN workspace_runtime_identities wri ON wri.workspace_id = ew.id AND wri.revoked_at IS NULL
+         JOIN workspace_worker_inventory i ON i.workspace_id = ew.id AND i.status != 'removed'
+        WHERE g.project_id = ?1 AND g.status = 'active'
+          AND (g.expires_at IS NULL OR g.expires_at > ?2) AND ew.status = 'online'
+       ) AS has_v7`,
+    )
+    .bind(request.projectId, now.toISOString())
+    .first<{ has_v7: number }>()
+    .then((row) => Number(row?.has_v7 ?? 0) === 1)
+    .catch(() => false);
+
+  // A project with eligible V7 inventory never reads V6 Worker bindings for
+  // candidate selection. The compatibility query is a fallback only when no
+  // online, granted Workspace currently has V7 inventory.
+  const legacyRows = hasV7CandidateRows
+    ? { results: [] as Row[] }
+    : await db
+        .prepare(
+          `SELECT g.id AS grant_id, g.project_id, g.workspace_id, g.status AS grant_status,
             g.scope, g.repository_mappings_json, g.path_mappings_json,
             g.allowed_worker_ids_json, g.allowed_worker_capabilities_json,
             g.allowed_permissions_json, g.network_policy_json,
@@ -248,15 +269,15 @@ export async function selectProjectExecutionTarget(
        AND ew.status = 'online'
      ORDER BY CASE WHEN c.owner_user_id = ?2 THEN 0 ELSE 1 END,
               active_assignments, ew.id, cw.id`,
-    )
-    .bind(
-      request.projectId,
-      request.requesterUserId,
-      now.toISOString(),
-      request.workstreamId ?? "",
-    )
-    .all<Row>()
-    .catch(() => ({ results: [] as Row[] }));
+        )
+        .bind(
+          request.projectId,
+          request.requesterUserId,
+          now.toISOString(),
+          request.workstreamId ?? "",
+        )
+        .all<Row>()
+        .catch(() => ({ results: [] as Row[] }));
 
   const v7Rows = await db
     .prepare(
@@ -271,19 +292,16 @@ export async function selectProjectExecutionTarget(
             ep.allowed_models_json,
             ew.name AS workspace_name, ew.owner_user_id, ew.status AS workspace_status,
             wri.id AS runtime_identity_id,
-            i.worker_id AS configured_worker_id, i.worker_type_id,
-            i.worker_type_id AS publisher, COALESCE(i.adapter_version, '1.0.0') AS worker_version,
-            i.capabilities_json, i.local_permissions_summary_json AS permissions_json,
-            'ready' AS package_status,
-            CASE WHEN i.status = 'ready' THEN 1 ELSE 0 END AS desired_enabled,
-            'latest' AS version_policy,
-            NULL AS credential_id,
+            i.worker_id, i.worker_type_id,
+            COALESCE(i.adapter_version, '1.0.0') AS worker_version,
+            i.capabilities_json, i.local_permissions_summary_json AS local_permissions_json,
+            i.allowed_models_json AS worker_allowed_models_json, i.default_model AS worker_default_model,
+            i.status AS local_worker_status,
+            vs.state AS cloud_scheduling_state,
+            vs.cloud_concurrency_limit,
             i.credential_status AS credential_status,
-            'explicit_project' AS credential_sharing_policy,
-            i.owner_user_id AS credential_owner_user_id,
-            i.auth_strategy AS auth_type,
-            json_object('provider', i.worker_type_id) AS provider_metadata_json,
-            i.local_concurrency_limit AS configured_concurrency_limit,
+            i.worker_type_id AS provider,
+            i.local_concurrency_limit AS local_concurrency_limit,
             (SELECT COUNT(*) FROM worker_assignments wa
              WHERE wa.execution_workspace_id = g.workspace_id
                AND (wa.configured_worker_id = i.worker_id OR
@@ -295,6 +313,7 @@ export async function selectProjectExecutionTarget(
      JOIN execution_workspaces ew ON ew.id = g.workspace_id
      JOIN workspace_runtime_identities wri ON wri.workspace_id = ew.id AND wri.revoked_at IS NULL
      JOIN workspace_worker_inventory i ON i.workspace_id = ew.id AND i.status != 'removed'
+     JOIN v7_worker_scheduling vs ON vs.worker_id = i.worker_id
      WHERE g.project_id = ?1 AND g.status = 'active'
        AND (g.expires_at IS NULL OR g.expires_at > ?3)
        AND ew.status = 'online'
@@ -344,6 +363,7 @@ export async function selectProjectExecutionTarget(
       row.account_id == null ? undefined : String(row.account_id);
     const credentialId =
       row.credential_id == null ? undefined : String(row.credential_id);
+    const isV7 = row.local_worker_status != null;
     const credentialOwnerUserId =
       row.credential_owner_user_id == null
         ? row.account_owner_user_id == null
@@ -361,13 +381,25 @@ export async function selectProjectExecutionTarget(
     );
     const providerMetadata = object(row.provider_metadata_json);
     const provider = String(
-      providerMetadata.provider ?? providerMetadata.providerId ?? "unknown",
+      row.provider ??
+        providerMetadata.provider ??
+        providerMetadata.providerId ??
+        "unknown",
     );
+    const selectedModel =
+      request.model ??
+      (isV7 && typeof row.worker_default_model === "string"
+        ? row.worker_default_model
+        : undefined);
     const independenceKey = `${provider}:${workerTypeId}`;
     const concurrency = object(row.concurrency_json);
-    const maxConcurrent = number(
-      row.configured_concurrency_limit,
-      number(concurrency.maxConcurrentAssignments, 1),
+    const maxConcurrent = Math.min(
+      number(
+        row.local_concurrency_limit,
+        number(row.configured_concurrency_limit, 1024),
+      ),
+      number(row.cloud_concurrency_limit, 1024),
+      number(concurrency.maxConcurrentAssignments, 1024),
     );
 
     const reject = (reason: string) =>
@@ -384,17 +416,30 @@ export async function selectProjectExecutionTarget(
       reject("grant_inactive");
       continue;
     }
+    if (isV7 && row.cloud_scheduling_state === "draining") {
+      reject("cloud_scheduling_draining");
+      continue;
+    }
+    if (isV7 && row.cloud_scheduling_state !== "enabled") {
+      reject("cloud_scheduling_disabled");
+      continue;
+    }
+    if (isV7 && String(row.local_worker_status) !== "ready") {
+      reject("local_worker_not_ready");
+      continue;
+    }
     const credentialStatus = String(
       row.credential_status ?? row.account_status ?? "unknown",
     );
     if (credentialStatus !== "ready" && credentialStatus !== "not_required") {
-      reject("credential_unavailable");
+      reject(isV7 ? "local_credential_unavailable" : "credential_unavailable");
       continue;
     }
     const credentialSharingPolicy = String(
       row.credential_sharing_policy ?? "explicit_project",
     );
     if (
+      !isV7 &&
       credentialSharingPolicy === "private_only" &&
       credentialOwnerUserId !== request.requesterUserId
     ) {
@@ -419,8 +464,9 @@ export async function selectProjectExecutionTarget(
       continue;
     }
     if (
-      String(row.package_status ?? row.installation_status) !== "ready" ||
-      Number(row.desired_enabled) !== 1
+      !isV7 &&
+      (String(row.package_status ?? row.installation_status) !== "ready" ||
+        Number(row.desired_enabled) !== 1)
     ) {
       reject("worker_not_ready");
       continue;
@@ -434,6 +480,17 @@ export async function selectProjectExecutionTarget(
       continue;
     }
     if (
+      isV7 &&
+      grantCapabilities.length > 0 &&
+      !requiredCapabilities.every((capability) =>
+        grantCapabilities.includes(capability),
+      )
+    ) {
+      reject("capability_not_allowed_by_grant");
+      continue;
+    }
+    if (
+      !isV7 &&
       grantCapabilities.some((capability) => !capabilities.includes(capability))
     ) {
       reject("grant_capability_not_declared");
@@ -464,9 +521,18 @@ export async function selectProjectExecutionTarget(
     const allowedModels = strings(row.allowed_models_json);
     if (
       allowedModels.length > 0 &&
-      (!request.model || !allowedModels.includes(request.model))
+      (!selectedModel || !allowedModels.includes(selectedModel))
     ) {
       reject("model_not_allowed_by_workstream");
+      continue;
+    }
+    const workerAllowedModels = strings(row.worker_allowed_models_json);
+    if (
+      selectedModel &&
+      workerAllowedModels.length > 0 &&
+      !workerAllowedModels.includes(selectedModel)
+    ) {
+      reject("model_not_supported_by_worker");
       continue;
     }
     if (excluded.has(independenceKey)) {
@@ -478,17 +544,19 @@ export async function selectProjectExecutionTarget(
       continue;
     }
     if (
-      request.model &&
+      selectedModel &&
       providerMetadata.models &&
       Array.isArray(providerMetadata.models) &&
-      !providerMetadata.models.includes(request.model)
+      !providerMetadata.models.includes(selectedModel)
     ) {
       reject("model_not_supported_by_account");
       continue;
     }
 
     const grantPermissions = strings(row.allowed_permissions_json);
-    const workerPermissions = strings(row.permissions_json);
+    const workerPermissions = strings(
+      row.local_permissions_json ?? row.permissions_json,
+    );
     const permissions = resolveEffectivePermissions({
       projectMemberPermissions: projectPermissions(membership.role),
       workspaceGrantPermissions: grantPermissions,
@@ -541,7 +609,7 @@ export async function selectProjectExecutionTarget(
       accountId,
       credentialId,
       credentialOwnerUserId,
-      model: request.model ?? null,
+      model: selectedModel ?? null,
       effectivePermissions: permissions,
       permissionSnapshot,
       selectionExplanation: {
@@ -555,20 +623,31 @@ export async function selectProjectExecutionTarget(
           id: configuredWorkerId,
           workerTypeId,
           version: row.worker_version,
-          status: row.package_status ?? row.installation_status,
+          status:
+            row.local_worker_status ??
+            row.package_status ??
+            row.installation_status,
         },
-        credential: {
-          id: credentialId,
-          owner: credentialOwnerUserId === request.requesterUserId,
-          provider,
-        },
+        ...(isV7
+          ? { localAuthentication: { status: credentialStatus } }
+          : {
+              credential: {
+                id: credentialId,
+                owner: credentialOwnerUserId === request.requesterUserId,
+                provider,
+              },
+            }),
         filters: [
           "project_authorized",
           "grant_active",
           "workspace_online",
-          "configured_worker_bound",
-          "package_ready",
-          "credential_ready",
+          ...(isV7
+            ? [
+                "workspace_worker_owned",
+                "local_worker_ready",
+                "cloud_scheduling_enabled",
+              ]
+            : ["configured_worker_bound", "package_ready", "credential_ready"]),
           "permissions_intersected",
           "capacity_available",
           ...(statefulLease

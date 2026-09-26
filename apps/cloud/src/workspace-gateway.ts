@@ -772,6 +772,9 @@ export class WorkspaceGateway implements DurableObject {
       .first<{ owner_user_id: string }>();
     if (!owner) return;
     const now = new Date().toISOString();
+    const fullSnapshot =
+      (payload as Record<string, unknown>).fullSnapshot === true;
+    const reportedWorkerIds = new Set<string>();
     for (const raw of reports) {
       if (!raw || typeof raw !== "object") continue;
       const item = raw as Record<string, unknown>;
@@ -781,6 +784,7 @@ export class WorkspaceGateway implements DurableObject {
       const status = item.status;
       const revision = item.revision;
       const concurrency = item.localConcurrencyLimit;
+      if (typeof workerId === "string") reportedWorkerIds.add(workerId);
       if (
         typeof workerId !== "string" ||
         typeof workerTypeId !== "string" ||
@@ -794,15 +798,25 @@ export class WorkspaceGateway implements DurableObject {
         continue;
       }
       const previous = await this.env.CONCLAVE_DB.prepare(
-        "SELECT workspace_id, revision FROM workspace_worker_inventory WHERE worker_id = ?1",
+        "SELECT workspace_id, revision, removed_by_snapshot FROM workspace_worker_inventory WHERE worker_id = ?1",
       )
         .bind(workerId)
-        .first<{ workspace_id: string; revision: number }>();
+        .first<{
+          workspace_id: string;
+          revision: number;
+          removed_by_snapshot: number;
+        }>();
       // A Worker ID is permanently owned by the Workspace that first synced
       // it. Revisions only move forward, including removal tombstones.
       if (
         (previous && previous.workspace_id !== workspaceId) ||
-        (previous && Number(previous.revision) >= (revision as number))
+        (previous &&
+          Number(previous.revision) >= (revision as number) &&
+          !(
+            Number(previous.removed_by_snapshot) === 1 &&
+            status !== "removed" &&
+            Number(previous.revision) === revision
+          ))
       ) {
         continue;
       }
@@ -860,9 +874,11 @@ export class WorkspaceGateway implements DurableObject {
            revision = excluded.revision,
            updated_at = excluded.updated_at,
            last_seen_at = excluded.last_seen_at,
-           removed_at = excluded.removed_at
+           removed_at = excluded.removed_at,
+           removed_by_snapshot = 0
          WHERE workspace_worker_inventory.workspace_id = excluded.workspace_id
-           AND workspace_worker_inventory.revision < excluded.revision`,
+           AND (workspace_worker_inventory.revision < excluded.revision OR
+             (workspace_worker_inventory.removed_by_snapshot = 1 AND excluded.status != 'removed' AND workspace_worker_inventory.revision = excluded.revision))`,
       )
         .bind(
           workerId,
@@ -888,6 +904,37 @@ export class WorkspaceGateway implements DurableObject {
           status === "removed" ? now : null,
         )
         .run();
+      await this.env.CONCLAVE_DB.prepare(
+        `INSERT OR IGNORE INTO v7_worker_scheduling (worker_id, state, updated_at)
+         SELECT worker_id, 'disabled', ?2 FROM workspace_worker_inventory WHERE worker_id = ?1`,
+      )
+        .bind(workerId, now)
+        .run();
+    }
+    // Full snapshots are authoritative. Omission marks a tombstone without
+    // inventing a source revision; replaying the same snapshot is idempotent.
+    if (fullSnapshot) {
+      const existing = await this.env.CONCLAVE_DB.prepare(
+        `SELECT worker_id FROM workspace_worker_inventory
+          WHERE workspace_id = ?1 AND status != 'removed'`,
+      )
+        .bind(workspaceId)
+        .all<{ worker_id: string }>();
+      for (const row of existing.results ?? []) {
+        if (reportedWorkerIds.has(row.worker_id)) continue;
+        await this.env.CONCLAVE_DB.prepare(
+          `UPDATE workspace_worker_inventory SET status = 'removed', removed_at = ?2, removed_by_snapshot = 1,
+             updated_at = ?2 WHERE worker_id = ?1 AND workspace_id = ?3 AND status != 'removed'`,
+        )
+          .bind(row.worker_id, now, workspaceId)
+          .run();
+        await this.env.CONCLAVE_DB.prepare(
+          `UPDATE v7_worker_scheduling SET state = 'disabled', updated_at = ?2
+            WHERE worker_id = ?1 AND state != 'disabled'`,
+        )
+          .bind(row.worker_id, now)
+          .run();
+      }
     }
   }
 
