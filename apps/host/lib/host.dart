@@ -28,6 +28,7 @@ class HostConfig {
     required this.dataDirectory,
     this.cloudUri,
     this.hostId,
+    this.installationId,
     this.workspaceId,
     this.repositoriesFile,
     this.authToken,
@@ -37,6 +38,7 @@ class HostConfig {
   final Directory dataDirectory;
   final Uri? cloudUri;
   final String? hostId;
+  final String? installationId;
   final String? workspaceId;
   final String? repositoriesFile;
   final String? authToken;
@@ -52,6 +54,7 @@ class HostConfig {
     final index = args.indexOf('--data-dir');
     final cloudIndex = args.indexOf('--cloud-url');
     final hostIndex = args.indexOf('--host-id');
+    final installationIndex = args.indexOf('--installation-id');
     final workspaceIndex = args.indexOf('--workspace-id');
     final repositoriesIndex = args.indexOf('--repositories');
     final workRootIndex = args.indexOf('--work-root');
@@ -67,6 +70,12 @@ class HostConfig {
     final hostId = hostIndex >= 0 && hostIndex + 1 < args.length
         ? args[hostIndex + 1]
         : Platform.environment['CONCLAVE_HOST_ID'] ?? registration?.hostId;
+    final installationId = installationIndex >= 0 &&
+            installationIndex + 1 < args.length
+        ? args[installationIndex + 1]
+        : Platform.environment['CONCLAVE_HOST_INSTALLATION_ID'] ??
+            registration?.installationId ??
+            InstallationIdentityStore(dataDirectory).readSync();
     final workspaceId = workspaceIndex >= 0 && workspaceIndex + 1 < args.length
         ? args[workspaceIndex + 1]
         : Platform.environment['CONCLAVE_HOST_WORKSPACE_ID'] ??
@@ -89,6 +98,7 @@ class HostConfig {
       dataDirectory: dataDirectory,
       cloudUri: configuredCloudUri,
       hostId: hostId,
+      installationId: installationId,
       workspaceId: workspaceId,
       repositoriesFile: repositoriesFile,
       authToken: Platform.environment['CONCLAVE_HOST_TOKEN'] ?? storedToken,
@@ -215,6 +225,7 @@ class Host {
   bool _running = false;
   final List<StreamSubscription<ProcessSignal>> _signalSubscriptions = [];
 
+  String? get installationId => config.installationId;
   bool get isRunning => _running;
   Directory? get workRoot => _workRoot;
   Future<void> start() async {

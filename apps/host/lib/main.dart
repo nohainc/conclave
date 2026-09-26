@@ -239,6 +239,10 @@ class HostLifecycleController extends ChangeNotifier {
     final workspaceName = registration?.name ?? 'Conclave Workspace';
     final workspaceId = host.config.workspaceId ?? registration?.workspaceId;
     final hostId = host.config.hostId ?? registration?.hostId;
+    final installationId = host.installationId ??
+        host.config.installationId ??
+        registration?.installationId ??
+        InstallationIdentityStore(host.config.dataDirectory).readSync();
     final hostname = registration?.hostname ?? Platform.localHostname;
     final cloudUrl = host.config.cloudUri?.toString() ?? registration?.cloudUrl;
     final workRootPath = host.workRoot?.path ?? host.config.workRootPath;
@@ -250,6 +254,7 @@ class HostLifecycleController extends ChangeNotifier {
         detail: 'Active local work is being reconciled safely.',
         workspaceName: workspaceName,
         workspaceId: workspaceId,
+        installationId: installationId,
         hostId: hostId,
         hostname: hostname,
         cloudUrl: cloudUrl,
@@ -265,6 +270,7 @@ class HostLifecycleController extends ChangeNotifier {
         issue: startupError.toString(),
         workspaceName: workspaceName,
         workspaceId: workspaceId,
+        installationId: installationId,
         hostId: hostId,
         hostname: hostname,
         cloudUrl: cloudUrl,
@@ -278,6 +284,7 @@ class HostLifecycleController extends ChangeNotifier {
         title: 'Pair this Workspace',
         detail: 'Connect this machine to Conclave to begin.',
         workspaceName: workspaceName,
+        installationId: installationId,
         hostname: hostname,
         cloudUrl: cloudUrl,
         workRootPath: workRootPath,
@@ -291,6 +298,7 @@ class HostLifecycleController extends ChangeNotifier {
         detail: 'Checking this machine and reconnecting to Conclave.',
         workspaceName: workspaceName,
         workspaceId: workspaceId,
+        installationId: installationId,
         hostId: hostId,
         hostname: hostname,
         cloudUrl: cloudUrl,
@@ -317,6 +325,7 @@ class HostLifecycleController extends ChangeNotifier {
           : 'This machine is paired and ready to run assigned work.',
       workspaceName: workspaceName,
       workspaceId: workspaceId,
+      installationId: installationId,
       hostId: hostId,
       hostname: hostname,
       cloudUrl: cloudUrl,
@@ -412,6 +421,7 @@ class HostUiSnapshot {
     required this.detail,
     this.workspaceName,
     this.workspaceId,
+    this.installationId,
     this.hostId,
     this.hostname,
     this.cloudUrl,
@@ -437,6 +447,7 @@ class HostUiSnapshot {
   final String detail;
   final String? workspaceName;
   final String? workspaceId;
+  final String? installationId;
   final String? hostId;
   final String? hostname;
   final String? cloudUrl;
@@ -1297,6 +1308,11 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
                       ?.copyWith(fontWeight: FontWeight.w700)),
             ),
             const SizedBox(height: 6),
+            if (snapshot.installationId != null)
+              _CopyableDetailRow(
+                label: 'Installation ID',
+                value: snapshot.installationId!,
+              ),
             _CopyableDetailRow(
               label: 'Workspace ID',
               value: snapshot.workspaceId ??

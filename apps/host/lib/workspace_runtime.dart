@@ -35,11 +35,26 @@ Future<Host> buildWorkspaceRuntime(
   const credentialStore = PlatformSecureCredentialStore();
   final workerExecutor = WorkerProcessExecutor();
   final releaseTrustPolicy = workerTrustPolicy;
-  final localWorkspaceId = await LocalWorkspaceIdentityStore(
+  final installationId = await InstallationIdentityStore(
     config.dataDirectory,
-  ).getOrCreate(initialIdentity: config.workspaceId);
+  ).getOrCreate(initialIdentity: config.installationId);
+  final effectiveConfig = config.installationId == installationId
+      ? config
+      : HostConfig(
+          dataDirectory: config.dataDirectory,
+          cloudUri: config.cloudUri,
+          hostId: config.hostId,
+          installationId: installationId,
+          workspaceId: config.workspaceId,
+          repositoriesFile: config.repositoriesFile,
+          authToken: config.authToken,
+          workRootPath: config.workRootPath,
+        );
+  final localWorkspaceId = await LocalWorkspaceIdentityStore(
+    effectiveConfig.dataDirectory,
+  ).getOrCreate(initialIdentity: effectiveConfig.workspaceId);
   final localWorkerRegistry = LocalConfiguredWorkerRegistry(
-    dataDirectory: config.dataDirectory,
+    dataDirectory: effectiveConfig.dataDirectory,
     workspaceId: localWorkspaceId,
     onWorkerRemoving: (workerId) async {
       await workerExecutor.cancelWorker(workerId);
@@ -250,7 +265,7 @@ Future<Host> buildWorkspaceRuntime(
     });
   }
   final engine = Host(
-    config: config,
+    config: effectiveConfig,
     localWorkerRegistry: localWorkerRegistry,
     cloudConnection: connection,
     adapterPackageStore: v7AdapterPackageStore,
