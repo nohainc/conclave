@@ -31,7 +31,10 @@ function candidate(overrides: Record<string, unknown> = {}) {
     publisher: "codex",
     worker_version: "1.0.0",
     capabilities_json: JSON.stringify(["repository"]),
-    local_permissions_json: JSON.stringify(["repository:read", "repository:write"]),
+    local_permissions_json: JSON.stringify([
+      "repository:read",
+      "repository:write",
+    ]),
     worker_allowed_models_json: "[]",
     worker_default_model: null,
     local_worker_status: "ready",
@@ -105,7 +108,10 @@ describe("V7 Project execution scheduler", () => {
       publisher: "antigravity",
       worker_version: "1.0.0",
       capabilities_json: JSON.stringify(["code", "shell"]),
-      local_permissions_json: JSON.stringify(["repository:read", "repository:write"]),
+      local_permissions_json: JSON.stringify([
+        "repository:read",
+        "repository:write",
+      ]),
       local_worker_status: "ready",
       cloud_scheduling_state: "enabled",
       credential_status: "ready",

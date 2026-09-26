@@ -312,7 +312,7 @@ void main() {
       'WorkstreamPage loads and persists discussions via dataSource and updates when switching workstreams',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
-    final dataSource = StudioFixtureDataSource();
+    const dataSource = StudioFixtureDataSource();
     const project = StudioProject(
       id: 'project-1',
       name: 'Project One',

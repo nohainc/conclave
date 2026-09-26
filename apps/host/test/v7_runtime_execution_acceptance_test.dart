@@ -46,32 +46,47 @@ void main() {
 
     final source = Directory('${temp.path}/source');
     await Directory('${source.path}/bin').create(recursive: true);
-    await File('${source.path}/bin/adapter.dart').writeAsString(r'''
-import 'dart:convert';
-import 'dart:io';
-Future<void> main() async {
-  await for (final line in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
-    final request = jsonDecode(line) as Map<String, dynamic>;
-    final base = {'protocolVersion': '1.0', 'requestId': request['requestId']};
-    switch (request['type']) {
-      case 'initialize.request': stdout.writeln(jsonEncode({...base, 'type': 'initialize.result', 'adapterVersion': '1.0.0', 'capabilities': <String>[]}));
-      case 'version.request': stdout.writeln(jsonEncode({...base, 'type': 'version.result', 'adapterVersion': '1.0.0'}));
-      case 'health.request': stdout.writeln(jsonEncode({...base, 'type': 'health.result', 'healthy': true}));
-      case 'validate.request': stdout.writeln(jsonEncode({...base, 'type': 'validate.result', 'ready': true, 'issues': <Object>[]}));
-      case 'execute.request':
-        final cwd = Directory.current.path;
-        await File('${cwd}/fixture.txt').writeAsString('written-by-adapter');
-        stdout.writeln(jsonEncode({...base, 'type': 'progress', 'assignmentId': request['assignmentId'], 'message': 'fixture running', 'percentage': 50}));
-        stdout.writeln(jsonEncode({...base, 'type': 'result', 'assignmentId': request['assignmentId'], 'output': jsonEncode({'cwd': cwd, 'file': await File('${cwd}/fixture.txt').readAsString()})}));
+    await File('${source.path}/bin/adapter.mjs').writeAsString(r'''
+import { writeFile } from 'node:fs/promises';
+import { createInterface } from 'node:readline';
+
+const input = createInterface({ input: process.stdin });
+for await (const line of input) {
+  const request = JSON.parse(line);
+  const base = { protocolVersion: '1.0', requestId: request.requestId };
+  switch (request.type) {
+    case 'initialize.request':
+      console.log(JSON.stringify({ ...base, type: 'initialize.result', adapterVersion: '1.0.0', capabilities: [] }));
+      break;
+    case 'version.request':
+      console.log(JSON.stringify({ ...base, type: 'version.result', adapterVersion: '1.0.0' }));
+      break;
+    case 'health.request':
+      console.log(JSON.stringify({ ...base, type: 'health.result', healthy: true }));
+      break;
+    case 'validate.request':
+      console.log(JSON.stringify({ ...base, type: 'validate.result', ready: true, issues: [] }));
+      break;
+    case 'execute.request': {
+      const cwd = process.cwd();
+      await writeFile(`${cwd}/fixture.txt`, 'written-by-adapter');
+      console.log(JSON.stringify({ ...base, type: 'progress', assignmentId: request.assignmentId, message: 'fixture running', percentage: 50 }));
+      console.log(JSON.stringify({ ...base, type: 'result', assignmentId: request.assignmentId, output: JSON.stringify({ cwd, file: 'written-by-adapter' }) }));
+      break;
     }
   }
 }
 ''');
+
+    final nodeWhich = await Process.run('which', ['node']);
+    final nodeBin = nodeWhich.exitCode == 0 &&
+            nodeWhich.stdout.toString().trim().isNotEmpty
+        ? nodeWhich.stdout.toString().trim()
+        : 'node';
     final launcher = File('${source.path}/bin/adapter');
-    await launcher.writeAsString(r'''#!/bin/sh
-exec __DART__ "$(dirname "$0")/adapter.dart"
-'''
-        .replaceFirst('__DART__', Platform.resolvedExecutable));
+    await launcher.writeAsString('''#!/bin/sh
+exec "$nodeBin" "\$(dirname "\$0")/adapter.mjs"
+''');
     final chmod = await Process.run('chmod', ['700', launcher.path]);
     expect(chmod.exitCode, 0);
 

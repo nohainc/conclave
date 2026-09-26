@@ -181,8 +181,7 @@ void main() {
       expect(find.text('Workspace'), findsOneWidget);
       expect(find.text('Scheduling'), findsOneWidget);
       expect(find.text('Activity and audit'), findsOneWidget);
-      expect(find.textContaining('Remote scheduling state is not included'),
-          findsOneWidget);
+      expect(find.textContaining('Cloud scheduling · disabled'), findsOneWidget);
     });
 
     testWidgets('keeps Add Workspace available when none exist',

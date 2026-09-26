@@ -1,7 +1,8 @@
 # Architecture v7 Completion Plan
 
 **Status:** Active completion plan  
-**Baseline:** `main@2c740092fd0e558880873894fe997454a989fef2`  
+**Baseline:** `main@36bfedd8b51c7395857bb77abc6f187c21bb7b82`
+
 **Date:** 2026-09-26  
 **Architecture:** [Architecture v7](../architecture/ARCHITECTURE_V7.md)  
 **Decision:** [ADR-012](../decisions/ADR-012-workspace-owned-local-workers.md)  
@@ -9,26 +10,23 @@
 
 ## Purpose
 
-The v7 desktop vertical slice is now implemented: Conclave Workspace can pair
-with Cloud, run the real Workspace runtime, create local Workers, synchronize
-safe Worker inventory, execute V7 adapters, build as a native macOS
-application, and verify a real enrollment + Workspace Gateway connection.
-
-v7 is not yet the implemented baseline because the repository still contains
-two execution models and several production release gates remain open.
+The V7 Worker ownership and execution architecture is implemented: Conclave
+Workspace creates local Workers, publishes safe inventory, Cloud authorizes and
+schedules from V7 state, and the owning Workspace executes assignments through
+the real V7 runtime. V6 Worker compatibility has been retired. V7 is not yet the
+declared implemented baseline because production release gates remain open.
 
 This plan defines the remaining work required to move from:
 
 ~~~text
-V7 desktop vertical slice
-+ V7 inventory/scheduling path
-+ V6 compatibility path
+V7 Worker ownership and execution model
++ production validation and release gates
 ~~~
 
 to:
 
 ~~~text
-one V7 Worker model
+production-validated V7 Worker model
 + production adapter trust
 + complete first-party Worker coverage
 + real end-to-end acceptance

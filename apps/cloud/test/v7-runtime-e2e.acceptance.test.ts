@@ -195,12 +195,12 @@ describe("V7 runtime assignment acceptance", () => {
       rejectHarness = reject;
     });
     const gatewaySession = "session-v7-e2e";
-    let hostBridge: BridgeSocket;
+    const hostBridge: { current: BridgeSocket | null } = { current: null };
     const gatewayOutbound: string[] = [];
     const gatewaySocket = {
       send(data: string) {
         gatewayOutbound.push(data);
-        hostBridge.send(data);
+        hostBridge.current?.send(data);
       },
       close() {},
     };
@@ -228,7 +228,7 @@ describe("V7 runtime assignment acceptance", () => {
         env: process.env,
       },
     );
-    hostBridge = new BridgeSocket(child);
+    hostBridge.current = new BridgeSocket(child);
     let childStderr = "";
     child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
       childStderr += chunk;

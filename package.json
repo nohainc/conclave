@@ -11,6 +11,7 @@
     "app:e2e": "vitest run apps/cloud/test/application-e2e.test.ts",
     "host:architecture-check": "node scripts/verify-host-architecture.mjs",
     "host:package-adapter": "cd apps/host && dart run bin/package_v7_adapter.dart",
+    "workspace:build:macos": "bash scripts/build-workspace-macos.sh",
     "worker-adapters:test": "node --test packages/worker-manifest/adapters/shared/test/api-adapters.node.mjs packages/worker-manifest/adapters/codex/test/codex-adapter.node.mjs packages/worker-manifest/adapters/antigravity/test/antigravity-adapter.node.mjs packages/worker-manifest/adapters/claude-code/test/claude-code-adapter.node.mjs packages/worker-manifest/adapters/ollama/test/ollama-adapter.node.mjs",
     "docs:check": "node scripts/verify-doc-links.mjs",
     "cloud:execution-boundary-check": "node scripts/verify-cloud-execution-boundary.mjs",

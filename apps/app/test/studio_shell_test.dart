@@ -1553,10 +1553,10 @@ void main() {
         workerCount: 0,
         activeTaskCount: 0,
       );
-      final workspaceContext = StudioShellContext(
-        navigation: const StudioNavigation.workspace('ws-mac'),
-        projects: const [projectA],
-        workspaces: const [testWs],
+      const workspaceContext = StudioShellContext(
+        navigation: StudioNavigation.workspace('ws-mac'),
+        projects: [projectA],
+        workspaces: [testWs],
       );
 
       await tester.pumpWidget(

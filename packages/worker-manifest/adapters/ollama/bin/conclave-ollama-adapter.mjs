@@ -17,8 +17,8 @@ function apiUrl(path) {
 }
 
 async function get(path) {
-  const response = await fetch(apiUrl(path), {
-    signal: AbortSignal.timeout(5000),
+  const response = await globalThis.fetch(apiUrl(path), {
+    signal: globalThis.AbortSignal.timeout(5000),
   });
   if (!response.ok) throw new Error(`Ollama returned HTTP ${response.status}.`);
   return response.json();
@@ -127,7 +127,7 @@ async function handle(frame) {
           });
           break;
         }
-        const response = await fetch(apiUrl("/api/chat"), {
+        const response = await globalThis.fetch(apiUrl("/api/chat"), {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -135,7 +135,7 @@ async function handle(frame) {
             messages: [{ role: "user", content: frame.prompt }],
             stream: false,
           }),
-          signal: AbortSignal.timeout(120000),
+          signal: globalThis.AbortSignal.timeout(120000),
         });
         if (!response.ok)
           throw new Error(`Ollama returned HTTP ${response.status}.`);

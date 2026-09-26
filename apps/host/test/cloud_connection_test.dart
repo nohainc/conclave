@@ -1052,12 +1052,18 @@ void main() {
     final first = FakeSocket();
     final recovered = FakeSocket();
     final cancelled = Completer<String>();
+    final assignmentStarted = Completer<void>();
+    final finishAssignment = Completer<HostAssignmentResult>();
     var factoryCalls = 0;
     final connection = HostCloudConnection(
       uri: Uri.parse('wss://cloud.test/workspace-gateway'),
       hostId: 'runtime-1',
       workspaceId: 'workspace-1',
       factory: (_) async => ++factoryCalls == 1 ? first : recovered,
+      assignmentHandler: (_) {
+        assignmentStarted.complete();
+        return finishAssignment.future;
+      },
       assignmentCancellationHandler: (assignmentId, reason) async {
         cancelled.complete('$assignmentId:$reason');
         return true;
@@ -1067,8 +1073,39 @@ void main() {
       reconnectMaxDelay: const Duration(milliseconds: 5),
     );
     await connection.connect();
+    first.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'assignment-before-reconnect',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'assignment.start',
+      'executionWorkspaceId': 'workspace-1',
+      'workspaceRuntimeId': 'runtime-1',
+      'workerId': 'worker-1',
+      'runId': 'run-1',
+      'taskId': 'task-1',
+      'attemptId': 'attempt-1',
+      'assignmentId': 'assignment-still-running',
+      'idempotencyKey': 'idempotency-cancel-after-reconnect',
+      'payload': {
+        'workerId': 'worker-1',
+        'objective': 'keep running until Cloud cancels',
+        'role': 'implementer',
+        'resolvedWorkerVersion': '1.0.0',
+        'input': <String, Object?>{},
+        'contextArtifactIds': <String>[],
+        'timeoutMs': 60000,
+      },
+    }));
+    await assignmentStarted.future.timeout(const Duration(seconds: 2));
     await first.controller.close();
     await waitFor(() => connection.reconnectCount > 0);
+    // reconnectCount increments before the retry delay. Wait for the recovered
+    // socket's hello to prove _open attached its message listener before send.
+    await waitFor(() => recovered.sent.any((message) {
+          final decoded = jsonDecode(message as String) as Map<String, dynamic>;
+          return decoded['type'] == 'workspace.hello';
+        }));
     recovered.controller.add(jsonEncode({
       'protocol': 'conclave.workspace-runtime-protocol',
       'protocolVersion': workspaceRuntimeProtocolVersion,
@@ -1077,7 +1114,12 @@ void main() {
       'type': 'assignment.cancel',
       'executionWorkspaceId': 'workspace-1',
       'workspaceRuntimeId': 'runtime-1',
+      'workerId': 'worker-1',
+      'runId': 'run-1',
+      'taskId': 'task-1',
+      'attemptId': 'attempt-1',
       'assignmentId': 'assignment-still-running',
+      'idempotencyKey': 'idempotency-cancel-after-reconnect',
       'payload': {'reason': 'cancelled after reconnect', 'gracePeriodMs': 100},
     }));
     expect(await cancelled.future.timeout(const Duration(seconds: 2)),
@@ -1085,6 +1127,8 @@ void main() {
     await waitFor(() => recovered.sent.any((message) =>
         (jsonDecode(message as String) as Map<String, dynamic>)['type'] ==
         'assignment.cancel.ack'));
+    finishAssignment
+        .complete(const HostAssignmentResult(summary: 'cancelled by test'));
     await connection.close();
   });
 }

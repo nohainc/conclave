@@ -58,7 +58,7 @@ const signature = sign(null, Buffer.from(payload), privateKey).toString(
 );
 const base = required("CLOUD_API_URL").replace(/\/$/, "");
 const token = required("RELEASE_PUBLISH_TOKEN");
-const publish = await fetch(`${base}/api/host-releases/publish`, {
+const publish = await globalThis.fetch(`${base}/api/host-releases/publish`, {
   method: "POST",
   headers: {
     authorization: `Bearer ${token}`,
@@ -80,7 +80,7 @@ const publish = await fetch(`${base}/api/host-releases/publish`, {
 if (!publish.ok)
   throw new Error(`Workspace release publish failed: HTTP ${publish.status}`);
 
-const infoResponse = await fetch(
+const infoResponse = await globalThis.fetch(
   `${base}/api/host-releases/${encodeURIComponent(version)}`,
 );
 if (!infoResponse.ok)
@@ -123,7 +123,7 @@ if (
 ) {
   throw new Error("Workspace release metadata signature readback failed");
 }
-const download = await fetch(
+const download = await globalThis.fetch(
   `${base}/api/host-releases/${encodeURIComponent(version)}/download`,
   {
     headers: { authorization: `Bearer ${token}` },

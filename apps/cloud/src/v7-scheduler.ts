@@ -318,10 +318,7 @@ export async function selectProjectExecutionTarget(
       reject("explicit_workspace_mismatch");
       continue;
     }
-    if (
-      request.workerId &&
-      request.workerId !== workerId
-    ) {
+    if (request.workerId && request.workerId !== workerId) {
       reject("explicit_worker_mismatch");
       continue;
     }
@@ -346,13 +343,7 @@ export async function selectProjectExecutionTarget(
       reject("worker_not_allowed_by_grant");
       continue;
     }
-    if (
-      !allowedByJson(
-        row,
-        "allowed_workspace_worker_ids_json",
-        workerId,
-      )
-    ) {
+    if (!allowedByJson(row, "allowed_workspace_worker_ids_json", workerId)) {
       reject("worker_not_allowed_by_workstream");
       continue;
     }
