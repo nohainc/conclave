@@ -114,28 +114,26 @@ void main() {
     );
   }
 
-  testWidgets('first launch focuses the user on pairing', (tester) async {
-    var paired = false;
+  testWidgets('first launch presents clean workspace tab with work root and diagnostics', (tester) async {
     await pumpDashboard(
       tester,
       const HostUiSnapshot(
         mode: HostUiMode.firstLaunch,
         title: 'Pair this Workspace',
         detail: 'Connect this machine to Conclave to begin.',
+        workRootPath: '/Users/test/Work',
       ),
-      onPair: () => paired = true,
     );
 
-    expect(find.text('Pair with Conclave AX'), findsOneWidget);
+    expect(find.text('Work Root'), findsOneWidget);
+    expect(find.text('Advanced & Diagnostics'), findsOneWidget);
     expect(find.text('Projects'), findsNothing);
     expect(find.text('Chats'), findsNothing);
-    await tester.tap(find.text('Pair with Conclave AX'));
-    expect(paired, isTrue);
   });
 
-  testWidgets('unpaired offline Workspace can still open pairing',
+  testWidgets('offline Workspace displays recovery panel with retry',
       (tester) async {
-    var opened = false;
+    var retried = false;
     await pumpDashboard(
       tester,
       const HostUiSnapshot(
@@ -144,12 +142,13 @@ void main() {
         detail: 'The Workspace could not connect.',
         issue: 'Network unavailable',
       ),
-      onPair: () => opened = true,
+      onRetry: () async => retried = true,
     );
 
-    expect(find.text('Pair with Conclave AX'), findsOneWidget);
-    await tester.tap(find.text('Pair with Conclave AX'));
-    expect(opened, isTrue);
+    expect(find.text('Network unavailable'), findsOneWidget);
+    expect(find.text('Retry connection'), findsOneWidget);
+    await tester.tap(find.text('Retry connection'));
+    expect(retried, isTrue);
   });
 
   testWidgets(
@@ -186,24 +185,24 @@ void main() {
     expect(find.text('Projects'), findsNothing);
     expect(find.text('Workspace management'), findsNothing);
 
-    // Header actions
-    expect(find.text('Open Conclave AX'), findsOneWidget);
-    expect(find.byIcon(Icons.more_horiz), findsOneWidget);
+    // Header actions: 3-lines menu icon, no duplicate button in header
+    expect(find.byIcon(Icons.menu), findsOneWidget);
 
-    // 7-card sequence on single Workspace page - verify zero duplication
-    expect(find.text('Current Work'), findsOneWidget);
-    expect(find.text('View Workers'), findsOneWidget);
+    // Streamlined Workspace tab: Work Root and Advanced & Diagnostics
     expect(find.text('Work Root'), findsOneWidget);
-    expect(find.text('Application'), findsOneWidget);
-    expect(find.text('Cloud Pairing'), findsOneWidget);
     expect(find.text('Advanced & Diagnostics'), findsOneWidget);
+
+    // Removed sections are not on the Workspace tab
+    expect(find.text('Current Work'), findsNothing);
+    expect(find.text('View Workers'), findsNothing);
+    expect(find.text('Cloud Pairing'), findsNothing);
+    expect(find.bySemanticsLabel('Workspace status'), findsNothing);
   });
 
-  testWidgets('header overflow menu provides updates, diagnostics, and quit',
+  testWidgets('header overflow menu provides AX, updates, about, and quit',
       (tester) async {
     var quitCalled = false;
     var retryCalled = false;
-    var exportedCalled = false;
 
     await pumpDashboard(
       tester,
@@ -214,83 +213,52 @@ void main() {
         paired: true,
         cloudConnected: true,
         statusLabel: 'Connected',
-        workspaceName: 'MacBook Pro',
+        hostname: 'MacBook Pro',
       ),
       onQuit: () => quitCalled = true,
       onRetry: () async => retryCalled = true,
-      onExportDiagnostics: () async => exportedCalled = true,
     );
 
     expect(find.text('Conclave Workspace'), findsOneWidget);
     expect(find.text('MacBook Pro'), findsOneWidget);
     expect(find.text('Connected'), findsWidgets);
 
-    // Open overflow menu
-    await tester.tap(find.byIcon(Icons.more_horiz));
+    // Open overflow menu (3 lines icon)
+    await tester.tap(find.byIcon(Icons.menu));
     await tester.pumpAndSettle();
 
+    expect(find.text('Open Conclave AX'), findsOneWidget);
     expect(find.text('Check for Updates'), findsOneWidget);
-    expect(find.text('Advanced Diagnostics'), findsOneWidget);
+    expect(find.text('About'), findsOneWidget);
     expect(find.text('Quit Conclave Workspace'), findsOneWidget);
+    expect(find.text('Advanced Diagnostics'), findsNothing);
 
     // Tap Check for Updates
     await tester.tap(find.text('Check for Updates'));
     await tester.pumpAndSettle();
     expect(retryCalled, isTrue);
 
-    // Open overflow menu and tap Advanced Diagnostics
-    await tester.tap(find.byIcon(Icons.more_horiz));
+    // Open overflow menu and tap About
+    await tester.tap(find.byIcon(Icons.menu));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Advanced Diagnostics'));
+    await tester.tap(find.text('About'));
     await tester.pumpAndSettle();
-    expect(exportedCalled, isTrue);
+    expect(find.byType(AboutDialog), findsOneWidget);
+    expect(
+        find.text('Conclave Workspace Runtime and Local Worker Manager.'),
+        findsOneWidget);
+    // Dismiss about dialog
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
 
     // Open overflow menu again and tap Quit
-    await tester.tap(find.byIcon(Icons.more_horiz));
+    await tester.tap(find.byIcon(Icons.menu));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Quit Conclave Workspace'));
     expect(quitCalled, isTrue);
   });
 
-  testWidgets('active, offline, and install failure states stay understandable',
-      (tester) async {
-    await pumpDashboard(
-      tester,
-      const HostUiSnapshot(
-        mode: HostUiMode.active,
-        title: 'Work in progress',
-        detail: 'The Workspace is running assigned work.',
-        activeAssignments: 2,
-        activeAssignmentIds: ['assignment-1', 'assignment-2'],
-      ),
-    );
-    expect(find.text('2 active'), findsOneWidget);
-    expect(find.text('2 active assignments running.'), findsOneWidget);
-
-    await pumpDashboard(
-      tester,
-      const HostUiSnapshot(
-        mode: HostUiMode.offline,
-        title: 'Workspace is offline',
-        detail: 'The Workspace could not connect.',
-        issue: 'Network unavailable',
-      ),
-    );
-    expect(find.text('Network unavailable'), findsOneWidget);
-
-    await pumpDashboard(
-      tester,
-      const HostUiSnapshot(
-        mode: HostUiMode.installFailure,
-        title: 'Worker update needs attention',
-        detail: 'The last Worker update could not be installed.',
-        issue: 'Signature rejected',
-      ),
-    );
-    expect(find.text('Signature rejected'), findsOneWidget);
-  });
-
-  testWidgets('install failure explains safety and offers recovery',
+  testWidgets('install failure explains safety and offers recovery in recovery panel',
       (tester) async {
     var retried = false;
     await pumpDashboard(
@@ -305,6 +273,7 @@ void main() {
     );
 
     expect(find.text('What happened'), findsOneWidget);
+    expect(find.text('Signature rejected'), findsOneWidget);
     expect(
         find.text(
             'Your work is safe. The Workspace will not discard an assignment.'),
@@ -337,7 +306,6 @@ void main() {
       onExportDiagnostics: () async => exported = true,
     );
 
-    expect(find.bySemanticsLabel('Workspace status'), findsOneWidget);
     expect(find.text('Advanced & Diagnostics'), findsOneWidget);
 
     // Before expanding, internal section headers and IDs are collapsed / not shown
@@ -365,9 +333,8 @@ void main() {
     expect(exported, isTrue);
   });
 
-  testWidgets('workspace tab displays work root, cloud pairing, and unpair',
+  testWidgets('workspace tab displays work root and expandable unpair',
       (tester) async {
-    var paired = false;
     var unpaired = false;
     tester.view.physicalSize = const Size(800, 1600);
     tester.view.devicePixelRatio = 1;
@@ -388,17 +355,11 @@ void main() {
         cloudUrl: 'https://app.conclaveax.com',
         workRootPath: '/workspace/root',
       ),
-      onPair: () => paired = true,
       onUnpair: () => unpaired = true,
     );
 
     expect(find.text('Work Root'), findsOneWidget);
     expect(find.text('/workspace/root'), findsOneWidget);
-    expect(find.text('Cloud Pairing'), findsOneWidget);
-    expect(find.text('Connected as “Office Mac”'), findsOneWidget);
-
-    await tester.tap(find.text('Re-pair'));
-    expect(paired, isTrue);
 
     await tester.ensureVisible(find.text('Advanced & Diagnostics'));
     await tester.tap(find.text('Advanced & Diagnostics'));
@@ -431,8 +392,7 @@ void main() {
       ),
     );
 
-    expect(find.text('View Workers'), findsOneWidget);
-    await tester.tap(find.text('View Workers'));
+    await tester.tap(find.text('Workers').first);
     await tester.pumpAndSettle();
 
     expect(find.text('Configured Workers'), findsOneWidget);
