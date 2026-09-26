@@ -1438,7 +1438,7 @@ class _WorkspaceTab extends StatelessWidget {
               childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
               children: [
                 const Divider(height: 16),
-                // Connection Telemetry
+                // Connection
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Text('Connection',
@@ -1447,24 +1447,30 @@ class _WorkspaceTab extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 _DetailRow(
-                  label: 'Gateway URL',
-                  value: snapshot.cloudUrl ?? 'Not configured',
+                  label: 'Gateway state',
+                  value: snapshot.cloudConnected ? 'Connected' : 'Disconnected',
                 ),
                 _DetailRow(
-                  label: 'Gateway Status',
-                  value: snapshot.cloudConnected ? 'Connected' : 'Disconnected',
+                  label: 'Gateway URL',
+                  value: snapshot.cloudUrl ?? 'Not configured',
                 ),
                 _DetailRow(
                   label: 'Session ID',
                   value: snapshot.sessionId ?? 'No active session',
                 ),
                 _DetailRow(
-                  label: 'Reconnect Count',
+                  label: 'Reconnect count',
                   value: '${snapshot.reconnectCount}',
                 ),
                 _DetailRow(
-                  label: 'Active Work',
-                  value: '${snapshot.activeAssignments} assignments',
+                  label: 'Last inventory sync',
+                  value: snapshot.lastInventorySyncAt != null
+                      ? '${snapshot.lastInventorySyncAt!.toLocal()}'
+                      : 'Never',
+                ),
+                _DetailRow(
+                  label: 'Active assignments',
+                  value: '${snapshot.activeAssignments}',
                 ),
                 if (snapshot.activeAssignmentIds.isNotEmpty) ...[
                   const SizedBox(height: 4),
@@ -1478,10 +1484,10 @@ class _WorkspaceTab extends StatelessWidget {
                 ],
                 const SizedBox(height: 12),
 
-                // Identity & Machine info
+                // Identity
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: Text('Identity & Machine',
+                  child: Text('Identity',
                       style: theme.textTheme.bodySmall
                           ?.copyWith(fontWeight: FontWeight.w700)),
                 ),
@@ -1496,21 +1502,31 @@ class _WorkspaceTab extends StatelessWidget {
                   label: 'Runtime ID',
                   value: snapshot.hostId ?? 'Not assigned',
                 ),
+                const SizedBox(height: 12),
+
+                // System
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('System',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                ),
+                const SizedBox(height: 6),
                 _CopyableDetailRow(
                   label: 'Hostname',
                   value: snapshot.hostname ?? Platform.localHostname,
                 ),
                 _DetailRow(
-                  label: 'OS Platform',
+                  label: 'OS',
                   value:
                       '${Platform.operatingSystem} (${Platform.operatingSystemVersion})',
                 ),
                 const SizedBox(height: 12),
 
-                // Logs & Export
+                // Logs
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: Text('Logs & Troubleshooting',
+                  child: Text('Logs',
                       style: theme.textTheme.bodySmall
                           ?.copyWith(fontWeight: FontWeight.w700)),
                 ),
@@ -1540,7 +1556,7 @@ class _WorkspaceTab extends StatelessWidget {
                         onPressed: () => HostLifecycleController.openPath(
                             snapshot.logsPath!),
                         icon: const Icon(Icons.open_in_new, size: 14),
-                        label: const Text('Open Logs',
+                        label: const Text('Open Log File',
                             style: TextStyle(fontSize: 11)),
                       ),
                   ],
@@ -1551,7 +1567,7 @@ class _WorkspaceTab extends StatelessWidget {
                     FilledButton.tonalIcon(
                       onPressed: onExportDiagnostics,
                       icon: const Icon(Icons.download_outlined, size: 16),
-                      label: const Text('Export Diagnostics Report'),
+                      label: const Text('Export Report'),
                     ),
                     const Spacer(),
                     if (snapshot.paired && onUnpair != null)

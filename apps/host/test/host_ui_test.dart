@@ -193,15 +193,16 @@ void main() {
     await tester.tap(find.text('Advanced & Diagnostics'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Identity & Machine'), findsOneWidget);
+    expect(find.text('Identity'), findsOneWidget);
     expect(find.text('Workspace ID'), findsOneWidget);
     expect(find.text('ws-test-123'), findsOneWidget);
     expect(find.text('Runtime ID'), findsOneWidget);
     expect(find.text('runtime-host-a'), findsOneWidget);
-    expect(find.text('Gateway Status'), findsOneWidget);
+    expect(find.text('Gateway state'), findsOneWidget);
     expect(find.text('Connected'), findsWidgets);
+    expect(find.text('Open Log File'), findsOneWidget);
 
-    final exportBtn = find.text('Export Diagnostics Report');
+    final exportBtn = find.text('Export Report');
     await tester.ensureVisible(exportBtn);
     await tester.pumpAndSettle();
     expect(exportBtn, findsOneWidget);
