@@ -108,6 +108,11 @@ Then run:
 Actions -> Deploy Conclave AX App -> Run workflow
 ```
 
+Before applying production D1 migrations or deploying Workers, the workflow
+runs the V7 runtime assignment and inventory recovery end-to-end tests. These
+tests use the same Workspace Gateway URI and protocol preflight as the desktop
+runtime; a failure stops the production deployment.
+
 The custom-domain route in `infra/cloudflare/app.wrangler.jsonc` targets `app.conclaveax.com`. Because `conclaveax.com` is already on Cloudflare, the Worker custom domain can create/manage the required DNS routing and certificate during deployment.
 
 ## Durable Objects & Database Migrations

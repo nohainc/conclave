@@ -32,6 +32,12 @@ jobs:
         with:
           channel: stable
           cache: true
+      - name: Install Workspace Flutter dependencies
+        run: flutter pub get
+        working-directory: apps/host
+      - name: Require V7 runtime end-to-end acceptance
+        working-directory: .
+        run: DART_EXECUTABLE="$(command -v dart)" pnpm exec vitest run apps/cloud/test/v7-runtime-e2e.acceptance.test.ts apps/cloud/test/v7-inventory-recovery.acceptance.test.ts
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test

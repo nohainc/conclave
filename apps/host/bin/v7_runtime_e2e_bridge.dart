@@ -219,7 +219,9 @@ exec __DART__ "$(dirname "$0")/adapter.dart"
     ),
   );
   connection = HostCloudConnection(
-    uri: Uri.parse('ws://stdio/workspace-gateway'),
+    uri: Uri.parse(
+      'ws://stdio/api/workspace-gateway/connect?workspaceRuntimeId=$runtimeId',
+    ),
     hostId: runtimeId,
     workspaceId: workspaceId,
     factory: (_) async => socket,
