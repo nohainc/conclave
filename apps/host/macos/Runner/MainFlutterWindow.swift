@@ -83,6 +83,9 @@ class MainFlutterWindow: NSWindow {
     WorkspaceKeychainChannel.register(
       messenger: flutterViewController.engine.binaryMessenger
     )
+    (NSApp.delegate as? AppDelegate)?.registerDesktopChannel(
+      messenger: flutterViewController.engine.binaryMessenger
+    )
 
     self.minSize = NSSize(width: 400, height: 600)
 

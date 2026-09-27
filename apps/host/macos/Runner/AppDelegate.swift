@@ -29,8 +29,15 @@ class AppDelegate: FlutterAppDelegate {
 
   override func applicationDidFinishLaunching(_ notification: Notification) {
     super.applicationDidFinishLaunching(notification)
-    guard let controller = mainFlutterWindow?.contentViewController as? FlutterViewController else { return }
-    let channel = FlutterMethodChannel(name: "com.conclave.workspace/desktop", binaryMessenger: controller.engine.binaryMessenger)
+    installStatusMenu()
+  }
+
+  func registerDesktopChannel(messenger: FlutterBinaryMessenger) {
+    guard desktopChannel == nil else { return }
+    let channel = FlutterMethodChannel(
+      name: "com.conclave.workspace/desktop",
+      binaryMessenger: messenger
+    )
     desktopChannel = channel
     screenLockObserver = observeWorkspaceScreenLock { [weak self] in
       self?.requestManagementLock()
@@ -118,6 +125,9 @@ class AppDelegate: FlutterAppDelegate {
         result(FlutterMethodNotImplemented)
       }
     }
+  }
+
+  private func installStatusMenu() {
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     statusItem = item
     item.button?.title = "Conclave Workspace"
