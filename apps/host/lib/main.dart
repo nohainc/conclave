@@ -19,9 +19,11 @@ import 'workspace_pairing_dialog.dart';
 import 'workspace_runtime.dart';
 
 void showCopyableErrorSnackBar(BuildContext context, String message) {
+  final colors = Theme.of(context).colorScheme;
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
       duration: const Duration(seconds: 20),
+      backgroundColor: colors.error,
       content: Row(
         children: [
           Expanded(child: SelectableText(message)),
@@ -29,7 +31,7 @@ void showCopyableErrorSnackBar(BuildContext context, String message) {
             tooltip: 'Copy error message',
             visualDensity: VisualDensity.compact,
             icon: const Icon(Icons.copy, size: 18),
-            color: Theme.of(context).colorScheme.onInverseSurface,
+            color: colors.onError,
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: message));
               if (!context.mounted) return;
@@ -833,12 +835,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       final displayMessage = error is WorkspacePairingException
           ? '${error.message}\n${error.action}'
           : 'Pairing failed: $error';
-      ScaffoldMessenger.of(dialogContext).showSnackBar(
-        SnackBar(
-          content: Text(displayMessage),
-          backgroundColor: Theme.of(dialogContext).colorScheme.error,
-        ),
-      );
+      showCopyableErrorSnackBar(dialogContext, displayMessage);
       rethrow;
     }
   }
@@ -917,8 +914,9 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       }
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(dialogContext).showSnackBar(
-        SnackBar(content: Text('Could not disconnect Workspace: $error')),
+      showCopyableErrorSnackBar(
+        dialogContext,
+        'Could not disconnect Workspace: $error',
       );
     }
   }
@@ -1088,8 +1086,9 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       }
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(dialogContext).showSnackBar(
-        SnackBar(content: Text('Could not reset Workspace: $error')),
+      showCopyableErrorSnackBar(
+        dialogContext,
+        'Could not reset Workspace: $error',
       );
     }
   }
