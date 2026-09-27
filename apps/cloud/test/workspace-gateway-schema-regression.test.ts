@@ -153,6 +153,10 @@ describe("Workspace Gateway active-schema regression", () => {
     vi.stubGlobal("Response", TestResponse);
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-27T10:00:00.000Z"));
+    const logs: string[] = [];
+    vi.spyOn(console, "error").mockImplementation((record) => {
+      logs.push(String(record));
+    });
 
     let acceptedSocket: TestSocket | undefined;
     const gateway = new WorkspaceGateway(
@@ -180,6 +184,12 @@ describe("Workspace Gateway active-schema regression", () => {
     expect(acceptedSocket).toBeDefined();
     const sessionId = (acceptedSocket?.attachment as { sessionId: string })
       .sessionId;
+    await waitFor(
+      () =>
+        database
+          .prepare("SELECT 1 FROM workspace_sessions WHERE id = ?")
+          .get(sessionId) !== undefined,
+    );
     const initialSession = database
       .prepare("SELECT * FROM workspace_sessions WHERE id = ?")
       .get(sessionId) as {
@@ -241,6 +251,68 @@ describe("Workspace Gateway active-schema regression", () => {
           .get(workspaceId) as { status: string }
       ).status,
     ).toBe("offline");
+
+    const failedWorkspaceId = "workspace-session-write-failure";
+    const failedRuntimeId = "runtime-session-write-failure";
+    const failedRuntimeToken = "runtime-session-write-failure-secret";
+    database
+      .prepare(
+        `INSERT INTO execution_workspaces (id, owner_user_id, name, created_at, updated_at)
+         VALUES (?, 'owner', 'Session Write Failure', '2026-01-01', '2026-01-01')`,
+      )
+      .run(failedWorkspaceId);
+    database
+      .prepare(
+        `INSERT INTO workspace_runtime_identities
+         (id, workspace_id, credential_key_ref, credential_token_hash, created_at)
+         VALUES (?, ?, 'test-key-ref', ?, '2026-01-01')`,
+      )
+      .run(
+        failedRuntimeId,
+        failedWorkspaceId,
+        await hashToken(failedRuntimeToken),
+      );
+    database.exec(`
+      CREATE TRIGGER fail_session_insert
+      BEFORE INSERT ON workspace_sessions
+      BEGIN SELECT RAISE(FAIL, 'simulated session history write failure'); END;
+    `);
+    let failureSocket: TestSocket | undefined;
+    const failureGateway = new WorkspaceGateway(
+      {
+        id: { name: failedWorkspaceId },
+        acceptWebSocket(socket: unknown) {
+          failureSocket = socket as TestSocket;
+        },
+      } as never,
+      { CONCLAVE_DB: new LocalD1(database) as never },
+    );
+    const failureResponse = (await failureGateway.fetch(
+      new Request(
+        `https://app.conclave.test/api/workspace-gateway/connect?workspaceRuntimeId=${failedRuntimeId}`,
+        {
+          headers: {
+            upgrade: "websocket",
+            authorization: `Bearer ${failedRuntimeToken}`,
+          },
+        },
+      ),
+    )) as unknown as TestResponse;
+    expect(failureResponse.status).toBe(101);
+    expect(failureSocket).toBeDefined();
+    expect(
+      (
+        database
+          .prepare("SELECT status FROM execution_workspaces WHERE id = ?")
+          .get(failedWorkspaceId) as { status: string }
+      ).status,
+    ).toBe("online");
+    await waitFor(() =>
+      logs.some((entry) =>
+        entry.includes("GW-SESSION session_observability_write_failed"),
+      ),
+    );
+    expect(logs.join("\n")).not.toContain(failedRuntimeToken);
 
     database.close();
   });

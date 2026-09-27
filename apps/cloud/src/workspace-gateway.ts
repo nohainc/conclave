@@ -218,6 +218,7 @@ export class WorkspaceGateway implements DurableObject {
   private workspaceRuntimeId: string | null = null;
   private sessionId: string | null = null;
   private correlationId: string | null = null;
+  private sessionWriteChain: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly state: DurableObjectState,
@@ -360,6 +361,17 @@ export class WorkspaceGateway implements DurableObject {
         { status: 401 },
       );
     }
+
+    // Workspace online state is an authorization/scheduling prerequisite, so
+    // persist it before accepting the transport. Session history is diagnostic
+    // and is written best-effort after the socket is accepted.
+    const now = new Date().toISOString();
+    await this.env.CONCLAVE_DB.prepare(
+      "UPDATE execution_workspaces SET status = 'online', updated_at = ?1 WHERE id = ?2",
+    )
+      .bind(now, runtimeIdentity.executionWorkspaceId)
+      .run();
+
     logStructured("info", "GW-06 durable_object_runtime_authenticated", {
       requestId: correlationId,
       runtimeId: workspaceRuntimeId,
@@ -400,28 +412,27 @@ export class WorkspaceGateway implements DurableObject {
     this.sessionId = sessionId;
     this.correlationId = correlationId;
 
-    const now = new Date().toISOString();
-    await this.env.CONCLAVE_DB.prepare(
-      `INSERT INTO workspace_sessions
-       (id, workspace_id, runtime_identity_id, client_version, protocol_version,
-        ip_address, connected_at, last_heartbeat_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)`,
-    )
-      .bind(
-        sessionId,
-        runtimeIdentity.executionWorkspaceId,
-        workspaceRuntimeId,
-        "0.1.0",
-        WORKSPACE_RUNTIME_PROTOCOL_VERSION,
-        request.headers.get("CF-Connecting-IP") ?? "127.0.0.1",
-        now,
-      )
-      .run();
-    await this.env.CONCLAVE_DB.prepare(
-      "UPDATE execution_workspaces SET status = 'online', updated_at = ?1 WHERE id = ?2",
-    )
-      .bind(now, runtimeIdentity.executionWorkspaceId)
-      .run();
+    this.queueSessionWrite(
+      () =>
+        this.env.CONCLAVE_DB.prepare(
+          `INSERT INTO workspace_sessions
+           (id, workspace_id, runtime_identity_id, client_version, protocol_version,
+            ip_address, connected_at, last_heartbeat_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)`,
+        )
+          .bind(
+            sessionId,
+            runtimeIdentity.executionWorkspaceId,
+            workspaceRuntimeId,
+            "0.1.0",
+            WORKSPACE_RUNTIME_PROTOCOL_VERSION,
+            request.headers.get("CF-Connecting-IP") ?? "127.0.0.1",
+            now,
+          )
+          .run(),
+      "session_insert_failed",
+      { requestId: correlationId, runtimeId: workspaceRuntimeId },
+    );
 
     logStructured("info", "GW-09 returning_http_101", {
       requestId: correlationId,
@@ -469,18 +480,35 @@ export class WorkspaceGateway implements DurableObject {
     }
     this.socket = null;
     const now = new Date().toISOString();
-    await this.env.CONCLAVE_DB.prepare(
-      "UPDATE workspace_sessions SET disconnected_at = ?1 WHERE id = ?2",
-    )
-      .bind(now, sessionId)
-      .run();
     if (this.executionWorkspaceId) {
-      await this.env.CONCLAVE_DB.prepare(
-        "UPDATE execution_workspaces SET status = 'offline', updated_at = ?1 WHERE id = ?2",
-      )
-        .bind(now, this.executionWorkspaceId)
-        .run();
+      try {
+        await this.env.CONCLAVE_DB.prepare(
+          "UPDATE execution_workspaces SET status = 'offline', updated_at = ?1 WHERE id = ?2",
+        )
+          .bind(now, this.executionWorkspaceId)
+          .run();
+      } catch {
+        logStructured("error", "GW-SESSION workspace_offline_update_failed", {
+          requestId: this.correlationId ?? undefined,
+          runtimeId: this.workspaceRuntimeId ?? undefined,
+          workspaceId: this.executionWorkspaceId,
+        });
+      }
     }
+    this.queueSessionWrite(
+      () =>
+        this.env.CONCLAVE_DB.prepare(
+          "UPDATE workspace_sessions SET disconnected_at = ?1 WHERE id = ?2",
+        )
+          .bind(now, sessionId)
+          .run(),
+      "session_disconnect_update_failed",
+      {
+        requestId: this.correlationId ?? undefined,
+        runtimeId: this.workspaceRuntimeId ?? undefined,
+        workspaceId: this.executionWorkspaceId ?? undefined,
+      },
+    );
     // This event carries no Worker configuration. AX rereads the owner-scoped
     // inventory endpoint after each complete snapshot.
     if (this.executionWorkspaceId) {
@@ -491,6 +519,32 @@ export class WorkspaceGateway implements DurableObject {
         durable: false,
       });
     }
+  }
+
+  private queueSessionWrite(
+    write: () => Promise<unknown>,
+    failure: string,
+    correlation: {
+      requestId?: string;
+      runtimeId?: string;
+      workspaceId?: string;
+    },
+  ): void {
+    this.sessionWriteChain = this.sessionWriteChain
+      .then(() => write())
+      .then(() => undefined)
+      .catch(() => {
+        // Database errors can contain bound values. Emit only a safe category
+        // and correlation metadata, never the raw error or credentials.
+        logStructured(
+          "error",
+          "GW-SESSION session_observability_write_failed",
+          {
+            ...correlation,
+          },
+          { failure },
+        );
+      });
   }
 
   private async handleMessage(data: unknown, sessionId: string): Promise<void> {
@@ -581,11 +635,20 @@ export class WorkspaceGateway implements DurableObject {
         return;
       case "workspace.heartbeat":
         if (message.payload && typeof message.payload === "object") {
-          await this.env.CONCLAVE_DB.prepare(
-            "UPDATE workspace_sessions SET last_heartbeat_at = ?1 WHERE id = ?2",
-          )
-            .bind(now, sessionId)
-            .run();
+          this.queueSessionWrite(
+            () =>
+              this.env.CONCLAVE_DB.prepare(
+                "UPDATE workspace_sessions SET last_heartbeat_at = ?1 WHERE id = ?2",
+              )
+                .bind(now, sessionId)
+                .run(),
+            "session_heartbeat_update_failed",
+            {
+              requestId: this.correlationId ?? undefined,
+              runtimeId: this.workspaceRuntimeId ?? undefined,
+              workspaceId: this.executionWorkspaceId ?? undefined,
+            },
+          );
         }
         this.send({
           protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,

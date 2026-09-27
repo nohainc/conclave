@@ -146,6 +146,12 @@ critical runtime tables, and exercises the production Gateway connection,
 heartbeat, and disconnect statements. A clean active migration chain must
 support every SQL statement used by current Cloud runtime code.
 
+Gateway transport acceptance depends on runtime authentication and the
+Workspace online-state write, because the scheduler only selects online
+Workspaces. Session history and heartbeat/disconnect timestamps are
+observability data: their writes are queued and logged on failure, but cannot
+reject an authenticated connection or interrupt a heartbeat acknowledgement.
+
 
 ## Backend deployment gate
 
