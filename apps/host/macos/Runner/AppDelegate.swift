@@ -3,6 +3,16 @@ import FlutterMacOS
 import ServiceManagement
 import LocalAuthentication
 
+func observeWorkspaceScreenLock(
+  center: DistributedNotificationCenter = .default(),
+  notificationName: Notification.Name = Notification.Name("com.apple.screenIsLocked"),
+  onLock: @escaping () -> Void
+) -> NSObjectProtocol {
+  center.addObserver(forName: notificationName, object: nil, queue: .main) { _ in
+    onLock()
+  }
+}
+
 @main
 class AppDelegate: FlutterAppDelegate {
   private var statusItem: NSStatusItem?
@@ -15,15 +25,16 @@ class AppDelegate: FlutterAppDelegate {
   private var runtimeConnected = false
   private var reauthRequired = false
   private var quitApproved = false
+  private var screenLockObserver: NSObjectProtocol?
 
   override func applicationDidFinishLaunching(_ notification: Notification) {
     super.applicationDidFinishLaunching(notification)
     guard let controller = mainFlutterWindow?.contentViewController as? FlutterViewController else { return }
     let channel = FlutterMethodChannel(name: "com.conclave.workspace/desktop", binaryMessenger: controller.engine.binaryMessenger)
     desktopChannel = channel
-    DistributedNotificationCenter.default().addObserver(
-      forName: Notification.Name("com.apple.screenIsLocked"), object: nil, queue: .main
-    ) { [weak self] _ in self?.requestManagementLock() }
+    screenLockObserver = observeWorkspaceScreenLock { [weak self] in
+      self?.requestManagementLock()
+    }
     channel.setMethodCallHandler { [weak self] call, result in
       switch call.method {
       case "status":

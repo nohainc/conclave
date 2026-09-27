@@ -234,6 +234,136 @@ describe("desktop human authentication", () => {
     ).rejects.toThrow(/invalid, expired, or revoked/);
   });
 
+  it("keeps runtime credentials out of human management APIs", async () => {
+    const { env, sqlite } = await setup();
+    const now = new Date().toISOString();
+    sqlite.prepare(
+      "INSERT INTO users (id, email, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+    ).run("human-a", "a@example.test", "A", now, now);
+    sqlite.prepare(
+      "INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at) VALUES (?, ?, ?, 'offline', ?, ?)",
+    ).run("workspace-a", "human-a", "A's Workspace", now, now);
+    sqlite.prepare(
+      "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_key_ref, credential_token_hash, created_at) VALUES (?, ?, ?, ?, ?)",
+    ).run("runtime-a", "workspace-a", "runtime-key", await hashToken("runtime-only-secret"), now);
+
+    await expect(
+      handleGetDesktopHumanSession(
+        new Request("https://app.conclave.test/api/desktop-auth/session", {
+          headers: { authorization: "Bearer runtime-only-secret" },
+        }),
+        env,
+      ),
+    ).rejects.toMatchObject({
+      status: 401,
+      message: "Desktop human session is invalid, expired, or revoked",
+    });
+  });
+
+  it("allows ownership transition only after explicit release", async () => {
+    const { env, sqlite } = await setup();
+    const now = new Date().toISOString();
+    const installationId = "install_12345678-1234-4234-8234-123456789abc";
+    const accounts = [
+      ["human-a", "a@example.test"],
+      ["human-b", "b@example.test"],
+    ] as const;
+    for (const [id, email] of accounts) {
+      sqlite.prepare(
+        "INSERT INTO users (id, email, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+      ).run(id, email, id, now, now);
+      sqlite.prepare(
+        "INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      ).run(
+        `session-${id}`,
+        id,
+        await hashToken(`${id}-secret`),
+        "conclave.desktop.management",
+        now,
+        now,
+        new Date(Date.now() + 60_000).toISOString(),
+      );
+    }
+    const registrationBody = {
+      contractVersion: "1.0",
+      installationId,
+      proposedWorkspaceName: "Test computer",
+      hostname: "test-computer",
+      platform: "macos",
+      architecture: "arm64",
+      appVersion: "1.0.0",
+      runtimeCapabilities: {
+        os: "macos",
+        arch: "arm64",
+        appVersion: "1.0.0",
+        supportedRuntimes: ["dart"],
+        maxConcurrentWorkers: 2,
+      },
+    };
+    const register = (userId: string, extra: Record<string, unknown> = {}) =>
+      handleRegisterWorkspaceFromDesktop(
+        new Request("https://app.conclave.test/api/workspace-runtime/register", {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${userId}-secret`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ ...registrationBody, ...extra }),
+        }),
+        env,
+      );
+
+    const connected = await register("human-a");
+    expect(connected.status).toBe(201);
+    const firstRuntime = (await connected.json()) as {
+      workspaceId: string;
+      workspaceRuntimeId: string;
+    };
+    const recovered = await register("human-a", {
+      existingWorkspaceId: firstRuntime.workspaceId,
+      existingRuntimeId: firstRuntime.workspaceRuntimeId,
+    });
+    expect(recovered.status).toBe(201);
+    const recoveredRuntime = (await recovered.json()) as {
+      outcome: string;
+      workspaceId: string;
+      workspaceRuntimeId: string;
+    };
+    expect(recoveredRuntime).toMatchObject({
+      outcome: "recovered",
+      workspaceId: firstRuntime.workspaceId,
+    });
+
+    const accountSwitchDenied = await register("human-b");
+    expect(accountSwitchDenied.status).toBe(409);
+    expect(await accountSwitchDenied.json()).toMatchObject({
+      code: "installation_already_owned",
+    });
+
+    const released = await handleReleaseDesktopWorkspace(
+      new Request("https://app.conclave.test/api/workspace-runtime/release", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer human-a-secret",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          installationId,
+          workspaceId: recoveredRuntime.workspaceId,
+          runtimeId: recoveredRuntime.workspaceRuntimeId,
+        }),
+      }),
+      env,
+    );
+    expect(released.status).toBe(200);
+    const transferred = await register("human-b");
+    expect(transferred.status).toBe(201);
+    expect(await transferred.json()).toMatchObject({
+      outcome: "created",
+      ownerUserId: "human-b",
+    });
+  });
+
   it("rejects an incorrect comparison code and cannot approve the intent", async () => {
     const { env } = await setup();
     const create = await handleCreateDesktopAuthIntent(

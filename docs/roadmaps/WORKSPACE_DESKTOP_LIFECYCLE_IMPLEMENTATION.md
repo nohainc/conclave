@@ -1144,6 +1144,37 @@ Test at minimum:
 Lifecycle security is enforced by backend/local state, not merely widget
 visibility.
 
+## Implementation status
+
+Acceptance coverage is distributed across the existing and expanded suites:
+
+- Workspace shell widget tests cover signed-out, signed-in/disconnected,
+  connected/unlocked, locked, reauth-required, and different-owner states;
+  they assert management/Worker content is absent from protected shells and
+  that signing in does not invoke Connect.
+- Desktop auth and Cloud tests cover the browser comparison-code flow,
+  registration/recovery, same-owner enforcement, explicit release before an
+  account transition, and both credential-boundary directions.
+- Runtime Gateway tests cover runtime-only HTTP session creation, WebSocket
+  authentication, long-poll fallback, cursor isolation, event replay, and
+  assignment delivery without a human management session.
+- Lifecycle and local-auth tests cover desired-runtime migration, disconnected
+  startup intent, locked state persistence, failed unlock, and recent-auth
+  expiry. Existing Phase 14 tests cover disconnect revocation and Gateway
+  liveness checks on Release.
+- Added a native macOS observer test for screen-lock notification delivery.
+  The Runner application target builds with the observer; the XCTest target
+  could not be executed here because the project’s `TEST_HOST` points at the
+  previous app executable name and the Flutter test link step rejects its
+  framework bundle loader. The screen-lock XCTest remains a macOS CI gate.
+
+Verification in this checkout: the focused Cloud security/runtime suites pass
+(37 tests), and the Flutter shell/lifecycle/local-auth suites pass (49 tests).
+Cloud type checking and Dart analysis pass. The full Cloud suite was attempted;
+it reports two unrelated baseline failures in `v6-discuss-work-contract.test.ts`
+and `workspace-gateway-schema-regression.test.ts`, and the broader run did not
+finish before interruption. No schema migration was introduced.
+
 ---
 
 # Phase 16 — Migration and cleanup
