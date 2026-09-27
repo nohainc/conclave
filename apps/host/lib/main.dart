@@ -1420,7 +1420,6 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         return;
       }
     }
-    if (!await _requireStepUp('Sign out of this Workspace account')) return;
     final stored =
         await lifecycle.host.credentialStore.read(desktopHumanCredentialKey);
     if (stored != null) {
