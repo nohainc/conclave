@@ -64,6 +64,15 @@ comparison code. The desktop keeps its waiting dialog open while the system
 browser is used. Cloud temporarily accepts the former code-based request shape
 for older desktop releases during the compatibility window.
 
+Each opened verification tab observes the intent's non-secret terminal status.
+Canceling in Workspace cancels the intent with its poll credential; choosing
+Cancel on the authenticated browser page denies the pending intent through the
+Better Auth session. Tabs attempt to close automatically after approval,
+cancellation, or expiry. If the system browser blocks script-initiated closing,
+the tab displays a clear result and a manual **Close tab** action. The browser
+status response contains only the intent ID, status, and expiry, never either
+desktop credential or account identity.
+
 This supports the same account methods as AX over time:
 
 - email/password;

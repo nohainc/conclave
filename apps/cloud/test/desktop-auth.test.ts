@@ -10,6 +10,9 @@ import {
   handleClaimDesktopAuthIntent,
   handleCreateDesktopAuthIntent,
   handleDesktopAuthIntentStatus,
+  handleDesktopAuthIntentBrowserStatus,
+  handleCancelDesktopAuthIntent,
+  handleDenyDesktopAuthIntent,
   handleGetDesktopHumanSession,
   handleCheckWorkspaceOwnership,
   handleDisconnectDesktopWorkspace,
@@ -235,6 +238,81 @@ describe("desktop human authentication", () => {
         env,
       ),
     ).rejects.toThrow(/invalid, expired, or revoked/);
+  });
+
+  it("lets only the intent poll credential cancel and expose terminal browser status", async () => {
+    const { env } = await setup();
+    const create = await handleCreateDesktopAuthIntent(
+      new Request("https://app.conclave.test/api/desktop-auth/intents", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          clientName: "Conclave Workspace",
+          contractVersion: "1.1",
+        }),
+      }),
+      env,
+    );
+    const intent = (await create.json()) as {
+      intentId: string;
+      pollToken: string;
+    };
+    await expect(
+      handleCancelDesktopAuthIntent(
+        new Request("https://app.conclave.test/cancel", { method: "POST" }),
+        env,
+        intent.intentId,
+      ),
+    ).rejects.toThrow(/credential required/);
+
+    const canceled = await handleCancelDesktopAuthIntent(
+      new Request("https://app.conclave.test/cancel", {
+        method: "POST",
+        headers: { authorization: `Bearer ${intent.pollToken}` },
+      }),
+      env,
+      intent.intentId,
+    );
+    expect(canceled.status).toBe(200);
+    const status = await handleDesktopAuthIntentBrowserStatus(
+      new Request(
+        `https://app.conclave.test/api/desktop-auth/intents/${intent.intentId}/browser-status`,
+      ),
+      env,
+      intent.intentId,
+    );
+    expect(((await status.json()) as { status: string }).status).toBe("denied");
+  });
+
+  it("allows an authenticated browser user to cancel a pending intent", async () => {
+    const { env } = await setup();
+    const create = await handleCreateDesktopAuthIntent(
+      new Request("https://app.conclave.test/api/desktop-auth/intents", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          clientName: "Workspace",
+          contractVersion: "1.1",
+        }),
+      }),
+      env,
+    );
+    const intent = (await create.json()) as { intentId: string };
+    const response = await handleDenyDesktopAuthIntent(
+      new Request("https://app.conclave.test/cancel", {
+        method: "POST",
+        headers: { cookie: "better-auth-session=opaque" },
+      }),
+      env,
+      intent.intentId,
+    );
+    expect(response.status).toBe(200);
+    const status = await handleDesktopAuthIntentBrowserStatus(
+      new Request("https://app.conclave.test/status"),
+      env,
+      intent.intentId,
+    );
+    expect(((await status.json()) as { status: string }).status).toBe("denied");
   });
 
   it("keeps runtime credentials out of human management APIs", async () => {

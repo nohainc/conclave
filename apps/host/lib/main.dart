@@ -1158,11 +1158,27 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                cancelled = true;
-                dialogOpen = false;
-                Navigator.pop(dialogContext, true);
-              },
+              onPressed: browserOpening
+                  ? null
+                  : () async {
+                      setDialogState(() {
+                        browserOpening = true;
+                        browserError = null;
+                      });
+                      try {
+                        await client.cancelIntent(intent);
+                      } on Object catch (error) {
+                        // The request may already have been approved or expired.
+                        // Closing the desktop dialog still stops its local wait;
+                        // browser tabs observe the server's terminal state.
+                        browserError = error.toString();
+                      }
+                      cancelled = true;
+                      dialogOpen = false;
+                      if (dialogContext.mounted) {
+                        Navigator.pop(dialogContext, true);
+                      }
+                    },
               child: const Text('Cancel'),
             ),
             FilledButton.icon(

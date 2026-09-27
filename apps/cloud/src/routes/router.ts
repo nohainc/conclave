@@ -54,8 +54,9 @@ export async function routeWorkerRequest(
           url.pathname,
         ));
     const desktopAuthPath = url.pathname.startsWith("/api/desktop-auth/");
-    const desktopAuthCookieMutation =
-      desktopAuthPath && !url.pathname.endsWith("/approve");
+    const desktopAuthRequiresSameOrigin =
+      desktopAuthPath &&
+      (url.pathname.endsWith("/approve") || url.pathname.endsWith("/deny"));
     if (
       !workspaceEnrollmentRedeem &&
       !desktopWorkspaceRegistration &&
@@ -64,7 +65,7 @@ export async function routeWorkerRequest(
       !desktopWorkspaceDisconnect &&
       !workspaceRuntimeUnpair &&
       !workspaceRuntimeTransport &&
-      !desktopAuthCookieMutation &&
+      (!desktopAuthPath || desktopAuthRequiresSameOrigin) &&
       (request.method === "POST" ||
         request.method === "PUT" ||
         request.method === "PATCH" ||
@@ -110,12 +111,36 @@ export async function routeWorkerRequest(
       return await handlers.handleGetDesktopHumanSession!(request, env);
     }
     const desktopIntentMatch = url.pathname.match(
-      /^\/api\/desktop-auth\/intents\/([^/]+)(?:\/(approve|claim))?$/,
+      /^\/api\/desktop-auth\/intents\/([^/]+)(?:\/(approve|claim|cancel|deny|browser-status))?$/,
     );
     if (desktopIntentMatch?.[1]) {
       const intentId = decodeURIComponent(desktopIntentMatch[1]);
       if (request.method === "GET" && !desktopIntentMatch[2]) {
         return await handlers.handleDesktopAuthIntentStatus!(
+          request,
+          env,
+          intentId,
+        );
+      }
+      if (
+        request.method === "GET" &&
+        desktopIntentMatch[2] === "browser-status"
+      ) {
+        return await handlers.handleDesktopAuthIntentBrowserStatus!(
+          request,
+          env,
+          intentId,
+        );
+      }
+      if (request.method === "POST" && desktopIntentMatch[2] === "cancel") {
+        return await handlers.handleCancelDesktopAuthIntent!(
+          request,
+          env,
+          intentId,
+        );
+      }
+      if (request.method === "POST" && desktopIntentMatch[2] === "deny") {
+        return await handlers.handleDenyDesktopAuthIntent!(
           request,
           env,
           intentId,

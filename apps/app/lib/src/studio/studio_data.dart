@@ -84,6 +84,8 @@ abstract interface class StudioDataSource {
   Future<void> approveDesktopAuthIntent({
     required String intentId,
   });
+  Future<String> loadDesktopAuthIntentStatus({required String intentId});
+  Future<void> denyDesktopAuthIntent({required String intentId});
   Future<List<StudioWorkspace>> loadWorkspaces();
   Future<List<StudioProject>> loadProjects({bool includeArchived = false});
   Future<List<Map<String, dynamic>>> loadProjectWorkspaces({
@@ -806,6 +808,37 @@ class StudioApiClient implements StudioDataSource {
         // Keep the status-based message for non-JSON error responses.
       }
       throw StudioApiException(message, statusCode: response.statusCode);
+    }
+  }
+
+  @override
+  Future<String> loadDesktopAuthIntentStatus({
+    required String intentId,
+  }) async {
+    final body = await _getJson(Uri.parse(
+      '$baseUrl/desktop-auth/intents/${Uri.encodeComponent(intentId)}/browser-status',
+    ));
+    final status = body['status'];
+    if (status is! String) {
+      throw const StudioApiException('Sign-in request status is malformed');
+    }
+    return status;
+  }
+
+  @override
+  Future<void> denyDesktopAuthIntent({required String intentId}) async {
+    final response = await client.post(
+      Uri.parse(
+        '$baseUrl/desktop-auth/intents/${Uri.encodeComponent(intentId)}/deny',
+      ),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode(const <String, Object?>{}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+        'Sign-in cancellation failed (${response.statusCode})',
+        statusCode: response.statusCode,
+      );
     }
   }
 

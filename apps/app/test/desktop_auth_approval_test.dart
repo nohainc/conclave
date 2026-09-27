@@ -20,6 +20,13 @@ class _SignedInDesktopAuthFixture extends StudioFixtureDataSource {
       );
 }
 
+class _CanceledDesktopAuthFixture extends _SignedInDesktopAuthFixture {
+  @override
+  Future<String> loadDesktopAuthIntentStatus(
+          {required String intentId}) async =>
+      'denied';
+}
+
 void main() {
   testWidgets('desktop approval uses the signed-in account without a code',
       (tester) async {
@@ -50,5 +57,27 @@ void main() {
         find.text(
             'Your browser did not allow this tab to close. You can close it now.'),
         findsOneWidget);
+  });
+
+  testWidgets('a remotely canceled intent closes its browser tab automatically',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: ConclaveAppShell(
+        services: const DefaultPlatformServices(),
+        dataSource: _CanceledDesktopAuthFixture(),
+        initialUri: Uri(
+          path: '/desktop-auth/approve',
+          queryParameters: {'intentId': 'intent-1'},
+        ),
+      ),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sign-in canceled'), findsOneWidget);
+    expect(
+        find.textContaining('did not allow this tab to close'), findsOneWidget);
+    expect(find.text('Close tab'), findsOneWidget);
   });
 }

@@ -222,6 +222,14 @@ class StudioFixtureDataSource implements StudioDataSource {
   Future<void> approveDesktopAuthIntent({required String intentId}) async {}
 
   @override
+  Future<String> loadDesktopAuthIntentStatus(
+          {required String intentId}) async =>
+      'pending';
+
+  @override
+  Future<void> denyDesktopAuthIntent({required String intentId}) async {}
+
+  @override
   Future<void> revokeAccountSession(String token) async {}
 
   @override

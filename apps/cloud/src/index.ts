@@ -68,6 +68,10 @@ export const routeHandlers = {
   handleSessionLogout: handlers.handleSessionLogout,
   handleCreateDesktopAuthIntent: handlers.handleCreateDesktopAuthIntent,
   handleDesktopAuthIntentStatus: handlers.handleDesktopAuthIntentStatus,
+  handleDesktopAuthIntentBrowserStatus:
+    handlers.handleDesktopAuthIntentBrowserStatus,
+  handleCancelDesktopAuthIntent: handlers.handleCancelDesktopAuthIntent,
+  handleDenyDesktopAuthIntent: handlers.handleDenyDesktopAuthIntent,
   handleApproveDesktopAuthIntent: handlers.handleApproveDesktopAuthIntent,
   handleClaimDesktopAuthIntent: handlers.handleClaimDesktopAuthIntent,
   handleRevokeDesktopHumanSession: handlers.handleRevokeDesktopHumanSession,
@@ -75,7 +79,8 @@ export const routeHandlers = {
   handleCheckWorkspaceOwnership: handlers.handleCheckWorkspaceOwnership,
   handleDisconnectDesktopWorkspace: handlers.handleDisconnectDesktopWorkspace,
   handleReleaseDesktopWorkspace: handlers.handleReleaseDesktopWorkspace,
-  handleRegisterWorkspaceFromDesktop: handlers.handleRegisterWorkspaceFromDesktop,
+  handleRegisterWorkspaceFromDesktop:
+    handlers.handleRegisterWorkspaceFromDesktop,
   handleRotateDesktopHumanSession: handlers.handleRotateDesktopHumanSession,
   handleCompleteStepUp: handlers.handleCompleteStepUp,
   handleListPendingInvitations: handlers.handleListPendingInvitations,

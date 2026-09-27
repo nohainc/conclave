@@ -1394,6 +1394,82 @@ async function handleDesktopAuthIntentStatus(
   return json({ intentId, status, expiresAt: intent.expiresAt });
 }
 
+/** Public, non-secret state for tabs opened by the desktop system browser. */
+async function handleDesktopAuthIntentBrowserStatus(
+  _request: Request,
+  env: SecurityEnv,
+  intentId: string,
+): Promise<Response> {
+  const intent = await env.CONCLAVE_DB.prepare(
+    `SELECT expires_at AS expiresAt, approved_at AS approvedAt,
+            claimed_at AS claimedAt, denied_at AS deniedAt
+       FROM desktop_auth_intents WHERE id = ?1`,
+  )
+    .bind(intentId)
+    .first<{
+      expiresAt: string;
+      approvedAt: string | null;
+      claimedAt: string | null;
+      deniedAt: string | null;
+    }>();
+  if (!intent) throw new HttpError(404, "Desktop auth intent not found");
+  const status = intent.claimedAt
+    ? "claimed"
+    : intent.deniedAt
+      ? "denied"
+      : intent.approvedAt
+        ? "approved"
+        : intent.expiresAt <= new Date().toISOString()
+          ? "expired"
+          : "pending";
+  return json({ intentId, status, expiresAt: intent.expiresAt });
+}
+
+async function handleCancelDesktopAuthIntent(
+  request: Request,
+  env: SecurityEnv,
+  intentId: string,
+): Promise<Response> {
+  const pollToken = extractBearerToken(request.headers);
+  if (!pollToken) {
+    throw new HttpError(401, "Desktop auth polling credential required");
+  }
+  const now = new Date().toISOString();
+  const result = await env.CONCLAVE_DB.prepare(
+    `UPDATE desktop_auth_intents SET denied_at = ?1
+      WHERE id = ?2 AND poll_token_hash = ?3 AND approved_at IS NULL
+        AND claimed_at IS NULL AND denied_at IS NULL AND expires_at > ?1`,
+  )
+    .bind(now, intentId, await hashToken(pollToken))
+    .run();
+  if ((result.meta?.changes ?? 0) !== 1) {
+    throw new HttpError(409, "Desktop sign-in is no longer pending");
+  }
+  return json({ intentId, cancelled: true });
+}
+
+async function handleDenyDesktopAuthIntent(
+  request: Request,
+  env: SecurityEnv,
+  intentId: string,
+): Promise<Response> {
+  const identity = await identityService.resolve(request, env);
+  if (!identity)
+    throw new HttpError(401, "Sign in before canceling this request");
+  const now = new Date().toISOString();
+  const result = await env.CONCLAVE_DB.prepare(
+    `UPDATE desktop_auth_intents SET denied_at = ?1
+      WHERE id = ?2 AND approved_at IS NULL AND claimed_at IS NULL
+        AND denied_at IS NULL AND expires_at > ?1`,
+  )
+    .bind(now, intentId)
+    .run();
+  if ((result.meta?.changes ?? 0) !== 1) {
+    throw new HttpError(409, "Desktop sign-in is no longer pending");
+  }
+  return json({ intentId, cancelled: true });
+}
+
 async function handleApproveDesktopAuthIntent(
   request: Request,
   env: SecurityEnv,
@@ -12309,6 +12385,9 @@ export {
   handleSessionLogout,
   handleCreateDesktopAuthIntent,
   handleDesktopAuthIntentStatus,
+  handleDesktopAuthIntentBrowserStatus,
+  handleCancelDesktopAuthIntent,
+  handleDenyDesktopAuthIntent,
   handleApproveDesktopAuthIntent,
   handleClaimDesktopAuthIntent,
   handleRevokeDesktopHumanSession,

@@ -192,4 +192,30 @@ describe("Workspace desktop enrollment route", () => {
     expect(approve).toHaveBeenCalledOnce();
     expect(sameOrigin).toHaveBeenCalledOnce();
   });
+
+  it("routes poller cancellation without cookie same-origin requirements", async () => {
+    const sameOrigin = vi.fn();
+    const cancel = vi.fn(async () => Response.json({ cancelled: true }));
+    const response = await routeWorkerRequest(
+      new Request(
+        "https://app.conclaveax.com/api/desktop-auth/intents/intent-1/cancel",
+        {
+          method: "POST",
+          headers: {
+            authorization: "Bearer poll-secret",
+            "content-type": "application/json",
+          },
+          body: "{}",
+        },
+      ),
+      {} as Env,
+      undefined,
+      { handleCancelDesktopAuthIntent: cancel },
+      dependencies(sameOrigin),
+    );
+
+    expect(response.status).toBe(200);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(sameOrigin).not.toHaveBeenCalled();
+  });
 });

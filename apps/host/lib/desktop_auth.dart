@@ -210,6 +210,16 @@ class DesktopAuthClient {
         runInShell: false, mode: ProcessStartMode.detached);
   }
 
+  Future<void> cancelIntent(DesktopAuthIntent intent) async {
+    await _requestJson(
+      'POST',
+      _api(
+          '/desktop-auth/intents/${Uri.encodeComponent(intent.intentId)}/cancel'),
+      bearer: intent.pollToken,
+      body: const <String, Object?>{},
+    );
+  }
+
   Future<DesktopHumanSession> waitForApprovalAndClaim(
     DesktopAuthIntent intent, {
     bool Function()? isCancelled,

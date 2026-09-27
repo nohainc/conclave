@@ -105,7 +105,11 @@ class _StudioAppState extends State<ConclaveAppShell> {
   bool authBusy = false;
   bool desktopAuthBusy = false;
   bool desktopAuthApproved = false;
+  bool desktopAuthCancelled = false;
   bool desktopAuthCloseBlocked = false;
+  String? _desktopAuthIntentId;
+  Timer? _desktopAuthStatusTimer;
+  bool _desktopAuthStatusRequestActive = false;
   String? desktopAuthError;
   String? authNotice;
   String? authError;
@@ -282,6 +286,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
     browserNavigation = createStudioBrowserNavigation();
     final initialUri = widget.initialUri ?? browserNavigation.current;
     navigation = StudioNavigation.fromUri(initialUri);
+    _desktopAuthIntentId = _intentIdFromNavigation(navigation);
     if (!_isCanonicalWorkspaceUri(initialUri, navigation.toUri())) {
       browserNavigation.replace(navigation.toUri());
     }
@@ -293,12 +298,19 @@ class _StudioAppState extends State<ConclaveAppShell> {
     realtimeSubscription = realtimeClient.events.listen(_onRealtimeEvent);
     store = StudioStore(widget.dataSource);
     snapshot = StudioSnapshot.empty();
+    if (_desktopAuthIntentId != null) {
+      _desktopAuthStatusTimer = Timer.periodic(
+        const Duration(seconds: 2),
+        (_) => unawaited(_pollDesktopAuthStatus()),
+      );
+    }
     unawaited(_loadSession());
   }
 
   @override
   void dispose() {
     refreshTimer?.cancel();
+    _desktopAuthStatusTimer?.cancel();
     _searchQueryController.removeListener(_onSearchQueryChanged);
     _searchQueryController.dispose();
     _searchFocusNode.dispose();
@@ -316,6 +328,46 @@ class _StudioAppState extends State<ConclaveAppShell> {
     unawaited(realtimeClient.close());
     browserNavigation.dispose();
     super.dispose();
+  }
+
+  String? _intentIdFromNavigation(StudioNavigation value) {
+    if (value.desktopAuthIntentId != null) return value.desktopAuthIntentId;
+    if (value.loginReturnTo == null) return null;
+    final returnTo = Uri.tryParse(value.loginReturnTo!);
+    if (returnTo == null) return null;
+    return StudioNavigation.fromUri(returnTo).desktopAuthIntentId;
+  }
+
+  Future<void> _pollDesktopAuthStatus() async {
+    final intentId = _desktopAuthIntentId;
+    if (intentId == null ||
+        _desktopAuthStatusRequestActive ||
+        desktopAuthApproved ||
+        desktopAuthCancelled) {
+      return;
+    }
+    _desktopAuthStatusRequestActive = true;
+    try {
+      final status = await widget.dataSource.loadDesktopAuthIntentStatus(
+        intentId: intentId,
+      );
+      if (!mounted || status == 'pending') return;
+      if (!{'approved', 'claimed', 'denied', 'expired'}.contains(status)) {
+        return;
+      }
+      browserNavigation.replace(Uri(path: '/'));
+      final approved = status == 'approved' || status == 'claimed';
+      setState(() {
+        desktopAuthApproved = approved;
+        desktopAuthCancelled = !approved;
+        desktopAuthCloseBlocked = !browserNavigation.closeCurrentWindow();
+      });
+      _desktopAuthStatusTimer?.cancel();
+    } on Object {
+      // Temporary network or sign-in errors should not disrupt browser auth.
+    } finally {
+      _desktopAuthStatusRequestActive = false;
+    }
   }
 
   Future<void> _loadSession() async {
@@ -1223,6 +1275,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {
+                  if (desktopAuthApproved || desktopAuthCancelled) {
+                    return _desktopAuthApprovalView();
+                  }
                   if (isLoading) return _loadingScaffold();
                   if (authRequired) return _authScaffold();
                   if (loadError != null) return _errorScaffold();
@@ -1561,7 +1616,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
   }
 
   Widget _desktopAuthApprovalView() {
-    if (desktopAuthApproved) {
+    if (desktopAuthApproved || desktopAuthCancelled) {
       return Scaffold(
         body: Center(
           child: ConstrainedBox(
@@ -1574,11 +1629,15 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text('Sign-in approved',
+                    Text(
+                        desktopAuthApproved
+                            ? 'Sign-in approved'
+                            : 'Sign-in canceled',
                         style: Theme.of(context).textTheme.headlineSmall),
                     const SizedBox(height: 12),
-                    const Text(
-                        'Return to Conclave Workspace to finish signing in.'),
+                    Text(desktopAuthApproved
+                        ? 'Return to Conclave Workspace to finish signing in.'
+                        : 'This sign-in request was canceled. You can close this tab.'),
                     if (desktopAuthCloseBlocked) ...[
                       const SizedBox(height: 8),
                       const Text(
@@ -1630,10 +1689,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
                         desktopAuthBusy ? 'Approving…' : 'Approve sign-in'),
                   ),
                   TextButton(
-                    onPressed: desktopAuthBusy
-                        ? null
-                        : () => _navigateTo(const StudioNavigation.home(),
-                            replace: true),
+                    onPressed:
+                        desktopAuthBusy ? null : _cancelDesktopAuthFromBrowser,
                     child: const Text('Cancel'),
                   ),
                 ],
@@ -1664,6 +1721,35 @@ class _StudioAppState extends State<ConclaveAppShell> {
         desktopAuthBusy = false;
         desktopAuthApproved = true;
       });
+      _closeApprovedAuthTab();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        desktopAuthBusy = false;
+        desktopAuthError = error.toString();
+      });
+    }
+  }
+
+  Future<void> _cancelDesktopAuthFromBrowser() async {
+    final intentId = navigation.desktopAuthIntentId;
+    if (intentId == null) {
+      _navigateTo(const StudioNavigation.home(), replace: true);
+      return;
+    }
+    setState(() {
+      desktopAuthBusy = true;
+      desktopAuthError = null;
+    });
+    try {
+      await widget.dataSource.denyDesktopAuthIntent(intentId: intentId);
+      if (!mounted) return;
+      browserNavigation.replace(Uri(path: '/'));
+      setState(() {
+        desktopAuthBusy = false;
+        desktopAuthCancelled = true;
+      });
+      _desktopAuthStatusTimer?.cancel();
       _closeApprovedAuthTab();
     } catch (error) {
       if (!mounted) return;

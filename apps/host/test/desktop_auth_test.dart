@@ -6,6 +6,35 @@ import 'package:conclave_host/desktop_auth.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('cancels an intent with its poll credential', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    final received = Completer<void>();
+    server.listen((request) async {
+      expect(request.method, 'POST');
+      expect(request.uri.path, '/api/desktop-auth/intents/intent-a/cancel');
+      expect(request.headers.value(HttpHeaders.authorizationHeader),
+          'Bearer poll-secret');
+      request.response.headers.contentType = ContentType.json;
+      request.response.write('{"cancelled":true}');
+      await request.response.close();
+      received.complete();
+    });
+    final client = DesktopAuthClient(
+      cloudUrl: 'http://127.0.0.1:${server.port}',
+    );
+    addTearDown(client.close);
+
+    await client.cancelIntent(DesktopAuthIntent(
+      intentId: 'intent-a',
+      pollToken: 'poll-secret',
+      verificationUrl: Uri.parse('http://127.0.0.1/verify'),
+      expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+      pollIntervalMs: 2000,
+    ));
+    await received.future;
+  });
+
   test('accepts browser approval intents without exposing a comparison code',
       () {
     final intent = DesktopAuthIntent.fromJson({

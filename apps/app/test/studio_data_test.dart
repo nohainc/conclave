@@ -66,6 +66,38 @@ void main() {
     expect(jsonDecode(client.lastBody!), isEmpty);
   });
 
+  test('reads non-secret desktop sign-in status for browser cleanup', () async {
+    final client = _JsonClient({'status': 'denied'}, statusCode: 200);
+    final api = StudioApiClient(
+      baseUrl: 'https://conclave.test/api',
+      client: client,
+    );
+
+    expect(
+      await api.loadDesktopAuthIntentStatus(intentId: 'intent-a'),
+      'denied',
+    );
+    expect(
+      client.lastRequest?.url.path,
+      '/api/desktop-auth/intents/intent-a/browser-status',
+    );
+  });
+
+  test('cancels desktop sign-in from the authenticated browser', () async {
+    final client = _JsonClient(const <String, dynamic>{}, statusCode: 200);
+    final api = StudioApiClient(
+      baseUrl: 'https://conclave.test/api',
+      client: client,
+    );
+
+    await api.denyDesktopAuthIntent(intentId: 'intent-a');
+    expect(client.lastRequest?.method, 'POST');
+    expect(
+      client.lastRequest?.url.path,
+      '/api/desktop-auth/intents/intent-a/deny',
+    );
+  });
+
   test('loads and clears the Cloud session boundary', () async {
     final client = _JsonClient({
       'authenticated': true,
