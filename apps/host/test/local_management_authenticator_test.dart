@@ -61,8 +61,7 @@ void main() {
     expect(saved.ownerUserId, 'owner-1');
   });
 
-  test('locking is unavailable when the platform has no native authenticator',
-      () async {
+  test('locking immediately protects management without prompting', () async {
     final directory = await Directory.systemTemp.createTemp('conclave-lock-');
     addTearDown(() => directory.delete(recursive: true));
     final store = WorkspaceLifecyclePreferencesStore(directory);
@@ -72,9 +71,10 @@ void main() {
       authenticator: authenticator,
     );
 
-    expect(await lock.lock(), isFalse);
-    expect(store.readSync().managementLockPreference,
-        ManagementLockState.unlocked);
+    expect(await lock.lock(), isTrue);
+    expect(
+        store.readSync().managementLockPreference, ManagementLockState.locked);
+    expect(authenticator.authenticationCount, 0);
   });
 
   test('step-up authentication is briefly reused and expires', () async {

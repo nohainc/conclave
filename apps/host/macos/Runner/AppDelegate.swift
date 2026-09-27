@@ -7,8 +7,13 @@ import LocalAuthentication
 class AppDelegate: FlutterAppDelegate {
   private var statusItem: NSStatusItem?
   private var desktopChannel: FlutterMethodChannel?
-  private var protectedMenuItems: [NSMenuItem] = []
+  private var connectedMenuItems: [NSMenuItem] = []
+  private var workspaceStatusItem: NSMenuItem?
+  private var assignmentCountItem: NSMenuItem?
+  private var pauseItem: NSMenuItem?
   private var managementLocked = false
+  private var runtimeConnected = false
+  private var reauthRequired = false
 
   override func applicationDidFinishLaunching(_ notification: Notification) {
     super.applicationDidFinishLaunching(notification)
@@ -78,18 +83,28 @@ class AppDelegate: FlutterAppDelegate {
     }
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     statusItem = item
-    item.button?.title = "Conclave · Starting"
+    item.button?.title = "Conclave Workspace"
     let menu = NSMenu()
+    let heading = NSMenuItem(title: "Conclave Workspace", action: nil, keyEquivalent: "")
+    heading.isEnabled = false
+    menu.addItem(heading)
+    let workspaceStatus = NSMenuItem(title: "Workspace disconnected", action: nil, keyEquivalent: "")
+    workspaceStatus.isEnabled = false
+    workspaceStatusItem = workspaceStatus
+    menu.addItem(workspaceStatus)
+    let assignmentCount = NSMenuItem(title: "0 assignments", action: nil, keyEquivalent: "")
+    assignmentCount.isEnabled = false
+    assignmentCountItem = assignmentCount
+    menu.addItem(assignmentCount)
+    menu.addItem(NSMenuItem.separator())
     add(menu, "Open Conclave Workspace", action: "openWorkspace")
-    add(menu, "Lock Workspace", action: "lock")
-    protectedMenuItems.append(add(menu, "Open Conclave AX", action: "openAX"))
+    connectedMenuItems.append(add(menu, "Lock Workspace", action: "lock"))
+    let pause = add(menu, "Pause new work", action: "togglePause")
+    pauseItem = pause
+    connectedMenuItems.append(pause)
     menu.addItem(NSMenuItem.separator())
-    protectedMenuItems.append(add(menu, "Pause New Work", action: "pause"))
-    protectedMenuItems.append(add(menu, "Resume New Work", action: "resume"))
-    protectedMenuItems.append(add(menu, "Drain", action: "drain"))
-    menu.addItem(NSMenuItem.separator())
-    protectedMenuItems.append(add(menu, "Export Diagnostics", action: "diagnostics"))
-    protectedMenuItems.append(add(menu, "Open Logs", action: "logs"))
+    connectedMenuItems.append(add(menu, "Diagnostics", action: "diagnostics"))
+    connectedMenuItems.forEach { $0.isHidden = true }
     menu.addItem(NSMenuItem.separator())
     add(menu, "Quit Conclave Workspace", action: "quit")
     item.menu = menu
@@ -108,6 +123,9 @@ class AppDelegate: FlutterAppDelegate {
     if action == "openWorkspace" {
       NSApp.activate(ignoringOtherApps: true)
       mainFlutterWindow?.makeKeyAndOrderFront(nil)
+      desktopChannel?.invokeMethod("menuAction", arguments: action)
+    } else if action == "togglePause" {
+      desktopChannel?.invokeMethod("menuAction", arguments: "togglePause")
     } else {
       desktopChannel?.invokeMethod("menuAction", arguments: action)
     }
@@ -116,16 +134,42 @@ class AppDelegate: FlutterAppDelegate {
   private func updateStatus(_ status: [String: Any]) {
     let state = status["state"] as? String ?? "Offline"
     let active = status["active"] as? Int ?? 0
-    statusItem?.button?.title = "Conclave · \(state) · \(active)"
+    let transport = status["transportMode"] as? String ?? "offline"
+    let accepting = status["accepting"] as? Bool ?? true
+    runtimeConnected = status["runtimeRunning"] as? Bool ?? (state == "Connected")
+    reauthRequired = status["reauthRequired"] as? Bool ?? false
+    statusItem?.button?.title = "Conclave Workspace"
+    if reauthRequired && runtimeConnected {
+      workspaceStatusItem?.title = "Workspace running"
+    } else if runtimeConnected {
+      switch transport {
+      case "websocket": workspaceStatusItem?.title = "Connected · WebSocket"
+      case "http_long_poll": workspaceStatusItem?.title = "Connected · HTTPS fallback"
+      case "switching_to_websocket": workspaceStatusItem?.title = "Reconnecting · HTTPS fallback"
+      default: workspaceStatusItem?.title = "Connected"
+      }
+    } else if state == "Connecting" || state == "Attention" {
+      workspaceStatusItem?.title = state == "Connecting" ? "Workspace connecting" : "Workspace needs attention"
+    } else {
+      workspaceStatusItem?.title = "Workspace disconnected"
+    }
+    assignmentCountItem?.title = reauthRequired && runtimeConnected
+      ? "Sign in required to manage"
+      : "\(active) assignments"
+    assignmentCountItem?.isHidden = !runtimeConnected && !reauthRequired
+    connectedMenuItems.forEach { $0.isHidden = !runtimeConnected || reauthRequired }
+    pauseItem?.title = accepting ? "Pause new work" : "Resume new work"
     setManagementLocked(status["managementLocked"] as? Bool ?? managementLocked)
   }
 
   private func setManagementLocked(_ locked: Bool) {
     managementLocked = locked
-    protectedMenuItems.forEach { $0.isHidden = locked }
+    connectedMenuItems.filter { ($0.representedObject as? String) != "lock" }
+      .forEach { $0.isHidden = locked || !runtimeConnected || reauthRequired }
     if let lockItem = statusItem?.menu?.items.first(where: { ($0.representedObject as? String) == "lock" }) {
       lockItem.title = locked ? "Workspace Locked · Unlock in App" : "Lock Workspace"
-      lockItem.isEnabled = !locked
+      lockItem.isEnabled = !locked && runtimeConnected && !reauthRequired
+      lockItem.isHidden = !runtimeConnected || reauthRequired
     }
   }
 

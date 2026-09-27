@@ -38,7 +38,6 @@ class WorkspaceManagementLock {
   final LocalManagementAuthenticator authenticator;
 
   Future<bool> lock() async {
-    if (!await authenticator.isAvailable()) return false;
     await _persist(ManagementLockState.locked);
     return true;
   }

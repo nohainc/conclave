@@ -195,6 +195,8 @@ class HostLifecycleController extends ChangeNotifier {
   Object? _startupError;
   Timer? _statusTimer;
   bool _draining = false;
+  // Fail closed until the human session has been restored by the shell router.
+  bool _managementAuthRequired = true;
   static const _desktopChannel =
       MethodChannel('com.conclave.workspace/desktop');
 
@@ -217,6 +219,12 @@ class HostLifecycleController extends ChangeNotifier {
   bool get acceptingNewWork => host.cloudConnection?.acceptingNewWork ?? false;
   bool get draining => _draining;
 
+  void updateManagementAuthRequired(bool required) {
+    if (_managementAuthRequired == required) return;
+    _managementAuthRequired = required;
+    _publishMenuStatus();
+  }
+
   Future<void> handleDesktopAction(String action) async {
     switch (action) {
       case 'openWorkspace':
@@ -228,6 +236,14 @@ class HostLifecycleController extends ChangeNotifier {
         break;
       case 'resume':
         host.cloudConnection?.resumeNewWork();
+        break;
+      case 'togglePause':
+        final connection = host.cloudConnection;
+        if (connection?.acceptingNewWork == true) {
+          connection?.pauseNewWork();
+        } else if (connection?.isConnected == true) {
+          connection?.resumeNewWork();
+        }
         break;
       case 'drain':
         final connection = host.cloudConnection;
@@ -353,16 +369,16 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
 
   void _publishMenuStatus() {
     final connection = host.cloudConnection;
-    final attention = startupError != null || !running;
-    final state = attention
+    final state = startupError != null
         ? 'Attention'
-        : _draining
-            ? 'Draining'
-            : !(connection?.acceptingNewWork ?? false)
-                ? 'Paused'
-                : connection?.isConnected == true
-                    ? 'Connected'
-                    : 'Offline';
+        : connection?.isConnected == true
+            ? 'Connected'
+            : WorkspaceLifecyclePreferencesStore(host.config.dataDirectory)
+                        .readSync()
+                        .desiredRuntime ==
+                    DesiredRuntimeState.connected
+                ? 'Connecting'
+                : 'Disconnected';
     unawaited(_desktopChannel.invokeMethod<void>('status', {
       'state': state,
       'transportMode': connection?.activeTransportMode ?? 'offline',
@@ -375,6 +391,8 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
             host.config.dataDirectory,
           ).readSync().managementLockPreference ==
           ManagementLockState.locked,
+      'reauthRequired': _managementAuthRequired,
+      'runtimeRunning': connection?.isConnected == true,
     }).catchError((_) {}));
   }
 
@@ -2068,6 +2086,8 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
                       managementLocked: _managementLocked,
                       onUnlock: _unlockManagement,
                       onActivity: _armAutoLockTimer,
+                      onManagementAuthRequiredChanged:
+                          lifecycle.updateManagementAuthRequired,
                       managementShellBuilder: _buildManagementDashboard,
                     ),
             ),
@@ -2111,6 +2131,7 @@ class WorkspaceShellRouter extends StatefulWidget {
     this.managementLocked = false,
     this.onUnlock,
     this.onActivity,
+    this.onManagementAuthRequiredChanged,
     this.onLock,
     required this.managementShellBuilder,
     super.key,
@@ -2130,6 +2151,7 @@ class WorkspaceShellRouter extends StatefulWidget {
   final bool managementLocked;
   final Future<void> Function()? onUnlock;
   final VoidCallback? onActivity;
+  final ValueChanged<bool>? onManagementAuthRequiredChanged;
   final Future<void> Function()? onLock;
   final Widget Function() managementShellBuilder;
 
@@ -2155,6 +2177,14 @@ class _WorkspaceShellRouterState extends State<WorkspaceShellRouter> {
   }
 
   Future<_ShellAccess> _loadAccess() async {
+    final access = await _resolveAccess();
+    widget.onManagementAuthRequiredChanged?.call(
+      access.mode == _ShellAccessMode.reauthRequired,
+    );
+    return access;
+  }
+
+  Future<_ShellAccess> _resolveAccess() async {
     final runtimeIntendedConnected = widget.snapshot.cloudConnected ||
         widget.snapshot.desiredRuntimeConnected;
     _ShellAccess invalidSession([DesktopHumanSession? session]) => _ShellAccess(

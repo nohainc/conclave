@@ -962,6 +962,17 @@ management data.
 
 Menu-bar status agrees with the full application's lifecycle/transport state.
 
+## Implementation status
+
+The macOS status menu now shows logical runtime state, active assignment count,
+and the active transport (including HTTPS fallback). Reauthentication-required
+runtime state is reported separately. Connected installations expose Open,
+Lock, Pause/Resume new work, Diagnostics, and Quit; disconnected installations
+show a disconnected status with Open and Quit. Reset and Release are absent.
+The lock menu action persists the locked state immediately without requiring a
+second authentication prompt, and the shell router starts in a fail-closed
+authentication state until desktop-session restoration completes.
+
 ---
 
 # Phase 13 — Runtime and quit semantics
