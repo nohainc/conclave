@@ -605,6 +605,18 @@ class WorkspacePairingService {
   final Directory dataDirectory;
   final SecureCredentialStore _credentialStore;
 
+  /// Clears only the stale Cloud registration after its Workspace has been
+  /// revoked in AX. Stable installation identity and local Worker state stay
+  /// in place so the desktop can claim a fresh pairing intent.
+  Future<void> preparePairingRecovery() async {
+    final registration = HostRegistrationStore(dataDirectory).readSync();
+    await InstallationIdentityStore(dataDirectory).authorizeRecovery();
+    if (registration != null) {
+      await _credentialStore.delete(registration.hostId);
+    }
+    await HostRegistrationStore(dataDirectory).clear();
+  }
+
   static Future<void> unpair({
     required String cloudUrl,
     required String token,

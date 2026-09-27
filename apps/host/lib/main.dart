@@ -340,6 +340,10 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
         cloudUrl: cloudUrl,
         workRootPath: workRootPath,
         paired: hostId != null && workspaceId != null,
+        canRecoverPairing: hostId != null &&
+            workspaceId != null &&
+            host.config.authToken == null &&
+            startupError.toString().contains('401'),
         statusLabel: 'Offline',
       );
     }
@@ -493,6 +497,7 @@ class HostUiSnapshot {
     this.workRootPath,
     this.statusLabel = 'Offline',
     this.paired = false,
+    this.canRecoverPairing = false,
     this.cloudConnected = false,
     this.accountsNeedingAction = const [],
     this.workerSummary = 'Worker diagnostics are available after pairing',
@@ -519,6 +524,7 @@ class HostUiSnapshot {
   final String? workRootPath;
   final String statusLabel;
   final bool paired;
+  final bool canRecoverPairing;
   final bool cloudConnected;
   final List<String> accountsNeedingAction;
   final String workerSummary;
@@ -855,6 +861,71 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     }
   }
 
+  Future<void> _preparePairingRecovery() async {
+    final lifecycle = widget.lifecycle;
+    final dataDirectory = lifecycle.host.config.dataDirectory;
+    final registration = HostRegistrationStore(dataDirectory).readSync();
+    if (registration == null) return;
+    final dialogContext = _navigatorKey.currentContext;
+    if (dialogContext == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: dialogContext,
+      builder: (context) => AlertDialog(
+        title: const Text('Prepare to pair again?'),
+        content: const Text(
+          'First, in Conclave AX, unpair this Workspace so Cloud revokes the '
+          'old runtime credential. Then continue here and connect with a new '
+          'pairing code. This clears only the saved Cloud connection. Local '
+          'Workers, their credentials, the installation identity, and Work '
+          'Root will be preserved.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Prepare pairing'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await WorkspacePairingService(
+        dataDirectory: dataDirectory,
+        credentialStore: lifecycle.host.credentialStore,
+      ).preparePairingRecovery();
+      final replacement = await buildWorkspaceRuntime(HostConfig(
+        dataDirectory: dataDirectory,
+        installationId:
+            registration.installationId ?? lifecycle.host.config.installationId,
+        repositoriesFile: lifecycle.host.config.repositoriesFile,
+        workRootPath: lifecycle.host.config.workRootPath,
+      ));
+      await lifecycle.replaceHost(replacement);
+      if (mounted) {
+        setState(() => _workerRevision++);
+        ScaffoldMessenger.of(dialogContext).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Saved connection cleared. Enter a new pairing code from Conclave AX.',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(dialogContext).showSnackBar(
+          SnackBar(content: Text('Could not prepare pairing recovery: $error')),
+        );
+      }
+    }
+  }
+
   Future<void> _resetLocalWorkspace() async {
     final lifecycle = widget.lifecycle;
     final dialogContext = _navigatorKey.currentContext;
@@ -1049,6 +1120,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
                   snapshot: lifecycle.uiSnapshot,
                   onPair: () => _pairWorkspace(),
                   onPairRequest: _pairWorkspace,
+                  onRecoverPairing: _preparePairingRecovery,
                   onDisconnect: _disconnectWorkspace,
                   onUnpair: _disconnectWorkspace,
                   onReset: _resetLocalWorkspace,
@@ -1074,6 +1146,7 @@ class HostDashboard extends StatefulWidget {
     required this.snapshot,
     this.onPair,
     this.onPairRequest,
+    this.onRecoverPairing,
     this.onDisconnect,
     this.onUnpair,
     this.onReset,
@@ -1095,6 +1168,7 @@ class HostDashboard extends StatefulWidget {
   final HostUiSnapshot snapshot;
   final VoidCallback? onPair;
   final Future<void> Function(WorkspacePairingRequest request)? onPairRequest;
+  final Future<void> Function()? onRecoverPairing;
   final VoidCallback? onDisconnect;
   final VoidCallback? onUnpair;
   final VoidCallback? onReset;
@@ -1307,6 +1381,7 @@ class _HostDashboardState extends State<HostDashboard> {
                     snapshot: snapshot,
                     onPair: widget.onPair,
                     onPairRequest: widget.onPairRequest,
+                    onRecoverPairing: widget.onRecoverPairing,
                     resolveComputerName: widget.resolveComputerName,
                     onRetry: widget.onRetry,
                     onExportDiagnostics: widget.onExportDiagnostics,
@@ -1400,6 +1475,7 @@ class _WorkspaceTab extends StatelessWidget {
     required this.snapshot,
     this.onPair,
     this.onPairRequest,
+    this.onRecoverPairing,
     this.resolveComputerName,
     this.onRetry,
     this.onExportDiagnostics,
@@ -1412,6 +1488,7 @@ class _WorkspaceTab extends StatelessWidget {
   final HostUiSnapshot snapshot;
   final VoidCallback? onPair;
   final Future<void> Function(WorkspacePairingRequest request)? onPairRequest;
+  final Future<void> Function()? onRecoverPairing;
   final Future<String> Function()? resolveComputerName;
   final Future<void> Function()? onRetry;
   final Future<void> Function()? onExportDiagnostics;
@@ -1439,6 +1516,8 @@ class _WorkspaceTab extends StatelessWidget {
                     ? 'Retry connection'
                     : 'Retry update',
                 onRetry: onRetry,
+                canRecoverPairing: snapshot.canRecoverPairing,
+                onRecoverPairing: onRecoverPairing,
               ),
             ),
           ),
@@ -2794,11 +2873,15 @@ class _HostRecoveryPanel extends StatelessWidget {
     this.issue,
     required this.retryLabel,
     this.onRetry,
+    this.canRecoverPairing = false,
+    this.onRecoverPairing,
   });
 
   final String? issue;
   final String retryLabel;
   final Future<void> Function()? onRetry;
+  final bool canRecoverPairing;
+  final Future<void> Function()? onRecoverPairing;
 
   @override
   Widget build(BuildContext context) {
@@ -2861,6 +2944,14 @@ class _HostRecoveryPanel extends StatelessWidget {
               onPressed: () => unawaited(onRetry!()),
               icon: const Icon(Icons.refresh),
               label: Text(retryLabel),
+            ),
+          ],
+          if (canRecoverPairing && onRecoverPairing != null) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => unawaited(onRecoverPairing!()),
+              icon: const Icon(Icons.link_off),
+              label: const Text('Prepare to pair again'),
             ),
           ],
         ],

@@ -62,8 +62,10 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
     if (command == null) return;
     final result = await Process.run(command.executable, command.arguments);
     // Deleting a missing credential is idempotent. Other failures are not.
+    final error = result.stderr.toString().toLowerCase();
     if (result.exitCode != 0 &&
-        !result.stderr.toString().contains('not found')) {
+        !error.contains('not found') &&
+        !error.contains('could not be found')) {
       throw StateError('OS secure credential storage rejected the delete');
     }
   }

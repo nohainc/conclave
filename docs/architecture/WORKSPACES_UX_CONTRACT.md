@@ -232,6 +232,14 @@ credentials.
 - An offline Workspace with an active runtime identity remains paired. AX
   keeps showing it as offline and does not ask it to claim a new code. Its
   saved runtime credential and Gateway reconnect path remain authoritative.
+- If the desktop has a saved pairing but its OS secure store no longer has the
+  runtime credential, the connection error offers **Prepare to pair again**.
+  The owner first revokes the stale Workspace in AX. Desktop recovery then
+  clears only its Cloud registration and stale runtime credential, preserves
+  installation identity and local Worker state, and marks the next claim as an
+  explicit recovery. The new claim creates a new Cloud Workspace/runtime ID;
+  Project grants must be restored. **Reset Everything** is not part of this
+  recovery.
 - Worker inventory appears only after the desktop has synchronized it.
 - Home may summarize Projects, Workspaces, and Active Runs. It must not make
   Workers a separate top-level destination; a Ready Workers metric, if kept,

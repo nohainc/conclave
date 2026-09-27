@@ -46,6 +46,52 @@ void main() {
     await requestFuture;
   });
 
+  test('pairing recovery preserves local Workers and installation identity',
+      () async {
+    final temp =
+        await Directory.systemTemp.createTemp('conclave-pairing-recovery-');
+    addTearDown(() => temp.delete(recursive: true));
+    const registration = HostRegistration(
+      hostId: 'runtime-old',
+      workspaceId: 'workspace-old',
+      cloudUrl: 'https://app.conclaveax.com',
+      name: 'Development Mac',
+      hostname: 'development-mac.local',
+      installationId: 'install_12345678-1234-4234-8234-123456789abc',
+      credentialRef: 'workspace-runtime:runtime-old',
+    );
+    await HostRegistrationStore(temp).write(registration);
+    const workersJson = '{"workers":[{"id":"worker-1"}]}';
+    await File('${temp.path}/configured-workers.json')
+        .writeAsString(workersJson);
+    final workRoot = Directory('${temp.path}/Work');
+    await workRoot.create();
+    await File('${workRoot.path}/keep.txt').writeAsString('local work');
+    final identities = InstallationIdentityStore(temp);
+    final installationId = await identities.getOrCreate(
+      initialIdentity: registration.installationId,
+    );
+    final credentials = _MemoryCredentials()
+      ..values['runtime-old'] = 'old-runtime-credential'
+      ..values['worker-credential/worker-1'] = 'local-worker-credential';
+
+    await WorkspacePairingService(
+      dataDirectory: temp,
+      credentialStore: credentials,
+    ).preparePairingRecovery();
+
+    expect(HostRegistrationStore(temp).readSync(), isNull);
+    expect(credentials.values, isNot(contains('runtime-old')));
+    expect(credentials.values['worker-credential/worker-1'],
+        'local-worker-credential');
+    expect(await File('${temp.path}/configured-workers.json').readAsString(),
+        workersJson);
+    expect(
+        await File('${workRoot.path}/keep.txt').readAsString(), 'local work');
+    expect(await identities.getOrCreate(), installationId);
+    expect(identities.recoveryAuthorizedSync(), isTrue);
+  });
+
   test('pairs a desktop Workspace and persists only the runtime token locally',
       () async {
     final temp =

@@ -210,6 +210,14 @@ against revoked installation history. A revoked installation without that
 marker cannot be re-paired. Workspace revocation also revokes its active
 runtime binding.
 
+The runtime credential is returned only during a successful claim and cannot
+be recovered from Cloud, which stores only its hash. If the desktop loses its
+OS secure-store item, the owner must revoke the stale Workspace in AX before
+using the desktop's **Prepare to pair again** action and claiming a new pairing
+intent. That recovery keeps the stable installation ID and local Worker
+configuration, credentials, and Work Root; the new claim creates a new Cloud
+Workspace/runtime identity, so Project grants must be applied again.
+
 ### 5.2 Runtime reports machine facts
 
 After pairing, Workspace reports:

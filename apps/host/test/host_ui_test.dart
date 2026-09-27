@@ -92,6 +92,7 @@ void main() {
     VoidCallback? onDisconnect,
     VoidCallback? onUnpair,
     VoidCallback? onReset,
+    Future<void> Function()? onRecoverPairing,
     VoidCallback? onAccountAction,
     VoidCallback? onQuit,
     Future<void> Function()? onRetry,
@@ -109,6 +110,7 @@ void main() {
             snapshot: snapshot,
             onPair: onPair,
             onPairRequest: onPairRequest,
+            onRecoverPairing: onRecoverPairing,
             onDisconnect: onDisconnect,
             onUnpair: onUnpair,
             onReset: onReset,
@@ -278,6 +280,7 @@ void main() {
   testWidgets('offline Workspace displays recovery panel with retry',
       (tester) async {
     var retried = false;
+    var recoveryPrepared = false;
     String? copiedText;
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform,
@@ -301,8 +304,10 @@ void main() {
         workspaceId: 'workspace-1',
         hostId: 'runtime-1',
         workspaceName: 'Development Mac',
+        canRecoverPairing: true,
       ),
       onRetry: () async => retried = true,
+      onRecoverPairing: () async => recoveryPrepared = true,
     );
 
     expect(find.text('Network unavailable'), findsOneWidget);
@@ -311,6 +316,7 @@ void main() {
     expect(find.text('Pairing code'), findsNothing);
     expect(find.widgetWithText(FilledButton, 'Connect'), findsNothing);
     expect(find.text('Retry connection'), findsOneWidget);
+    expect(find.text('Prepare to pair again'), findsOneWidget);
     expect(find.byTooltip('Copy error message'), findsOneWidget);
     await tester.tap(find.byTooltip('Copy error message'));
     await tester.pump();
@@ -318,6 +324,8 @@ void main() {
     expect(find.text('Error message copied'), findsOneWidget);
     await tester.tap(find.text('Retry connection'));
     expect(retried, isTrue);
+    await tester.tap(find.text('Prepare to pair again'));
+    expect(recoveryPrepared, isTrue);
   });
 
   testWidgets(
