@@ -560,31 +560,33 @@ describe("Workspace pairing intents", () => {
       authToken: string;
     };
 
+    let forwardedWebSocketRequest: Request | null = null;
     Object.assign(env, {
       CONCLAVE_WORKSPACE_GATEWAY: {
         getByName: () => ({
-          fetch: async (request: Request) =>
-            Response.json({
+          fetch: async (request: Request) => {
+            forwardedWebSocketRequest = request;
+            return Response.json({
               workspaceRuntimeId: new URL(request.url).searchParams.get(
                 "workspaceRuntimeId",
               ),
-            }),
+            });
+          },
         }),
       },
     });
-    const reconnect = await handleWorkspaceGatewayConnect(
-      new Request(
-        `https://conclave.test/api/workspace-gateway/connect?workspaceRuntimeId=${runtime.workspaceRuntimeId}`,
-        {
-          headers: {
-            upgrade: "websocket",
-            authorization: `Bearer ${runtime.authToken}`,
-          },
+    const connectRequest = new Request(
+      `https://conclave.test/api/workspace-gateway/connect?workspaceRuntimeId=${runtime.workspaceRuntimeId}`,
+      {
+        headers: {
+          upgrade: "websocket",
+          authorization: `Bearer ${runtime.authToken}`,
         },
-      ),
-      env,
+      },
     );
+    const reconnect = await handleWorkspaceGatewayConnect(connectRequest, env);
     expect(reconnect.status).toBe(200);
+    expect(forwardedWebSocketRequest).toBe(connectRequest);
     expect(await reconnect.json()).toEqual({
       workspaceRuntimeId: runtime.workspaceRuntimeId,
     });

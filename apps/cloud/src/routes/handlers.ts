@@ -8306,10 +8306,6 @@ async function handleWorkspaceGatewayConnect(
     );
   }
 
-  const targetUrl = new URL(request.url);
-  targetUrl.searchParams.set("workspaceRuntimeId", workspaceRuntimeId);
-  const upgradedRequest = new Request(targetUrl.toString(), request);
-
   if (!env.CONCLAVE_WORKSPACE_GATEWAY) {
     return json(
       { error: "Workspace Gateway is not configured" },
@@ -8317,7 +8313,10 @@ async function handleWorkspaceGatewayConnect(
     );
   }
   const stub = env.CONCLAVE_WORKSPACE_GATEWAY.getByName(workspace.workspaceId);
-  return stub.fetch(upgradedRequest);
+  // Preserve Cloudflare's original WebSocket upgrade request when forwarding
+  // it to the Durable Object. Reconstructing an upgraded Request can make the
+  // edge reject the handshake with HTTP 400 before the Gateway sees it.
+  return stub.fetch(request);
 }
 
 export async function handleHostProtocolMessage(
