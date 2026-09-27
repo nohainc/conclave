@@ -37,10 +37,23 @@ void main() {
   });
 
   test('explicit Cloud ports are preserved', () {
+    final standardPort = configFor('https://cloud.example.test:443').cloudUri!;
     final uri = configFor('https://cloud.example.test:8443').cloudUri!;
 
+    expect(standardPort.port, 443);
     expect(uri.scheme, 'wss');
     expect(uri.port, 8443);
+  });
+
+  test('Cloud URL secrets are never copied into the WebSocket query', () {
+    final uri = configFor(
+      'https://cloud.example.test?source=desktop&authToken=must-not-leak&api_key=also-secret',
+    ).cloudUri!;
+
+    expect(uri.queryParameters['source'], 'desktop');
+    expect(uri.queryParameters['workspaceRuntimeId'], 'runtime-test');
+    expect(uri.queryParameters.containsKey('authToken'), isFalse);
+    expect(uri.queryParameters.containsKey('api_key'), isFalse);
   });
 
   test('local HTTP origin keeps its explicit development port', () {

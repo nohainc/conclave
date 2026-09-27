@@ -65,19 +65,25 @@ void main() {
   test('reports Workstream readiness without a local path', () async {
     final socket = FakeSocket();
     final connection = HostCloudConnection(
-      uri: Uri.parse('wss://cloud.test/workspace-gateway'),
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-1'),
       hostId: 'runtime-1',
       workspaceId: 'workspace-1',
       factory: (_) async => socket,
       heartbeat: const Duration(hours: 1),
     );
     await connection.connect();
+    final hello =
+        jsonDecode(socket.sent.single as String) as Map<String, dynamic>;
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.workspace-runtime-protocol',
       'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-hello-ack',
+      'correlationId': hello['messageId'],
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'workspace.hello.ack',
+      'workspaceRuntimeId': 'runtime-1',
+      'executionWorkspaceId': 'workspace-1',
       'payload': {'sessionId': 'session-1'},
     }));
     await waitFor(() => connection.isConnected);
@@ -95,6 +101,188 @@ void main() {
     expect(payload['workstreamId'], 'workstream-1');
     expect(payload.containsKey('path'), isFalse);
     expect(payload.containsKey('relativePath'), isFalse);
+    await connection.close();
+  });
+
+  test('tracks authentication and synchronization stages before Ready',
+      () async {
+    final socket = FakeSocket();
+    final connection = HostCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-stage'),
+      hostId: 'runtime-stage',
+      workspaceId: 'workspace-stage',
+      factory: (_) async => socket,
+      workerInventoryProvider: () async => const [],
+      heartbeat: const Duration(hours: 1),
+    );
+
+    await connection.connect();
+    expect(connection.connectionStage, HostConnectionStage.authenticating);
+    expect(connection.isConnected, isFalse);
+    final hello =
+        jsonDecode(socket.sent.single as String) as Map<String, dynamic>;
+
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'stage-hello-ack',
+      'correlationId': hello['messageId'],
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'workspace.hello.ack',
+      'workspaceRuntimeId': 'runtime-stage',
+      'executionWorkspaceId': 'workspace-stage',
+      'payload': {'sessionId': 'session-stage'},
+    }));
+    await waitFor(
+        () => connection.connectionStage == HostConnectionStage.synchronizing);
+    await waitFor(() => socket.sent.any((message) =>
+        (jsonDecode(message as String) as Map<String, dynamic>)['type'] ==
+        'worker.inventory'));
+    expect(connection.isConnected, isTrue);
+    final syncRequest = socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .firstWhere((message) => message['type'] == 'workspace.sync.request');
+
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'stage-sync-result',
+      'correlationId': syncRequest['messageId'],
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'workspace.sync.result',
+      'workspaceRuntimeId': 'runtime-stage',
+      'executionWorkspaceId': 'workspace-stage',
+      'payload': {'assignmentStates': []},
+    }));
+    await waitFor(
+        () => connection.connectionStage == HostConnectionStage.ready);
+    expect(connection.lastReadyAt, isNotNull);
+    await connection.close();
+  });
+
+  test('classifies a failed WebSocket upgrade by HTTP status', () async {
+    final connection = HostCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-400'),
+      hostId: 'runtime-400',
+      workspaceId: 'workspace-400',
+      factory: (_) async => throw const WebSocketException(
+        'upgrade rejected',
+        HttpStatus.badRequest,
+      ),
+    );
+
+    await expectLater(connection.connect(), throwsA(isA<WebSocketException>()));
+    expect(connection.connectionStage, HostConnectionStage.offline);
+    expect(connection.lastHttpStatusCode, HttpStatus.badRequest);
+    expect(connection.lastConnectionError,
+        'Cloud rejected the WebSocket upgrade with HTTP 400.');
+    await connection.close();
+  });
+
+  test('preflight rejects a missing runtime credential before opening socket',
+      () async {
+    var opened = false;
+    final connection = HostCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-no-credential'),
+      hostId: 'runtime-no-credential',
+      workspaceId: 'workspace-no-credential',
+      credentialAvailable: false,
+      factory: (_) async {
+        opened = true;
+        return FakeSocket();
+      },
+    );
+
+    await expectLater(
+      connection.connect(),
+      throwsA(isA<HostConnectionPreflightException>()),
+    );
+    expect(opened, isFalse);
+    expect(connection.connectionStage, HostConnectionStage.offline);
+    expect(connection.lastConnectionError, contains('credential is missing'));
+    await connection.close();
+  });
+
+  test('manual retry opens a fresh socket without replacing the runtime',
+      () async {
+    final first = FakeSocket();
+    final second = FakeSocket();
+    var calls = 0;
+    final connection = HostCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-retry'),
+      hostId: 'runtime-retry',
+      workspaceId: 'workspace-retry',
+      factory: (_) async => ++calls == 1 ? first : second,
+    );
+
+    await connection.connect();
+    await connection.retryNow();
+
+    expect(calls, 2);
+    expect(connection.connectionStage, HostConnectionStage.authenticating);
+    expect(connection.isConnected, isFalse);
+    await connection.close();
+  });
+
+  test('hello acknowledgement timeout differs from upgrade failure', () async {
+    final socket = FakeSocket();
+    final connection = HostCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-no-hello'),
+      hostId: 'runtime-no-hello',
+      workspaceId: 'workspace-no-hello',
+      factory: (_) async => socket,
+      protocolHandshakeTimeout: const Duration(milliseconds: 20),
+      reconnectBaseDelay: const Duration(milliseconds: 5),
+      heartbeat: const Duration(hours: 1),
+    );
+
+    await connection.connect();
+    await waitFor(() => connection.lastConnectionError != null);
+    expect(connection.lastConnectionError,
+        contains('did not acknowledge workspace.hello'));
+    expect(connection.lastHttpStatusCode, isNull);
+    await connection.close();
+  });
+
+  test('Cloud sync timeout is distinct from the hello handshake timeout',
+      () async {
+    final socket = FakeSocket();
+    final connection = HostCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-no-sync'),
+      hostId: 'runtime-no-sync',
+      workspaceId: 'workspace-no-sync',
+      factory: (_) async => socket,
+      protocolHandshakeTimeout: const Duration(seconds: 1),
+      syncTimeout: const Duration(milliseconds: 30),
+      reconnectBaseDelay: const Duration(milliseconds: 5),
+      heartbeat: const Duration(hours: 1),
+    );
+
+    await connection.connect();
+    final hello =
+        jsonDecode(socket.sent.single as String) as Map<String, dynamic>;
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'sync-timeout-hello-ack',
+      'correlationId': hello['messageId'],
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'workspace.hello.ack',
+      'workspaceRuntimeId': 'runtime-no-sync',
+      'executionWorkspaceId': 'workspace-no-sync',
+      'payload': {'sessionId': 'session-no-sync'},
+    }));
+    await waitFor(() => connection.lastConnectionError != null);
+
+    expect(connection.lastConnectionError,
+        contains('Cloud synchronization did not complete'));
+    expect(connection.connectionStage, HostConnectionStage.reconnecting);
     await connection.close();
   });
 
@@ -498,7 +686,8 @@ void main() {
     final socket = FakeSocket();
     var executions = 0;
     final connection = HostCloudConnection(
-      uri: Uri.parse('wss://cloud.test/workspace-gateway'),
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=host-1'),
       hostId: 'host-1',
       workspaceId: 'workspace-1',
       factory: (_) async => socket,
@@ -1056,7 +1245,8 @@ void main() {
     final finishAssignment = Completer<HostAssignmentResult>();
     var factoryCalls = 0;
     final connection = HostCloudConnection(
-      uri: Uri.parse('wss://cloud.test/workspace-gateway'),
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-1'),
       hostId: 'runtime-1',
       workspaceId: 'workspace-1',
       factory: (_) async => ++factoryCalls == 1 ? first : recovered,

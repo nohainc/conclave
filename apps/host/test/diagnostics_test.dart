@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:conclave_host/assignment_journal.dart';
 import 'package:conclave_host/diagnostics.dart';
 import 'package:conclave_host/host.dart';
+import 'package:conclave_host/cloud_connection.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -44,6 +45,53 @@ void main() {
     expect(exported, contains('workRoot'));
     expect(exported, isNot(contains('secret-value')));
     expect(exported, contains('[redacted]'));
+    await directory.delete(recursive: true);
+  });
+
+  test('connection diagnostics include exact safe failure stages', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-connection-diag-');
+    const runtimeSecret = 'workspace-runtime-secret-never-export';
+    final connection = HostCloudConnection(
+      uri: Uri.parse(
+        'wss://app.conclaveax.com/api/workspace-gateway/connect?workspaceRuntimeId=runtime-1&authToken=must-not-leak',
+      ),
+      hostId: 'runtime-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => throw const WebSocketException(
+        'upgrade rejected',
+        HttpStatus.badRequest,
+      ),
+    );
+    await expectLater(connection.connect(), throwsA(isA<WebSocketException>()));
+
+    final diagnostics = await buildHostDiagnostics(
+      config: HostConfig(
+        dataDirectory: directory,
+        hostId: 'runtime-1',
+        workspaceId: 'workspace-1',
+        cloudUri: connection.uri,
+        authToken: runtimeSecret,
+      ),
+      connection: connection,
+    );
+    final text = jsonEncode(diagnostics);
+    final host = diagnostics['host'] as Map<String, Object?>;
+    final connectionInfo = host['connection'] as Map<String, Object?>;
+
+    expect(connectionInfo['stage'], 'offline');
+    expect(connectionInfo['lastHttpStatusCode'], 400);
+    expect(connectionInfo['dnsTls'], 'passed');
+    expect(connectionInfo['webSocketUpgrade'], 'failed_http_400');
+    expect(connectionInfo['protocolHello'], 'not started');
+    expect(connectionInfo['runtimeCredential'],
+        'available_locally_value_withheld');
+    expect(connectionInfo['cloudOrigin'], 'https://app.conclaveax.com');
+    expect(connectionInfo['webSocketEndpoint'],
+        'wss://app.conclaveax.com/api/workspace-gateway/connect?workspaceRuntimeId=runtime-1');
+    expect(text, isNot(contains(runtimeSecret)));
+    expect(text, isNot(contains('must-not-leak')));
+    expect(text, isNot(contains('must-not-leak')));
     await directory.delete(recursive: true);
   });
 }

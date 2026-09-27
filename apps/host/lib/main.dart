@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'brand.dart';
 import 'adapter_prerequisite.dart';
+import 'cloud_connection.dart';
 import 'diagnostics.dart';
 import 'friendly_computer_name.dart';
 import 'host.dart';
@@ -148,6 +149,14 @@ Future<void> _launchLocalWorkerAuthentication(String workerTypeId) async {
   throw StateError('Sign-in setup is not available for this Worker Type yet.');
 }
 
+String _webSocketUpgradeStatus(HostCloudConnection? connection) {
+  if (connection == null) return 'not configured';
+  final status = connection.lastHttpStatusCode;
+  if (status != null) return 'failed (HTTP $status)';
+  if (connection.lastWebSocketUpgradeAt != null) return 'succeeded';
+  return 'not completed';
+}
+
 class HostLifecycleController extends ChangeNotifier {
   HostLifecycleController(this.host) {
     _statusTimer = Timer.periodic(const Duration(seconds: 3), (_) {
@@ -200,7 +209,7 @@ class HostLifecycleController extends ChangeNotifier {
         await openPath(file.path);
         break;
       case 'logs':
-        await openPath('${host.config.dataDirectory.path}/logs/host.log');
+        await openPath(WorkspacePaths(host.config.dataDirectory).logsFile.path);
         break;
       case 'openAX':
         await openAX();
@@ -327,6 +336,7 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
   }
 
   HostUiSnapshot get uiSnapshot {
+    final connection = host.cloudConnection;
     final registration =
         HostRegistrationStore(host.config.dataDirectory).readSync();
     final workspaceName = registration?.name ?? 'Conclave Workspace';
@@ -353,6 +363,14 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
         cloudUrl: cloudUrl,
         workRootPath: workRootPath,
         statusLabel: 'Stopping',
+        connectionStage: connection?.connectionStage,
+        connectionError: connection?.lastConnectionError,
+        connectionHttpStatus: connection?.lastHttpStatusCode,
+        runtimeCredentialAvailable: host.config.authToken?.isNotEmpty == true,
+        protocolHelloStatus: connection?.protocolHelloStatus,
+        dnsTlsStatus: connection?.lastDnsTlsStatus,
+        webSocketUpgradeStatus: _webSocketUpgradeStatus(connection),
+        lastConnectionAttemptAt: connection?.lastConnectionAttemptAt,
       );
     }
     if (startupError != null) {
@@ -374,6 +392,16 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
         // tells the user to unpair in AX before clearing this local identity.
         canRecoverPairing: hostId != null && workspaceId != null,
         statusLabel: 'Offline',
+        logsPath: WorkspacePaths(host.config.dataDirectory).logsDirectory.path,
+        connectionStage: connection?.connectionStage,
+        connectionError:
+            connection?.lastConnectionError ?? startupError.toString(),
+        connectionHttpStatus: connection?.lastHttpStatusCode,
+        runtimeCredentialAvailable: host.config.authToken?.isNotEmpty == true,
+        protocolHelloStatus: connection?.protocolHelloStatus,
+        dnsTlsStatus: connection?.lastDnsTlsStatus,
+        webSocketUpgradeStatus: _webSocketUpgradeStatus(connection),
+        lastConnectionAttemptAt: connection?.lastConnectionAttemptAt,
       );
     }
     if (host.config.hostId == null) {
@@ -387,6 +415,11 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
         cloudUrl: cloudUrl,
         workRootPath: workRootPath,
         statusLabel: 'Not paired',
+        connectionStage: connection?.connectionStage,
+        runtimeCredentialAvailable: host.config.authToken?.isNotEmpty == true,
+        protocolHelloStatus: connection?.protocolHelloStatus,
+        dnsTlsStatus: connection?.lastDnsTlsStatus,
+        webSocketUpgradeStatus: _webSocketUpgradeStatus(connection),
       );
     }
     if (!running) {
@@ -402,9 +435,16 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
         cloudUrl: cloudUrl,
         workRootPath: workRootPath,
         statusLabel: 'Starting',
+        connectionStage: connection?.connectionStage,
+        connectionError: connection?.lastConnectionError,
+        connectionHttpStatus: connection?.lastHttpStatusCode,
+        runtimeCredentialAvailable: host.config.authToken?.isNotEmpty == true,
+        protocolHelloStatus: connection?.protocolHelloStatus,
+        dnsTlsStatus: connection?.lastDnsTlsStatus,
+        webSocketUpgradeStatus: _webSocketUpgradeStatus(connection),
+        lastConnectionAttemptAt: connection?.lastConnectionAttemptAt,
       );
     }
-    final connection = host.cloudConnection;
     final activeAssignments = connection?.activeAssignmentCount ?? 0;
     final isConnected = connection?.isConnected ?? false;
     final statusLabel = !isConnected
@@ -448,12 +488,20 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
       canRecoverPairing: isOffline && hostId != null && workspaceId != null,
       cloudConnected: isConnected,
       statusLabel: statusLabel,
-      logsPath: '${host.config.dataDirectory.path}/logs/host.log',
+      logsPath: WorkspacePaths(host.config.dataDirectory).logsFile.path,
       activeAssignments: activeAssignments,
       activeAssignmentIds: connection?.activeAssignmentIds ?? const [],
       reconnectCount: connection?.reconnectCount ?? 0,
       sessionId: connection?.sessionId,
       lastInventorySyncAt: connection?.lastInventorySyncAt,
+      connectionStage: connection?.connectionStage,
+      connectionError: connection?.lastConnectionError,
+      connectionHttpStatus: connection?.lastHttpStatusCode,
+      runtimeCredentialAvailable: host.config.authToken?.isNotEmpty == true,
+      protocolHelloStatus: connection?.protocolHelloStatus,
+      dnsTlsStatus: connection?.lastDnsTlsStatus,
+      webSocketUpgradeStatus: _webSocketUpgradeStatus(connection),
+      lastConnectionAttemptAt: connection?.lastConnectionAttemptAt,
     );
   }
 
@@ -465,6 +513,21 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
       _startupError = error;
       notifyListeners();
       rethrow;
+    }
+    notifyListeners();
+  }
+
+  Future<void> retryConnection() async {
+    final connection = host.cloudConnection;
+    if (!running || connection == null) {
+      await launch();
+      return;
+    }
+    _startupError = null;
+    try {
+      await connection.retryNow();
+    } catch (error) {
+      _startupError = error;
     }
     notifyListeners();
   }
@@ -554,6 +617,14 @@ class HostUiSnapshot {
     this.reconnectCount = 0,
     this.sessionId,
     this.lastInventorySyncAt,
+    this.connectionStage,
+    this.connectionError,
+    this.connectionHttpStatus,
+    this.runtimeCredentialAvailable = false,
+    this.protocolHelloStatus,
+    this.dnsTlsStatus,
+    this.webSocketUpgradeStatus,
+    this.lastConnectionAttemptAt,
     this.appVersion = conclaveWorkspaceAppVersion,
     this.issue,
   });
@@ -581,6 +652,14 @@ class HostUiSnapshot {
   final int reconnectCount;
   final String? sessionId;
   final DateTime? lastInventorySyncAt;
+  final HostConnectionStage? connectionStage;
+  final String? connectionError;
+  final int? connectionHttpStatus;
+  final bool runtimeCredentialAvailable;
+  final String? protocolHelloStatus;
+  final String? dnsTlsStatus;
+  final String? webSocketUpgradeStatus;
+  final DateTime? lastConnectionAttemptAt;
   final String appVersion;
   final String? issue;
 
@@ -592,6 +671,9 @@ class HostUiSnapshot {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await WorkspacePaths.migrateLegacyMacLayout(
+    migrateState: Platform.environment['CONCLAVE_HOST_DATA_DIR'] == null,
+  );
   const credentialStore = PlatformSecureCredentialStore(
     nativeKeychain: FlutterMacKeychainBridge(),
   );
@@ -1198,7 +1280,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
                   onUnpair: _disconnectWorkspace,
                   onReset: _resetLocalWorkspace,
                   onQuit: _confirmQuit,
-                  onRetry: lifecycle.launch,
+                  onRetry: lifecycle.retryConnection,
                   onExportDiagnostics: _exportDiagnostics,
                   onChangeWorkRoot: _changeWorkRoot,
                   workerRevision: _workerRevision,
@@ -1622,6 +1704,7 @@ class _WorkspaceTab extends StatelessWidget {
         // Section 3: Advanced & Diagnostics (Expandable Accordion)
         _WorkspaceDiagnosticsSection(
           snapshot: snapshot,
+          onRetry: onRetry,
           onExportDiagnostics: onExportDiagnostics,
           onDisconnect: onDisconnect,
           onUnpair: onUnpair,
@@ -2014,6 +2097,7 @@ class _PairedWorkspaceCard extends StatelessWidget {
 class _WorkspaceDiagnosticsSection extends StatelessWidget {
   const _WorkspaceDiagnosticsSection({
     required this.snapshot,
+    this.onRetry,
     this.onExportDiagnostics,
     this.onDisconnect,
     this.onUnpair,
@@ -2021,6 +2105,7 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
   });
 
   final HostUiSnapshot snapshot;
+  final Future<void> Function()? onRetry;
   final Future<void> Function()? onExportDiagnostics;
   final VoidCallback? onDisconnect;
   final VoidCallback? onUnpair;
@@ -2060,6 +2145,38 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
               label: 'Gateway URL',
               value: snapshot.cloudUrl ?? 'Not configured',
             ),
+            _DetailRow(
+              label: 'Connection stage',
+              value: snapshot.connectionStage?.name ?? 'Offline',
+            ),
+            _DetailRow(
+              label: 'Runtime credential',
+              value: snapshot.runtimeCredentialAvailable
+                  ? 'Available locally (value hidden)'
+                  : 'Missing from secure storage',
+            ),
+            _DetailRow(
+              label: 'DNS / TLS',
+              value: snapshot.dnsTlsStatus ?? 'not checked',
+            ),
+            _DetailRow(
+              label: 'WebSocket upgrade',
+              value: snapshot.webSocketUpgradeStatus ?? 'not completed',
+            ),
+            _DetailRow(
+              label: 'Protocol hello',
+              value: snapshot.protocolHelloStatus ?? 'not started',
+            ),
+            _DetailRow(
+              label: 'Last attempt',
+              value: snapshot.lastConnectionAttemptAt?.toLocal().toString() ??
+                  'Never',
+            ),
+            if (snapshot.connectionError != null)
+              _DetailRow(
+                label: 'Connection detail',
+                value: snapshot.connectionError!,
+              ),
             _DetailRow(
               label: 'Session ID',
               value: snapshot.sessionId ?? 'No active session',
@@ -2176,11 +2293,54 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final uri = Uri.tryParse(snapshot.cloudUrl ?? '');
+                    final origin = uri == null
+                        ? 'Not configured'
+                        : Uri(
+                            scheme: uri.scheme == 'wss'
+                                ? 'https'
+                                : uri.scheme == 'ws'
+                                    ? 'http'
+                                    : uri.scheme,
+                            host: uri.host,
+                            port: uri.hasPort ? uri.port : null,
+                          ).toString();
+                    final report = [
+                      'Cloud origin: $origin',
+                      'WebSocket endpoint: ${uri == null ? 'Not configured' : Uri(scheme: uri.scheme, host: uri.host, port: uri.hasPort ? uri.port : null, path: uri.path)}',
+                      'Workspace runtime ID: ${snapshot.hostId ?? 'Not assigned'}',
+                      'Runtime credential: ${snapshot.runtimeCredentialAvailable ? 'available locally (value withheld)' : 'missing'}',
+                      'DNS/TLS: ${snapshot.dnsTlsStatus ?? 'not checked'}',
+                      'WebSocket upgrade: ${snapshot.webSocketUpgradeStatus ?? 'not completed'}',
+                      'Protocol hello: ${snapshot.protocolHelloStatus ?? 'not started'}',
+                      'Connection stage: ${snapshot.connectionStage?.name ?? 'offline'}',
+                      'HTTP status: ${snapshot.connectionHttpStatus ?? 'none'}',
+                      'Last attempt: ${snapshot.lastConnectionAttemptAt?.toUtc().toIso8601String() ?? 'never'}',
+                      'Last error: ${snapshot.connectionError ?? 'none'}',
+                    ].join('\n');
+                    await Clipboard.setData(ClipboardData(text: report));
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text('Connection diagnostics copied')),
+                    );
+                  },
+                  icon: const Icon(Icons.copy, size: 16),
+                  label: const Text('Copy connection details'),
+                ),
                 FilledButton.tonalIcon(
                   onPressed: onExportDiagnostics,
                   icon: const Icon(Icons.download_outlined, size: 16),
                   label: const Text('Export Report'),
                 ),
+                if (onRetry != null)
+                  OutlinedButton.icon(
+                    onPressed: () => unawaited(onRetry!()),
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: const Text('Retry connection'),
+                  ),
                 if (snapshot.paired && disconnectAction != null)
                   OutlinedButton.icon(
                     onPressed: disconnectAction,

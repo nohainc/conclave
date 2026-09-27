@@ -63,7 +63,7 @@ Future<Host> buildWorkspaceRuntime(
     },
   );
   final v7AdapterPackageStore = V7AdapterPackageStore(
-    root: Directory('${config.dataDirectory.path}/v7-adapters'),
+    root: WorkspacePaths(config.dataDirectory).adaptersDirectory,
     trustPolicy: workerTrustPolicy,
     allowedPermissions: _configuredPermissions(),
   );
@@ -138,7 +138,7 @@ Future<Host> buildWorkspaceRuntime(
       currentVersion: conclaveWorkspaceAppVersion,
       client: const HostReleaseClient(),
       updater: HostUpdater(
-        Directory('${config.dataDirectory.path}/updates'),
+        WorkspacePaths(config.dataDirectory).updatesDirectory,
         trustPolicy: releaseTrustPolicy,
       ),
       operatingSystem: Platform.operatingSystem,
@@ -169,6 +169,7 @@ Future<Host> buildWorkspaceRuntime(
           uri: config.cloudUri!,
           hostId: config.hostId!,
           workspaceId: config.workspaceId!,
+          credentialAvailable: config.authToken?.isNotEmpty == true,
           activeWorkerIds: activeWorkerIds,
           assignmentHandler: workerHandler.call,
           assignmentCancellationHandler: workerHandler.cancel,

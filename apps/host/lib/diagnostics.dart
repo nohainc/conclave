@@ -52,7 +52,7 @@ Future<Map<String, Object?>> buildHostDiagnostics({
   String? workRootPath,
   int logLineLimit = 200,
 }) async {
-  final logFile = File('${config.dataDirectory.path}/logs/host.log');
+  final logFile = WorkspacePaths(config.dataDirectory).logsFile;
   final lines =
       await logFile.exists() ? await logFile.readAsLines() : <String>[];
   final recentLogs = lines.length <= logLineLimit
@@ -125,6 +125,32 @@ Future<Map<String, Object?>> buildHostDiagnostics({
       'hostId': config.hostId,
       'workspaceId': config.workspaceId,
       'cloudConnected': connection?.isConnected ?? false,
+      'connection': {
+        'stage': connection?.connectionStage.name ?? 'offline',
+        'cloudOrigin':
+            connection == null ? null : _cloudOrigin(connection.uri).toString(),
+        'webSocketEndpoint': connection == null
+            ? null
+            : _safeWebSocketEndpoint(connection.uri).toString(),
+        'runtimeCredential': config.authToken == null
+            ? 'unavailable'
+            : 'available_locally_value_withheld',
+        'dnsTls': connection?.lastDnsTlsStatus ?? 'not checked',
+        'webSocketUpgrade': connection?.lastHttpStatusCode != null
+            ? 'failed_http_${connection!.lastHttpStatusCode}'
+            : connection?.lastWebSocketUpgradeAt != null
+                ? 'succeeded'
+                : 'not completed',
+        'webSocketUpgradedAt':
+            connection?.lastWebSocketUpgradeAt?.toIso8601String(),
+        'protocolHello': connection?.protocolHelloStatus ?? 'not started',
+        'helloAcknowledgedAt':
+            connection?.lastHelloAcknowledgedAt?.toIso8601String(),
+        'lastAttemptAt': connection?.lastConnectionAttemptAt?.toIso8601String(),
+        'lastReadyAt': connection?.lastReadyAt?.toIso8601String(),
+        'lastHttpStatusCode': connection?.lastHttpStatusCode,
+        'lastError': connection?.lastConnectionError,
+      },
       'reconnectCount': connection?.reconnectCount ?? 0,
       'activeAssignmentIds': connection?.activeAssignmentIds ?? const [],
       'activeAssignmentCount': connection?.activeAssignmentCount ?? 0,
@@ -149,6 +175,30 @@ Future<Map<String, Object?>> buildHostDiagnostics({
     }).toList(),
   };
 }
+
+Uri _cloudOrigin(Uri uri) {
+  final scheme = switch (uri.scheme) {
+    'wss' => 'https',
+    'ws' => 'http',
+    _ => uri.scheme,
+  };
+  return Uri(
+    scheme: scheme,
+    host: uri.host,
+    port: uri.hasPort ? uri.port : null,
+  );
+}
+
+Uri _safeWebSocketEndpoint(Uri uri) => Uri(
+      scheme: uri.scheme,
+      host: uri.host,
+      port: uri.hasPort ? uri.port : null,
+      path: uri.path,
+      queryParameters: {
+        if (uri.queryParameters['workspaceRuntimeId'] != null)
+          'workspaceRuntimeId': uri.queryParameters['workspaceRuntimeId']!,
+      },
+    );
 
 Future<File> writeHostDiagnostics({
   required HostConfig config,

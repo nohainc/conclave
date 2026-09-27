@@ -587,6 +587,15 @@ describe("Workspace pairing intents", () => {
     const reconnect = await handleWorkspaceGatewayConnect(connectRequest, env);
     expect(reconnect.status).toBe(200);
     expect(forwardedWebSocketRequest).toBe(connectRequest);
+    expect(forwardedWebSocketRequest?.headers.get("upgrade")).toBe("websocket");
+    expect(forwardedWebSocketRequest?.headers.get("authorization")).toBe(
+      `Bearer ${runtime.authToken}`,
+    );
+    expect(
+      new URL(forwardedWebSocketRequest!.url).searchParams.get(
+        "workspaceRuntimeId",
+      ),
+    ).toBe(runtime.workspaceRuntimeId);
     expect(await reconnect.json()).toEqual({
       workspaceRuntimeId: runtime.workspaceRuntimeId,
     });

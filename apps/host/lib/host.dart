@@ -11,9 +11,11 @@ import 'work_root.dart';
 import 'v7_adapter_package_store.dart';
 import 'worker_trust_policy.dart';
 import 'release_trust_roots.dart';
+import 'workspace_paths.dart';
 
 export 'configured_worker_registry.dart';
 export 'release_trust_roots.dart';
+export 'workspace_paths.dart';
 
 WorkerTrustPolicy _configuredAdapterTrustPolicy() =>
     workspaceReleaseTrustPolicy();
@@ -61,8 +63,8 @@ class HostConfig {
     final path = index >= 0 && index + 1 < args.length
         ? args[index + 1]
         : Platform.environment['CONCLAVE_HOST_DATA_DIR'];
-    final dataDirectory = Directory(path ??
-        '${currentPlatformRuntime.homeDirectory}${Platform.pathSeparator}.conclave-host');
+    final dataDirectory =
+        path == null ? WorkspacePaths.defaultStateDirectory() : Directory(path);
     final registration = HostRegistrationStore(dataDirectory).readSync();
     final cloudUrl = cloudIndex >= 0 && cloudIndex + 1 < args.length
         ? args[cloudIndex + 1]
@@ -70,12 +72,12 @@ class HostConfig {
     final hostId = hostIndex >= 0 && hostIndex + 1 < args.length
         ? args[hostIndex + 1]
         : Platform.environment['CONCLAVE_HOST_ID'] ?? registration?.hostId;
-    final installationId = installationIndex >= 0 &&
-            installationIndex + 1 < args.length
-        ? args[installationIndex + 1]
-        : Platform.environment['CONCLAVE_HOST_INSTALLATION_ID'] ??
-            registration?.installationId ??
-            InstallationIdentityStore(dataDirectory).readSync();
+    final installationId =
+        installationIndex >= 0 && installationIndex + 1 < args.length
+            ? args[installationIndex + 1]
+            : Platform.environment['CONCLAVE_HOST_INSTALLATION_ID'] ??
+                registration?.installationId ??
+                InstallationIdentityStore(dataDirectory).readSync();
     final workspaceId = workspaceIndex >= 0 && workspaceIndex + 1 < args.length
         ? args[workspaceIndex + 1]
         : Platform.environment['CONCLAVE_HOST_WORKSPACE_ID'] ??
@@ -111,8 +113,9 @@ class HostConfig {
     final path = index >= 0 && index + 1 < args.length
         ? args[index + 1]
         : Platform.environment['CONCLAVE_HOST_DATA_DIR'];
-    return Directory(path ??
-        '${currentPlatformRuntime.homeDirectory}${Platform.pathSeparator}.conclave-host');
+    return path == null
+        ? WorkspacePaths.defaultStateDirectory()
+        : Directory(path);
   }
 
   static Uri? _cloudSocketUri(String value, {String? workspaceRuntimeId}) {
@@ -142,6 +145,14 @@ class HostConfig {
         : socketScheme == 'wss'
             ? 443
             : 80;
+    final safeQueryParameters = {
+      for (final entry in uri.queryParameters.entries)
+        if (!RegExp(
+          r'(secret|token|password|api[_-]?key|authorization|cookie|credential)',
+          caseSensitive: false,
+        ).hasMatch(entry.key))
+          entry.key: entry.value,
+    };
 
     return Uri(
       scheme: socketScheme,
@@ -150,7 +161,7 @@ class HostConfig {
       port: port,
       path: path,
       queryParameters: {
-        ...uri.queryParameters,
+        ...safeQueryParameters,
         if (workspaceRuntimeId != null)
           'workspaceRuntimeId': workspaceRuntimeId,
       },
@@ -222,7 +233,7 @@ class Host {
             credentialStore ?? const PlatformSecureCredentialStore(),
         adapterPackageStore = adapterPackageStore ??
             V7AdapterPackageStore(
-              root: Directory('${config.dataDirectory.path}/v7-adapters'),
+              root: WorkspacePaths(config.dataDirectory).adaptersDirectory,
               trustPolicy: _configuredAdapterTrustPolicy(),
               allowedPermissions: parseConfiguredWorkerPermissions(
                   Platform.environment['CONCLAVE_WORKER_PERMISSIONS']),
@@ -265,6 +276,7 @@ class Host {
   Future<void> start() async {
     if (_running) return;
     _workRoot = await config.workRootResolver.resolve();
+    await WorkspacePaths(config.dataDirectory).prepareRuntimeDirectories();
     await config.dataDirectory.create(recursive: true);
     await currentPlatformRuntime.restrictPermissions(
       config.dataDirectory.path,
@@ -330,7 +342,7 @@ class Host {
   }
 
   Future<IOSink> _openLogFile() async {
-    final logsDirectory = Directory('${config.dataDirectory.path}/logs');
+    final logsDirectory = WorkspacePaths(config.dataDirectory).logsDirectory;
     await logsDirectory.create(recursive: true);
     await currentPlatformRuntime.restrictPermissions(logsDirectory.path,
         directory: true);

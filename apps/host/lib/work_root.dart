@@ -17,15 +17,21 @@ class WorkRootResolver {
     final separator = platform.isWindows ? r'\' : '/';
     if (platform.isWindows) {
       return _join(
-          platform.homeDirectory, 'AppData', 'Local', 'Conclave', 'Work',
+          [platform.homeDirectory, 'AppData', 'Local', 'Conclave', 'Work'],
           separator: separator);
     }
     if (platform.operatingSystem == 'macos') {
-      return _join(platform.homeDirectory, 'Library', 'Application Support',
-          'Conclave', 'Work',
-          separator: separator);
+      return _join([
+        platform.homeDirectory,
+        'Library',
+        'Application Support',
+        'Conclave',
+        'Workspace',
+        'Work'
+      ], separator: separator);
     }
-    return _join(platform.homeDirectory, '.local', 'share', 'conclave', 'work',
+    return _join(
+        [platform.homeDirectory, '.local', 'share', 'conclave', 'work'],
         separator: separator);
   }
 
@@ -60,15 +66,19 @@ class WorkRootResolver {
     } on Object catch (error) {
       throw WorkRootViolation('cannot secure Work Root: $error');
     }
+    final writeProbe = File(
+        '${canonical.path}${Platform.pathSeparator}.write-check-$pid-${DateTime.now().microsecondsSinceEpoch}');
+    try {
+      await writeProbe.writeAsString('ok', flush: true);
+      await writeProbe.delete();
+    } on FileSystemException catch (error) {
+      throw WorkRootViolation('cannot write to Work Root: ${error.message}');
+    }
     return canonical;
   }
 
-  String _join(
-      String first, String second, String third, String fourth, String fifth,
-      {String? separator}) {
-    return [first, second, third, fourth, fifth]
-        .join(separator ?? Platform.pathSeparator);
-  }
+  String _join(List<String> parts, {String? separator}) =>
+      parts.join(separator ?? Platform.pathSeparator);
 }
 
 class WorkRootViolation implements Exception {

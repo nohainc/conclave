@@ -80,6 +80,25 @@ typedef HostUpdateAvailableHandler = Future<void> Function(
   Map<String, Object?> payload,
 );
 
+enum HostConnectionStage {
+  validating,
+  offline,
+  connecting,
+  authenticating,
+  synchronizing,
+  ready,
+  reconnecting,
+}
+
+class HostConnectionPreflightException implements Exception {
+  const HostConnectionPreflightException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class IoHostCloudSocket implements HostCloudSocket {
   IoHostCloudSocket(this.socket);
   final WebSocket socket;
@@ -100,8 +119,10 @@ Future<HostCloudSocket> connectIoHostCloudSocket(
   Uri uri, {
   String? authToken,
 }) async {
+  final socketUri =
+      uri.hasPort ? uri : uri.replace(port: uri.scheme == 'wss' ? 443 : 80);
   final socket = await WebSocket.connect(
-    uri.toString(),
+    socketUri.toString(),
     headers: authToken == null
         ? null
         : <String, String>{'Authorization': 'Bearer $authToken'},
@@ -131,6 +152,9 @@ class HostCloudConnection {
     this.heartbeat = const Duration(seconds: 15),
     this.reconnectBaseDelay = const Duration(milliseconds: 10),
     this.reconnectMaxDelay = const Duration(seconds: 5),
+    this.protocolHandshakeTimeout = const Duration(seconds: 15),
+    this.syncTimeout = const Duration(seconds: 20),
+    this.credentialAvailable = true,
   })  : authorizedWorkspaceIds = {
           workspaceId,
           ...?authorizedWorkspaceIds,
@@ -161,16 +185,71 @@ class HostCloudConnection {
   final Duration heartbeat;
   final Duration reconnectBaseDelay;
   final Duration reconnectMaxDelay;
+  final Duration protocolHandshakeTimeout;
+  final Duration syncTimeout;
+  final bool credentialAvailable;
   HostCloudSocket? _socket;
   Timer? _heartbeatTimer;
   Timer? _heartbeatTimeoutTimer;
+  Timer? _protocolHandshakeTimer;
+  Timer? _syncTimer;
   StreamSubscription<Object?>? _subscription;
+  Completer<void>? _reconnectWakeup;
   bool _closing = false;
   bool _reconnecting = false;
   int _reconnectAttempt = 0;
   int reconnectCount = 0;
   String? sessionId;
   bool get isConnected => sessionId != null;
+  HostConnectionStage connectionStage = HostConnectionStage.offline;
+  DateTime? lastConnectionAttemptAt;
+  DateTime? lastWebSocketUpgradeAt;
+  DateTime? lastHelloSentAt;
+  DateTime? lastHelloAcknowledgedAt;
+  DateTime? lastReadyAt;
+  String? lastConnectionError;
+  int? lastHttpStatusCode;
+  String lastDnsTlsStatus = 'not checked';
+  bool _workerInventorySent = false;
+  bool _syncResultReceived = false;
+  String? _helloMessageId;
+  String? _syncRequestMessageId;
+
+  String get protocolHelloStatus {
+    if (lastHelloSentAt == null) return 'not started';
+    if (sessionId != null) return 'acknowledged';
+    if (lastConnectionError?.contains('did not acknowledge workspace.hello') ==
+        true) {
+      return 'timed out';
+    }
+    return 'waiting for acknowledgement';
+  }
+
+  void validateConfiguration() {
+    if (!credentialAvailable) {
+      throw const HostConnectionPreflightException(
+        'The Workspace runtime credential is missing from secure storage.',
+      );
+    }
+    if (!const {'ws', 'wss'}.contains(uri.scheme) ||
+        uri.host.isEmpty ||
+        (uri.hasPort && (uri.port <= 0 || uri.port > 65535)) ||
+        uri.hasFragment) {
+      throw const HostConnectionPreflightException(
+        'The Cloud WebSocket endpoint is invalid. Expected ws/wss, a host, '
+        'a valid port, and no URL fragment.',
+      );
+    }
+    if (!legacyProtocol &&
+        (uri.path != '/api/workspace-gateway/connect' ||
+            uri.queryParameters['workspaceRuntimeId'] != hostId)) {
+      throw const HostConnectionPreflightException(
+        'The Cloud WebSocket endpoint must include the Workspace Gateway '
+        'path and this runtime ID.',
+      );
+    }
+  }
+
   int get activeAssignmentCount => _activeAssignments.length;
   bool acceptingNewWork = true;
   bool get isDraining => _draining;
@@ -211,12 +290,20 @@ class HostCloudConnection {
 
   Future<void> _reportCurrentWorkerInventory() async {
     final provider = workerInventoryProvider;
-    if (provider == null || !isConnected) return;
+    if (provider == null) {
+      _workerInventorySent = true;
+      _completeSynchronizationWhenReady();
+      return;
+    }
+    if (sessionId == null) return;
     try {
       reportWorkerInventory(await provider());
       lastInventorySyncAt = DateTime.now().toUtc();
+      _workerInventorySent = true;
+      _completeSynchronizationWhenReady();
     } on Object {
-      // A local inventory read failure must not tear down the runtime link.
+      lastConnectionError =
+          'Workspace authenticated, but its Worker inventory could not be read.';
     }
   }
 
@@ -366,28 +453,100 @@ class HostCloudConnection {
 
   Future<void> connect() async {
     _closing = false;
+    lastConnectionAttemptAt = DateTime.now().toUtc();
+    connectionStage = HostConnectionStage.validating;
+    try {
+      validateConfiguration();
+    } on Object catch (error) {
+      lastConnectionError = error.toString();
+      connectionStage = HostConnectionStage.offline;
+      rethrow;
+    }
+    await _open();
+  }
+
+  /// Requests an immediate transport retry without recreating local Workers
+  /// or interrupting their assignment processes.
+  Future<void> retryNow() async {
+    if (_closing) _closing = false;
+    _reconnectAttempt = 0;
+    final wakeup = _reconnectWakeup;
+    if (_reconnecting) {
+      if (wakeup != null && !wakeup.isCompleted) wakeup.complete();
+      return;
+    }
+
+    _heartbeatTimer?.cancel();
+    _heartbeatTimeoutTimer?.cancel();
+    _protocolHandshakeTimer?.cancel();
+    _syncTimer?.cancel();
+    await _subscription?.cancel();
+    _subscription = null;
+    final oldSocket = _socket;
+    _socket = null;
+    sessionId = null;
+    await oldSocket?.close();
     await _open();
   }
 
   Future<void> _open() async {
-    final socket = await factory(uri);
+    lastConnectionAttemptAt = DateTime.now().toUtc();
+    connectionStage = HostConnectionStage.connecting;
+    lastHelloSentAt = null;
+    _helloMessageId = null;
+    _syncRequestMessageId = null;
+    _workerInventorySent = workerInventoryProvider == null;
+    _syncResultReceived = false;
+    late final HostCloudSocket socket;
+    try {
+      socket = await factory(uri);
+    } on Object catch (error) {
+      lastConnectionError = _describeConnectionError(error);
+      if (error is WebSocketException) {
+        lastHttpStatusCode = error.httpStatusCode;
+        lastDnsTlsStatus =
+            error.httpStatusCode == null ? 'not confirmed' : 'passed';
+      } else {
+        lastDnsTlsStatus = 'not confirmed (${error.runtimeType})';
+      }
+      connectionStage = _closing || !_reconnecting
+          ? HostConnectionStage.offline
+          : HostConnectionStage.reconnecting;
+      rethrow;
+    }
     _socket = socket;
+    lastHttpStatusCode = null;
+    lastWebSocketUpgradeAt = DateTime.now().toUtc();
+    lastDnsTlsStatus = 'passed';
     sessionId = null;
     _reconnectAttempt = 0;
+    connectionStage = HostConnectionStage.authenticating;
     await _subscription?.cancel();
     _subscription = socket.messages.listen(
       _handleMessage,
       onDone: () => unawaited(_reconnect()),
       onError: (_) => unawaited(_reconnect()),
     );
-    socket.send(jsonEncode(_envelope('workspace.hello', {
+    final hello = _envelope('workspace.hello', {
       'workspaceRuntimeId': hostId,
       'executionWorkspaceId': workspaceId,
       'name': name,
       'hostname': hostname,
       'hostVersion': hostVersion,
       'capabilities': capabilities,
-    })));
+    });
+    _helloMessageId = hello['messageId'] as String;
+    socket.send(jsonEncode(hello));
+    lastHelloSentAt = DateTime.now().toUtc();
+    _protocolHandshakeTimer?.cancel();
+    _protocolHandshakeTimer = Timer(protocolHandshakeTimeout, () {
+      if (sessionId != null || _closing) return;
+      lastConnectionError =
+          'WebSocket connected, but Cloud did not acknowledge workspace.hello '
+          'within ${protocolHandshakeTimeout.inSeconds} seconds.';
+      connectionStage = HostConnectionStage.reconnecting;
+      unawaited(_socket?.close());
+    });
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(heartbeat, (_) {
       final currentSessionId = sessionId;
@@ -513,8 +672,41 @@ class HostCloudConnection {
     }
     if (decoded['type'] == 'workspace.hello.ack') {
       final payload = decoded['payload'];
-      if (payload is Map<String, dynamic> && payload['sessionId'] is String) {
+      final runtimeId = decoded['workspaceRuntimeId'];
+      final executionWorkspaceId = decoded['executionWorkspaceId'];
+      if ((!legacyProtocol && runtimeId != hostId) ||
+          (!legacyProtocol && executionWorkspaceId != workspaceId) ||
+          (runtimeId != null && runtimeId != hostId) ||
+          (executionWorkspaceId != null &&
+              executionWorkspaceId != workspaceId) ||
+          (!legacyProtocol && decoded['correlationId'] != _helloMessageId)) {
+        lastConnectionError =
+            'Cloud hello acknowledgement did not match this Workspace runtime.';
+        connectionStage = HostConnectionStage.reconnecting;
+        unawaited(_socket?.close());
+        return;
+      }
+      if (payload is Map<String, dynamic> &&
+          payload['sessionId'] is String &&
+          (payload['sessionId'] as String).isNotEmpty) {
+        _protocolHandshakeTimer?.cancel();
+        _protocolHandshakeTimer = null;
+        lastHelloAcknowledgedAt = DateTime.now().toUtc();
+        connectionStage = HostConnectionStage.synchronizing;
         sessionId = payload['sessionId'] as String;
+        _syncTimer?.cancel();
+        _syncTimer = Timer(syncTimeout, () {
+          if ((_syncResultReceived && _workerInventorySent) || _closing) {
+            return;
+          }
+          lastConnectionError = !_syncResultReceived
+              ? 'Workspace authenticated, but Cloud synchronization did '
+                  'not complete within ${syncTimeout.inSeconds} seconds.'
+              : 'Cloud synchronization completed, but the Worker inventory '
+                  'did not finish within ${syncTimeout.inSeconds} seconds.';
+          connectionStage = HostConnectionStage.reconnecting;
+          unawaited(_socket?.close());
+        });
         authorizedWorkspaceIds
           ..clear()
           ..add(workspaceId);
@@ -528,9 +720,21 @@ class HostCloudConnection {
         unawaited(_reportCurrentWorkerInventory());
       }
     } else if (decoded['type'] == 'workspace.sync.result') {
+      if (!legacyProtocol &&
+          (decoded['workspaceRuntimeId'] != hostId ||
+              decoded['executionWorkspaceId'] != workspaceId ||
+              decoded['correlationId'] != _syncRequestMessageId)) {
+        lastConnectionError =
+            'Cloud synchronization response did not match this runtime session.';
+        connectionStage = HostConnectionStage.reconnecting;
+        unawaited(_socket?.close());
+        return;
+      }
       final payload = decoded['payload'];
       if (payload is Map<String, dynamic>) {
         syncResponse = Map<String, Object?>.from(payload);
+        _syncResultReceived = true;
+        _completeSynchronizationWhenReady();
         unawaited(_reconcileSyncResponse(syncResponse!).catchError((_) {}));
       }
     } else if (decoded['type'] == 'workspace.update') {
@@ -557,6 +761,29 @@ class HostCloudConnection {
         decoded['type'] == 'checkout.finalize') {
       unawaited(_handleCheckoutCommand(decoded));
     }
+  }
+
+  void _completeSynchronizationWhenReady() {
+    if (!_syncResultReceived || !_workerInventorySent || sessionId == null) {
+      return;
+    }
+    _syncTimer?.cancel();
+    _syncTimer = null;
+    connectionStage = HostConnectionStage.ready;
+    lastReadyAt = DateTime.now().toUtc();
+    lastConnectionError = null;
+    lastHttpStatusCode = null;
+  }
+
+  String _describeConnectionError(Object error) {
+    if (error is WebSocketException && error.httpStatusCode != null) {
+      return 'Cloud rejected the WebSocket upgrade with HTTP '
+          '${error.httpStatusCode}.';
+    }
+    if (error is WebSocketException) {
+      return 'WebSocket upgrade failed.';
+    }
+    return 'WebSocket connection failed (${error.runtimeType}).';
   }
 
   Future<void> _handleCheckoutCommand(Map<String, dynamic> message) async {
@@ -1153,17 +1380,25 @@ class HostCloudConnection {
         }
       }
     }
-    socket.send(jsonEncode(_envelope('workspace.sync.request', {
+    final request = _envelope('workspace.sync.request', {
       'workspaceRuntimeId': hostId,
       'executionWorkspaceId': workspaceId,
       if (recoveredAssignmentIds.isNotEmpty)
         'unreconciledAssignmentIds': recoveredAssignmentIds.toList()..sort(),
-    })));
+    });
+    _syncRequestMessageId = request['messageId'] as String;
+    socket.send(jsonEncode(request));
   }
 
   Future<void> _reconnect() async {
     if (_closing || _reconnecting) return;
     _reconnecting = true;
+    sessionId = null;
+    connectionStage = HostConnectionStage.reconnecting;
+    _protocolHandshakeTimer?.cancel();
+    _protocolHandshakeTimer = null;
+    _syncTimer?.cancel();
+    _syncTimer = null;
     try {
       while (!_closing) {
         reconnectCount += 1;
@@ -1172,7 +1407,10 @@ class HostCloudConnection {
           microseconds: (reconnectBaseDelay.inMicroseconds * multiplier)
               .clamp(0, reconnectMaxDelay.inMicroseconds),
         );
-        await Future<void>.delayed(delay);
+        final wakeup = Completer<void>();
+        _reconnectWakeup = wakeup;
+        await Future.any([Future<void>.delayed(delay), wakeup.future]);
+        if (identical(_reconnectWakeup, wakeup)) _reconnectWakeup = null;
         if (_closing) return;
         try {
           await _open();
@@ -1188,10 +1426,17 @@ class HostCloudConnection {
 
   Future<void> close() async {
     _closing = true;
+    final wakeup = _reconnectWakeup;
+    if (wakeup != null && !wakeup.isCompleted) wakeup.complete();
     _heartbeatTimer?.cancel();
     _heartbeatTimeoutTimer?.cancel();
+    _protocolHandshakeTimer?.cancel();
+    _syncTimer?.cancel();
     await _subscription?.cancel();
     await _socket?.close();
     _socket = null;
+    sessionId = null;
+    lastHelloSentAt = null;
+    connectionStage = HostConnectionStage.offline;
   }
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:conclave_host/configured_worker_registry.dart';
+import 'package:conclave_host/cloud_connection.dart';
 import 'package:conclave_host/main.dart';
 import 'package:conclave_host/platform_runtime.dart';
 import 'package:conclave_host/secure_credentials.dart';
@@ -541,10 +542,23 @@ void main() {
       'advanced diagnostics accordion starts collapsed and exposes IDs, logs, metrics upon expansion',
       (tester) async {
     var exported = false;
+    var retried = false;
+    String? copiedConnectionDetails;
     tester.view.physicalSize = const Size(800, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copiedConnectionDetails = (call.arguments as Map)['text'] as String?;
+        }
+        return null;
+      },
+    );
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
 
     await pumpDashboard(
       tester,
@@ -556,9 +570,19 @@ void main() {
         cloudConnected: true,
         workspaceId: 'ws-test-123',
         hostId: 'runtime-host-a',
+        cloudUrl:
+            'wss://app.conclaveax.com/api/workspace-gateway/connect?workspaceRuntimeId=runtime-host-a',
         logsPath: '/var/logs/host.log',
+        connectionStage: HostConnectionStage.offline,
+        connectionError: 'Cloud rejected the WebSocket upgrade with HTTP 400.',
+        connectionHttpStatus: 400,
+        runtimeCredentialAvailable: true,
+        protocolHelloStatus: 'not started',
+        dnsTlsStatus: 'passed',
+        webSocketUpgradeStatus: 'failed (HTTP 400)',
       ),
       onExportDiagnostics: () async => exported = true,
+      onRetry: () async => retried = true,
     );
 
     expect(find.text('Advanced & Diagnostics'), findsOneWidget);
@@ -577,6 +601,15 @@ void main() {
     expect(find.text('Runtime ID'), findsOneWidget);
     expect(find.text('runtime-host-a'), findsOneWidget);
     expect(find.text('Gateway state'), findsOneWidget);
+    expect(find.text('Connection stage'), findsOneWidget);
+    expect(find.text('offline'), findsOneWidget);
+    expect(find.text('DNS / TLS'), findsOneWidget);
+    expect(find.text('passed'), findsOneWidget);
+    expect(find.text('WebSocket upgrade'), findsOneWidget);
+    expect(find.text('Protocol hello'), findsOneWidget);
+    expect(find.text('not started'), findsOneWidget);
+    expect(find.text('failed (HTTP 400)'), findsOneWidget);
+    expect(find.text('Runtime credential'), findsOneWidget);
     expect(find.text('Connected'), findsWidgets);
     expect(find.text('Open Log File'), findsOneWidget);
 
@@ -586,6 +619,19 @@ void main() {
     expect(exportBtn, findsOneWidget);
     await tester.tap(exportBtn);
     expect(exported, isTrue);
+
+    final copyButton = find.text('Copy connection details');
+    await tester.ensureVisible(copyButton);
+    await tester.pumpAndSettle();
+    await tester.tap(copyButton);
+    expect(copiedConnectionDetails, contains('HTTP 400'));
+    expect(copiedConnectionDetails, isNot(contains('Bearer')));
+
+    final retryButton = find.text('Retry connection');
+    await tester.ensureVisible(retryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(retryButton);
+    expect(retried, isTrue);
   });
 
   testWidgets(
