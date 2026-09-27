@@ -16,6 +16,12 @@ enum ManagementLockState { unlocked, locked }
 
 enum DesiredRuntimeState { connected, disconnected }
 
+bool shouldHideManagementWindowOnStartup({
+  required bool isMacOS,
+  required bool launchAtLogin,
+}) =>
+    isMacOS && launchAtLogin;
+
 /// Full lifecycle snapshot that can be constructed and tested without UI state.
 /// Transport health remains a separate [RuntimeTransportState] projection.
 class WorkspaceLifecycleState {

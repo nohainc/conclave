@@ -780,6 +780,16 @@ Future<void> main() async {
   final desiredRuntime = WorkspaceLifecyclePreferencesStore(dataDirectory)
       .readSync()
       .desiredRuntime;
+  final startupPreferences =
+      WorkspaceLifecyclePreferencesStore(dataDirectory).readSync();
+  if (shouldHideManagementWindowOnStartup(
+    isMacOS: Platform.isMacOS,
+    launchAtLogin: startupPreferences.launchAtLogin,
+  )) {
+    unawaited(const MethodChannel('com.conclave.workspace/desktop')
+        .invokeMethod<void>('hideMainWindow')
+        .catchError((_) {}));
+  }
   final registration = HostRegistrationStore(dataDirectory).readSync();
   if (registration != null && desiredRuntime == DesiredRuntimeState.connected) {
     await credentialStore.readForSynchronousConfig(registration.hostId);
@@ -951,6 +961,27 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       ownerDisplayName: p.ownerDisplayName,
     ));
     _armAutoLockTimer();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _setLaunchAtLogin(bool enabled) async {
+    if (enabled &&
+        _preferences.desiredRuntime != DesiredRuntimeState.connected) {
+      return;
+    }
+    await HostLifecycleController.setLaunchAtLogin(enabled);
+    final store = WorkspaceLifecyclePreferencesStore(
+      widget.lifecycle.host.config.dataDirectory,
+    );
+    final p = store.readSync();
+    await store.write(WorkspaceLifecyclePreferences(
+      desiredRuntime: p.desiredRuntime,
+      launchAtLogin: enabled,
+      managementLockPreference: p.managementLockPreference,
+      autoLockTimeout: p.autoLockTimeout,
+      ownerUserId: p.ownerUserId,
+      ownerDisplayName: p.ownerDisplayName,
+    ));
     if (mounted) setState(() {});
   }
 
@@ -1333,7 +1364,8 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       final nameController = TextEditingController(text: suggestedName);
       final existingPreferences =
           WorkspaceLifecyclePreferencesStore(dataDirectory).readSync();
-      var launchAtLogin = Platform.isMacOS && existingPreferences.launchAtLogin;
+      var launchAtLogin = Platform.isMacOS &&
+          (registration == null || existingPreferences.launchAtLogin);
       final connectOptions = await showDialog<(String, bool)>(
         context: context,
         builder: (dialogContext) => StatefulBuilder(
@@ -1383,7 +1415,6 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       if (workspaceName.trim().isEmpty) {
         throw StateError('Workspace name cannot be empty.');
       }
-      await HostLifecycleController.setLaunchAtLogin(connectOptions.$2);
       final facts = SafeMachineFacts.collect(
           installationId: installationId,
           name: workspaceName,
@@ -1399,6 +1430,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         existingWorkspaceId: registration?.workspaceId,
         existingRuntimeId: registration?.hostId,
       );
+      await HostLifecycleController.setLaunchAtLogin(connectOptions.$2);
       final preferenceStore = WorkspaceLifecyclePreferencesStore(dataDirectory);
       final preferences = preferenceStore.readSync();
       await preferenceStore.write(WorkspaceLifecyclePreferences(
@@ -1956,6 +1988,8 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       snapshot: lifecycle.uiSnapshot,
       autoLockTimeout: _preferences.autoLockTimeout,
       onAutoLockTimeoutChanged: _setAutoLockTimeout,
+      launchAtLogin: _preferences.launchAtLogin,
+      onLaunchAtLoginChanged: _setLaunchAtLogin,
       onLock: () => unawaited(_lockManagement()),
       requireStepUp: _requireStepUp,
       onSignIn: _signInDesktopHuman,
@@ -2523,6 +2557,8 @@ class HostDashboard extends StatefulWidget {
     this.onLock,
     this.autoLockTimeout,
     this.onAutoLockTimeoutChanged,
+    this.launchAtLogin = false,
+    this.onLaunchAtLoginChanged,
     this.requireStepUp,
     this.onQuit,
     this.onRetry,
@@ -2548,6 +2584,8 @@ class HostDashboard extends StatefulWidget {
   final VoidCallback? onLock;
   final Duration? autoLockTimeout;
   final ValueChanged<Duration?>? onAutoLockTimeoutChanged;
+  final bool launchAtLogin;
+  final ValueChanged<bool>? onLaunchAtLoginChanged;
   final Future<bool> Function(String reason)? requireStepUp;
   final VoidCallback? onQuit;
   final Future<void> Function()? onRetry;
@@ -2777,6 +2815,8 @@ class _HostDashboardState extends State<HostDashboard> {
                           onDisconnect: widget.onDisconnect,
                           onRelease: widget.onRelease,
                           onReset: widget.onReset,
+                          launchAtLogin: widget.launchAtLogin,
+                          onLaunchAtLoginChanged: widget.onLaunchAtLoginChanged,
                         ),
                         _WorkersTab(
                           key: ValueKey(widget.workerRevision),
@@ -2808,6 +2848,8 @@ class _HostDashboardState extends State<HostDashboard> {
                           autoLockTimeout: widget.autoLockTimeout,
                           onAutoLockTimeoutChanged:
                               widget.onAutoLockTimeoutChanged,
+                          launchAtLogin: widget.launchAtLogin,
+                          onLaunchAtLoginChanged: widget.onLaunchAtLoginChanged,
                         ),
                       ],
               ),
@@ -2895,6 +2937,8 @@ class _WorkspaceTab extends StatelessWidget {
     this.onLock,
     this.autoLockTimeout,
     this.onAutoLockTimeoutChanged,
+    this.launchAtLogin = false,
+    this.onLaunchAtLoginChanged,
   });
 
   final HostUiSnapshot snapshot;
@@ -2912,6 +2956,8 @@ class _WorkspaceTab extends StatelessWidget {
   final VoidCallback? onLock;
   final Duration? autoLockTimeout;
   final ValueChanged<Duration?>? onAutoLockTimeoutChanged;
+  final bool launchAtLogin;
+  final ValueChanged<bool>? onLaunchAtLoginChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -2952,6 +2998,8 @@ class _WorkspaceTab extends StatelessWidget {
           onLock: onLock,
           autoLockTimeout: autoLockTimeout,
           onAutoLockTimeoutChanged: onAutoLockTimeoutChanged,
+          launchAtLogin: launchAtLogin,
+          onLaunchAtLoginChanged: onLaunchAtLoginChanged,
         ),
         const SizedBox(height: 16),
         if (snapshot.paired)
@@ -2994,6 +3042,8 @@ class _WorkspaceAccountSection extends StatelessWidget {
     this.onLock,
     this.autoLockTimeout,
     this.onAutoLockTimeoutChanged,
+    this.launchAtLogin = false,
+    this.onLaunchAtLoginChanged,
   });
 
   final HostUiSnapshot snapshot;
@@ -3008,6 +3058,8 @@ class _WorkspaceAccountSection extends StatelessWidget {
   final VoidCallback? onLock;
   final Duration? autoLockTimeout;
   final ValueChanged<Duration?>? onAutoLockTimeoutChanged;
+  final bool launchAtLogin;
+  final ValueChanged<bool>? onLaunchAtLoginChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -3021,6 +3073,18 @@ class _WorkspaceAccountSection extends StatelessWidget {
           const SizedBox(height: 8),
           _DesktopHumanAccountStatus(
               key: ValueKey(refreshToken), credentialStore: credentialStore),
+          if (Platform.isMacOS && snapshot.desiredRuntimeConnected) ...[
+            const SizedBox(height: 8),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: launchAtLogin,
+              onChanged: onLaunchAtLoginChanged,
+              title: const Text('Start Conclave Workspace when I log in'),
+              subtitle: const Text(
+                'Reconnect this computer in the background after you sign in to macOS.',
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           Row(children: [
             const Expanded(child: Text('Lock after inactivity')),

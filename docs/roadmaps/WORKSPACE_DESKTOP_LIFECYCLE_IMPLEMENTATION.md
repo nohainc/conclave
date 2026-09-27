@@ -678,6 +678,24 @@ Opening from Dock/menu bar presents:
 A connected Workspace becomes available after a normal restart/login without
 manual app launch or human sign-in.
 
+## Implementation record
+
+- macOS login-item registration uses `SMAppService.mainApp`; the first Connect
+  flow opts in by default and allows the user to opt out. The Account section
+  can change the preference for an already-connected Workspace.
+- Startup loads the persisted desired-runtime state and runtime credential
+  before building the runtime. The saved human session is not required to
+  reconnect. A deliberately disconnected Workspace ignores the saved runtime
+  registration and credential.
+- When login startup is enabled, the app requests a hidden initial window. The
+  native delegate preserves the visible window for an activated, user-started
+  launch; Dock reopen and the menu-bar Open action present the routed shell.
+- The existing runtime startup path continues to prefer WebSocket and use the
+  HTTP long-poll transport through the common Workspace runtime.
+- Automated coverage verifies startup window policy against platform and the
+  login-item preference. Native loginwindow behavior and end-to-end restart
+  reconnection still require a macOS packaged-app acceptance run.
+
 ---
 
 # Phase 9 — Persist desired runtime and startup state safely

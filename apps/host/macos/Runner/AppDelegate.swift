@@ -36,6 +36,13 @@ class AppDelegate: FlutterAppDelegate {
       case "setManagementLocked":
         self?.setManagementLocked(call.arguments as? Bool ?? false)
         result(nil)
+      case "hideMainWindow":
+        // Login-item launches are not activated by the user. Preserve the
+        // normal first window when the user explicitly starts the app.
+        if NSApp.isActive == false {
+          self?.mainFlutterWindow?.orderOut(nil)
+        }
+        result(nil)
       case "openPath":
         guard let path = call.arguments as? String else { result(FlutterError(code: "bad_path", message: nil, details: nil)); return }
         NSWorkspace.shared.open(URL(fileURLWithPath: path))

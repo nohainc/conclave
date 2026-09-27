@@ -67,6 +67,30 @@ void main() {
     expect(transport, RuntimeTransportState.httpLongPoll);
   });
 
+  test('initial window hides only for enabled macOS login startup', () {
+    expect(
+      shouldHideManagementWindowOnStartup(
+        isMacOS: true,
+        launchAtLogin: true,
+      ),
+      isTrue,
+    );
+    expect(
+      shouldHideManagementWindowOnStartup(
+        isMacOS: true,
+        launchAtLogin: false,
+      ),
+      isFalse,
+    );
+    expect(
+      shouldHideManagementWindowOnStartup(
+        isMacOS: false,
+        launchAtLogin: true,
+      ),
+      isFalse,
+    );
+  });
+
   test('lifecycle preferences persist intent and owner cache without secrets',
       () async {
     final directory =
