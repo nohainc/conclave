@@ -9,6 +9,7 @@ abstract interface class StudioBrowserNavigation {
   void replaceWithLogin(Uri returnTo);
   void startSocialLogin(String provider, Uri returnTo);
   void openExternal(Uri uri);
+  bool closeCurrentWindow();
   void dispose();
 }
 
@@ -39,6 +40,9 @@ final class _StubStudioBrowserNavigation implements StudioBrowserNavigation {
 
   @override
   void openExternal(Uri uri) {}
+
+  @override
+  bool closeCurrentWindow() => false;
 
   @override
   void dispose() {}

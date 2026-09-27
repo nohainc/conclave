@@ -39,5 +39,16 @@ void main() {
     expect(find.text('Approve sign-in'), findsOneWidget);
     expect(find.textContaining('code'), findsNothing);
     expect(find.byType(TextField), findsNothing);
+
+    await tester.tap(find.text('Approve sign-in'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sign-in approved'), findsOneWidget);
+    expect(find.text('Return to Conclave Workspace to finish signing in.'),
+        findsOneWidget);
+    expect(
+        find.text(
+            'Your browser did not allow this tab to close. You can close it now.'),
+        findsOneWidget);
   });
 }

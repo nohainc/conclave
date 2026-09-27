@@ -104,6 +104,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
   bool authResetRequest = false;
   bool authBusy = false;
   bool desktopAuthBusy = false;
+  bool desktopAuthApproved = false;
+  bool desktopAuthCloseBlocked = false;
   String? desktopAuthError;
   String? authNotice;
   String? authError;
@@ -1559,6 +1561,43 @@ class _StudioAppState extends State<ConclaveAppShell> {
   }
 
   Widget _desktopAuthApprovalView() {
+    if (desktopAuthApproved) {
+      return Scaffold(
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Card(
+              margin: const EdgeInsets.all(24),
+              child: Padding(
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Sign-in approved',
+                        style: Theme.of(context).textTheme.headlineSmall),
+                    const SizedBox(height: 12),
+                    const Text(
+                        'Return to Conclave Workspace to finish signing in.'),
+                    if (desktopAuthCloseBlocked) ...[
+                      const SizedBox(height: 8),
+                      const Text(
+                          'Your browser did not allow this tab to close. You can close it now.'),
+                    ],
+                    const SizedBox(height: 16),
+                    OutlinedButton.icon(
+                      onPressed: _closeApprovedAuthTab,
+                      icon: const Icon(Icons.close),
+                      label: const Text('Close tab'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     final user = store.auth.viewer;
     return Scaffold(
       body: Center(
@@ -1620,15 +1659,25 @@ class _StudioAppState extends State<ConclaveAppShell> {
     try {
       await widget.dataSource.approveDesktopAuthIntent(intentId: intentId);
       if (!mounted) return;
-      _navigateTo(const StudioNavigation.home(), replace: true);
-      _showSnackBar(
-          'Conclave Workspace sign-in approved. Return to the desktop app.');
+      browserNavigation.replace(Uri(path: '/'));
+      setState(() {
+        desktopAuthBusy = false;
+        desktopAuthApproved = true;
+      });
+      _closeApprovedAuthTab();
     } catch (error) {
       if (!mounted) return;
       setState(() {
         desktopAuthBusy = false;
         desktopAuthError = error.toString();
       });
+    }
+  }
+
+  void _closeApprovedAuthTab() {
+    final closed = browserNavigation.closeCurrentWindow();
+    if (!closed && mounted) {
+      setState(() => desktopAuthCloseBlocked = true);
     }
   }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import worker from "../src/index.js";
+import worker, { routeHandlers } from "../src/index.js";
 
 const workflowExecutions = new Map<string, string>();
 const consumedEvidence = new Set<string>();
@@ -136,6 +136,14 @@ const env = {
 } as unknown as Env;
 
 describe("Worker smoke tests", () => {
+  it("registers authenticated Workspace ownership lifecycle handlers", () => {
+    expect(typeof routeHandlers.handleCheckWorkspaceOwnership).toBe("function");
+    expect(typeof routeHandlers.handleDisconnectDesktopWorkspace).toBe(
+      "function",
+    );
+    expect(typeof routeHandlers.handleReleaseDesktopWorkspace).toBe("function");
+  });
+
   it("returns a health response", async () => {
     const response = await worker.fetch(
       new Request("https://conclave.test/health"),
