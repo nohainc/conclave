@@ -18,8 +18,8 @@ Conclave AX has three primary applications and one extension type.
 - human authentication;
 - Projects and Workstreams;
 - Discuss/Work;
-- Workspace management;
-- remote Worker inventory and scheduling controls;
+- read-only Workspace/runtime/Worker visibility;
+- Project-facing Workspace Grants and execution authorization;
 - approvals, evidence and artifacts.
 
 Conclave AX is the web application. It is not packaged as the machine-side executor. Native mobile clients may be added later without changing the Workspace runtime boundary.
@@ -37,9 +37,13 @@ configure Workers in the Conclave Workspace desktop app, and create a Project.
 Authentication and local readiness problems direct users back to that desktop
 runtime.
 
-Workspace-owned Worker inventory and V7 remote scheduling enable/disable/drain
-controls are implemented. Cloud schedules only Workers owned by their paired
-Workspace and cannot modify local credentials or permissions.
+Workspace-owned Worker inventory remains visible in AX, but the normal
+Workspaces surface is moving to an operationally read-only model. Pairing,
+recovery, local Worker lifecycle, credentials, permissions, and runtime
+connection management belong to Conclave Workspace. Project/Workstream
+authorization remains a Cloud/AX concern. Existing remote scheduling-control
+APIs may remain temporarily for compatibility/internal use while their product
+surface is retired.
 
 ## 2. Conclave Cloud
 
@@ -88,7 +92,9 @@ Conclave Cloud never executes an external AI/model/tool directly.
 
 **Purpose**
 - one machine runtime/security identity;
-- pairing and persistent Cloud connection;
+- human sign-in for local Workspace management/recovery;
+- authenticated Workspace registration/recovery;
+- persistent Cloud communication with WebSocket primary and HTTPS fallback;
 - platform/architecture/runtime reporting;
 - local Work Root and Workstream directories;
 - local configured Worker registry;
@@ -104,7 +110,11 @@ One normal Conclave Workspace installation runs per machine/OS-user installation
 
 Configured Workers are created/authenticated locally and belong to exactly one Workspace. Safe Worker inventory is synchronized to Cloud for scheduling and remote control.
 
-Conclave Workspace is background-first. Its GUI is intentionally limited to local concerns such as pairing, Workers, authentication, permissions, current local work, diagnostics and updates.
+Conclave Workspace is background-first. Its GUI is intentionally limited to
+local concerns such as account/session state, Workspace registration/recovery,
+Workers, provider authentication, permissions, current local work, connection
+mode, diagnostics and updates. Human desktop authentication is distinct from
+the machine runtime credential; provider credentials remain local.
 
 Projects, Workstreams, Discuss, Work orchestration and Project administration remain in Conclave AX.
 
@@ -180,3 +190,12 @@ CONCLAVE_ENROLLMENT_TOKEN=... bash scripts/test-workspace-cloud-connection.sh
 ~~~
 
 See [Architecture v7](ARCHITECTURE_V7.md) and [V7 Implementation Audit](V7_IMPLEMENTATION_AUDIT.md).
+
+
+## Workspace authentication and transport
+
+The target desktop ownership/connection model is defined by
+[ADR-013](../decisions/ADR-013-desktop-auth-and-dual-transport.md) and the
+[implementation plan](../roadmaps/WORKSPACE_AUTH_TRANSPORT_IMPLEMENTATION.md).
+WebSocket remains the preferred runtime transport; HTTPS long-poll is the
+fallback. AX is not required for normal Workspace repair or registration.

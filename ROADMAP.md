@@ -51,3 +51,17 @@ Earlier implementation history remains available in:
 - [Architecture v5 Implementation Roadmap](docs/roadmaps/ARCHITECTURE_V5_IMPLEMENTATION.md)
 - [Architecture v4 Implementation Roadmap](docs/roadmaps/ARCHITECTURE_V4_IMPLEMENTATION.md)
 - [v4 Implementation Status](docs/roadmaps/V4_IMPLEMENTATION_STATUS.md)
+
+
+## Workspace desktop authentication and transport resilience
+
+ADR-013 defines the next Workspace product evolution: Conclave Workspace gains
+human sign-in for local ownership/management, desktop-owned Workspace
+registration/recovery, WebSocket as the preferred runtime transport, and HTTPS
+long-poll as a functional fallback. Conclave AX Workspaces becomes read-only
+for machine/runtime and local Worker operational state; Project/Workstream
+collaboration and authorization remain in AX/Cloud.
+
+Implementation sequence:
+
+[Workspace Desktop Authentication and Dual-Transport Implementation](docs/roadmaps/WORKSPACE_AUTH_TRANSPORT_IMPLEMENTATION.md)

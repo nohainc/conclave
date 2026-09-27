@@ -62,6 +62,28 @@ independent top-level page. The canonical page composition, view model, data
 ownership, and route compatibility contract are defined in the
 [Workspaces UX contract](WORKSPACES_UX_CONTRACT.md).
 
+## 2.1 Desktop ownership and transport update
+
+ADR-013 extends v7 without changing Worker ownership. Conclave Workspace now
+has two independent Cloud identity planes:
+
+~~~text
+human desktop session -> Workspace/account management and recovery APIs
+runtime credential     -> machine execution APIs
+~~~
+
+The runtime protocol is transport-independent. WebSocket/WSS remains preferred,
+but HTTPS long-poll provides a functional fallback when WebSocket cannot reach
+Ready. Scheduler/assignment logic targets one logical Gateway session rather
+than a specific transport.
+
+Normal Workspace registration/recovery moves into the desktop application after
+human sign-in. Conclave AX Workspaces becomes read-only for machine/runtime and
+Worker operational state; Project/Workstream authorization remains in AX.
+
+See [ADR-013](../decisions/ADR-013-desktop-auth-and-dual-transport.md) and the
+[Workspace auth/transport implementation plan](../roadmaps/WORKSPACE_AUTH_TRANSPORT_IMPLEMENTATION.md).
+
 ## 3. Product topology
 
 ```text

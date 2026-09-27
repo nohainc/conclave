@@ -1,0 +1,313 @@
+# ADR-013: Desktop Human Authentication and Dual Workspace Transport
+
+**Status:** Accepted for implementation  
+**Date:** 2026-09-27  
+**Builds on:** ADR-005, ADR-012  
+**Supersedes in part:** ADR-005 statement that machine-side applications never establish a human Better Auth session
+
+## Context
+
+Architecture v7 correctly separates two identities:
+
+- the human User;
+- the Workspace runtime/machine identity.
+
+The current desktop product, however, relies on a pairing/re-pairing flow initiated from Conclave AX. When the runtime credential is revoked or the Workspace is unpaired in AX, Conclave Workspace can restart in a state where its WebSocket cannot authenticate, yet the desktop has no independent authenticated human API channel with which to inspect or repair its Cloud state.
+
+That produces poor recovery UX:
+
+~~~text
+Workspace runtime credential invalid/revoked
+-> WebSocket cannot connect
+-> desktop only knows transport failed
+-> user must switch to AX
+-> user repairs pairing from a different application
+~~~
+
+The product also currently treats WebSocket as the only runtime transport. A WebSocket is the preferred transport for assignments, cancellation, progress, inventory, and realtime state, but it should not be the only way a legitimate Workspace can communicate with Cloud.
+
+The desired product model is:
+
+~~~text
+Conclave Workspace
+  human session -> account/Workspace management APIs
+  runtime credential -> machine execution APIs
+  WebSocket -> preferred realtime runtime transport
+  HTTPS long-poll -> fallback runtime transport
+~~~
+
+The desktop application becomes the primary management surface for one user's local Workspace and Workers. Conclave AX shows Workspace/Worker state and Project-facing execution availability, but does not own pairing/re-pairing or local runtime recovery.
+
+## Decision
+
+### 1. Conclave Workspace authenticates the human User
+
+Conclave Workspace gains a human sign-in flow backed by the same Better Auth identity system as Conclave AX.
+
+The desktop must not reuse or scrape the browser's HttpOnly AX cookie. Instead, Cloud issues a desktop-specific human session after Better Auth authenticates the user.
+
+Preferred flow:
+
+~~~text
+desktop creates desktop-auth intent
+-> opens system browser
+-> user authenticates with Better Auth
+-> Cloud marks intent approved for that User
+-> desktop exchanges one-time result
+-> receives desktop human session credential
+-> stores it in OS secure storage
+~~~
+
+This supports the same account methods as AX over time:
+
+- email/password;
+- GitHub;
+- Google;
+- passkey where the browser/platform supports it.
+
+The human desktop credential is:
+
+- scoped to human/account-management APIs;
+- revocable independently;
+- stored only in OS secure storage;
+- not sent to Worker adapters;
+- not used as the Workspace execution credential.
+
+### 2. Runtime identity remains separate
+
+Human authentication does not replace the Workspace runtime credential.
+
+After the human signs in, the desktop may register/recover its installation and receive or rotate a runtime credential.
+
+The runtime credential remains the only credential accepted for machine execution APIs:
+
+- Workspace Gateway;
+- HTTP runtime fallback;
+- inventory synchronization;
+- assignment receive/acknowledge;
+- progress/result;
+- heartbeat;
+- runtime facts.
+
+The two credential planes are therefore:
+
+~~~text
+Human desktop session
+  -> "who is managing this Workspace?"
+
+Workspace runtime credential
+  -> "which enrolled machine is executing?"
+~~~
+
+Human session expiry must not automatically terminate already-authorized work. Explicit user sign-out/disconnect may revoke or stop the runtime according to product policy.
+
+### 3. Desktop owns Workspace creation/recovery
+
+The normal product flow becomes desktop-first.
+
+After sign-in:
+
+~~~text
+Conclave Workspace
+-> discovers persistent installation identity
+-> proposes friendly computer name
+-> calls authenticated register/recover API
+-> Cloud verifies User + installation ownership
+-> creates or restores the user's Workspace/runtime
+-> returns runtime credential
+-> desktop starts runtime transport
+~~~
+
+Normal users no longer create a Workspace placeholder or pairing code in AX.
+
+Cloud must enforce:
+
+- one active Workspace owner per installation identity;
+- same-user recovery is idempotent;
+- a different user cannot silently claim an installation already owned by another user;
+- transfer requires an explicit disconnect/reset/release flow;
+- changing display name or hostname does not change installation identity.
+
+### 4. AX Workspaces becomes operationally read-only
+
+The Conclave AX Workspaces page remains useful for:
+
+- Workspace list;
+- connected/offline state;
+- transport type;
+- hostname/platform/version;
+- last seen;
+- synchronized Workers;
+- readiness/attention;
+- Project-facing execution availability.
+
+Normal AX Workspace UI does not:
+
+- create pairing codes;
+- re-pair;
+- unpair;
+- rename the local machine Workspace;
+- add/remove/authenticate Workers;
+- change local Worker permissions;
+- repair local credentials.
+
+Remote operational controls such as Worker scheduling enable/disable/drain are removed from normal Workspace UI for this phase. Backend control APIs may remain temporarily for compatibility/internal operation until separately audited.
+
+Project membership, Project Workspace Grants, and Workstream policy remain Cloud/AX concerns because they authorize collaborative use; they are not local machine configuration.
+
+### 5. Runtime protocol is transport-independent
+
+The logical Workspace protocol is independent of WebSocket.
+
+Canonical logical messages remain concepts such as:
+
+- workspace.hello;
+- workspace.sync;
+- worker inventory;
+- heartbeat;
+- assignment dispatch;
+- assignment progress/result;
+- assignment cancel;
+- checkout commands.
+
+The preferred transport is WebSocket/WSS.
+
+If WebSocket cannot become Ready after bounded connection attempts, Workspace falls back to HTTPS long-poll transport.
+
+### 6. HTTPS long-poll fallback
+
+Fallback uses the runtime credential, not the human desktop session.
+
+Conceptually:
+
+~~~text
+POST /api/workspace-runtime/session
+  -> establish/reconcile runtime session
+
+GET /api/workspace-runtime/poll?cursor=...
+  -> bounded long-poll for Cloud -> Workspace commands/events
+
+POST /api/workspace-runtime/events
+  -> Workspace -> Cloud hello/sync/inventory/progress/result/heartbeat/acks
+~~~
+
+The exact route shape may be implemented behind the existing Workspace Gateway Durable Object. The Durable Object should remain the authoritative live runtime coordinator regardless of transport.
+
+Requirements:
+
+- long-poll requests use finite server timeouts and reconnect immediately;
+- cursor/event identity makes delivery idempotent;
+- duplicate requests/messages are safe;
+- assignment dispatch has explicit acknowledgement;
+- cancellation remains timely;
+- runtime heartbeat/liveness has a defined TTL;
+- transition between WebSocket and fallback does not create a second runtime identity;
+- the scheduler sees one logical Workspace session.
+
+### 7. Transport state is visible
+
+The desktop Workspace page displays the active connection mode:
+
+~~~text
+Connected · WebSocket
+Connected · HTTP fallback
+Reconnecting…
+Offline
+Authentication required
+~~~
+
+HTTP fallback is functional but may be presented as degraded:
+
+> Connected using HTTPS fallback. Realtime WebSocket is unavailable.
+
+Diagnostics shows the last WebSocket failure and fallback session state.
+
+AX may display a read-only transport observation:
+
+~~~text
+Connected
+WebSocket
+~~~
+
+or:
+
+~~~text
+Connected
+HTTPS fallback
+~~~
+
+but does not control it.
+
+### 8. Recovery no longer depends on "Repair pairing"
+
+Remove the normal **Repair pairing** product concept.
+
+Recovery becomes:
+
+~~~text
+human session valid?
+  yes -> inspect installation/Workspace via HTTPS API
+       -> recover/rotate runtime credential if authorized
+       -> reconnect using preferred transport
+  no  -> sign in
+       -> continue recovery
+~~~
+
+If Cloud reports that the installation belongs to another user, the desktop presents an explicit ownership conflict. It does not reset automatically.
+
+### 9. Security boundary
+
+Human desktop authentication does not allow provider secrets into Cloud.
+
+Local Worker credentials, provider sessions, API keys, permissions, adapter state, Work Root, and local files remain Workspace-owned.
+
+Cloud receives only safe projections already allowed by v7.
+
+The desktop human session and runtime credential are distinct secrets and must be redacted independently from logs/diagnostics.
+
+## Consequences
+
+### Positive
+
+- Workspace recovery is self-contained in the desktop app;
+- users do not need two applications to repair one machine;
+- Cloud API diagnostics remain available even when WebSocket fails;
+- WebSocket becomes an optimization/preferred realtime transport rather than a single point of failure;
+- runtime machine identity remains separate from human identity;
+- AX Workspaces becomes simpler and safer;
+- the product can survive restrictive proxies/networks with HTTPS fallback.
+
+### Tradeoffs
+
+- desktop authentication requires a secure native browser-assisted flow;
+- Cloud needs a desktop human-session credential lifecycle;
+- long-poll requires delivery cursor/idempotency semantics;
+- scheduler liveness must understand both transports;
+- migration must preserve already-paired Workspaces and runtime credentials;
+- AX remote control behavior must be deliberately reduced rather than accidentally duplicated.
+
+## Non-goals
+
+This ADR does not:
+
+- make one Workspace multi-user;
+- move provider credentials to Cloud;
+- use the human session for assignment execution;
+- replace WebSocket with polling;
+- add organization-owned shared-machine semantics;
+- require a dedicated Gateway domain.
+
+## Acceptance
+
+The architecture is accepted when tests prove:
+
+1. desktop user can authenticate using the same Conclave account identity;
+2. fresh installation can create/register its Workspace without AX pairing;
+3. same user can recover an existing installation/runtime;
+4. another user cannot claim an installation already owned by someone else;
+5. WebSocket remains the preferred transport;
+6. HTTP fallback can complete hello/sync/inventory and receive/complete an assignment;
+7. switching transports preserves one Workspace/runtime identity;
+8. AX displays Workspace and Worker state without pairing/recovery controls;
+9. provider secrets remain local;
+10. a broken WebSocket never prevents the signed-in desktop from querying its Cloud Workspace state.
