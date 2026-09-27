@@ -798,6 +798,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         );
     if (request == null || !mounted) return;
 
+    var pairingClaimCompleted = false;
     try {
       final service = WorkspacePairingService(
         dataDirectory: dataDirectory,
@@ -815,6 +816,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         installationId: installationId,
         allowRecovery: allowRecovery,
       );
+      pairingClaimCompleted = true;
       final config = HostConfig.fromArgs(
         const [],
         credentialStore: lifecycle.host.credentialStore,
@@ -832,10 +834,13 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       }
     } catch (error) {
       if (!mounted) return;
-      final displayMessage = error is WorkspacePairingException
-          ? '${error.message}\n${error.action}'
-          : 'Pairing failed: $error';
+      final displayMessage = pairingClaimCompleted
+          ? 'Workspace pairing completed, but the Cloud connection failed:\n$error'
+          : error is WorkspacePairingException
+              ? '${error.message}\n${error.action}'
+              : 'Pairing failed: $error';
       showCopyableErrorSnackBar(dialogContext, displayMessage);
+      if (pairingClaimCompleted) throw StateError(displayMessage);
       rethrow;
     }
   }
@@ -1894,13 +1899,26 @@ class _ConnectWorkspaceCardState extends State<_ConnectWorkspaceCard> {
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text(
+                  child: SelectableText(
                     _error!,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onErrorContainer,
                       height: 1.3,
                     ),
                   ),
+                ),
+                IconButton(
+                  tooltip: 'Copy pairing error',
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.copy, size: 18),
+                  color: theme.colorScheme.onErrorContainer,
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: _error!));
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Error message copied')),
+                    );
+                  },
                 ),
               ],
             ),

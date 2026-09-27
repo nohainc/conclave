@@ -237,6 +237,18 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     Object? pairingErrorToThrow;
+    String? copiedPairingError;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copiedPairingError = (call.arguments as Map)['text'] as String?;
+        }
+        return null;
+      },
+    );
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
 
     await pumpDashboard(
       tester,
@@ -277,6 +289,19 @@ void main() {
         find.textContaining(
             'Generate a new code in Conclave AX and try again.'),
         findsOneWidget);
+    expect(find.byTooltip('Copy pairing error'), findsOneWidget);
+    final copyPairingError = tester.widget<IconButton>(find.ancestor(
+      of: find.byTooltip('Copy pairing error'),
+      matching: find.byType(IconButton),
+    ));
+    copyPairingError.onPressed!();
+    await tester.pump();
+    expect(copiedPairingError, contains('This pairing code has expired.'));
+    expect(copiedPairingError, contains('Generate a new code in Conclave AX'));
+    tester
+        .state<ScaffoldMessengerState>(find.byType(ScaffoldMessenger))
+        .hideCurrentSnackBar();
+    await tester.pumpAndSettle();
     // Custom name is retained
     expect(find.text("Vitalii's Custom Mac"), findsOneWidget);
 
