@@ -78,7 +78,9 @@ whose runtime row has no installation ID, the exact locally stored
 Workspace/runtime ID pair can be owner-verified; only a successful same-owner
 check backfills the installation ID. A failed check does not alter Cloud
 ownership or the desktop's stored human session. The local owner cache is
-refreshed from this Cloud response and remains non-authoritative.
+refreshed from this Cloud response and remains non-authoritative. Cloud rejects
+local IDs bound to a different installation or to multiple Workspace records,
+even when those records share an owner.
 
 `POST /api/workspace-runtime/release` is a separate advanced operation. It
 requires a desktop human session created within the last five minutes, the

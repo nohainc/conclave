@@ -109,6 +109,10 @@ replaces an existing human session. Both that check and registration/recovery
 reject a different authenticated user with `installation_already_owned` before
 rotating credentials or changing bindings. Legacy registrations can be linked
 to their persistent installation ID only after Cloud verifies the same owner;
-desktop caches the confirmed owner only after that check.
+desktop caches the confirmed owner only after that check. Ownership checks also
+reject mismatched installation IDs and mixed Workspace/runtime bindings, even
+when the authenticated user owns each record, so stale or altered local IDs
+cannot authorize an account transition. The desktop keeps management surfaces
+hidden when the stored session user differs from the Cloud-confirmed owner.
 
 [Workspace Desktop Lifecycle Implementation](docs/roadmaps/WORKSPACE_DESKTOP_LIFECYCLE_IMPLEMENTATION.md)

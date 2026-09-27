@@ -1659,6 +1659,12 @@ async function handleCheckWorkspaceOwnership(
   if (matches.some((item) => item.ownerUserId !== session.userId)) {
     return json({ error: "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.", code: "installation_already_owned" }, { status: 409 });
   }
+  if (new Set(matches.map((item) => item.workspaceId)).size > 1) {
+    return json({ error: "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.", code: "installation_already_owned" }, { status: 409 });
+  }
+  if (matches.some((item) => item.installationId !== null && item.installationId !== installationId)) {
+    return json({ error: "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.", code: "installation_already_owned" }, { status: 409 });
+  }
   if (legacyBinding) {
     const legacy = matches.find((item) => item.runtimeId === runtimeId)!;
     if (legacy.installationId !== null && legacy.installationId !== installationId) {

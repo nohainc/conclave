@@ -446,6 +446,46 @@ describe("desktop human authentication", () => {
     expect(verified.status).toBe(200);
     expect(await verified.json()).toMatchObject({ registered: true, ownerUserId: "human-a" });
     expect(sqlite.prepare("SELECT installation_id FROM workspace_runtime_identities WHERE id = ?").get("legacy-runtime")).toMatchObject({ installation_id: installationId });
+
+    const mismatchedInstallation = await handleCheckWorkspaceOwnership(
+      new Request("https://app.conclave.test/api/workspace-runtime/ownership", {
+        method: "POST",
+        headers: { authorization: "Bearer human-a-secret", "content-type": "application/json" },
+        body: JSON.stringify({
+          contractVersion: "1.0",
+          installationId: "install_abcdefab-cdef-4abc-8def-abcdefabcdef",
+          workspaceId: "legacy-workspace",
+          runtimeId: "legacy-runtime",
+        }),
+      }),
+      env,
+    );
+    expect(mismatchedInstallation.status).toBe(409);
+    expect(await mismatchedInstallation.json()).toMatchObject({ code: "installation_already_owned" });
+    expect(sqlite.prepare("SELECT installation_id FROM workspace_runtime_identities WHERE id = ?").get("legacy-runtime")).toMatchObject({ installation_id: installationId });
+
+    sqlite.prepare(
+      "INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at) VALUES (?, ?, ?, 'offline', ?, ?)",
+    ).run("workspace-other", "human-a", "Other Workspace", now, now);
+    sqlite.prepare(
+      "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_key_ref, credential_token_hash, installation_id, created_at) VALUES (?, ?, ?, ?, NULL, ?)",
+    ).run("runtime-other", "workspace-other", "other-key", await hashToken("other-runtime-secret"), now);
+    const mismatchedWorkspace = await handleCheckWorkspaceOwnership(
+      new Request("https://app.conclave.test/api/workspace-runtime/ownership", {
+        method: "POST",
+        headers: { authorization: "Bearer human-a-secret", "content-type": "application/json" },
+        body: JSON.stringify({
+          contractVersion: "1.0",
+          installationId,
+          workspaceId: "workspace-other",
+          runtimeId: "runtime-other",
+        }),
+      }),
+      env,
+    );
+    expect(mismatchedWorkspace.status).toBe(409);
+    expect(await mismatchedWorkspace.json()).toMatchObject({ code: "installation_already_owned" });
+    expect(sqlite.prepare("SELECT installation_id FROM workspace_runtime_identities WHERE id = ?").get("runtime-other")).toMatchObject({ installation_id: null });
   });
 
   it("allows only a fresh Workspace owner session to release the installation binding", async () => {

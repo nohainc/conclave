@@ -357,6 +357,52 @@ void main() {
     expect(released, isTrue);
   });
 
+  testWidgets('a different account cannot open a connected owner Workspace',
+      (tester) async {
+    final credentials = _MemoryCredentialStore()
+      ..values[desktopHumanCredentialKey] = jsonEncode({
+        'credential': 'human-session-b',
+        'sessionId': 'session-b',
+        'userId': 'user-b',
+        'displayName': 'User B',
+        'email': 'b@example.com',
+        'expiresAt': DateTime.now()
+            .add(const Duration(hours: 1))
+            .toUtc()
+            .toIso8601String(),
+      });
+    await tester.pumpWidget(MaterialApp(
+      home: WorkspaceShellRouter(
+        snapshot: const HostUiSnapshot(
+          mode: HostUiMode.ready,
+          title: 'Workspace ready',
+          detail: 'Ready',
+          paired: true,
+          workspaceReady: true,
+          cloudConnected: true,
+          ownerUserId: 'user-a',
+          workspaceName: 'User A Workspace',
+        ),
+        credentialStore: credentials,
+        cloudUrl: 'https://cloud.example',
+        refreshToken: 0,
+        validateSession: (_) async => true,
+        onSignIn: () async {},
+        onConnectWorkspace: () async {},
+        onSignOut: () async {},
+        onQuit: () async {},
+        managementShellBuilder: () => const Text('MANAGEMENT DASHBOARD'),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sign in again to manage Workspace'), findsOneWidget);
+    expect(
+        find.textContaining('Sign in as the Workspace owner'), findsOneWidget);
+    expect(find.text('MANAGEMENT DASHBOARD'), findsNothing);
+    expect(find.text('Workers'), findsNothing);
+  });
+
   testWidgets('offline Workspace displays recovery panel with retry',
       (tester) async {
     var retried = false;
