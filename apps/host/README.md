@@ -9,7 +9,7 @@ child processes, enforces local permissions, supervises execution, and reports
 safe readiness/status back to Conclave Cloud.
 
 Its GUI is intentionally minimal and local-first:
-- pairing/connection;
+- account sign-in and explicit Workspace connection/lifecycle;
 - Workers;
 - provider authentication;
 - local permissions;
@@ -89,21 +89,34 @@ Optional release environment:
 
 The output ZIP is written under `dist/conclave-workspace/macos`.
 
-## Pairing
+## Account and Workspace lifecycle
 
-In Conclave AX web:
-1. create/open a Workspace;
-2. choose **Connect machine**;
-3. copy the one-time code.
+The normal desktop path uses browser-based Better Auth sign-in, followed by an
+explicit **Connect Workspace** action. Sign-in alone does not register or start
+the runtime. Connect sends the persistent installation ID and safe machine
+facts, then recovers or creates the Workspace for the authenticated owner.
+Human session, runtime credential, and local Worker/provider credentials are
+separate secrets stored in their respective secure stores.
 
-In Conclave Workspace desktop:
-1. choose **Start pairing**;
-2. paste the code;
-3. keep the production Cloud URL unless using local/staging;
-4. pair.
+Connected Workspaces can start at macOS login through `SMAppService.mainApp`.
+The preference is offered during first Connect and can later be changed in the
+Workspace Account section. Startup uses the runtime credential and persisted
+desired-runtime state; it does not require interactive human sign-in. A
+deliberately disconnected Workspace stays disconnected after restart. Closing
+the window leaves the runtime running. Locking protects management UI without
+stopping runtime work.
 
-The one-time code is exchanged for a Workspace Runtime ID and bearer token.
-The token is stored only in the platform secure credential store.
+Disconnect preserves installation ownership and local Workers/provider
+credentials. Release ownership is a separate advanced action for a disconnected
+Workspace and permits a different account to connect. Reset local Workspace
+has separate published data-removal semantics; see [ADR-014](../../docs/decisions/ADR-014-workspace-desktop-lifecycle.md).
+
+## Legacy pairing compatibility
+
+Pairing remains available only for the documented compatibility window; it is
+not the normal desktop onboarding path. AX does not create pairing intents in
+its normal Workspaces UI. Do not remove compatibility endpoints/tables until
+the supported-release window and caller audit are complete.
 
 To verify a real Cloud connection with a disposable Workspace:
 

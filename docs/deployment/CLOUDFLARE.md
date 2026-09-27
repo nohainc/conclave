@@ -129,6 +129,14 @@ Workspace and user in a `finally` cleanup. The runtime token is generated for
 that run and is never written to workflow logs or a URL. A failed handshake,
 protocol exchange, schema check, or cleanup fails the deployment workflow.
 
+That automated deployment acceptance does not replace the packaged desktop
+lifecycle release run. Before publishing a Workspace desktop release, execute
+the ten production scenarios in the
+[Workspace desktop lifecycle release validation runbook](../operations/WORKSPACE_DESKTOP_LIFECYCLE_RELEASE_VALIDATION.md),
+including native login-item restart and local authentication on a supported
+macOS installation. The runbook distinguishes automated CI evidence from
+required production-device evidence.
+
 The custom-domain route in `infra/cloudflare/app.wrangler.jsonc` targets `app.conclaveax.com`. Because `conclaveax.com` is already on Cloudflare, the Worker custom domain can create/manage the required DNS routing and certificate during deployment.
 
 ## Durable Objects & Database Migrations

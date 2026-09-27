@@ -1,6 +1,6 @@
 # Conclave AX Workspaces UX and Data Contract
 
-**Status:** Current Workspace read model; desktop-auth/read-only-AX migration defined by ADR-013 is the next product direction.
+**Status:** Current AX read-only Workspace read model; local lifecycle and management are defined by [ADR-014](../decisions/ADR-014-workspace-desktop-lifecycle.md).
 
 **Applies to:** Conclave AX and its Cloud read models.
 
@@ -138,6 +138,20 @@ applies `enable`, `disable`, or `drain`. The former
 `/api[/v2]/workspaces/:id/workers` catalog and desired-state routes are retired.
 Workspace account and credential-profile APIs remain separate and are not
 covered by this Worker-route retirement.
+
+AX Workspaces is an operational read surface. It may show machine status,
+Workers, connection mode, version, last seen, activity, and Project-facing
+information. Pairing intent creation, Connect Machine, repair/re-pair, local
+Workspace lifecycle actions, and normal remote Worker scheduling controls are
+not part of the AX UX. Backend endpoints remain during the compatibility and
+caller-audit window; their continued presence does not authorize a UI caller to
+expose them.
+
+Connection mode is read-only transport information. Render the display-ready
+mode as `Connected · WebSocket` or `Connected · HTTPS fallback`; the fallback
+mode may explain that WebSocket is unavailable while work can continue. It
+does not expose controls for selecting a transport or imply a human management
+session is valid.
 
 ### `WorkspaceProjectGrantSummary`
 

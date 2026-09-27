@@ -30,6 +30,12 @@ header. `--data-dir` and
 `CONCLAVE_HOST_DATA_DIR` remain supported and keep their state, adapter, update,
 and log directories colocated with the explicit override.
 
+The desktop human session is stored in secure storage separately from the
+runtime credential. Local Worker/provider credentials remain in the local
+secret store. Versioned lifecycle preferences store only desired runtime state,
+login-item and lock settings, and non-authoritative owner display metadata;
+they never contain bearer credentials.
+
 At first launch after the layout change, Workspace copies missing legacy state
 from `~/.conclave-host`, moves legacy adapter/update/log directories when the
 new destination is empty, and renames the old default Work Root when the new
@@ -65,6 +71,15 @@ upgrade. If the client URI is valid and the current Workspace build still
 receives 400, check that Cloud is running the release which forwards the
 original upgrade `Request` into the Durable Object (`c1b8708` or a later
 commit). A repository commit does not deploy the production Cloud Worker.
+
+When fallback is active, the UI reports **Connected · HTTPS fallback** and
+explains that WebSocket is unavailable while work can continue. Diagnostics
+retain both the latest WSS failure and current fallback health. Fallback does
+not indicate human-session expiry; management reauthentication does not mean
+the runtime transport is offline. For ownership conflicts, sign in as the
+current Workspace owner; do not reset or replace local identity. Disconnect
+preserves owner binding, while Release is the explicit ownership transition.
+See the [lifecycle troubleshooting and production validation runbook](WORKSPACE_DESKTOP_LIFECYCLE_RELEASE_VALIDATION.md).
 
 ## Cloud Gateway checkpoints
 

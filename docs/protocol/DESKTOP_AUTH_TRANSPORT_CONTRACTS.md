@@ -232,3 +232,20 @@ Disconnect and ownership release are intentionally different operations:
 Disconnect stops/revokes runtime participation while retaining installation
 ownership; Release ownership is a separate management operation required before
 another account may claim the installation.
+
+The concrete management operation boundaries are:
+
+| User action | Required authority | Cloud/local effect |
+| --- | --- | --- |
+| Sign in | Browser-approved desktop human session | Establishes human management identity; does not register or start runtime |
+| Connect Workspace | Valid human session for the installation owner | Register/recover and issue runtime credential; persist desired runtime `connected`; start runtime |
+| Disconnect Workspace | Owning human session and local confirmation/reauthentication | Drain/revoke runtime participation; retain installation owner binding and local Workers/secrets |
+| Release ownership | Owning human session, fresh local authentication, disconnected runtime and no active assignments | Audit and clear Cloud owner binding; preserve local data |
+| Sign out | Human session revoke/removal | Allowed directly while disconnected; while connected requires an explicit Disconnect and sign out transition |
+| Reset local Workspace | Fresh local authentication and explicit destructive confirmation | Removes only the data enumerated in ADR-014; distinct from Cloud Release |
+
+On macOS, launch-at-login is a user preference implemented through
+`SMAppService.mainApp`. It is not enabled merely by installing the app. On
+startup, the runtime follows persisted `DesiredRuntimeState` and secure runtime
+credential independently of human-session validation; opening the window then
+routes to unlocked, locked, or reauthentication-required management UI.

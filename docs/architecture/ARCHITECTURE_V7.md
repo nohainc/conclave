@@ -272,6 +272,13 @@ Contextual links may appear:
 
 ### 5.4 Pairing intent API
 
+> **Lifecycle update:** This section records the compatibility API, not the
+> current onboarding UX. ADR-013 and its lifecycle refinement in ADR-014 make
+> browser-based desktop sign-in followed by explicit Connect Workspace the
+> normal path. AX does not create pairing intents in its normal Workspaces
+> UI. Keep this API only for clients inside the published compatibility
+> window; see the [desktop lifecycle contract](../decisions/ADR-014-workspace-desktop-lifecycle.md).
+
 AX creates, checks, cancels, or regenerates temporary pairing intents through
 `/api/workspace-pairing-intents`. Status reads never return the raw code. The
 first successful desktop claim creates the permanent Workspace; expiry,

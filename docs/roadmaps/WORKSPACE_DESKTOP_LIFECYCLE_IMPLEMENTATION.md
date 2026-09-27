@@ -1,6 +1,6 @@
 # Conclave Workspace Desktop Lifecycle Implementation
 
-**Status:** Proposed implementation plan  
+**Status:** Phases 0–16 implemented; Phase 17 documentation updated, production validation pending
 **Baseline:** `main@d268546ce9ced72eeaa9c10233d934182e05d353`  
 **Architecture decisions:** [ADR-013](../decisions/ADR-013-desktop-auth-and-dual-transport.md), [ADR-014](../decisions/ADR-014-workspace-desktop-lifecycle.md)
 
@@ -1259,7 +1259,8 @@ was required.
 
 # Phase 17 — Documentation and release validation
 
-Update after implementation:
+Documentation updated after implementation. Production runbook is published;
+the production scenarios remain release gates until executed and recorded:
 
 - ADR-013 status/reference to ADR-014 refinement;
 - application boundaries;
@@ -1285,6 +1286,22 @@ Production validation should include:
 ## Exit
 
 Published docs and application behavior describe the same lifecycle.
+
+## Phase 17 implementation record
+
+- ADR-013 identifies ADR-014 as its lifecycle refinement; application
+  boundaries and AX read-only Workspace behavior are current.
+- The desktop auth/transport contract remains version 1.0 and documents
+  lifecycle state ownership and explicit Connect/Disconnect/Release semantics.
+- Workspace desktop documentation describes browser sign-in, explicit Connect,
+  local lock, separate account/runtime state, and macOS login startup.
+- Security and diagnostics docs describe credential boundaries, ownership
+  checks, opaque runtime cursors, transport health, and safe troubleshooting.
+- The [production validation runbook](../operations/WORKSPACE_DESKTOP_LIFECYCLE_RELEASE_VALIDATION.md)
+  defines evidence and pass criteria for all ten requested scenarios.
+- Production installation, reboot/login behavior, native lock/unlock, fallback,
+  account transfer, and restart execution have not been performed in this
+  documentation phase. Release remains gated on recording those results.
 
 ---
 
