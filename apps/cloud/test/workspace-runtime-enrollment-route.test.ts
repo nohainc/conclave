@@ -75,14 +75,22 @@ describe("Workspace desktop enrollment route", () => {
 
   it("routes ownership checks and release with desktop bearer authentication", async () => {
     const sameOrigin = vi.fn();
-    const ownership = vi.fn(async () => Response.json({ ownerUserId: "user-a" }));
+    const ownership = vi.fn(async () =>
+      Response.json({ ownerUserId: "user-a" }),
+    );
     const release = vi.fn(async () => Response.json({ released: true }));
     const checkResponse = await routeWorkerRequest(
-      new Request("https://app.conclaveax.com/api/workspace-runtime/ownership", {
-        method: "POST",
-        headers: { authorization: "Bearer desktop-human-token", "content-type": "application/json" },
-        body: "{}",
-      }),
+      new Request(
+        "https://app.conclaveax.com/api/workspace-runtime/ownership",
+        {
+          method: "POST",
+          headers: {
+            authorization: "Bearer desktop-human-token",
+            "content-type": "application/json",
+          },
+          body: "{}",
+        },
+      ),
       {} as Env,
       undefined,
       { handleCheckWorkspaceOwnership: ownership },
@@ -91,7 +99,10 @@ describe("Workspace desktop enrollment route", () => {
     const releaseResponse = await routeWorkerRequest(
       new Request("https://app.conclaveax.com/api/workspace-runtime/release", {
         method: "POST",
-        headers: { authorization: "Bearer fresh-desktop-human-token", "content-type": "application/json" },
+        headers: {
+          authorization: "Bearer fresh-desktop-human-token",
+          "content-type": "application/json",
+        },
         body: "{}",
       }),
       {} as Env,
@@ -111,11 +122,17 @@ describe("Workspace desktop enrollment route", () => {
     const sameOrigin = vi.fn();
     const disconnect = vi.fn(async () => Response.json({ disconnected: true }));
     const response = await routeWorkerRequest(
-      new Request("https://app.conclaveax.com/api/workspace-runtime/disconnect", {
-        method: "POST",
-        headers: { authorization: "Bearer desktop-human-token", "content-type": "application/json" },
-        body: "{}",
-      }),
+      new Request(
+        "https://app.conclaveax.com/api/workspace-runtime/disconnect",
+        {
+          method: "POST",
+          headers: {
+            authorization: "Bearer desktop-human-token",
+            "content-type": "application/json",
+          },
+          body: "{}",
+        },
+      ),
       {} as Env,
       undefined,
       { handleDisconnectDesktopWorkspace: disconnect },
@@ -146,6 +163,33 @@ describe("Workspace desktop enrollment route", () => {
 
     expect(response.status).toBe(201);
     expect(createWorkspace).toHaveBeenCalledOnce();
+    expect(sameOrigin).toHaveBeenCalledOnce();
+  });
+
+  it("requires same-origin protection for browser-cookie desktop approval", async () => {
+    const sameOrigin = vi.fn();
+    const approve = vi.fn(async () => Response.json({ approved: true }));
+    const response = await routeWorkerRequest(
+      new Request(
+        "https://app.conclaveax.com/api/desktop-auth/intents/intent-1/approve",
+        {
+          method: "POST",
+          headers: {
+            cookie: "better-auth-session=opaque",
+            origin: "https://app.conclaveax.com",
+            "content-type": "application/json",
+          },
+          body: "{}",
+        },
+      ),
+      {} as Env,
+      undefined,
+      { handleApproveDesktopAuthIntent: approve },
+      dependencies(sameOrigin),
+    );
+
+    expect(response.status).toBe(200);
+    expect(approve).toHaveBeenCalledOnce();
     expect(sameOrigin).toHaveBeenCalledOnce();
   });
 });

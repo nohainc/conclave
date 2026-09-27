@@ -27,11 +27,14 @@ event. No credential is a substitute for another.
 
 1. `POST /api/desktop-auth/intents` accepts `DesktopAuthIntentCreateRequest`
    and returns `DesktopAuthIntentCreateResponse`, including a separate
-   short-lived poll token and one-time comparison code.
+   short-lived poll token. Intent contract `1.1` does not return a comparison
+   code; legacy intent contract `1.0` retains it during the compatibility
+   window.
 2. The desktop opens `verificationUrl` in the system browser. The existing
    AX Better Auth login handles email/password, configured social providers,
-   and passkeys where supported. The signed-in user enters the comparison
-   code and explicitly approves the request.
+   and passkeys where supported. After sign-in, the user explicitly approves
+   the desktop request in the browser. New desktop releases do not ask the
+   user to read, remember, or enter a code.
 3. The desktop polls the intent status using the poll token and claims an
    approved intent exactly once using `DesktopAuthIntentClaimRequest`.
 4. The claim returns `DesktopHumanSessionIssue`. The credential is opaque,
@@ -40,9 +43,11 @@ event. No credential is a substitute for another.
    `GET /api/desktop-auth/session` endpoint checks the desktop audience; session
    rotation and revocation use the desktop session bearer and session ID.
 
-The Cloud intent expires after ten minutes, allows up to five code attempts,
-and permits a single successful claim. Poll-token and user-code values are
-stored only as hashes. Intent expiry, approval and one-time claim enforcement
+The Cloud intent expires after ten minutes and permits a single successful
+claim. Legacy `1.0` intents allow up to five code attempts; poll-token and
+comparison-code values are stored only as hashes. New `1.1` intents bind
+approval to the authenticated browser session, explicit user approval, and the
+unguessable intent URL. Intent expiry, approval and one-time claim enforcement
 are Cloud behavior.
 This exchange never exposes the browser's HttpOnly cookie to the desktop.
 
@@ -164,10 +169,11 @@ the reason WebSocket became unavailable.
 
 ## Compatibility
 
-Version `1.0` is frozen for the first implementation sequence. Breaking shape
-or semantic changes require a new major contract version. Additive optional
-fields may be introduced only in a compatible minor version and must be
-supported by both Cloud and desktop before use.
+The shared runtime/registration contract remains version `1.0`. Desktop auth
+intent creation has its own minor version: `1.1` selects browser approval
+without a comparison code; Cloud continues to serve the old `1.0` intent shape
+for already released desktop clients. Changes to other frozen `1.0` shapes
+require a separately versioned contract.
 
 ## Desktop lifecycle semantics
 

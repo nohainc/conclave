@@ -6,6 +6,23 @@ import 'package:conclave_host/desktop_auth.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('accepts browser approval intents without exposing a comparison code',
+      () {
+    final intent = DesktopAuthIntent.fromJson({
+      'intentId': 'intent-a',
+      'pollToken': 'poll-token-with-sufficient-length-123456',
+      'verificationUrl': 'https://app.conclave.test/desktop-auth/approve',
+      'expiresAt': DateTime.now()
+          .toUtc()
+          .add(const Duration(minutes: 5))
+          .toIso8601String(),
+      'pollIntervalMs': 2000,
+    });
+
+    expect(intent.intentId, 'intent-a');
+    expect(intent.verificationUrl.path, '/desktop-auth/approve');
+  });
+
   test('rotates the same desktop session using its current bearer credential',
       () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);

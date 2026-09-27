@@ -58,6 +58,12 @@ desktop creates desktop-auth intent
 -> stores it in OS secure storage
 ~~~
 
+Browser approval uses the authenticated Better Auth session and an explicit
+approval action for the pending desktop intent; the user does not transcribe a
+comparison code. The desktop keeps its waiting dialog open while the system
+browser is used. Cloud temporarily accepts the former code-based request shape
+for older desktop releases during the compatibility window.
+
 This supports the same account methods as AX over time:
 
 - email/password;

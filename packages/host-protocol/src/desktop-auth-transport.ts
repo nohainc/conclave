@@ -5,6 +5,7 @@ import type { WorkspaceRuntimeMessage } from "./workspace-runtime.js";
 export const DESKTOP_AUTH_TRANSPORT_CONTRACT =
   "conclave.desktop-auth-transport" as const;
 export const DESKTOP_AUTH_TRANSPORT_VERSION = "1.0" as const;
+export const DESKTOP_AUTH_INTENT_VERSION = "1.1" as const;
 
 const id = z.string().trim().min(1).max(256);
 const timestamp = z.string().datetime();
@@ -32,13 +33,19 @@ export type LocalWorkerProviderCredential = string & {
 export const DesktopAuthIntentCreateRequestSchema = z
   .object({
     clientName: id.max(128),
-    contractVersion: z.literal(DESKTOP_AUTH_TRANSPORT_VERSION),
+    contractVersion: z.enum([
+      DESKTOP_AUTH_TRANSPORT_VERSION,
+      DESKTOP_AUTH_INTENT_VERSION,
+    ]),
   })
   .strict();
 export const DesktopAuthIntentCreateResponseSchema = z
   .object({
     intentId: id,
-    userCode: z.string().regex(/^[A-Z0-9-]{6,24}$/),
+    userCode: z
+      .string()
+      .regex(/^[A-Z0-9-]{6,24}$/)
+      .optional(),
     pollToken: secret,
     verificationUrl: z.url({ protocol: /^https$/ }),
     expiresAt: timestamp,
@@ -56,7 +63,14 @@ export const DesktopAuthIntentClaimRequestSchema = z
   .object({ intentId: id, pollToken: secret })
   .strict();
 export const DesktopAuthIntentApproveRequestSchema = z
-  .object({ userCode: z.string().regex(/^[A-Z0-9-]{6,24}$/) })
+  // userCode remains optional during the desktop compatibility window. New
+  // browser approvals rely on the signed-in Better Auth session and intent ID.
+  .object({
+    userCode: z
+      .string()
+      .regex(/^[A-Z0-9-]{6,24}$/)
+      .optional(),
+  })
   .strict();
 export const DesktopHumanSessionIssueSchema = z
   .object({

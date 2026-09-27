@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   DESKTOP_AUTH_TRANSPORT_VERSION,
+  DESKTOP_AUTH_INTENT_VERSION,
   DesktopHumanSessionCredentialSchema,
+  DesktopAuthIntentCreateRequestSchema,
+  DesktopAuthIntentCreateResponseSchema,
   DesktopAuthIntentClaimRequestSchema,
   RuntimePollRequestSchema,
   RuntimePollResponseSchema,
@@ -99,6 +102,37 @@ describe("desktop auth and runtime transport contracts", () => {
       DesktopAuthIntentClaimRequestSchema.safeParse({ intentId: "intent-1" })
         .success,
     ).toBe(false);
+  });
+
+  it("supports code-free 1.1 browser intents while retaining the 1.0 code field", () => {
+    expect(
+      DesktopAuthIntentCreateRequestSchema.parse({
+        clientName: "Conclave Workspace",
+        contractVersion: DESKTOP_AUTH_INTENT_VERSION,
+      }).contractVersion,
+    ).toBe("1.1");
+    expect(
+      DesktopAuthIntentCreateRequestSchema.parse({
+        clientName: "Conclave Workspace",
+        contractVersion: DESKTOP_AUTH_TRANSPORT_VERSION,
+      }).contractVersion,
+    ).toBe("1.0");
+    const response = {
+      intentId: "intent-a",
+      pollToken: "p".repeat(32),
+      verificationUrl: "https://app.conclave.test/desktop-auth/approve",
+      expiresAt: timestamp,
+      pollIntervalMs: 2000,
+    };
+    expect(DesktopAuthIntentCreateResponseSchema.parse(response).intentId).toBe(
+      "intent-a",
+    );
+    expect(
+      DesktopAuthIntentCreateResponseSchema.parse({
+        ...response,
+        userCode: "12345678",
+      }).userCode,
+    ).toBe("12345678");
   });
 
   it("validates versioned installation registration data", () => {

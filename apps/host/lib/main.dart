@@ -1124,6 +1124,101 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     );
   }
 
+  Future<DesktopHumanSession?> _approveDesktopAuthInBrowser(
+    DesktopAuthClient client,
+    DesktopAuthIntent intent, {
+    required String title,
+    required String description,
+  }) async {
+    final context = _navigatorKey.currentContext;
+    if (context == null) return null;
+    var browserOpened = false;
+    var browserOpening = false;
+    var cancelled = false;
+    var dialogOpen = true;
+    String? browserError;
+    final dialogResult = showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: Text(title),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(browserOpened
+                  ? 'Complete sign-in and approve Conclave Workspace in your browser. This window will update automatically.'
+                  : description),
+              if (browserError != null) ...[
+                const SizedBox(height: 12),
+                SelectableText(browserError!),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                cancelled = true;
+                dialogOpen = false;
+                Navigator.pop(dialogContext, true);
+              },
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: browserOpening
+                  ? null
+                  : () async {
+                      setDialogState(() {
+                        browserOpening = true;
+                        browserError = null;
+                      });
+                      try {
+                        await client.openVerification(intent);
+                        if (!dialogOpen) return;
+                        setDialogState(() {
+                          browserOpened = true;
+                          browserOpening = false;
+                        });
+                      } on Object catch (error) {
+                        if (!dialogOpen) return;
+                        setDialogState(() {
+                          browserOpening = false;
+                          browserError = error.toString();
+                        });
+                      }
+                    },
+              icon: const Icon(Icons.open_in_browser),
+              label: Text(browserOpening
+                  ? 'Opening…'
+                  : browserOpened
+                      ? 'Open browser again'
+                      : 'Open browser'),
+            ),
+          ],
+        ),
+      ),
+    );
+    try {
+      return await Future.any<DesktopHumanSession>([
+        client.waitForApprovalAndClaim(
+          intent,
+          isCancelled: () => cancelled,
+        ),
+        dialogResult
+            .then((_) => throw StateError('Workspace sign-in was cancelled.')),
+      ]);
+    } on StateError {
+      if (cancelled) return null;
+      rethrow;
+    } finally {
+      if (mounted && dialogOpen) {
+        dialogOpen = false;
+        Navigator.of(context, rootNavigator: true).pop(false);
+      }
+    }
+  }
+
   Future<void> _signInDesktopHuman() async {
     final lifecycle = widget.lifecycle;
     final dialogContext = _navigatorKey.currentContext;
@@ -1153,34 +1248,15 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         }
       }
       final intent = await client.createIntent();
-      final openBrowser = await showDialog<bool>(
-        context: dialogContext,
-        builder: (context) => AlertDialog(
-          title: const Text('Sign in to Conclave Workspace'),
-          content: SelectableText(
-            'Open the secure sign-in request in your browser, sign in to your Conclave account, then enter this code to approve the desktop app:\n\n${intent.userCode}',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton.icon(
-              onPressed: () => Navigator.pop(context, true),
-              icon: const Icon(Icons.open_in_browser),
-              label: const Text('Open browser'),
-            ),
-          ],
-        ),
-      );
-      if (openBrowser != true) return;
-      await client.openVerification(intent);
-      if (!mounted) return;
-      ScaffoldMessenger.of(dialogContext).showSnackBar(
-        const SnackBar(content: Text('Waiting for browser sign-in approval…')),
-      );
       failureContext = 'waiting for browser approval';
-      final session = await client.waitForApprovalAndClaim(intent);
+      final session = await _approveDesktopAuthInBrowser(
+        client,
+        intent,
+        title: 'Sign in to Conclave Workspace',
+        description:
+            'Open the secure sign-in request in your browser, then sign in to your Conclave account and approve Conclave Workspace.',
+      );
+      if (session == null) return;
       claimedSession = session;
       failureContext = 'validating the desktop session';
       await client.validateSession(session);
@@ -1520,30 +1596,14 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     final client = DesktopAuthClient(cloudUrl: cloudUrl);
     try {
       final intent = await client.createIntent();
-      final openBrowser = await showDialog<bool>(
-        context: dialogContext,
-        builder: (context) => AlertDialog(
-          title: const Text('Confirm your Conclave account'),
-          content: SelectableText(
-            'Open the secure sign-in request in your browser and approve this '
-            'action with the Workspace owner account.\n\n${intent.userCode}',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton.icon(
-              onPressed: () => Navigator.pop(context, true),
-              icon: const Icon(Icons.open_in_browser),
-              label: const Text('Open browser'),
-            ),
-          ],
-        ),
+      final session = await _approveDesktopAuthInBrowser(
+        client,
+        intent,
+        title: 'Confirm your Conclave account',
+        description:
+            'Open the secure sign-in request in your browser and approve this action with the Workspace owner account.',
       );
-      if (openBrowser != true) return null;
-      await client.openVerification(intent);
-      final session = await client.waitForApprovalAndClaim(intent);
+      if (session == null) return null;
       await client.validateSession(session);
       if (session.userId != expectedOwnerUserId) {
         await client.revokeSession(session);

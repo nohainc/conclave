@@ -83,7 +83,6 @@ abstract interface class StudioDataSource {
   Future<void> signInWithPasskey();
   Future<void> approveDesktopAuthIntent({
     required String intentId,
-    required String userCode,
   });
   Future<List<StudioWorkspace>> loadWorkspaces();
   Future<List<StudioProject>> loadProjects({bool includeArchived = false});
@@ -788,13 +787,12 @@ class StudioApiClient implements StudioDataSource {
   @override
   Future<void> approveDesktopAuthIntent({
     required String intentId,
-    required String userCode,
   }) async {
     final response = await client.post(
       Uri.parse(
           '$baseUrl/desktop-auth/intents/${Uri.encodeComponent(intentId)}/approve'),
       headers: _headers(contentType: 'application/json'),
-      body: jsonEncode({'userCode': userCode}),
+      body: jsonEncode(const <String, Object?>{}),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       var message =
@@ -1595,5 +1593,4 @@ class StudioApiClient implements StudioDataSource {
     return StudioWorkspaceEnrollment.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>);
   }
-
 }

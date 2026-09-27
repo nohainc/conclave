@@ -30,27 +30,35 @@ export async function routeWorkerRequest(
     const workspaceEnrollmentRedeem =
       request.method === "POST" &&
       url.pathname === "/api/workspace-runtime/enroll";
-    const desktopWorkspaceRegistration = request.method === "POST" &&
+    const desktopWorkspaceRegistration =
+      request.method === "POST" &&
       url.pathname === "/api/workspace-runtime/register";
-    const desktopWorkspaceOwnershipCheck = request.method === "POST" &&
+    const desktopWorkspaceOwnershipCheck =
+      request.method === "POST" &&
       url.pathname === "/api/workspace-runtime/ownership";
-    const desktopWorkspaceRelease = request.method === "POST" &&
+    const desktopWorkspaceRelease =
+      request.method === "POST" &&
       url.pathname === "/api/workspace-runtime/release";
-    const desktopWorkspaceDisconnect = request.method === "POST" &&
+    const desktopWorkspaceDisconnect =
+      request.method === "POST" &&
       url.pathname === "/api/workspace-runtime/disconnect";
     const workspaceRuntimeUnpair =
       request.method === "POST" &&
       url.pathname === "/api/workspace-runtime/unpair";
-    const workspaceRuntimeTransport = request.method === "POST" &&
+    const workspaceRuntimeTransport =
+      request.method === "POST" &&
       (url.pathname === "/api/workspace-runtime/sessions" ||
         url.pathname === "/api/workspace-runtime/events" ||
         url.pathname === "/api/workspace-runtime/poll" ||
-        /^\/api\/workspace-runtime\/sessions\/[^/]+\/close$/.test(url.pathname));
+        /^\/api\/workspace-runtime\/sessions\/[^/]+\/close$/.test(
+          url.pathname,
+        ));
     const desktopAuthPath = url.pathname.startsWith("/api/desktop-auth/");
     const desktopAuthCookieMutation =
       desktopAuthPath && !url.pathname.endsWith("/approve");
     if (
-      !workspaceEnrollmentRedeem && !desktopWorkspaceRegistration &&
+      !workspaceEnrollmentRedeem &&
+      !desktopWorkspaceRegistration &&
       !desktopWorkspaceOwnershipCheck &&
       !desktopWorkspaceRelease &&
       !desktopWorkspaceDisconnect &&
@@ -68,7 +76,11 @@ export async function routeWorkerRequest(
       return await handlers.handleRedeemWorkspaceEnrollment!(request, env, ctx);
     }
     if (desktopWorkspaceRegistration) {
-      return await handlers.handleRegisterWorkspaceFromDesktop!(request, env, ctx);
+      return await handlers.handleRegisterWorkspaceFromDesktop!(
+        request,
+        env,
+        ctx,
+      );
     }
     if (desktopWorkspaceOwnershipCheck) {
       return await handlers.handleCheckWorkspaceOwnership!(request, env);

@@ -1127,9 +1127,9 @@ async function handleListWorkspaces(
         env.CONCLAVE_WORKSPACE_GATEWAY
       ) {
         try {
-          const response = await env.CONCLAVE_WORKSPACE_GATEWAY
-            .getByName(workspaceId)
-            .fetch("https://workspace-gateway/status");
+          const response = await env.CONCLAVE_WORKSPACE_GATEWAY.getByName(
+            workspaceId,
+          ).fetch("https://workspace-gateway/status");
           if (response.ok) {
             const status = (await response.json()) as {
               online?: boolean;
@@ -1314,7 +1314,7 @@ async function handleCreateDesktopAuthIntent(
     contractVersion?: unknown;
   };
   if (
-    body.contractVersion !== "1.0" ||
+    (body.contractVersion !== "1.0" && body.contractVersion !== "1.1") ||
     typeof body.clientName !== "string" ||
     !body.clientName.trim()
   ) {
@@ -1324,7 +1324,10 @@ async function handleCreateDesktopAuthIntent(
     );
   }
   const intentId = crypto.randomUUID();
-  const userCode = randomUserCode();
+  const legacyCodeFlow = body.contractVersion === "1.0";
+  const userCode = legacyCodeFlow
+    ? randomUserCode()
+    : randomSecret("conclave_dai_");
   const pollToken = randomSecret("conclave_dap_");
   const createdAt = new Date();
   const expiresAt = new Date(createdAt.getTime() + 10 * 60_000);
@@ -1348,7 +1351,7 @@ async function handleCreateDesktopAuthIntent(
   return json(
     {
       intentId,
-      userCode,
+      ...(legacyCodeFlow ? { userCode } : {}),
       pollToken,
       verificationUrl: verificationUrl.toString(),
       expiresAt: expiresAt.toISOString(),
@@ -1406,50 +1409,52 @@ async function handleApproveDesktopAuthIntent(
   const body = (await request.json().catch(() => ({}))) as {
     userCode?: unknown;
   };
-  if (typeof body.userCode !== "string" || !/^\d{8}$/.test(body.userCode)) {
-    throw new HttpError(
-      400,
-      "Enter the 8-digit code shown in Conclave Workspace",
-    );
-  }
   const now = new Date().toISOString();
-  const attempt = await env.CONCLAVE_DB.prepare(
-    `UPDATE desktop_auth_intents SET approval_attempts = approval_attempts + 1
-      WHERE id = ?1 AND approved_at IS NULL AND claimed_at IS NULL
-        AND denied_at IS NULL AND expires_at > ?2 AND approval_attempts < 5`,
-  )
-    .bind(intentId, now)
-    .run();
-  if ((attempt.meta?.changes ?? 0) !== 1) {
-    throw new HttpError(
-      409,
-      "This sign-in request is invalid, expired, or unavailable",
-    );
-  }
-  const intent = await env.CONCLAVE_DB.prepare(
-    "SELECT user_code_hash AS userCodeHash FROM desktop_auth_intents WHERE id = ?1",
-  )
-    .bind(intentId)
-    .first<{ userCodeHash: string }>();
-  if (
-    !intent ||
-    !timingSafeEqual(intent.userCodeHash, await hashToken(body.userCode))
-  ) {
-    await env.CONCLAVE_DB.prepare(
-      `UPDATE desktop_auth_intents SET denied_at = ?1
-        WHERE id = ?2 AND approval_attempts >= 5 AND approved_at IS NULL`,
+  // Older desktop releases still submit their displayed code. New approvals
+  // omit it: the authenticated browser session plus the unguessable intent URL
+  // and explicit approval action bind the request to the signed-in account.
+  if (body.userCode !== undefined) {
+    if (typeof body.userCode !== "string" || !/^\d{8}$/.test(body.userCode)) {
+      throw new HttpError(400, "The legacy desktop sign-in code is invalid");
+    }
+    const attempt = await env.CONCLAVE_DB.prepare(
+      `UPDATE desktop_auth_intents SET approval_attempts = approval_attempts + 1
+        WHERE id = ?1 AND approved_at IS NULL AND claimed_at IS NULL
+          AND denied_at IS NULL AND expires_at > ?2 AND approval_attempts < 5`,
     )
-      .bind(now, intentId)
+      .bind(intentId, now)
       .run();
-    throw new HttpError(409, "The code does not match this sign-in request");
+    if ((attempt.meta?.changes ?? 0) !== 1) {
+      throw new HttpError(
+        409,
+        "This sign-in request is invalid, expired, or unavailable",
+      );
+    }
+    const intent = await env.CONCLAVE_DB.prepare(
+      "SELECT user_code_hash AS userCodeHash FROM desktop_auth_intents WHERE id = ?1",
+    )
+      .bind(intentId)
+      .first<{ userCodeHash: string }>();
+    if (
+      !intent ||
+      !timingSafeEqual(intent.userCodeHash, await hashToken(body.userCode))
+    ) {
+      await env.CONCLAVE_DB.prepare(
+        `UPDATE desktop_auth_intents SET denied_at = ?1
+          WHERE id = ?2 AND approval_attempts >= 5 AND approved_at IS NULL`,
+      )
+        .bind(now, intentId)
+        .run();
+      throw new HttpError(409, "The code does not match this sign-in request");
+    }
   }
   const result = await env.CONCLAVE_DB.prepare(
     `UPDATE desktop_auth_intents
         SET approved_at = ?1, approved_user_id = ?2
-      WHERE id = ?3 AND user_code_hash = ?4 AND approved_at IS NULL
+      WHERE id = ?3 AND approved_at IS NULL
         AND claimed_at IS NULL AND denied_at IS NULL AND expires_at > ?1`,
   )
-    .bind(now, identity.userId, intentId, intent.userCodeHash)
+    .bind(now, identity.userId, intentId)
     .run();
   if ((result.meta?.changes ?? 0) !== 1) {
     throw new HttpError(
@@ -1618,11 +1623,25 @@ async function handleCheckWorkspaceOwnership(
 ): Promise<Response> {
   const { session } = await findDesktopHumanSession(request, env);
   const body = parseJson<Record<string, unknown>>(await request.text(), {});
-  const installationId = typeof body.installationId === "string" ? body.installationId.trim() : "";
-  const workspaceId = typeof body.workspaceId === "string" ? body.workspaceId.trim() : "";
-  const runtimeId = typeof body.runtimeId === "string" ? body.runtimeId.trim() : "";
-  if (body.contractVersion !== "1.0" || !/^install_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(installationId)) {
-    return json({ error: "Workspace installation identity is invalid", code: "invalid_installation_id" }, { status: 400 });
+  const installationId =
+    typeof body.installationId === "string" ? body.installationId.trim() : "";
+  const workspaceId =
+    typeof body.workspaceId === "string" ? body.workspaceId.trim() : "";
+  const runtimeId =
+    typeof body.runtimeId === "string" ? body.runtimeId.trim() : "";
+  if (
+    body.contractVersion !== "1.0" ||
+    !/^install_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      installationId,
+    )
+  ) {
+    return json(
+      {
+        error: "Workspace installation identity is invalid",
+        code: "invalid_installation_id",
+      },
+      { status: 400 },
+    );
   }
 
   const byInstallation = await env.CONCLAVE_DB.prepare(
@@ -1631,12 +1650,26 @@ async function handleCheckWorkspaceOwnership(
        FROM workspace_runtime_identities i
        JOIN execution_workspaces w ON w.id = i.workspace_id
       WHERE i.installation_id = ?1 ORDER BY i.created_at DESC`,
-  ).bind(installationId).all<{ runtimeId: string; workspaceId: string; installationId: string | null; ownerUserId: string }>();
+  )
+    .bind(installationId)
+    .all<{
+      runtimeId: string;
+      workspaceId: string;
+      installationId: string | null;
+      ownerUserId: string;
+    }>();
   let matches = byInstallation.results ?? [];
   let legacyBinding = false;
   if (workspaceId || runtimeId) {
     if (!workspaceId || !runtimeId) {
-      return json({ error: "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.", code: "installation_already_owned" }, { status: 409 });
+      return json(
+        {
+          error:
+            "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.",
+          code: "installation_already_owned",
+        },
+        { status: 409 },
+      );
     }
     const legacy = await env.CONCLAVE_DB.prepare(
       `SELECT i.id AS runtimeId, i.workspace_id AS workspaceId,
@@ -1644,10 +1677,24 @@ async function handleCheckWorkspaceOwnership(
          FROM workspace_runtime_identities i
          JOIN execution_workspaces w ON w.id = i.workspace_id
         WHERE i.id = ?1 AND i.workspace_id = ?2`,
-    ).bind(runtimeId, workspaceId).all<{ runtimeId: string; workspaceId: string; installationId: string | null; ownerUserId: string }>();
+    )
+      .bind(runtimeId, workspaceId)
+      .all<{
+        runtimeId: string;
+        workspaceId: string;
+        installationId: string | null;
+        ownerUserId: string;
+      }>();
     const localBinding = legacy.results ?? [];
     if (localBinding.length === 0) {
-      return json({ error: "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.", code: "installation_already_owned" }, { status: 409 });
+      return json(
+        {
+          error:
+            "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.",
+          code: "installation_already_owned",
+        },
+        { status: 409 },
+      );
     }
     for (const binding of localBinding) {
       if (!matches.some((item) => item.runtimeId === binding.runtimeId)) {
@@ -1657,32 +1704,84 @@ async function handleCheckWorkspaceOwnership(
     legacyBinding = localBinding.some((item) => item.installationId === null);
   }
   if (matches.some((item) => item.ownerUserId !== session.userId)) {
-    return json({ error: "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.", code: "installation_already_owned" }, { status: 409 });
+    return json(
+      {
+        error:
+          "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.",
+        code: "installation_already_owned",
+      },
+      { status: 409 },
+    );
   }
   if (new Set(matches.map((item) => item.workspaceId)).size > 1) {
-    return json({ error: "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.", code: "installation_already_owned" }, { status: 409 });
+    return json(
+      {
+        error:
+          "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.",
+        code: "installation_already_owned",
+      },
+      { status: 409 },
+    );
   }
-  if (matches.some((item) => item.installationId !== null && item.installationId !== installationId)) {
-    return json({ error: "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.", code: "installation_already_owned" }, { status: 409 });
+  if (
+    matches.some(
+      (item) =>
+        item.installationId !== null && item.installationId !== installationId,
+    )
+  ) {
+    return json(
+      {
+        error:
+          "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.",
+        code: "installation_already_owned",
+      },
+      { status: 409 },
+    );
   }
   if (legacyBinding) {
     const legacy = matches.find((item) => item.runtimeId === runtimeId)!;
-    if (legacy.installationId !== null && legacy.installationId !== installationId) {
-      return json({ error: "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.", code: "installation_already_owned" }, { status: 409 });
+    if (
+      legacy.installationId !== null &&
+      legacy.installationId !== installationId
+    ) {
+      return json(
+        {
+          error:
+            "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.",
+          code: "installation_already_owned",
+        },
+        { status: 409 },
+      );
     }
     const conflict = await env.CONCLAVE_DB.prepare(
       `SELECT 1 AS found FROM workspace_runtime_identities
         WHERE installation_id = ?1 AND id <> ?2 LIMIT 1`,
-    ).bind(installationId, runtimeId).first<{ found: number }>();
+    )
+      .bind(installationId, runtimeId)
+      .first<{ found: number }>();
     if (conflict) {
-      return json({ error: "Workspace installation ownership changed concurrently", code: "installation_already_owned" }, { status: 409 });
+      return json(
+        {
+          error: "Workspace installation ownership changed concurrently",
+          code: "installation_already_owned",
+        },
+        { status: 409 },
+      );
     }
     const linked = await env.CONCLAVE_DB.prepare(
       `UPDATE workspace_runtime_identities SET installation_id = ?1
         WHERE id = ?2 AND workspace_id = ?3 AND installation_id IS NULL`,
-    ).bind(installationId, runtimeId, workspaceId).run();
+    )
+      .bind(installationId, runtimeId, workspaceId)
+      .run();
     if ((linked.meta?.changes ?? 0) !== 1) {
-      return json({ error: "Workspace installation ownership changed concurrently", code: "installation_already_owned" }, { status: 409 });
+      return json(
+        {
+          error: "Workspace installation ownership changed concurrently",
+          code: "installation_already_owned",
+        },
+        { status: 409 },
+      );
     }
   }
   return json({ registered: matches.length > 0, ownerUserId: session.userId });
@@ -1695,11 +1794,20 @@ async function handleDisconnectDesktopWorkspace(
 ): Promise<Response> {
   const { session, now } = await findDesktopHumanSession(request, env);
   const body = parseJson<Record<string, unknown>>(await request.text(), {});
-  const installationId = typeof body.installationId === "string" ? body.installationId.trim() : "";
-  const workspaceId = typeof body.workspaceId === "string" ? body.workspaceId.trim() : "";
-  const runtimeId = typeof body.runtimeId === "string" ? body.runtimeId.trim() : "";
+  const installationId =
+    typeof body.installationId === "string" ? body.installationId.trim() : "";
+  const workspaceId =
+    typeof body.workspaceId === "string" ? body.workspaceId.trim() : "";
+  const runtimeId =
+    typeof body.runtimeId === "string" ? body.runtimeId.trim() : "";
   if (!installationId || !workspaceId || !runtimeId) {
-    return json({ error: "Workspace disconnect identity is incomplete", code: "invalid_disconnect_identity" }, { status: 400 });
+    return json(
+      {
+        error: "Workspace disconnect identity is incomplete",
+        code: "invalid_disconnect_identity",
+      },
+      { status: 400 },
+    );
   }
   const owned = await env.CONCLAVE_DB.prepare(
     `SELECT i.id AS runtimeId, i.workspace_id AS workspaceId, i.credential_token_hash AS credentialHash,
@@ -1707,21 +1815,44 @@ async function handleDisconnectDesktopWorkspace(
             w.owner_user_id AS ownerUserId, w.status AS workspaceStatus
        FROM workspace_runtime_identities i JOIN execution_workspaces w ON w.id = i.workspace_id
       WHERE i.installation_id = ?1 AND i.workspace_id = ?2 AND i.id = ?3`,
-  ).bind(installationId, workspaceId, runtimeId).first<{
-    runtimeId: string; workspaceId: string; credentialHash: string;
-    installationId: string; revokedAt: string | null; ownerUserId: string; workspaceStatus: string;
-  }>();
+  )
+    .bind(installationId, workspaceId, runtimeId)
+    .first<{
+      runtimeId: string;
+      workspaceId: string;
+      credentialHash: string;
+      installationId: string;
+      revokedAt: string | null;
+      ownerUserId: string;
+      workspaceStatus: string;
+    }>();
   if (!owned || owned.ownerUserId !== session.userId) {
-    return json({ error: "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.", code: "installation_already_owned" }, { status: 409 });
+    return json(
+      {
+        error:
+          "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.",
+        code: "installation_already_owned",
+      },
+      { status: 409 },
+    );
   }
-  if (owned.revokedAt !== null) return json({ disconnected: true, workspaceId, installationId });
+  if (owned.revokedAt !== null)
+    return json({ disconnected: true, workspaceId, installationId });
 
   const active = await env.CONCLAVE_DB.prepare(
     `SELECT COUNT(*) AS count FROM worker_assignments
       WHERE execution_workspace_id = ?1 AND status IN ('created', 'dispatched', 'acknowledged', 'running')`,
-  ).bind(workspaceId).first<{ count: number }>();
+  )
+    .bind(workspaceId)
+    .first<{ count: number }>();
   if ((active?.count ?? 0) > 0) {
-    return json({ error: "Finish active Workspace assignments before disconnecting", code: "active_work" }, { status: 409 });
+    return json(
+      {
+        error: "Finish active Workspace assignments before disconnecting",
+        code: "active_work",
+      },
+      { status: 409 },
+    );
   }
 
   const disconnectedAt = now;
@@ -1738,13 +1869,36 @@ async function handleDisconnectDesktopWorkspace(
       `INSERT INTO workspace_audit_log
         (id, workspace_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
        VALUES (?1, ?2, 'user', ?3, 'workspace.disconnected', 'workspace_runtime', ?4, ?5, ?6)`,
-    ).bind(`audit-${crypto.randomUUID()}`, workspaceId, session.userId, runtimeId, JSON.stringify({ installationId, disconnectedAt }), disconnectedAt),
+    ).bind(
+      `audit-${crypto.randomUUID()}`,
+      workspaceId,
+      session.userId,
+      runtimeId,
+      JSON.stringify({ installationId, disconnectedAt }),
+      disconnectedAt,
+    ),
   ]);
   if ((result[0]?.meta?.changes ?? 0) !== 1) {
-    return json({ error: "Workspace runtime state changed concurrently", code: "runtime_state_conflict" }, { status: 409 });
+    return json(
+      {
+        error: "Workspace runtime state changed concurrently",
+        code: "runtime_state_conflict",
+      },
+      { status: 409 },
+    );
   }
-  const gatewayDisconnected = await disconnectWorkspaceRuntime(env, workspaceId, runtimeId);
-  return json({ disconnected: true, workspaceId, installationId, disconnectedAt, gatewayDisconnected });
+  const gatewayDisconnected = await disconnectWorkspaceRuntime(
+    env,
+    workspaceId,
+    runtimeId,
+  );
+  return json({
+    disconnected: true,
+    workspaceId,
+    installationId,
+    disconnectedAt,
+    gatewayDisconnected,
+  });
 }
 
 /** Releases Cloud ownership only after a fresh same-owner human session. */
@@ -1754,15 +1908,33 @@ async function handleReleaseDesktopWorkspace(
 ): Promise<Response> {
   const { session, now } = await findDesktopHumanSession(request, env);
   const sessionCreatedAt = Date.parse(session.createdAt);
-  if (!Number.isFinite(sessionCreatedAt) || sessionCreatedAt < Date.now() - 5 * 60_000) {
-    return json({ error: "Fresh sign-in is required to release this Workspace", code: "fresh_auth_required" }, { status: 403 });
+  if (
+    !Number.isFinite(sessionCreatedAt) ||
+    sessionCreatedAt < Date.now() - 5 * 60_000
+  ) {
+    return json(
+      {
+        error: "Fresh sign-in is required to release this Workspace",
+        code: "fresh_auth_required",
+      },
+      { status: 403 },
+    );
   }
   const body = parseJson<Record<string, unknown>>(await request.text(), {});
-  const installationId = typeof body.installationId === "string" ? body.installationId.trim() : "";
-  const workspaceId = typeof body.workspaceId === "string" ? body.workspaceId.trim() : "";
-  const runtimeId = typeof body.runtimeId === "string" ? body.runtimeId.trim() : "";
+  const installationId =
+    typeof body.installationId === "string" ? body.installationId.trim() : "";
+  const workspaceId =
+    typeof body.workspaceId === "string" ? body.workspaceId.trim() : "";
+  const runtimeId =
+    typeof body.runtimeId === "string" ? body.runtimeId.trim() : "";
   if (!installationId || !workspaceId || !runtimeId) {
-    return json({ error: "Workspace release identity is incomplete", code: "invalid_release_identity" }, { status: 400 });
+    return json(
+      {
+        error: "Workspace release identity is incomplete",
+        code: "invalid_release_identity",
+      },
+      { status: 400 },
+    );
   }
   const owned = await env.CONCLAVE_DB.prepare(
     `SELECT i.id AS runtimeId, i.workspace_id AS workspaceId,
@@ -1770,36 +1942,71 @@ async function handleReleaseDesktopWorkspace(
        FROM workspace_runtime_identities i
        JOIN execution_workspaces w ON w.id = i.workspace_id
       WHERE i.installation_id = ?1 AND i.workspace_id = ?2 AND i.id = ?3`,
-  ).bind(installationId, workspaceId, runtimeId).first<{
-    runtimeId: string;
-    workspaceId: string;
-    ownerUserId: string;
-    workspaceStatus: string;
-  }>();
+  )
+    .bind(installationId, workspaceId, runtimeId)
+    .first<{
+      runtimeId: string;
+      workspaceId: string;
+      ownerUserId: string;
+      workspaceStatus: string;
+    }>();
   if (!owned || owned.ownerUserId !== session.userId) {
-    return json({ error: "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.", code: "installation_already_owned" }, { status: 409 });
+    return json(
+      {
+        error:
+          "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.",
+        code: "installation_already_owned",
+      },
+      { status: 409 },
+    );
   }
 
   const gatewayStatus = await getWorkspaceGatewayStatus(env, workspaceId);
-  if (gatewayStatus === null || gatewayStatus.online || owned.workspaceStatus === "online") {
-    return json({ error: "Disconnect the Workspace runtime before releasing ownership", code: "runtime_connected" }, { status: 409 });
+  if (
+    gatewayStatus === null ||
+    gatewayStatus.online ||
+    owned.workspaceStatus === "online"
+  ) {
+    return json(
+      {
+        error: "Disconnect the Workspace runtime before releasing ownership",
+        code: "runtime_connected",
+      },
+      { status: 409 },
+    );
   }
 
   const active = await env.CONCLAVE_DB.prepare(
     `SELECT COUNT(*) AS count FROM worker_assignments
       WHERE execution_workspace_id = ?1
         AND status IN ('created', 'dispatched', 'acknowledged', 'running')`,
-  ).bind(workspaceId).first<{ count: number }>();
+  )
+    .bind(workspaceId)
+    .first<{ count: number }>();
   if ((active?.count ?? 0) > 0) {
-    return json({ error: "Finish active Workspace assignments before releasing ownership", code: "active_work" }, { status: 409 });
+    return json(
+      {
+        error: "Finish active Workspace assignments before releasing ownership",
+        code: "active_work",
+      },
+      { status: 409 },
+    );
   }
 
   const reserved = await env.CONCLAVE_DB.prepare(
     `UPDATE execution_workspaces SET status = 'revoked', updated_at = ?1
       WHERE id = ?2 AND owner_user_id = ?3 AND status = ?4`,
-  ).bind(now, workspaceId, session.userId, owned.workspaceStatus).run();
+  )
+    .bind(now, workspaceId, session.userId, owned.workspaceStatus)
+    .run();
   if ((reserved.meta?.changes ?? 0) !== 1) {
-    return json({ error: "Workspace ownership changed concurrently", code: "installation_already_owned" }, { status: 409 });
+    return json(
+      {
+        error: "Workspace ownership changed concurrently",
+        code: "installation_already_owned",
+      },
+      { status: 409 },
+    );
   }
 
   await env.CONCLAVE_DB.batch([
@@ -1816,7 +2023,14 @@ async function handleReleaseDesktopWorkspace(
       `INSERT INTO workspace_audit_log
         (id, workspace_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
        VALUES (?1, ?2, 'user', ?3, 'workspace.ownership.released', 'workspace_runtime', ?4, ?5, ?6)`,
-    ).bind(`audit-${crypto.randomUUID()}`, workspaceId, session.userId, runtimeId, JSON.stringify({ installationId, releasedAt: now }), now),
+    ).bind(
+      `audit-${crypto.randomUUID()}`,
+      workspaceId,
+      session.userId,
+      runtimeId,
+      JSON.stringify({ installationId, releasedAt: now }),
+      now,
+    ),
   ]);
   return json({ released: true, workspaceId, installationId, releasedAt: now });
 }
@@ -1844,21 +2058,77 @@ async function handleRegisterWorkspaceFromDesktop(
 ): Promise<Response> {
   const { session, now } = await findDesktopHumanSession(request, env);
   const body = parseJson<Record<string, unknown>>(await request.text(), {});
-  const installationId = typeof body.installationId === "string" ? body.installationId.trim() : "";
-  const existingWorkspaceId = typeof body.existingWorkspaceId === "string" ? body.existingWorkspaceId.trim() : "";
-  const existingRuntimeId = typeof body.existingRuntimeId === "string" ? body.existingRuntimeId.trim() : "";
-  const name = typeof body.proposedWorkspaceName === "string" ? body.proposedWorkspaceName.trim() : "";
-  const hostname = typeof body.hostname === "string" ? body.hostname.trim() : "";
+  const installationId =
+    typeof body.installationId === "string" ? body.installationId.trim() : "";
+  const existingWorkspaceId =
+    typeof body.existingWorkspaceId === "string"
+      ? body.existingWorkspaceId.trim()
+      : "";
+  const existingRuntimeId =
+    typeof body.existingRuntimeId === "string"
+      ? body.existingRuntimeId.trim()
+      : "";
+  const name =
+    typeof body.proposedWorkspaceName === "string"
+      ? body.proposedWorkspaceName.trim()
+      : "";
+  const hostname =
+    typeof body.hostname === "string" ? body.hostname.trim() : "";
   const platform = body.platform;
   const architecture = body.architecture;
-  const appVersion = typeof body.appVersion === "string" ? body.appVersion.trim() : "";
+  const appVersion =
+    typeof body.appVersion === "string" ? body.appVersion.trim() : "";
   const capabilities = body.runtimeCapabilities;
-  if (body.contractVersion !== "1.0" || !/^install_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(installationId) || !name || name.length > 120 || /[\u0000-\u001f\u007f]/.test(name) || !hostname || hostname.length > 253 || /[\u0000-\u001f\u007f]/.test(hostname) || !["macos", "linux", "windows"].includes(String(platform)) || !["arm64", "x64", "x86"].includes(String(architecture)) || !appVersion || appVersion.length > 64 || !/^[0-9A-Za-z.+-]+$/.test(appVersion) || !capabilities || typeof capabilities !== "object" || Array.isArray(capabilities)) {
-    return json({ error: "Workspace registration details are invalid" }, { status: 400 });
+  if (
+    body.contractVersion !== "1.0" ||
+    !/^install_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      installationId,
+    ) ||
+    !name ||
+    name.length > 120 ||
+    /[\u0000-\u001f\u007f]/.test(name) ||
+    !hostname ||
+    hostname.length > 253 ||
+    /[\u0000-\u001f\u007f]/.test(hostname) ||
+    !["macos", "linux", "windows"].includes(String(platform)) ||
+    !["arm64", "x64", "x86"].includes(String(architecture)) ||
+    !appVersion ||
+    appVersion.length > 64 ||
+    !/^[0-9A-Za-z.+-]+$/.test(appVersion) ||
+    !capabilities ||
+    typeof capabilities !== "object" ||
+    Array.isArray(capabilities)
+  ) {
+    return json(
+      { error: "Workspace registration details are invalid" },
+      { status: 400 },
+    );
   }
   const caps = capabilities as Record<string, unknown>;
   const supported = caps.supportedRuntimes;
-  if (Object.keys(caps).some((key) => !["os", "arch", "appVersion", "supportedRuntimes", "maxConcurrentWorkers"].includes(key)) || caps.os !== platform || caps.arch !== architecture || caps.appVersion !== appVersion || !Array.isArray(supported) || supported.length > 16 || supported.some((x) => typeof x !== "string" || !/^[a-z0-9_-]{1,32}$/i.test(x)) || !Number.isInteger(caps.maxConcurrentWorkers) || (caps.maxConcurrentWorkers as number) < 1 || (caps.maxConcurrentWorkers as number) > 256) {
+  if (
+    Object.keys(caps).some(
+      (key) =>
+        ![
+          "os",
+          "arch",
+          "appVersion",
+          "supportedRuntimes",
+          "maxConcurrentWorkers",
+        ].includes(key),
+    ) ||
+    caps.os !== platform ||
+    caps.arch !== architecture ||
+    caps.appVersion !== appVersion ||
+    !Array.isArray(supported) ||
+    supported.length > 16 ||
+    supported.some(
+      (x) => typeof x !== "string" || !/^[a-z0-9_-]{1,32}$/i.test(x),
+    ) ||
+    !Number.isInteger(caps.maxConcurrentWorkers) ||
+    (caps.maxConcurrentWorkers as number) < 1 ||
+    (caps.maxConcurrentWorkers as number) > 256
+  ) {
     return json({ error: "Runtime capabilities are invalid" }, { status: 400 });
   }
   const bindings = await env.CONCLAVE_DB.prepare(
@@ -1869,17 +2139,59 @@ async function handleRegisterWorkspaceFromDesktop(
       WHERE i.installation_id = ?1
          OR (i.id = ?2 AND i.workspace_id = ?3)
       ORDER BY i.created_at DESC`,
-  ).bind(installationId, existingRuntimeId || null, existingWorkspaceId || null).all<{ runtimeId:string; workspaceId:string; revokedAt:string|null; ownerUserId:string; workspaceName:string; workspaceStatus:string; installationId: string | null }>();
+  )
+    .bind(
+      installationId,
+      existingRuntimeId || null,
+      existingWorkspaceId || null,
+    )
+    .all<{
+      runtimeId: string;
+      workspaceId: string;
+      revokedAt: string | null;
+      ownerUserId: string;
+      workspaceName: string;
+      workspaceStatus: string;
+      installationId: string | null;
+    }>();
   const history = bindings.results ?? [];
   if ((existingWorkspaceId || existingRuntimeId) && history.length === 0) {
-    return json({ error: "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.", code: "installation_already_owned" }, { status: 409 });
+    return json(
+      {
+        error:
+          "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.",
+        code: "installation_already_owned",
+      },
+      { status: 409 },
+    );
   }
-  const active = history.find((item) => item.revokedAt === null && item.workspaceStatus !== "revoked");
+  const active = history.find(
+    (item) => item.revokedAt === null && item.workspaceStatus !== "revoked",
+  );
   if (history.some((item) => item.ownerUserId !== session.userId)) {
-    return json({ error: "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.", code: "installation_already_owned" }, { status: 409 });
+    return json(
+      {
+        error:
+          "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.",
+        code: "installation_already_owned",
+      },
+      { status: 409 },
+    );
   }
-  if (history.some((item) => item.installationId !== null && item.installationId !== installationId)) {
-    return json({ error: "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.", code: "installation_already_owned" }, { status: 409 });
+  if (
+    history.some(
+      (item) =>
+        item.installationId !== null && item.installationId !== installationId,
+    )
+  ) {
+    return json(
+      {
+        error:
+          "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.",
+        code: "installation_already_owned",
+      },
+      { status: 409 },
+    );
   }
   const existing = active ?? history[0];
   const outcome = existing ? "recovered" : "created";
@@ -1890,30 +2202,95 @@ async function handleRegisterWorkspaceFromDesktop(
   const credentialHash = await hashToken(credential);
   const auditId = `audit-${crypto.randomUUID()}`;
   const statements = [];
-  if (existing && existing.installationId === null) statements.push(env.CONCLAVE_DB.prepare(
-    `UPDATE workspace_runtime_identities SET installation_id = ?1
+  if (existing && existing.installationId === null)
+    statements.push(
+      env.CONCLAVE_DB.prepare(
+        `UPDATE workspace_runtime_identities SET installation_id = ?1
       WHERE id = ?2 AND workspace_id = ?3 AND installation_id IS NULL`,
-  ).bind(installationId, existing.runtimeId, existing.workspaceId));
-  if (!existing) statements.push(env.CONCLAVE_DB.prepare(
-    `INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at) VALUES (?1, ?2, ?3, 'offline', ?4, ?4)`,
-  ).bind(workspaceId, session.userId, name, now));
-  if (active) statements.push(env.CONCLAVE_DB.prepare(
-    `UPDATE workspace_runtime_identities SET revoked_at = ?1 WHERE installation_id = ?2 AND revoked_at IS NULL`,
-  ).bind(now, installationId));
-  statements.push(env.CONCLAVE_DB.prepare(
-    `INSERT INTO workspace_runtime_identities (id, workspace_id, credential_key_ref, credential_token_hash, installation_id, created_at, revoked_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL)`,
-  ).bind(runtimeId, workspaceId, `workspace-runtime:${runtimeId}`, credentialHash, installationId, now));
-  statements.push(env.CONCLAVE_DB.prepare(
-    `INSERT INTO workspace_runtime_facts (workspace_id, platform, architecture, hostname, app_version, runtime_capabilities_json, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(workspace_id) DO UPDATE SET platform=excluded.platform, architecture=excluded.architecture, hostname=excluded.hostname, app_version=excluded.app_version, runtime_capabilities_json=excluded.runtime_capabilities_json, updated_at=excluded.updated_at`,
-  ).bind(workspaceId, platform, architecture, hostname, appVersion, JSON.stringify(caps), now));
-  statements.push(env.CONCLAVE_DB.prepare(
-    `INSERT INTO workspace_audit_log (id, workspace_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at) VALUES (?1, ?2, 'user', ?3, ?4, 'workspace_runtime', ?5, ?6, ?7)`,
-  ).bind(auditId, workspaceId, session.userId, outcome === "created" ? "workspace.registered" : "workspace.recovered", runtimeId, JSON.stringify({ installationId, hostname, platform, architecture, appVersion }), now));
-  try { await env.CONCLAVE_DB.batch(statements); } catch {
-    return json({ error: "Workspace registration changed concurrently; retry the request", code: "registration_conflict" }, { status: 409 });
+      ).bind(installationId, existing.runtimeId, existing.workspaceId),
+    );
+  if (!existing)
+    statements.push(
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at) VALUES (?1, ?2, ?3, 'offline', ?4, ?4)`,
+      ).bind(workspaceId, session.userId, name, now),
+    );
+  if (active)
+    statements.push(
+      env.CONCLAVE_DB.prepare(
+        `UPDATE workspace_runtime_identities SET revoked_at = ?1 WHERE installation_id = ?2 AND revoked_at IS NULL`,
+      ).bind(now, installationId),
+    );
+  statements.push(
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO workspace_runtime_identities (id, workspace_id, credential_key_ref, credential_token_hash, installation_id, created_at, revoked_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL)`,
+    ).bind(
+      runtimeId,
+      workspaceId,
+      `workspace-runtime:${runtimeId}`,
+      credentialHash,
+      installationId,
+      now,
+    ),
+  );
+  statements.push(
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO workspace_runtime_facts (workspace_id, platform, architecture, hostname, app_version, runtime_capabilities_json, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(workspace_id) DO UPDATE SET platform=excluded.platform, architecture=excluded.architecture, hostname=excluded.hostname, app_version=excluded.app_version, runtime_capabilities_json=excluded.runtime_capabilities_json, updated_at=excluded.updated_at`,
+    ).bind(
+      workspaceId,
+      platform,
+      architecture,
+      hostname,
+      appVersion,
+      JSON.stringify(caps),
+      now,
+    ),
+  );
+  statements.push(
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO workspace_audit_log (id, workspace_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at) VALUES (?1, ?2, 'user', ?3, ?4, 'workspace_runtime', ?5, ?6, ?7)`,
+    ).bind(
+      auditId,
+      workspaceId,
+      session.userId,
+      outcome === "created" ? "workspace.registered" : "workspace.recovered",
+      runtimeId,
+      JSON.stringify({
+        installationId,
+        hostname,
+        platform,
+        architecture,
+        appVersion,
+      }),
+      now,
+    ),
+  );
+  try {
+    await env.CONCLAVE_DB.batch(statements);
+  } catch {
+    return json(
+      {
+        error: "Workspace registration changed concurrently; retry the request",
+        code: "registration_conflict",
+      },
+      { status: 409 },
+    );
   }
   const completedAt = new Date().toISOString();
-  return json({ outcome, workspaceId, workspaceRuntimeId: runtimeId, workspaceName, ownerUserId: session.userId, runtimeCredential: credential, credentialIssuedAt: completedAt, credentialExpiresAt: null, completedAt }, { status: 201 });
+  return json(
+    {
+      outcome,
+      workspaceId,
+      workspaceRuntimeId: runtimeId,
+      workspaceName,
+      ownerUserId: session.userId,
+      runtimeCredential: credential,
+      credentialIssuedAt: completedAt,
+      credentialExpiresAt: null,
+      completedAt,
+    },
+    { status: 201 },
+  );
 }
 
 async function handleRotateDesktopHumanSession(
@@ -6282,11 +6659,11 @@ async function getWorkspaceGatewayStatus(
   const gateway = env.CONCLAVE_WORKSPACE_GATEWAY;
   if (!gateway) return null;
   try {
-    const response = await gateway.getByName(workspaceId).fetch(
-      "https://workspace-gateway/status",
-    );
+    const response = await gateway
+      .getByName(workspaceId)
+      .fetch("https://workspace-gateway/status");
     if (!response.ok) return null;
-    const status = await response.json() as { online?: unknown };
+    const status = (await response.json()) as { online?: unknown };
     if (typeof status.online !== "boolean") return null;
     return { online: status.online };
   } catch {
@@ -9148,40 +9525,71 @@ async function handleWorkspaceGatewayConnect(
   }
 }
 
-async function handleWorkspaceRuntimeTransport(request: Request, env: SecurityEnv): Promise<Response> {
-  if (!env.CONCLAVE_WORKSPACE_GATEWAY) return json({ error: "Workspace Gateway is not configured" }, { status: 503 });
+async function handleWorkspaceRuntimeTransport(
+  request: Request,
+  env: SecurityEnv,
+): Promise<Response> {
+  if (!env.CONCLAVE_WORKSPACE_GATEWAY)
+    return json(
+      { error: "Workspace Gateway is not configured" },
+      { status: 503 },
+    );
   const url = new URL(request.url);
-  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+  const body = (await request.json().catch(() => null)) as Record<
+    string,
+    unknown
+  > | null;
   if (!body) return json({ error: "Invalid request body" }, { status: 400 });
   const authToken = extractBearerToken(request.headers);
-  if (!authToken) return json({ error: "Workspace runtime credential required" }, { status: 401 });
+  if (!authToken)
+    return json(
+      { error: "Workspace runtime credential required" },
+      { status: 401 },
+    );
   let workspaceId: string | null = null;
   if (url.pathname === "/api/workspace-runtime/sessions") {
-    if (typeof body.workspaceRuntimeId !== "string") return json({ error: "workspaceRuntimeId is required" }, { status: 400 });
+    if (typeof body.workspaceRuntimeId !== "string")
+      return json({ error: "workspaceRuntimeId is required" }, { status: 400 });
     const authorized = await env.CONCLAVE_DB.prepare(
       `SELECT wri.workspace_id AS workspaceId FROM workspace_runtime_identities wri
        JOIN execution_workspaces ew ON ew.id = wri.workspace_id
        WHERE wri.id = ?1 AND wri.credential_token_hash = ?2
        AND wri.revoked_at IS NULL AND ew.status <> 'revoked'`,
-    ).bind(body.workspaceRuntimeId, await hashToken(authToken)).first<{ workspaceId: string }>();
+    )
+      .bind(body.workspaceRuntimeId, await hashToken(authToken))
+      .first<{ workspaceId: string }>();
     workspaceId = authorized?.workspaceId ?? null;
   } else {
-    if (typeof body.sessionId !== "string") return json({ error: "sessionId is required" }, { status: 400 });
+    if (typeof body.sessionId !== "string")
+      return json({ error: "sessionId is required" }, { status: 400 });
     const session = await env.CONCLAVE_DB.prepare(
       "SELECT workspace_id AS workspaceId FROM workspace_sessions WHERE id = ?1 AND disconnected_at IS NULL",
-    ).bind(body.sessionId).first<{ workspaceId: string }>();
+    )
+      .bind(body.sessionId)
+      .first<{ workspaceId: string }>();
     workspaceId = session?.workspaceId ?? null;
   }
-  if (!workspaceId) return json({ error: "Runtime session not found or credential revoked" }, { status: 401 });
+  if (!workspaceId)
+    return json(
+      { error: "Runtime session not found or credential revoked" },
+      { status: 401 },
+    );
   const stub = env.CONCLAVE_WORKSPACE_GATEWAY.getByName(workspaceId);
   let internalPath = "/runtime/" + url.pathname.split("/").pop();
-  if (url.pathname === "/api/workspace-runtime/sessions") internalPath = "/runtime/sessions";
+  if (url.pathname === "/api/workspace-runtime/sessions")
+    internalPath = "/runtime/sessions";
   else if (url.pathname.endsWith("/close")) internalPath = "/runtime/close";
-  const forwarded = new Request(`https://workspace-gateway.internal${internalPath}`, {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${authToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const forwarded = new Request(
+    `https://workspace-gateway.internal${internalPath}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    },
+  );
   return stub.fetch(forwarded);
 }
 

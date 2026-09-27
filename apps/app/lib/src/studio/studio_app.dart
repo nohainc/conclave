@@ -83,7 +83,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
   final authEmailController = TextEditingController();
   final authPasswordController = TextEditingController();
   final authConfirmPasswordController = TextEditingController();
-  final desktopAuthCodeController = TextEditingController();
   final List<StudioChatMessage> localChatMessages = [];
   final List<_PendingChatMessage> pendingChatMessages = [];
   final List<StudioNotification> notifications = [];
@@ -308,7 +307,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
     authEmailController.dispose();
     authPasswordController.dispose();
     authConfirmPasswordController.dispose();
-    desktopAuthCodeController.dispose();
     promptResponseController.dispose();
     unawaited(navigationSubscription?.cancel());
     unawaited(lifecycleSubscription?.cancel());
@@ -1578,19 +1576,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
                       style: Theme.of(context).textTheme.headlineSmall),
                   const SizedBox(height: 12),
                   Text(
-                      'Approve this request for ${user?.displayName ?? user?.email ?? 'your account'}. Compare the code below with the one shown in Conclave Workspace before continuing.'),
+                      'Approve Conclave Workspace sign-in for ${user?.displayName ?? user?.email ?? 'your account'}? Return to the desktop app after approval.'),
                   const SizedBox(height: 22),
-                  TextField(
-                    controller: desktopAuthCodeController,
-                    autofocus: true,
-                    maxLength: 8,
-                    keyboardType: TextInputType.number,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    decoration: const InputDecoration(
-                        labelText: '8-digit code from Conclave Workspace',
-                        border: OutlineInputBorder()),
-                  ),
                   if (desktopAuthError != null) ...[
                     const SizedBox(height: 8),
                     Text(desktopAuthError!,
@@ -1621,10 +1608,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
 
   Future<void> _approveDesktopAuth() async {
     final intentId = navigation.desktopAuthIntentId;
-    final code = desktopAuthCodeController.text.trim();
-    if (intentId == null || !RegExp(r'^\d{8}$').hasMatch(code)) {
+    if (intentId == null) {
       setState(() => desktopAuthError =
-          'Enter the 8-digit code shown in Conclave Workspace.');
+          'This Workspace sign-in request is incomplete. Start again from the desktop app.');
       return;
     }
     setState(() {
@@ -1632,8 +1618,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
       desktopAuthError = null;
     });
     try {
-      await widget.dataSource
-          .approveDesktopAuthIntent(intentId: intentId, userCode: code);
+      await widget.dataSource.approveDesktopAuthIntent(intentId: intentId);
       if (!mounted) return;
       _navigateTo(const StudioNavigation.home(), replace: true);
       _showSnackBar(

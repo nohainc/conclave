@@ -49,6 +49,23 @@ class _ReadModelClient extends http.BaseClient {
 }
 
 void main() {
+  test('approves desktop sign-in without a comparison code', () async {
+    final client = _JsonClient(const <String, dynamic>{}, statusCode: 200);
+    final api = StudioApiClient(
+      baseUrl: 'https://conclave.test/api',
+      client: client,
+    );
+
+    await api.approveDesktopAuthIntent(intentId: 'intent-a');
+
+    expect(client.lastRequest?.method, 'POST');
+    expect(
+      client.lastRequest?.url.path,
+      '/api/desktop-auth/intents/intent-a/approve',
+    );
+    expect(jsonDecode(client.lastBody!), isEmpty);
+  });
+
   test('loads and clears the Cloud session boundary', () async {
     final client = _JsonClient({
       'authenticated': true,

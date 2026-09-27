@@ -3,11 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 
 const desktopHumanCredentialKey = 'desktop-human-session';
+const desktopAuthIntentContractVersion = '1.1';
 
 class DesktopAuthIntent {
   const DesktopAuthIntent({
     required this.intentId,
-    required this.userCode,
     required this.pollToken,
     required this.verificationUrl,
     required this.expiresAt,
@@ -15,7 +15,6 @@ class DesktopAuthIntent {
   });
 
   final String intentId;
-  final String userCode;
   final String pollToken;
   final Uri verificationUrl;
   final DateTime expiresAt;
@@ -41,7 +40,6 @@ class DesktopAuthIntent {
     }
     return DesktopAuthIntent(
       intentId: required('intentId'),
-      userCode: required('userCode'),
       pollToken: required('pollToken'),
       verificationUrl: url,
       expiresAt: DateTime.parse(required('expiresAt')),
@@ -189,7 +187,7 @@ class DesktopAuthClient {
     final json =
         await _requestJson('POST', _api('/desktop-auth/intents'), body: {
       'clientName': 'Conclave Workspace',
-      'contractVersion': '1.0',
+      'contractVersion': desktopAuthIntentContractVersion,
     });
     final intent = DesktopAuthIntent.fromJson(json);
     if (intent.verificationUrl.origin != _cloudOrigin.origin) {
@@ -213,8 +211,13 @@ class DesktopAuthClient {
   }
 
   Future<DesktopHumanSession> waitForApprovalAndClaim(
-      DesktopAuthIntent intent) async {
+    DesktopAuthIntent intent, {
+    bool Function()? isCancelled,
+  }) async {
     while (DateTime.now().toUtc().isBefore(intent.expiresAt.toUtc())) {
+      if (isCancelled?.call() ?? false) {
+        throw StateError('Workspace sign-in was cancelled.');
+      }
       final status = await _requestJson(
         'GET',
         _api('/desktop-auth/intents/${Uri.encodeComponent(intent.intentId)}'),
@@ -236,8 +239,15 @@ class DesktopAuthClient {
           throw StateError(
               'This Conclave Workspace sign-in request is no longer available.');
         case 'pending':
-          await Future<void>.delayed(
-              Duration(milliseconds: intent.pollIntervalMs.clamp(1000, 10000)));
+          final waitUntil = DateTime.now().add(Duration(
+            milliseconds: intent.pollIntervalMs.clamp(1000, 10000),
+          ));
+          while (DateTime.now().isBefore(waitUntil)) {
+            if (isCancelled?.call() ?? false) {
+              throw StateError('Workspace sign-in was cancelled.');
+            }
+            await Future<void>.delayed(const Duration(milliseconds: 200));
+          }
       }
     }
     throw StateError(

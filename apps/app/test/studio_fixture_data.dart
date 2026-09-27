@@ -219,8 +219,7 @@ class StudioFixtureDataSource implements StudioDataSource {
   Future<void> signInWithPasskey() async {}
 
   @override
-  Future<void> approveDesktopAuthIntent(
-      {required String intentId, required String userCode}) async {}
+  Future<void> approveDesktopAuthIntent({required String intentId}) async {}
 
   @override
   Future<void> revokeAccountSession(String token) async {}
@@ -489,8 +488,6 @@ class StudioFixtureDataSource implements StudioDataSource {
       expiresAt: 'Tomorrow',
     );
   }
-
-
 }
 
 /// Stateful fixture used by the empty-workspace onboarding test. It mirrors
