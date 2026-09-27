@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:conclave_host/workspace_lifecycle.dart';
@@ -111,7 +112,81 @@ void main() {
     expect(restored.ownerUserId, 'user-1');
     expect(restored.autoLockTimeout, const Duration(minutes: 5));
     final raw = await preferencesStore.file.readAsString();
+    final json = jsonDecode(raw) as Map<String, dynamic>;
+    expect(json['schemaVersion'],
+        WorkspaceLifecyclePreferencesStore.currentSchemaVersion);
+    expect(json['desiredRuntimeState'], 'connected');
+    expect(json.containsKey('desiredRuntime'), isFalse);
     expect(raw, isNot(contains('credential')));
     expect(raw, isNot(contains('secret')));
+    expect(
+      directory.listSync().where((entity) => entity.path.contains('.tmp.')),
+      isEmpty,
+    );
+  });
+
+  test('legacy intent migrates connected only when intent is absent', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('workspace-lifecycle-migration-');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = WorkspaceLifecyclePreferencesStore(directory);
+
+    await store.migrateLegacyIfNeeded(
+      hasRuntimeRegistrationAndCredential: true,
+    );
+    expect(store.readSync().desiredRuntime, DesiredRuntimeState.connected);
+
+    await store.file.writeAsString(jsonEncode({
+      'desiredRuntime': 'disconnected',
+      'launchAtLogin': true,
+      'managementLockPreference': 'locked',
+      'ownerUserId': 'owner-1',
+    }));
+    expect(store.needsRuntimeCredentialMigrationCheck, isFalse);
+    await store.migrateLegacyIfNeeded(
+      hasRuntimeRegistrationAndCredential: true,
+    );
+    final migrated = store.readSync();
+    expect(migrated.desiredRuntime, DesiredRuntimeState.disconnected);
+    expect(migrated.launchAtLogin, isTrue);
+    expect(migrated.managementLockPreference, ManagementLockState.locked);
+    expect(migrated.ownerUserId, 'owner-1');
+  });
+
+  test('legacy install without a runtime credential defaults disconnected',
+      () async {
+    final directory =
+        await Directory.systemTemp.createTemp('workspace-lifecycle-safe-');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = WorkspaceLifecyclePreferencesStore(directory);
+
+    await store.migrateLegacyIfNeeded(
+      hasRuntimeRegistrationAndCredential: false,
+    );
+
+    expect(store.readSync().desiredRuntime, DesiredRuntimeState.disconnected);
+    expect(store.file.existsSync(), isFalse);
+  });
+
+  test('local Workspace reset marks disconnected and retains chosen settings',
+      () {
+    const before = WorkspaceLifecyclePreferences(
+      desiredRuntime: DesiredRuntimeState.connected,
+      launchAtLogin: true,
+      managementLockPreference: ManagementLockState.locked,
+      autoLockTimeout: Duration(minutes: 15),
+      ownerUserId: 'cached-owner',
+      ownerDisplayName: 'Cached owner',
+    );
+
+    final reset =
+        WorkspaceLifecyclePreferences.afterLocalWorkspaceReset(before);
+
+    expect(reset.desiredRuntime, DesiredRuntimeState.disconnected);
+    expect(reset.launchAtLogin, isTrue);
+    expect(reset.managementLockPreference, ManagementLockState.locked);
+    expect(reset.autoLockTimeout, const Duration(minutes: 15));
+    expect(reset.ownerUserId, 'cached-owner');
+    expect(reset.ownerDisplayName, 'Cached owner');
   });
 }

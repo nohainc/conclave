@@ -740,6 +740,25 @@ Do not make users manually reconnect after upgrade.
 
 Restart behavior is deterministic and testable.
 
+## Implementation record
+
+- Lifecycle preferences now use schema version 1 and the canonical
+  `desiredRuntimeState` field. Writes go to a permission-restricted sibling
+  temporary file and atomically rename it into place.
+- Migration preserves a saved connected or disconnected value. If legacy
+  preferences have no intent marker, a valid local registration plus a
+  non-empty runtime credential migrates to connected; without both, the safe
+  default is disconnected. Startup runs this migration before deciding whether
+  to load the registration into the runtime.
+- The preference document contains only runtime intent, startup/lock settings,
+  and cached owner display metadata. Runtime, desktop-session, Worker, and
+  provider credentials remain in secure storage.
+- Reset Local Workspace explicitly writes disconnected intent, while retaining
+  the existing documented login, lock, timeout, and owner-cache preferences.
+  It does not delete the Work Root or installation ownership.
+- Unit tests cover schema writes, atomic-temp cleanup, the legacy migration
+  branches, safe defaults, and reset semantics.
+
 ---
 
 # Phase 10 — Gate Workers UI by lifecycle state

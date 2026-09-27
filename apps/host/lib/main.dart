@@ -777,11 +777,31 @@ Future<void> main() async {
     nativeKeychain: FlutterMacKeychainBridge(),
   );
   final dataDirectory = HostConfig.resolveDataDirectory(const []);
-  final desiredRuntime = WorkspaceLifecyclePreferencesStore(dataDirectory)
-      .readSync()
-      .desiredRuntime;
-  final startupPreferences =
-      WorkspaceLifecyclePreferencesStore(dataDirectory).readSync();
+  final preferencesStore = WorkspaceLifecyclePreferencesStore(dataDirectory);
+  final registration = HostRegistrationStore(dataDirectory).readSync();
+  var runtimeCredentialLoaded = false;
+  var hasRuntimeCredential = false;
+  if (preferencesStore.needsRuntimeCredentialMigrationCheck &&
+      registration != null) {
+    hasRuntimeCredential =
+        (await credentialStore.readForSynchronousConfig(registration.hostId))
+                ?.isNotEmpty ==
+            true;
+    runtimeCredentialLoaded = true;
+  }
+  try {
+    await preferencesStore.migrateLegacyIfNeeded(
+      hasRuntimeRegistrationAndCredential:
+          registration != null && hasRuntimeCredential,
+    );
+  } on Object catch (error) {
+    // A failed preference migration must not prevent the management shell from
+    // opening. The unversioned state reader still preserves any valid explicit
+    // intent; otherwise its safe default suppresses runtime auto-connect.
+    debugPrint('Could not migrate Workspace lifecycle preferences: $error');
+  }
+  final startupPreferences = preferencesStore.readSync();
+  final desiredRuntime = startupPreferences.desiredRuntime;
   if (shouldHideManagementWindowOnStartup(
     isMacOS: Platform.isMacOS,
     launchAtLogin: startupPreferences.launchAtLogin,
@@ -790,8 +810,9 @@ Future<void> main() async {
         .invokeMethod<void>('hideMainWindow')
         .catchError((_) {}));
   }
-  final registration = HostRegistrationStore(dataDirectory).readSync();
-  if (registration != null && desiredRuntime == DesiredRuntimeState.connected) {
+  if (registration != null &&
+      desiredRuntime == DesiredRuntimeState.connected &&
+      !runtimeCredentialLoaded) {
     await credentialStore.readForSynchronousConfig(registration.hostId);
   }
   final config = HostConfig.fromArgs(
@@ -1836,14 +1857,9 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       await LocalWorkspaceIdentityStore(dataDir).clear();
       final preferenceStore = WorkspaceLifecyclePreferencesStore(dataDir);
       final preferences = preferenceStore.readSync();
-      await preferenceStore.write(WorkspaceLifecyclePreferences(
-        desiredRuntime: DesiredRuntimeState.disconnected,
-        launchAtLogin: preferences.launchAtLogin,
-        managementLockPreference: preferences.managementLockPreference,
-        autoLockTimeout: preferences.autoLockTimeout,
-        ownerUserId: preferences.ownerUserId,
-        ownerDisplayName: preferences.ownerDisplayName,
-      ));
+      await preferenceStore.write(
+        WorkspaceLifecyclePreferences.afterLocalWorkspaceReset(preferences),
+      );
       final workersFile = File(
           '${dataDir.path}${Platform.pathSeparator}configured-workers.json');
       if (await workersFile.exists()) await workersFile.delete();

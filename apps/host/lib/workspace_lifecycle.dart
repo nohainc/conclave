@@ -58,10 +58,42 @@ class WorkspaceLifecyclePreferences {
     this.ownerDisplayName,
   });
 
+  WorkspaceLifecyclePreferences copyWith({
+    DesiredRuntimeState? desiredRuntime,
+    bool? launchAtLogin,
+    ManagementLockState? managementLockPreference,
+    Duration? autoLockTimeout,
+    String? ownerUserId,
+    String? ownerDisplayName,
+  }) =>
+      WorkspaceLifecyclePreferences(
+        desiredRuntime: desiredRuntime ?? this.desiredRuntime,
+        launchAtLogin: launchAtLogin ?? this.launchAtLogin,
+        managementLockPreference:
+            managementLockPreference ?? this.managementLockPreference,
+        autoLockTimeout: autoLockTimeout ?? this.autoLockTimeout,
+        ownerUserId: ownerUserId ?? this.ownerUserId,
+        ownerDisplayName: ownerDisplayName ?? this.ownerDisplayName,
+      );
+
   final DesiredRuntimeState desiredRuntime;
   final bool launchAtLogin;
   final ManagementLockState managementLockPreference;
   final Duration? autoLockTimeout;
   final String? ownerUserId;
   final String? ownerDisplayName;
+
+  /// Reset removes the local Workspace configuration while retaining user
+  /// preferences and the non-authoritative owner cache as documented in ADR-014.
+  factory WorkspaceLifecyclePreferences.afterLocalWorkspaceReset(
+    WorkspaceLifecyclePreferences previous,
+  ) =>
+      WorkspaceLifecyclePreferences(
+        desiredRuntime: DesiredRuntimeState.disconnected,
+        launchAtLogin: previous.launchAtLogin,
+        managementLockPreference: previous.managementLockPreference,
+        autoLockTimeout: previous.autoLockTimeout,
+        ownerUserId: previous.ownerUserId,
+        ownerDisplayName: previous.ownerDisplayName,
+      );
 }
