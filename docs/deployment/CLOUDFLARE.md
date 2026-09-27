@@ -113,6 +113,17 @@ runs the V7 runtime assignment and inventory recovery end-to-end tests. These
 tests use the same Workspace Gateway URI and protocol preflight as the desktop
 runtime; a failure stops the production deployment.
 
+After deploying `app.conclaveax.com`, the same workflow runs
+`scripts/production-workspace-gateway-smoke.mjs` as a production acceptance
+gate. It creates a uniquely named temporary user, Workspace, and runtime
+credential in production D1, verifies the required Gateway tables, performs an
+HTTP/1.1 WebSocket upgrade, sends `workspace.hello`, requires the matching
+`workspace.hello.ack`, requests synchronization and requires a correlated
+`workspace.sync.result`, verifies the session row, and deletes the temporary
+Workspace and user in a `finally` cleanup. The runtime token is generated for
+that run and is never written to workflow logs or a URL. A failed handshake,
+protocol exchange, schema check, or cleanup fails the deployment workflow.
+
 The custom-domain route in `infra/cloudflare/app.wrangler.jsonc` targets `app.conclaveax.com`. Because `conclaveax.com` is already on Cloudflare, the Worker custom domain can create/manage the required DNS routing and certificate during deployment.
 
 ## Durable Objects & Database Migrations
