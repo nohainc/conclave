@@ -895,6 +895,17 @@ Put Release/Reset under Advanced with warnings.
 Users can distinguish account state, runtime participation, transport health,
 and local lock state without reading diagnostics.
 
+## Implementation status
+
+Implemented in the Workspace dashboard: connected installations now show
+account identity and Lock, connection mode and fallback explanation, startup
+preference, active assignment count, configured/ready Worker counts, Work Root,
+and version/update state as separate sections. Disconnect, Release, Reset, and
+Sign out are grouped under Advanced & Diagnostics. The signed-in/disconnected
+surface presents Account, Computer, explicit disconnected status, and Connect
+Workspace while retaining the Worker onboarding guidance. The existing shell
+router continues to gate these surfaces by authentication and lock state.
+
 ---
 
 # Phase 12 — Menu-bar lifecycle

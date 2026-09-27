@@ -414,14 +414,20 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('Reconnect Workspace'), findsOneWidget);
+    expect(find.text('Connect Workspace'), findsOneWidget);
     expect(
       find.text('Connect this computer before configuring Workers.'),
       findsOneWidget,
     );
-    expect(find.text('Workspace'), findsNothing);
+    expect(find.text('Workspace'), findsOneWidget);
     expect(find.text('Workers'), findsNothing);
+    expect(find.text('Release Workspace from account'), findsNothing);
+    await tester.ensureVisible(find.text('Advanced & Diagnostics'));
+    await tester.tap(find.text('Advanced & Diagnostics'));
+    await tester.pumpAndSettle();
     expect(find.text('Release Workspace from account'), findsOneWidget);
+    await tester.ensureVisible(find.text('Release Workspace from account'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Release Workspace from account'));
     expect(released, isTrue);
   });
@@ -704,14 +710,26 @@ void main() {
       ),
       onRetry: () async => retried = true,
       onRecoverCredential: () async => recoveryPrepared = true,
+      credentialStore: _MemoryCredentialStore()
+        ..values[desktopHumanCredentialKey] = jsonEncode({
+          'credential': 'human-session',
+          'sessionId': 'session-1',
+          'userId': 'user-1',
+          'displayName': 'Test User',
+          'email': 'test@example.com',
+          'expiresAt': DateTime.now()
+              .add(const Duration(hours: 1))
+              .toUtc()
+              .toIso8601String(),
+        }),
     );
 
     expect(find.text('Network unavailable'), findsOneWidget);
-    expect(find.text('Offline'), findsOneWidget);
+    expect(find.text('Offline'), findsWidgets);
     expect(find.text('Pairing code'), findsNothing);
     expect(find.widgetWithText(FilledButton, 'Connect'), findsNothing);
     expect(find.text('Retry connection'), findsOneWidget);
-    expect(find.text('Reconnect Workspace'), findsOneWidget);
+    expect(find.text('Connect Workspace'), findsOneWidget);
     expect(find.byTooltip('Copy error message'), findsOneWidget);
     await tester.tap(find.byTooltip('Copy error message'));
     await tester.pump();
@@ -719,7 +737,9 @@ void main() {
     expect(find.text('Error message copied'), findsOneWidget);
     await tester.tap(find.text('Retry connection'));
     expect(retried, isTrue);
-    await tester.tap(find.text('Reconnect Workspace'));
+    await tester.ensureVisible(find.text('Connect Workspace'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Connect Workspace'));
     expect(recoveryPrepared, isTrue);
   });
 
@@ -740,6 +760,7 @@ void main() {
         paired: true,
         workspaceReady: true,
         cloudConnected: true,
+        activeTransportMode: 'websocket',
         workspaceName: 'MacBook Pro',
         workspaceId: 'ws-123',
         hostId: 'host-a',
@@ -761,11 +782,17 @@ void main() {
     // Header actions: 3-lines menu icon, no duplicate button in header
     expect(find.byIcon(Icons.menu), findsOneWidget);
 
-    // Streamlined Workspace tab: Workspace title, display name, Connected indicator, Work Root and Advanced & Diagnostics
+    // Lifecycle sections are visible without opening diagnostics.
     expect(find.text('Workspace'), findsWidgets);
     expect(find.text('MacBook Pro'), findsOneWidget);
-    expect(find.text('Connected'), findsOneWidget);
+    expect(find.text('Connection'), findsOneWidget);
+    expect(find.text('Connected · WebSocket'), findsOneWidget);
+    expect(find.text('Startup'), findsOneWidget);
+    expect(find.text('Current work'), findsOneWidget);
+    expect(find.text('Workers'), findsWidgets);
+    expect(find.text('View Workers'), findsOneWidget);
     expect(find.text('Work Root'), findsOneWidget);
+    expect(find.text('Application'), findsOneWidget);
     expect(find.text('Advanced & Diagnostics'), findsOneWidget);
 
     // No pairing form is shown when paired
@@ -775,7 +802,7 @@ void main() {
 
     // Removed sections are not on the Workspace tab
     expect(find.text('Current Work'), findsNothing);
-    expect(find.text('View Workers'), findsNothing);
+    expect(find.text('View Workers'), findsOneWidget);
     expect(find.bySemanticsLabel('Workspace status'), findsNothing);
   });
 
@@ -890,6 +917,7 @@ void main() {
         title: 'Workspace is ready',
         detail: 'Ready',
         paired: true,
+        workspaceReady: true,
         cloudConnected: true,
         workspaceId: 'ws-test-123',
         hostId: 'runtime-host-a',
@@ -957,7 +985,7 @@ void main() {
     expect(retried, isTrue);
   });
 
-  testWidgets('workspace tab displays work root and Account lifecycle actions',
+  testWidgets('workspace tab separates status from advanced lifecycle actions',
       (tester) async {
     var disconnected = false;
     var released = false;
@@ -988,6 +1016,7 @@ void main() {
         paired: true,
         workspaceReady: true,
         cloudConnected: true,
+        activeTransportMode: 'websocket',
         workspaceName: 'Office Mac',
         workspaceId: 'ws-456',
         hostId: 'host-456',
@@ -1002,6 +1031,10 @@ void main() {
 
     expect(find.text('Work Root'), findsOneWidget);
     expect(find.text('/workspace/root'), findsOneWidget);
+    expect(find.text('Disconnect Workspace'), findsNothing);
+    await tester.tap(find.text('Advanced & Diagnostics'));
+    await tester.pumpAndSettle();
+    expect(find.text('Workspace management'), findsOneWidget);
 
     final disconnectBtn = find.text('Disconnect Workspace');
     await tester.ensureVisible(disconnectBtn);
