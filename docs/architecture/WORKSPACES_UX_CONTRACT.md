@@ -1,6 +1,6 @@
 # Conclave AX Workspaces UX and Data Contract
 
-**Status:** Workspaces UI/model migration, Phase A6 compatibility handling, and pairing-first onboarding cleanup are implemented.
+**Status:** Current Workspace read model; desktop-auth/read-only-AX migration defined by ADR-013 is the next product direction.
 
 **Applies to:** Conclave AX and its Cloud read models.
 
@@ -22,8 +22,9 @@ Workspaces
 - A Workspace is the Cloud resource representing one enrolled machine runtime.
 - A Workspace contains its synchronized Workers. A Worker belongs to exactly
   one owning Workspace.
-- Workers are visible and schedulable in AX, but have no independent
-  top-level page or global inventory destination.
+- Workers are visible in AX, but have no independent top-level page or global
+  inventory destination. Normal AX Workspace UI is read-only for runtime and
+  local Worker lifecycle state.
 - Workers are created, authenticated, permissioned, and removed locally in
   Conclave Workspace. AX never configures their local execution environment.
 - Project access is managed as a Workspace Grant in AX. A Workspace can be
@@ -123,11 +124,12 @@ adapter version, capabilities, concurrency limits, and safe local remediation
 guidance. Worker configuration and authentication are explicitly managed in
 Conclave Workspace on the owning computer.
 
-AX may enable, disable, or drain scheduling. AX may not create or locally
-remove a Worker, set credentials, approve local permissions, install a CLI,
-change an endpoint, or change local model configuration. For local attention,
-AX says what needs attention and identifies the owning Workspace where the
-user can complete it.
+The current backend still contains Cloud scheduling enable/disable/drain APIs,
+but ADR-013 removes those actions from the normal AX Workspaces UI for this
+phase. AX may not create/remove a local Worker, set credentials, approve local
+permissions, install a CLI, change an endpoint, repair the runtime connection,
+or change local model configuration. Local attention is informational and
+points to Conclave Workspace.
 
 The current Cloud Worker API is V7-shaped: `GET /api/v7/workers` reads the
 safe inventory projection, `GET /api/v7/workers/:id/scheduling` reads the
@@ -176,14 +178,14 @@ returned to AX.
 
 | Concern | Owner | AX treatment |
 | --- | --- | --- |
-| Workspace record, name, lifecycle, user role | Cloud | Show and manage according to role |
+| Workspace record, name, lifecycle, user role | Cloud with desktop-authenticated owner actions | Show read-only operational state in Workspaces |
 | Runtime credential, live connection, last-seen time | Cloud and paired runtime protocol | Show connected/offline and last seen |
 | OS, architecture, app version | Workspace reports; Cloud stores safe facts | Show concise machine identity; diagnostics retain detail |
 | Worker existence/configuration and Worker ID | Conclave Workspace | Show safe synchronized Worker projection |
 | Provider credentials and authentication | Conclave Workspace secure storage | Never read or write from AX |
 | Local permissions, CLI/prerequisite state, adapter health | Conclave Workspace | Show only safe readiness/attention summary |
 | Local concurrency ceiling | Conclave Workspace | Display only when useful; Cloud cannot increase it |
-| Cloud Worker scheduling state and Cloud concurrency ceiling | Cloud | AX scheduling controls operate here |
+| Cloud Worker scheduling state and Cloud concurrency ceiling | Cloud | Show if useful; normal AX Workspaces UI does not mutate it in ADR-013 phase |
 | Workspace-to-Project grants and Workstream policy | Cloud | AX owns authorization and grant controls |
 | Active assignments, run attribution, audit | Cloud | Summarize activity; retain detailed audit views as needed |
 | Work Root, local files, process state, logs | Conclave Workspace | Do not expose local paths or secrets in ordinary AX UI |
@@ -211,15 +213,16 @@ credentials.
   machine/settings sections. Workspace settings such as rename, reconnect,
   download, update status, and revoke live in the card's overflow menu or a
   focused dialog.
-- Empty state says **No Workspaces connected**, explains that connecting a
-  Conclave Workspace computer makes local Workers available to Projects, and
-  offers **Connect Workspace** plus **Download Conclave Workspace**.
-- Pairing creates a temporary owner-scoped intent, not a permanent Workspace.
-  While unpaired, the desktop proposes the OS-friendly computer name as an
-  editable Workspace display name (falling back to the cleaned hostname when
-  unavailable). The user can change it before claiming the one-time code;
-  Cloud creates the Workspace and runtime identity only after a successful
-  claim. Existing paired Workspaces remain available during migration.
+- Empty state says **No Workspaces connected**, explains that installing
+  Conclave Workspace and signing in on that computer will register it
+  automatically, and offers **Download Conclave Workspace**. Normal AX no
+  longer creates pairing codes.
+- Target onboarding is desktop-authenticated registration, not AX pairing:
+  the user signs in from Conclave Workspace, confirms the OS-friendly computer
+  name, and the desktop registers/recovers its installation using the human
+  management session. Cloud creates or restores the Workspace/runtime only for
+  the authenticated owner. Existing pairing remains as a migration path until
+  supported old desktop releases age out.
 - New V7 execution Workspaces cannot be created with `POST /api/workspaces`;
   that endpoint returns `410 Gone` for the V7 authorization model. AX uses
   pairing intents. The retained non-V7 handler path exists only for historical
@@ -232,14 +235,11 @@ credentials.
 - An offline Workspace with an active runtime identity remains paired. AX
   keeps showing it as offline and does not ask it to claim a new code. Its
   saved runtime credential and Gateway reconnect path remain authoritative.
-- If the desktop has a saved pairing but its OS secure store no longer has the
-  runtime credential, the connection error offers **Prepare to pair again**.
-  The owner first revokes the stale Workspace in AX. Desktop recovery then
-  clears only its Cloud registration and stale runtime credential, preserves
-  installation identity and local Worker state, and marks the next claim as an
-  explicit recovery. The new claim creates a new Cloud Workspace/runtime ID;
-  Project grants must be restored. **Reset Everything** is not part of this
-  recovery.
+- If the desktop is missing/rejected for its runtime credential, it uses its
+  human desktop session over HTTPS to inspect ownership and recover/rotate the
+  runtime credential. Normal recovery does not require AX and does not expose a
+  **Repair pairing** action. An installation owned by a different User is an
+  explicit ownership conflict and is never transferred silently.
 - Worker inventory appears only after the desktop has synchronized it.
 - Home may summarize Projects, Workspaces, and Active Runs. It must not make
   Workers a separate top-level destination; a Ready Workers metric, if kept,
@@ -318,3 +318,15 @@ when an inventory identity is available.
 - AX cannot use its Worker UI to mutate local credentials, permissions, or
   Worker configuration.
 - Historical route aliases remain supported during migration.
+
+
+## ADR-013 target state
+
+The Workspaces page becomes an operationally read-only view of the user's
+registered machines and synchronized Workers. It may display
+`WebSocket` or `HTTPS fallback` as the observed connection mode. Workspace
+registration, recovery, sign-in, local Worker management and transport
+selection live in Conclave Workspace. Project membership, Workspace Grants and
+Workstream execution policy remain Cloud/AX collaboration concerns.
+
+See [ADR-013](../decisions/ADR-013-desktop-auth-and-dual-transport.md).
