@@ -106,6 +106,11 @@ deliberately disconnected Workspace stays disconnected after restart. Closing
 the window leaves the runtime running. Locking protects management UI without
 stopping runtime work.
 
+Workspace error and warning messages include a copy action where they are
+shown, including transient notifications and Worker setup details. Copying a
+message copies its displayed text; it does not extend the message's existing
+display timeout.
+
 Disconnect preserves installation ownership and local Workers/provider
 credentials. Release ownership is a separate advanced action for a disconnected
 Workspace and permits a different account to connect. Reset local Workspace

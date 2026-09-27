@@ -22,34 +22,9 @@ import 'workspace_runtime.dart';
 import 'workspace_lifecycle_store.dart';
 import 'workspace_lifecycle.dart';
 import 'local_management_authenticator.dart';
+import 'copyable_messages.dart';
 
-void showCopyableErrorSnackBar(BuildContext context, String message) {
-  final colors = Theme.of(context).colorScheme;
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      duration: const Duration(seconds: 20),
-      backgroundColor: colors.error,
-      content: Row(
-        children: [
-          Expanded(child: SelectableText(message)),
-          IconButton(
-            tooltip: 'Copy error message',
-            visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.copy, size: 18),
-            color: colors.onError,
-            onPressed: () async {
-              await Clipboard.setData(ClipboardData(text: message));
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Error message copied')),
-              );
-            },
-          ),
-        ],
-      ),
-    ),
-  );
-}
+export 'copyable_messages.dart' show showCopyableErrorSnackBar;
 
 bool _hasValidCachedDesktopSession(SecureCredentialStore credentialStore) {
   try {
@@ -955,9 +930,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         final detail = authenticationError == null
             ? 'Authentication was canceled or not accepted. Workspace remains locked.'
             : 'Could not authenticate: $authenticationError';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(detail)),
-        );
+        showCopyableMessageSnackBar(context, detail, isError: true);
       }
       return;
     }
@@ -982,9 +955,10 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     if (!authenticated && mounted) {
       final context = _navigatorKey.currentContext;
       if (context != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Local authentication was not completed.')),
+        showCopyableMessageSnackBar(
+          context,
+          'Local authentication was not completed.',
+          isError: true,
         );
       }
     }
@@ -1050,7 +1024,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         context: dialogContext,
         builder: (context) => AlertDialog(
           title: const Text('Assignments are running'),
-          content: Text(
+          content: CopyableMessageText(
             'There ${initialCount == 1 ? 'is 1 active assignment' : 'are $initialCount active assignments'}. '
             'Drain and quit stops accepting new work, waits for active assignments to finish, then closes the runtime. '
             'If they do not finish within 15 seconds, the Workspace stays open.',
@@ -1093,7 +1067,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
             context: dialogContext,
             builder: (context) => AlertDialog(
               title: const Text('Assignments are still running'),
-              content: Text(
+              content: CopyableMessageText(
                 'The Workspace remains open with ${connection.activeAssignmentCount} active assignments. '
                 '${acceptingBeforeDrain ? 'New work has resumed.' : 'New work remains paused.'}',
               ),
@@ -1125,7 +1099,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
           context: dialogContext,
           builder: (context) => AlertDialog(
             title: const Text('Unable to Quit'),
-            content: Text(
+            content: CopyableMessageText(
               'An error occurred while stopping the Workspace: $error\n\n'
               'Conclave Workspace did not close.',
             ),
@@ -1589,10 +1563,10 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     final dialogContext = _navigatorKey.currentContext;
     if (registration == null || dialogContext == null) return;
     if ((lifecycle.host.cloudConnection?.activeAssignmentCount ?? 0) > 0) {
-      ScaffoldMessenger.of(dialogContext).showSnackBar(
-        const SnackBar(
-            content: Text(
-                'Wait for active work to finish before releasing Workspace ownership.')),
+      showCopyableMessageSnackBar(
+        dialogContext,
+        'Wait for active work to finish before releasing Workspace ownership.',
+        isError: true,
       );
       return;
     }
@@ -1837,10 +1811,10 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     if (dialogContext == null) return;
 
     if ((lifecycle.host.cloudConnection?.activeAssignmentCount ?? 0) > 0) {
-      ScaffoldMessenger.of(dialogContext).showSnackBar(
-        const SnackBar(
-          content: Text('Wait for active work to finish before resetting.'),
-        ),
+      showCopyableMessageSnackBar(
+        dialogContext,
+        'Wait for active work to finish before resetting.',
+        isError: true,
       );
       return;
     }
@@ -4234,8 +4208,9 @@ class _WorkersTabState extends State<_WorkersTab> {
           const Card(
             child: Padding(
               padding: EdgeInsets.all(20),
-              child: Text(
-                  'Local Worker setup is unavailable. Restart Workspace and check Diagnostics.'),
+              child: CopyableMessageText(
+                'Local Worker setup is unavailable. Restart Workspace and check Diagnostics.',
+              ),
             ),
           )
         else
@@ -4246,10 +4221,11 @@ class _WorkersTabState extends State<_WorkersTab> {
                 return Card(
                   child: Padding(
                     padding: const EdgeInsets.all(20),
-                    child: Text(
+                    child: CopyableMessageText(
                       'Worker registry needs repair: ${snapshot.error}',
                       style:
                           TextStyle(color: Theme.of(context).colorScheme.error),
+                      iconColor: Theme.of(context).colorScheme.error,
                     ),
                   ),
                 );
@@ -4357,7 +4333,7 @@ class _WorkersTabState extends State<_WorkersTab> {
                                             deriveLocalWorkerHealth(worker)) !=
                                         null) ...[
                                       const SizedBox(height: 4),
-                                      Text(
+                                      CopyableMessageText(
                                         _healthReasonExplanation(
                                             deriveLocalWorkerHealth(worker))!,
                                         style: TextStyle(
@@ -4365,6 +4341,7 @@ class _WorkersTabState extends State<_WorkersTab> {
                                           color: theme.colorScheme.error,
                                           fontWeight: FontWeight.w500,
                                         ),
+                                        iconColor: theme.colorScheme.error,
                                       ),
                                     ],
                                   ],
@@ -4833,35 +4810,11 @@ class _HostRecoveryPanel extends StatelessWidget {
               style: TextStyle(
                   color: colors.onErrorContainer, fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: SelectableText(
-                  issue ?? 'The Workspace needs attention.',
-                  style: TextStyle(color: colors.onErrorContainer),
-                ),
-              ),
-              if (issue != null && issue!.isNotEmpty)
-                IconButton(
-                  tooltip: 'Copy error message',
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 36,
-                    minHeight: 36,
-                  ),
-                  icon: const Icon(Icons.copy, size: 18),
-                  color: colors.onErrorContainer,
-                  onPressed: () async {
-                    await Clipboard.setData(ClipboardData(text: issue!));
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Error message copied')),
-                    );
-                  },
-                ),
-            ],
+          CopyableMessageText(
+            issue ?? 'The Workspace needs attention.',
+            style: TextStyle(color: colors.onErrorContainer),
+            iconColor: colors.onErrorContainer,
+            tooltip: 'Copy error message',
           ),
           const SizedBox(height: 8),
           Text(

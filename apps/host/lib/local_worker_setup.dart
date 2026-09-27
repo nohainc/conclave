@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 
 import 'adapter_prerequisite.dart';
+import 'copyable_messages.dart';
 import 'configured_worker_registry.dart';
 import 'secure_credentials.dart';
 
@@ -942,10 +943,13 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
               ],
               if (_authenticationMessage != null) ...[
                 const SizedBox(height: 8),
-                Text(
+                CopyableMessageText(
                   _authenticationMessage!,
-                  style:
-                      TextStyle(color: theme.colorScheme.error, fontSize: 13),
+                  style: TextStyle(
+                    color: theme.colorScheme.error,
+                    fontSize: 13,
+                  ),
+                  iconColor: theme.colorScheme.error,
                 ),
               ],
               const SizedBox(height: 12),
@@ -1035,13 +1039,17 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
               ),
               if (_prerequisiteMessage != null) ...[
                 const SizedBox(height: 8),
-                Text('Prerequisite check: $_prerequisiteMessage',
-                    style: theme.textTheme.bodySmall),
+                CopyableMessageText(
+                  'Prerequisite check: $_prerequisiteMessage',
+                  style: theme.textTheme.bodySmall,
+                ),
               ],
               if (_adapterMessage != null) ...[
                 const SizedBox(height: 8),
-                Text('Adapter check: $_adapterMessage',
-                    style: theme.textTheme.bodySmall),
+                CopyableMessageText(
+                  'Adapter check: $_adapterMessage',
+                  style: theme.textTheme.bodySmall,
+                ),
               ],
               if (_error != null) ...[
                 const SizedBox(height: 10),
@@ -1058,11 +1066,13 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
                           size: 16, color: theme.colorScheme.error),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(
+                        child: CopyableMessageText(
                           _error!,
                           style: TextStyle(
-                              color: theme.colorScheme.onErrorContainer,
-                              fontSize: 13),
+                            color: theme.colorScheme.onErrorContainer,
+                            fontSize: 13,
+                          ),
+                          iconColor: theme.colorScheme.onErrorContainer,
                         ),
                       ),
                     ],
