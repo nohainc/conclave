@@ -331,3 +331,26 @@ selection live in Conclave Workspace. Project membership, Workspace Grants and
 Workstream execution policy remain Cloud/AX collaboration concerns.
 
 See [ADR-013](../decisions/ADR-013-desktop-auth-and-dual-transport.md).
+
+## Desktop lifecycle visibility contract
+
+ADR-014 refines the desktop side of this UX contract:
+
+- **Signed out:** Conclave Workspace shows a dedicated Sign in shell only; the
+  Workspace and Workers tabs are hidden.
+- **Signed in / disconnected:** show account/computer identity and **Connect
+  Workspace**. Do not expose Worker management yet.
+- **Connected / unlocked:** show the normal **Workspace** and **Workers** tabs.
+- **Connected / locked:** keep the runtime online but hide management details
+  until native local authentication succeeds.
+- **Connected / reauth required:** runtime execution may continue, but the user
+  must reauthenticate as the same Workspace owner before management controls
+  return.
+- Human Sign in does not itself create/recover the runtime after the ADR-014
+  migration; **Connect Workspace** does.
+- A connected installation cannot switch to another Conclave user. Explicit
+  Disconnect and Release ownership are required before an ownership change.
+- Connected installations may launch/reconnect automatically at OS login. AX
+  remains a read-only operational view of that state.
+
+See [ADR-014](../decisions/ADR-014-workspace-desktop-lifecycle.md).

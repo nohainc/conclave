@@ -62,6 +62,7 @@ Adapter processes run as separate per-assignment child processes under Conclave 
 - [v7 implementation audit](docs/architecture/V7_IMPLEMENTATION_AUDIT.md)
 - [v7 completion plan](docs/roadmaps/ARCHITECTURE_V7_COMPLETION.md)
 - [Workspace desktop auth and dual-transport plan](docs/roadmaps/WORKSPACE_AUTH_TRANSPORT_IMPLEMENTATION.md)
+- [Workspace desktop lifecycle plan](docs/roadmaps/WORKSPACE_DESKTOP_LIFECYCLE_IMPLEMENTATION.md)
 - [Workspace and adapter release operations](docs/deployment/WORKSPACE_RELEASES.md)
 - [Release trust and key rotation](docs/security/RELEASE_TRUST_AND_ROTATION.md)
 - [AI Development Rules](AGENTS.md)

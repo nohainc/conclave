@@ -110,11 +110,15 @@ One normal Conclave Workspace installation runs per machine/OS-user installation
 
 Configured Workers are created/authenticated locally and belong to exactly one Workspace. Safe Worker inventory is synchronized to Cloud for scheduling and remote control.
 
-Conclave Workspace is background-first. Its GUI is intentionally limited to
-local concerns such as account/session state, Workspace registration/recovery,
-Workers, provider authentication, permissions, current local work, connection
-mode, diagnostics and updates. Human desktop authentication is distinct from
-the machine runtime credential; provider credentials remain local.
+Conclave Workspace is background-first. Human desktop authentication is
+distinct from Workspace runtime participation and from Worker/provider
+credentials. Signing in establishes management identity; an explicit **Connect
+Workspace** action registers/recovers runtime participation. A connected
+Workspace may auto-start/reconnect in the background after OS login using its
+runtime credential even when the human management session later requires
+reauthentication. The management UI may be locally locked without stopping
+runtime execution. Signed-out and locked users do not see the normal Workspace
+or Workers management surfaces. Provider credentials remain local.
 
 Projects, Workstreams, Discuss, Work orchestration and Project administration remain in Conclave AX.
 
@@ -199,3 +203,12 @@ The target desktop ownership/connection model is defined by
 [implementation plan](../roadmaps/WORKSPACE_AUTH_TRANSPORT_IMPLEMENTATION.md).
 WebSocket remains the preferred runtime transport; HTTPS long-poll is the
 fallback. AX is not required for normal Workspace repair or registration.
+
+## Desktop lifecycle
+
+The canonical Workspace desktop lifecycle is defined by
+[ADR-014](../decisions/ADR-014-workspace-desktop-lifecycle.md) and its
+[implementation plan](../roadmaps/WORKSPACE_DESKTOP_LIFECYCLE_IMPLEMENTATION.md).
+The product distinguishes Sign in, Connect/Disconnect Workspace, Lock/Unlock,
+Release ownership, Sign out, and Reset. These actions must not be aliases for
+one another.

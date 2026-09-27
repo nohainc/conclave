@@ -116,3 +116,35 @@ Version `1.0` is frozen for the first implementation sequence. Breaking shape
 or semantic changes require a new major contract version. Additive optional
 fields may be introduced only in a compatible minor version and must be
 supported by both Cloud and desktop before use.
+
+## Desktop lifecycle semantics
+
+ADR-014 adds lifecycle semantics around these unchanged credential/transport
+contracts.
+
+Human authentication and runtime participation are independent:
+
+~~~text
+DesktopHumanSessionCredential present
+!= WorkspaceRuntimeCredential active
+~~~
+
+A successful desktop-auth claim establishes management identity only. The
+client invokes Workspace registration/recovery when the user explicitly chooses
+**Connect Workspace**. Existing connected installations may start/reconnect the
+runtime after reboot using a valid Workspace runtime credential without first
+refreshing the human desktop session.
+
+Clients should persist non-secret desired lifecycle state separately from these
+wire credentials, including at minimum whether runtime participation is intended
+(`connected` or `disconnected`). Runtime credentials remain in secure storage.
+
+If a management session expires while runtime transport remains authorized, the
+runtime continues and management transitions to reauthentication-required. The
+same owner must reauthenticate. A different User cannot use a desktop human
+session to assume ownership of an already-owned installation.
+
+Disconnect and ownership release are intentionally different operations:
+Disconnect stops/revokes runtime participation while retaining installation
+ownership; Release ownership is a separate management operation required before
+another account may claim the installation.

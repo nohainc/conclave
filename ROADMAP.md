@@ -65,3 +65,7 @@ collaboration and authorization remain in AX/Cloud.
 Implementation sequence:
 
 [Workspace Desktop Authentication and Dual-Transport Implementation](docs/roadmaps/WORKSPACE_AUTH_TRANSPORT_IMPLEMENTATION.md)
+
+ADR-014 refines the desktop lifecycle after the first ADR-013 implementation: human Sign in no longer implies runtime connection, signed-out/locked shells hide management controls, connected runtimes auto-start/reconnect after OS login, and account switching requires explicit disconnect/release ownership.
+
+[Workspace Desktop Lifecycle Implementation](docs/roadmaps/WORKSPACE_DESKTOP_LIFECYCLE_IMPLEMENTATION.md)
