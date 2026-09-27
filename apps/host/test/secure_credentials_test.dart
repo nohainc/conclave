@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:conclave_host/secure_credentials.dart';
+import 'package:conclave_host/secure_credentials_flutter.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -32,7 +33,10 @@ void main() {
         .instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null));
 
-    const store = PlatformSecureCredentialStore(platform: 'macos');
+    const store = PlatformSecureCredentialStore(
+      platform: 'macos',
+      nativeKeychain: FlutterMacKeychainBridge(),
+    );
     const account = 'runtime-test';
     const token = 'test-only-runtime-secret';
     await store.write(account, token);

@@ -30,9 +30,11 @@ Set<WorkerPermission> _configuredPermissions() {
 Future<Host> buildWorkspaceRuntime(
   HostConfig config, {
   List<String> restartArgs = const [],
+  SecureCredentialStore? credentialStore,
 }) async {
   final workerTrustPolicy = workspaceReleaseTrustPolicy();
-  const credentialStore = PlatformSecureCredentialStore();
+  final secureCredentialStore =
+      credentialStore ?? const PlatformSecureCredentialStore();
   final workerExecutor = WorkerProcessExecutor();
   final releaseTrustPolicy = workerTrustPolicy;
   final installationId = await InstallationIdentityStore(
@@ -95,7 +97,7 @@ Future<Host> buildWorkspaceRuntime(
       }
       final adapter = await v7AdapterPackageStore.resolve(
         worker: worker,
-        readCredential: credentialStore.read,
+        readCredential: secureCredentialStore.read,
       );
       if (adapter == null) {
         throw StateError(
@@ -266,6 +268,7 @@ Future<Host> buildWorkspaceRuntime(
   }
   final engine = Host(
     config: effectiveConfig,
+    credentialStore: secureCredentialStore,
     localWorkerRegistry: localWorkerRegistry,
     cloudConnection: connection,
     adapterPackageStore: v7AdapterPackageStore,

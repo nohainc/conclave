@@ -11,6 +11,7 @@ import 'host.dart';
 import 'host_configuration.dart';
 import 'local_worker_setup.dart';
 import 'secure_credentials.dart';
+import 'secure_credentials_flutter.dart';
 import 'v7_adapter_package_store.dart';
 import 'v7_adapter_catalog.dart';
 import 'workspace_enrollment.dart';
@@ -545,7 +546,9 @@ class HostUiSnapshot {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  const credentialStore = PlatformSecureCredentialStore();
+  const credentialStore = PlatformSecureCredentialStore(
+    nativeKeychain: FlutterMacKeychainBridge(),
+  );
   final dataDirectory = HostConfig.resolveDataDirectory(const []);
   final registration = HostRegistrationStore(dataDirectory).readSync();
   if (registration != null) {
@@ -555,7 +558,10 @@ Future<void> main() async {
     const [],
     credentialStore: credentialStore,
   );
-  final host = await buildWorkspaceRuntime(config);
+  final host = await buildWorkspaceRuntime(
+    config,
+    credentialStore: credentialStore,
+  );
   runApp(ConclaveHostApp(lifecycle: HostLifecycleController(host)));
 }
 
@@ -767,7 +773,10 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         const [],
         credentialStore: lifecycle.host.credentialStore,
       );
-      final replacement = await buildWorkspaceRuntime(config);
+      final replacement = await buildWorkspaceRuntime(
+        config,
+        credentialStore: lifecycle.host.credentialStore,
+      );
       await lifecycle.replaceHost(replacement);
       if (mounted) {
         setState(() => _workerRevision++);
@@ -849,6 +858,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
           const [],
           credentialStore: lifecycle.host.credentialStore,
         ),
+        credentialStore: lifecycle.host.credentialStore,
       );
       await lifecycle.replaceHost(replacement);
       if (mounted) {
@@ -907,13 +917,15 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         dataDirectory: dataDirectory,
         credentialStore: lifecycle.host.credentialStore,
       ).preparePairingRecovery();
-      final replacement = await buildWorkspaceRuntime(HostConfig(
-        dataDirectory: dataDirectory,
-        installationId:
-            registration.installationId ?? lifecycle.host.config.installationId,
-        repositoriesFile: lifecycle.host.config.repositoriesFile,
-        workRootPath: lifecycle.host.config.workRootPath,
-      ));
+      final replacement = await buildWorkspaceRuntime(
+          HostConfig(
+            dataDirectory: dataDirectory,
+            installationId: registration.installationId ??
+                lifecycle.host.config.installationId,
+            repositoriesFile: lifecycle.host.config.repositoriesFile,
+            workRootPath: lifecycle.host.config.workRootPath,
+          ),
+          credentialStore: lifecycle.host.credentialStore);
       await lifecycle.replaceHost(replacement);
       if (mounted) {
         setState(() => _workerRevision++);
@@ -1020,6 +1032,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
           const [],
           credentialStore: lifecycle.host.credentialStore,
         ),
+        credentialStore: lifecycle.host.credentialStore,
       );
       await lifecycle.replaceHost(replacement);
       if (mounted) {
@@ -1095,7 +1108,10 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       authToken: currentHost.config.authToken,
       workRootPath: newPath,
     );
-    final replacement = await buildWorkspaceRuntime(updatedConfig);
+    final replacement = await buildWorkspaceRuntime(
+      updatedConfig,
+      credentialStore: currentHost.credentialStore,
+    );
     await widget.lifecycle.replaceHost(replacement);
     if (mounted) {
       setState(() {});

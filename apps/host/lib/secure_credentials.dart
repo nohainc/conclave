@@ -1,7 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter/services.dart';
-
 import 'credential_backend.dart';
 
 /// OS-backed storage for credentials used by the Host.
@@ -15,20 +13,33 @@ abstract interface class SecureCredentialStore {
   Future<void> delete(String key);
 }
 
+abstract interface class NativeSecureCredentialBridge {
+  Future<String?> read({required String service, required String account});
+
+  Future<void> write({
+    required String service,
+    required String account,
+    required String value,
+  });
+
+  Future<void> delete({required String service, required String account});
+}
+
 /// Uses the platform's native credential service rather than a plaintext file.
 /// Unsupported platforms fail closed and return no credential.
 class PlatformSecureCredentialStore implements SecureCredentialStore {
   const PlatformSecureCredentialStore({
     this.service = 'com.conclaveax.host',
     String? platform,
+    this.nativeKeychain,
   }) : _platform = platform;
 
-  static const _macKeychain = MethodChannel('com.conclave.workspace/keychain');
   static final Map<String, String?> _cache = {};
   static final Set<String> _loaded = {};
 
   final String service;
   final String? _platform;
+  final NativeSecureCredentialBridge? nativeKeychain;
 
   String get _effectivePlatform => _platform ?? Platform.operatingSystem;
   bool _needsSynchronousCache(String key) => key.startsWith('runtime-');
@@ -59,20 +70,15 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
   Future<String?> read(String key) async {
     if (key.isEmpty) return null;
     if (_effectivePlatform == 'macos') {
-      try {
-        final value = await _macKeychain.invokeMethod<String>(
-          'read',
-          {'service': service, 'account': key},
-        );
+      final keychain = nativeKeychain;
+      if (keychain != null) {
+        final value = await keychain.read(service: service, account: key);
         if (_needsSynchronousCache(key)) {
           final cacheKey = _cacheKey(key);
           _cache[cacheKey] = value;
           _loaded.add(cacheKey);
         }
         return value;
-      } on MissingPluginException {
-        // Command-line development entry points do not register the Flutter
-        // Keychain channel. Preserve their legacy CLI read path.
       }
     }
     return readSync(key);
@@ -95,10 +101,13 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
       throw ArgumentError('credential key and value are required');
     }
     if (_effectivePlatform == 'macos') {
-      await _macKeychain.invokeMethod<void>(
-        'write',
-        {'service': service, 'account': key, 'value': value},
-      );
+      final keychain = nativeKeychain;
+      if (keychain == null) {
+        throw UnsupportedError(
+          'Native macOS Keychain access is unavailable in this process',
+        );
+      }
+      await keychain.write(service: service, account: key, value: value);
       if (_needsSynchronousCache(key)) {
         final cacheKey = _cacheKey(key);
         _cache[cacheKey] = value;
@@ -129,16 +138,16 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
   Future<void> delete(String key) async {
     if (key.isEmpty) return;
     if (_effectivePlatform == 'macos') {
-      await _macKeychain.invokeMethod<void>(
-        'delete',
-        {'service': service, 'account': key},
-      );
-      if (_needsSynchronousCache(key)) {
-        final cacheKey = _cacheKey(key);
-        _cache.remove(cacheKey);
-        _loaded.add(cacheKey);
+      final keychain = nativeKeychain;
+      if (keychain != null) {
+        await keychain.delete(service: service, account: key);
+        if (_needsSynchronousCache(key)) {
+          final cacheKey = _cacheKey(key);
+          _cache.remove(cacheKey);
+          _loaded.add(cacheKey);
+        }
+        return;
       }
-      return;
     }
     final command = currentCredentialBackend.delete(service, key);
     if (command == null) return;
