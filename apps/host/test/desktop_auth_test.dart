@@ -23,6 +23,24 @@ void main() {
     expect(intent.verificationUrl.path, '/desktop-auth/approve');
   });
 
+  test('restores the persisted desktop session shape without a wire audience',
+      () {
+    final session = DesktopHumanSession.fromSecureJson({
+      'credential': 'desktop-session-secret',
+      'sessionId': 'session-a',
+      'userId': 'user-a',
+      'displayName': 'User A',
+      'email': 'a@example.com',
+      'expiresAt': DateTime.now()
+          .toUtc()
+          .add(const Duration(days: 10))
+          .toIso8601String(),
+    });
+
+    expect(session.userId, 'user-a');
+    expect(session.toSecureJson(), isNot(contains('audience')));
+  });
+
   test('rotates the same desktop session using its current bearer credential',
       () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);

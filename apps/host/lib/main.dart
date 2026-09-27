@@ -1411,8 +1411,9 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       try {
         final decoded = jsonDecode(stored);
         if (decoded is Map) {
-          final session =
-              DesktopHumanSession.fromJson(Map<String, dynamic>.from(decoded));
+          final session = DesktopHumanSession.fromSecureJson(
+            Map<String, dynamic>.from(decoded),
+          );
           final client = DesktopAuthClient(
               cloudUrl: registration?.cloudUrl ?? conclaveProductionCloudUrl);
           try {
@@ -1458,7 +1459,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       if (decoded is! Map) {
         throw StateError('Sign in to your Conclave account first.');
       }
-      final session = DesktopHumanSession.fromJson(
+      final session = DesktopHumanSession.fromSecureJson(
         Map<String, dynamic>.from(decoded),
       );
       final authClient = DesktopAuthClient(cloudUrl: cloudUrl);
