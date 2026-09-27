@@ -339,6 +339,7 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
         hostname: hostname,
         cloudUrl: cloudUrl,
         workRootPath: workRootPath,
+        paired: hostId != null && workspaceId != null,
         statusLabel: 'Offline',
       );
     }
@@ -1790,8 +1791,14 @@ class _PairedWorkspaceCard extends StatelessWidget {
     final theme = Theme.of(context);
     final workspaceName =
         snapshot.workspaceName ?? snapshot.hostname ?? 'Conclave Workspace';
-    final isConnected =
-        snapshot.mode == HostUiMode.ready || snapshot.cloudConnected;
+    final isConnected = snapshot.mode == HostUiMode.ready ||
+        snapshot.mode == HostUiMode.active ||
+        snapshot.cloudConnected;
+    final connectionLabel = isConnected
+        ? 'Connected'
+        : snapshot.mode == HostUiMode.starting
+            ? 'Connecting...'
+            : 'Offline';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1823,7 +1830,7 @@ class _PairedWorkspaceCard extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Text(
-              isConnected ? 'Connected' : 'Connecting...',
+              connectionLabel,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,

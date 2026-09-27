@@ -297,11 +297,19 @@ void main() {
         title: 'Workspace is offline',
         detail: 'The Workspace could not connect.',
         issue: 'Network unavailable',
+        paired: true,
+        workspaceId: 'workspace-1',
+        hostId: 'runtime-1',
+        workspaceName: 'Development Mac',
       ),
       onRetry: () async => retried = true,
     );
 
     expect(find.text('Network unavailable'), findsOneWidget);
+    expect(find.text('Development Mac'), findsOneWidget);
+    expect(find.text('Offline'), findsNWidgets(2));
+    expect(find.text('Pairing code'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Connect'), findsNothing);
     expect(find.text('Retry connection'), findsOneWidget);
     expect(find.byTooltip('Copy error message'), findsOneWidget);
     await tester.tap(find.byTooltip('Copy error message'));
