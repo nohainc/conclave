@@ -146,11 +146,14 @@ critical runtime tables, and exercises the production Gateway connection,
 heartbeat, and disconnect statements. A clean active migration chain must
 support every SQL statement used by current Cloud runtime code.
 
-Gateway transport acceptance depends on runtime authentication and the
-Workspace online-state write, because the scheduler only selects online
-Workspaces. Session history and heartbeat/disconnect timestamps are
-observability data: their writes are queued and logged on failure, but cannot
-reject an authenticated connection or interrupt a heartbeat acknowledgement.
+The Workspace Gateway Durable Object is authoritative for live connection
+state. Workspace online/offline fields and session history are persisted
+projections: their writes are queued and logged on failure, but cannot reject
+an authenticated connection or interrupt a heartbeat acknowledgement. V7
+assignment selection checks the owning Gateway's live socket and runtime ID;
+it does not trust a stale database online flag. The Durable Object restores
+hibernated sockets from its accepted WebSocket attachments before answering
+status or dispatch requests.
 
 
 ## Backend deployment gate

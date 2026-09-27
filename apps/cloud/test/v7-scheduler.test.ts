@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { selectProjectExecutionTarget } from "../src/v7-scheduler.js";
 
 function candidate(overrides: Record<string, unknown> = {}) {
@@ -403,6 +403,43 @@ describe("V7 Project execution scheduler", () => {
           },
         ]),
         request,
+      ),
+    ).resolves.toBeNull();
+  });
+
+  it("uses live Workspace Gateway state instead of the persisted online projection", async () => {
+    const offlineProjection = {
+      ...candidate(),
+      workspace_id: "workspace-live",
+      runtime_identity_id: "runtime-live",
+      workspace_status: "offline",
+      cloud_scheduling_state: "enabled",
+      local_worker_status: "ready",
+      credential_status: "ready",
+      active_assignments: 0,
+    };
+    const request = {
+      projectId: "project-a",
+      requesterUserId: "user-requester",
+      role: "implementer",
+      capabilities: ["repository"],
+    };
+    const liveCheck = vi.fn(async () => true);
+    const target = await selectProjectExecutionTarget(
+      db([offlineProjection]),
+      request,
+      new Date(),
+      liveCheck,
+    );
+
+    expect(target?.workspaceId).toBe("workspace-live");
+    expect(liveCheck).toHaveBeenCalledWith("workspace-live", "runtime-live");
+    await expect(
+      selectProjectExecutionTarget(
+        db([{ ...offlineProjection, workspace_status: "online" }]),
+        request,
+        new Date(),
+        async () => false,
       ),
     ).resolves.toBeNull();
   });

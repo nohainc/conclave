@@ -218,7 +218,7 @@ export class WorkspaceGateway implements DurableObject {
   private workspaceRuntimeId: string | null = null;
   private sessionId: string | null = null;
   private correlationId: string | null = null;
-  private sessionWriteChain: Promise<void> = Promise.resolve();
+  private projectionWriteChain: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly state: DurableObjectState,
@@ -227,6 +227,7 @@ export class WorkspaceGateway implements DurableObject {
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    this.restoreAcceptedSocket();
     if (request.headers.get("Upgrade")?.toLowerCase() === "websocket") {
       return this.connectSocket(request, url);
     }
@@ -260,6 +261,32 @@ export class WorkspaceGateway implements DurableObject {
       return this.sendCheckoutCommand(request, "checkout.finalize");
     }
     return Response.json({ error: "Not found" }, { status: 404 });
+  }
+
+  private restoreAcceptedSocket(): void {
+    if (this.socket) return;
+    for (const socket of this.state.getWebSockets?.() ?? []) {
+      const attachment = socket.deserializeAttachment() as {
+        sessionId?: string;
+        executionWorkspaceId?: string;
+        workspaceRuntimeId?: string;
+        correlationId?: string;
+      } | null;
+      if (
+        !attachment?.sessionId ||
+        !attachment.executionWorkspaceId ||
+        !attachment.workspaceRuntimeId ||
+        socket.readyState !== WebSocket.OPEN
+      ) {
+        continue;
+      }
+      this.socket = socket;
+      this.sessionId = attachment.sessionId;
+      this.executionWorkspaceId = attachment.executionWorkspaceId;
+      this.workspaceRuntimeId = attachment.workspaceRuntimeId;
+      this.correlationId = attachment.correlationId ?? null;
+      return;
+    }
   }
 
   private async disconnectRuntime(request: Request): Promise<Response> {
@@ -362,16 +389,7 @@ export class WorkspaceGateway implements DurableObject {
       );
     }
 
-    // Workspace online state is an authorization/scheduling prerequisite, so
-    // persist it before accepting the transport. Session history is diagnostic
-    // and is written best-effort after the socket is accepted.
     const now = new Date().toISOString();
-    await this.env.CONCLAVE_DB.prepare(
-      "UPDATE execution_workspaces SET status = 'online', updated_at = ?1 WHERE id = ?2",
-    )
-      .bind(now, runtimeIdentity.executionWorkspaceId)
-      .run();
-
     logStructured("info", "GW-06 durable_object_runtime_authenticated", {
       requestId: correlationId,
       runtimeId: workspaceRuntimeId,
@@ -412,7 +430,21 @@ export class WorkspaceGateway implements DurableObject {
     this.sessionId = sessionId;
     this.correlationId = correlationId;
 
-    this.queueSessionWrite(
+    this.queueProjectionWrite(
+      () =>
+        this.env.CONCLAVE_DB.prepare(
+          "UPDATE execution_workspaces SET status = 'online', updated_at = ?1 WHERE id = ?2",
+        )
+          .bind(now, runtimeIdentity.executionWorkspaceId)
+          .run(),
+      "workspace_online_projection_failed",
+      {
+        requestId: correlationId,
+        runtimeId: workspaceRuntimeId,
+        workspaceId: runtimeIdentity.executionWorkspaceId,
+      },
+    );
+    this.queueProjectionWrite(
       () =>
         this.env.CONCLAVE_DB.prepare(
           `INSERT INTO workspace_sessions
@@ -481,21 +513,22 @@ export class WorkspaceGateway implements DurableObject {
     this.socket = null;
     const now = new Date().toISOString();
     if (this.executionWorkspaceId) {
-      try {
-        await this.env.CONCLAVE_DB.prepare(
-          "UPDATE execution_workspaces SET status = 'offline', updated_at = ?1 WHERE id = ?2",
-        )
-          .bind(now, this.executionWorkspaceId)
-          .run();
-      } catch {
-        logStructured("error", "GW-SESSION workspace_offline_update_failed", {
+      this.queueProjectionWrite(
+        () =>
+          this.env.CONCLAVE_DB.prepare(
+            "UPDATE execution_workspaces SET status = 'offline', updated_at = ?1 WHERE id = ?2",
+          )
+            .bind(now, this.executionWorkspaceId)
+            .run(),
+        "workspace_offline_projection_failed",
+        {
           requestId: this.correlationId ?? undefined,
           runtimeId: this.workspaceRuntimeId ?? undefined,
           workspaceId: this.executionWorkspaceId,
-        });
-      }
+        },
+      );
     }
-    this.queueSessionWrite(
+    this.queueProjectionWrite(
       () =>
         this.env.CONCLAVE_DB.prepare(
           "UPDATE workspace_sessions SET disconnected_at = ?1 WHERE id = ?2",
@@ -521,7 +554,7 @@ export class WorkspaceGateway implements DurableObject {
     }
   }
 
-  private queueSessionWrite(
+  private queueProjectionWrite(
     write: () => Promise<unknown>,
     failure: string,
     correlation: {
@@ -530,7 +563,7 @@ export class WorkspaceGateway implements DurableObject {
       workspaceId?: string;
     },
   ): void {
-    this.sessionWriteChain = this.sessionWriteChain
+    this.projectionWriteChain = this.projectionWriteChain
       .then(() => write())
       .then(() => undefined)
       .catch(() => {
@@ -538,7 +571,7 @@ export class WorkspaceGateway implements DurableObject {
         // and correlation metadata, never the raw error or credentials.
         logStructured(
           "error",
-          "GW-SESSION session_observability_write_failed",
+          "GW-PROJECTION write_failed",
           {
             ...correlation,
           },
@@ -635,7 +668,7 @@ export class WorkspaceGateway implements DurableObject {
         return;
       case "workspace.heartbeat":
         if (message.payload && typeof message.payload === "object") {
-          this.queueSessionWrite(
+          this.queueProjectionWrite(
             () =>
               this.env.CONCLAVE_DB.prepare(
                 "UPDATE workspace_sessions SET last_heartbeat_at = ?1 WHERE id = ?2",
@@ -941,7 +974,7 @@ export class WorkspaceGateway implements DurableObject {
     const row = await this.env.CONCLAVE_DB.prepare(
       `SELECT c.id, c.status, c.workstream_id AS workstreamId,
               c.workspace_id AS workspaceId, c.repository_id AS repositoryId,
-              c.revision, ws.project_id AS projectId, ew.status AS workspaceStatus,
+              c.revision, ws.project_id AS projectId,
               g.id AS grantId
        FROM workstream_checkouts c
        JOIN workstreams ws ON ws.id = c.workstream_id
@@ -971,9 +1004,6 @@ export class WorkspaceGateway implements DurableObject {
         { error: "Workspace Project Grant is not active" },
         { status: 409 },
       );
-    }
-    if (row.workspaceStatus !== "online") {
-      return Response.json({ error: "Workspace is offline" }, { status: 503 });
     }
     this.send({
       protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,

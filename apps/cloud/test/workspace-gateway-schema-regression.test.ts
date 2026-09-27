@@ -121,6 +121,7 @@ describe("Workspace Gateway active-schema regression", () => {
       .run(runtimeId, workspaceId, await hashToken(runtimeToken));
 
     class TestSocket {
+      readyState = 1;
       attachment?: unknown;
       serializeAttachment(value: unknown) {
         this.attachment = value;
@@ -138,12 +139,14 @@ describe("Workspace Gateway active-schema regression", () => {
     class TestResponse {
       readonly status: number;
       readonly webSocket?: unknown;
+      readonly value: unknown;
       constructor(
-        _body: unknown,
+        body: unknown,
         init?: { status?: number; webSocket?: unknown },
       ) {
         this.status = init?.status ?? 200;
         this.webSocket = init?.webSocket;
+        this.value = body;
       }
       static json(body: unknown, init?: { status?: number }) {
         return new TestResponse(body, init);
@@ -273,20 +276,29 @@ describe("Workspace Gateway active-schema regression", () => {
         await hashToken(failedRuntimeToken),
       );
     database.exec(`
+      CREATE TRIGGER fail_workspace_online_projection
+      BEFORE UPDATE OF status ON execution_workspaces
+      WHEN NEW.status = 'online'
+      BEGIN SELECT RAISE(FAIL, 'simulated online projection failure'); END;
+    `);
+    database.exec(`
       CREATE TRIGGER fail_session_insert
       BEFORE INSERT ON workspace_sessions
       BEGIN SELECT RAISE(FAIL, 'simulated session history write failure'); END;
     `);
     let failureSocket: TestSocket | undefined;
-    const failureGateway = new WorkspaceGateway(
-      {
-        id: { name: failedWorkspaceId },
-        acceptWebSocket(socket: unknown) {
-          failureSocket = socket as TestSocket;
-        },
-      } as never,
-      { CONCLAVE_DB: new LocalD1(database) as never },
-    );
+    const failureState = {
+      id: { name: failedWorkspaceId },
+      acceptWebSocket(socket: unknown) {
+        failureSocket = socket as TestSocket;
+      },
+      getWebSockets() {
+        return failureSocket ? [failureSocket as unknown as WebSocket] : [];
+      },
+    };
+    const failureGateway = new WorkspaceGateway(failureState as never, {
+      CONCLAVE_DB: new LocalD1(database) as never,
+    });
     const failureResponse = (await failureGateway.fetch(
       new Request(
         `https://app.conclave.test/api/workspace-gateway/connect?workspaceRuntimeId=${failedRuntimeId}`,
@@ -306,11 +318,20 @@ describe("Workspace Gateway active-schema regression", () => {
           .prepare("SELECT status FROM execution_workspaces WHERE id = ?")
           .get(failedWorkspaceId) as { status: string }
       ).status,
-    ).toBe("online");
+    ).toBe("enrolled");
+    const rehydratedGateway = new WorkspaceGateway(failureState as never, {
+      CONCLAVE_DB: new LocalD1(database) as never,
+    });
+    const liveStatus = (await rehydratedGateway.fetch(
+      new Request("https://app.conclave.test/status"),
+    )) as unknown as TestResponse;
+    expect(liveStatus.value).toMatchObject({
+      online: true,
+      executionWorkspaceId: failedWorkspaceId,
+      workspaceRuntimeId: failedRuntimeId,
+    });
     await waitFor(() =>
-      logs.some((entry) =>
-        entry.includes("GW-SESSION session_observability_write_failed"),
-      ),
+      logs.some((entry) => entry.includes("GW-PROJECTION write_failed")),
     );
     expect(logs.join("\n")).not.toContain(failedRuntimeToken);
 

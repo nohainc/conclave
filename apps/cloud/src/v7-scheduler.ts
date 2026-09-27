@@ -38,6 +38,11 @@ export interface V7ExecutionTarget {
   readonly expectedRevision?: string;
 }
 
+export type WorkspaceLiveCheck = (
+  workspaceId: string,
+  runtimeIdentityId: string,
+) => Promise<boolean>;
+
 type Row = Record<string, unknown>;
 
 function strings(value: unknown): string[] {
@@ -94,6 +99,7 @@ export async function selectProjectExecutionTarget(
   db: D1Database,
   request: ProjectExecutionSelectionRequest,
   now = new Date(),
+  isWorkspaceLive?: WorkspaceLiveCheck,
 ): Promise<V7ExecutionTarget | null> {
   const membership = await db
     .prepare(
@@ -231,7 +237,8 @@ export async function selectProjectExecutionTarget(
      JOIN v7_worker_scheduling vs ON vs.worker_id = i.worker_id
      WHERE g.project_id = ?1 AND g.status = 'active'
        AND (g.expires_at IS NULL OR g.expires_at > ?3)
-       AND ew.status = 'online'
+       AND ew.status <> 'revoked'
+       ${isWorkspaceLive ? "" : "AND ew.status = 'online'"}
      ORDER BY CASE WHEN i.owner_user_id = ?2 THEN 0 ELSE 1 END,
               active_assignments, ew.id, i.worker_id`,
     )
@@ -246,6 +253,7 @@ export async function selectProjectExecutionTarget(
 
   const excluded = new Set(request.excludeIndependenceKeys ?? []);
   const rejected: Array<Record<string, unknown>> = [];
+  const liveWorkspaceChecks = new Map<string, Promise<boolean>>();
   const candidates = [...(v7Rows.results ?? [])].sort((left, right) => {
     const load =
       number(left.active_assignments) - number(right.active_assignments);
@@ -290,7 +298,7 @@ export async function selectProjectExecutionTarget(
       reject("stateful_primary_workspace_required");
       continue;
     }
-    if (String(row.workspace_status) !== "online") {
+    if (!isWorkspaceLive && String(row.workspace_status) !== "online") {
       reject("workspace_offline");
       continue;
     }
@@ -396,6 +404,23 @@ export async function selectProjectExecutionTarget(
       reject("effective_permission_intersection_empty");
       continue;
     }
+    let workspaceIsLive = false;
+    if (isWorkspaceLive) {
+      const runtimeIdentityId = String(row.runtime_identity_id);
+      const key = `${workspaceId}:${runtimeIdentityId}`;
+      let liveCheck = liveWorkspaceChecks.get(key);
+      if (!liveCheck) {
+        liveCheck = isWorkspaceLive(workspaceId, runtimeIdentityId).catch(
+          () => false,
+        );
+        liveWorkspaceChecks.set(key, liveCheck);
+      }
+      workspaceIsLive = await liveCheck;
+      if (!workspaceIsLive) {
+        reject("workspace_offline");
+        continue;
+      }
+    }
     const snapshotAt = now.toISOString();
     const permissionSnapshot = {
       projectId: request.projectId,
@@ -437,7 +462,8 @@ export async function selectProjectExecutionTarget(
         projectMembership: membership.role,
         workspace: {
           id: workspaceId,
-          status: row.workspace_status,
+          status: isWorkspaceLive ? "online" : row.workspace_status,
+          connectionSource: isWorkspaceLive ? "workspace_gateway" : "database",
           grantId: row.grant_id,
         },
         worker: {

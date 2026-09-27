@@ -61,10 +61,8 @@ describe("Workspace runtime Gateway", () => {
     }
     vi.stubGlobal("WebSocketPair", TestWebSocketPair);
     vi.stubGlobal("Response", TestResponse);
-    const statements: string[] = [];
     const db = {
-      prepare(sql: string) {
-        statements.push(sql);
+      prepare(_sql: string) {
         return {
           bind: (..._values: unknown[]) => ({
             first: async () => ({
@@ -152,7 +150,6 @@ describe("Workspace runtime Gateway", () => {
       ),
     ).toBe(true);
     expect(logs.join("\n")).not.toContain(runtimeToken);
-    expect(statements).toHaveLength(4);
   });
 
   it("accepts only the runtime credential for one execution Workspace", async () => {

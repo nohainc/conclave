@@ -66,20 +66,43 @@ async function dispatchWorkspaceWorkerAssignment(
   params: DispatchAssignmentParams,
 ): Promise<DispatchAssignmentResult> {
   const { runId, taskId, task } = params;
-  const target = await selectProjectExecutionTarget(env.CONCLAVE_DB, {
-    projectId: task.projectId!,
-    requesterUserId: task.requestedByUserId!,
-    role: task.role,
-    capabilities: task.capabilities ?? [],
-    workspaceId: params.workspaceId || undefined,
-    workerId: params.explicitWorkerId,
-    excludeIndependenceKeys: params.excludeIndependenceKeys,
-    model: task.model,
-    executionClass: task.executionClass,
-    workstreamId: task.workstreamId,
-    workRequestId: task.workRequestId,
-    expectedRevision: task.expectedRevision,
-  });
+  const target = await selectProjectExecutionTarget(
+    env.CONCLAVE_DB,
+    {
+      projectId: task.projectId!,
+      requesterUserId: task.requestedByUserId!,
+      role: task.role,
+      capabilities: task.capabilities ?? [],
+      workspaceId: params.workspaceId || undefined,
+      workerId: params.explicitWorkerId,
+      excludeIndependenceKeys: params.excludeIndependenceKeys,
+      model: task.model,
+      executionClass: task.executionClass,
+      workstreamId: task.workstreamId,
+      workRequestId: task.workRequestId,
+      expectedRevision: task.expectedRevision,
+    },
+    new Date(),
+    async (workspaceId, runtimeIdentityId) => {
+      const gatewayNamespace = env.CONCLAVE_WORKSPACE_GATEWAY;
+      if (!gatewayNamespace) return false;
+      const gateway = gatewayNamespace.get(
+        gatewayNamespace.idFromName(workspaceId),
+      );
+      const response = await gateway.fetch("http://gateway/status");
+      if (!response.ok) return false;
+      const status = (await response.json()) as {
+        online?: boolean;
+        workspaceRuntimeId?: string | null;
+        executionWorkspaceId?: string | null;
+      };
+      return (
+        status.online === true &&
+        status.workspaceRuntimeId === runtimeIdentityId &&
+        status.executionWorkspaceId === workspaceId
+      );
+    },
+  );
   if (!target) {
     return {
       assignmentId: "",

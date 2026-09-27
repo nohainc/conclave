@@ -4222,14 +4222,6 @@ export async function handleProvisionWorkstreamCheckout(
       "Add at least one repository mapping to the Workspace Project Grant before provisioning a checkout",
     );
   }
-  const workspace = await env.CONCLAVE_DB.prepare(
-    "SELECT status FROM execution_workspaces WHERE id = ?1",
-  )
-    .bind(workspaceId)
-    .first<{ status: string }>();
-  if (!workspace || workspace.status !== "online") {
-    throw new HttpError(503, "Primary Workspace is offline");
-  }
   const existing = await env.CONCLAVE_DB.prepare(
     `SELECT id, workstream_id AS workstreamId, workspace_id AS workspaceId,
             repository_id AS repositoryId, revision,
