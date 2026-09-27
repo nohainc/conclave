@@ -251,7 +251,10 @@ cancellation, and a successful claim make the code unusable.
 
 - one runtime bearer token.
 
-The desktop app stores the bearer token only in the OS secure credential store and writes only non-secret registration metadata to disk. It then opens:
+The desktop app stores the bearer token only in the OS secure credential store
+and writes only non-secret registration metadata to disk. On macOS, the native
+Security framework reads and writes Keychain items directly; credentials are
+never passed as command-line arguments. It then opens:
 
 ```text
 /api/workspace-gateway/connect?workspaceRuntimeId=<runtime-id>

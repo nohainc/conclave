@@ -545,7 +545,16 @@ class HostUiSnapshot {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final config = HostConfig.fromArgs(const []);
+  const credentialStore = PlatformSecureCredentialStore();
+  final dataDirectory = HostConfig.resolveDataDirectory(const []);
+  final registration = HostRegistrationStore(dataDirectory).readSync();
+  if (registration != null) {
+    await credentialStore.readForSynchronousConfig(registration.hostId);
+  }
+  final config = HostConfig.fromArgs(
+    const [],
+    credentialStore: credentialStore,
+  );
   final host = await buildWorkspaceRuntime(config);
   runApp(ConclaveHostApp(lifecycle: HostLifecycleController(host)));
 }
@@ -823,7 +832,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
 
     try {
       final token =
-          lifecycle.host.credentialStore.readSync(registration.hostId);
+          await lifecycle.host.credentialStore.read(registration.hostId);
       if (token == null) {
         throw StateError('Workspace credential is missing; reconnect first.');
       }
@@ -974,7 +983,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
           HostRegistrationStore(lifecycle.host.config.dataDirectory).readSync();
       if (registration != null) {
         final token =
-            lifecycle.host.credentialStore.readSync(registration.hostId);
+            await lifecycle.host.credentialStore.read(registration.hostId);
         if (token != null) {
           try {
             await WorkspacePairingService.unpair(

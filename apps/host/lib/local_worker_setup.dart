@@ -297,7 +297,7 @@ class LocalWorkerSetupService {
         ? current.credentialRef
         : 'worker-credential/${current.id}';
     final previousSecret = apiKey.isNotEmpty && current.credentialRef != null
-        ? credentialStore.readSync(current.credentialRef!)
+        ? await credentialStore.read(current.credentialRef!)
         : null;
     late LocalConfiguredWorker updated;
     try {
@@ -562,8 +562,8 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
             ? _apiKey.text
             : widget.worker?.credentialRef == null
                 ? ''
-                : widget.credentialStore
-                        .readSync(widget.worker!.credentialRef!) ??
+                : await widget.credentialStore
+                        .read(widget.worker!.credentialRef!) ??
                     '';
     if (!localEndpoint && apiKey.isEmpty) return const [];
     final validator = widget.validateApiCredential;
@@ -1049,4 +1049,3 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
         _ => permission,
       };
 }
-

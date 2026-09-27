@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -350,7 +351,7 @@ class V7AdapterPackageStore {
     }
     final secrets = <String, String>{};
     if (worker.credentialRef != null) {
-      final credential = readCredential(worker.credentialRef!);
+      final credential = await readCredential(worker.credentialRef!);
       if (credential != null && credential.isNotEmpty) {
         for (final requirement in admitted.secretRequirements) {
           if (requirement.authStrategy == worker.authStrategy) {
@@ -748,4 +749,4 @@ String _canonicalJson(Object? value) {
   return jsonEncode(value);
 }
 
-typedef SecureCredentialReader = String? Function(String key);
+typedef SecureCredentialReader = FutureOr<String?> Function(String key);

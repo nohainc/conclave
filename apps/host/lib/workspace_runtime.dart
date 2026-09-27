@@ -95,7 +95,7 @@ Future<Host> buildWorkspaceRuntime(
       }
       final adapter = await v7AdapterPackageStore.resolve(
         worker: worker,
-        readCredential: credentialStore.readSync,
+        readCredential: credentialStore.read,
       );
       if (adapter == null) {
         throw StateError(

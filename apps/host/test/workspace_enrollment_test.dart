@@ -13,6 +13,9 @@ class _MemoryCredentials implements SecureCredentialStore {
   String? readSync(String key) => values[key];
 
   @override
+  Future<String?> read(String key) async => readSync(key);
+
+  @override
   Future<void> write(String key, String value) async {
     values[key] = value;
   }

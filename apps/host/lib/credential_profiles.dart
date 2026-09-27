@@ -186,7 +186,7 @@ class CredentialProfileStore {
         profile.secretLocation != CredentialSecretLocation.hostSecureStore) {
       return null;
     }
-    return store.readSync(localKey(profile));
+    return store.read(localKey(profile));
   }
 
   Future<CredentialProfile> clear(CredentialProfile profile) async {

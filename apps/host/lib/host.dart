@@ -106,6 +106,15 @@ class HostConfig {
     );
   }
 
+  static Directory resolveDataDirectory(List<String> args) {
+    final index = args.indexOf('--data-dir');
+    final path = index >= 0 && index + 1 < args.length
+        ? args[index + 1]
+        : Platform.environment['CONCLAVE_HOST_DATA_DIR'];
+    return Directory(path ??
+        '${currentPlatformRuntime.homeDirectory}${Platform.pathSeparator}.conclave-host');
+  }
+
   static Uri? _cloudSocketUri(String value, {String? workspaceRuntimeId}) {
     final uri = Uri.tryParse(value);
     if (uri == null) return null;
