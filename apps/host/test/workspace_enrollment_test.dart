@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:conclave_host/host_configuration.dart';
+import 'package:conclave_host/desktop_auth.dart';
 import 'package:conclave_host/secure_credentials.dart';
 import 'package:conclave_host/workspace_enrollment.dart';
 import 'package:test/test.dart';
@@ -27,6 +28,110 @@ class _MemoryCredentials implements SecureCredentialStore {
 }
 
 void main() {
+  test('Cloud API URLs normalize configured /api suffixes exactly once', () {
+    final configured = 'https://app.conclaveax.com/api/';
+
+    expect(
+      normalizeWorkspaceCloudOrigin(configured),
+      'https://app.conclaveax.com',
+    );
+    expect(
+      workspaceCloudApiUri(configured, '/api/workspace-runtime/register'),
+      Uri.parse('https://app.conclaveax.com/api/workspace-runtime/register'),
+    );
+  });
+
+  test('desktop ownership check uses the human session and legacy binding IDs',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    final requestFuture = server.first.then((request) async {
+      expect(request.uri.path, '/api/workspace-runtime/ownership');
+      expect(request.headers.value(HttpHeaders.authorizationHeader),
+          'Bearer desktop-human-secret');
+      final body = jsonDecode(await utf8.decoder.bind(request).join()) as Map;
+      expect(body, {
+        'contractVersion': '1.0',
+        'installationId': 'install_12345678-1234-4234-8234-123456789abc',
+        'workspaceId': 'legacy-workspace',
+        'runtimeId': 'legacy-runtime',
+      });
+      request.response.statusCode = HttpStatus.ok;
+      request.response.headers.contentType = ContentType.json;
+      request.response.write('{"registered":true,"ownerUserId":"user-a"}');
+      await request.response.close();
+    });
+    final client = DesktopAuthClient(
+      cloudUrl: 'http://127.0.0.1:${server.port}',
+    );
+    addTearDown(client.close);
+    final owner = await client.checkWorkspaceOwnership(
+      session: DesktopHumanSession(
+        credential: 'desktop-human-secret',
+        sessionId: 'session-a',
+        userId: 'user-a',
+        displayName: 'A',
+        email: 'a@example.test',
+        expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+      ),
+      installationId: 'install_12345678-1234-4234-8234-123456789abc',
+      workspaceId: 'legacy-workspace',
+      runtimeId: 'legacy-runtime',
+    );
+    expect(owner, 'user-a');
+    await requestFuture;
+  });
+
+  test('desktop registration rejects a Workspace owned by another user',
+      () async {
+    final temp = await Directory.systemTemp.createTemp('owner-check-test-');
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async {
+      await server.close(force: true);
+      await temp.delete(recursive: true);
+    });
+    final requestFuture = server.first.then((request) async {
+      expect(request.uri.path, '/api/workspace-runtime/register');
+      request.response.statusCode = HttpStatus.created;
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode({
+        'outcome': 'recovered',
+        'workspaceId': 'workspace-1',
+        'workspaceRuntimeId': 'runtime-1',
+        'workspaceName': 'Workspace',
+        'ownerUserId': 'user-b',
+        'runtimeCredential': List.filled(32, 'r').join(),
+        'credentialIssuedAt': DateTime.now().toUtc().toIso8601String(),
+        'credentialExpiresAt': null,
+        'completedAt': DateTime.now().toUtc().toIso8601String(),
+      }));
+      await request.response.close();
+    });
+    final credentials = _MemoryCredentials();
+    final service = WorkspacePairingService(
+      dataDirectory: temp,
+      credentialStore: credentials,
+    );
+
+    await expectLater(
+      service.registerWithDesktopSession(
+        cloudUrl: 'http://127.0.0.1:${server.port}',
+        desktopCredential: 'h' * 32,
+        expectedOwnerUserId: 'user-a',
+        facts: SafeMachineFacts.collect(
+          installationId: 'install_12345678-1234-4234-8234-123456789abc',
+          name: 'Workspace',
+          hostname: 'test-host',
+        ),
+      ),
+      throwsStateError,
+    );
+    await requestFuture;
+    expect(credentials.values, isEmpty,
+        reason: 'Do not store a runtime credential before owner verification.');
+    expect(HostRegistrationStore(temp).readSync(), isNull);
+  });
+
   test('unpair revokes the runtime credential before local unlinking',
       () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -346,8 +451,8 @@ void main() {
         serverCode: 'installation_already_paired',
       );
       expect(ex.kind, WorkspacePairingErrorKind.installationAlreadyPaired);
-      expect(ex.message,
-          'This installation is already connected to a Workspace.');
+      expect(
+          ex.message, 'This installation is already connected to a Workspace.');
       expect(ex.action,
           'Disconnect the current Workspace before connecting to another account.');
     });
@@ -372,8 +477,8 @@ void main() {
       expect(ex.kind, WorkspacePairingErrorKind.workspaceOrAccountRevoked);
       expect(ex.message,
           'The associated account or Workspace is inactive or revoked.');
-      expect(ex.action,
-          'Sign in to Conclave AX to verify your account status.');
+      expect(
+          ex.action, 'Sign in to Conclave AX to verify your account status.');
     });
 
     test('classifies unsupported version', () {
@@ -384,15 +489,16 @@ void main() {
       expect(ex.kind, WorkspacePairingErrorKind.versionUnsupported);
       expect(ex.message,
           'This version of Conclave Workspace is no longer supported.');
-      expect(ex.action,
-          'Please update Conclave Workspace to the latest version.');
+      expect(
+          ex.action, 'Please update Conclave Workspace to the latest version.');
     });
 
     test('classifies invalid pairing code', () {
       final ex = WorkspacePairingException.fromError(
         statusCode: 401,
         serverCode: 'invalid_pairing_code',
-        serverError: 'Invalid, expired, revoked, or already used enrollment token',
+        serverError:
+            'Invalid, expired, revoked, or already used enrollment token',
       );
       expect(ex.kind, WorkspacePairingErrorKind.invalidCode);
       expect(ex.message, 'The pairing code is invalid.');
@@ -422,8 +528,7 @@ void main() {
       );
       expect(ex.kind, WorkspacePairingErrorKind.serverValidationFailure);
       expect(ex.message, 'Registration details were rejected by the server.');
-      expect(ex.action,
-          'Workspace name is invalid or exceeds 120 characters');
+      expect(ex.action, 'Workspace name is invalid or exceeds 120 characters');
     });
   });
 

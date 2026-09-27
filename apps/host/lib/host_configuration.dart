@@ -11,6 +11,7 @@ class HostRegistration {
     required this.cloudUrl,
     required this.name,
     required this.hostname,
+    this.ownerUserId,
     this.installationId,
     this.credentialRef,
     this.pairedAt,
@@ -21,6 +22,7 @@ class HostRegistration {
   final String cloudUrl;
   final String name;
   final String hostname;
+  final String? ownerUserId;
   final String? installationId;
   final String? credentialRef;
   final String? pairedAt;
@@ -44,6 +46,9 @@ class HostRegistration {
       cloudUrl: required('cloudUrl'),
       name: required('name'),
       hostname: required('hostname'),
+      ownerUserId: json['ownerUserId'] is String
+          ? (json['ownerUserId'] as String).trim()
+          : null,
       installationId: json['installationId'] is String
           ? (json['installationId'] as String).trim()
           : null,
@@ -62,6 +67,7 @@ class HostRegistration {
         'cloudUrl': cloudUrl,
         'name': name,
         'hostname': hostname,
+        if (ownerUserId != null) 'ownerUserId': ownerUserId,
         if (installationId != null) 'installationId': installationId,
         if (credentialRef != null) 'credentialRef': credentialRef,
         if (pairedAt != null) 'pairedAt': pairedAt,

@@ -52,6 +52,7 @@ class HostConfig {
   factory HostConfig.fromArgs(
     List<String> args, {
     SecureCredentialStore? credentialStore,
+    bool ignoreSavedRegistration = false,
   }) {
     final index = args.indexOf('--data-dir');
     final cloudIndex = args.indexOf('--cloud-url');
@@ -65,13 +66,19 @@ class HostConfig {
         : Platform.environment['CONCLAVE_HOST_DATA_DIR'];
     final dataDirectory =
         path == null ? WorkspacePaths.defaultStateDirectory() : Directory(path);
-    final registration = HostRegistrationStore(dataDirectory).readSync();
+    final registration = ignoreSavedRegistration
+        ? null
+        : HostRegistrationStore(dataDirectory).readSync();
     final cloudUrl = cloudIndex >= 0 && cloudIndex + 1 < args.length
         ? args[cloudIndex + 1]
-        : Platform.environment['CONCLAVE_HOST_CLOUD_URL'];
+        : ignoreSavedRegistration
+            ? null
+            : Platform.environment['CONCLAVE_HOST_CLOUD_URL'];
     final hostId = hostIndex >= 0 && hostIndex + 1 < args.length
         ? args[hostIndex + 1]
-        : Platform.environment['CONCLAVE_HOST_ID'] ?? registration?.hostId;
+        : ignoreSavedRegistration
+            ? null
+            : Platform.environment['CONCLAVE_HOST_ID'] ?? registration?.hostId;
     final installationId =
         installationIndex >= 0 && installationIndex + 1 < args.length
             ? args[installationIndex + 1]
@@ -80,8 +87,10 @@ class HostConfig {
                 InstallationIdentityStore(dataDirectory).readSync();
     final workspaceId = workspaceIndex >= 0 && workspaceIndex + 1 < args.length
         ? args[workspaceIndex + 1]
-        : Platform.environment['CONCLAVE_HOST_WORKSPACE_ID'] ??
-            registration?.workspaceId;
+        : ignoreSavedRegistration
+            ? null
+            : Platform.environment['CONCLAVE_HOST_WORKSPACE_ID'] ??
+                registration?.workspaceId;
     final repositoriesFile =
         repositoriesIndex >= 0 && repositoriesIndex + 1 < args.length
             ? args[repositoriesIndex + 1]
@@ -103,7 +112,9 @@ class HostConfig {
       installationId: installationId,
       workspaceId: workspaceId,
       repositoriesFile: repositoriesFile,
-      authToken: Platform.environment['CONCLAVE_HOST_TOKEN'] ?? storedToken,
+      authToken: ignoreSavedRegistration
+          ? null
+          : Platform.environment['CONCLAVE_HOST_TOKEN'] ?? storedToken,
       workRootPath: workRootPath,
     );
   }

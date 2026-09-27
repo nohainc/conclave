@@ -19,6 +19,8 @@ import 'v7_adapter_package_store.dart';
 import 'v7_adapter_catalog.dart';
 import 'workspace_enrollment.dart';
 import 'workspace_runtime.dart';
+import 'workspace_lifecycle_store.dart';
+import 'workspace_lifecycle.dart';
 
 void showCopyableErrorSnackBar(BuildContext context, String message) {
   final colors = Theme.of(context).colorScheme;
@@ -46,6 +48,19 @@ void showCopyableErrorSnackBar(BuildContext context, String message) {
       ),
     ),
   );
+}
+
+bool _hasValidCachedDesktopSession(SecureCredentialStore credentialStore) {
+  try {
+    final stored = credentialStore.readSync(desktopHumanCredentialKey);
+    if (stored == null || stored.isEmpty) return false;
+    final decoded = jsonDecode(stored);
+    if (decoded is! Map || decoded['credential'] is! String) return false;
+    final expiresAt = DateTime.tryParse(decoded['expiresAt']?.toString() ?? '');
+    return expiresAt != null && expiresAt.isAfter(DateTime.now().toUtc());
+  } on Object {
+    return false;
+  }
 }
 
 Future<AdapterPrerequisiteResult> _probeLocalWorkerPrerequisite(
@@ -181,6 +196,18 @@ class HostLifecycleController extends ChangeNotifier {
   bool _draining = false;
   static const _desktopChannel =
       MethodChannel('com.conclave.workspace/desktop');
+
+  static Future<void> setLaunchAtLogin(bool enabled) async {
+    if (!Platform.isMacOS) {
+      if (enabled) {
+        throw UnsupportedError(
+          'Launch at login is currently supported only on macOS.',
+        );
+      }
+      return;
+    }
+    await _desktopChannel.invokeMethod<void>('setLaunchAtLogin', enabled);
+  }
 
   bool get hidden => _hidden;
   bool get quitting => _quitting;
@@ -358,6 +385,7 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
         registration?.installationId ??
         InstallationIdentityStore(host.config.dataDirectory).readSync();
     final hostname = registration?.hostname ?? Platform.localHostname;
+    final ownerUserId = registration?.ownerUserId;
     final cloudUrl = host.config.cloudUri?.toString() ?? registration?.cloudUrl;
     final workRootPath = host.workRoot?.path ?? host.config.workRootPath;
 
@@ -403,6 +431,9 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
         cloudUrl: cloudUrl,
         workRootPath: workRootPath,
         paired: hostId != null && workspaceId != null,
+        ownerUserId: ownerUserId,
+        workspaceReady:
+            connection?.connectionStage == HostConnectionStage.ready,
         // A saved token can be present and still be revoked in Cloud. The
         // Account section can recover it through the human management API.
         statusLabel: 'Offline',
@@ -514,6 +545,8 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
       cloudUrl: cloudUrl,
       workRootPath: workRootPath,
       paired: true,
+      ownerUserId: ownerUserId,
+      workspaceReady: connection?.connectionStage == HostConnectionStage.ready,
       cloudConnected: isConnected,
       statusLabel: statusLabel,
       logsPath: WorkspacePaths(host.config.dataDirectory).logsFile.path,
@@ -639,6 +672,8 @@ class HostUiSnapshot {
     this.workRootPath,
     this.statusLabel = 'Offline',
     this.paired = false,
+    this.ownerUserId,
+    this.workspaceReady = false,
     this.cloudConnected = false,
     this.accountsNeedingAction = const [],
     this.workerSummary = 'Worker diagnostics are available after sign-in',
@@ -678,6 +713,8 @@ class HostUiSnapshot {
   final String? workRootPath;
   final String statusLabel;
   final bool paired;
+  final String? ownerUserId;
+  final bool workspaceReady;
   final bool cloudConnected;
   final List<String> accountsNeedingAction;
   final String workerSummary;
@@ -719,13 +756,17 @@ Future<void> main() async {
     nativeKeychain: FlutterMacKeychainBridge(),
   );
   final dataDirectory = HostConfig.resolveDataDirectory(const []);
+  final desiredRuntime = WorkspaceLifecyclePreferencesStore(dataDirectory)
+      .readSync()
+      .desiredRuntime;
   final registration = HostRegistrationStore(dataDirectory).readSync();
-  if (registration != null) {
+  if (registration != null && desiredRuntime == DesiredRuntimeState.connected) {
     await credentialStore.readForSynchronousConfig(registration.hostId);
   }
   final config = HostConfig.fromArgs(
     const [],
     credentialStore: credentialStore,
+    ignoreSavedRegistration: desiredRuntime == DesiredRuntimeState.disconnected,
   );
   final host = await buildWorkspaceRuntime(
     config,
@@ -889,6 +930,8 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         Platform.environment['CONCLAVE_HOST_CLOUD_URL'] ??
         conclaveProductionCloudUrl;
     final client = DesktopAuthClient(cloudUrl: cloudUrl);
+    var failureContext = 'creating the sign-in request';
+    DesktopHumanSession? claimedSession;
     try {
       final intent = await client.createIntent();
       final openBrowser = await showDialog<bool>(
@@ -917,42 +960,86 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       ScaffoldMessenger.of(dialogContext).showSnackBar(
         const SnackBar(content: Text('Waiting for browser sign-in approval…')),
       );
+      failureContext = 'waiting for browser approval';
       final session = await client.waitForApprovalAndClaim(intent);
+      claimedSession = session;
+      failureContext = 'validating the desktop session';
       await client.validateSession(session);
+      final existingRegistration = HostRegistrationStore(
+        lifecycle.host.config.dataDirectory,
+      ).readSync();
+      final identityStore =
+          InstallationIdentityStore(lifecycle.host.config.dataDirectory);
+      final installationId = existingRegistration?.installationId ??
+          identityStore.readSync() ??
+          (existingRegistration == null
+              ? null
+              : await identityStore.getOrCreate());
+      if (installationId != null) {
+        failureContext = 'checking Workspace account ownership';
+        final cloudOwnerUserId = await client.checkWorkspaceOwnership(
+          session: session,
+          installationId: installationId,
+          workspaceId: existingRegistration?.workspaceId,
+          runtimeId: existingRegistration?.hostId,
+        );
+        if (cloudOwnerUserId != session.userId) {
+          throw StateError(
+            'This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.',
+          );
+        }
+        if (existingRegistration != null) {
+          await HostRegistrationStore(
+            lifecycle.host.config.dataDirectory,
+          ).write(HostRegistration(
+            hostId: existingRegistration.hostId,
+            workspaceId: existingRegistration.workspaceId,
+            cloudUrl: existingRegistration.cloudUrl,
+            name: existingRegistration.name,
+            hostname: existingRegistration.hostname,
+            ownerUserId: cloudOwnerUserId,
+            installationId: installationId,
+            credentialRef: existingRegistration.credentialRef,
+            pairedAt: existingRegistration.pairedAt,
+          ));
+        }
+      }
       await lifecycle.host.credentialStore.write(
         desktopHumanCredentialKey,
         jsonEncode(session.toSecureJson()),
       );
-      {
-        final installationId = await InstallationIdentityStore(
-          lifecycle.host.config.dataDirectory,
-        ).getOrCreate();
-        final facts = SafeMachineFacts.collect(
-          installationId: installationId,
-          name: await resolveFriendlyComputerName(),
-          hostname: Platform.localHostname,
-        );
-        await WorkspacePairingService(
-          dataDirectory: lifecycle.host.config.dataDirectory,
-          credentialStore: lifecycle.host.credentialStore,
-        ).registerWithDesktopSession(
-          cloudUrl: cloudUrl,
-          desktopCredential: session.credential,
-          facts: facts,
-        );
-        final config = HostConfig.fromArgs(const [],
-            credentialStore: lifecycle.host.credentialStore);
-        await lifecycle.replaceHost(await buildWorkspaceRuntime(config,
-            credentialStore: lifecycle.host.credentialStore));
-      }
+      final preferenceStore = WorkspaceLifecyclePreferencesStore(
+        lifecycle.host.config.dataDirectory,
+      );
+      final preferences = preferenceStore.readSync();
+      await preferenceStore.write(WorkspaceLifecyclePreferences(
+        desiredRuntime: existingRegistration == null
+            ? DesiredRuntimeState.disconnected
+            : preferences.desiredRuntime,
+        launchAtLogin: preferences.launchAtLogin,
+        managementLockPreference: preferences.managementLockPreference,
+        autoLockTimeout: preferences.autoLockTimeout,
+        ownerUserId: session.userId,
+        ownerDisplayName: session.displayName,
+      ));
       if (!mounted) return;
       setState(() => _workerRevision++);
       ScaffoldMessenger.of(dialogContext).showSnackBar(
         SnackBar(content: Text('Signed in as ${session.displayName}.')),
       );
     } catch (error) {
+      if (claimedSession != null) {
+        try {
+          await client.revokeSession(claimedSession);
+        } on Object {
+          // A failed ownership check must never replace the stored session.
+        }
+      }
       if (mounted) {
-        showCopyableErrorSnackBar(dialogContext, 'Sign-in failed: $error');
+        showCopyableErrorSnackBar(
+          dialogContext,
+          'Sign-in failed while $failureContext: $error',
+        );
       }
     } finally {
       client.close();
@@ -963,6 +1050,44 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     final lifecycle = widget.lifecycle;
     final registration =
         HostRegistrationStore(lifecycle.host.config.dataDirectory).readSync();
+    final desiredRuntime = WorkspaceLifecyclePreferencesStore(
+      lifecycle.host.config.dataDirectory,
+    ).readSync().desiredRuntime;
+    final runtimeIntendedConnected =
+        desiredRuntime == DesiredRuntimeState.connected;
+    if (registration != null && runtimeIntendedConnected) {
+      final dialogContext = _navigatorKey.currentContext;
+      if (dialogContext == null) return;
+      final choice = await showDialog<bool>(
+        context: dialogContext,
+        builder: (context) => AlertDialog(
+          title: const Text('This Workspace is connected.'),
+          content: const Text(
+            'Disconnect this Workspace before signing out. Disconnecting keeps '
+            'the installation owner and local Workers, credentials, adapters, '
+            'and Work Root.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Disconnect and sign out'),
+            ),
+          ],
+        ),
+      );
+      if (choice != true) return;
+      await _disconnectWorkspace(confirmed: true);
+      if (WorkspaceLifecyclePreferencesStore(
+            lifecycle.host.config.dataDirectory,
+          ).readSync().desiredRuntime !=
+          DesiredRuntimeState.disconnected) {
+        return;
+      }
+    }
     final stored =
         await lifecycle.host.credentialStore.read(desktopHumanCredentialKey);
     if (stored != null) {
@@ -987,10 +1112,20 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     if (mounted) setState(() => _workerRevision++);
   }
 
-  Future<void> _recoverWorkspaceCredential() async {
+  Future<void> _connectWorkspace() async {
     final lifecycle = widget.lifecycle;
     final context = _navigatorKey.currentContext;
     if (context == null) return;
+    if (lifecycle.host.cloudConnection?.isConnected == true ||
+        lifecycle.host.cloudConnection?.connectionStage ==
+            HostConnectionStage.ready ||
+        (lifecycle.host.cloudConnection?.activeAssignmentCount ?? 0) > 0) {
+      showCopyableErrorSnackBar(
+        context,
+        'Disconnect or let active work finish before connecting this Workspace again.',
+      );
+      return;
+    }
     final dataDirectory = lifecycle.host.config.dataDirectory;
     final registration = HostRegistrationStore(dataDirectory).readSync();
     final cloudUrl = registration?.cloudUrl ??
@@ -1003,41 +1138,297 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         throw StateError('Sign in to your Conclave account first.');
       }
       final decoded = jsonDecode(encoded);
-      if (decoded is! Map || decoded['credential'] is! String) {
+      if (decoded is! Map) {
         throw StateError('Sign in to your Conclave account first.');
+      }
+      final session = DesktopHumanSession.fromJson(
+        Map<String, dynamic>.from(decoded),
+      );
+      final authClient = DesktopAuthClient(cloudUrl: cloudUrl);
+      try {
+        await authClient.validateSession(session);
+      } finally {
+        authClient.close();
       }
       final installationId =
           await InstallationIdentityStore(dataDirectory).getOrCreate();
+      final suggestedName =
+          registration?.name ?? await resolveFriendlyComputerName();
+      final nameController = TextEditingController(text: suggestedName);
+      final existingPreferences =
+          WorkspaceLifecyclePreferencesStore(dataDirectory).readSync();
+      var launchAtLogin = Platform.isMacOS && existingPreferences.launchAtLogin;
+      final connectOptions = await showDialog<(String, bool)>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Connect Workspace'),
+            content: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(
+                controller: nameController,
+                autofocus: true,
+                maxLength: 200,
+                decoration: const InputDecoration(
+                  labelText: 'Workspace name',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              if (Platform.isMacOS)
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: launchAtLogin,
+                  onChanged: (value) =>
+                      setDialogState(() => launchAtLogin = value),
+                  title: const Text('Start Conclave Workspace at login'),
+                  subtitle: const Text(
+                    'Reconnect this computer in the background after you sign in to macOS.',
+                  ),
+                ),
+            ]),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(
+                  dialogContext,
+                  (nameController.text.trim(), launchAtLogin),
+                ),
+                child: const Text('Connect Workspace'),
+              ),
+            ],
+          ),
+        ),
+      );
+      nameController.dispose();
+      if (connectOptions == null) return;
+      final workspaceName = connectOptions.$1;
+      if (workspaceName.trim().isEmpty) {
+        throw StateError('Workspace name cannot be empty.');
+      }
+      await HostLifecycleController.setLaunchAtLogin(connectOptions.$2);
       final facts = SafeMachineFacts.collect(
           installationId: installationId,
-          name: registration?.name ?? await resolveFriendlyComputerName(),
+          name: workspaceName,
           hostname: Platform.localHostname);
       await WorkspacePairingService(
               dataDirectory: dataDirectory,
               credentialStore: lifecycle.host.credentialStore)
           .registerWithDesktopSession(
         cloudUrl: cloudUrl,
-        desktopCredential: decoded['credential'] as String,
+        desktopCredential: session.credential,
         facts: facts,
+        expectedOwnerUserId: session.userId,
+        existingWorkspaceId: registration?.workspaceId,
+        existingRuntimeId: registration?.hostId,
       );
+      final preferenceStore = WorkspaceLifecyclePreferencesStore(dataDirectory);
+      final preferences = preferenceStore.readSync();
+      await preferenceStore.write(WorkspaceLifecyclePreferences(
+        desiredRuntime: DesiredRuntimeState.connected,
+        launchAtLogin: connectOptions.$2,
+        managementLockPreference: preferences.managementLockPreference,
+        autoLockTimeout: preferences.autoLockTimeout,
+        ownerUserId: session.userId,
+        ownerDisplayName: session.displayName,
+      ));
       final config = HostConfig.fromArgs(const [],
           credentialStore: lifecycle.host.credentialStore);
       await lifecycle.replaceHost(await buildWorkspaceRuntime(config,
           credentialStore: lifecycle.host.credentialStore));
+      final deadline = DateTime.now().add(const Duration(seconds: 45));
+      while (DateTime.now().isBefore(deadline)) {
+        final connection = lifecycle.host.cloudConnection;
+        if (connection?.connectionStage == HostConnectionStage.ready) break;
+        if (!lifecycle.running) {
+          throw StateError('Workspace runtime stopped before becoming Ready.');
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+      if (lifecycle.host.cloudConnection?.connectionStage !=
+          HostConnectionStage.ready) {
+        throw TimeoutException(
+          'Workspace did not become Ready within 45 seconds.',
+        );
+      }
       if (mounted) {
         setState(() => _workerRevision++);
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Workspace connection recovered.')));
+            const SnackBar(content: Text('Workspace is connected and Ready.')));
       }
     } catch (error) {
       if (mounted) {
         showCopyableErrorSnackBar(
-            context, 'Could not recover Workspace connection: $error');
+            context, 'Could not connect Workspace: $error');
       }
     }
   }
 
-  Future<void> _disconnectWorkspace() async {
+  Future<DesktopHumanSession?> _reauthenticateWorkspaceOwner(
+    String expectedOwnerUserId, {
+    bool revokeAfterVerification = true,
+  }) async {
+    final dialogContext = _navigatorKey.currentContext;
+    if (dialogContext == null) return null;
+    final registration = HostRegistrationStore(
+      widget.lifecycle.host.config.dataDirectory,
+    ).readSync();
+    final cloudUrl = registration?.cloudUrl ?? conclaveProductionCloudUrl;
+    final client = DesktopAuthClient(cloudUrl: cloudUrl);
+    try {
+      final intent = await client.createIntent();
+      final openBrowser = await showDialog<bool>(
+        context: dialogContext,
+        builder: (context) => AlertDialog(
+          title: const Text('Confirm your Conclave account'),
+          content: SelectableText(
+            'Open the secure sign-in request in your browser and approve this '
+            'action with the Workspace owner account.\n\n${intent.userCode}',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(context, true),
+              icon: const Icon(Icons.open_in_browser),
+              label: const Text('Open browser'),
+            ),
+          ],
+        ),
+      );
+      if (openBrowser != true) return null;
+      await client.openVerification(intent);
+      final session = await client.waitForApprovalAndClaim(intent);
+      await client.validateSession(session);
+      if (session.userId != expectedOwnerUserId) {
+        await client.revokeSession(session);
+        throw StateError('Sign in as the Workspace owner to continue.');
+      }
+      if (revokeAfterVerification) await client.revokeSession(session);
+      return session;
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<void> _releaseWorkspaceOwnership() async {
+    final lifecycle = widget.lifecycle;
+    final dataDirectory = lifecycle.host.config.dataDirectory;
+    final registration = HostRegistrationStore(dataDirectory).readSync();
+    final dialogContext = _navigatorKey.currentContext;
+    if (registration == null || dialogContext == null) return;
+    if ((lifecycle.host.cloudConnection?.activeAssignmentCount ?? 0) > 0) {
+      ScaffoldMessenger.of(dialogContext).showSnackBar(
+        const SnackBar(
+            content: Text(
+                'Wait for active work to finish before releasing Workspace ownership.')),
+      );
+      return;
+    }
+    var acknowledgedLocalCredentials = false;
+    final confirmed = await showDialog<bool>(
+      context: dialogContext,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Release Workspace from this account?'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text(
+                'This revokes the runtime credential, disconnects Cloud, and releases the installation owner binding so another Conclave account can connect it. Local Workers, provider credentials, adapters, and Work Root files remain on this computer.'),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              value: acknowledgedLocalCredentials,
+              onChanged: (value) => setDialogState(
+                  () => acknowledgedLocalCredentials = value == true),
+              title: const Text(
+                  'I understand local Worker/provider credentials will remain here.'),
+            ),
+          ]),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel')),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                  foregroundColor: Theme.of(context).colorScheme.onError),
+              onPressed: acknowledgedLocalCredentials
+                  ? () => Navigator.pop(context, true)
+                  : null,
+              child: const Text('Release Workspace'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    DesktopHumanSession? freshSession;
+    final authClient = DesktopAuthClient(cloudUrl: registration.cloudUrl);
+    try {
+      final ownerUserId = registration.ownerUserId;
+      if (ownerUserId == null) {
+        throw StateError(
+            'Verify this Workspace owner by reconnecting before release.');
+      }
+      freshSession = await _reauthenticateWorkspaceOwner(
+        ownerUserId,
+        revokeAfterVerification: false,
+      );
+      if (freshSession == null) return;
+      final installationId = registration.installationId ??
+          await InstallationIdentityStore(dataDirectory).getOrCreate();
+      await authClient.releaseWorkspace(
+        session: freshSession,
+        installationId: installationId,
+        workspaceId: registration.workspaceId,
+        runtimeId: registration.hostId,
+      );
+      await lifecycle.host.credentialStore.delete(registration.hostId);
+      await HostRegistrationStore(dataDirectory).clear();
+      await LocalWorkspaceIdentityStore(dataDirectory).clear();
+      final preferenceStore = WorkspaceLifecyclePreferencesStore(dataDirectory);
+      final preferences = preferenceStore.readSync();
+      await preferenceStore.write(WorkspaceLifecyclePreferences(
+        desiredRuntime: DesiredRuntimeState.disconnected,
+        launchAtLogin: preferences.launchAtLogin,
+        managementLockPreference: preferences.managementLockPreference,
+        autoLockTimeout: preferences.autoLockTimeout,
+      ));
+      final replacement = await buildWorkspaceRuntime(
+        HostConfig.fromArgs(const [],
+            credentialStore: lifecycle.host.credentialStore),
+        credentialStore: lifecycle.host.credentialStore,
+      );
+      await lifecycle.replaceHost(replacement);
+      if (mounted) {
+        setState(() => _workerRevision++);
+        ScaffoldMessenger.of(dialogContext).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  'Workspace ownership released. Local Workers and files are preserved.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        showCopyableErrorSnackBar(
+            dialogContext, 'Could not release Workspace ownership: $error');
+      }
+    } finally {
+      if (freshSession != null) {
+        try {
+          await authClient.revokeSession(freshSession);
+        } on Object {
+          // The temporary session expires on its own if revocation fails.
+        }
+      }
+      authClient.close();
+    }
+  }
+
+  Future<void> _disconnectWorkspace({bool confirmed = false}) async {
     final lifecycle = widget.lifecycle;
     final registration =
         HostRegistrationStore(lifecycle.host.config.dataDirectory).readSync();
@@ -1045,39 +1436,51 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     final dialogContext = _navigatorKey.currentContext;
     if (dialogContext == null) return;
 
-    if ((lifecycle.host.cloudConnection?.activeAssignmentCount ?? 0) > 0) {
-      ScaffoldMessenger.of(dialogContext).showSnackBar(
-        const SnackBar(
-          content: Text('Wait for active work to finish before disconnecting.'),
-        ),
-      );
-      return;
-    }
-    final confirmed = await showDialog<bool>(
-      context: dialogContext,
-      builder: (context) => AlertDialog(
-        title: const Text('Disconnect Workspace?'),
-        content: const Text(
-          'This computer will stop accepting Cloud work.\n\n'
-          'Local Worker credentials, configurations, and Workstream files remain on this machine unless '
-          'you explicitly choose to remove them.\n\n'
-          'You can reconnect to a Workspace at any time.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Disconnect Workspace'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
+    final accepted = confirmed ||
+        (await showDialog<bool>(
+              context: dialogContext,
+              builder: (context) => AlertDialog(
+                title: const Text('Disconnect Workspace?'),
+                content: const Text(
+                  'This computer will stop accepting Cloud work.\n\n'
+                  'Active assignments will finish before it disconnects.\n\n'
+                  'Local Worker credentials, configurations, and Workstream files remain on this machine unless '
+                  'you explicitly choose to remove them.\n\n'
+                  'You can reconnect to a Workspace at any time.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Disconnect Workspace'),
+                  ),
+                ],
+              ),
+            ) ??
+            false);
+    if (!accepted || !mounted) return;
 
     try {
+      final ownerUserId = registration.ownerUserId;
+      if (ownerUserId == null ||
+          await _reauthenticateWorkspaceOwner(ownerUserId) == null) {
+        return;
+      }
+    } catch (error) {
+      if (mounted) {
+        showCopyableErrorSnackBar(
+          dialogContext,
+          'Could not verify the Workspace owner: $error',
+        );
+      }
+      return;
+    }
+
+    try {
+      await lifecycle.handleDesktopAction('drain');
       final token =
           await lifecycle.host.credentialStore.read(registration.hostId);
       if (token == null) {
@@ -1090,11 +1493,23 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       await InstallationIdentityStore(lifecycle.host.config.dataDirectory)
           .authorizeRecovery();
       await lifecycle.host.credentialStore.delete(registration.hostId);
-      await HostRegistrationStore(lifecycle.host.config.dataDirectory).clear();
+      final preferenceStore = WorkspaceLifecyclePreferencesStore(
+        lifecycle.host.config.dataDirectory,
+      );
+      final preferences = preferenceStore.readSync();
+      await preferenceStore.write(WorkspaceLifecyclePreferences(
+        desiredRuntime: DesiredRuntimeState.disconnected,
+        launchAtLogin: preferences.launchAtLogin,
+        managementLockPreference: preferences.managementLockPreference,
+        autoLockTimeout: preferences.autoLockTimeout,
+        ownerUserId: preferences.ownerUserId ?? registration.ownerUserId,
+        ownerDisplayName: preferences.ownerDisplayName,
+      ));
       final replacement = await buildWorkspaceRuntime(
         HostConfig.fromArgs(
           const [],
           credentialStore: lifecycle.host.credentialStore,
+          ignoreSavedRegistration: true,
         ),
         credentialStore: lifecycle.host.credentialStore,
       );
@@ -1136,14 +1551,15 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       builder: (context) => AlertDialog(
         title: const Text('Reset Local Workspace?'),
         content: const Text(
-          'This completely resets this Conclave Workspace installation on this machine.\n\n'
-          'This will disconnect the Cloud Workspace and permanently remove:\n'
-          '• Runtime identity & registration\n'
-          '• All configured local Workers\n'
-          '• All stored credentials and API keys\n'
-          '• Your desktop Conclave account session\n'
-          '• Installed adapter packages\n\n'
-          'This action cannot be undone.',
+          'Reset removes the local Workspace registration and runtime credential, '
+          'configured Workers and their provider credentials, installed adapter '
+          'packages, desktop sign-in session, and local runtime identity. It also '
+          'disconnects the Cloud runtime when available.\n\n'
+          'The persistent installation ID and its account ownership remain, so '
+          'another account cannot claim this installation. Work Root metadata, '
+          'Work Root contents, launch-at-login, management preferences, and '
+          'other local files are kept. To transfer the '
+          'installation, use the separate Release Workspace action.',
         ),
         actions: [
           TextButton(
@@ -1156,7 +1572,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
               foregroundColor: Theme.of(context).colorScheme.onError,
             ),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Reset Everything'),
+            child: const Text('Reset Local Workspace'),
           ),
         ],
       ),
@@ -1164,20 +1580,33 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     if (confirmed != true || !mounted) return;
 
     try {
-      final registration =
-          HostRegistrationStore(lifecycle.host.config.dataDirectory).readSync();
+      final dataDir = lifecycle.host.config.dataDirectory;
+      final registration = HostRegistrationStore(dataDir).readSync();
       if (registration != null) {
-        final token =
-            await lifecycle.host.credentialStore.read(registration.hostId);
-        if (token != null) {
-          try {
-            await WorkspacePairingService.unpair(
-              cloudUrl: registration.cloudUrl,
-              token: token,
+        final ownerUserId = registration.ownerUserId;
+        if (ownerUserId == null ||
+            await _reauthenticateWorkspaceOwner(ownerUserId) == null) {
+          return;
+        }
+        await lifecycle.handleDesktopAction('drain');
+        if ((lifecycle.host.cloudConnection?.activeAssignmentCount ?? 0) > 0) {
+          throw StateError('Wait for active work to finish before resetting.');
+        }
+        final desiredRuntime = WorkspaceLifecyclePreferencesStore(dataDir)
+            .readSync()
+            .desiredRuntime;
+        if (desiredRuntime == DesiredRuntimeState.connected) {
+          final token =
+              await lifecycle.host.credentialStore.read(registration.hostId);
+          if (token == null) {
+            throw StateError(
+              'The runtime credential is missing. Reconnect before resetting so Cloud can revoke it.',
             );
-          } catch (_) {
-            // Proceed with local reset even if cloud endpoint is unreachable
           }
+          await WorkspacePairingService.unpair(
+            cloudUrl: registration.cloudUrl,
+            token: token,
+          );
         }
         await lifecycle.host.credentialStore.delete(registration.hostId);
       }
@@ -1189,11 +1618,19 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
           await lifecycle.host.credentialStore.delete(worker.credentialRef!);
         }
       }
-      final dataDir = lifecycle.host.config.dataDirectory;
       await lifecycle.host.credentialStore.delete(desktopHumanCredentialKey);
       await HostRegistrationStore(dataDir).clear();
-      await InstallationIdentityStore(dataDir).clear();
       await LocalWorkspaceIdentityStore(dataDir).clear();
+      final preferenceStore = WorkspaceLifecyclePreferencesStore(dataDir);
+      final preferences = preferenceStore.readSync();
+      await preferenceStore.write(WorkspaceLifecyclePreferences(
+        desiredRuntime: DesiredRuntimeState.disconnected,
+        launchAtLogin: preferences.launchAtLogin,
+        managementLockPreference: preferences.managementLockPreference,
+        autoLockTimeout: preferences.autoLockTimeout,
+        ownerUserId: preferences.ownerUserId,
+        ownerDisplayName: preferences.ownerDisplayName,
+      ));
       final workersFile = File(
           '${dataDir.path}${Platform.pathSeparator}configured-workers.json');
       if (await workersFile.exists()) await workersFile.delete();
@@ -1299,6 +1736,47 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     }
   }
 
+  Future<bool> _validateDesktopSession(DesktopHumanSession session) async {
+    final registration =
+        HostRegistrationStore(widget.lifecycle.host.config.dataDirectory)
+            .readSync();
+    final cloudUrl = registration?.cloudUrl ??
+        Platform.environment['CONCLAVE_HOST_CLOUD_URL'] ??
+        conclaveProductionCloudUrl;
+    final client = DesktopAuthClient(cloudUrl: cloudUrl);
+    try {
+      await client.validateSession(session);
+      return true;
+    } on Object {
+      return false;
+    } finally {
+      client.close();
+    }
+  }
+
+  Widget _buildManagementDashboard() {
+    final lifecycle = widget.lifecycle;
+    return HostDashboard(
+      snapshot: lifecycle.uiSnapshot,
+      onSignIn: _signInDesktopHuman,
+      onSignOut: _signOutDesktopHuman,
+      onRecoverCredential: _connectWorkspace,
+      onDisconnect: _disconnectWorkspace,
+      onRelease: _releaseWorkspaceOwnership,
+      onReset: _resetLocalWorkspace,
+      onQuit: _confirmQuit,
+      onRetry: lifecycle.retryConnection,
+      onExportDiagnostics: _exportDiagnostics,
+      onChangeWorkRoot: _changeWorkRoot,
+      workerRevision: _workerRevision,
+      localWorkerRegistry: lifecycle.host.localWorkerRegistry,
+      credentialStore: lifecycle.host.credentialStore,
+      adapterPackageStore: lifecycle.host.adapterPackageStore,
+      ensureAdapter: _ensureAdapterAvailable,
+      onAddWorker: () => _addLocalWorker(context),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final lifecycle = widget.lifecycle;
@@ -1315,28 +1793,403 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
           child: lifecycle.hidden
               ? const Center(
                   child: Text('Workspace is running in the background.'))
-              : HostDashboard(
+              : WorkspaceShellRouter(
                   snapshot: lifecycle.uiSnapshot,
-                  onSignIn: _signInDesktopHuman,
-                  onSignOut: _signOutDesktopHuman,
-                  onRecoverCredential: _recoverWorkspaceCredential,
-                  onDisconnect: _disconnectWorkspace,
-                  onReset: _resetLocalWorkspace,
-                  onQuit: _confirmQuit,
-                  onRetry: lifecycle.retryConnection,
-                  onExportDiagnostics: _exportDiagnostics,
-                  onChangeWorkRoot: _changeWorkRoot,
-                  workerRevision: _workerRevision,
-                  localWorkerRegistry: lifecycle.host.localWorkerRegistry,
                   credentialStore: lifecycle.host.credentialStore,
-                  adapterPackageStore: lifecycle.host.adapterPackageStore,
-                  ensureAdapter: _ensureAdapterAvailable,
-                  onAddWorker: () => _addLocalWorker(context),
+                  cloudUrl: lifecycle.uiSnapshot.cloudUrl ??
+                      conclaveProductionCloudUrl,
+                  refreshToken: _workerRevision,
+                  validateSession: _validateDesktopSession,
+                  onSignIn: _signInDesktopHuman,
+                  onConnectWorkspace: _connectWorkspace,
+                  onSignOut: _signOutDesktopHuman,
+                  onRelease: _releaseWorkspaceOwnership,
+                  onQuit: _confirmQuit,
+                  managementShellBuilder: _buildManagementDashboard,
                 ),
         ),
       ),
     );
   }
+}
+
+enum _ShellAccessMode { checking, signedOut, signedIn, reauthRequired }
+
+class _ShellAccess {
+  const _ShellAccess(this.mode, [this.session]);
+
+  final _ShellAccessMode mode;
+  final DesktopHumanSession? session;
+}
+
+/// Selects a shell only after validating the desktop management session.
+/// The runtime is owned by [HostLifecycleController] and keeps running while
+/// this widget checks or changes the management surface.
+class WorkspaceShellRouter extends StatefulWidget {
+  const WorkspaceShellRouter({
+    required this.snapshot,
+    required this.credentialStore,
+    required this.cloudUrl,
+    required this.refreshToken,
+    required this.validateSession,
+    required this.onSignIn,
+    required this.onConnectWorkspace,
+    required this.onSignOut,
+    this.onRelease,
+    required this.onQuit,
+    required this.managementShellBuilder,
+    super.key,
+  });
+
+  final HostUiSnapshot snapshot;
+  final SecureCredentialStore credentialStore;
+  final String cloudUrl;
+  final int refreshToken;
+  final Future<bool> Function(DesktopHumanSession session) validateSession;
+  final Future<void> Function() onSignIn;
+  final Future<void> Function() onConnectWorkspace;
+  final Future<void> Function() onSignOut;
+  final Future<void> Function()? onRelease;
+  final Future<void> Function() onQuit;
+  final Widget Function() managementShellBuilder;
+
+  @override
+  State<WorkspaceShellRouter> createState() => _WorkspaceShellRouterState();
+}
+
+class _WorkspaceShellRouterState extends State<WorkspaceShellRouter> {
+  late Future<_ShellAccess> _access;
+
+  @override
+  void initState() {
+    super.initState();
+    _access = _loadAccess();
+  }
+
+  @override
+  void didUpdateWidget(covariant WorkspaceShellRouter oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshToken != widget.refreshToken) {
+      _access = _loadAccess();
+    }
+  }
+
+  Future<_ShellAccess> _loadAccess() async {
+    final stored = await widget.credentialStore.read(desktopHumanCredentialKey);
+    if (stored == null || stored.isEmpty) {
+      return _ShellAccess(
+          widget.snapshot.paired && widget.snapshot.cloudConnected
+              ? _ShellAccessMode.reauthRequired
+              : _ShellAccessMode.signedOut);
+    }
+
+    try {
+      final decoded = jsonDecode(stored);
+      if (decoded is! Map) throw const FormatException('Invalid session data');
+      final credential = decoded['credential'];
+      final sessionId = decoded['sessionId'];
+      final userId = decoded['userId'];
+      final displayName = decoded['displayName'];
+      final email = decoded['email'];
+      final expiresAt =
+          DateTime.tryParse(decoded['expiresAt']?.toString() ?? '');
+      if (credential is! String ||
+          sessionId is! String ||
+          userId is! String ||
+          displayName is! String ||
+          email is! String ||
+          expiresAt == null) {
+        throw const FormatException('Invalid session identity');
+      }
+      final session = DesktopHumanSession(
+        credential: credential,
+        sessionId: sessionId,
+        userId: userId,
+        displayName: displayName,
+        email: email,
+        expiresAt: expiresAt,
+      );
+      if (!expiresAt.isAfter(DateTime.now().toUtc()) ||
+          !await widget.validateSession(session)) {
+        return _ShellAccess(_ShellAccessMode.reauthRequired, session);
+      }
+      final ownerUserId = widget.snapshot.ownerUserId;
+      if (widget.snapshot.paired &&
+          (ownerUserId == null || ownerUserId != session.userId)) {
+        return _ShellAccess(_ShellAccessMode.reauthRequired, session);
+      }
+      return _ShellAccess(_ShellAccessMode.signedIn, session);
+    } on Object {
+      return _ShellAccess(
+          widget.snapshot.paired && widget.snapshot.cloudConnected
+              ? _ShellAccessMode.reauthRequired
+              : _ShellAccessMode.signedOut);
+    }
+  }
+
+  void _showAbout() {
+    showAboutDialog(
+      context: context,
+      applicationName: 'Conclave Workspace',
+      applicationVersion: 'v${widget.snapshot.appVersion}',
+      applicationIcon: ConclaveBrand.logoMark(size: 40),
+      children: const [
+        Text('Conclave Workspace Runtime and Local Worker Manager.'),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<_ShellAccess>(
+        future: _access,
+        builder: (context, result) {
+          final access = result.data;
+          if (access == null || access.mode == _ShellAccessMode.checking) {
+            return const _MinimalShell(
+              version: conclaveWorkspaceAppVersion,
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+          switch (access.mode) {
+            case _ShellAccessMode.checking:
+              return const _MinimalShell(
+                version: conclaveWorkspaceAppVersion,
+                child: Center(child: CircularProgressIndicator()),
+              );
+            case _ShellAccessMode.signedOut:
+              return _MinimalShell(
+                version: widget.snapshot.appVersion,
+                onAbout: _showAbout,
+                onQuit: widget.onQuit,
+                child: _SignedOutShell(onSignIn: widget.onSignIn),
+              );
+            case _ShellAccessMode.reauthRequired:
+              return _MinimalShell(
+                version: widget.snapshot.appVersion,
+                onAbout: _showAbout,
+                onQuit: widget.onQuit,
+                child: _ReauthRequiredShell(
+                  runtimeConnected: widget.snapshot.cloudConnected,
+                  onSignIn: widget.onSignIn,
+                ),
+              );
+            case _ShellAccessMode.signedIn:
+              if (widget.snapshot.workspaceReady) {
+                return widget.managementShellBuilder();
+              }
+              return _MinimalShell(
+                version: widget.snapshot.appVersion,
+                onAbout: _showAbout,
+                onQuit: widget.onQuit,
+                child: _SignedInDisconnectedShell(
+                  session: access.session!,
+                  computerName: widget.snapshot.hostname ??
+                      widget.snapshot.workspaceName ??
+                      'This computer',
+                  isRegistered: widget.snapshot.paired,
+                  onConnect: widget.onConnectWorkspace,
+                  onSignOut: widget.onSignOut,
+                  onRelease: widget.onRelease,
+                ),
+              );
+          }
+        },
+      );
+}
+
+class _MinimalShell extends StatelessWidget {
+  const _MinimalShell({
+    required this.version,
+    required this.child,
+    this.onAbout,
+    this.onQuit,
+  });
+
+  final String version;
+  final Widget child;
+  final VoidCallback? onAbout;
+  final Future<void> Function()? onQuit;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 12, 10),
+            child: Row(children: [
+              ConclaveBrand.logoMark(size: 26),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text('Conclave Workspace',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+              ),
+              Text('v$version'),
+              PopupMenuButton<String>(
+                tooltip: 'Menu',
+                onSelected: (value) {
+                  if (value == 'about') onAbout?.call();
+                },
+                itemBuilder: (context) => const [
+                  PopupMenuItem(value: 'about', child: Text('About')),
+                ],
+              ),
+              IconButton(
+                tooltip: 'Quit Conclave Workspace',
+                onPressed: onQuit == null ? null : () => unawaited(onQuit!()),
+                icon: const Icon(Icons.power_settings_new),
+              ),
+            ]),
+          ),
+          const Divider(height: 1),
+          Expanded(child: child),
+        ],
+      );
+}
+
+class _SignedOutShell extends StatelessWidget {
+  const _SignedOutShell({required this.onSignIn});
+
+  final Future<void> Function() onSignIn;
+
+  @override
+  Widget build(BuildContext context) => Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(28),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                ConclaveBrand.logoMark(size: 48),
+                const SizedBox(height: 18),
+                Text('Sign in to Conclave Workspace',
+                    style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 10),
+                const Text(
+                  'Sign in with your Conclave account to manage this computer.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 22),
+                FilledButton.icon(
+                  onPressed: () => unawaited(onSignIn()),
+                  icon: const Icon(Icons.login),
+                  label: const Text('Sign in'),
+                ),
+              ]),
+            ),
+          ),
+        ),
+      );
+}
+
+class _SignedInDisconnectedShell extends StatelessWidget {
+  const _SignedInDisconnectedShell({
+    required this.session,
+    required this.computerName,
+    required this.isRegistered,
+    required this.onConnect,
+    required this.onSignOut,
+    this.onRelease,
+  });
+
+  final DesktopHumanSession session;
+  final String computerName;
+  final bool isRegistered;
+  final Future<void> Function() onConnect;
+  final Future<void> Function() onSignOut;
+  final Future<void> Function()? onRelease;
+
+  @override
+  Widget build(BuildContext context) => Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(28),
+              child: SingleChildScrollView(
+                child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Signed in as',
+                          style: Theme.of(context).textTheme.bodyMedium),
+                      Text(session.displayName,
+                          style: Theme.of(context).textTheme.titleLarge),
+                      Text(session.email),
+                      const SizedBox(height: 24),
+                      Text(
+                        isRegistered
+                            ? 'This Workspace is not Ready yet.'
+                            : 'This computer is not connected as a Workspace.',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 14),
+                      const Text('Computer'),
+                      Text(computerName),
+                      const SizedBox(height: 22),
+                      Wrap(spacing: 8, runSpacing: 4, children: [
+                        FilledButton.icon(
+                          onPressed: () => unawaited(onConnect()),
+                          icon: const Icon(Icons.link),
+                          label: Text(isRegistered
+                              ? 'Reconnect Workspace'
+                              : 'Connect Workspace'),
+                        ),
+                        TextButton(
+                          onPressed: () => unawaited(onSignOut()),
+                          child: const Text('Sign out'),
+                        ),
+                      ]),
+                      if (isRegistered && onRelease != null) ...[
+                        const SizedBox(height: 8),
+                        TextButton(
+                          onPressed: () => unawaited(onRelease!()),
+                          child: const Text('Release Workspace from account'),
+                        ),
+                      ],
+                    ]),
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
+class _ReauthRequiredShell extends StatelessWidget {
+  const _ReauthRequiredShell({
+    required this.runtimeConnected,
+    required this.onSignIn,
+  });
+
+  final bool runtimeConnected;
+  final Future<void> Function() onSignIn;
+
+  @override
+  Widget build(BuildContext context) => Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(28),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.lock_outline, size: 42),
+                const SizedBox(height: 16),
+                Text('Sign in again to manage Workspace',
+                    style: Theme.of(context).textTheme.titleLarge,
+                    textAlign: TextAlign.center),
+                const SizedBox(height: 10),
+                Text(runtimeConnected
+                    ? 'The runtime remains connected. Sign in as the Workspace owner to manage it.'
+                    : 'Sign in as the Workspace owner to continue managing this computer.'),
+                const SizedBox(height: 22),
+                FilledButton.icon(
+                  onPressed: () => unawaited(onSignIn()),
+                  icon: const Icon(Icons.login),
+                  label: const Text('Sign in'),
+                ),
+              ]),
+            ),
+          ),
+        ),
+      );
 }
 
 class HostDashboard extends StatefulWidget {
@@ -1346,6 +2199,7 @@ class HostDashboard extends StatefulWidget {
     this.onSignOut,
     this.onRecoverCredential,
     this.onDisconnect,
+    this.onRelease,
     this.onReset,
     this.onAccountAction,
     this.onQuit,
@@ -1366,6 +2220,7 @@ class HostDashboard extends StatefulWidget {
   final Future<void> Function()? onSignOut;
   final Future<void> Function()? onRecoverCredential;
   final VoidCallback? onDisconnect;
+  final Future<void> Function()? onRelease;
   final VoidCallback? onReset;
   final VoidCallback? onAccountAction;
   final VoidCallback? onQuit;
@@ -1393,6 +2248,16 @@ enum _HeaderMenuAction {
 
 class _HostDashboardState extends State<HostDashboard> {
   HostSurface _selectedSurface = HostSurface.workspace;
+
+  @override
+  void didUpdateWidget(covariant HostDashboard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.snapshot.workspaceReady &&
+        oldWidget.snapshot.workspaceReady &&
+        _selectedSurface != HostSurface.workspace) {
+      _selectedSurface = HostSurface.workspace;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1534,33 +2399,34 @@ class _HostDashboardState extends State<HostDashboard> {
         ),
 
         // Two-Surface Horizontal Tab Switcher
-        Container(
-          width: double.infinity,
-          color: theme.colorScheme.surface,
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _SurfaceTabButton(
-                icon: Icons.computer_outlined,
-                selectedIcon: Icons.computer,
-                label: 'Workspace',
-                selected: _selectedSurface == HostSurface.workspace,
-                onTap: () =>
-                    setState(() => _selectedSurface = HostSurface.workspace),
-              ),
-              const SizedBox(width: 16),
-              _SurfaceTabButton(
-                icon: Icons.memory_outlined,
-                selectedIcon: Icons.memory,
-                label: 'Workers',
-                selected: _selectedSurface == HostSurface.workers,
-                onTap: () =>
-                    setState(() => _selectedSurface = HostSurface.workers),
-              ),
-            ],
+        if (snapshot.workspaceReady)
+          Container(
+            width: double.infinity,
+            color: theme.colorScheme.surface,
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _SurfaceTabButton(
+                  icon: Icons.computer_outlined,
+                  selectedIcon: Icons.computer,
+                  label: 'Workspace',
+                  selected: _selectedSurface == HostSurface.workspace,
+                  onTap: () =>
+                      setState(() => _selectedSurface = HostSurface.workspace),
+                ),
+                const SizedBox(width: 16),
+                _SurfaceTabButton(
+                  icon: Icons.memory_outlined,
+                  selectedIcon: Icons.memory,
+                  label: 'Workers',
+                  selected: _selectedSurface == HostSurface.workers,
+                  onTap: () =>
+                      setState(() => _selectedSurface = HostSurface.workers),
+                ),
+              ],
+            ),
           ),
-        ),
 
         // Content Area
         Expanded(
@@ -1570,32 +2436,49 @@ class _HostDashboardState extends State<HostDashboard> {
               constraints: const BoxConstraints(maxWidth: 820),
               child: IndexedStack(
                 index: _selectedSurface.index,
-                children: [
-                  _WorkspaceTab(
-                    snapshot: snapshot,
-                    onSignIn: widget.onSignIn,
-                    credentialStore: widget.credentialStore,
-                    accountRefreshToken: widget.workerRevision,
-                    onSignOut: widget.onSignOut,
-                    onRecoverCredential: widget.onRecoverCredential,
-                    onRetry: widget.onRetry,
-                    onExportDiagnostics: widget.onExportDiagnostics,
-                    onChangeWorkRoot: widget.onChangeWorkRoot,
-                    onDisconnect: widget.onDisconnect,
-                    onReset: widget.onReset,
-                  ),
-                  _WorkersTab(
-                    key: ValueKey(widget.workerRevision),
-                    registry: widget.localWorkerRegistry,
-                    credentialStore: widget.credentialStore,
-                    adapterPackageStore: widget.adapterPackageStore,
-                    ensureAdapter: widget.ensureAdapter,
-                    onAddWorker: widget.onAddWorker,
-                    isPaired: snapshot.paired,
-                    onSwitchToWorkspace: () => setState(
-                        () => _selectedSurface = HostSurface.workspace),
-                  ),
-                ],
+                children: snapshot.workspaceReady
+                    ? [
+                        _WorkspaceTab(
+                          snapshot: snapshot,
+                          onSignIn: widget.onSignIn,
+                          credentialStore: widget.credentialStore,
+                          accountRefreshToken: widget.workerRevision,
+                          onSignOut: widget.onSignOut,
+                          onRecoverCredential: widget.onRecoverCredential,
+                          onRetry: widget.onRetry,
+                          onExportDiagnostics: widget.onExportDiagnostics,
+                          onChangeWorkRoot: widget.onChangeWorkRoot,
+                          onDisconnect: widget.onDisconnect,
+                          onRelease: widget.onRelease,
+                          onReset: widget.onReset,
+                        ),
+                        _WorkersTab(
+                          key: ValueKey(widget.workerRevision),
+                          registry: widget.localWorkerRegistry,
+                          credentialStore: widget.credentialStore,
+                          adapterPackageStore: widget.adapterPackageStore,
+                          ensureAdapter: widget.ensureAdapter,
+                          onAddWorker: widget.onAddWorker,
+                          isPaired: snapshot.workspaceReady,
+                          onSwitchToWorkspace: () => setState(
+                              () => _selectedSurface = HostSurface.workspace),
+                        ),
+                      ]
+                    : [
+                        _WorkspaceTab(
+                          snapshot: snapshot,
+                          onSignIn: widget.onSignIn,
+                          credentialStore: widget.credentialStore,
+                          accountRefreshToken: widget.workerRevision,
+                          onSignOut: widget.onSignOut,
+                          onRecoverCredential: widget.onRecoverCredential,
+                          onRetry: widget.onRetry,
+                          onExportDiagnostics: widget.onExportDiagnostics,
+                          onChangeWorkRoot: widget.onChangeWorkRoot,
+                          onDisconnect: widget.onDisconnect,
+                          onReset: widget.onReset,
+                        ),
+                      ],
               ),
             ),
           ),
@@ -1676,6 +2559,7 @@ class _WorkspaceTab extends StatelessWidget {
     this.onExportDiagnostics,
     this.onChangeWorkRoot,
     this.onDisconnect,
+    this.onRelease,
     this.onReset,
   });
 
@@ -1689,6 +2573,7 @@ class _WorkspaceTab extends StatelessWidget {
   final Future<void> Function()? onExportDiagnostics;
   final Future<void> Function(String path)? onChangeWorkRoot;
   final VoidCallback? onDisconnect;
+  final Future<void> Function()? onRelease;
   final VoidCallback? onReset;
 
   @override
@@ -1725,6 +2610,7 @@ class _WorkspaceTab extends StatelessWidget {
           onSignOut: onSignOut,
           onRecoverCredential: onRecoverCredential,
           onDisconnect: onDisconnect,
+          onRelease: onRelease,
           onReset: onReset,
         ),
         const SizedBox(height: 16),
@@ -1735,21 +2621,20 @@ class _WorkspaceTab extends StatelessWidget {
         const SizedBox(height: 24),
 
         // Section 2: Work Root Path with Browse & Open Folder Button (Flat light design)
-        _WorkRootSection(
-          workRootPath: snapshot.workRootPath,
-          onChangeWorkRoot: onChangeWorkRoot,
-        ),
-
-        const SizedBox(height: 24),
-
-        // Section 3: Advanced & Diagnostics (Expandable Accordion)
-        _WorkspaceDiagnosticsSection(
-          snapshot: snapshot,
-          onRetry: onRetry,
-          onExportDiagnostics: onExportDiagnostics,
-          onDisconnect: null,
-          onReset: null,
-        ),
+        if (snapshot.paired) ...[
+          _WorkRootSection(
+            workRootPath: snapshot.workRootPath,
+            onChangeWorkRoot: onChangeWorkRoot,
+          ),
+          const SizedBox(height: 24),
+          _WorkspaceDiagnosticsSection(
+            snapshot: snapshot,
+            onRetry: onRetry,
+            onExportDiagnostics: onExportDiagnostics,
+            onDisconnect: null,
+            onReset: null,
+          ),
+        ],
       ],
     );
   }
@@ -1764,6 +2649,7 @@ class _WorkspaceAccountSection extends StatelessWidget {
     this.onSignOut,
     this.onRecoverCredential,
     this.onDisconnect,
+    this.onRelease,
     this.onReset,
   });
 
@@ -1774,59 +2660,80 @@ class _WorkspaceAccountSection extends StatelessWidget {
   final Future<void> Function()? onSignOut;
   final Future<void> Function()? onRecoverCredential;
   final VoidCallback? onDisconnect;
+  final Future<void> Function()? onRelease;
   final VoidCallback? onReset;
 
   @override
-  Widget build(BuildContext context) => Card(
-        margin: EdgeInsets.zero,
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Account', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            _DesktopHumanAccountStatus(
-                key: ValueKey(refreshToken), credentialStore: credentialStore),
-            const SizedBox(height: 12),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              if (onSignIn != null)
-                OutlinedButton.icon(
-                    onPressed: () => unawaited(onSignIn!()),
-                    icon: const Icon(Icons.login),
-                    label: const Text('Sign in')),
-              if (onSignOut != null)
-                OutlinedButton.icon(
-                    onPressed: () => unawaited(onSignOut!()),
-                    icon: const Icon(Icons.logout),
-                    label: const Text('Sign out')),
-              if (onRecoverCredential != null)
-                OutlinedButton.icon(
-                    onPressed: () => unawaited(onRecoverCredential!()),
-                    icon: const Icon(Icons.sync),
-                    label: Text(snapshot.paired
-                        ? 'Recover Workspace connection'
-                        : 'Register Workspace')),
-              if (snapshot.paired && onDisconnect != null)
-                OutlinedButton.icon(
-                    onPressed: onDisconnect,
-                    icon: const Icon(Icons.link_off),
-                    label: const Text('Disconnect Workspace')),
-              if (onReset != null)
-                TextButton.icon(
-                    onPressed: onReset,
-                    icon: Icon(Icons.delete_forever_outlined,
-                        color: Theme.of(context).colorScheme.error),
-                    label: Text('Reset local Workspace',
-                        style: TextStyle(
-                            color: Theme.of(context).colorScheme.error))),
-            ]),
-            const SizedBox(height: 8),
+  Widget build(BuildContext context) {
+    final signedIn = _hasValidCachedDesktopSession(credentialStore);
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Account', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          _DesktopHumanAccountStatus(
+              key: ValueKey(refreshToken), credentialStore: credentialStore),
+          if (!snapshot.paired) ...[
+            const SizedBox(height: 14),
+            const Text(
+              'This computer is not connected as a Workspace.',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 6),
             Text(
-                'Sign out removes the desktop account session. Disconnect Workspace stops Cloud work and preserves local Workers. Reset local Workspace removes local Worker configuration and credentials.',
-                style: Theme.of(context).textTheme.bodySmall),
+                'Computer\n${snapshot.hostname ?? snapshot.workspaceName ?? 'This computer'}'),
+          ],
+          const SizedBox(height: 12),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            if (!signedIn && onSignIn != null)
+              OutlinedButton.icon(
+                  onPressed: () => unawaited(onSignIn!()),
+                  icon: const Icon(Icons.login),
+                  label: const Text('Sign in')),
+            if (signedIn && onSignOut != null)
+              OutlinedButton.icon(
+                  onPressed: () => unawaited(onSignOut!()),
+                  icon: const Icon(Icons.logout),
+                  label: const Text('Sign out')),
+            if (signedIn &&
+                onRecoverCredential != null &&
+                !snapshot.workspaceReady)
+              OutlinedButton.icon(
+                  onPressed: () => unawaited(onRecoverCredential!()),
+                  icon: const Icon(Icons.sync),
+                  label: Text(snapshot.paired
+                      ? 'Reconnect Workspace'
+                      : 'Connect Workspace')),
+            if (signedIn && snapshot.paired && onDisconnect != null)
+              OutlinedButton.icon(
+                  onPressed: onDisconnect,
+                  icon: const Icon(Icons.link_off),
+                  label: const Text('Disconnect Workspace')),
+            if (signedIn && snapshot.paired && onRelease != null)
+              TextButton.icon(
+                onPressed: () => unawaited(onRelease!()),
+                icon: const Icon(Icons.person_remove_outlined),
+                label: const Text('Release Workspace from account'),
+              ),
+            if (signedIn && onReset != null)
+              TextButton.icon(
+                  onPressed: onReset,
+                  icon: Icon(Icons.delete_forever_outlined,
+                      color: Theme.of(context).colorScheme.error),
+                  label: Text('Reset local Workspace',
+                      style: TextStyle(
+                          color: Theme.of(context).colorScheme.error))),
           ]),
-        ),
-      );
+          const SizedBox(height: 8),
+          Text(
+              'Sign out removes the desktop account session. Disconnect Workspace stops Cloud work and preserves local Workers. Reset local Workspace removes local Worker configuration and credentials.',
+              style: Theme.of(context).textTheme.bodySmall),
+        ]),
+      ),
+    );
+  }
 }
 
 class _WorkRootSection extends StatefulWidget {
@@ -1932,46 +2839,63 @@ class _DesktopHumanAccountStatus extends StatefulWidget {
 
 class _DesktopHumanAccountStatusState
     extends State<_DesktopHumanAccountStatus> {
-  late Future<String> _status;
+  late Future<Map<String, String>?> _session;
 
   @override
   void initState() {
     super.initState();
-    _status = _loadStatus();
+    _session = _loadSession();
   }
 
-  Future<String> _loadStatus() async {
+  Future<Map<String, String>?> _loadSession() async {
     try {
       final stored =
           await widget.credentialStore.read(desktopHumanCredentialKey);
-      if (stored == null || stored.isEmpty) return 'Not signed in';
+      if (stored == null || stored.isEmpty) return null;
       final decoded = jsonDecode(stored);
-      if (decoded is! Map) return 'Not signed in';
-      final name = decoded['displayName'];
-      final email = decoded['email'];
+      if (decoded is! Map) return null;
       final expiresAt =
           DateTime.tryParse(decoded['expiresAt']?.toString() ?? '');
       if (expiresAt == null || !expiresAt.isAfter(DateTime.now().toUtc())) {
-        return 'Sign-in expired';
+        return null;
       }
-      final identity = name is String && name.isNotEmpty
-          ? name
-          : email is String && email.isNotEmpty
-              ? email
-              : 'Conclave account';
-      return 'Signed in as $identity';
+      final displayName = decoded['displayName'];
+      final email = decoded['email'];
+      return {
+        'displayName': displayName is String && displayName.isNotEmpty
+            ? displayName
+            : 'Conclave account',
+        'email': email is String ? email : '',
+      };
     } on Object {
-      return 'Not signed in';
+      return null;
     }
   }
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<String>(
-        future: _status,
-        builder: (context, snapshot) => Text(
-          snapshot.data ?? 'Checking Conclave account…',
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
+  Widget build(BuildContext context) => FutureBuilder<Map<String, String>?>(
+        future: _session,
+        builder: (context, result) {
+          final session = result.data;
+          if (!result.hasData) {
+            return Text(
+              result.connectionState == ConnectionState.done
+                  ? 'Not signed in'
+                  : 'Checking Conclave account…',
+              style: Theme.of(context).textTheme.bodyMedium,
+            );
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Signed in as'),
+              Text(session!['displayName']!,
+                  style: Theme.of(context).textTheme.titleSmall),
+              Text(session['email']!,
+                  style: Theme.of(context).textTheme.bodyMedium),
+            ],
+          );
+        },
       );
 }
 

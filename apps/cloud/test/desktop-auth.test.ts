@@ -11,6 +11,8 @@ import {
   handleCreateDesktopAuthIntent,
   handleDesktopAuthIntentStatus,
   handleGetDesktopHumanSession,
+  handleCheckWorkspaceOwnership,
+  handleReleaseDesktopWorkspace,
   handleRegisterWorkspaceFromDesktop,
   handleRevokeDesktopHumanSession,
 } from "../src/routes/handlers.js";
@@ -374,5 +376,187 @@ describe("desktop human authentication", () => {
         )
         .get(installationId),
     ).toMatchObject({ count: 1 });
+  });
+
+  it("blocks a different owner and safely migrates a legacy unbound runtime", async () => {
+    const { env, sqlite } = await setup();
+    const now = new Date().toISOString();
+    const installationId = "install_12345678-1234-4234-8234-123456789abc";
+    const testUsers: Array<[string, string]> = [
+      ["human-a", "a@example.test"],
+      ["human-b", "b@example.test"],
+    ];
+    for (const [id, email] of testUsers) {
+      sqlite.prepare(
+        "INSERT INTO users (id, email, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+      ).run(id, email, id, now, now);
+    }
+    sqlite.prepare(
+      "INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at) VALUES (?, ?, ?, 'offline', ?, ?)",
+    ).run("legacy-workspace", "human-a", "Legacy Workspace", now, now);
+    sqlite.prepare(
+      "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_key_ref, credential_token_hash, installation_id, created_at) VALUES (?, ?, ?, ?, NULL, ?)",
+    ).run("legacy-runtime", "legacy-workspace", "legacy-key", await hashToken("runtime-secret"), now);
+    const addSession = async (id: string, userId: string, credential: string) => {
+      sqlite.prepare(
+        "INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      ).run(id, userId, await hashToken(credential), "conclave.desktop.management", now, now, new Date(Date.now() + 60_000).toISOString());
+    };
+    await addSession("session-b", "human-b", "human-b-secret");
+    await addSession("session-a", "human-a", "human-a-secret");
+    const request = (credential: string) => new Request(
+      "https://app.conclave.test/api/workspace-runtime/ownership",
+      {
+        method: "POST",
+        headers: { authorization: `Bearer ${credential}`, "content-type": "application/json" },
+        body: JSON.stringify({ contractVersion: "1.0", installationId, workspaceId: "legacy-workspace", runtimeId: "legacy-runtime" }),
+      },
+    );
+
+    const denied = await handleCheckWorkspaceOwnership(request("human-b-secret"), env);
+    expect(denied.status).toBe(409);
+    expect(await denied.json()).toMatchObject({ code: "installation_already_owned" });
+    expect(sqlite.prepare("SELECT installation_id FROM workspace_runtime_identities WHERE id = ?").get("legacy-runtime")).toMatchObject({ installation_id: null });
+
+    const connectDenied = await handleRegisterWorkspaceFromDesktop(
+      new Request("https://app.conclave.test/api/workspace-runtime/register", {
+        method: "POST",
+        headers: { authorization: "Bearer human-b-secret", "content-type": "application/json" },
+        body: JSON.stringify({
+          contractVersion: "1.0",
+          installationId,
+          existingWorkspaceId: "legacy-workspace",
+          existingRuntimeId: "legacy-runtime",
+          proposedWorkspaceName: "B's computer",
+          hostname: "b-computer",
+          platform: "linux",
+          architecture: "x64",
+          appVersion: "1.0.0",
+          runtimeCapabilities: { os: "linux", arch: "x64", appVersion: "1.0.0", supportedRuntimes: ["dart"], maxConcurrentWorkers: 2 },
+        }),
+      }),
+      env,
+    );
+    expect(connectDenied.status).toBe(409);
+    expect(await connectDenied.json()).toMatchObject({ code: "installation_already_owned" });
+    expect(sqlite.prepare("SELECT COUNT(*) AS count FROM workspace_runtime_identities").get()).toMatchObject({ count: 1 });
+    expect(sqlite.prepare("SELECT credential_token_hash AS tokenHash FROM workspace_runtime_identities WHERE id = ?").get("legacy-runtime")).toMatchObject({ tokenHash: await hashToken("runtime-secret") });
+
+    const verified = await handleCheckWorkspaceOwnership(request("human-a-secret"), env);
+    expect(verified.status).toBe(200);
+    expect(await verified.json()).toMatchObject({ registered: true, ownerUserId: "human-a" });
+    expect(sqlite.prepare("SELECT installation_id FROM workspace_runtime_identities WHERE id = ?").get("legacy-runtime")).toMatchObject({ installation_id: installationId });
+  });
+
+  it("allows only a fresh Workspace owner session to release the installation binding", async () => {
+    const { env, sqlite } = await setup();
+    const now = new Date().toISOString();
+    const installationId = "install_12345678-1234-4234-8234-123456789abc";
+    sqlite.prepare(
+      "INSERT INTO users (id, email, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+    ).run("human-a", "a@example.test", "A", now, now);
+    sqlite.prepare(
+      "INSERT INTO users (id, email, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+    ).run("human-b", "b@example.test", "B", now, now);
+    sqlite.prepare(
+      "INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at) VALUES (?, ?, ?, 'offline', ?, ?)",
+    ).run("workspace-a", "human-a", "A's Workspace", now, now);
+    sqlite.prepare(
+      "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_key_ref, credential_token_hash, installation_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+    ).run("runtime-a", "workspace-a", "runtime-key", await hashToken("runtime-secret"), installationId, now);
+    const addSession = async (id: string, userId: string, credential: string) => {
+      sqlite.prepare(
+        "INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      ).run(id, userId, await hashToken(credential), "conclave.desktop.management", now, now, new Date(Date.now() + 60_000).toISOString());
+    };
+    await addSession("session-a", "human-a", "human-a-secret");
+    await addSession("session-b", "human-b", "human-b-secret");
+    const request = (credential: string) => new Request(
+      "https://app.conclave.test/api/workspace-runtime/release",
+      {
+        method: "POST",
+        headers: { authorization: `Bearer ${credential}`, "content-type": "application/json" },
+        body: JSON.stringify({ installationId, workspaceId: "workspace-a", runtimeId: "runtime-a" }),
+      },
+    );
+
+    const denied = await handleReleaseDesktopWorkspace(request("human-b-secret"), env);
+    expect(denied.status).toBe(409);
+    expect(await denied.json()).toMatchObject({ code: "installation_already_owned" });
+    expect(sqlite.prepare("SELECT installation_id, revoked_at FROM workspace_runtime_identities WHERE id = ?").get("runtime-a")).toMatchObject({ installation_id: installationId, revoked_at: null });
+
+    sqlite.exec("PRAGMA foreign_keys = OFF");
+    sqlite.prepare(
+      "INSERT INTO worker_assignments (id, project_id, execution_workspace_id, runtime_identity_id, worker_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'running', ?, ?)",
+    ).run("assignment-active", "project-x", "workspace-a", "runtime-a", "worker-x", now, now);
+    const activeWorkDenied = await handleReleaseDesktopWorkspace(request("human-a-secret"), env);
+    expect(activeWorkDenied.status).toBe(409);
+    expect(await activeWorkDenied.json()).toMatchObject({ code: "active_work" });
+    expect(sqlite.prepare("SELECT installation_id, revoked_at FROM workspace_runtime_identities WHERE id = ?").get("runtime-a")).toMatchObject({ installation_id: installationId, revoked_at: null });
+    expect(sqlite.prepare("SELECT status FROM execution_workspaces WHERE id = ?").get("workspace-a")).toMatchObject({ status: "offline" });
+    sqlite.prepare("DELETE FROM worker_assignments WHERE id = ?").run("assignment-active");
+
+    const released = await handleReleaseDesktopWorkspace(request("human-a-secret"), env);
+    expect(released.status).toBe(200);
+    expect(await released.json()).toMatchObject({ released: true, installationId });
+    expect(sqlite.prepare("SELECT installation_id, revoked_at FROM workspace_runtime_identities WHERE id = ?").get("runtime-a")).toMatchObject({ installation_id: null });
+    expect(sqlite.prepare("SELECT status FROM execution_workspaces WHERE id = ?").get("workspace-a")).toMatchObject({ status: "revoked" });
+  });
+
+  it("returns the authenticated owner with a new Workspace registration", async () => {
+    const { env, sqlite } = await setup();
+    const humanCredential = "conclave_dhs_user-a";
+    const now = new Date().toISOString();
+    sqlite
+      .prepare(
+        "INSERT INTO users (id, email, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+      )
+      .run("human-a", "a@example.test", "A", now, now);
+    sqlite
+      .prepare(
+        "INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "session-a",
+        "human-a",
+        await hashToken(humanCredential),
+        "conclave.desktop.management",
+        now,
+        now,
+        new Date(Date.now() + 60_000).toISOString(),
+      );
+
+    const response = await handleRegisterWorkspaceFromDesktop(
+      new Request("https://app.conclave.test/api/workspace-runtime/register", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${humanCredential}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          contractVersion: "1.0",
+          installationId: "install_12345678-1234-4234-8234-123456789abc",
+          proposedWorkspaceName: "A's computer",
+          hostname: "a-computer",
+          platform: "macos",
+          architecture: "arm64",
+          appVersion: "1.0.0",
+          runtimeCapabilities: {
+            os: "macos",
+            arch: "arm64",
+            appVersion: "1.0.0",
+            supportedRuntimes: ["dart"],
+            maxConcurrentWorkers: 2,
+          },
+        }),
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({
+      outcome: "created",
+      ownerUserId: "human-a",
+    });
   });
 });

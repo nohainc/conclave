@@ -138,12 +138,12 @@ class DesktopAuthClient {
         await (method == 'GET' ? _http.getUrl(uri) : _http.postUrl(uri))
             .timeout(const Duration(seconds: 20));
     request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+    if (bearer != null) {
+      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $bearer');
+    }
     if (body != null) {
       request.headers.contentType = ContentType.json;
       request.write(jsonEncode(body));
-    }
-    if (bearer != null) {
-      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $bearer');
     }
     final response = await request.close().timeout(const Duration(seconds: 20));
     final text = await utf8.decoder
@@ -240,6 +240,48 @@ class DesktopAuthClient {
         'Cloud did not confirm the desktop management session',
       );
     }
+  }
+
+  Future<String> checkWorkspaceOwnership({
+    required DesktopHumanSession session,
+    required String installationId,
+    String? workspaceId,
+    String? runtimeId,
+  }) async {
+    final response = await _requestJson(
+      'POST',
+      _api('/workspace-runtime/ownership'),
+      bearer: session.credential,
+      body: {
+        'contractVersion': '1.0',
+        'installationId': installationId,
+        if (workspaceId != null) 'workspaceId': workspaceId,
+        if (runtimeId != null) 'runtimeId': runtimeId,
+      },
+    );
+    final ownerUserId = response['ownerUserId'];
+    if (ownerUserId is! String || ownerUserId.trim().isEmpty) {
+      throw const FormatException('Cloud did not confirm Workspace ownership');
+    }
+    return ownerUserId.trim();
+  }
+
+  Future<void> releaseWorkspace({
+    required DesktopHumanSession session,
+    required String installationId,
+    required String workspaceId,
+    required String runtimeId,
+  }) async {
+    await _requestJson(
+      'POST',
+      _api('/workspace-runtime/release'),
+      bearer: session.credential,
+      body: {
+        'installationId': installationId,
+        'workspaceId': workspaceId,
+        'runtimeId': runtimeId,
+      },
+    );
   }
 
   Future<void> revokeSession(DesktopHumanSession session) async {

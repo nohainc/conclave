@@ -62,6 +62,45 @@ returns `409 installation_already_owned`; changing the account requires the
 existing explicit disconnect/release workflow. Hostname and display-name changes
 never transfer ownership. Runtime credentials remain separate from the human
 credential and are stored by desktop in the OS secure credential store.
+Registration responses include the authenticated `ownerUserId`; desktop checks
+it against the signed-in session before storing the returned runtime credential.
+This response addition is backward-compatible for older clients that ignore
+unknown fields; new desktop clients fail closed if a Cloud deployment omits the
+owner field.
+
+Before replacing a desktop human session for an already registered local
+Workspace, the desktop calls `POST /api/workspace-runtime/ownership` with that
+session, the persistent installation ID, and any locally known Workspace and
+runtime IDs. Cloud compares the authenticated user with the authoritative
+Workspace owner and returns `409 installation_already_owned` on mismatch. It
+does not issue or rotate a runtime credential. For first-ADR-013 registrations
+whose runtime row has no installation ID, the exact locally stored
+Workspace/runtime ID pair can be owner-verified; only a successful same-owner
+check backfills the installation ID. A failed check does not alter Cloud
+ownership or the desktop's stored human session. The local owner cache is
+refreshed from this Cloud response and remains non-authoritative.
+
+`POST /api/workspace-runtime/release` is a separate advanced operation. It
+requires a desktop human session created within the last five minutes, the
+same authoritative owner, the exact installation/Workspace/runtime binding,
+and no active assignments. Cloud first fences the Workspace from scheduling,
+then revokes runtime identities, disconnects the Gateway, revokes Project
+grants, clears installation bindings, and records an audit event. It does not
+delete local Worker/provider credentials, adapters, or Work Root files. A
+different account can register the stable installation ID only after this
+explicit release succeeds.
+
+Reset local Workspace has published fixed semantics: it removes local
+registration/runtime identity, configured Workers and their provider
+credentials, installed adapters, and the desktop human session. It preserves
+the stable installation ID and owner binding, Work Root metadata/content,
+launch-at-login, management preferences, and other local files. Disconnect
+also preserves its non-secret registration and cached owner metadata so the
+owner can choose Release later; `desiredRuntimeState = disconnected` prevents
+that retained record from starting the runtime. It preserves the human session.
+Connect presents an
+explicit launch-at-login option on macOS 13 and later; it uses the native
+`SMAppService.mainApp` login item registration.
 
 ## Runtime transport abstraction
 
@@ -121,6 +160,38 @@ supported by both Cloud and desktop before use.
 
 ADR-014 adds lifecycle semantics around these unchanged credential/transport
 contracts.
+
+The lifecycle model is a product of independent dimensions, not a single
+derived status:
+
+| Dimension | Values |
+| --- | --- |
+| `HumanAuthState` | `signed_out`, `signed_in`, `reauth_required` |
+| `WorkspaceParticipationState` | `disconnected`, `connecting`, `connected`, `disconnecting` |
+| `ManagementLockState` | `unlocked`, `locked` |
+| `DesiredRuntimeState` | `connected`, `disconnected` |
+| `RuntimeTransportProjection` | `websocket`, `http_long_poll`, `reconnecting`, `offline`, `authentication_required` |
+
+`WorkspaceLifecycleState` carries the first four dimensions. Transport is
+represented separately by `RuntimeTransportProjection` (and the richer
+`RuntimeTransportStatus` diagnostics contract). No state is inferred from
+another: signed-in does not imply connected; connected does not imply a valid
+human session; locked does not imply disconnected; and HTTPS fallback does
+not imply management reauthentication. Implementations must not add a
+combined `isConnected` or `isUnlocked` value that hides these dimensions.
+
+`WorkspaceLifecyclePreferences` is a strict, non-secret local persistence
+shape: desired runtime state, launch-at-login preference, management-lock
+preference, optional auto-lock timeout, and optional cached owner user ID/display
+name. Owner metadata is display-only and non-authoritative. Human sessions,
+runtime credentials, and Worker/provider credentials are excluded and remain
+in secure storage.
+
+Other lifecycle invariants: another user cannot replace the owner of a
+connected installation; disconnect preserves account ownership; and explicit
+sign-out while connected requires an explicit disconnect-and-sign-out
+transition instead of silently changing accounts. These rules constrain
+commands/transitions, not construction of the independent state dimensions.
 
 Human authentication and runtime participation are independent:
 

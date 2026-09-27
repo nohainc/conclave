@@ -76,19 +76,27 @@ export const DesktopHumanSessionRevokeRequestSchema = z
 export const WorkspaceRegistrationRequestSchema = z
   .object({
     contractVersion: z.literal(DESKTOP_AUTH_TRANSPORT_VERSION),
-    installationId: z.string().regex(/^install_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i),
+    installationId: z
+      .string()
+      .regex(
+        /^install_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      ),
     proposedWorkspaceName: z.string().trim().min(1).max(200),
     hostname: z.string().trim().min(1).max(255),
     platform: z.enum(["macos", "windows", "linux"]),
     architecture: z.enum(["arm64", "x64", "x86"]),
     appVersion: id.max(128),
-    runtimeCapabilities: z.object({
-      os: z.enum(["macos", "windows", "linux"]),
-      arch: z.enum(["arm64", "x64", "x86"]),
-      appVersion: id.max(128),
-      supportedRuntimes: z.array(z.string().regex(/^[a-z0-9_-]{1,32}$/i)).max(16),
-      maxConcurrentWorkers: z.number().int().min(1).max(256),
-    }).strict(),
+    runtimeCapabilities: z
+      .object({
+        os: z.enum(["macos", "windows", "linux"]),
+        arch: z.enum(["arm64", "x64", "x86"]),
+        appVersion: id.max(128),
+        supportedRuntimes: z
+          .array(z.string().regex(/^[a-z0-9_-]{1,32}$/i))
+          .max(16),
+        maxConcurrentWorkers: z.number().int().min(1).max(256),
+      })
+      .strict(),
   })
   .strict();
 export const WorkspaceRegistrationResponseSchema = z
@@ -97,6 +105,7 @@ export const WorkspaceRegistrationResponseSchema = z
     workspaceId: id,
     workspaceRuntimeId: id,
     workspaceName: id,
+    ownerUserId: id.optional(),
     runtimeCredential: WorkspaceRuntimeCredentialSchema,
     credentialIssuedAt: timestamp,
     credentialExpiresAt: timestamp.nullable(),
@@ -106,7 +115,11 @@ export const WorkspaceRegistrationResponseSchema = z
 export const WorkspaceRuntimeCredentialRotateRequestSchema = z
   .object({
     workspaceId: id,
-    installationId: z.string().regex(/^install_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i),
+    installationId: z
+      .string()
+      .regex(
+        /^install_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      ),
   })
   .strict();
 export const WorkspaceRuntimeCredentialRotateResponseSchema = z
@@ -181,6 +194,50 @@ export const RuntimeTransportStatusSchema = z
       });
     }
   });
+
+/** ADR-014 lifecycle dimensions are deliberately independent of one another. */
+export const HumanAuthStateSchema = z.enum([
+  "signed_out",
+  "signed_in",
+  "reauth_required",
+]);
+export const WorkspaceParticipationStateSchema = z.enum([
+  "disconnected",
+  "connecting",
+  "connected",
+  "disconnecting",
+]);
+export const ManagementLockStateSchema = z.enum(["unlocked", "locked"]);
+export const DesiredRuntimeStateSchema = z.enum(["connected", "disconnected"]);
+export const WorkspaceLifecycleStateSchema = z
+  .object({
+    humanAuth: HumanAuthStateSchema,
+    participation: WorkspaceParticipationStateSchema,
+    managementLock: ManagementLockStateSchema,
+    desiredRuntime: DesiredRuntimeStateSchema,
+  })
+  .strict();
+
+/** Persisted local preferences only; owner fields are a non-authoritative cache. */
+export const WorkspaceLifecyclePreferencesSchema = z
+  .object({
+    desiredRuntime: DesiredRuntimeStateSchema,
+    launchAtLogin: z.boolean(),
+    managementLockPreference: ManagementLockStateSchema,
+    autoLockTimeoutSeconds: z.number().int().positive().optional(),
+    ownerUserId: id.optional(),
+    ownerDisplayName: id.optional(),
+  })
+  .strict();
+
+/** Read-only transport state; orthogonal to Workspace lifecycle. */
+export const RuntimeTransportProjectionSchema = z.enum([
+  "websocket",
+  "http_long_poll",
+  "reconnecting",
+  "offline",
+  "authentication_required",
+]);
 
 export const RuntimeSessionCreateRequestSchema = z
   .object({
@@ -275,6 +332,21 @@ export type WorkspaceRuntimeCredentialRotateResponse = z.infer<
 >;
 export type RuntimeTransportStatus = z.infer<
   typeof RuntimeTransportStatusSchema
+>;
+export type HumanAuthState = z.infer<typeof HumanAuthStateSchema>;
+export type WorkspaceParticipationState = z.infer<
+  typeof WorkspaceParticipationStateSchema
+>;
+export type ManagementLockState = z.infer<typeof ManagementLockStateSchema>;
+export type DesiredRuntimeState = z.infer<typeof DesiredRuntimeStateSchema>;
+export type WorkspaceLifecycleState = z.infer<
+  typeof WorkspaceLifecycleStateSchema
+>;
+export type WorkspaceLifecyclePreferences = z.infer<
+  typeof WorkspaceLifecyclePreferencesSchema
+>;
+export type RuntimeTransportProjection = z.infer<
+  typeof RuntimeTransportProjectionSchema
 >;
 export type RuntimeSessionCreateRequest = z.infer<
   typeof RuntimeSessionCreateRequestSchema

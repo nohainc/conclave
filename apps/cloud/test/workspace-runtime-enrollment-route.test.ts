@@ -73,6 +73,40 @@ describe("Workspace desktop enrollment route", () => {
     expect(sameOrigin).not.toHaveBeenCalled();
   });
 
+  it("routes ownership checks and release with desktop bearer authentication", async () => {
+    const sameOrigin = vi.fn();
+    const ownership = vi.fn(async () => Response.json({ ownerUserId: "user-a" }));
+    const release = vi.fn(async () => Response.json({ released: true }));
+    const checkResponse = await routeWorkerRequest(
+      new Request("https://app.conclaveax.com/api/workspace-runtime/ownership", {
+        method: "POST",
+        headers: { authorization: "Bearer desktop-human-token", "content-type": "application/json" },
+        body: "{}",
+      }),
+      {} as Env,
+      undefined,
+      { handleCheckWorkspaceOwnership: ownership },
+      dependencies(sameOrigin),
+    );
+    const releaseResponse = await routeWorkerRequest(
+      new Request("https://app.conclaveax.com/api/workspace-runtime/release", {
+        method: "POST",
+        headers: { authorization: "Bearer fresh-desktop-human-token", "content-type": "application/json" },
+        body: "{}",
+      }),
+      {} as Env,
+      undefined,
+      { handleReleaseDesktopWorkspace: release },
+      dependencies(sameOrigin),
+    );
+
+    expect(checkResponse.status).toBe(200);
+    expect(releaseResponse.status).toBe(200);
+    expect(ownership).toHaveBeenCalledOnce();
+    expect(release).toHaveBeenCalledOnce();
+    expect(sameOrigin).not.toHaveBeenCalled();
+  });
+
   it("keeps same-origin enforcement for normal mutation routes", async () => {
     const sameOrigin = vi.fn();
     const createWorkspace = vi.fn(async () =>

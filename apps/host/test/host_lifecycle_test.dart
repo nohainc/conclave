@@ -24,6 +24,33 @@ class _SilentWorkspaceSocket implements WorkspaceTransport {
 }
 
 void main() {
+  test(
+      'intentional disconnect keeps registration but suppresses runtime config',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('conclave-host-');
+    const registration = HostRegistration(
+      hostId: 'runtime-owned',
+      workspaceId: 'workspace-owned',
+      cloudUrl: 'https://cloud.example.test',
+      name: 'Owned Workspace',
+      hostname: 'owned-mac.local',
+      ownerUserId: 'user-owner',
+      installationId: 'install-owned',
+    );
+    await HostRegistrationStore(directory).write(registration);
+
+    final config = HostConfig.fromArgs(
+      ['--data-dir', directory.path],
+      ignoreSavedRegistration: true,
+    );
+
+    expect(config.hostId, isNull);
+    expect(config.workspaceId, isNull);
+    expect(config.authToken, isNull);
+    expect(
+        HostRegistrationStore(directory).readSync()?.ownerUserId, 'user-owner');
+  });
+
   test('connection failure keeps saved Workspace registration paired',
       () async {
     final directory = await Directory.systemTemp.createTemp('conclave-host-');

@@ -32,6 +32,10 @@ export async function routeWorkerRequest(
       url.pathname === "/api/workspace-runtime/enroll";
     const desktopWorkspaceRegistration = request.method === "POST" &&
       url.pathname === "/api/workspace-runtime/register";
+    const desktopWorkspaceOwnershipCheck = request.method === "POST" &&
+      url.pathname === "/api/workspace-runtime/ownership";
+    const desktopWorkspaceRelease = request.method === "POST" &&
+      url.pathname === "/api/workspace-runtime/release";
     const workspaceRuntimeUnpair =
       request.method === "POST" &&
       url.pathname === "/api/workspace-runtime/unpair";
@@ -45,6 +49,8 @@ export async function routeWorkerRequest(
       desktopAuthPath && !url.pathname.endsWith("/approve");
     if (
       !workspaceEnrollmentRedeem && !desktopWorkspaceRegistration &&
+      !desktopWorkspaceOwnershipCheck &&
+      !desktopWorkspaceRelease &&
       !workspaceRuntimeUnpair &&
       !workspaceRuntimeTransport &&
       !desktopAuthCookieMutation &&
@@ -60,6 +66,12 @@ export async function routeWorkerRequest(
     }
     if (desktopWorkspaceRegistration) {
       return await handlers.handleRegisterWorkspaceFromDesktop!(request, env, ctx);
+    }
+    if (desktopWorkspaceOwnershipCheck) {
+      return await handlers.handleCheckWorkspaceOwnership!(request, env);
+    }
+    if (desktopWorkspaceRelease) {
+      return await handlers.handleReleaseDesktopWorkspace!(request, env);
     }
     if (workspaceRuntimeUnpair) {
       return await handlers.handleUnpairWorkspaceRuntime!(request, env);

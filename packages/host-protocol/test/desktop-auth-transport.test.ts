@@ -6,6 +6,9 @@ import {
   RuntimePollRequestSchema,
   RuntimePollResponseSchema,
   RuntimeTransportStatusSchema,
+  RuntimeTransportProjectionSchema,
+  WorkspaceLifecyclePreferencesSchema,
+  WorkspaceLifecycleStateSchema,
   WorkspaceRegistrationRequestSchema,
   WorkspaceRuntimeCredentialSchema,
 } from "../src/index.js";
@@ -13,6 +16,66 @@ import {
 const timestamp = "2026-09-27T12:00:00.000Z";
 
 describe("desktop auth and runtime transport contracts", () => {
+  it("constructs every lifecycle combination without deriving dimensions", () => {
+    const auth = ["signed_out", "signed_in", "reauth_required"] as const;
+    const participation = [
+      "disconnected",
+      "connecting",
+      "connected",
+      "disconnecting",
+    ] as const;
+    const locks = ["unlocked", "locked"] as const;
+    const desired = ["connected", "disconnected"] as const;
+    const states = auth.flatMap((humanAuth) =>
+      participation.flatMap((state) =>
+        locks.flatMap((managementLock) =>
+          desired.map((desiredRuntime) =>
+            WorkspaceLifecycleStateSchema.parse({
+              humanAuth,
+              participation: state,
+              managementLock,
+              desiredRuntime,
+            }),
+          ),
+        ),
+      ),
+    );
+
+    expect(states).toHaveLength(3 * 4 * 2 * 2);
+    expect(
+      WorkspaceLifecycleStateSchema.parse({
+        humanAuth: "reauth_required",
+        participation: "connected",
+        managementLock: "locked",
+        desiredRuntime: "connected",
+      }).participation,
+    ).toBe("connected");
+    expect(RuntimeTransportProjectionSchema.parse("http_long_poll")).toBe(
+      "http_long_poll",
+    );
+  });
+
+  it("limits persisted lifecycle preferences to non-secret fields", () => {
+    expect(
+      WorkspaceLifecyclePreferencesSchema.parse({
+        desiredRuntime: "connected",
+        launchAtLogin: true,
+        managementLockPreference: "locked",
+        autoLockTimeoutSeconds: 600,
+        ownerUserId: "user-1",
+        ownerDisplayName: "Ada",
+      }).ownerUserId,
+    ).toBe("user-1");
+    expect(
+      WorkspaceLifecyclePreferencesSchema.safeParse({
+        desiredRuntime: "connected",
+        launchAtLogin: true,
+        managementLockPreference: "unlocked",
+        desktopHumanSessionCredential: "h".repeat(32),
+      }).success,
+    ).toBe(false);
+  });
+
   it("keeps human and runtime credentials as distinct typed secrets", () => {
     expect(DesktopHumanSessionCredentialSchema.parse("h".repeat(32))).toBe(
       "h".repeat(32),
@@ -48,7 +111,13 @@ describe("desktop auth and runtime transport contracts", () => {
         platform: "macos",
         architecture: "arm64",
         appVersion: "1.2.3",
-        runtimeCapabilities: { os: "macos", arch: "arm64", appVersion: "1.2.3", supportedRuntimes: ["dart"], maxConcurrentWorkers: 1 },
+        runtimeCapabilities: {
+          os: "macos",
+          arch: "arm64",
+          appVersion: "1.2.3",
+          supportedRuntimes: ["dart"],
+          maxConcurrentWorkers: 1,
+        },
       }).installationId,
     ).toContain("install_00000000");
     expect(

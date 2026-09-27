@@ -1,5 +1,6 @@
 import Cocoa
 import FlutterMacOS
+import ServiceManagement
 
 @main
 class AppDelegate: FlutterAppDelegate {
@@ -26,6 +27,25 @@ class AppDelegate: FlutterAppDelegate {
       case "terminate":
         NSApp.terminate(nil)
         result(nil)
+      case "setLaunchAtLogin":
+        guard let enabled = call.arguments as? Bool else {
+          result(FlutterError(code: "bad_argument", message: "Expected a Boolean", details: nil))
+          return
+        }
+        guard #available(macOS 13.0, *) else {
+          result(FlutterError(code: "unsupported_os", message: "Launch at login requires macOS 13 or later", details: nil))
+          return
+        }
+        do {
+          if enabled && SMAppService.mainApp.status != .enabled {
+            try SMAppService.mainApp.register()
+          } else if !enabled && SMAppService.mainApp.status == .enabled {
+            try SMAppService.mainApp.unregister()
+          }
+          result(nil)
+        } catch {
+          result(FlutterError(code: "launch_at_login_failed", message: error.localizedDescription, details: nil))
+        }
       default:
         result(FlutterMethodNotImplemented)
       }

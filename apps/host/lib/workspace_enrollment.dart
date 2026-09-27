@@ -9,17 +9,41 @@ const conclaveProductionCloudUrl = 'https://app.conclaveax.com';
 const conclaveWorkspaceAppVersion =
     String.fromEnvironment('CONCLAVE_WORKSPACE_VERSION', defaultValue: '1.0.3');
 
+String normalizeWorkspaceCloudOrigin(String cloudUrl) {
+  final parsed = Uri.tryParse(cloudUrl.trim());
+  if (parsed == null ||
+      !const {'https', 'http'}.contains(parsed.scheme) ||
+      parsed.host.isEmpty) {
+    throw ArgumentError('Cloud URL must be an HTTP(S) origin.');
+  }
+  return Uri(
+    scheme: parsed.scheme,
+    host: parsed.host,
+    port: parsed.hasPort ? parsed.port : null,
+  ).toString();
+}
+
+Uri workspaceCloudApiUri(String cloudUrl, String apiPath) {
+  if (!apiPath.startsWith('/api/')) {
+    throw ArgumentError.value(apiPath, 'apiPath', 'Must start with /api/.');
+  }
+  return Uri.parse(normalizeWorkspaceCloudOrigin(cloudUrl))
+      .replace(path: apiPath);
+}
+
 class WorkspaceEnrollmentResult {
   const WorkspaceEnrollmentResult({
     required this.workspaceRuntimeId,
     required this.workspaceId,
     required this.workspaceName,
+    required this.ownerUserId,
     required this.authToken,
   });
 
   final String workspaceRuntimeId;
   final String workspaceId;
   final String workspaceName;
+  final String? ownerUserId;
   final String authToken;
 
   factory WorkspaceEnrollmentResult.fromJson(Map<String, Object?> json) {
@@ -35,6 +59,9 @@ class WorkspaceEnrollmentResult {
       workspaceRuntimeId: requiredString('workspaceRuntimeId'),
       workspaceId: requiredString('workspaceId'),
       workspaceName: requiredString('workspaceName'),
+      ownerUserId: json['ownerUserId'] is String
+          ? (json['ownerUserId'] as String).trim()
+          : null,
       authToken: requiredString(json.containsKey('runtimeCredential')
           ? 'runtimeCredential'
           : 'authToken'),
@@ -512,18 +539,13 @@ class WorkspaceEnrollmentClient {
   Future<WorkspaceEnrollmentResult> register({
     required String credential,
     required SafeMachineFacts facts,
+    String? existingWorkspaceId,
+    String? existingRuntimeId,
   }) async {
-    final base = Uri.tryParse(cloudUrl.trim());
-    if (base == null ||
-        !const {'https', 'http'}.contains(base.scheme) ||
-        base.host.isEmpty) {
-      throw ArgumentError('Cloud URL must be an HTTP(S) origin.');
-    }
-    final uri = base.replace(
-        path:
-            '${base.path.replaceFirst(RegExp(r'/$'), '')}/api/workspace-runtime/register',
-        query: null,
-        fragment: null);
+    final uri = workspaceCloudApiUri(
+      cloudUrl,
+      '/api/workspace-runtime/register',
+    );
     final request = await _client.postUrl(uri).timeout(timeout);
     request.headers.contentType = ContentType.json;
     request.headers
@@ -532,6 +554,12 @@ class WorkspaceEnrollmentClient {
     payload.remove('token');
     payload['contractVersion'] = '1.0';
     payload['proposedWorkspaceName'] = payload.remove('name');
+    if (existingWorkspaceId != null) {
+      payload['existingWorkspaceId'] = existingWorkspaceId;
+    }
+    if (existingRuntimeId != null) {
+      payload['existingRuntimeId'] = existingRuntimeId;
+    }
     request.write(jsonEncode(payload));
     final response = await request.close().timeout(timeout);
     final body = await utf8.decoder.bind(response).join().timeout(timeout);
@@ -568,10 +596,10 @@ class WorkspaceEnrollmentClient {
     Map<String, Object?>? runtimeCapabilities,
     bool allowRecovery = false,
   }) async {
-    final base = Uri.tryParse(cloudUrl.trim());
-    if (base == null ||
-        !const {'https', 'http'}.contains(base.scheme) ||
-        base.host.isEmpty) {
+    Uri uri;
+    try {
+      uri = workspaceCloudApiUri(cloudUrl, '/api/workspace-runtime/enroll');
+    } on ArgumentError {
       throw const WorkspacePairingException(
         kind: WorkspacePairingErrorKind.cloudUnavailable,
         message: 'Invalid Conclave Cloud URL.',
@@ -593,12 +621,6 @@ class WorkspaceEnrollmentClient {
       capabilities: runtimeCapabilities,
     );
 
-    final uri = base.replace(
-      path:
-          '${base.path.replaceFirst(RegExp(r'/$'), '')}/api/workspace-runtime/enroll',
-      query: null,
-      fragment: null,
-    );
     try {
       final request = await _client.postUrl(uri).timeout(timeout);
       request.headers.contentType = ContentType.json;
@@ -661,18 +683,32 @@ class WorkspacePairingService {
     required String cloudUrl,
     required String desktopCredential,
     required SafeMachineFacts facts,
+    required String expectedOwnerUserId,
+    String? existingWorkspaceId,
+    String? existingRuntimeId,
   }) async {
     final client = WorkspaceEnrollmentClient(cloudUrl: cloudUrl);
     try {
-      final result =
-          await client.register(credential: desktopCredential, facts: facts);
+      final result = await client.register(
+        credential: desktopCredential,
+        facts: facts,
+        existingWorkspaceId: existingWorkspaceId,
+        existingRuntimeId: existingRuntimeId,
+      );
+      if (result.ownerUserId == null ||
+          result.ownerUserId != expectedOwnerUserId) {
+        throw StateError(
+          'Cloud returned a Workspace owned by a different Conclave account.',
+        );
+      }
       await _credentialStore.write(result.workspaceRuntimeId, result.authToken);
       final registration = HostRegistration(
         hostId: result.workspaceRuntimeId,
         workspaceId: result.workspaceId,
-        cloudUrl: cloudUrl.trim().replaceFirst(RegExp(r'/$'), ''),
+        cloudUrl: normalizeWorkspaceCloudOrigin(cloudUrl),
         name: result.workspaceName,
         hostname: facts.hostname,
+        ownerUserId: result.ownerUserId,
         installationId: facts.installationId,
         credentialRef: 'workspace-runtime:${result.workspaceRuntimeId}',
         pairedAt: DateTime.now().toUtc().toIso8601String(),
@@ -705,20 +741,12 @@ class WorkspacePairingService {
     required String cloudUrl,
     required String token,
   }) async {
-    final base = Uri.tryParse(cloudUrl.trim());
-    if (base == null ||
-        !const {'https', 'http'}.contains(base.scheme) ||
-        base.host.isEmpty) {
-      throw ArgumentError('Cloud URL must be an HTTP(S) origin.');
-    }
     if (token.trim().isEmpty) {
       throw ArgumentError('Workspace runtime credential is required.');
     }
-    final uri = base.replace(
-      path: '${base.path.replaceFirst(RegExp(r'/$'), '')}'
-          '/api/workspace-runtime/unpair',
-      query: null,
-      fragment: null,
+    final uri = workspaceCloudApiUri(
+      cloudUrl,
+      '/api/workspace-runtime/unpair',
     );
     final client = HttpClient();
     try {
@@ -789,7 +817,7 @@ class WorkspacePairingService {
       final registration = HostRegistration(
         hostId: result.workspaceRuntimeId,
         workspaceId: result.workspaceId,
-        cloudUrl: cloudUrl.trim().replaceFirst(RegExp(r'/$'), ''),
+        cloudUrl: normalizeWorkspaceCloudOrigin(cloudUrl),
         name: result.workspaceName.trim().isNotEmpty
             ? result.workspaceName.trim()
             : (proposedWorkspaceName?.trim().isNotEmpty == true

@@ -68,4 +68,47 @@ Implementation sequence:
 
 ADR-014 refines the desktop lifecycle after the first ADR-013 implementation: human Sign in no longer implies runtime connection, signed-out/locked shells hide management controls, connected runtimes auto-start/reconnect after OS login, and account switching requires explicit disconnect/release ownership.
 
+ADR-014 Phase 0 lifecycle types are defined in the host protocol package and
+mirrored in the desktop runtime. Human authentication, runtime participation,
+management lock, desired runtime intent, and transport projection remain
+independently constructible; non-secret local preferences have a strict shape.
+
+Phase 1 separates browser sign-in from Workspace registration: sign-in stores
+and displays the desktop account only. **Connect Workspace** explicitly
+confirms the machine name, registers or recovers under that account, verifies
+the returned owner, stores runtime intent/credential, starts the runtime, and
+exposes Worker management only after the runtime reaches Ready.
+
+Phase 2 routes the app window through a minimal signed-out shell until the
+stored desktop human session is both unexpired and server-validated. A paired
+runtime whose session needs reauthentication shows a dedicated sign-in shell
+while its runtime lifecycle remains independent. The root-shell UI test checks
+that signed-out users cannot see Workspace, Workers, Work Root, or lifecycle
+management actions.
+
+Phase 3 now requires owner reauthentication for Disconnect and Reset, confirms
+Disconnect, preserves the installation ID and owner binding on Disconnect and
+Reset, persists disconnected runtime intent, and makes connected Sign out an
+explicit Disconnect and sign out choice. Reset's warning enumerates the local
+registration, runtime identity, Worker/provider credential, adapter, and human
+session data it removes while preserving Work Root files and installation
+ownership; a Cloud revocation failure stops the reset. Disconnect drains active
+assignments before Cloud revocation. The advanced Release action now has a
+separate fresh-owner-authenticated Cloud endpoint, active-assignment gate, audit
+event, runtime revocation, ownership unlink, and local preservation flow. macOS
+13+ Connect offers an explicit launch-at-login choice backed by
+`SMAppService.mainApp`.
+
+Disconnected installations retain the non-secret local registration and cached
+owner metadata so Release remains available after Disconnect. Startup honors
+`desiredRuntimeState = disconnected` and suppresses runtime connection from that
+registration until the owner explicitly reconnects.
+
+Phase 4 adds a Cloud ownership-check endpoint used before desktop sign-in
+replaces an existing human session. Both that check and registration/recovery
+reject a different authenticated user with `installation_already_owned` before
+rotating credentials or changing bindings. Legacy registrations can be linked
+to their persistent installation ID only after Cloud verifies the same owner;
+desktop caches the confirmed owner only after that check.
+
 [Workspace Desktop Lifecycle Implementation](docs/roadmaps/WORKSPACE_DESKTOP_LIFECYCLE_IMPLEMENTATION.md)
