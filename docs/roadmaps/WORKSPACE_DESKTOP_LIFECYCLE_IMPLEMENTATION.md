@@ -544,6 +544,31 @@ Failure/cancel -> remain locked.
 
 Tests prove locking does not alter runtime/Gateway/assignment state.
 
+## Implementation status — implemented
+
+`LocalManagementAuthenticator` is a platform boundary, with the macOS bridge
+using `LocalAuthentication`'s device-owner authentication policy. macOS offers
+Touch ID when available and falls back to the system account password. No
+Conclave PIN or lock secret is created. Locking is persisted in the existing
+non-secret lifecycle preferences and never depends on or calls the runtime
+lifecycle controller. The preference write preserves desired runtime state,
+launch-at-login, owner cache, and timeout.
+
+The Account section provides manual Lock and an optional idle timeout (Off, 5,
+15, 30, or 60 minutes). macOS screen-lock notifications also lock management.
+Unlock cancellation/failure leaves the shell locked. The locked shell omits
+Workspace/Workers management and local machine details; the menu-bar menu hides
+Worker controls, AX navigation, logs, and diagnostics while retaining safe
+runtime status, app opening, and Quit. Closing the window continues to leave
+the runtime running.
+
+Windows/Linux do not yet have native authenticator implementations; the lock
+action is unavailable when native authentication reports unavailable. The
+implementation test proves that lock/unlock changes only the management-lock
+preference, retains `desiredRuntime = connected`, and leaves failed unlocks
+locked. UI tests verify sensitive Workspace information is absent in the
+locked shell.
+
 ---
 
 # Phase 7 — Protect sensitive actions with step-up local authentication

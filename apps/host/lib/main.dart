@@ -21,6 +21,7 @@ import 'workspace_enrollment.dart';
 import 'workspace_runtime.dart';
 import 'workspace_lifecycle_store.dart';
 import 'workspace_lifecycle.dart';
+import 'local_management_authenticator.dart';
 
 void showCopyableErrorSnackBar(BuildContext context, String message) {
   final colors = Theme.of(context).colorScheme;
@@ -370,6 +371,10 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
       'active': connection?.activeAssignmentCount ?? 0,
       'accepting': connection?.acceptingNewWork ?? false,
       'draining': _draining,
+      'managementLocked': WorkspaceLifecyclePreferencesStore(
+            host.config.dataDirectory,
+          ).readSync().managementLockPreference ==
+          ManagementLockState.locked,
     }).catchError((_) {}));
   }
 
@@ -792,9 +797,14 @@ Future<void> main() async {
 }
 
 class ConclaveHostApp extends StatefulWidget {
-  const ConclaveHostApp({required this.lifecycle, super.key});
+  const ConclaveHostApp({
+    required this.lifecycle,
+    this.localAuthenticator = const MethodChannelLocalManagementAuthenticator(),
+    super.key,
+  });
 
   final HostLifecycleController lifecycle;
+  final LocalManagementAuthenticator localAuthenticator;
 
   @override
   State<ConclaveHostApp> createState() => _ConclaveHostAppState();
@@ -802,11 +812,20 @@ class ConclaveHostApp extends StatefulWidget {
 
 class _ConclaveHostAppState extends State<ConclaveHostApp> {
   int _workerRevision = 0;
+  late bool _managementLocked;
+  Timer? _autoLockTimer;
   final _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
     super.initState();
+    _managementLocked = WorkspaceLifecyclePreferencesStore(
+          widget.lifecycle.host.config.dataDirectory,
+        ).readSync().managementLockPreference ==
+        ManagementLockState.locked;
+    unawaited(const MethodChannel('com.conclave.workspace/desktop')
+        .invokeMethod<void>('setManagementLocked', _managementLocked)
+        .catchError((_) {}));
     widget.lifecycle.addListener(_refresh);
     const desktopChannel = MethodChannel('com.conclave.workspace/desktop');
     desktopChannel.setMethodCallHandler((call) async {
@@ -814,22 +833,101 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         final action = call.arguments as String;
         if (action == 'quit') {
           await _confirmQuit();
+        } else if (action == 'lock') {
+          await _lockManagement();
         } else {
           await widget.lifecycle.handleDesktopAction(action);
         }
+      } else if (call.method == 'managementLockRequested') {
+        await _lockManagement();
       }
     });
+    _armAutoLockTimer();
     unawaited(widget.lifecycle.launch());
   }
 
   @override
   void dispose() {
+    _autoLockTimer?.cancel();
     widget.lifecycle.removeListener(_refresh);
     unawaited(widget.lifecycle.quit());
     super.dispose();
   }
 
   void _refresh() => setState(() {});
+
+  WorkspaceLifecyclePreferences get _preferences =>
+      WorkspaceLifecyclePreferencesStore(
+        widget.lifecycle.host.config.dataDirectory,
+      ).readSync();
+
+  WorkspaceManagementLock get _managementLock => WorkspaceManagementLock(
+        preferences: WorkspaceLifecyclePreferencesStore(
+          widget.lifecycle.host.config.dataDirectory,
+        ),
+        authenticator: widget.localAuthenticator,
+      );
+
+  Future<void> _lockManagement() async {
+    if (_managementLocked) return;
+    try {
+      if (!await _managementLock.lock()) return;
+    } on Object {
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _managementLocked = true);
+    _autoLockTimer?.cancel();
+    unawaited(const MethodChannel('com.conclave.workspace/desktop')
+        .invokeMethod<void>('setManagementLocked', true)
+        .catchError((_) {}));
+  }
+
+  Future<void> _unlockManagement() async {
+    var authenticated = false;
+    try {
+      authenticated =
+          await _managementLock.unlock('Unlock Conclave Workspace management');
+    } on Object {
+      authenticated = false;
+    }
+    if (!mounted) return;
+    if (!authenticated) return;
+    setState(() {
+      _managementLocked = false;
+      _workerRevision++;
+    });
+    unawaited(const MethodChannel('com.conclave.workspace/desktop')
+        .invokeMethod<void>('setManagementLocked', false)
+        .catchError((_) {}));
+    _armAutoLockTimer();
+  }
+
+  void _armAutoLockTimer() {
+    _autoLockTimer?.cancel();
+    final timeout = _preferences.autoLockTimeout;
+    if (_managementLocked || timeout == null || timeout <= Duration.zero) {
+      return;
+    }
+    _autoLockTimer = Timer(timeout, () => unawaited(_lockManagement()));
+  }
+
+  Future<void> _setAutoLockTimeout(Duration? timeout) async {
+    final store = WorkspaceLifecyclePreferencesStore(
+      widget.lifecycle.host.config.dataDirectory,
+    );
+    final p = store.readSync();
+    await store.write(WorkspaceLifecyclePreferences(
+      desiredRuntime: p.desiredRuntime,
+      launchAtLogin: p.launchAtLogin,
+      managementLockPreference: p.managementLockPreference,
+      autoLockTimeout: timeout,
+      ownerUserId: p.ownerUserId,
+      ownerDisplayName: p.ownerDisplayName,
+    ));
+    _armAutoLockTimer();
+    if (mounted) setState(() {});
+  }
 
   Future<void> _confirmQuit() async {
     // Use the navigator's context (below MaterialApp) so showDialog can find
@@ -1811,6 +1909,9 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     final lifecycle = widget.lifecycle;
     return HostDashboard(
       snapshot: lifecycle.uiSnapshot,
+      autoLockTimeout: _preferences.autoLockTimeout,
+      onAutoLockTimeoutChanged: _setAutoLockTimeout,
+      onLock: () => unawaited(_lockManagement()),
       onSignIn: _signInDesktopHuman,
       onSignOut: _signOutDesktopHuman,
       onRecoverCredential: _connectWorkspace,
@@ -1840,26 +1941,41 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       theme: ConclaveBrand.lightTheme(),
       darkTheme: ConclaveBrand.darkTheme(),
       themeMode: ThemeMode.system,
-      home: Scaffold(
-        body: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 400, minHeight: 600),
-          child: lifecycle.hidden
-              ? const Center(
-                  child: Text('Workspace is running in the background.'))
-              : WorkspaceShellRouter(
-                  snapshot: lifecycle.uiSnapshot,
-                  credentialStore: lifecycle.host.credentialStore,
-                  cloudUrl: lifecycle.uiSnapshot.cloudUrl ??
-                      conclaveProductionCloudUrl,
-                  refreshToken: _workerRevision,
-                  restoreSession: _restoreDesktopSession,
-                  onSignIn: _signInDesktopHuman,
-                  onConnectWorkspace: _connectWorkspace,
-                  onSignOut: _signOutDesktopHuman,
-                  onRelease: _releaseWorkspaceOwnership,
-                  onQuit: _confirmQuit,
-                  managementShellBuilder: _buildManagementDashboard,
-                ),
+      home: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) => _armAutoLockTimer(),
+        onPointerMove: (_) => _armAutoLockTimer(),
+        child: Focus(
+          onKeyEvent: (_, __) {
+            _armAutoLockTimer();
+            return KeyEventResult.ignored;
+          },
+          child: Scaffold(
+            body: ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 400, minHeight: 600),
+              child: lifecycle.hidden
+                  ? const Center(
+                      child: Text('Workspace is running in the background.'))
+                  : WorkspaceShellRouter(
+                      snapshot: lifecycle.uiSnapshot,
+                      credentialStore: lifecycle.host.credentialStore,
+                      cloudUrl: lifecycle.uiSnapshot.cloudUrl ??
+                          conclaveProductionCloudUrl,
+                      refreshToken: _workerRevision,
+                      restoreSession: _restoreDesktopSession,
+                      onSignIn: _signInDesktopHuman,
+                      onConnectWorkspace: _connectWorkspace,
+                      onSignOut: _signOutDesktopHuman,
+                      onRelease: _releaseWorkspaceOwnership,
+                      onQuit: _confirmQuit,
+                      onLock: _lockManagement,
+                      managementLocked: _managementLocked,
+                      onUnlock: _unlockManagement,
+                      onActivity: _armAutoLockTimer,
+                      managementShellBuilder: _buildManagementDashboard,
+                    ),
+            ),
+          ),
         ),
       ),
     );
@@ -1896,6 +2012,10 @@ class WorkspaceShellRouter extends StatefulWidget {
     required this.onSignOut,
     this.onRelease,
     required this.onQuit,
+    this.managementLocked = false,
+    this.onUnlock,
+    this.onActivity,
+    this.onLock,
     required this.managementShellBuilder,
     super.key,
   });
@@ -1911,6 +2031,10 @@ class WorkspaceShellRouter extends StatefulWidget {
   final Future<void> Function() onSignOut;
   final Future<void> Function()? onRelease;
   final Future<void> Function() onQuit;
+  final bool managementLocked;
+  final Future<void> Function()? onUnlock;
+  final VoidCallback? onActivity;
+  final Future<void> Function()? onLock;
   final Widget Function() managementShellBuilder;
 
   @override
@@ -2062,6 +2186,17 @@ class _WorkspaceShellRouterState extends State<WorkspaceShellRouter> {
                 ),
               );
             case _ShellAccessMode.signedIn:
+              if (widget.managementLocked) {
+                return _MinimalShell(
+                  version: widget.snapshot.appVersion,
+                  onAbout: _showAbout,
+                  onQuit: widget.onQuit,
+                  child: _LockedShell(
+                    runtimeConnected: widget.snapshot.cloudConnected,
+                    onUnlock: widget.onUnlock,
+                  ),
+                );
+              }
               if (widget.snapshot.workspaceReady) {
                 return widget.managementShellBuilder();
               }
@@ -2078,10 +2213,47 @@ class _WorkspaceShellRouterState extends State<WorkspaceShellRouter> {
                   onConnect: widget.onConnectWorkspace,
                   onSignOut: widget.onSignOut,
                   onRelease: widget.onRelease,
+                  onLock: widget.onLock,
                 ),
               );
           }
         },
+      );
+}
+
+class _LockedShell extends StatelessWidget {
+  const _LockedShell({required this.runtimeConnected, this.onUnlock});
+
+  final bool runtimeConnected;
+  final Future<void> Function()? onUnlock;
+
+  @override
+  Widget build(BuildContext context) => Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.lock_outline, size: 42),
+              const SizedBox(height: 16),
+              Text('Conclave Workspace',
+                  style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: 12),
+              const Text('Workspace is locked.'),
+              const SizedBox(height: 4),
+              Text(runtimeConnected
+                  ? 'Runtime is still connected.'
+                  : 'Runtime is disconnected.'),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed:
+                    onUnlock == null ? null : () => unawaited(onUnlock!()),
+                icon: const Icon(Icons.lock_open),
+                label: const Text('Unlock'),
+              ),
+            ]),
+          ),
+        ),
       );
 }
 
@@ -2180,6 +2352,7 @@ class _SignedInDisconnectedShell extends StatelessWidget {
     required this.onConnect,
     required this.onSignOut,
     this.onRelease,
+    this.onLock,
   });
 
   final DesktopHumanSession session;
@@ -2188,6 +2361,7 @@ class _SignedInDisconnectedShell extends StatelessWidget {
   final Future<void> Function() onConnect;
   final Future<void> Function() onSignOut;
   final Future<void> Function()? onRelease;
+  final Future<void> Function()? onLock;
 
   @override
   Widget build(BuildContext context) => Center(
@@ -2229,6 +2403,12 @@ class _SignedInDisconnectedShell extends StatelessWidget {
                           onPressed: () => unawaited(onSignOut()),
                           child: const Text('Sign out'),
                         ),
+                        if (onLock != null)
+                          OutlinedButton.icon(
+                            onPressed: () => unawaited(onLock!()),
+                            icon: const Icon(Icons.lock_outline),
+                            label: const Text('Lock Workspace'),
+                          ),
                       ]),
                       if (isRegistered && onRelease != null) ...[
                         const SizedBox(height: 8),
@@ -2294,6 +2474,9 @@ class HostDashboard extends StatefulWidget {
     this.onRelease,
     this.onReset,
     this.onAccountAction,
+    this.onLock,
+    this.autoLockTimeout,
+    this.onAutoLockTimeoutChanged,
     this.onQuit,
     this.onRetry,
     this.onExportDiagnostics,
@@ -2315,6 +2498,9 @@ class HostDashboard extends StatefulWidget {
   final Future<void> Function()? onRelease;
   final VoidCallback? onReset;
   final VoidCallback? onAccountAction;
+  final VoidCallback? onLock;
+  final Duration? autoLockTimeout;
+  final ValueChanged<Duration?>? onAutoLockTimeoutChanged;
   final VoidCallback? onQuit;
   final Future<void> Function()? onRetry;
   final Future<void> Function()? onExportDiagnostics;
@@ -2569,6 +2755,10 @@ class _HostDashboardState extends State<HostDashboard> {
                           onChangeWorkRoot: widget.onChangeWorkRoot,
                           onDisconnect: widget.onDisconnect,
                           onReset: widget.onReset,
+                          onLock: widget.onLock,
+                          autoLockTimeout: widget.autoLockTimeout,
+                          onAutoLockTimeoutChanged:
+                              widget.onAutoLockTimeoutChanged,
                         ),
                       ],
               ),
@@ -2653,6 +2843,9 @@ class _WorkspaceTab extends StatelessWidget {
     this.onDisconnect,
     this.onRelease,
     this.onReset,
+    this.onLock,
+    this.autoLockTimeout,
+    this.onAutoLockTimeoutChanged,
   });
 
   final HostUiSnapshot snapshot;
@@ -2667,6 +2860,9 @@ class _WorkspaceTab extends StatelessWidget {
   final VoidCallback? onDisconnect;
   final Future<void> Function()? onRelease;
   final VoidCallback? onReset;
+  final VoidCallback? onLock;
+  final Duration? autoLockTimeout;
+  final ValueChanged<Duration?>? onAutoLockTimeoutChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -2704,6 +2900,9 @@ class _WorkspaceTab extends StatelessWidget {
           onDisconnect: onDisconnect,
           onRelease: onRelease,
           onReset: onReset,
+          onLock: onLock,
+          autoLockTimeout: autoLockTimeout,
+          onAutoLockTimeoutChanged: onAutoLockTimeoutChanged,
         ),
         const SizedBox(height: 16),
         if (snapshot.paired)
@@ -2743,6 +2942,9 @@ class _WorkspaceAccountSection extends StatelessWidget {
     this.onDisconnect,
     this.onRelease,
     this.onReset,
+    this.onLock,
+    this.autoLockTimeout,
+    this.onAutoLockTimeoutChanged,
   });
 
   final HostUiSnapshot snapshot;
@@ -2754,6 +2956,9 @@ class _WorkspaceAccountSection extends StatelessWidget {
   final VoidCallback? onDisconnect;
   final Future<void> Function()? onRelease;
   final VoidCallback? onReset;
+  final VoidCallback? onLock;
+  final Duration? autoLockTimeout;
+  final ValueChanged<Duration?>? onAutoLockTimeoutChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -2767,6 +2972,26 @@ class _WorkspaceAccountSection extends StatelessWidget {
           const SizedBox(height: 8),
           _DesktopHumanAccountStatus(
               key: ValueKey(refreshToken), credentialStore: credentialStore),
+          const SizedBox(height: 8),
+          Row(children: [
+            const Expanded(child: Text('Lock after inactivity')),
+            DropdownButton<int>(
+              value: autoLockTimeout?.inMinutes ?? 0,
+              items: const [0, 5, 15, 30, 60]
+                  .map((minutes) => DropdownMenuItem<int>(
+                        value: minutes,
+                        child: Text(minutes == 0 ? 'Off' : '$minutes min'),
+                      ))
+                  .toList(),
+              onChanged: onAutoLockTimeoutChanged == null
+                  ? null
+                  : (minutes) => onAutoLockTimeoutChanged!(
+                        minutes == null || minutes == 0
+                            ? null
+                            : Duration(minutes: minutes),
+                      ),
+            ),
+          ]),
           if (!snapshot.paired) ...[
             const SizedBox(height: 14),
             const Text(
@@ -2789,6 +3014,12 @@ class _WorkspaceAccountSection extends StatelessWidget {
                   onPressed: () => unawaited(onSignOut!()),
                   icon: const Icon(Icons.logout),
                   label: const Text('Sign out')),
+            if (signedIn && onLock != null)
+              OutlinedButton.icon(
+                onPressed: onLock,
+                icon: const Icon(Icons.lock_outline),
+                label: const Text('Lock Workspace'),
+              ),
             if (signedIn &&
                 onRecoverCredential != null &&
                 !snapshot.workspaceReady)

@@ -270,6 +270,69 @@ void main() {
     expect(signInStarted, isTrue);
   });
 
+  testWidgets('locked shell hides management surfaces until unlock',
+      (tester) async {
+    final credentials = _MemoryCredentialStore()
+      ..values[desktopHumanCredentialKey] = jsonEncode({
+        'credential': 'human-session-secret',
+        'sessionId': 'session-1',
+        'userId': 'user-1',
+        'displayName': 'Vitalii Noha',
+        'email': 'vitalii@example.com',
+        'expiresAt': DateTime.now()
+            .add(const Duration(hours: 1))
+            .toUtc()
+            .toIso8601String(),
+      });
+    var unlockRequested = false;
+    var managementVisible = false;
+    await tester.pumpWidget(MaterialApp(
+      home: WorkspaceShellRouter(
+        snapshot: const HostUiSnapshot(
+          mode: HostUiMode.active,
+          title: 'Workspace connected',
+          detail: 'Ready',
+          paired: true,
+          workspaceReady: true,
+          cloudConnected: true,
+          ownerUserId: 'user-1',
+          hostname: 'sensitive-machine-name',
+          workRootPath: '/private/work/root',
+        ),
+        credentialStore: credentials,
+        cloudUrl: 'https://cloud.example',
+        refreshToken: 0,
+        restoreSession: (session) async => session,
+        onSignIn: () async {},
+        onConnectWorkspace: () async {},
+        onSignOut: () async {},
+        onQuit: () async {},
+        managementLocked: true,
+        onUnlock: () async => unlockRequested = true,
+        managementShellBuilder: () {
+          managementVisible = true;
+          return const Text('MANAGEMENT DASHBOARD');
+        },
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Workspace is locked.'), findsOneWidget);
+    expect(find.text('Runtime is still connected.'), findsOneWidget);
+    expect(find.text('MANAGEMENT DASHBOARD'), findsNothing);
+    expect(find.text('Workers'), findsNothing);
+    expect(find.text('/private/work/root'), findsNothing);
+    expect(find.text('sensitive-machine-name'), findsNothing);
+    expect(managementVisible, isFalse);
+
+    await tester.ensureVisible(find.text('Unlock'));
+    await tester.tap(find.text('Unlock'));
+    await tester.pump();
+    expect(unlockRequested, isTrue);
+    expect(managementVisible, isFalse,
+        reason: 'the shell itself cannot change runtime or reveal controls');
+  });
+
   testWidgets('signed-in disconnected account exposes explicit Connect action',
       (tester) async {
     final credentials = _MemoryCredentialStore()
