@@ -15,6 +15,7 @@ import {
   handleReleaseDesktopWorkspace,
   handleRegisterWorkspaceFromDesktop,
   handleRevokeDesktopHumanSession,
+  handleRotateDesktopHumanSession,
 } from "../src/routes/handlers.js";
 
 const migrationsDirectory = fileURLToPath(
@@ -541,6 +542,64 @@ describe("desktop human authentication", () => {
     expect(await released.json()).toMatchObject({ released: true, installationId });
     expect(sqlite.prepare("SELECT installation_id, revoked_at FROM workspace_runtime_identities WHERE id = ?").get("runtime-a")).toMatchObject({ installation_id: null });
     expect(sqlite.prepare("SELECT status FROM execution_workspaces WHERE id = ?").get("workspace-a")).toMatchObject({ status: "revoked" });
+  });
+
+  it("rotates a valid desktop session without changing its owner or session ID", async () => {
+    const { env, sqlite } = await setup();
+    const oldCredential = "conclave_dhs_before_rotation";
+    const now = new Date().toISOString();
+    sqlite.prepare(
+      "INSERT INTO users (id, email, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+    ).run("human-a", "a@example.test", "A", now, now);
+    sqlite.prepare(
+      "INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    ).run(
+      "session-a",
+      "human-a",
+      await hashToken(oldCredential),
+      "conclave.desktop.management",
+      now,
+      now,
+      new Date(Date.now() + 60_000).toISOString(),
+    );
+
+    const response = await handleRotateDesktopHumanSession(
+      new Request(
+        "https://app.conclave.test/api/desktop-auth/sessions/session-a/rotate",
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${oldCredential}` },
+        },
+      ),
+      env,
+      "session-a",
+    );
+    expect(response.status).toBe(200);
+    const rotated = (await response.json()) as {
+      credential: string;
+      sessionId: string;
+      audience: string;
+      user: { userId: string };
+      expiresAt: string;
+    };
+    expect(rotated.credential).not.toBe(oldCredential);
+    expect(rotated.sessionId).toBe("session-a");
+    expect(rotated.audience).toBe("conclave.desktop.management");
+    expect(rotated.user.userId).toBe("human-a");
+    expect(Date.parse(rotated.expiresAt)).toBeGreaterThan(Date.now());
+    expect(
+      sqlite
+        .prepare("SELECT token_hash FROM desktop_human_sessions WHERE id = ?")
+        .get("session-a"),
+    ).toMatchObject({ token_hash: await hashToken(rotated.credential) });
+    await expect(
+      handleGetDesktopHumanSession(
+        new Request("https://app.conclave.test/api/desktop-auth/session", {
+          headers: { authorization: `Bearer ${oldCredential}` },
+        }),
+        env,
+      ),
+    ).rejects.toThrow(/invalid, expired, or revoked/);
   });
 
   it("returns the authenticated owner with a new Workspace registration", async () => {

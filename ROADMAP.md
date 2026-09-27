@@ -115,4 +115,12 @@ when the authenticated user owns each record, so stale or altered local IDs
 cannot authorize an account transition. The desktop keeps management surfaces
 hidden when the stored session user differs from the Cloud-confirmed owner.
 
+Phase 5 restores desktop human sessions asynchronously after the runtime has
+started. Still-valid sessions nearing expiry rotate in place and persist the
+replacement credential; revoked/expired sessions route to sign-in when
+disconnected or same-owner reauthentication when the runtime is intended to
+remain connected. Reauthentication replaces the desktop session without
+re-registering or rebuilding the runtime, and passive expiry never disconnects
+Cloud participation.
+
 [Workspace Desktop Lifecycle Implementation](docs/roadmaps/WORKSPACE_DESKTOP_LIFECYCLE_IMPLEMENTATION.md)

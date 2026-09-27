@@ -94,6 +94,25 @@ class DesktopHumanSession {
     );
   }
 
+  factory DesktopHumanSession.fromSecureJson(Map<String, dynamic> json) {
+    String required(String key) {
+      final value = json[key];
+      if (value is! String || value.trim().isEmpty) {
+        throw FormatException('Stored desktop session is missing $key');
+      }
+      return value.trim();
+    }
+
+    return DesktopHumanSession(
+      credential: required('credential'),
+      sessionId: required('sessionId'),
+      userId: required('userId'),
+      displayName: required('displayName'),
+      email: required('email'),
+      expiresAt: DateTime.parse(required('expiresAt')),
+    );
+  }
+
   Map<String, Object?> toSecureJson() => {
         'credential': credential,
         'sessionId': sessionId,
@@ -240,6 +259,29 @@ class DesktopAuthClient {
         'Cloud did not confirm the desktop management session',
       );
     }
+  }
+
+  /// Rotates a still-valid management credential without creating a new
+  /// browser-authenticated session or changing Workspace runtime state.
+  Future<DesktopHumanSession> rotateSession(
+    DesktopHumanSession session,
+  ) async {
+    final response = await _requestJson(
+      'POST',
+      _api(
+        '/desktop-auth/sessions/${Uri.encodeComponent(session.sessionId)}/rotate',
+      ),
+      bearer: session.credential,
+      body: const <String, Object?>{},
+    );
+    final rotated = DesktopHumanSession.fromJson(response);
+    if (rotated.sessionId != session.sessionId ||
+        rotated.userId != session.userId) {
+      throw const FormatException(
+        'Cloud rotated the desktop session to a different account',
+      );
+    }
+    return rotated;
   }
 
   Future<String> checkWorkspaceOwnership({

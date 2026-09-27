@@ -243,7 +243,7 @@ void main() {
         credentialStore: credentials,
         cloudUrl: 'https://cloud.example',
         refreshToken: 0,
-        validateSession: (_) async => false,
+        restoreSession: (_) async => null,
         onSignIn: () async => signInStarted = true,
         onConnectWorkspace: () async {},
         onSignOut: () async {},
@@ -340,7 +340,7 @@ void main() {
         credentialStore: credentials,
         cloudUrl: 'https://cloud.example',
         refreshToken: 0,
-        validateSession: (_) async => true,
+        restoreSession: (session) async => session,
         onSignIn: () async {},
         onConnectWorkspace: () async {},
         onSignOut: () async {},
@@ -386,7 +386,7 @@ void main() {
         credentialStore: credentials,
         cloudUrl: 'https://cloud.example',
         refreshToken: 0,
-        validateSession: (_) async => true,
+        restoreSession: (session) async => session,
         onSignIn: () async {},
         onConnectWorkspace: () async {},
         onSignOut: () async {},
@@ -401,6 +401,153 @@ void main() {
         find.textContaining('Sign in as the Workspace owner'), findsOneWidget);
     expect(find.text('MANAGEMENT DASHBOARD'), findsNothing);
     expect(find.text('Workers'), findsNothing);
+  });
+
+  testWidgets('an expired disconnected session asks the user to sign in',
+      (tester) async {
+    final credentials = _MemoryCredentialStore()
+      ..values[desktopHumanCredentialKey] = jsonEncode({
+        'credential': 'expired-session',
+        'sessionId': 'expired-session-id',
+        'userId': 'user-a',
+        'displayName': 'User A',
+        'email': 'a@example.com',
+        'expiresAt': DateTime.now()
+            .subtract(const Duration(minutes: 1))
+            .toUtc()
+            .toIso8601String(),
+      });
+    var restoreAttempted = false;
+    await tester.pumpWidget(MaterialApp(
+      home: WorkspaceShellRouter(
+        snapshot: const HostUiSnapshot(
+          mode: HostUiMode.firstLaunch,
+          title: 'Workspace disconnected',
+          detail: 'Sign-in expired.',
+          paired: true,
+          ownerUserId: 'user-a',
+          cloudConnected: false,
+          desiredRuntimeConnected: false,
+        ),
+        credentialStore: credentials,
+        cloudUrl: 'https://cloud.example',
+        refreshToken: 0,
+        restoreSession: (_) async {
+          restoreAttempted = true;
+          return null;
+        },
+        onSignIn: () async {},
+        onConnectWorkspace: () async {},
+        onSignOut: () async {},
+        onQuit: () async {},
+        managementShellBuilder: () => const Text('MANAGEMENT DASHBOARD'),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sign in required'), findsOneWidget);
+    expect(find.text('MANAGEMENT DASHBOARD'), findsNothing);
+    expect(restoreAttempted, isFalse);
+  });
+
+  testWidgets('expired human session leaves connected runtime available',
+      (tester) async {
+    final credentials = _MemoryCredentialStore()
+      ..values[desktopHumanCredentialKey] = jsonEncode({
+        'credential': 'expired-session',
+        'sessionId': 'expired-session-id',
+        'userId': 'user-a',
+        'displayName': 'User A',
+        'email': 'a@example.com',
+        'expiresAt': DateTime.now()
+            .subtract(const Duration(minutes: 1))
+            .toUtc()
+            .toIso8601String(),
+      });
+    await tester.pumpWidget(MaterialApp(
+      home: WorkspaceShellRouter(
+        snapshot: const HostUiSnapshot(
+          mode: HostUiMode.ready,
+          title: 'Workspace ready',
+          detail: 'Runtime is connected.',
+          paired: true,
+          workspaceReady: true,
+          ownerUserId: 'user-a',
+          cloudConnected: true,
+          desiredRuntimeConnected: true,
+        ),
+        credentialStore: credentials,
+        cloudUrl: 'https://cloud.example',
+        refreshToken: 0,
+        restoreSession: (_) async => null,
+        onSignIn: () async {},
+        onConnectWorkspace: () async {},
+        onSignOut: () async {},
+        onQuit: () async {},
+        managementShellBuilder: () => const Text('MANAGEMENT DASHBOARD'),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sign in again to manage Workspace'), findsOneWidget);
+    expect(
+      find.text(
+          'The runtime remains connected. Sign in as the Workspace owner to manage it.'),
+      findsOneWidget,
+    );
+    expect(find.text('MANAGEMENT DASHBOARD'), findsNothing);
+  });
+
+  testWidgets('near-expiry session rotates and persists without reconnecting',
+      (tester) async {
+    final current = DesktopHumanSession(
+      credential: 'current-human-session',
+      sessionId: 'session-a',
+      userId: 'user-a',
+      displayName: 'User A',
+      email: 'a@example.com',
+      expiresAt: DateTime.now().toUtc().add(const Duration(days: 2)),
+    );
+    final credentials = _MemoryCredentialStore()
+      ..values[desktopHumanCredentialKey] = jsonEncode(current.toSecureJson());
+    var runtimeRebuilt = false;
+    await tester.pumpWidget(MaterialApp(
+      home: WorkspaceShellRouter(
+        snapshot: const HostUiSnapshot(
+          mode: HostUiMode.ready,
+          title: 'Workspace ready',
+          detail: 'Runtime is connected.',
+          paired: true,
+          workspaceReady: true,
+          ownerUserId: 'user-a',
+          cloudConnected: true,
+          desiredRuntimeConnected: true,
+        ),
+        credentialStore: credentials,
+        cloudUrl: 'https://cloud.example',
+        refreshToken: 0,
+        restoreSession: (_) async => DesktopHumanSession(
+          credential: 'rotated-human-session',
+          sessionId: 'session-a',
+          userId: 'user-a',
+          displayName: 'User A',
+          email: 'a@example.com',
+          expiresAt: DateTime.now().toUtc().add(const Duration(days: 30)),
+        ),
+        onSignIn: () async {},
+        onConnectWorkspace: () async => runtimeRebuilt = true,
+        onSignOut: () async {},
+        onQuit: () async {},
+        managementShellBuilder: () => const Text('MANAGEMENT DASHBOARD'),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    final stored = jsonDecode(credentials.values[desktopHumanCredentialKey]!)
+        as Map<String, dynamic>;
+    expect(stored['credential'], 'rotated-human-session');
+    expect(find.text('MANAGEMENT DASHBOARD'), findsOneWidget);
+    expect(runtimeRebuilt, isFalse);
   });
 
   testWidgets('offline Workspace displays recovery panel with retry',

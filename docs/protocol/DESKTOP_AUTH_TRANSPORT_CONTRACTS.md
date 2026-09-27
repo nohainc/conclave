@@ -46,6 +46,17 @@ stored only as hashes. Intent expiry, approval and one-time claim enforcement
 are Cloud behavior.
 This exchange never exposes the browser's HttpOnly cookie to the desktop.
 
+At startup, the desktop asynchronously validates the stored human session after
+starting the runtime. A still-valid session within five days of expiry may be
+rotated through `POST /api/desktop-auth/sessions/{sessionId}/rotate`; the same
+session ID and user are retained while the bearer credential and expiry change.
+The replacement is persisted to secure storage before management access is
+restored. A failed/revoked validation does not stop or rebuild the runtime:
+disconnected installations show **Sign in required**, while a connected or
+desired-connected installation requires same-owner reauthentication. Browser
+reauthentication stores the newly approved session and then best-effort revokes
+the previous desktop session.
+
 ## Registration and recovery
 
 `WorkspaceRegistrationRequest` is sent to `POST /api/workspace-runtime/register`

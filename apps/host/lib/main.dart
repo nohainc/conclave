@@ -388,10 +388,16 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
     final ownerUserId = registration?.ownerUserId;
     final cloudUrl = host.config.cloudUri?.toString() ?? registration?.cloudUrl;
     final workRootPath = host.workRoot?.path ?? host.config.workRootPath;
+    final desiredRuntimeConnected =
+        WorkspaceLifecyclePreferencesStore(host.config.dataDirectory)
+                .readSync()
+                .desiredRuntime ==
+            DesiredRuntimeState.connected;
 
     if (quitting) {
       return HostUiSnapshot(
         mode: HostUiMode.stopped,
+        desiredRuntimeConnected: desiredRuntimeConnected,
         title: 'Stopping Workspace',
         detail: 'Active local work is being reconciled safely.',
         workspaceName: workspaceName,
@@ -420,6 +426,7 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
     if (startupError != null) {
       return HostUiSnapshot(
         mode: HostUiMode.offline,
+        desiredRuntimeConnected: desiredRuntimeConnected,
         title: 'Workspace is offline',
         detail: 'The Workspace could not connect. It will be safe to retry.',
         issue: startupError.toString(),
@@ -457,9 +464,14 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
     if (host.config.hostId == null) {
       return HostUiSnapshot(
         mode: HostUiMode.firstLaunch,
+        desiredRuntimeConnected: desiredRuntimeConnected,
         title: 'Connect this Workspace',
         detail: 'Sign in to register this computer with Conclave.',
         workspaceName: workspaceName,
+        workspaceId: workspaceId,
+        hostId: hostId,
+        paired: registration != null,
+        ownerUserId: ownerUserId,
         installationId: installationId,
         hostname: hostname,
         cloudUrl: cloudUrl,
@@ -480,6 +492,7 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
     if (!running) {
       return HostUiSnapshot(
         mode: HostUiMode.starting,
+        desiredRuntimeConnected: desiredRuntimeConnected,
         title: 'Starting Workspace',
         detail: 'Checking this machine and reconnecting to Conclave.',
         workspaceName: workspaceName,
@@ -522,6 +535,7 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
           : activeAssignments > 0
               ? HostUiMode.active
               : HostUiMode.ready,
+      desiredRuntimeConnected: desiredRuntimeConnected,
       title: isOffline
           ? 'Workspace is offline'
           : activeAssignments > 0
@@ -673,6 +687,7 @@ class HostUiSnapshot {
     this.statusLabel = 'Offline',
     this.paired = false,
     this.ownerUserId,
+    this.desiredRuntimeConnected = false,
     this.workspaceReady = false,
     this.cloudConnected = false,
     this.accountsNeedingAction = const [],
@@ -714,6 +729,7 @@ class HostUiSnapshot {
   final String statusLabel;
   final bool paired;
   final String? ownerUserId;
+  final bool desiredRuntimeConnected;
   final bool workspaceReady;
   final bool cloudConnected;
   final List<String> accountsNeedingAction;
@@ -930,9 +946,24 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         Platform.environment['CONCLAVE_HOST_CLOUD_URL'] ??
         conclaveProductionCloudUrl;
     final client = DesktopAuthClient(cloudUrl: cloudUrl);
+    DesktopHumanSession? previousSession;
     var failureContext = 'creating the sign-in request';
     DesktopHumanSession? claimedSession;
     try {
+      final previousRecord =
+          await lifecycle.host.credentialStore.read(desktopHumanCredentialKey);
+      if (previousRecord != null) {
+        try {
+          final decoded = jsonDecode(previousRecord);
+          if (decoded is Map) {
+            previousSession = DesktopHumanSession.fromSecureJson(
+              Map<String, dynamic>.from(decoded),
+            );
+          }
+        } on Object {
+          // Replace malformed local session data after the new session succeeds.
+        }
+      }
       final intent = await client.createIntent();
       final openBrowser = await showDialog<bool>(
         context: dialogContext,
@@ -1008,6 +1039,14 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         desktopHumanCredentialKey,
         jsonEncode(session.toSecureJson()),
       );
+      if (previousSession != null &&
+          previousSession.sessionId != session.sessionId) {
+        try {
+          await client.revokeSession(previousSession);
+        } on Object {
+          // Replacing local state must not fail if the old session already expired.
+        }
+      }
       final preferenceStore = WorkspaceLifecyclePreferencesStore(
         lifecycle.host.config.dataDirectory,
       );
@@ -1736,7 +1775,9 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     }
   }
 
-  Future<bool> _validateDesktopSession(DesktopHumanSession session) async {
+  Future<DesktopHumanSession?> _restoreDesktopSession(
+    DesktopHumanSession session,
+  ) async {
     final registration =
         HostRegistrationStore(widget.lifecycle.host.config.dataDirectory)
             .readSync();
@@ -1746,9 +1787,21 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     final client = DesktopAuthClient(cloudUrl: cloudUrl);
     try {
       await client.validateSession(session);
-      return true;
+      final refreshWindow = DateTime.now().toUtc().add(
+            const Duration(days: 5),
+          );
+      if (session.expiresAt.toUtc().isAfter(refreshWindow)) return session;
+      try {
+        return await client.rotateSession(session);
+      } on Object {
+        // Keep a still-valid session usable during transient refresh failures.
+        // If Cloud revoked it during the rotation race, the second validation
+        // fails and the management shell remains locked.
+        await client.validateSession(session);
+        return session;
+      }
     } on Object {
-      return false;
+      return null;
     } finally {
       client.close();
     }
@@ -1799,7 +1852,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
                   cloudUrl: lifecycle.uiSnapshot.cloudUrl ??
                       conclaveProductionCloudUrl,
                   refreshToken: _workerRevision,
-                  validateSession: _validateDesktopSession,
+                  restoreSession: _restoreDesktopSession,
                   onSignIn: _signInDesktopHuman,
                   onConnectWorkspace: _connectWorkspace,
                   onSignOut: _signOutDesktopHuman,
@@ -1813,7 +1866,13 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
   }
 }
 
-enum _ShellAccessMode { checking, signedOut, signedIn, reauthRequired }
+enum _ShellAccessMode {
+  checking,
+  signedOut,
+  signInRequired,
+  signedIn,
+  reauthRequired,
+}
 
 class _ShellAccess {
   const _ShellAccess(this.mode, [this.session]);
@@ -1831,7 +1890,7 @@ class WorkspaceShellRouter extends StatefulWidget {
     required this.credentialStore,
     required this.cloudUrl,
     required this.refreshToken,
-    required this.validateSession,
+    required this.restoreSession,
     required this.onSignIn,
     required this.onConnectWorkspace,
     required this.onSignOut,
@@ -1845,7 +1904,8 @@ class WorkspaceShellRouter extends StatefulWidget {
   final SecureCredentialStore credentialStore;
   final String cloudUrl;
   final int refreshToken;
-  final Future<bool> Function(DesktopHumanSession session) validateSession;
+  final Future<DesktopHumanSession?> Function(DesktopHumanSession session)
+      restoreSession;
   final Future<void> Function() onSignIn;
   final Future<void> Function() onConnectWorkspace;
   final Future<void> Function() onSignOut;
@@ -1875,12 +1935,20 @@ class _WorkspaceShellRouterState extends State<WorkspaceShellRouter> {
   }
 
   Future<_ShellAccess> _loadAccess() async {
+    final runtimeIntendedConnected = widget.snapshot.cloudConnected ||
+        widget.snapshot.desiredRuntimeConnected;
+    _ShellAccess invalidSession([DesktopHumanSession? session]) => _ShellAccess(
+          runtimeIntendedConnected
+              ? _ShellAccessMode.reauthRequired
+              : _ShellAccessMode.signInRequired,
+          session,
+        );
+
     final stored = await widget.credentialStore.read(desktopHumanCredentialKey);
     if (stored == null || stored.isEmpty) {
-      return _ShellAccess(
-          widget.snapshot.paired && widget.snapshot.cloudConnected
-              ? _ShellAccessMode.reauthRequired
-              : _ShellAccessMode.signedOut);
+      return _ShellAccess(widget.snapshot.paired && runtimeIntendedConnected
+          ? _ShellAccessMode.reauthRequired
+          : _ShellAccessMode.signedOut);
     }
 
     try {
@@ -1909,21 +1977,31 @@ class _WorkspaceShellRouterState extends State<WorkspaceShellRouter> {
         email: email,
         expiresAt: expiresAt,
       );
-      if (!expiresAt.isAfter(DateTime.now().toUtc()) ||
-          !await widget.validateSession(session)) {
-        return _ShellAccess(_ShellAccessMode.reauthRequired, session);
+      if (!expiresAt.isAfter(DateTime.now().toUtc())) {
+        return invalidSession(session);
       }
       final ownerUserId = widget.snapshot.ownerUserId;
       if (widget.snapshot.paired &&
           (ownerUserId == null || ownerUserId != session.userId)) {
         return _ShellAccess(_ShellAccessMode.reauthRequired, session);
       }
-      return _ShellAccess(_ShellAccessMode.signedIn, session);
+      final restored = await widget.restoreSession(session);
+      if (restored == null ||
+          restored.sessionId != session.sessionId ||
+          restored.userId != session.userId) {
+        return invalidSession(session);
+      }
+      if (restored.credential != session.credential) {
+        await widget.credentialStore.write(
+          desktopHumanCredentialKey,
+          jsonEncode(restored.toSecureJson()),
+        );
+      }
+      return _ShellAccess(_ShellAccessMode.signedIn, restored);
     } on Object {
-      return _ShellAccess(
-          widget.snapshot.paired && widget.snapshot.cloudConnected
-              ? _ShellAccessMode.reauthRequired
-              : _ShellAccessMode.signedOut);
+      return runtimeIntendedConnected
+          ? _ShellAccess(_ShellAccessMode.reauthRequired)
+          : _ShellAccess(_ShellAccessMode.signInRequired);
     }
   }
 
@@ -1962,6 +2040,16 @@ class _WorkspaceShellRouterState extends State<WorkspaceShellRouter> {
                 onAbout: _showAbout,
                 onQuit: widget.onQuit,
                 child: _SignedOutShell(onSignIn: widget.onSignIn),
+              );
+            case _ShellAccessMode.signInRequired:
+              return _MinimalShell(
+                version: widget.snapshot.appVersion,
+                onAbout: _showAbout,
+                onQuit: widget.onQuit,
+                child: _SignedOutShell(
+                  onSignIn: widget.onSignIn,
+                  signInRequired: true,
+                ),
               );
             case _ShellAccessMode.reauthRequired:
               return _MinimalShell(
@@ -2046,9 +2134,10 @@ class _MinimalShell extends StatelessWidget {
 }
 
 class _SignedOutShell extends StatelessWidget {
-  const _SignedOutShell({required this.onSignIn});
+  const _SignedOutShell({required this.onSignIn, this.signInRequired = false});
 
   final Future<void> Function() onSignIn;
+  final bool signInRequired;
 
   @override
   Widget build(BuildContext context) => Center(
@@ -2060,7 +2149,10 @@ class _SignedOutShell extends StatelessWidget {
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 ConclaveBrand.logoMark(size: 48),
                 const SizedBox(height: 18),
-                Text('Sign in to Conclave Workspace',
+                Text(
+                    signInRequired
+                        ? 'Sign in required'
+                        : 'Sign in to Conclave Workspace',
                     style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 10),
                 const Text(

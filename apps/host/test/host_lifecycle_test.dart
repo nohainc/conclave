@@ -5,6 +5,8 @@ import 'package:conclave_host/assignment_journal.dart';
 import 'package:conclave_host/cloud_connection.dart';
 import 'package:conclave_host/host.dart';
 import 'package:conclave_host/host_configuration.dart';
+import 'package:conclave_host/workspace_lifecycle.dart';
+import 'package:conclave_host/workspace_lifecycle_store.dart';
 import 'package:conclave_host/workspace_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -49,6 +51,41 @@ void main() {
     expect(config.authToken, isNull);
     expect(
         HostRegistrationStore(directory).readSync()?.ownerUserId, 'user-owner');
+  });
+
+  test('disconnected registration remains visible as owned but not connected',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('conclave-host-');
+    await HostRegistrationStore(directory).write(const HostRegistration(
+      hostId: 'runtime-owned',
+      workspaceId: 'workspace-owned',
+      cloudUrl: 'https://cloud.example.test',
+      name: 'Owned Workspace',
+      hostname: 'owned-mac.local',
+      ownerUserId: 'user-owner',
+      installationId: 'install-owned',
+    ));
+    await WorkspaceLifecyclePreferencesStore(directory).write(
+      const WorkspaceLifecyclePreferences(
+        desiredRuntime: DesiredRuntimeState.disconnected,
+        launchAtLogin: false,
+        managementLockPreference: ManagementLockState.unlocked,
+        ownerUserId: 'user-owner',
+      ),
+    );
+    final host = Host(
+      config: HostConfig.fromArgs(
+        ['--data-dir', directory.path],
+        ignoreSavedRegistration: true,
+      ),
+    );
+    final snapshot = HostLifecycleController(host).uiSnapshot;
+
+    expect(snapshot.paired, isTrue);
+    expect(snapshot.ownerUserId, 'user-owner');
+    expect(snapshot.desiredRuntimeConnected, isFalse);
+    expect(snapshot.workspaceReady, isFalse);
+    expect(snapshot.cloudConnected, isFalse);
   });
 
   test('connection failure keeps saved Workspace registration paired',
