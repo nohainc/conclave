@@ -181,6 +181,27 @@ String _webSocketUpgradeStatus(HostCloudConnection? connection) {
   return 'not completed';
 }
 
+Future<bool> drainWorkspaceAssignments({
+  required int Function() activeAssignmentCount,
+  required void Function() beginDrain,
+  required void Function() restoreNewWorkState,
+  Duration timeout = const Duration(seconds: 15),
+  Duration pollInterval = const Duration(milliseconds: 250),
+  DateTime Function()? now,
+  Future<void> Function(Duration)? wait,
+}) async {
+  beginDrain();
+  final clock = now ?? DateTime.now;
+  final delay = wait ?? Future<void>.delayed;
+  final deadline = clock().add(timeout);
+  while (activeAssignmentCount() > 0 && clock().isBefore(deadline)) {
+    await delay(pollInterval);
+  }
+  if (activeAssignmentCount() == 0) return true;
+  restoreNewWorkState();
+  return false;
+}
+
 class HostLifecycleController extends ChangeNotifier {
   HostLifecycleController(this.host) {
     _statusTimer = Timer.periodic(const Duration(seconds: 3), (_) {
@@ -194,7 +215,6 @@ class HostLifecycleController extends ChangeNotifier {
   bool _quitting = false;
   Object? _startupError;
   Timer? _statusTimer;
-  bool _draining = false;
   // Fail closed until the human session has been restored by the shell router.
   bool _managementAuthRequired = true;
   static const _desktopChannel =
@@ -217,12 +237,16 @@ class HostLifecycleController extends ChangeNotifier {
   bool get running => host.isRunning;
   Object? get startupError => _startupError;
   bool get acceptingNewWork => host.cloudConnection?.acceptingNewWork ?? false;
-  bool get draining => _draining;
 
   void updateManagementAuthRequired(bool required) {
     if (_managementAuthRequired == required) return;
     _managementAuthRequired = required;
     _publishMenuStatus();
+  }
+
+  void refreshMenuStatus() {
+    _publishMenuStatus();
+    notifyListeners();
   }
 
   Future<void> handleDesktopAction(String action) async {
@@ -232,29 +256,18 @@ class HostLifecycleController extends ChangeNotifier {
         break;
       case 'pause':
         host.cloudConnection?.pauseNewWork();
-        _draining = false;
         break;
       case 'resume':
         host.cloudConnection?.resumeNewWork();
         break;
       case 'togglePause':
         final connection = host.cloudConnection;
+        if (connection?.isDraining == true) break;
         if (connection?.acceptingNewWork == true) {
           connection?.pauseNewWork();
         } else if (connection?.isConnected == true) {
           connection?.resumeNewWork();
         }
-        break;
-      case 'drain':
-        final connection = host.cloudConnection;
-        if (connection == null) break;
-        connection.beginDrain();
-        _draining = true;
-        notifyListeners();
-        while (connection.activeAssignmentCount > 0 && !_quitting) {
-          await Future<void>.delayed(const Duration(milliseconds: 250));
-        }
-        _draining = false;
         break;
       case 'diagnostics':
         final file = await exportDiagnostics();
@@ -265,24 +278,6 @@ class HostLifecycleController extends ChangeNotifier {
         break;
       case 'openAX':
         await openAX();
-        break;
-      case 'quit':
-        final connection = host.cloudConnection;
-        if (connection != null && connection.activeAssignmentCount > 0) {
-          connection.beginDrain();
-          var elapsed = 0;
-          while (connection.activeAssignmentCount > 0 &&
-              !_quitting &&
-              elapsed < 15000) {
-            await Future<void>.delayed(const Duration(milliseconds: 250));
-            elapsed += 250;
-          }
-          if (connection.activeAssignmentCount > 0) {
-            break;
-          }
-        }
-        await quit();
-        await _desktopChannel.invokeMethod<void>('terminate');
         break;
       default:
         return;
@@ -386,7 +381,7 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
       'lastWebSocketFailure': connection?.lastWebSocketFailure,
       'active': connection?.activeAssignmentCount ?? 0,
       'accepting': connection?.acceptingNewWork ?? false,
-      'draining': _draining,
+      'draining': connection?.isDraining ?? false,
       'managementLocked': WorkspaceLifecyclePreferencesStore(
             host.config.dataDirectory,
           ).readSync().managementLockPreference ==
@@ -422,7 +417,7 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
         mode: HostUiMode.stopped,
         desiredRuntimeConnected: desiredRuntimeConnected,
         title: 'Stopping Workspace',
-        detail: 'Active local work is being reconciled safely.',
+        detail: 'Stopping the runtime and closing its connection.',
         workspaceName: workspaceName,
         workspaceId: workspaceId,
         installationId: installationId,
@@ -545,7 +540,7 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
     final isConnected = connection?.isConnected ?? false;
     final statusLabel = !isConnected
         ? 'Offline'
-        : _draining
+        : (connection?.isDraining ?? false)
             ? 'Draining'
             : !(connection?.acceptingNewWork ?? true)
                 ? 'Paused'
@@ -891,6 +886,8 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         } else {
           await widget.lifecycle.handleDesktopAction(action);
         }
+      } else if (call.method == 'requestQuit') {
+        await _confirmQuit();
       } else if (call.method == 'managementLockRequested') {
         await _lockManagement();
       }
@@ -1025,77 +1022,84 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
   }
 
   Future<void> _confirmQuit() async {
-    // Use the navigator's context (below MaterialApp) so showDialog can find
-    // a valid Overlay.  The state's own `context` sits *above* MaterialApp and
-    // has no Navigator ancestor, which silently prevents the dialog from being
-    // shown.
     final dialogContext = _navigatorKey.currentContext;
     if (dialogContext == null) return;
 
-    final activeCount =
-        widget.lifecycle.host.cloudConnection?.activeAssignmentCount ?? 0;
-    final shouldQuit = await showDialog<bool>(
-      context: dialogContext,
-      builder: (context) => AlertDialog(
-        title: const Text('Quit Conclave Workspace?'),
-        content: Text(
-          activeCount > 0
-              ? 'There ${activeCount == 1 ? 'is 1 active assignment running' : 'are $activeCount active assignments running'}.\n\n'
-                  'Assignments will be safely reconciled and drained before the Workspace disconnects.'
-              : 'Active work will be reconciled safely before this machine disconnects. You can start the Workspace again anytime.',
+    final lifecycle = widget.lifecycle;
+    final connection = lifecycle.host.cloudConnection;
+    final initialCount = connection?.activeAssignmentCount ?? 0;
+    if (initialCount > 0) {
+      final drainAndQuit = await showDialog<bool>(
+        context: dialogContext,
+        builder: (context) => AlertDialog(
+          title: const Text('Assignments are running'),
+          content: Text(
+            'There ${initialCount == 1 ? 'is 1 active assignment' : 'are $initialCount active assignments'}. '
+            'Drain and quit stops accepting new work, waits for active assignments to finish, then closes the runtime. '
+            'If they do not finish within 15 seconds, the Workspace stays open.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Drain and quit'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Keep running'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Quit Workspace'),
-          ),
-        ],
-      ),
-    );
-    if (shouldQuit != true || !mounted) return;
+      );
+      if (drainAndQuit != true || !mounted) return;
 
-    if (activeCount > 0) {
-      final connection = widget.lifecycle.host.cloudConnection;
-      connection?.beginDrain();
-      var drained = false;
-      final deadline = DateTime.now().add(const Duration(seconds: 15));
-      while (DateTime.now().isBefore(deadline)) {
-        if ((connection?.activeAssignmentCount ?? 0) == 0) {
-          drained = true;
-          break;
-        }
-        await Future<void>.delayed(const Duration(milliseconds: 250));
-      }
-
-      if (!drained && (connection?.activeAssignmentCount ?? 0) > 0) {
-        if (mounted) {
+      if (connection != null) {
+        final acceptingBeforeDrain = connection.acceptingNewWork;
+        final drained = await drainWorkspaceAssignments(
+          activeAssignmentCount: () => connection.activeAssignmentCount,
+          beginDrain: () {
+            connection.beginDrain();
+            lifecycle.refreshMenuStatus();
+          },
+          restoreNewWorkState: acceptingBeforeDrain
+              ? () {
+                  connection.resumeNewWork();
+                  lifecycle.refreshMenuStatus();
+                }
+              : () {
+                  connection.pauseNewWork();
+                  lifecycle.refreshMenuStatus();
+                },
+        );
+        if (!drained) {
+          if (!mounted) return;
           await showDialog<void>(
             context: dialogContext,
             builder: (context) => AlertDialog(
-              title: const Text('Unable to Close Safely'),
+              title: const Text('Assignments are still running'),
               content: Text(
-                'Running processes could not be safely stopped within the timeout (${connection?.activeAssignmentCount ?? 0} active assignments remaining).\n\n'
-                'Conclave Workspace did not close to protect your work and files from corruption.',
+                'The Workspace remains open with ${connection.activeAssignmentCount} active assignments. '
+                '${acceptingBeforeDrain ? 'New work has resumed.' : 'New work remains paused.'}',
               ),
               actions: [
                 FilledButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('OK'),
+                  child: const Text('Keep Workspace running'),
                 ),
               ],
             ),
           );
+          return;
         }
-        return;
       }
+    } else {
+      // Prevent an assignment racing the shutdown between the count check and
+      // closing the transport.
+      connection?.beginDrain();
+      lifecycle.refreshMenuStatus();
     }
 
     try {
-      await widget.lifecycle.quit();
+      await lifecycle.quit();
       const desktopChannel = MethodChannel('com.conclave.workspace/desktop');
       await desktopChannel.invokeMethod<void>('terminate');
     } catch (error) {
@@ -1103,7 +1107,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         await showDialog<void>(
           context: dialogContext,
           builder: (context) => AlertDialog(
-            title: const Text('Unable to Close Safely'),
+            title: const Text('Unable to Quit'),
             content: Text(
               'An error occurred while stopping the Workspace: $error\n\n'
               'Conclave Workspace did not close.',

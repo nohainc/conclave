@@ -14,6 +14,7 @@ class AppDelegate: FlutterAppDelegate {
   private var managementLocked = false
   private var runtimeConnected = false
   private var reauthRequired = false
+  private var quitApproved = false
 
   override func applicationDidFinishLaunching(_ notification: Notification) {
     super.applicationDidFinishLaunching(notification)
@@ -56,6 +57,7 @@ class AppDelegate: FlutterAppDelegate {
         if let url = URL(string: "https://app.conclaveax.com") { NSWorkspace.shared.open(url) }
         result(nil)
       case "terminate":
+        self?.quitApproved = true
         NSApp.terminate(nil)
         result(nil)
       case "setLaunchAtLogin":
@@ -136,6 +138,7 @@ class AppDelegate: FlutterAppDelegate {
     let active = status["active"] as? Int ?? 0
     let transport = status["transportMode"] as? String ?? "offline"
     let accepting = status["accepting"] as? Bool ?? true
+    let draining = status["draining"] as? Bool ?? false
     runtimeConnected = status["runtimeRunning"] as? Bool ?? (state == "Connected")
     reauthRequired = status["reauthRequired"] as? Bool ?? false
     statusItem?.button?.title = "Conclave Workspace"
@@ -158,7 +161,10 @@ class AppDelegate: FlutterAppDelegate {
       : "\(active) assignments"
     assignmentCountItem?.isHidden = !runtimeConnected && !reauthRequired
     connectedMenuItems.forEach { $0.isHidden = !runtimeConnected || reauthRequired }
-    pauseItem?.title = accepting ? "Pause new work" : "Resume new work"
+    pauseItem?.title = draining
+      ? "Waiting for active work…"
+      : accepting ? "Pause new work" : "Resume new work"
+    pauseItem?.isEnabled = !draining
     setManagementLocked(status["managementLocked"] as? Bool ?? managementLocked)
   }
 
@@ -180,11 +186,20 @@ class AppDelegate: FlutterAppDelegate {
   override func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
     NSApp.activate(ignoringOtherApps: true)
     mainFlutterWindow?.makeKeyAndOrderFront(nil)
+    desktopChannel?.invokeMethod("menuAction", arguments: "openWorkspace")
     return true
   }
 
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+    // Closing the window only hides management UI. The Workspace runtime and
+    // status menu remain alive until an explicit, confirmed Quit action.
     return false
+  }
+
+  override func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+    if quitApproved { return .terminateNow }
+    desktopChannel?.invokeMethod("requestQuit", arguments: nil)
+    return .terminateCancel
   }
 
   override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {

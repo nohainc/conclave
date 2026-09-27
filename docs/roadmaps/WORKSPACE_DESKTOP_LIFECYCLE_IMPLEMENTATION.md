@@ -1015,6 +1015,17 @@ Do not use Disconnect as Pause.
 
 Close, lock, pause, disconnect, sign out, and quit each have distinct behavior.
 
+## Implementation status
+
+Closing the last macOS window leaves the app and runtime alive. Dock reopen and
+the menu-bar Open action restore the lifecycle-routed shell. macOS quit requests,
+including Cmd-Q and the menu-bar command, are routed through one confirmation
+path. With no active assignments, the runtime closes immediately. With active
+assignments, the user can Cancel or Drain and quit; drain stops new assignments
+while current work finishes. A 15-second timeout leaves the app running and
+restores the prior intake state. Pause/Resume changes only assignment intake,
+and cannot resume work while a quit drain is underway.
+
 ---
 
 # Phase 14 — Cloud API adjustments

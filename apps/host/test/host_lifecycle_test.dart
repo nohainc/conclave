@@ -183,11 +183,104 @@ void main() {
     expect(lifecycle.running, isTrue);
     lifecycle.minimize();
     expect(lifecycle.hidden, isTrue);
+    expect(lifecycle.running, isTrue,
+        reason: 'hiding the window must leave the runtime alive');
     lifecycle.restore();
     expect(lifecycle.hidden, isFalse);
+    expect(lifecycle.running, isTrue);
     await lifecycle.quit();
     expect(lifecycle.quitting, isTrue);
     expect(lifecycle.running, isFalse);
+  });
+
+  test('pause and resume affect assignment intake, not runtime lifecycle',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('conclave-pause-');
+    final registration = const HostRegistration(
+      hostId: 'runtime-1',
+      workspaceId: 'workspace-1',
+      cloudUrl: 'https://cloud.example.test',
+      name: 'Test Workspace',
+      hostname: 'test-machine',
+      ownerUserId: 'owner-1',
+      installationId: 'installation-1',
+    );
+    await HostRegistrationStore(directory).write(registration);
+    await WorkspaceLifecyclePreferencesStore(directory).write(
+      const WorkspaceLifecyclePreferences(
+        desiredRuntime: DesiredRuntimeState.connected,
+        launchAtLogin: false,
+        managementLockPreference: ManagementLockState.unlocked,
+      ),
+    );
+    final connection = HostCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.example.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-1'),
+      hostId: 'runtime-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => _SilentWorkspaceSocket(),
+    );
+    final lifecycle = HostLifecycleController(Host(
+      config: HostConfig(
+        dataDirectory: directory,
+        hostId: 'runtime-1',
+        workspaceId: 'workspace-1',
+        authToken: 'runtime-credential',
+      ),
+      cloudConnection: connection,
+    ));
+
+    await lifecycle.handleDesktopAction('pause');
+    expect(connection.acceptingNewWork, isFalse);
+    expect(connection.isDraining, isFalse);
+    expect(lifecycle.quitting, isFalse);
+    expect(
+      WorkspaceLifecyclePreferencesStore(directory).readSync().desiredRuntime,
+      DesiredRuntimeState.connected,
+    );
+
+    await lifecycle.handleDesktopAction('resume');
+    expect(connection.acceptingNewWork, isTrue);
+    await lifecycle.quit();
+  });
+
+  test('quit drain waits for work and restores intake if the timeout expires',
+      () async {
+    var now = DateTime.utc(2026, 9, 27);
+    var active = 2;
+    var drainStarted = false;
+    var restored = false;
+    final drained = await drainWorkspaceAssignments(
+      activeAssignmentCount: () => active,
+      beginDrain: () => drainStarted = true,
+      restoreNewWorkState: () => restored = true,
+      timeout: const Duration(seconds: 3),
+      pollInterval: const Duration(seconds: 1),
+      now: () => now,
+      wait: (duration) async {
+        now = now.add(duration);
+        active--;
+      },
+    );
+    expect(drained, isTrue);
+    expect(drainStarted, isTrue);
+    expect(restored, isFalse);
+
+    now = DateTime.utc(2026, 9, 27);
+    active = 1;
+    restored = false;
+    final timedOut = await drainWorkspaceAssignments(
+      activeAssignmentCount: () => active,
+      beginDrain: () {},
+      restoreNewWorkState: () => restored = true,
+      timeout: const Duration(seconds: 1),
+      pollInterval: const Duration(seconds: 1),
+      now: () => now,
+      wait: (duration) async => now = now.add(duration),
+    );
+    expect(timedOut, isFalse);
+    expect(restored, isTrue);
+    expect(active, 1);
   });
 
   test('assignment journal recovers interrupted work after restart', () async {
