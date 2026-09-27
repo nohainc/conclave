@@ -1,10 +1,19 @@
 # Workspace Desktop Authentication and Dual-Transport Implementation
 
 **Status:** Proposed implementation plan  
-**Baseline:** `main@353c60e5b861a4b20b223611516076c200912d8b`  
+**Baseline:** `main@d268546ce9ced72eeaa9c10233d934182e05d353`  
 **Architecture decision:** [ADR-013](../decisions/ADR-013-desktop-auth-and-dual-transport.md)
 
 ## Goal
+
+> **Lifecycle refinement:** The first ADR-013 implementation landed in
+> `4789088e`, including desktop human auth, authenticated registration and
+> dual transport. ADR-014 now refines the desktop product lifecycle so Sign in
+> no longer automatically connects the Workspace, signed-out UI is isolated,
+> connected runtimes auto-start/reconnect after reboot, and management UI can
+> be locally locked. Implement those changes using
+> [WORKSPACE_DESKTOP_LIFECYCLE_IMPLEMENTATION.md](WORKSPACE_DESKTOP_LIFECYCLE_IMPLEMENTATION.md)
+> before treating the desktop UX as complete.
 
 Move Workspace ownership/recovery into the desktop app and remove WebSocket as
 a single point of failure while preserving v7 security boundaries.
@@ -203,14 +212,10 @@ Never silently transfer.
 
 ## Desktop
 
-On first authenticated run:
-
-1. load installation ID;
-2. detect friendly computer name;
-3. let user confirm/edit Workspace name;
-4. register;
-5. securely persist runtime credential;
-6. start runtime transport.
+The first implementation performs registration immediately after sign-in. ADR-014
+refines this: human sign-in must stop at management authentication. Registration,
+runtime credential issuance, and transport startup move behind an explicit
+**Connect Workspace** action.
 
 Recovery UX:
 
