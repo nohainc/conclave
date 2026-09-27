@@ -341,9 +341,10 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
         cloudUrl: cloudUrl,
         workRootPath: workRootPath,
         paired: hostId != null && workspaceId != null,
-        canRecoverPairing: hostId != null &&
-            workspaceId != null &&
-            host.config.authToken == null,
+        // A saved token can be present and still be revoked in Cloud. Offer
+        // explicit recovery for every paired startup failure; the dialog
+        // tells the user to unpair in AX before clearing this local identity.
+        canRecoverPairing: hostId != null && workspaceId != null,
         statusLabel: 'Offline',
       );
     }
@@ -378,20 +379,36 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
     final connection = host.cloudConnection;
     final activeAssignments = connection?.activeAssignmentCount ?? 0;
     final isConnected = connection?.isConnected ?? false;
-    final statusLabel = _draining
-        ? 'Draining'
-        : !(connection?.acceptingNewWork ?? true)
-            ? 'Paused'
-            : isConnected
-                ? 'Connected'
-                : 'Offline';
+    final statusLabel = !isConnected
+        ? 'Offline'
+        : _draining
+            ? 'Draining'
+            : !(connection?.acceptingNewWork ?? true)
+                ? 'Paused'
+                : 'Connected';
+    final isOffline = !isConnected;
 
     return HostUiSnapshot(
-      mode: activeAssignments > 0 ? HostUiMode.active : HostUiMode.ready,
-      title: activeAssignments > 0 ? 'Work in progress' : 'Workspace is ready',
-      detail: activeAssignments > 0
-          ? 'The Workspace is running assigned work.'
-          : 'This machine is paired and ready to run assigned work.',
+      mode: isOffline
+          ? HostUiMode.offline
+          : activeAssignments > 0
+              ? HostUiMode.active
+              : HostUiMode.ready,
+      title: isOffline
+          ? 'Workspace is offline'
+          : activeAssignments > 0
+              ? 'Work in progress'
+              : 'Workspace is ready',
+      detail: isOffline
+          ? activeAssignments > 0
+              ? 'Cloud is disconnected. Active work remains on this computer while the Workspace retries.'
+              : 'The Workspace is paired, but Cloud has not authenticated this connection.'
+          : activeAssignments > 0
+              ? 'The Workspace is running assigned work.'
+              : 'This machine is paired and ready to run assigned work.',
+      issue: isOffline
+          ? 'No authenticated Cloud session. Check the saved runtime credential or prepare to pair again.'
+          : null,
       workspaceName: workspaceName,
       workspaceId: workspaceId,
       installationId: installationId,
@@ -400,6 +417,7 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
       cloudUrl: cloudUrl,
       workRootPath: workRootPath,
       paired: true,
+      canRecoverPairing: isOffline && hostId != null && workspaceId != null,
       cloudConnected: isConnected,
       statusLabel: statusLabel,
       logsPath: '${host.config.dataDirectory.path}/logs/host.log',
@@ -892,11 +910,11 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       builder: (context) => AlertDialog(
         title: const Text('Prepare to pair again?'),
         content: const Text(
-          'First, in Conclave AX, unpair this Workspace so Cloud revokes the '
-          'old runtime credential. Then continue here and connect with a new '
-          'pairing code. This clears only the saved Cloud connection. Local '
-          'Workers, their credentials, the installation identity, and Work '
-          'Root will be preserved.',
+          'If this Workspace still appears in Conclave AX, unpair it there '
+          'first. If it is already absent, continue here. This clears the '
+          'saved Cloud connection so this computer can use a new pairing '
+          'code. Local Workers, their credentials, the installation identity, '
+          'and Work Root will be preserved.',
         ),
         actions: [
           TextButton(
@@ -1894,9 +1912,7 @@ class _PairedWorkspaceCard extends StatelessWidget {
     final theme = Theme.of(context);
     final workspaceName =
         snapshot.workspaceName ?? snapshot.hostname ?? 'Conclave Workspace';
-    final isConnected = snapshot.mode == HostUiMode.ready ||
-        snapshot.mode == HostUiMode.active ||
-        snapshot.cloudConnected;
+    final isConnected = snapshot.cloudConnected;
     final connectionLabel = isConnected
         ? 'Connected'
         : snapshot.mode == HostUiMode.starting
