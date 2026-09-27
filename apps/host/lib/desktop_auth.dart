@@ -326,6 +326,24 @@ class DesktopAuthClient {
     );
   }
 
+  Future<void> disconnectWorkspace({
+    required DesktopHumanSession session,
+    required String installationId,
+    required String workspaceId,
+    required String runtimeId,
+  }) async {
+    await _requestJson(
+      'POST',
+      _api('/workspace-runtime/disconnect'),
+      bearer: session.credential,
+      body: {
+        'installationId': installationId,
+        'workspaceId': workspaceId,
+        'runtimeId': runtimeId,
+      },
+    );
+  }
+
   Future<void> revokeSession(DesktopHumanSession session) async {
     await _requestJson(
       'POST',

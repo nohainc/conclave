@@ -12,6 +12,7 @@ import {
   handleDesktopAuthIntentStatus,
   handleGetDesktopHumanSession,
   handleCheckWorkspaceOwnership,
+  handleDisconnectDesktopWorkspace,
   handleReleaseDesktopWorkspace,
   handleRegisterWorkspaceFromDesktop,
   handleRevokeDesktopHumanSession,
@@ -88,7 +89,12 @@ describe("desktop human authentication", () => {
         );
     }
     const db = new TestD1(sqlite);
-    const env = { CONCLAVE_DB: db } as never;
+    const env = {
+      CONCLAVE_DB: db,
+      CONCLAVE_WORKSPACE_GATEWAY: {
+        getByName: () => ({ fetch: async () => Response.json({ online: false }) }),
+      },
+    } as never;
     vi.spyOn(identityService, "resolve").mockResolvedValue({
       userId: "human-1",
       email: "person@example.test",
@@ -537,11 +543,54 @@ describe("desktop human authentication", () => {
     expect(sqlite.prepare("SELECT status FROM execution_workspaces WHERE id = ?").get("workspace-a")).toMatchObject({ status: "offline" });
     sqlite.prepare("DELETE FROM worker_assignments WHERE id = ?").run("assignment-active");
 
+    sqlite.prepare("UPDATE execution_workspaces SET status = 'online' WHERE id = ?").run("workspace-a");
+    const connectedReleaseDenied = await handleReleaseDesktopWorkspace(request("human-a-secret"), env);
+    expect(connectedReleaseDenied.status).toBe(409);
+    expect(await connectedReleaseDenied.json()).toMatchObject({ code: "runtime_connected" });
+    expect(sqlite.prepare("SELECT installation_id FROM workspace_runtime_identities WHERE id = ?").get("runtime-a")).toMatchObject({ installation_id: installationId });
+    sqlite.prepare("UPDATE execution_workspaces SET status = 'offline' WHERE id = ?").run("workspace-a");
+
     const released = await handleReleaseDesktopWorkspace(request("human-a-secret"), env);
     expect(released.status).toBe(200);
     expect(await released.json()).toMatchObject({ released: true, installationId });
     expect(sqlite.prepare("SELECT installation_id, revoked_at FROM workspace_runtime_identities WHERE id = ?").get("runtime-a")).toMatchObject({ installation_id: null });
     expect(sqlite.prepare("SELECT status FROM execution_workspaces WHERE id = ?").get("workspace-a")).toMatchObject({ status: "revoked" });
+  });
+
+  it("disconnects through the owner human session and retains installation ownership", async () => {
+    const { env, sqlite } = await setup();
+    const now = new Date().toISOString();
+    const installationId = "install_12345678-1234-4234-8234-123456789abc";
+    sqlite.prepare("INSERT INTO users (id, email, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
+      .run("human-a", "a@example.test", "A", now, now);
+    sqlite.prepare("INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at) VALUES (?, ?, ?, 'online', ?, ?)")
+      .run("workspace-a", "human-a", "A's Workspace", now, now);
+    sqlite.prepare("INSERT INTO workspace_runtime_identities (id, workspace_id, credential_key_ref, credential_token_hash, installation_id, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .run("runtime-a", "workspace-a", "runtime-key", await hashToken("runtime-secret"), installationId, now);
+    sqlite.prepare("INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run("session-a", "human-a", await hashToken("human-a-secret"), "conclave.desktop.management", now, now, new Date(Date.now() + 60_000).toISOString());
+    const gatewayFetch = vi.fn(async (request: RequestInfo | URL) => {
+      const requestUrl = request instanceof Request ? request.url : String(request);
+      expect(new URL(requestUrl).pathname).toBe("/disconnect-runtime");
+      return Response.json({ disconnected: true });
+    });
+    (env as unknown as { CONCLAVE_WORKSPACE_GATEWAY: unknown }).CONCLAVE_WORKSPACE_GATEWAY = {
+      getByName: () => ({ fetch: gatewayFetch }),
+    };
+    const response = await handleDisconnectDesktopWorkspace(
+      new Request("https://app.conclave.test/api/workspace-runtime/disconnect", {
+        method: "POST",
+        headers: { authorization: "Bearer human-a-secret", "content-type": "application/json" },
+        body: JSON.stringify({ installationId, workspaceId: "workspace-a", runtimeId: "runtime-a" }),
+      }),
+      env,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ disconnected: true, gatewayDisconnected: true });
+    expect(gatewayFetch).toHaveBeenCalledOnce();
+    expect(sqlite.prepare("SELECT installation_id, revoked_at FROM workspace_runtime_identities WHERE id = ?").get("runtime-a")).toMatchObject({ installation_id: installationId, revoked_at: expect.any(String) });
+    expect(sqlite.prepare("SELECT status FROM execution_workspaces WHERE id = ?").get("workspace-a")).toMatchObject({ status: "offline" });
+    expect(sqlite.prepare("SELECT action FROM workspace_audit_log WHERE workspace_id = ?").get("workspace-a")).toMatchObject({ action: "workspace.disconnected" });
   });
 
   it("rotates a valid desktop session without changing its owner or session ID", async () => {

@@ -1688,6 +1688,65 @@ async function handleCheckWorkspaceOwnership(
   return json({ registered: matches.length > 0, ownerUserId: session.userId });
 }
 
+/** Disconnects runtime participation while retaining the installation owner binding. */
+async function handleDisconnectDesktopWorkspace(
+  request: Request,
+  env: SecurityEnv,
+): Promise<Response> {
+  const { session, now } = await findDesktopHumanSession(request, env);
+  const body = parseJson<Record<string, unknown>>(await request.text(), {});
+  const installationId = typeof body.installationId === "string" ? body.installationId.trim() : "";
+  const workspaceId = typeof body.workspaceId === "string" ? body.workspaceId.trim() : "";
+  const runtimeId = typeof body.runtimeId === "string" ? body.runtimeId.trim() : "";
+  if (!installationId || !workspaceId || !runtimeId) {
+    return json({ error: "Workspace disconnect identity is incomplete", code: "invalid_disconnect_identity" }, { status: 400 });
+  }
+  const owned = await env.CONCLAVE_DB.prepare(
+    `SELECT i.id AS runtimeId, i.workspace_id AS workspaceId, i.credential_token_hash AS credentialHash,
+            i.installation_id AS installationId, i.revoked_at AS revokedAt,
+            w.owner_user_id AS ownerUserId, w.status AS workspaceStatus
+       FROM workspace_runtime_identities i JOIN execution_workspaces w ON w.id = i.workspace_id
+      WHERE i.installation_id = ?1 AND i.workspace_id = ?2 AND i.id = ?3`,
+  ).bind(installationId, workspaceId, runtimeId).first<{
+    runtimeId: string; workspaceId: string; credentialHash: string;
+    installationId: string; revokedAt: string | null; ownerUserId: string; workspaceStatus: string;
+  }>();
+  if (!owned || owned.ownerUserId !== session.userId) {
+    return json({ error: "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.", code: "installation_already_owned" }, { status: 409 });
+  }
+  if (owned.revokedAt !== null) return json({ disconnected: true, workspaceId, installationId });
+
+  const active = await env.CONCLAVE_DB.prepare(
+    `SELECT COUNT(*) AS count FROM worker_assignments
+      WHERE execution_workspace_id = ?1 AND status IN ('created', 'dispatched', 'acknowledged', 'running')`,
+  ).bind(workspaceId).first<{ count: number }>();
+  if ((active?.count ?? 0) > 0) {
+    return json({ error: "Finish active Workspace assignments before disconnecting", code: "active_work" }, { status: 409 });
+  }
+
+  const disconnectedAt = now;
+  const result = await env.CONCLAVE_DB.batch([
+    env.CONCLAVE_DB.prepare(
+      `UPDATE workspace_runtime_identities SET revoked_at = ?1
+        WHERE id = ?2 AND workspace_id = ?3 AND installation_id = ?4 AND revoked_at IS NULL`,
+    ).bind(disconnectedAt, runtimeId, workspaceId, installationId),
+    env.CONCLAVE_DB.prepare(
+      `UPDATE execution_workspaces SET status = 'offline', updated_at = ?1
+        WHERE id = ?2 AND owner_user_id = ?3 AND status <> 'revoked'`,
+    ).bind(disconnectedAt, workspaceId, session.userId),
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO workspace_audit_log
+        (id, workspace_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
+       VALUES (?1, ?2, 'user', ?3, 'workspace.disconnected', 'workspace_runtime', ?4, ?5, ?6)`,
+    ).bind(`audit-${crypto.randomUUID()}`, workspaceId, session.userId, runtimeId, JSON.stringify({ installationId, disconnectedAt }), disconnectedAt),
+  ]);
+  if ((result[0]?.meta?.changes ?? 0) !== 1) {
+    return json({ error: "Workspace runtime state changed concurrently", code: "runtime_state_conflict" }, { status: 409 });
+  }
+  const gatewayDisconnected = await disconnectWorkspaceRuntime(env, workspaceId, runtimeId);
+  return json({ disconnected: true, workspaceId, installationId, disconnectedAt, gatewayDisconnected });
+}
+
 /** Releases Cloud ownership only after a fresh same-owner human session. */
 async function handleReleaseDesktopWorkspace(
   request: Request,
@@ -1721,27 +1780,28 @@ async function handleReleaseDesktopWorkspace(
     return json({ error: "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.", code: "installation_already_owned" }, { status: 409 });
   }
 
-  const reserved = await env.CONCLAVE_DB.prepare(
-    `UPDATE execution_workspaces SET status = 'revoked', updated_at = ?1
-      WHERE id = ?2 AND owner_user_id = ?3`,
-  ).bind(now, workspaceId, session.userId).run();
-  if ((reserved.meta?.changes ?? 0) !== 1) {
-    return json({ error: "Workspace ownership changed concurrently", code: "installation_already_owned" }, { status: 409 });
+  const gatewayStatus = await getWorkspaceGatewayStatus(env, workspaceId);
+  if (gatewayStatus === null || gatewayStatus.online || owned.workspaceStatus === "online") {
+    return json({ error: "Disconnect the Workspace runtime before releasing ownership", code: "runtime_connected" }, { status: 409 });
   }
+
   const active = await env.CONCLAVE_DB.prepare(
     `SELECT COUNT(*) AS count FROM worker_assignments
       WHERE execution_workspace_id = ?1
         AND status IN ('created', 'dispatched', 'acknowledged', 'running')`,
   ).bind(workspaceId).first<{ count: number }>();
   if ((active?.count ?? 0) > 0) {
-    await env.CONCLAVE_DB.prepare(
-      `UPDATE execution_workspaces SET status = ?1, updated_at = ?2
-        WHERE id = ?3 AND owner_user_id = ?4 AND status = 'revoked'`,
-    ).bind(owned.workspaceStatus, now, workspaceId, session.userId).run();
     return json({ error: "Finish active Workspace assignments before releasing ownership", code: "active_work" }, { status: 409 });
   }
 
-  await disconnectWorkspaceRuntime(env, workspaceId, runtimeId);
+  const reserved = await env.CONCLAVE_DB.prepare(
+    `UPDATE execution_workspaces SET status = 'revoked', updated_at = ?1
+      WHERE id = ?2 AND owner_user_id = ?3 AND status = ?4`,
+  ).bind(now, workspaceId, session.userId, owned.workspaceStatus).run();
+  if ((reserved.meta?.changes ?? 0) !== 1) {
+    return json({ error: "Workspace ownership changed concurrently", code: "installation_already_owned" }, { status: 409 });
+  }
+
   await env.CONCLAVE_DB.batch([
     env.CONCLAVE_DB.prepare(
       `UPDATE workspace_runtime_identities
@@ -6212,6 +6272,25 @@ async function disconnectWorkspaceRuntime(
     return response.ok;
   } catch {
     return false;
+  }
+}
+
+async function getWorkspaceGatewayStatus(
+  env: SecurityEnv,
+  workspaceId: string,
+): Promise<{ online: boolean } | null> {
+  const gateway = env.CONCLAVE_WORKSPACE_GATEWAY;
+  if (!gateway) return null;
+  try {
+    const response = await gateway.getByName(workspaceId).fetch(
+      "https://workspace-gateway/status",
+    );
+    if (!response.ok) return null;
+    const status = await response.json() as { online?: unknown };
+    if (typeof status.online !== "boolean") return null;
+    return { online: status.online };
+  } catch {
+    return null;
   }
 }
 
@@ -11827,6 +11906,7 @@ export {
   handleRevokeDesktopHumanSession,
   handleGetDesktopHumanSession,
   handleCheckWorkspaceOwnership,
+  handleDisconnectDesktopWorkspace,
   handleReleaseDesktopWorkspace,
   handleRegisterWorkspaceFromDesktop,
   handleRotateDesktopHumanSession,

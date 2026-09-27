@@ -107,6 +107,25 @@ describe("Workspace desktop enrollment route", () => {
     expect(sameOrigin).not.toHaveBeenCalled();
   });
 
+  it("routes explicit desktop-human disconnect without cookie CSRF", async () => {
+    const sameOrigin = vi.fn();
+    const disconnect = vi.fn(async () => Response.json({ disconnected: true }));
+    const response = await routeWorkerRequest(
+      new Request("https://app.conclaveax.com/api/workspace-runtime/disconnect", {
+        method: "POST",
+        headers: { authorization: "Bearer desktop-human-token", "content-type": "application/json" },
+        body: "{}",
+      }),
+      {} as Env,
+      undefined,
+      { handleDisconnectDesktopWorkspace: disconnect },
+      dependencies(sameOrigin),
+    );
+    expect(response.status).toBe(200);
+    expect(disconnect).toHaveBeenCalledOnce();
+    expect(sameOrigin).not.toHaveBeenCalled();
+  });
+
   it("keeps same-origin enforcement for normal mutation routes", async () => {
     const sameOrigin = vi.fn();
     const createWorkspace = vi.fn(async () =>

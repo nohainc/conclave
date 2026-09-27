@@ -1715,10 +1715,17 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
             false);
     if (!accepted || !mounted) return;
 
+    DesktopHumanSession? disconnectSession;
+    final authClient = DesktopAuthClient(cloudUrl: registration.cloudUrl);
     try {
       final ownerUserId = registration.ownerUserId;
       if (ownerUserId == null ||
-          await _reauthenticateWorkspaceOwner(ownerUserId) == null) {
+          (disconnectSession = await _reauthenticateWorkspaceOwner(
+                ownerUserId,
+                revokeAfterVerification: false,
+              )) ==
+              null) {
+        authClient.close();
         return;
       }
     } catch (error) {
@@ -1728,20 +1735,32 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
           'Could not verify the Workspace owner: $error',
         );
       }
+      authClient.close();
       return;
     }
 
     try {
-      await lifecycle.handleDesktopAction('drain');
-      final token =
-          await lifecycle.host.credentialStore.read(registration.hostId);
-      if (token == null) {
-        throw StateError('Workspace credential is missing; reconnect first.');
+      final connection = lifecycle.host.cloudConnection;
+      final drained = await drainWorkspaceAssignments(
+        activeAssignmentCount: () => connection?.activeAssignmentCount ?? 0,
+        beginDrain: () => connection?.beginDrain(),
+        restoreNewWorkState: () => connection?.resumeNewWork(),
+      );
+      if (!drained) {
+        throw StateError('Active assignments did not finish before timeout.');
       }
       if (!await _requireStepUp('Disconnect Workspace')) return;
-      await WorkspacePairingService.unpair(
-        cloudUrl: registration.cloudUrl,
-        token: token,
+      final session = disconnectSession;
+      if (session == null) throw StateError('Owner sign-in is required.');
+      final installationId = registration.installationId ??
+          await InstallationIdentityStore(
+            lifecycle.host.config.dataDirectory,
+          ).getOrCreate();
+      await authClient.disconnectWorkspace(
+        session: session,
+        installationId: installationId,
+        workspaceId: registration.workspaceId,
+        runtimeId: registration.hostId,
       );
       await InstallationIdentityStore(lifecycle.host.config.dataDirectory)
           .authorizeRecovery();
@@ -1783,6 +1802,15 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         dialogContext,
         'Could not disconnect Workspace: $error',
       );
+    } finally {
+      if (disconnectSession != null) {
+        try {
+          await authClient.revokeSession(disconnectSession);
+        } on Object {
+          // The temporary owner session expires automatically if revocation fails.
+        }
+      }
+      authClient.close();
     }
   }
 
@@ -1837,31 +1865,43 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       final registration = HostRegistrationStore(dataDir).readSync();
       if (registration != null) {
         final ownerUserId = registration.ownerUserId;
-        if (ownerUserId == null ||
-            await _reauthenticateWorkspaceOwner(ownerUserId) == null) {
+        if (ownerUserId == null) {
           return;
         }
-        await lifecycle.handleDesktopAction('drain');
-        if ((lifecycle.host.cloudConnection?.activeAssignmentCount ?? 0) > 0) {
-          throw StateError('Wait for active work to finish before resetting.');
+        final resetAuthClient =
+            DesktopAuthClient(cloudUrl: registration.cloudUrl);
+        final resetSession = await _reauthenticateWorkspaceOwner(
+          ownerUserId,
+          revokeAfterVerification: false,
+        );
+        if (resetSession == null) {
+          resetAuthClient.close();
+          return;
         }
         if (!await _requireStepUp('Reset local Workspace')) return;
-        final desiredRuntime = WorkspaceLifecyclePreferencesStore(dataDir)
-            .readSync()
-            .desiredRuntime;
-        if (desiredRuntime == DesiredRuntimeState.connected) {
-          final token =
-              await lifecycle.host.credentialStore.read(registration.hostId);
-          if (token == null) {
-            throw StateError(
-              'The runtime credential is missing. Reconnect before resetting so Cloud can revoke it.',
-            );
-          }
-          await WorkspacePairingService.unpair(
-            cloudUrl: registration.cloudUrl,
-            token: token,
-          );
+        final connection = lifecycle.host.cloudConnection;
+        final drained = await drainWorkspaceAssignments(
+          activeAssignmentCount: () => connection?.activeAssignmentCount ?? 0,
+          beginDrain: () => connection?.beginDrain(),
+          restoreNewWorkState: () => connection?.resumeNewWork(),
+        );
+        if (!drained) {
+          throw StateError('Wait for active work to finish before resetting.');
         }
+        final installationId = registration.installationId ??
+            await InstallationIdentityStore(dataDir).getOrCreate();
+        await resetAuthClient.disconnectWorkspace(
+          session: resetSession,
+          installationId: installationId,
+          workspaceId: registration.workspaceId,
+          runtimeId: registration.hostId,
+        );
+        try {
+          await resetAuthClient.revokeSession(resetSession);
+        } on Object {
+          // This one-time session expires automatically if revocation fails.
+        }
+        resetAuthClient.close();
         await lifecycle.host.credentialStore.delete(registration.hostId);
       } else if (!await _requireStepUp('Reset local Workspace')) {
         return;

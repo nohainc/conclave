@@ -1073,6 +1073,25 @@ reconnects after reboot.
 
 Cloud behavior maps one-to-one to lifecycle actions.
 
+## Implementation status
+
+- Added a Desktop Human authenticated `POST /api/workspace-runtime/disconnect`
+  action. It rejects active assignments, revokes runtime participation,
+  retains the installation binding and Workspace history, records an audit
+  event, and asks the Workspace Gateway to close the logical runtime.
+- Desktop Disconnect and connected Reset now use the human management session;
+  they do not require the runtime credential to be present. The legacy runtime
+  `/unpair` route remains available for older desktop releases during migration.
+- Release now checks the Workspace Gateway status and rejects release unless
+  the runtime is offline. Runtime reconnect remains authorized by the runtime
+  credential and does not require a human API call.
+- The disconnect and release contracts have Cloud route/handler coverage.
+
+No database migration was required. Cloud deployment must include the existing
+Workspace Gateway binding for Release to verify offline status; if the Gateway
+is unavailable, release fails closed. Existing clients can continue using the
+legacy `/unpair` endpoint during the compatibility window.
+
 ---
 
 # Phase 15 — Security and failure acceptance
