@@ -8,12 +8,16 @@ import 'package:flutter_test/flutter_test.dart';
 class _FakeAuthenticator implements LocalManagementAuthenticator {
   bool available = true;
   bool succeeds = true;
+  int authenticationCount = 0;
 
   @override
   Future<bool> isAvailable() async => available;
 
   @override
-  Future<bool> authenticate(String reason) async => succeeds;
+  Future<bool> authenticate(String reason) async {
+    authenticationCount++;
+    return succeeds;
+  }
 }
 
 void main() {
@@ -71,5 +75,31 @@ void main() {
     expect(await lock.lock(), isFalse);
     expect(store.readSync().managementLockPreference,
         ManagementLockState.unlocked);
+  });
+
+  test('step-up authentication is briefly reused and expires', () async {
+    var now = DateTime.utc(2026, 9, 27);
+    final authenticator = _FakeAuthenticator();
+    final gate = RecentLocalAuthenticationGate(
+      authenticator: authenticator,
+      validity: const Duration(seconds: 30),
+      now: () => now,
+    );
+
+    expect(await gate.require('Remove Worker'), isTrue);
+    expect(await gate.require('Change permissions'), isTrue);
+    expect(authenticator.authenticationCount, 1);
+
+    now = now.add(const Duration(seconds: 31));
+    authenticator.succeeds = false;
+    expect(await gate.require('Replace credentials'), isFalse);
+    expect(authenticator.authenticationCount, 2);
+    expect(gate.recentlyAuthenticated, isFalse);
+
+    authenticator.succeeds = true;
+    expect(await gate.require('Release Workspace'), isTrue);
+    expect(authenticator.authenticationCount, 3);
+    gate.invalidate();
+    expect(gate.recentlyAuthenticated, isFalse);
   });
 }

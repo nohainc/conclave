@@ -177,6 +177,7 @@ void main() {
     final service = LocalWorkerSetupService(
       registry: registry,
       credentialStore: credentials,
+      requireStepUp: (_) async => true,
     );
     final created = await service.create(
       type: LocalWorkerTypeOption.supported.first,
@@ -214,6 +215,7 @@ void main() {
     final service = LocalWorkerSetupService(
       registry: registry,
       credentialStore: credentials,
+      requireStepUp: (_) async => true,
     );
     final created = await service.create(
       type: LocalWorkerTypeOption.supported[3],
@@ -290,6 +292,64 @@ void main() {
     );
     expect(credentials.values[rotated.credentialRef], 'new-secret');
     expect((await registry.list()).first.name, 'API Work Updated');
+  });
+
+  test(
+      'Worker setup service fails closed before sensitive edits without step-up',
+      () async {
+    final worker = await LocalWorkerSetupService(
+      registry: registry,
+      credentialStore: credentials,
+    ).create(
+      type: LocalWorkerTypeOption.supported[3],
+      name: 'Protected API Worker',
+      apiKey: 'original-secret',
+      defaultModel: 'model-a',
+      endpointUrl: '',
+      allowedModels: const [],
+      permissions: const ['network_openai'],
+      adapterReady: true,
+      prerequisiteReady: true,
+      authenticationReady: true,
+    );
+    final service = LocalWorkerSetupService(
+      registry: registry,
+      credentialStore: credentials,
+    );
+
+    await expectLater(
+      service.update(
+        current: worker,
+        type: LocalWorkerTypeOption.supported[3],
+        name: worker.name,
+        apiKey: 'replacement-secret',
+        defaultModel: 'model-a',
+        endpointUrl: '',
+        allowedModels: const [],
+        permissions: const ['network_openai'],
+        adapterReady: true,
+        prerequisiteReady: true,
+      ),
+      throwsStateError,
+    );
+    await expectLater(
+      service.update(
+        current: worker,
+        type: LocalWorkerTypeOption.supported[3],
+        name: worker.name,
+        apiKey: '',
+        defaultModel: 'model-a',
+        endpointUrl: '',
+        allowedModels: const [],
+        permissions: const [],
+        adapterReady: true,
+        prerequisiteReady: true,
+      ),
+      throwsStateError,
+    );
+
+    expect(credentials.values[worker.credentialRef], 'original-secret');
+    expect((await registry.list()).single.localPermissions, ['network_openai']);
   });
 
   testWidgets('offers the v7 integration types in the local Add Worker dialog',

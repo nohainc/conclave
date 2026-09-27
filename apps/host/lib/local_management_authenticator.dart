@@ -61,3 +61,42 @@ class WorkspaceManagementLock {
     ));
   }
 }
+
+/// Reuses a successful native prompt briefly across one deliberate action flow.
+class RecentLocalAuthenticationGate {
+  RecentLocalAuthenticationGate({
+    required this.authenticator,
+    this.validity = const Duration(seconds: 30),
+    DateTime Function()? now,
+  }) : _now = now ?? DateTime.now;
+
+  final LocalManagementAuthenticator authenticator;
+  final Duration validity;
+  final DateTime Function() _now;
+  DateTime? _authenticatedAt;
+  Future<bool>? _pending;
+
+  bool get recentlyAuthenticated {
+    final authenticatedAt = _authenticatedAt;
+    if (authenticatedAt == null) return false;
+    final age = _now().difference(authenticatedAt);
+    return age >= Duration.zero && age <= validity;
+  }
+
+  Future<bool> require(String reason) {
+    if (recentlyAuthenticated) return Future.value(true);
+    final pending = _pending;
+    if (pending != null) return pending;
+    final authentication = _authenticate(reason);
+    _pending = authentication;
+    return authentication.whenComplete(() => _pending = null);
+  }
+
+  Future<bool> _authenticate(String reason) async {
+    final success = await authenticator.authenticate(reason);
+    if (success) _authenticatedAt = _now();
+    return success;
+  }
+
+  void invalidate() => _authenticatedAt = null;
+}

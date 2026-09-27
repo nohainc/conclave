@@ -813,12 +813,16 @@ class ConclaveHostApp extends StatefulWidget {
 class _ConclaveHostAppState extends State<ConclaveHostApp> {
   int _workerRevision = 0;
   late bool _managementLocked;
+  late final RecentLocalAuthenticationGate _stepUpGate;
   Timer? _autoLockTimer;
   final _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
     super.initState();
+    _stepUpGate = RecentLocalAuthenticationGate(
+      authenticator: widget.localAuthenticator,
+    );
     _managementLocked = WorkspaceLifecyclePreferencesStore(
           widget.lifecycle.host.config.dataDirectory,
         ).readSync().managementLockPreference ==
@@ -876,6 +880,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       return;
     }
     if (!mounted) return;
+    _stepUpGate.invalidate();
     setState(() => _managementLocked = true);
     _autoLockTimer?.cancel();
     unawaited(const MethodChannel('com.conclave.workspace/desktop')
@@ -893,6 +898,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     }
     if (!mounted) return;
     if (!authenticated) return;
+    _stepUpGate.invalidate();
     setState(() {
       _managementLocked = false;
       _workerRevision++;
@@ -901,6 +907,25 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         .invokeMethod<void>('setManagementLocked', false)
         .catchError((_) {}));
     _armAutoLockTimer();
+  }
+
+  Future<bool> _requireStepUp(String reason) async {
+    var authenticated = false;
+    try {
+      authenticated = await _stepUpGate.require(reason);
+    } on Object {
+      authenticated = false;
+    }
+    if (!authenticated && mounted) {
+      final context = _navigatorKey.currentContext;
+      if (context != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Local authentication was not completed.')),
+        );
+      }
+    }
+    return authenticated;
   }
 
   void _armAutoLockTimer() {
@@ -1117,6 +1142,12 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
             'This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.',
           );
         }
+        if (previousSession != null &&
+            previousSession.userId != session.userId &&
+            !await _requireStepUp('Switch the Workspace account')) {
+          throw StateError(
+              'Local authentication is required to switch accounts.');
+        }
         if (existingRegistration != null) {
           await HostRegistrationStore(
             lifecycle.host.config.dataDirectory,
@@ -1132,6 +1163,13 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
             pairedAt: existingRegistration.pairedAt,
           ));
         }
+      }
+      if (previousSession != null &&
+          previousSession.userId != session.userId &&
+          installationId == null &&
+          !await _requireStepUp('Switch the Workspace account')) {
+        throw StateError(
+            'Local authentication is required to switch accounts.');
       }
       await lifecycle.host.credentialStore.write(
         desktopHumanCredentialKey,
@@ -1225,6 +1263,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         return;
       }
     }
+    if (!await _requireStepUp('Sign out of this Workspace account')) return;
     final stored =
         await lifecycle.host.credentialStore.read(desktopHumanCredentialKey);
     if (stored != null) {
@@ -1515,6 +1554,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         revokeAfterVerification: false,
       );
       if (freshSession == null) return;
+      if (!await _requireStepUp('Release Workspace ownership')) return;
       final installationId = registration.installationId ??
           await InstallationIdentityStore(dataDirectory).getOrCreate();
       await authClient.releaseWorkspace(
@@ -1623,6 +1663,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       if (token == null) {
         throw StateError('Workspace credential is missing; reconnect first.');
       }
+      if (!await _requireStepUp('Disconnect Workspace')) return;
       await WorkspacePairingService.unpair(
         cloudUrl: registration.cloudUrl,
         token: token,
@@ -1729,6 +1770,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         if ((lifecycle.host.cloudConnection?.activeAssignmentCount ?? 0) > 0) {
           throw StateError('Wait for active work to finish before resetting.');
         }
+        if (!await _requireStepUp('Reset local Workspace')) return;
         final desiredRuntime = WorkspaceLifecyclePreferencesStore(dataDir)
             .readSync()
             .desiredRuntime;
@@ -1746,6 +1788,8 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
           );
         }
         await lifecycle.host.credentialStore.delete(registration.hostId);
+      } else if (!await _requireStepUp('Reset local Workspace')) {
+        return;
       }
       final workers = await lifecycle.host.localWorkerRegistry
               ?.list(includeRemoved: true) ??
@@ -1846,6 +1890,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
   }
 
   Future<void> _changeWorkRoot(String newPath) async {
+    if (!await _requireStepUp('Change the Workspace Work Root')) return;
     final currentHost = widget.lifecycle.host;
     final updatedConfig = HostConfig(
       dataDirectory: currentHost.config.dataDirectory,
@@ -1912,6 +1957,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       autoLockTimeout: _preferences.autoLockTimeout,
       onAutoLockTimeoutChanged: _setAutoLockTimeout,
       onLock: () => unawaited(_lockManagement()),
+      requireStepUp: _requireStepUp,
       onSignIn: _signInDesktopHuman,
       onSignOut: _signOutDesktopHuman,
       onRecoverCredential: _connectWorkspace,
@@ -2477,6 +2523,7 @@ class HostDashboard extends StatefulWidget {
     this.onLock,
     this.autoLockTimeout,
     this.onAutoLockTimeoutChanged,
+    this.requireStepUp,
     this.onQuit,
     this.onRetry,
     this.onExportDiagnostics,
@@ -2501,6 +2548,7 @@ class HostDashboard extends StatefulWidget {
   final VoidCallback? onLock;
   final Duration? autoLockTimeout;
   final ValueChanged<Duration?>? onAutoLockTimeoutChanged;
+  final Future<bool> Function(String reason)? requireStepUp;
   final VoidCallback? onQuit;
   final Future<void> Function()? onRetry;
   final Future<void> Function()? onExportDiagnostics;
@@ -2737,6 +2785,7 @@ class _HostDashboardState extends State<HostDashboard> {
                           adapterPackageStore: widget.adapterPackageStore,
                           ensureAdapter: widget.ensureAdapter,
                           onAddWorker: widget.onAddWorker,
+                          requireStepUp: widget.requireStepUp,
                           isPaired: snapshot.workspaceReady,
                           onSwitchToWorkspace: () => setState(
                               () => _selectedSurface = HostSurface.workspace),
@@ -3622,6 +3671,7 @@ class _WorkersTab extends StatefulWidget {
     required this.onAddWorker,
     this.isPaired = true,
     this.onSwitchToWorkspace,
+    this.requireStepUp,
     super.key,
   });
 
@@ -3632,6 +3682,7 @@ class _WorkersTab extends StatefulWidget {
   final Future<void> Function()? onAddWorker;
   final bool isPaired;
   final VoidCallback? onSwitchToWorkspace;
+  final Future<bool> Function(String reason)? requireStepUp;
 
   @override
   State<_WorkersTab> createState() => _WorkersTabState();
@@ -3690,6 +3741,12 @@ class _WorkersTabState extends State<_WorkersTab> {
       ),
     );
     if (confirmed != true || !mounted) return;
+    final requireStepUp = widget.requireStepUp;
+    if (requireStepUp == null ||
+        !await requireStepUp('Remove a local Worker')) {
+      return;
+    }
+    if (!mounted) return;
     final registry = widget.registry;
     if (registry == null) return;
     await registry.remove(worker.id);
@@ -3709,6 +3766,7 @@ class _WorkersTabState extends State<_WorkersTab> {
         registry: registry,
         credentialStore: widget.credentialStore,
         worker: worker,
+        requireStepUp: widget.requireStepUp,
         adapterAvailable: (workerTypeId, permissions) =>
             widget.adapterPackageStore
                 ?.hasVerifiedActivePackage(workerTypeId, permissions) ??

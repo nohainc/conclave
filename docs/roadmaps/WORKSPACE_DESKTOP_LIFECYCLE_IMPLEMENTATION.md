@@ -598,6 +598,28 @@ Do not prompt for ordinary reads or benign navigation.
 High-impact local actions cannot be triggered by someone who merely encounters
 an unlocked window after the owner leaves.
 
+## Implementation status — implemented
+
+`RecentLocalAuthenticationGate` uses the native authenticator from Phase 6 and
+allows a successful prompt to be reused for 30 seconds during one deliberate
+action flow. Cancelled, unavailable, or failed authentication fails closed.
+The gate is invalidated when management is locked or unlocked.
+
+The gate now protects Disconnect, Release, Reset, Worker removal, replacement
+of an existing API credential, changes to an existing Worker's local
+permissions, Work Root changes, sign-out, and switching the signed-in account.
+Worker edits request authentication before launching a replacement CLI/browser
+sign-in or validating/persisting a replacement provider credential. The setup
+service also fails closed for direct credential/permission updates without an
+authentication callback. Release and account transition still retain the
+separate Cloud owner verification; local authentication does not replace that
+check. Ordinary reads and navigation do not prompt.
+
+Tests cover recent-auth reuse, expiry, failure, and invalidation. The Worker
+setup service fails closed on credential/permission updates without step-up,
+and the editor requests authentication before provider validation. The full
+Workspace test suite and static analysis pass.
+
 ---
 
 # Phase 8 — Launch at login and background auto-connect

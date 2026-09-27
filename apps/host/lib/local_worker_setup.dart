@@ -131,10 +131,12 @@ class LocalWorkerSetupService {
   const LocalWorkerSetupService({
     required this.registry,
     required this.credentialStore,
+    this.requireStepUp,
   });
 
   final LocalConfiguredWorkerRegistry registry;
   final SecureCredentialStore credentialStore;
+  final Future<bool> Function(String reason)? requireStepUp;
 
   Future<LocalConfiguredWorker> create({
     required LocalWorkerTypeOption type,
@@ -293,6 +295,21 @@ class LocalWorkerSetupService {
         current.credentialRef == null) {
       throw ArgumentError('Enter the API key.');
     }
+    final permissionsChanged =
+        permissions.length != current.localPermissions.length ||
+            !permissions.toSet().containsAll(current.localPermissions);
+    if (permissionsChanged || apiKey.isNotEmpty) {
+      final gate = requireStepUp;
+      final reason = permissionsChanged && apiKey.isNotEmpty
+          ? 'Change Worker permissions and replace provider credentials'
+          : permissionsChanged
+              ? 'Change local Worker execution permissions'
+              : 'Replace Worker provider credentials';
+      if (gate == null || !await gate(reason)) {
+        throw StateError(
+            'Local authentication is required to save these changes.');
+      }
+    }
     final credentialRef = apiKey.isEmpty
         ? current.credentialRef
         : 'worker-credential/${current.id}';
@@ -373,6 +390,7 @@ class AddLocalWorkerDialog extends StatefulWidget {
     this.validateApiCredential,
     this.ensureAdapter,
     this.worker,
+    this.requireStepUp,
     super.key,
   });
 
@@ -392,6 +410,7 @@ class AddLocalWorkerDialog extends StatefulWidget {
   )? validateApiCredential;
   final Future<bool> Function(String workerTypeId)? ensureAdapter;
   final LocalConfiguredWorker? worker;
+  final Future<bool> Function(String reason)? requireStepUp;
 
   @override
   State<AddLocalWorkerDialog> createState() => _AddLocalWorkerDialogState();
@@ -459,6 +478,36 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
           _error = 'Enter the API key. It will be stored on this machine.');
       return;
     }
+    final currentWorker = widget.worker;
+    final permissionsChanged = currentWorker != null &&
+        (_permissions.length != currentWorker.localPermissions.length ||
+            !_permissions.containsAll(currentWorker.localPermissions));
+    final replacingCredential = currentWorker != null &&
+        _type.requiresApiKey &&
+        _apiKey.text.isNotEmpty;
+    if (permissionsChanged || replacingCredential) {
+      final requireStepUp = widget.requireStepUp;
+      final reason = permissionsChanged && replacingCredential
+          ? 'Change Worker permissions and replace provider credentials'
+          : permissionsChanged
+              ? 'Change local Worker execution permissions'
+              : 'Replace Worker provider credentials';
+      if (requireStepUp == null) {
+        if (mounted) {
+          setState(() => _error =
+              'Local authentication is required to save these changes.');
+        }
+        return;
+      }
+      if (!await requireStepUp(reason)) {
+        if (mounted) {
+          setState(() => _error =
+              'Local authentication is required to save these changes.');
+        }
+        return;
+      }
+      if (!mounted) return;
+    }
     setState(() {
       _saving = true;
       _error = null;
@@ -474,6 +523,7 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
       final service = LocalWorkerSetupService(
         registry: widget.registry,
         credentialStore: widget.credentialStore,
+        requireStepUp: widget.requireStepUp,
       );
       final permissions = _permissions.toList()..sort();
       var adapterReady =
@@ -619,7 +669,8 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hasStoredKey = widget.worker?.credentialRef != null && !_replaceApiKey;
+    final hasStoredKey =
+        widget.worker?.credentialRef != null && !_replaceApiKey;
 
     return AlertDialog(
       title: Row(
@@ -709,8 +760,8 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
                       color: theme.colorScheme.surfaceContainerHighest
                           .withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                          color: theme.colorScheme.outlineVariant),
+                      border:
+                          Border.all(color: theme.colorScheme.outlineVariant),
                     ),
                     child: Row(
                       children: [
@@ -767,8 +818,7 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
                     color: theme.colorScheme.surfaceContainerHighest
                         .withValues(alpha: 0.35),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                        color: theme.colorScheme.outlineVariant),
+                    border: Border.all(color: theme.colorScheme.outlineVariant),
                   ),
                   child: Row(
                     children: [
@@ -808,6 +858,19 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
                           onPressed: _saving
                               ? null
                               : () async {
+                                  if (widget.worker != null) {
+                                    final requireStepUp = widget.requireStepUp;
+                                    if (requireStepUp == null ||
+                                        !await requireStepUp(
+                                            'Replace Worker sign-in credentials')) {
+                                      if (mounted) {
+                                        setState(() => _error =
+                                            'Local authentication is required to replace Worker sign-in credentials.');
+                                      }
+                                      return;
+                                    }
+                                    if (!mounted) return;
+                                  }
                                   try {
                                     await widget
                                         .launchAuthentication!(_type.id);
@@ -853,8 +916,8 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
                     labelText: 'Custom Endpoint URL (optional)',
                     hintText: 'Leave empty for default provider endpoint',
                     border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 12),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     helperText: 'Optional proxy or custom API base URL.',
                   ),
                 ),
@@ -901,8 +964,8 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
                               ? 'claude-3-7-sonnet'
                               : 'e.g. qwen2.5-coder',
                   border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 12),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   helperText: _discoveredModels.isEmpty
                       ? null
                       : 'Discovered: ${_discoveredModels.take(8).join(', ')}',
@@ -918,8 +981,7 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
                   border: OutlineInputBorder(),
                   contentPadding:
                       EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  helperText:
-                      'Limit assignments to specific approved models.',
+                  helperText: 'Limit assignments to specific approved models.',
                 ),
               ),
               const SizedBox(height: 16),
