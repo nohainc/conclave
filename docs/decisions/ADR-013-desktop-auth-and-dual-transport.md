@@ -1,6 +1,6 @@
 # ADR-013: Desktop Human Authentication and Dual Workspace Transport
 
-**Status:** Accepted for implementation  
+**Status:** Accepted; desktop lifecycle refined by [ADR-014](ADR-014-workspace-desktop-lifecycle.md)  
 **Date:** 2026-09-27  
 **Builds on:** ADR-005, ADR-012  
 **Supersedes in part:** ADR-005 statement that machine-side applications never establish a human Better Auth session
@@ -296,6 +296,25 @@ This ADR does not:
 - replace WebSocket with polling;
 - add organization-owned shared-machine semantics;
 - require a dedicated Gateway domain.
+
+## Desktop lifecycle refinement
+
+ADR-014 refines the product lifecycle introduced here without changing the
+credential or transport separation. In particular:
+
+- successful human sign-in establishes management identity only;
+- **Connect Workspace** explicitly registers/recovers and starts runtime participation;
+- signed-out users do not see Workspace/Workers management surfaces;
+- connected runtimes auto-reconnect after OS login/restart using the runtime
+  credential without requiring interactive human sign-in;
+- management UI may be locally locked while runtime execution continues;
+- explicit Disconnect, Release ownership, Sign out, Lock, and Reset have
+  different semantics;
+- account switching is forbidden while an installation remains owned/connected
+  to another user.
+
+See [ADR-014](ADR-014-workspace-desktop-lifecycle.md) and the
+[desktop lifecycle implementation plan](../roadmaps/WORKSPACE_DESKTOP_LIFECYCLE_IMPLEMENTATION.md).
 
 ## Acceptance
 
