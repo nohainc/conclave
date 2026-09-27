@@ -140,6 +140,12 @@ successful migration applied; correct the pending migration and re-run the
 same migration command after review. Do not manually mark a failed migration as
 applied.
 
+The `workspace-gateway-schema-regression.test.ts` test constructs a clean
+SQLite database from every SQL migration in `apps/cloud/migrations-v6`, checks
+critical runtime tables, and exercises the production Gateway connection,
+heartbeat, and disconnect statements. A clean active migration chain must
+support every SQL statement used by current Cloud runtime code.
+
 
 ## Backend deployment gate
 
