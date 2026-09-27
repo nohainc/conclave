@@ -49,4 +49,24 @@ void main() {
     expect(await store.read(account), isNull);
     expect(calls, ['write', 'read', 'delete', 'read']);
   });
+
+  test('Keychain read failure falls back without blocking startup', () async {
+    const channel = MethodChannel('com.conclave.workspace/keychain');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      throw PlatformException(code: 'keychain_unavailable');
+    });
+    addTearDown(() => TestDefaultBinaryMessengerBinding
+        .instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null));
+
+    const store = PlatformSecureCredentialStore(
+      platform: 'macos',
+      nativeKeychain: FlutterMacKeychainBridge(),
+    );
+    expect(
+      await store.readForSynchronousConfig('runtime-startup-fallback-test'),
+      isNull,
+    );
+  });
 }

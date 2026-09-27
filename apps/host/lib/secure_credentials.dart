@@ -88,7 +88,15 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
   /// synchronous read. This also supports older runtime IDs that do not use
   /// the current `runtime-` prefix.
   Future<String?> readForSynchronousConfig(String key) async {
-    final value = await read(key);
+    String? value;
+    try {
+      value = await read(key);
+    } on Object {
+      // A Keychain/channel failure must not prevent the desktop UI from
+      // starting. Fall back to the OS credential helper used by headless
+      // startup; if that also fails, the Workspace stays safely offline.
+      value = readSync(key);
+    }
     final cacheKey = _cacheKey(key);
     _cache[cacheKey] = value;
     _loaded.add(cacheKey);
