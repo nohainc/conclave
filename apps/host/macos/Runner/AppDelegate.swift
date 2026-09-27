@@ -47,8 +47,28 @@ class AppDelegate: FlutterAppDelegate {
       case "authenticateLocalManagement":
         let reason = call.arguments as? String ?? "Unlock Conclave Workspace management"
         let context = LAContext()
-        context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { success, _ in
-          DispatchQueue.main.async { result(success) }
+        context.localizedFallbackTitle = "Use Password"
+        var evaluationError: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &evaluationError) else {
+          result(FlutterError(
+            code: "local_auth_unavailable",
+            message: evaluationError?.localizedDescription ?? "macOS local authentication is unavailable.",
+            details: nil
+          ))
+          return
+        }
+        context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { success, error in
+          DispatchQueue.main.async {
+            if success {
+              result(true)
+            } else {
+              result(FlutterError(
+                code: "local_auth_failed",
+                message: error?.localizedDescription ?? "Authentication was not accepted.",
+                details: nil
+              ))
+            }
+          }
         }
       case "setManagementLocked":
         self?.setManagementLocked(call.arguments as? Bool ?? false)
@@ -69,8 +89,12 @@ class AppDelegate: FlutterAppDelegate {
         result(nil)
       case "terminate":
         self?.quitApproved = true
-        NSApp.terminate(nil)
         result(nil)
+        // Let Flutter complete the awaited method-channel call before macOS
+        // starts application termination.
+        DispatchQueue.main.async {
+          NSApp.terminate(nil)
+        }
       case "setLaunchAtLogin":
         guard let enabled = call.arguments as? Bool else {
           result(FlutterError(code: "bad_argument", message: "Expected a Boolean", details: nil))

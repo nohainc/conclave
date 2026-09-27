@@ -857,6 +857,7 @@ class ConclaveHostApp extends StatefulWidget {
 class _ConclaveHostAppState extends State<ConclaveHostApp> {
   int _workerRevision = 0;
   late bool _managementLocked;
+  bool _unlockingManagement = false;
   late final RecentLocalAuthenticationGate _stepUpGate;
   Timer? _autoLockTimer;
   final _navigatorKey = GlobalKey<NavigatorState>();
@@ -935,15 +936,31 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
   }
 
   Future<void> _unlockManagement() async {
+    if (!mounted || _unlockingManagement) return;
+    if (mounted) setState(() => _unlockingManagement = true);
     var authenticated = false;
+    Object? authenticationError;
     try {
       authenticated =
           await _managementLock.unlock('Unlock Conclave Workspace management');
-    } on Object {
+    } on Object catch (error) {
       authenticated = false;
+      authenticationError = error;
     }
     if (!mounted) return;
-    if (!authenticated) return;
+    setState(() => _unlockingManagement = false);
+    if (!authenticated) {
+      final context = _navigatorKey.currentContext;
+      if (context != null) {
+        final detail = authenticationError == null
+            ? 'Authentication was canceled or not accepted. Workspace remains locked.'
+            : 'Could not authenticate: $authenticationError';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(detail)),
+        );
+      }
+      return;
+    }
     _stepUpGate.invalidate();
     setState(() {
       _managementLocked = false;
@@ -2128,6 +2145,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
                       onQuit: _confirmQuit,
                       onLock: _lockManagement,
                       managementLocked: _managementLocked,
+                      unlockingManagement: _unlockingManagement,
                       onUnlock: _unlockManagement,
                       onActivity: _armAutoLockTimer,
                       onManagementAuthRequiredChanged:
@@ -2170,6 +2188,7 @@ class WorkspaceShellRouter extends StatefulWidget {
     this.onRelease,
     required this.onQuit,
     this.managementLocked = false,
+    this.unlockingManagement = false,
     this.onUnlock,
     this.onActivity,
     this.onManagementAuthRequiredChanged,
@@ -2190,6 +2209,7 @@ class WorkspaceShellRouter extends StatefulWidget {
   final Future<void> Function()? onRelease;
   final Future<void> Function() onQuit;
   final bool managementLocked;
+  final bool unlockingManagement;
   final Future<void> Function()? onUnlock;
   final VoidCallback? onActivity;
   final ValueChanged<bool>? onManagementAuthRequiredChanged;
@@ -2383,6 +2403,7 @@ class _WorkspaceShellRouterState extends State<WorkspaceShellRouter> {
                   child: _LockedShell(
                     runtimeConnected: widget.snapshot.cloudConnected,
                     onUnlock: widget.onUnlock,
+                    unlocking: widget.unlockingManagement,
                   ),
                 );
               }
@@ -2413,10 +2434,15 @@ class _WorkspaceShellRouterState extends State<WorkspaceShellRouter> {
 }
 
 class _LockedShell extends StatelessWidget {
-  const _LockedShell({required this.runtimeConnected, this.onUnlock});
+  const _LockedShell({
+    required this.runtimeConnected,
+    this.onUnlock,
+    this.unlocking = false,
+  });
 
   final bool runtimeConnected;
   final Future<void> Function()? onUnlock;
+  final bool unlocking;
 
   @override
   Widget build(BuildContext context) => Center(
@@ -2437,10 +2463,16 @@ class _LockedShell extends StatelessWidget {
                   : 'Runtime is disconnected.'),
               const SizedBox(height: 20),
               FilledButton.icon(
-                onPressed:
-                    onUnlock == null ? null : () => unawaited(onUnlock!()),
-                icon: const Icon(Icons.lock_open),
-                label: const Text('Unlock'),
+                onPressed: onUnlock == null || unlocking
+                    ? null
+                    : () => unawaited(onUnlock!()),
+                icon: unlocking
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.lock_open),
+                label: Text(unlocking ? 'Authenticating…' : 'Unlock'),
               ),
             ]),
           ),
