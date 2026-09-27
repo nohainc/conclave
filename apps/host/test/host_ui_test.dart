@@ -415,9 +415,70 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Reconnect Workspace'), findsOneWidget);
+    expect(
+      find.text('Connect this computer before configuring Workers.'),
+      findsOneWidget,
+    );
+    expect(find.text('Workspace'), findsNothing);
+    expect(find.text('Workers'), findsNothing);
     expect(find.text('Release Workspace from account'), findsOneWidget);
     await tester.tap(find.text('Release Workspace from account'));
     expect(released, isTrue);
+  });
+
+  testWidgets('connected unlocked owner sees Workspace and Workers tabs',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final credentials = _MemoryCredentialStore()
+      ..values[desktopHumanCredentialKey] = jsonEncode({
+        'credential': 'human-session-a',
+        'sessionId': 'session-a',
+        'userId': 'user-a',
+        'displayName': 'User A',
+        'email': 'a@example.com',
+        'expiresAt': DateTime.now()
+            .add(const Duration(hours: 1))
+            .toUtc()
+            .toIso8601String(),
+      });
+    const snapshot = HostUiSnapshot(
+      mode: HostUiMode.ready,
+      title: 'Workspace ready',
+      detail: 'Ready',
+      paired: true,
+      workspaceReady: true,
+      cloudConnected: true,
+      desiredRuntimeConnected: true,
+      ownerUserId: 'user-a',
+      workspaceName: 'User A Workspace',
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: WorkspaceShellRouter(
+        snapshot: snapshot,
+        credentialStore: credentials,
+        cloudUrl: 'https://cloud.example',
+        refreshToken: 0,
+        restoreSession: (session) async => session,
+        onSignIn: () async {},
+        onConnectWorkspace: () async {},
+        onSignOut: () async {},
+        onQuit: () async {},
+        managementShellBuilder: () => Scaffold(
+          body: HostDashboard(
+            snapshot: snapshot,
+            credentialStore: credentials,
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Workspace'), findsWidgets);
+    expect(find.text('Workers'), findsWidgets);
   });
 
   testWidgets('a different account cannot open a connected owner Workspace',

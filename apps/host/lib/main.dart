@@ -2306,6 +2306,8 @@ class _WorkspaceShellRouterState extends State<WorkspaceShellRouter> {
                       widget.snapshot.workspaceName ??
                       'This computer',
                   isRegistered: widget.snapshot.paired,
+                  runtimeIntendedConnected: widget.snapshot.cloudConnected ||
+                      widget.snapshot.desiredRuntimeConnected,
                   onConnect: widget.onConnectWorkspace,
                   onSignOut: widget.onSignOut,
                   onRelease: widget.onRelease,
@@ -2445,6 +2447,7 @@ class _SignedInDisconnectedShell extends StatelessWidget {
     required this.session,
     required this.computerName,
     required this.isRegistered,
+    required this.runtimeIntendedConnected,
     required this.onConnect,
     required this.onSignOut,
     this.onRelease,
@@ -2454,6 +2457,7 @@ class _SignedInDisconnectedShell extends StatelessWidget {
   final DesktopHumanSession session;
   final String computerName;
   final bool isRegistered;
+  final bool runtimeIntendedConnected;
   final Future<void> Function() onConnect;
   final Future<void> Function() onSignOut;
   final Future<void> Function()? onRelease;
@@ -2478,9 +2482,9 @@ class _SignedInDisconnectedShell extends StatelessWidget {
                       Text(session.email),
                       const SizedBox(height: 24),
                       Text(
-                        isRegistered
-                            ? 'This Workspace is not Ready yet.'
-                            : 'This computer is not connected as a Workspace.',
+                        runtimeIntendedConnected
+                            ? 'Workspace is reconnecting. Worker management will be available when it is Ready.'
+                            : 'Connect this computer before configuring Workers.',
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
                       const SizedBox(height: 14),

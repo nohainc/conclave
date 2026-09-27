@@ -810,6 +810,22 @@ Do not destroy or disable local Workers merely because management UI is hidden.
 
 UI visibility exactly follows the lifecycle contract.
 
+## Implementation record
+
+- The root shell continues to admit the Workspace/Workers dashboard only after
+  same-owner desktop-session validation and an unlocked management state.
+- The connected, ready shell shows the Workspace and Workers surfaces. Signed
+  out, locked, and reauthentication-required shells do not instantiate the
+  dashboard or Worker controls. A disconnected signed-in installation remains
+  on the connection setup surface and explains that it must connect before
+  Workers can be configured.
+- Reconnection in progress is described separately from deliberate
+  disconnection, with Worker management withheld until the runtime is Ready.
+  Hiding the Worker surface does not mutate the configured Worker registry or
+  stop runtime execution.
+- Widget coverage verifies connected/unlocked access, and the signed-out,
+  disconnected, locked, expired-session, and different-owner rejection paths.
+
 ---
 
 # Phase 11 — Refine Workspace tab around the lifecycle
