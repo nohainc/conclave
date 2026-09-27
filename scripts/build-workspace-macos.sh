@@ -86,6 +86,7 @@ fi
 
 echo "Building Conclave Workspace $VERSION for macOS (mode: $MODE)"
 cd "$HOST_DIR"
+flutter clean
 flutter pub get
 
 if [[ "$SKIP_CHECKS" != "1" ]]; then
