@@ -63,7 +63,6 @@ void main() {
     await expectLater(lifecycle.launch(), throwsA(isA<WebSocketException>()));
     expect(lifecycle.uiSnapshot.mode, HostUiMode.offline);
     expect(lifecycle.uiSnapshot.paired, isTrue);
-    expect(lifecycle.uiSnapshot.canRecoverPairing, isTrue);
     expect(lifecycle.uiSnapshot.workspaceName, 'Development Mac');
 
     await lifecycle.quit();
@@ -106,7 +105,6 @@ void main() {
     expect(lifecycle.uiSnapshot.mode, HostUiMode.offline);
     expect(lifecycle.uiSnapshot.statusLabel, 'Offline');
     expect(lifecycle.uiSnapshot.cloudConnected, isFalse);
-    expect(lifecycle.uiSnapshot.canRecoverPairing, isTrue);
     await lifecycle.quit();
   });
 

@@ -9,6 +9,7 @@ enum StudioRouteKind {
   profileSecurity,
   login,
   search,
+  desktopAuthApproval,
 }
 
 class StudioNavigation {
@@ -21,6 +22,7 @@ class StudioNavigation {
     this.workspaceId,
     this.loginReturnTo,
     this.searchQuery,
+    this.desktopAuthIntentId,
   });
 
   const StudioNavigation.home() : this._(kind: StudioRouteKind.home);
@@ -64,6 +66,11 @@ class StudioNavigation {
   const StudioNavigation.search([String? query])
       : this._(kind: StudioRouteKind.search, searchQuery: query);
 
+  const StudioNavigation.desktopAuthApproval(String intentId)
+      : this._(
+            kind: StudioRouteKind.desktopAuthApproval,
+            desktopAuthIntentId: intentId);
+
   /// Compatibility parser for old links. New links serialize canonically.
   const StudioNavigation.account()
       : this._(kind: StudioRouteKind.profileSecurity);
@@ -76,12 +83,19 @@ class StudioNavigation {
   final String? workspaceId;
   final String? loginReturnTo;
   final String? searchQuery;
+  final String? desktopAuthIntentId;
 
   factory StudioNavigation.fromUri(Uri uri) {
     final segments = uri.pathSegments.where((segment) => segment.isNotEmpty);
     final parts = segments.toList(growable: false);
     if (parts case ['login']) {
       return StudioNavigation.login(returnTo: uri.queryParameters['returnTo']);
+    }
+    if (parts case ['desktop-auth', 'approve']) {
+      final intentId = uri.queryParameters['intentId'];
+      if (intentId != null && intentId.isNotEmpty) {
+        return StudioNavigation.desktopAuthApproval(intentId);
+      }
     }
     if (parts case ['account']) {
       return const StudioNavigation.profileSecurity();
@@ -180,6 +194,12 @@ class StudioNavigation {
               ? {'q': searchQuery!}
               : null,
         ),
+      StudioRouteKind.desktopAuthApproval => Uri(
+          path: '/desktop-auth/approve',
+          queryParameters: desktopAuthIntentId == null
+              ? null
+              : {'intentId': desktopAuthIntentId},
+        ),
     };
   }
 
@@ -193,9 +213,10 @@ class StudioNavigation {
       other.runId == runId &&
       other.workspaceId == workspaceId &&
       other.loginReturnTo == loginReturnTo &&
-      other.searchQuery == searchQuery;
+      other.searchQuery == searchQuery &&
+      other.desktopAuthIntentId == desktopAuthIntentId;
 
   @override
   int get hashCode => Object.hash(kind, projectId, chatId, workstreamId, runId,
-      workspaceId, loginReturnTo, searchQuery);
+      workspaceId, loginReturnTo, searchQuery, desktopAuthIntentId);
 }

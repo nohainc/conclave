@@ -7,13 +7,11 @@ class WorkspacesOverview extends StatelessWidget {
   const WorkspacesOverview({
     super.key,
     required this.workspaces,
-    required this.onAdd,
     required this.onSelectWorkspace,
     this.onOpenDownloads,
   });
 
   final List<StudioWorkspace> workspaces;
-  final VoidCallback onAdd;
   final ValueChanged<StudioWorkspace> onSelectWorkspace;
   final VoidCallback? onOpenDownloads;
 
@@ -43,12 +41,6 @@ class WorkspacesOverview extends StatelessWidget {
                   ),
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.add),
-                tooltip: 'Connect Workspace',
-                splashRadius: 20,
-                onPressed: onAdd,
-              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -60,6 +52,8 @@ class WorkspacesOverview extends StatelessWidget {
                 children: [
                   const Text('No Workspaces connected'),
                   const SizedBox(height: 8),
+                  const Text(
+                      'Register a Workspace from the Conclave Workspace desktop app.'),
                   OutlinedButton.icon(
                     onPressed: onOpenDownloads,
                     icon: const Icon(Icons.download_outlined),
@@ -134,6 +128,14 @@ class WorkspacesOverview extends StatelessWidget {
                                   workspace.architecture != '—')
                                 Text(
                                   '${workspace.platform} · ${workspace.architecture}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              if (workspace.connectionMode != null)
+                                Text(
+                                  workspace.connectionMode!,
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: theme.colorScheme.onSurfaceVariant,

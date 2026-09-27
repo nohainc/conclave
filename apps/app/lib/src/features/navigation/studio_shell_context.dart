@@ -198,6 +198,8 @@ class StudioShellContext {
             navigation.chatId == target.chatId;
       case StudioRouteKind.login:
         return navigation.kind == StudioRouteKind.login;
+      case StudioRouteKind.desktopAuthApproval:
+        return false;
       case StudioRouteKind.search:
         return navigation.kind == StudioRouteKind.search;
     }

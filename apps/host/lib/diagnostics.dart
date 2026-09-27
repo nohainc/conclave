@@ -127,6 +127,12 @@ Future<Map<String, Object?>> buildHostDiagnostics({
       'cloudConnected': connection?.isConnected ?? false,
       'connection': {
         'stage': connection?.connectionStage.name ?? 'offline',
+        'activeTransport': connection?.activeTransportMode ?? 'offline',
+        'fallbackHealth': connection?.fallbackHealthStatus ?? 'not configured',
+        'lastWebSocketFailure': connection?.lastWebSocketFailure,
+        'lastWebSocketHttpStatusCode': connection?.lastWebSocketHttpStatusCode,
+        'lastWebSocketFailureAt':
+            connection?.lastWebSocketFailureAt?.toUtc().toIso8601String(),
         'cloudOrigin':
             connection == null ? null : _cloudOrigin(connection.uri).toString(),
         'webSocketEndpoint': connection == null

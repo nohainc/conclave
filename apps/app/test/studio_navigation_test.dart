@@ -102,4 +102,17 @@ void main() {
     expect(login.toUri().queryParameters['returnTo'],
         '/projects/project-1/chats/chat-2');
   });
+
+  test('preserves desktop auth approval through the browser sign-in route', () {
+    final approval = StudioNavigation.fromUri(
+      Uri.parse('/desktop-auth/approve?intentId=intent-123'),
+    );
+    expect(approval.kind, StudioRouteKind.desktopAuthApproval);
+    expect(approval.desktopAuthIntentId, 'intent-123');
+    final login = StudioNavigation.login(returnTo: approval.toUri().toString());
+    final restored =
+        StudioNavigation.fromUri(Uri.parse(login.toUri().toString()));
+    expect(
+        StudioNavigation.fromUri(Uri.parse(restored.loginReturnTo!)), approval);
+  });
 }

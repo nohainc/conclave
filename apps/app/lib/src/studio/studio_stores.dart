@@ -63,19 +63,6 @@ class WorkspaceStore {
   Future<StudioWorkspaceEnrollment> createEnrollment(String workspaceId) =>
       source.createWorkspaceEnrollment(workspaceId: workspaceId);
 
-  Future<StudioWorkspacePairingIntent> createPairingIntent() =>
-      source.createWorkspacePairingIntent();
-
-  Future<StudioWorkspacePairingIntent> pairingIntent(String pairingIntentId) =>
-      source.getWorkspacePairingIntent(pairingIntentId: pairingIntentId);
-
-  Future<StudioWorkspacePairingIntent> regeneratePairingIntent(
-          String pairingIntentId) =>
-      source.regenerateWorkspacePairingIntent(pairingIntentId: pairingIntentId);
-
-  Future<void> cancelPairingIntent(String pairingIntentId) =>
-      source.cancelWorkspacePairingIntent(pairingIntentId: pairingIntentId);
-
   Future<void> revoke(String workspaceId) =>
       source.revokeWorkspace(workspaceId: workspaceId);
 

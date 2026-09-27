@@ -311,3 +311,12 @@ The architecture is accepted when tests prove:
 8. AX displays Workspace and Worker state without pairing/recovery controls;
 9. provider secrets remain local;
 10. a broken WebSocket never prevents the signed-in desktop from querying its Cloud Workspace state.
+
+## Shared contract baseline
+
+Phase 0 freezes the Cloud/desktop payloads and validators in
+[`conclave.desktop-auth-transport` 1.0](../protocol/DESKTOP_AUTH_TRANSPORT_CONTRACTS.md),
+exported by `@conclave/host-protocol`. Desktop human sessions,
+Workspace runtime credentials, and local Worker/provider credentials are
+separate types and security boundaries. Cloud and desktop implementation
+phases must consume these contracts rather than defining parallel shapes.

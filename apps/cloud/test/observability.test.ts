@@ -23,6 +23,24 @@ describe("observability", () => {
     expect(result.items).toHaveLength(50);
   });
 
+  it("never emits human or runtime credentials from credential-shaped fields", () => {
+    const humanCredential = "conclave_dhs_human-secret";
+    const runtimeCredential = "conclave_workspace_tok_runtime-secret";
+    const record = structuredLogRecord(
+      "info",
+      "workspace.auth",
+      {},
+      {
+        humanCredential,
+        runtimeCredential,
+        authorization: `Bearer ${humanCredential}`,
+        nested: { bearer: runtimeCredential },
+      },
+    );
+    expect(JSON.stringify(record)).not.toContain(humanCredential);
+    expect(JSON.stringify(record)).not.toContain(runtimeCredential);
+  });
+
   it("keeps end-to-end correlation fields in structured records", () => {
     const record = structuredLogRecord("info", "assignment.completed", {
       requestId: "request-1",

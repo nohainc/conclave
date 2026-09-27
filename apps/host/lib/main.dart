@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +8,7 @@ import 'brand.dart';
 import 'adapter_prerequisite.dart';
 import 'cloud_connection.dart';
 import 'diagnostics.dart';
+import 'desktop_auth.dart';
 import 'friendly_computer_name.dart';
 import 'host.dart';
 import 'host_configuration.dart';
@@ -16,7 +18,6 @@ import 'secure_credentials_flutter.dart';
 import 'v7_adapter_package_store.dart';
 import 'v7_adapter_catalog.dart';
 import 'workspace_enrollment.dart';
-import 'workspace_pairing_dialog.dart';
 import 'workspace_runtime.dart';
 
 void showCopyableErrorSnackBar(BuildContext context, String message) {
@@ -151,6 +152,13 @@ Future<void> _launchLocalWorkerAuthentication(String workerTypeId) async {
 
 String _webSocketUpgradeStatus(HostCloudConnection? connection) {
   if (connection == null) return 'not configured';
+  final failureAt = connection.lastWebSocketFailureAt;
+  if (failureAt != null &&
+      (connection.lastWebSocketUpgradeAt == null ||
+          failureAt.isAfter(connection.lastWebSocketUpgradeAt!))) {
+    final status = connection.lastWebSocketHttpStatusCode;
+    return status == null ? 'failed' : 'failed (HTTP $status)';
+  }
   final status = connection.lastHttpStatusCode;
   if (status != null) return 'failed (HTTP $status)';
   if (connection.lastWebSocketUpgradeAt != null) return 'succeeded';
@@ -329,6 +337,9 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
                     : 'Offline';
     unawaited(_desktopChannel.invokeMethod<void>('status', {
       'state': state,
+      'transportMode': connection?.activeTransportMode ?? 'offline',
+      'fallbackHealth': connection?.fallbackHealthStatus ?? 'not configured',
+      'lastWebSocketFailure': connection?.lastWebSocketFailure,
       'active': connection?.activeAssignmentCount ?? 0,
       'accepting': connection?.acceptingNewWork ?? false,
       'draining': _draining,
@@ -370,6 +381,11 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
         protocolHelloStatus: connection?.protocolHelloStatus,
         dnsTlsStatus: connection?.lastDnsTlsStatus,
         webSocketUpgradeStatus: _webSocketUpgradeStatus(connection),
+        activeTransportMode: connection?.activeTransportMode,
+        fallbackHealthStatus: connection?.fallbackHealthStatus,
+        lastWebSocketFailure: connection?.lastWebSocketFailure,
+        lastWebSocketHttpStatusCode: connection?.lastWebSocketHttpStatusCode,
+        lastWebSocketFailureAt: connection?.lastWebSocketFailureAt,
         lastConnectionAttemptAt: connection?.lastConnectionAttemptAt,
       );
     }
@@ -387,10 +403,8 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
         cloudUrl: cloudUrl,
         workRootPath: workRootPath,
         paired: hostId != null && workspaceId != null,
-        // A saved token can be present and still be revoked in Cloud. Offer
-        // explicit recovery for every paired startup failure; the dialog
-        // tells the user to unpair in AX before clearing this local identity.
-        canRecoverPairing: hostId != null && workspaceId != null,
+        // A saved token can be present and still be revoked in Cloud. The
+        // Account section can recover it through the human management API.
         statusLabel: 'Offline',
         logsPath: WorkspacePaths(host.config.dataDirectory).logsDirectory.path,
         connectionStage: connection?.connectionStage,
@@ -401,14 +415,19 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
         protocolHelloStatus: connection?.protocolHelloStatus,
         dnsTlsStatus: connection?.lastDnsTlsStatus,
         webSocketUpgradeStatus: _webSocketUpgradeStatus(connection),
+        activeTransportMode: connection?.activeTransportMode,
+        fallbackHealthStatus: connection?.fallbackHealthStatus,
+        lastWebSocketFailure: connection?.lastWebSocketFailure,
+        lastWebSocketHttpStatusCode: connection?.lastWebSocketHttpStatusCode,
+        lastWebSocketFailureAt: connection?.lastWebSocketFailureAt,
         lastConnectionAttemptAt: connection?.lastConnectionAttemptAt,
       );
     }
     if (host.config.hostId == null) {
       return HostUiSnapshot(
         mode: HostUiMode.firstLaunch,
-        title: 'Pair this Workspace',
-        detail: 'Connect this machine to Conclave to begin.',
+        title: 'Connect this Workspace',
+        detail: 'Sign in to register this computer with Conclave.',
         workspaceName: workspaceName,
         installationId: installationId,
         hostname: hostname,
@@ -420,6 +439,11 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
         protocolHelloStatus: connection?.protocolHelloStatus,
         dnsTlsStatus: connection?.lastDnsTlsStatus,
         webSocketUpgradeStatus: _webSocketUpgradeStatus(connection),
+        activeTransportMode: connection?.activeTransportMode,
+        fallbackHealthStatus: connection?.fallbackHealthStatus,
+        lastWebSocketFailure: connection?.lastWebSocketFailure,
+        lastWebSocketHttpStatusCode: connection?.lastWebSocketHttpStatusCode,
+        lastWebSocketFailureAt: connection?.lastWebSocketFailureAt,
       );
     }
     if (!running) {
@@ -442,6 +466,11 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
         protocolHelloStatus: connection?.protocolHelloStatus,
         dnsTlsStatus: connection?.lastDnsTlsStatus,
         webSocketUpgradeStatus: _webSocketUpgradeStatus(connection),
+        activeTransportMode: connection?.activeTransportMode,
+        fallbackHealthStatus: connection?.fallbackHealthStatus,
+        lastWebSocketFailure: connection?.lastWebSocketFailure,
+        lastWebSocketHttpStatusCode: connection?.lastWebSocketHttpStatusCode,
+        lastWebSocketFailureAt: connection?.lastWebSocketFailureAt,
         lastConnectionAttemptAt: connection?.lastConnectionAttemptAt,
       );
     }
@@ -470,12 +499,12 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
       detail: isOffline
           ? activeAssignments > 0
               ? 'Cloud is disconnected. Active work remains on this computer while the Workspace retries.'
-              : 'The Workspace is paired, but Cloud has not authenticated this connection.'
+              : 'The Workspace is registered, but Cloud has not authenticated this connection.'
           : activeAssignments > 0
               ? 'The Workspace is running assigned work.'
-              : 'This machine is paired and ready to run assigned work.',
+              : 'This computer is registered and ready to run assigned work.',
       issue: isOffline
-          ? 'No authenticated Cloud session. Check the saved runtime credential or prepare to pair again.'
+          ? 'No authenticated Cloud session. Recover the Workspace connection from Account.'
           : null,
       workspaceName: workspaceName,
       workspaceId: workspaceId,
@@ -485,7 +514,6 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
       cloudUrl: cloudUrl,
       workRootPath: workRootPath,
       paired: true,
-      canRecoverPairing: isOffline && hostId != null && workspaceId != null,
       cloudConnected: isConnected,
       statusLabel: statusLabel,
       logsPath: WorkspacePaths(host.config.dataDirectory).logsFile.path,
@@ -501,6 +529,11 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
       protocolHelloStatus: connection?.protocolHelloStatus,
       dnsTlsStatus: connection?.lastDnsTlsStatus,
       webSocketUpgradeStatus: _webSocketUpgradeStatus(connection),
+      activeTransportMode: connection?.activeTransportMode,
+      fallbackHealthStatus: connection?.fallbackHealthStatus,
+      lastWebSocketFailure: connection?.lastWebSocketFailure,
+      lastWebSocketHttpStatusCode: connection?.lastWebSocketHttpStatusCode,
+      lastWebSocketFailureAt: connection?.lastWebSocketFailureAt,
       lastConnectionAttemptAt: connection?.lastConnectionAttemptAt,
     );
   }
@@ -606,10 +639,9 @@ class HostUiSnapshot {
     this.workRootPath,
     this.statusLabel = 'Offline',
     this.paired = false,
-    this.canRecoverPairing = false,
     this.cloudConnected = false,
     this.accountsNeedingAction = const [],
-    this.workerSummary = 'Worker diagnostics are available after pairing',
+    this.workerSummary = 'Worker diagnostics are available after sign-in',
     this.logsPath,
     this.updateSummary = 'Up to date',
     this.activeAssignments = 0,
@@ -624,6 +656,11 @@ class HostUiSnapshot {
     this.protocolHelloStatus,
     this.dnsTlsStatus,
     this.webSocketUpgradeStatus,
+    this.activeTransportMode,
+    this.fallbackHealthStatus,
+    this.lastWebSocketFailure,
+    this.lastWebSocketHttpStatusCode,
+    this.lastWebSocketFailureAt,
     this.lastConnectionAttemptAt,
     this.appVersion = conclaveWorkspaceAppVersion,
     this.issue,
@@ -641,7 +678,6 @@ class HostUiSnapshot {
   final String? workRootPath;
   final String statusLabel;
   final bool paired;
-  final bool canRecoverPairing;
   final bool cloudConnected;
   final List<String> accountsNeedingAction;
   final String workerSummary;
@@ -659,6 +695,11 @@ class HostUiSnapshot {
   final String? protocolHelloStatus;
   final String? dnsTlsStatus;
   final String? webSocketUpgradeStatus;
+  final String? activeTransportMode;
+  final String? fallbackHealthStatus;
+  final String? lastWebSocketFailure;
+  final int? lastWebSocketHttpStatusCode;
+  final DateTime? lastWebSocketFailureAt;
   final DateTime? lastConnectionAttemptAt;
   final String appVersion;
   final String? issue;
@@ -838,92 +879,161 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     );
   }
 
-  Future<void> _pairWorkspace([WorkspacePairingRequest? directRequest]) async {
+  Future<void> _signInDesktopHuman() async {
     final lifecycle = widget.lifecycle;
-    final dataDirectory = lifecycle.host.config.dataDirectory;
-    final currentRegistration = HostRegistrationStore(dataDirectory).readSync();
-
     final dialogContext = _navigatorKey.currentContext;
     if (dialogContext == null) return;
-
-    if (currentRegistration != null && lifecycle.uiSnapshot.paired) {
-      if (mounted) {
-        await showDialog<void>(
-          context: dialogContext,
-          builder: (context) => AlertDialog(
-            title: const Text('Already Connected'),
-            content: const Text(
-              'This installation is already connected to a Workspace.\n\n'
-              'Disconnect the current Workspace before connecting to another account.',
-            ),
-            actions: [
-              FilledButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-      }
-      return;
-    }
-
-    final proposedName = await resolveFriendlyComputerName();
-
-    final request = directRequest ??
-        await showWorkspacePairingDialog(
-          dialogContext,
-          initialCloudUrl: currentRegistration?.cloudUrl ??
-              Platform.environment['CONCLAVE_HOST_CLOUD_URL'] ??
-              conclaveProductionCloudUrl,
-          initialWorkspaceName: proposedName,
-        );
-    if (request == null || !mounted) return;
-
-    var pairingClaimCompleted = false;
+    final registration =
+        HostRegistrationStore(lifecycle.host.config.dataDirectory).readSync();
+    final cloudUrl = registration?.cloudUrl ??
+        Platform.environment['CONCLAVE_HOST_CLOUD_URL'] ??
+        conclaveProductionCloudUrl;
+    final client = DesktopAuthClient(cloudUrl: cloudUrl);
     try {
-      final service = WorkspacePairingService(
-        dataDirectory: dataDirectory,
-        credentialStore: lifecycle.host.credentialStore,
+      final intent = await client.createIntent();
+      final openBrowser = await showDialog<bool>(
+        context: dialogContext,
+        builder: (context) => AlertDialog(
+          title: const Text('Sign in to Conclave Workspace'),
+          content: SelectableText(
+            'Open the secure sign-in request in your browser, sign in to your Conclave account, then enter this code to approve the desktop app:\n\n${intent.userCode}',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(context, true),
+              icon: const Icon(Icons.open_in_browser),
+              label: const Text('Open browser'),
+            ),
+          ],
+        ),
       );
-      final installationIdStore = InstallationIdentityStore(dataDirectory);
-      final installationId = await installationIdStore.getOrCreate();
-      final allowRecovery = installationIdStore.recoveryAuthorizedSync();
+      if (openBrowser != true) return;
+      await client.openVerification(intent);
+      if (!mounted) return;
+      ScaffoldMessenger.of(dialogContext).showSnackBar(
+        const SnackBar(content: Text('Waiting for browser sign-in approval…')),
+      );
+      final session = await client.waitForApprovalAndClaim(intent);
+      await client.validateSession(session);
+      await lifecycle.host.credentialStore.write(
+        desktopHumanCredentialKey,
+        jsonEncode(session.toSecureJson()),
+      );
+      {
+        final installationId = await InstallationIdentityStore(
+          lifecycle.host.config.dataDirectory,
+        ).getOrCreate();
+        final facts = SafeMachineFacts.collect(
+          installationId: installationId,
+          name: await resolveFriendlyComputerName(),
+          hostname: Platform.localHostname,
+        );
+        await WorkspacePairingService(
+          dataDirectory: lifecycle.host.config.dataDirectory,
+          credentialStore: lifecycle.host.credentialStore,
+        ).registerWithDesktopSession(
+          cloudUrl: cloudUrl,
+          desktopCredential: session.credential,
+          facts: facts,
+        );
+        final config = HostConfig.fromArgs(const [],
+            credentialStore: lifecycle.host.credentialStore);
+        await lifecycle.replaceHost(await buildWorkspaceRuntime(config,
+            credentialStore: lifecycle.host.credentialStore));
+      }
+      if (!mounted) return;
+      setState(() => _workerRevision++);
+      ScaffoldMessenger.of(dialogContext).showSnackBar(
+        SnackBar(content: Text('Signed in as ${session.displayName}.')),
+      );
+    } catch (error) {
+      if (mounted) {
+        showCopyableErrorSnackBar(dialogContext, 'Sign-in failed: $error');
+      }
+    } finally {
+      client.close();
+    }
+  }
 
-      await service.pair(
-        cloudUrl: request.cloudUrl,
-        token: request.token,
-        hostname: Platform.localHostname,
-        proposedWorkspaceName: request.workspaceName,
-        installationId: installationId,
-        allowRecovery: allowRecovery,
+  Future<void> _signOutDesktopHuman() async {
+    final lifecycle = widget.lifecycle;
+    final registration =
+        HostRegistrationStore(lifecycle.host.config.dataDirectory).readSync();
+    final stored =
+        await lifecycle.host.credentialStore.read(desktopHumanCredentialKey);
+    if (stored != null) {
+      try {
+        final decoded = jsonDecode(stored);
+        if (decoded is Map) {
+          final session =
+              DesktopHumanSession.fromJson(Map<String, dynamic>.from(decoded));
+          final client = DesktopAuthClient(
+              cloudUrl: registration?.cloudUrl ?? conclaveProductionCloudUrl);
+          try {
+            await client.revokeSession(session);
+          } finally {
+            client.close();
+          }
+        }
+      } on Object {
+        // Local sign-out must remain available if Cloud is unreachable or the session expired.
+      }
+    }
+    await lifecycle.host.credentialStore.delete(desktopHumanCredentialKey);
+    if (mounted) setState(() => _workerRevision++);
+  }
+
+  Future<void> _recoverWorkspaceCredential() async {
+    final lifecycle = widget.lifecycle;
+    final context = _navigatorKey.currentContext;
+    if (context == null) return;
+    final dataDirectory = lifecycle.host.config.dataDirectory;
+    final registration = HostRegistrationStore(dataDirectory).readSync();
+    final cloudUrl = registration?.cloudUrl ??
+        Platform.environment['CONCLAVE_HOST_CLOUD_URL'] ??
+        conclaveProductionCloudUrl;
+    try {
+      final encoded =
+          await lifecycle.host.credentialStore.read(desktopHumanCredentialKey);
+      if (encoded == null) {
+        throw StateError('Sign in to your Conclave account first.');
+      }
+      final decoded = jsonDecode(encoded);
+      if (decoded is! Map || decoded['credential'] is! String) {
+        throw StateError('Sign in to your Conclave account first.');
+      }
+      final installationId =
+          await InstallationIdentityStore(dataDirectory).getOrCreate();
+      final facts = SafeMachineFacts.collect(
+          installationId: installationId,
+          name: registration?.name ?? await resolveFriendlyComputerName(),
+          hostname: Platform.localHostname);
+      await WorkspacePairingService(
+              dataDirectory: dataDirectory,
+              credentialStore: lifecycle.host.credentialStore)
+          .registerWithDesktopSession(
+        cloudUrl: cloudUrl,
+        desktopCredential: decoded['credential'] as String,
+        facts: facts,
       );
-      pairingClaimCompleted = true;
-      final config = HostConfig.fromArgs(
-        const [],
-        credentialStore: lifecycle.host.credentialStore,
-      );
-      final replacement = await buildWorkspaceRuntime(
-        config,
-        credentialStore: lifecycle.host.credentialStore,
-      );
-      await lifecycle.replaceHost(replacement);
+      final config = HostConfig.fromArgs(const [],
+          credentialStore: lifecycle.host.credentialStore);
+      await lifecycle.replaceHost(await buildWorkspaceRuntime(config,
+          credentialStore: lifecycle.host.credentialStore));
       if (mounted) {
         setState(() => _workerRevision++);
-        ScaffoldMessenger.of(dialogContext).showSnackBar(
-          const SnackBar(content: Text('Workspace paired and connected.')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Workspace connection recovered.')));
       }
     } catch (error) {
-      if (!mounted) return;
-      final displayMessage = pairingClaimCompleted
-          ? 'Workspace pairing completed, but the Cloud connection failed:\n$error'
-          : error is WorkspacePairingException
-              ? '${error.message}\n${error.action}'
-              : 'Pairing failed: $error';
-      showCopyableErrorSnackBar(dialogContext, displayMessage);
-      if (pairingClaimCompleted) throw StateError(displayMessage);
-      rethrow;
+      if (mounted) {
+        showCopyableErrorSnackBar(
+            context, 'Could not recover Workspace connection: $error');
+      }
     }
   }
 
@@ -946,7 +1056,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     final confirmed = await showDialog<bool>(
       context: dialogContext,
       builder: (context) => AlertDialog(
-        title: const Text('Disconnect from Conclave AX?'),
+        title: const Text('Disconnect Workspace?'),
         content: const Text(
           'This computer will stop accepting Cloud work.\n\n'
           'Local Worker credentials, configurations, and Workstream files remain on this machine unless '
@@ -960,7 +1070,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Disconnect'),
+            child: const Text('Disconnect Workspace'),
           ),
         ],
       ),
@@ -1008,74 +1118,6 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
     }
   }
 
-  Future<void> _preparePairingRecovery() async {
-    final lifecycle = widget.lifecycle;
-    final dataDirectory = lifecycle.host.config.dataDirectory;
-    final registration = HostRegistrationStore(dataDirectory).readSync();
-    if (registration == null) return;
-    final dialogContext = _navigatorKey.currentContext;
-    if (dialogContext == null) return;
-
-    final confirmed = await showDialog<bool>(
-      context: dialogContext,
-      builder: (context) => AlertDialog(
-        title: const Text('Prepare to pair again?'),
-        content: const Text(
-          'If this Workspace still appears in Conclave AX, unpair it there '
-          'first. If it is already absent, continue here. This clears the '
-          'saved Cloud connection so this computer can use a new pairing '
-          'code. Local Workers, their credentials, the installation identity, '
-          'and Work Root will be preserved.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Prepare pairing'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    try {
-      await WorkspacePairingService(
-        dataDirectory: dataDirectory,
-        credentialStore: lifecycle.host.credentialStore,
-      ).preparePairingRecovery();
-      final replacement = await buildWorkspaceRuntime(
-          HostConfig(
-            dataDirectory: dataDirectory,
-            installationId: registration.installationId ??
-                lifecycle.host.config.installationId,
-            repositoriesFile: lifecycle.host.config.repositoriesFile,
-            workRootPath: lifecycle.host.config.workRootPath,
-          ),
-          credentialStore: lifecycle.host.credentialStore);
-      await lifecycle.replaceHost(replacement);
-      if (mounted) {
-        setState(() => _workerRevision++);
-        ScaffoldMessenger.of(dialogContext).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Saved connection cleared. Enter a new pairing code from Conclave AX.',
-            ),
-          ),
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        showCopyableErrorSnackBar(
-          dialogContext,
-          'Could not prepare pairing recovery: $error',
-        );
-      }
-    }
-  }
-
   Future<void> _resetLocalWorkspace() async {
     final lifecycle = widget.lifecycle;
     final dialogContext = _navigatorKey.currentContext;
@@ -1095,10 +1137,11 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         title: const Text('Reset Local Workspace?'),
         content: const Text(
           'This completely resets this Conclave Workspace installation on this machine.\n\n'
-          'This will revoke Cloud pairing and permanently remove:\n'
+          'This will disconnect the Cloud Workspace and permanently remove:\n'
           '• Runtime identity & registration\n'
           '• All configured local Workers\n'
           '• All stored credentials and API keys\n'
+          '• Your desktop Conclave account session\n'
           '• Installed adapter packages\n\n'
           'This action cannot be undone.',
         ),
@@ -1147,6 +1190,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
         }
       }
       final dataDir = lifecycle.host.config.dataDirectory;
+      await lifecycle.host.credentialStore.delete(desktopHumanCredentialKey);
       await HostRegistrationStore(dataDir).clear();
       await InstallationIdentityStore(dataDir).clear();
       await LocalWorkspaceIdentityStore(dataDir).clear();
@@ -1273,11 +1317,10 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
                   child: Text('Workspace is running in the background.'))
               : HostDashboard(
                   snapshot: lifecycle.uiSnapshot,
-                  onPair: () => _pairWorkspace(),
-                  onPairRequest: _pairWorkspace,
-                  onRecoverPairing: _preparePairingRecovery,
+                  onSignIn: _signInDesktopHuman,
+                  onSignOut: _signOutDesktopHuman,
+                  onRecoverCredential: _recoverWorkspaceCredential,
                   onDisconnect: _disconnectWorkspace,
-                  onUnpair: _disconnectWorkspace,
                   onReset: _resetLocalWorkspace,
                   onQuit: _confirmQuit,
                   onRetry: lifecycle.retryConnection,
@@ -1299,11 +1342,10 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
 class HostDashboard extends StatefulWidget {
   const HostDashboard({
     required this.snapshot,
-    this.onPair,
-    this.onPairRequest,
-    this.onRecoverPairing,
+    this.onSignIn,
+    this.onSignOut,
+    this.onRecoverCredential,
     this.onDisconnect,
-    this.onUnpair,
     this.onReset,
     this.onAccountAction,
     this.onQuit,
@@ -1316,16 +1358,14 @@ class HostDashboard extends StatefulWidget {
     this.adapterPackageStore,
     this.ensureAdapter,
     this.onAddWorker,
-    this.resolveComputerName,
     super.key,
   });
 
   final HostUiSnapshot snapshot;
-  final VoidCallback? onPair;
-  final Future<void> Function(WorkspacePairingRequest request)? onPairRequest;
-  final Future<void> Function()? onRecoverPairing;
+  final Future<void> Function()? onSignIn;
+  final Future<void> Function()? onSignOut;
+  final Future<void> Function()? onRecoverCredential;
   final VoidCallback? onDisconnect;
-  final VoidCallback? onUnpair;
   final VoidCallback? onReset;
   final VoidCallback? onAccountAction;
   final VoidCallback? onQuit;
@@ -1338,7 +1378,6 @@ class HostDashboard extends StatefulWidget {
   final V7AdapterPackageStore? adapterPackageStore;
   final Future<bool> Function(String workerTypeId)? ensureAdapter;
   final Future<void> Function()? onAddWorker;
-  final Future<String> Function()? resolveComputerName;
 
   @override
   State<HostDashboard> createState() => _HostDashboardState();
@@ -1534,15 +1573,15 @@ class _HostDashboardState extends State<HostDashboard> {
                 children: [
                   _WorkspaceTab(
                     snapshot: snapshot,
-                    onPair: widget.onPair,
-                    onPairRequest: widget.onPairRequest,
-                    onRecoverPairing: widget.onRecoverPairing,
-                    resolveComputerName: widget.resolveComputerName,
+                    onSignIn: widget.onSignIn,
+                    credentialStore: widget.credentialStore,
+                    accountRefreshToken: widget.workerRevision,
+                    onSignOut: widget.onSignOut,
+                    onRecoverCredential: widget.onRecoverCredential,
                     onRetry: widget.onRetry,
                     onExportDiagnostics: widget.onExportDiagnostics,
                     onChangeWorkRoot: widget.onChangeWorkRoot,
                     onDisconnect: widget.onDisconnect,
-                    onUnpair: widget.onUnpair,
                     onReset: widget.onReset,
                   ),
                   _WorkersTab(
@@ -1628,28 +1667,28 @@ class _SurfaceTabButton extends StatelessWidget {
 class _WorkspaceTab extends StatelessWidget {
   const _WorkspaceTab({
     required this.snapshot,
-    this.onPair,
-    this.onPairRequest,
-    this.onRecoverPairing,
-    this.resolveComputerName,
+    this.onSignIn,
+    this.onSignOut,
+    this.onRecoverCredential,
+    required this.credentialStore,
+    required this.accountRefreshToken,
     this.onRetry,
     this.onExportDiagnostics,
     this.onChangeWorkRoot,
     this.onDisconnect,
-    this.onUnpair,
     this.onReset,
   });
 
   final HostUiSnapshot snapshot;
-  final VoidCallback? onPair;
-  final Future<void> Function(WorkspacePairingRequest request)? onPairRequest;
-  final Future<void> Function()? onRecoverPairing;
-  final Future<String> Function()? resolveComputerName;
+  final Future<void> Function()? onSignIn;
+  final Future<void> Function()? onSignOut;
+  final Future<void> Function()? onRecoverCredential;
+  final SecureCredentialStore credentialStore;
+  final int accountRefreshToken;
   final Future<void> Function()? onRetry;
   final Future<void> Function()? onExportDiagnostics;
   final Future<void> Function(String path)? onChangeWorkRoot;
   final VoidCallback? onDisconnect;
-  final VoidCallback? onUnpair;
   final VoidCallback? onReset;
 
   @override
@@ -1671,23 +1710,25 @@ class _WorkspaceTab extends StatelessWidget {
                     ? 'Retry connection'
                     : 'Retry update',
                 onRetry: onRetry,
-                canRecoverPairing: snapshot.canRecoverPairing,
-                onRecoverPairing: onRecoverPairing,
               ),
             ),
           ),
           const SizedBox(height: 16),
         ],
 
-        // Section 1: Pairing / Connection Section (Flat light design)
-        if (!snapshot.paired)
-          _ConnectWorkspaceCard(
-            snapshot: snapshot,
-            onPair: onPair,
-            onPairRequest: onPairRequest,
-            resolveComputerName: resolveComputerName,
-          )
-        else
+        // Account and Workspace lifecycle controls.
+        _WorkspaceAccountSection(
+          snapshot: snapshot,
+          credentialStore: credentialStore,
+          refreshToken: accountRefreshToken,
+          onSignIn: onSignIn,
+          onSignOut: onSignOut,
+          onRecoverCredential: onRecoverCredential,
+          onDisconnect: onDisconnect,
+          onReset: onReset,
+        ),
+        const SizedBox(height: 16),
+        if (snapshot.paired)
           _PairedWorkspaceCard(
             snapshot: snapshot,
           ),
@@ -1706,13 +1747,86 @@ class _WorkspaceTab extends StatelessWidget {
           snapshot: snapshot,
           onRetry: onRetry,
           onExportDiagnostics: onExportDiagnostics,
-          onDisconnect: onDisconnect,
-          onUnpair: onUnpair,
-          onReset: onReset,
+          onDisconnect: null,
+          onReset: null,
         ),
       ],
     );
   }
+}
+
+class _WorkspaceAccountSection extends StatelessWidget {
+  const _WorkspaceAccountSection({
+    required this.snapshot,
+    required this.credentialStore,
+    required this.refreshToken,
+    this.onSignIn,
+    this.onSignOut,
+    this.onRecoverCredential,
+    this.onDisconnect,
+    this.onReset,
+  });
+
+  final HostUiSnapshot snapshot;
+  final SecureCredentialStore credentialStore;
+  final int refreshToken;
+  final Future<void> Function()? onSignIn;
+  final Future<void> Function()? onSignOut;
+  final Future<void> Function()? onRecoverCredential;
+  final VoidCallback? onDisconnect;
+  final VoidCallback? onReset;
+
+  @override
+  Widget build(BuildContext context) => Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Account', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            _DesktopHumanAccountStatus(
+                key: ValueKey(refreshToken), credentialStore: credentialStore),
+            const SizedBox(height: 12),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              if (onSignIn != null)
+                OutlinedButton.icon(
+                    onPressed: () => unawaited(onSignIn!()),
+                    icon: const Icon(Icons.login),
+                    label: const Text('Sign in')),
+              if (onSignOut != null)
+                OutlinedButton.icon(
+                    onPressed: () => unawaited(onSignOut!()),
+                    icon: const Icon(Icons.logout),
+                    label: const Text('Sign out')),
+              if (onRecoverCredential != null)
+                OutlinedButton.icon(
+                    onPressed: () => unawaited(onRecoverCredential!()),
+                    icon: const Icon(Icons.sync),
+                    label: Text(snapshot.paired
+                        ? 'Recover Workspace connection'
+                        : 'Register Workspace')),
+              if (snapshot.paired && onDisconnect != null)
+                OutlinedButton.icon(
+                    onPressed: onDisconnect,
+                    icon: const Icon(Icons.link_off),
+                    label: const Text('Disconnect Workspace')),
+              if (onReset != null)
+                TextButton.icon(
+                    onPressed: onReset,
+                    icon: Icon(Icons.delete_forever_outlined,
+                        color: Theme.of(context).colorScheme.error),
+                    label: Text('Reset local Workspace',
+                        style: TextStyle(
+                            color: Theme.of(context).colorScheme.error))),
+            ]),
+            const SizedBox(height: 8),
+            Text(
+                'Sign out removes the desktop account session. Disconnect Workspace stops Cloud work and preserves local Workers. Reset local Workspace removes local Worker configuration and credentials.',
+                style: Theme.of(context).textTheme.bodySmall),
+          ]),
+        ),
+      );
 }
 
 class _WorkRootSection extends StatefulWidget {
@@ -1803,228 +1917,62 @@ class _WorkRootSectionState extends State<_WorkRootSection> {
   }
 }
 
-class _ConnectWorkspaceCard extends StatefulWidget {
-  const _ConnectWorkspaceCard({
-    required this.snapshot,
-    this.onPair,
-    this.onPairRequest,
-    this.resolveComputerName,
+class _DesktopHumanAccountStatus extends StatefulWidget {
+  const _DesktopHumanAccountStatus({
+    required this.credentialStore,
+    super.key,
   });
 
-  final HostUiSnapshot snapshot;
-  final VoidCallback? onPair;
-  final Future<void> Function(WorkspacePairingRequest request)? onPairRequest;
-  final Future<String> Function()? resolveComputerName;
+  final SecureCredentialStore credentialStore;
 
   @override
-  State<_ConnectWorkspaceCard> createState() => _ConnectWorkspaceCardState();
+  State<_DesktopHumanAccountStatus> createState() =>
+      _DesktopHumanAccountStatusState();
 }
 
-class _ConnectWorkspaceCardState extends State<_ConnectWorkspaceCard> {
-  late final TextEditingController _nameController;
-  late final TextEditingController _codeController;
-  bool _isConnecting = false;
-  bool _workspaceNameWasEdited = false;
-  String? _error;
+class _DesktopHumanAccountStatusState
+    extends State<_DesktopHumanAccountStatus> {
+  late Future<String> _status;
 
   @override
   void initState() {
     super.initState();
-    // This form is shown only while unpaired: use this computer's name, not a
-    // stale Workspace display name. Resolve the OS-friendly name asynchronously
-    // and retain a fallback immediately while the OS lookup completes.
-    final defaultName = resolveFriendlyComputerNameSync(
-      localHostname: widget.snapshot.hostname,
-    );
-    _nameController = TextEditingController(text: defaultName);
-    _nameController.addListener(_onWorkspaceNameEdited);
-    _codeController = TextEditingController();
-    // Only resolve the OS name when this card can actually initiate pairing.
-    // Read-only dashboard states (including recovery panels) should not spawn
-    // a subprocess just to populate an unused form field.
-    if (widget.onPair != null || widget.onPairRequest != null) {
-      unawaited(_loadComputerName());
-    }
+    _status = _loadStatus();
   }
 
-  void _onWorkspaceNameEdited() => _workspaceNameWasEdited = true;
-
-  Future<void> _loadComputerName() async {
+  Future<String> _loadStatus() async {
     try {
-      final resolver = widget.resolveComputerName ??
-          () => resolveFriendlyComputerName(
-                localHostname: widget.snapshot.hostname,
-              );
-      final computerName = await resolver();
-      final proposedName = computerName.trim();
-      if (!mounted || _workspaceNameWasEdited || proposedName.isEmpty) return;
-      _nameController.value = TextEditingValue(
-        text: proposedName,
-        selection: TextSelection.collapsed(offset: proposedName.length),
-      );
+      final stored =
+          await widget.credentialStore.read(desktopHumanCredentialKey);
+      if (stored == null || stored.isEmpty) return 'Not signed in';
+      final decoded = jsonDecode(stored);
+      if (decoded is! Map) return 'Not signed in';
+      final name = decoded['displayName'];
+      final email = decoded['email'];
+      final expiresAt =
+          DateTime.tryParse(decoded['expiresAt']?.toString() ?? '');
+      if (expiresAt == null || !expiresAt.isAfter(DateTime.now().toUtc())) {
+        return 'Sign-in expired';
+      }
+      final identity = name is String && name.isNotEmpty
+          ? name
+          : email is String && email.isNotEmpty
+              ? email
+              : 'Conclave account';
+      return 'Signed in as $identity';
     } on Object {
-      // Keep the cleaned hostname fallback if the OS name cannot be read.
+      return 'Not signed in';
     }
   }
 
   @override
-  void dispose() {
-    _nameController.dispose();
-    _codeController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    final name = _nameController.text.trim();
-    final code = _codeController.text.trim();
-    final cloudUrl = widget.snapshot.cloudUrl ??
-        Platform.environment['CONCLAVE_HOST_CLOUD_URL'] ??
-        conclaveProductionCloudUrl;
-
-    if (name.isEmpty) {
-      setState(() => _error = 'Enter a workspace name.');
-      return;
-    }
-    if (code.isEmpty) {
-      setState(() => _error = 'Enter the pairing code from Conclave AX.');
-      return;
-    }
-
-    setState(() {
-      _isConnecting = true;
-      _error = null;
-    });
-
-    final request = WorkspacePairingRequest(
-      cloudUrl: cloudUrl,
-      token: code,
-      workspaceName: name,
-    );
-
-    try {
-      if (widget.onPairRequest != null) {
-        await widget.onPairRequest!(request);
-      } else if (widget.onPair != null) {
-        widget.onPair!();
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          if (e is WorkspacePairingException) {
-            _error = '${e.message}\n\n${e.action}';
-            if (e.kind == WorkspacePairingErrorKind.invalidCode ||
-                e.kind == WorkspacePairingErrorKind.expiredCode ||
-                e.kind == WorkspacePairingErrorKind.alreadyUsed) {
-              _codeController.clear();
-            }
-          } else {
-            _error = e
-                .toString()
-                .replaceFirst('Exception: ', '')
-                .replaceFirst('StateError: ', '');
-          }
-        });
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isConnecting = false);
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextField(
-          controller: _nameController,
-          autocorrect: false,
-          textInputAction: TextInputAction.next,
-          decoration: const InputDecoration(
-            labelText: 'Workspace name',
-            helperText: 'Suggested from this computer. You can change it.',
-            border: OutlineInputBorder(),
-          ),
+  Widget build(BuildContext context) => FutureBuilder<String>(
+        future: _status,
+        builder: (context, snapshot) => Text(
+          snapshot.data ?? 'Checking Conclave account…',
+          style: Theme.of(context).textTheme.bodyMedium,
         ),
-        const SizedBox(height: 14),
-        TextField(
-          controller: _codeController,
-          autocorrect: false,
-          enableSuggestions: false,
-          textInputAction: TextInputAction.done,
-          onSubmitted: (_) => _submit(),
-          decoration: const InputDecoration(
-            labelText: 'Pairing code',
-            hintText: 'Enter pairing code from Conclave AX',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        if (_error != null) ...[
-          const SizedBox(height: 14),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.errorContainer.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: theme.colorScheme.error.withValues(alpha: 0.3),
-              ),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  Icons.error_outline_rounded,
-                  size: 18,
-                  color: theme.colorScheme.error,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: SelectableText(
-                    _error!,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onErrorContainer,
-                      height: 1.3,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Copy pairing error',
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.copy, size: 18),
-                  color: theme.colorScheme.onErrorContainer,
-                  onPressed: () async {
-                    await Clipboard.setData(ClipboardData(text: _error!));
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Error message copied')),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-        ],
-        const SizedBox(height: 16),
-        FilledButton.icon(
-          onPressed: _isConnecting ? null : _submit,
-          icon: _isConnecting
-              ? const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.link, size: 16),
-          label: Text(_isConnecting ? 'Connecting...' : 'Connect'),
-          style: FilledButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          ),
-        ),
-      ],
-    );
-  }
+      );
 }
 
 class _PairedWorkspaceCard extends StatelessWidget {
@@ -2040,11 +1988,19 @@ class _PairedWorkspaceCard extends StatelessWidget {
     final workspaceName =
         snapshot.workspaceName ?? snapshot.hostname ?? 'Conclave Workspace';
     final isConnected = snapshot.cloudConnected;
-    final connectionLabel = isConnected
-        ? 'Connected'
-        : snapshot.mode == HostUiMode.starting
-            ? 'Connecting...'
-            : 'Offline';
+    final connectionLabel =
+        snapshot.activeTransportMode == 'switching_to_websocket'
+            ? 'Switching to WebSocket…'
+            : isConnected
+                ? switch (snapshot.activeTransportMode) {
+                    'websocket' => 'Connected · WebSocket',
+                    'http_long_poll' => 'Connected · HTTPS fallback',
+                    'switching_to_websocket' => 'Switching to WebSocket…',
+                    _ => 'Connected',
+                  }
+                : snapshot.mode == HostUiMode.starting
+                    ? 'Connecting...'
+                    : 'Offline';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2089,6 +2045,17 @@ class _PairedWorkspaceCard extends StatelessWidget {
             ),
           ],
         ),
+        if (isConnected &&
+            snapshot.activeTransportMode == 'http_long_poll') ...[
+          const SizedBox(height: 4),
+          Text(
+            'WebSocket is unavailable. Work can continue.',
+            style: TextStyle(
+              fontSize: 12,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -2100,7 +2067,6 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
     this.onRetry,
     this.onExportDiagnostics,
     this.onDisconnect,
-    this.onUnpair,
     this.onReset,
   });
 
@@ -2108,13 +2074,12 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
   final Future<void> Function()? onRetry;
   final Future<void> Function()? onExportDiagnostics;
   final VoidCallback? onDisconnect;
-  final VoidCallback? onUnpair;
   final VoidCallback? onReset;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final disconnectAction = onDisconnect ?? onUnpair;
+    final disconnectAction = onDisconnect;
 
     return Card(
       margin: EdgeInsets.zero,
@@ -2139,8 +2104,33 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
             const SizedBox(height: 6),
             _DetailRow(
               label: 'Gateway state',
-              value: snapshot.cloudConnected ? 'Connected' : 'Disconnected',
+              value: snapshot.cloudConnected
+                  ? switch (snapshot.activeTransportMode) {
+                      'websocket' => 'Connected · WebSocket',
+                      'http_long_poll' => 'Connected · HTTPS fallback',
+                      'switching_to_websocket' => 'Switching to WebSocket',
+                      _ => 'Connected',
+                    }
+                  : 'Disconnected',
             ),
+            if (snapshot.cloudConnected &&
+                snapshot.activeTransportMode == 'http_long_poll')
+              const _DetailRow(
+                label: 'Fallback status',
+                value: 'WebSocket is unavailable. Work can continue.',
+              ),
+            if (snapshot.fallbackHealthStatus != null)
+              _DetailRow(
+                label: 'HTTPS fallback health',
+                value: snapshot.fallbackHealthStatus!,
+              ),
+            if (snapshot.lastWebSocketFailure != null)
+              _DetailRow(
+                label: 'Last WSS failure',
+                value: snapshot.lastWebSocketHttpStatusCode == null
+                    ? snapshot.lastWebSocketFailure!
+                    : '${snapshot.lastWebSocketFailure} (HTTP ${snapshot.lastWebSocketHttpStatusCode})',
+              ),
             _DetailRow(
               label: 'Gateway URL',
               value: snapshot.cloudUrl ?? 'Not configured',
@@ -2314,6 +2304,10 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
                       'Runtime credential: ${snapshot.runtimeCredentialAvailable ? 'available locally (value withheld)' : 'missing'}',
                       'DNS/TLS: ${snapshot.dnsTlsStatus ?? 'not checked'}',
                       'WebSocket upgrade: ${snapshot.webSocketUpgradeStatus ?? 'not completed'}',
+                      'Active transport: ${snapshot.activeTransportMode ?? 'offline'}',
+                      'HTTPS fallback health: ${snapshot.fallbackHealthStatus ?? 'not configured'}',
+                      'Last WSS failure: ${snapshot.lastWebSocketFailure ?? 'none'}${snapshot.lastWebSocketHttpStatusCode == null ? '' : ' (HTTP ${snapshot.lastWebSocketHttpStatusCode})'}',
+                      'Last WSS failure at: ${snapshot.lastWebSocketFailureAt?.toUtc().toIso8601String() ?? 'never'}',
                       'Protocol hello: ${snapshot.protocolHelloStatus ?? 'not started'}',
                       'Connection stage: ${snapshot.connectionStage?.name ?? 'offline'}',
                       'HTTP status: ${snapshot.connectionHttpStatus ?? 'none'}',
@@ -3117,15 +3111,11 @@ class _HostRecoveryPanel extends StatelessWidget {
     this.issue,
     required this.retryLabel,
     this.onRetry,
-    this.canRecoverPairing = false,
-    this.onRecoverPairing,
   });
 
   final String? issue;
   final String retryLabel;
   final Future<void> Function()? onRetry;
-  final bool canRecoverPairing;
-  final Future<void> Function()? onRecoverPairing;
 
   @override
   Widget build(BuildContext context) {
@@ -3188,14 +3178,6 @@ class _HostRecoveryPanel extends StatelessWidget {
               onPressed: () => unawaited(onRetry!()),
               icon: const Icon(Icons.refresh),
               label: Text(retryLabel),
-            ),
-          ],
-          if (canRecoverPairing && onRecoverPairing != null) ...[
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: () => unawaited(onRecoverPairing!()),
-              icon: const Icon(Icons.link_off),
-              label: const Text('Prepare to pair again'),
             ),
           ],
         ],

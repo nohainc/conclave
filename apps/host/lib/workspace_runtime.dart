@@ -15,6 +15,7 @@ import 'package:conclave_host/worker_trust_policy.dart';
 import 'package:conclave_host/v7_adapter_package_store.dart';
 import 'package:conclave_host/v7_adapter_catalog.dart';
 import 'package:conclave_host/workspace_enrollment.dart';
+import 'package:conclave_host/workspace_transport.dart';
 
 Set<WorkerPermission> _configuredPermissions() {
   final configured = Platform.environment['CONCLAVE_WORKER_PERMISSIONS'];
@@ -237,6 +238,22 @@ Future<Host> buildWorkspaceRuntime(
             uri,
             authToken: config.authToken,
           ),
+          fallbackFactory: (uri) {
+            final gatewayPath = uri.path.indexOf('/api/workspace-gateway');
+            final basePath =
+                gatewayPath < 0 ? '' : uri.path.substring(0, gatewayPath);
+            final baseUri = uri.replace(
+              scheme: uri.scheme == 'wss' ? 'https' : 'http',
+              path: basePath,
+              query: null,
+              fragment: null,
+            );
+            return HttpLongPollWorkspaceTransport.connect(
+              baseUri: baseUri,
+              workspaceRuntimeId: config.hostId!,
+              runtimeCredential: config.authToken!,
+            );
+          },
         )
       : null;
   if (adapterCatalog != null) {

@@ -50,6 +50,7 @@ import {
   authorizeHostWorkspaceAction,
   extractBearerToken,
   hashToken,
+  timingSafeEqual,
   computePackageDigest,
   signPackageDigest,
   verifyPackageDigestSignature,
@@ -1115,7 +1116,51 @@ async function handleListWorkspaces(
             updatedAt: string;
           }>()
           .catch(() => ({ results: [] }));
-  return json({ workspaces: rows.results ?? [] });
+  const workspaces = await Promise.all(
+    (rows.results ?? []).map(async (raw) => {
+      const row = raw as Record<string, unknown>;
+      const workspaceId = typeof row.id === "string" ? row.id : null;
+      let activeTransport: "websocket" | "http_long_poll" | null = null;
+      if (
+        workspaceId &&
+        row.hasRuntimeIdentity &&
+        env.CONCLAVE_WORKSPACE_GATEWAY
+      ) {
+        try {
+          const response = await env.CONCLAVE_WORKSPACE_GATEWAY
+            .getByName(workspaceId)
+            .fetch("https://workspace-gateway/status");
+          if (response.ok) {
+            const status = (await response.json()) as {
+              online?: boolean;
+              activeTransport?: string | null;
+            };
+            if (
+              status.online &&
+              (status.activeTransport === "websocket" ||
+                status.activeTransport === "http_long_poll")
+            ) {
+              activeTransport = status.activeTransport;
+            }
+          }
+        } catch {
+          // Connection mode is an operational hint; preserve the Workspace
+          // row if its Gateway status cannot be read at this moment.
+        }
+      }
+      return {
+        ...row,
+        activeTransport,
+        connectionMode:
+          activeTransport === "websocket"
+            ? "Connected · WebSocket"
+            : activeTransport === "http_long_poll"
+              ? "Connected · HTTPS fallback"
+              : null,
+      };
+    }),
+  );
+  return json({ workspaces });
 }
 
 async function handleCreateWorkspace(
@@ -1243,6 +1288,449 @@ async function handleCreateWorkspacePairingIntent(
     },
     { status: 201 },
   );
+}
+
+const DESKTOP_HUMAN_AUDIENCE = "conclave.desktop.management" as const;
+const DESKTOP_HUMAN_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
+
+function randomSecret(prefix: string): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return `${prefix}${btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "")}`;
+}
+
+function randomUserCode(): string {
+  const bytes = crypto.getRandomValues(new Uint32Array(1));
+  return String((bytes[0] ?? 0) % 100_000_000).padStart(8, "0");
+}
+
+async function handleCreateDesktopAuthIntent(
+  request: Request,
+  env: SecurityEnv,
+): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as {
+    clientName?: unknown;
+    contractVersion?: unknown;
+  };
+  if (
+    body.contractVersion !== "1.0" ||
+    typeof body.clientName !== "string" ||
+    !body.clientName.trim()
+  ) {
+    throw new HttpError(
+      400,
+      "A supported contract version and client name are required",
+    );
+  }
+  const intentId = crypto.randomUUID();
+  const userCode = randomUserCode();
+  const pollToken = randomSecret("conclave_dap_");
+  const createdAt = new Date();
+  const expiresAt = new Date(createdAt.getTime() + 10 * 60_000);
+  await env.CONCLAVE_DB.prepare(
+    `INSERT INTO desktop_auth_intents
+       (id, user_code_hash, poll_token_hash, client_name, created_at, expires_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
+  )
+    .bind(
+      intentId,
+      await hashToken(userCode),
+      await hashToken(pollToken),
+      body.clientName.trim().slice(0, 128),
+      createdAt.toISOString(),
+      expiresAt.toISOString(),
+    )
+    .run();
+
+  const verificationUrl = new URL("/desktop-auth/approve", request.url);
+  verificationUrl.searchParams.set("intentId", intentId);
+  return json(
+    {
+      intentId,
+      userCode,
+      pollToken,
+      verificationUrl: verificationUrl.toString(),
+      expiresAt: expiresAt.toISOString(),
+      pollIntervalMs: 2000,
+    },
+    { status: 201 },
+  );
+}
+
+async function handleDesktopAuthIntentStatus(
+  request: Request,
+  env: SecurityEnv,
+  intentId: string,
+): Promise<Response> {
+  const pollToken = extractBearerToken(request.headers);
+  if (!pollToken)
+    throw new HttpError(401, "Desktop auth polling credential required");
+  const intent = await env.CONCLAVE_DB.prepare(
+    `SELECT expires_at AS expiresAt, approved_at AS approvedAt,
+            claimed_at AS claimedAt, denied_at AS deniedAt
+       FROM desktop_auth_intents WHERE id = ?1 AND poll_token_hash = ?2`,
+  )
+    .bind(intentId, await hashToken(pollToken))
+    .first<{
+      expiresAt: string;
+      approvedAt: string | null;
+      claimedAt: string | null;
+      deniedAt: string | null;
+    }>();
+  if (!intent) throw new HttpError(404, "Desktop auth intent not found");
+  const status = intent.claimedAt
+    ? "claimed"
+    : intent.deniedAt
+      ? "denied"
+      : intent.approvedAt
+        ? "approved"
+        : intent.expiresAt <= new Date().toISOString()
+          ? "expired"
+          : "pending";
+  return json({ intentId, status, expiresAt: intent.expiresAt });
+}
+
+async function handleApproveDesktopAuthIntent(
+  request: Request,
+  env: SecurityEnv,
+  intentId: string,
+): Promise<Response> {
+  const identity = await identityService.resolve(request, env);
+  if (!identity)
+    throw new HttpError(
+      401,
+      "Sign in to Conclave AX before approving Workspace sign-in",
+    );
+  await provisionConclaveUser(env.CONCLAVE_DB, identity);
+  const body = (await request.json().catch(() => ({}))) as {
+    userCode?: unknown;
+  };
+  if (typeof body.userCode !== "string" || !/^\d{8}$/.test(body.userCode)) {
+    throw new HttpError(
+      400,
+      "Enter the 8-digit code shown in Conclave Workspace",
+    );
+  }
+  const now = new Date().toISOString();
+  const attempt = await env.CONCLAVE_DB.prepare(
+    `UPDATE desktop_auth_intents SET approval_attempts = approval_attempts + 1
+      WHERE id = ?1 AND approved_at IS NULL AND claimed_at IS NULL
+        AND denied_at IS NULL AND expires_at > ?2 AND approval_attempts < 5`,
+  )
+    .bind(intentId, now)
+    .run();
+  if ((attempt.meta?.changes ?? 0) !== 1) {
+    throw new HttpError(
+      409,
+      "This sign-in request is invalid, expired, or unavailable",
+    );
+  }
+  const intent = await env.CONCLAVE_DB.prepare(
+    "SELECT user_code_hash AS userCodeHash FROM desktop_auth_intents WHERE id = ?1",
+  )
+    .bind(intentId)
+    .first<{ userCodeHash: string }>();
+  if (
+    !intent ||
+    !timingSafeEqual(intent.userCodeHash, await hashToken(body.userCode))
+  ) {
+    await env.CONCLAVE_DB.prepare(
+      `UPDATE desktop_auth_intents SET denied_at = ?1
+        WHERE id = ?2 AND approval_attempts >= 5 AND approved_at IS NULL`,
+    )
+      .bind(now, intentId)
+      .run();
+    throw new HttpError(409, "The code does not match this sign-in request");
+  }
+  const result = await env.CONCLAVE_DB.prepare(
+    `UPDATE desktop_auth_intents
+        SET approved_at = ?1, approved_user_id = ?2
+      WHERE id = ?3 AND user_code_hash = ?4 AND approved_at IS NULL
+        AND claimed_at IS NULL AND denied_at IS NULL AND expires_at > ?1`,
+  )
+    .bind(now, identity.userId, intentId, intent.userCodeHash)
+    .run();
+  if ((result.meta?.changes ?? 0) !== 1) {
+    throw new HttpError(
+      409,
+      "This sign-in request is invalid, expired, or already used",
+    );
+  }
+  return json({
+    approved: true,
+    approvedAt: now,
+    user: {
+      userId: identity.userId,
+      displayName: identity.name,
+      email: identity.email,
+    },
+  });
+}
+
+async function handleClaimDesktopAuthIntent(
+  request: Request,
+  env: SecurityEnv,
+  intentId: string,
+): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as {
+    pollToken?: unknown;
+  };
+  const pollToken = typeof body.pollToken === "string" ? body.pollToken : "";
+  if (!pollToken)
+    throw new HttpError(401, "Desktop auth polling credential required");
+  const intent = await env.CONCLAVE_DB.prepare(
+    `SELECT approved_user_id AS userId, expires_at AS expiresAt
+       FROM desktop_auth_intents
+      WHERE id = ?1 AND poll_token_hash = ?2 AND approved_at IS NOT NULL
+        AND claimed_at IS NULL AND denied_at IS NULL AND expires_at > ?3`,
+  )
+    .bind(intentId, await hashToken(pollToken), new Date().toISOString())
+    .first<{ userId: string; expiresAt: string }>();
+  if (!intent)
+    throw new HttpError(
+      409,
+      "Desktop sign-in is not approved, expired, or already claimed",
+    );
+  const user = await env.CONCLAVE_DB.prepare(
+    "SELECT id AS userId, email, display_name AS displayName FROM users WHERE id = ?1 AND status = 'active'",
+  )
+    .bind(intent.userId)
+    .first<{ userId: string; email: string; displayName: string }>();
+  if (!user) throw new HttpError(403, "Conclave account is unavailable");
+
+  const sessionId = crypto.randomUUID();
+  const credential = randomSecret("conclave_dhs_");
+  const tokenHash = await hashToken(credential);
+  const issuedAt = new Date();
+  const expiresAt = new Date(issuedAt.getTime() + DESKTOP_HUMAN_SESSION_MS);
+  const results = await env.CONCLAVE_DB.batch([
+    env.CONCLAVE_DB.prepare(
+      `UPDATE desktop_auth_intents SET claimed_at = ?1, claimed_session_id = ?2
+        WHERE id = ?3 AND poll_token_hash = ?4 AND approved_at IS NOT NULL
+          AND claimed_at IS NULL AND denied_at IS NULL AND expires_at > ?1`,
+    ).bind(
+      issuedAt.toISOString(),
+      sessionId,
+      intentId,
+      await hashToken(pollToken),
+    ),
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at)
+       SELECT ?1, ?2, ?3, ?4, ?5, ?5, ?6 FROM desktop_auth_intents
+        WHERE id = ?7 AND claimed_session_id = ?1`,
+    ).bind(
+      sessionId,
+      user.userId,
+      tokenHash,
+      DESKTOP_HUMAN_AUDIENCE,
+      issuedAt.toISOString(),
+      expiresAt.toISOString(),
+      intentId,
+    ),
+  ]);
+  const changes =
+    (results[0] as { meta?: { changes?: number } } | undefined)?.meta
+      ?.changes ?? 0;
+  if (changes !== 1)
+    throw new HttpError(409, "Desktop sign-in is already claimed or expired");
+  return json({
+    credential,
+    user: {
+      userId: user.userId,
+      displayName: user.displayName,
+      email: user.email,
+    },
+    issuedAt: issuedAt.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+    sessionId,
+    audience: DESKTOP_HUMAN_AUDIENCE,
+  });
+}
+
+async function handleRevokeDesktopHumanSession(
+  request: Request,
+  env: SecurityEnv,
+  sessionId: string,
+): Promise<Response> {
+  const credential = extractBearerToken(request.headers);
+  if (!credential) throw new HttpError(401, "Desktop human session required");
+  const now = new Date().toISOString();
+  const result = await env.CONCLAVE_DB.prepare(
+    `UPDATE desktop_human_sessions SET revoked_at = ?1
+      WHERE id = ?2 AND token_hash = ?3 AND revoked_at IS NULL AND expires_at > ?1`,
+  )
+    .bind(now, sessionId, await hashToken(credential))
+    .run();
+  if ((result.meta?.changes ?? 0) !== 1)
+    throw new HttpError(401, "Desktop human session is invalid or revoked");
+  return json({ revoked: true, revokedAt: now });
+}
+
+async function findDesktopHumanSession(
+  request: Request,
+  env: SecurityEnv,
+  sessionId?: string,
+) {
+  const credential = extractBearerToken(request.headers);
+  if (!credential) throw new HttpError(401, "Desktop human session required");
+  const now = new Date().toISOString();
+  const session = await env.CONCLAVE_DB.prepare(
+    `SELECT s.id AS sessionId, s.user_id AS userId, s.expires_at AS expiresAt,
+            u.email, u.display_name AS displayName
+       FROM desktop_human_sessions s JOIN users u ON u.id = s.user_id
+      WHERE s.token_hash = ?1 AND s.audience = ?2 AND s.revoked_at IS NULL
+        AND s.expires_at > ?3 AND u.status = 'active'
+        AND (?4 IS NULL OR s.id = ?4)`,
+  )
+    .bind(
+      await hashToken(credential),
+      DESKTOP_HUMAN_AUDIENCE,
+      now,
+      sessionId ?? null,
+    )
+    .first<{
+      sessionId: string;
+      userId: string;
+      expiresAt: string;
+      email: string;
+      displayName: string;
+    }>();
+  if (!session)
+    throw new HttpError(
+      401,
+      "Desktop human session is invalid, expired, or revoked",
+    );
+  await env.CONCLAVE_DB.prepare(
+    "UPDATE desktop_human_sessions SET last_used_at = ?1 WHERE id = ?2",
+  )
+    .bind(now, session.sessionId)
+    .run();
+  return { credential, session, now };
+}
+
+async function handleGetDesktopHumanSession(
+  request: Request,
+  env: SecurityEnv,
+): Promise<Response> {
+  const { session } = await findDesktopHumanSession(request, env);
+  return json({
+    sessionId: session.sessionId,
+    user: {
+      userId: session.userId,
+      displayName: session.displayName,
+      email: session.email,
+    },
+    audience: DESKTOP_HUMAN_AUDIENCE,
+    expiresAt: session.expiresAt,
+  });
+}
+
+async function handleRegisterWorkspaceFromDesktop(
+  request: Request,
+  env: SecurityEnv,
+): Promise<Response> {
+  const { session, now } = await findDesktopHumanSession(request, env);
+  const body = parseJson<Record<string, unknown>>(await request.text(), {});
+  const installationId = typeof body.installationId === "string" ? body.installationId.trim() : "";
+  const name = typeof body.proposedWorkspaceName === "string" ? body.proposedWorkspaceName.trim() : "";
+  const hostname = typeof body.hostname === "string" ? body.hostname.trim() : "";
+  const platform = body.platform;
+  const architecture = body.architecture;
+  const appVersion = typeof body.appVersion === "string" ? body.appVersion.trim() : "";
+  const capabilities = body.runtimeCapabilities;
+  if (body.contractVersion !== "1.0" || !/^install_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(installationId) || !name || name.length > 120 || /[\u0000-\u001f\u007f]/.test(name) || !hostname || hostname.length > 253 || /[\u0000-\u001f\u007f]/.test(hostname) || !["macos", "linux", "windows"].includes(String(platform)) || !["arm64", "x64", "x86"].includes(String(architecture)) || !appVersion || appVersion.length > 64 || !/^[0-9A-Za-z.+-]+$/.test(appVersion) || !capabilities || typeof capabilities !== "object" || Array.isArray(capabilities)) {
+    return json({ error: "Workspace registration details are invalid" }, { status: 400 });
+  }
+  const caps = capabilities as Record<string, unknown>;
+  const supported = caps.supportedRuntimes;
+  if (Object.keys(caps).some((key) => !["os", "arch", "appVersion", "supportedRuntimes", "maxConcurrentWorkers"].includes(key)) || caps.os !== platform || caps.arch !== architecture || caps.appVersion !== appVersion || !Array.isArray(supported) || supported.length > 16 || supported.some((x) => typeof x !== "string" || !/^[a-z0-9_-]{1,32}$/i.test(x)) || !Number.isInteger(caps.maxConcurrentWorkers) || (caps.maxConcurrentWorkers as number) < 1 || (caps.maxConcurrentWorkers as number) > 256) {
+    return json({ error: "Runtime capabilities are invalid" }, { status: 400 });
+  }
+  const bindings = await env.CONCLAVE_DB.prepare(
+    `SELECT i.id AS runtimeId, i.workspace_id AS workspaceId, i.revoked_at AS revokedAt,
+            w.owner_user_id AS ownerUserId, w.name AS workspaceName, w.status AS workspaceStatus
+       FROM workspace_runtime_identities i JOIN execution_workspaces w ON w.id = i.workspace_id
+      WHERE i.installation_id = ?1 ORDER BY i.created_at DESC`,
+  ).bind(installationId).all<{ runtimeId:string; workspaceId:string; revokedAt:string|null; ownerUserId:string; workspaceName:string; workspaceStatus:string }>();
+  const history = bindings.results ?? [];
+  const active = history.find((item) => item.revokedAt === null && item.workspaceStatus !== "revoked");
+  if (history.some((item) => item.ownerUserId !== session.userId)) {
+    return json({ error: "This installation is already owned by another account", code: "installation_already_owned" }, { status: 409 });
+  }
+  const existing = active ?? history[0];
+  const outcome = existing ? "recovered" : "created";
+  const workspaceId = existing?.workspaceId ?? `ws-${crypto.randomUUID()}`;
+  const workspaceName = existing?.workspaceName ?? name;
+  const runtimeId = `runtime-${crypto.randomUUID()}`;
+  const credential = `conclave_workspace_tok_${crypto.randomUUID().replace(/-/g, "")}`;
+  const credentialHash = await hashToken(credential);
+  const auditId = `audit-${crypto.randomUUID()}`;
+  const statements = [];
+  if (!existing) statements.push(env.CONCLAVE_DB.prepare(
+    `INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at) VALUES (?1, ?2, ?3, 'offline', ?4, ?4)`,
+  ).bind(workspaceId, session.userId, name, now));
+  if (active) statements.push(env.CONCLAVE_DB.prepare(
+    `UPDATE workspace_runtime_identities SET revoked_at = ?1 WHERE installation_id = ?2 AND revoked_at IS NULL`,
+  ).bind(now, installationId));
+  statements.push(env.CONCLAVE_DB.prepare(
+    `INSERT INTO workspace_runtime_identities (id, workspace_id, credential_key_ref, credential_token_hash, installation_id, created_at, revoked_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL)`,
+  ).bind(runtimeId, workspaceId, `workspace-runtime:${runtimeId}`, credentialHash, installationId, now));
+  statements.push(env.CONCLAVE_DB.prepare(
+    `INSERT INTO workspace_runtime_facts (workspace_id, platform, architecture, hostname, app_version, runtime_capabilities_json, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(workspace_id) DO UPDATE SET platform=excluded.platform, architecture=excluded.architecture, hostname=excluded.hostname, app_version=excluded.app_version, runtime_capabilities_json=excluded.runtime_capabilities_json, updated_at=excluded.updated_at`,
+  ).bind(workspaceId, platform, architecture, hostname, appVersion, JSON.stringify(caps), now));
+  statements.push(env.CONCLAVE_DB.prepare(
+    `INSERT INTO workspace_audit_log (id, workspace_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at) VALUES (?1, ?2, 'user', ?3, ?4, 'workspace_runtime', ?5, ?6, ?7)`,
+  ).bind(auditId, workspaceId, session.userId, outcome === "created" ? "workspace.registered" : "workspace.recovered", runtimeId, JSON.stringify({ installationId, hostname, platform, architecture, appVersion }), now));
+  try { await env.CONCLAVE_DB.batch(statements); } catch {
+    return json({ error: "Workspace registration changed concurrently; retry the request", code: "registration_conflict" }, { status: 409 });
+  }
+  const completedAt = new Date().toISOString();
+  return json({ outcome, workspaceId, workspaceRuntimeId: runtimeId, workspaceName, runtimeCredential: credential, credentialIssuedAt: completedAt, credentialExpiresAt: null, completedAt }, { status: 201 });
+}
+
+async function handleRotateDesktopHumanSession(
+  request: Request,
+  env: SecurityEnv,
+  sessionId: string,
+): Promise<Response> {
+  const {
+    credential: currentCredential,
+    session,
+    now,
+  } = await findDesktopHumanSession(request, env, sessionId);
+  const nextCredential = randomSecret("conclave_dhs_");
+  const expiresAt = new Date(
+    Date.now() + DESKTOP_HUMAN_SESSION_MS,
+  ).toISOString();
+  const result = await env.CONCLAVE_DB.prepare(
+    `UPDATE desktop_human_sessions SET token_hash = ?1,
+       last_used_at = ?2, expires_at = ?3
+      WHERE id = ?4 AND token_hash = ?5 AND revoked_at IS NULL`,
+  )
+    .bind(
+      await hashToken(nextCredential),
+      now,
+      expiresAt,
+      session.sessionId,
+      await hashToken(currentCredential),
+    )
+    .run();
+  if ((result.meta?.changes ?? 0) !== 1) {
+    throw new HttpError(401, "Desktop human session changed or was revoked");
+  }
+  return json({
+    credential: nextCredential,
+    user: {
+      userId: session.userId,
+      displayName: session.displayName,
+      email: session.email,
+    },
+    issuedAt: now,
+    expiresAt,
+    sessionId: session.sessionId,
+    audience: DESKTOP_HUMAN_AUDIENCE,
+  });
 }
 
 async function handleGetWorkspacePairingIntent(
@@ -8414,6 +8902,43 @@ async function handleWorkspaceGatewayConnect(
   }
 }
 
+async function handleWorkspaceRuntimeTransport(request: Request, env: SecurityEnv): Promise<Response> {
+  if (!env.CONCLAVE_WORKSPACE_GATEWAY) return json({ error: "Workspace Gateway is not configured" }, { status: 503 });
+  const url = new URL(request.url);
+  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+  if (!body) return json({ error: "Invalid request body" }, { status: 400 });
+  const authToken = extractBearerToken(request.headers);
+  if (!authToken) return json({ error: "Workspace runtime credential required" }, { status: 401 });
+  let workspaceId: string | null = null;
+  if (url.pathname === "/api/workspace-runtime/sessions") {
+    if (typeof body.workspaceRuntimeId !== "string") return json({ error: "workspaceRuntimeId is required" }, { status: 400 });
+    const authorized = await env.CONCLAVE_DB.prepare(
+      `SELECT wri.workspace_id AS workspaceId FROM workspace_runtime_identities wri
+       JOIN execution_workspaces ew ON ew.id = wri.workspace_id
+       WHERE wri.id = ?1 AND wri.credential_token_hash = ?2
+       AND wri.revoked_at IS NULL AND ew.status <> 'revoked'`,
+    ).bind(body.workspaceRuntimeId, await hashToken(authToken)).first<{ workspaceId: string }>();
+    workspaceId = authorized?.workspaceId ?? null;
+  } else {
+    if (typeof body.sessionId !== "string") return json({ error: "sessionId is required" }, { status: 400 });
+    const session = await env.CONCLAVE_DB.prepare(
+      "SELECT workspace_id AS workspaceId FROM workspace_sessions WHERE id = ?1 AND disconnected_at IS NULL",
+    ).bind(body.sessionId).first<{ workspaceId: string }>();
+    workspaceId = session?.workspaceId ?? null;
+  }
+  if (!workspaceId) return json({ error: "Runtime session not found or credential revoked" }, { status: 401 });
+  const stub = env.CONCLAVE_WORKSPACE_GATEWAY.getByName(workspaceId);
+  let internalPath = "/runtime/" + url.pathname.split("/").pop();
+  if (url.pathname === "/api/workspace-runtime/sessions") internalPath = "/runtime/sessions";
+  else if (url.pathname.endsWith("/close")) internalPath = "/runtime/close";
+  const forwarded = new Request(`https://workspace-gateway.internal${internalPath}`, {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${authToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return stub.fetch(forwarded);
+}
+
 export async function handleHostProtocolMessage(
   request: Request,
   env: SecurityEnv,
@@ -11128,6 +11653,14 @@ export {
   resolveWorkflowInstanceId,
   handleSession,
   handleSessionLogout,
+  handleCreateDesktopAuthIntent,
+  handleDesktopAuthIntentStatus,
+  handleApproveDesktopAuthIntent,
+  handleClaimDesktopAuthIntent,
+  handleRevokeDesktopHumanSession,
+  handleGetDesktopHumanSession,
+  handleRegisterWorkspaceFromDesktop,
+  handleRotateDesktopHumanSession,
   handleCompleteStepUp,
   handleListPendingInvitations,
   handleConnectorTaskRequest,
@@ -11156,6 +11689,7 @@ export {
   handleWorkspaceMemberStatus,
   handleInternalDispatchTaskAssignment,
   handleWorkspaceGatewayConnect,
+  handleWorkspaceRuntimeTransport,
   handleRedeemWorkspaceEnrollment,
   handleUnpairWorkspaceRuntime,
   handleEnrollHost,

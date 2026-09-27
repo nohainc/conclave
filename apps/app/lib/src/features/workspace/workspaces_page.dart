@@ -14,29 +14,24 @@ class WorkspacesPage extends StatefulWidget {
     this.workspaceWorkers = const [],
     this.initialWorkspaceId,
     this.onSelectWorkspace,
-    required this.onAdd,
-    required this.onRename,
-    required this.onUpdate,
-    required this.onRevoke,
+    // Retained as optional compatibility inputs while callers are audited.
+    VoidCallback? onAdd,
+    ValueChanged<StudioWorkspace>? onRename,
+    ValueChanged<StudioWorkspace>? onUpdate,
+    ValueChanged<StudioWorkspace>? onRevoke,
+    Future<void> Function(StudioWorkspace)? onConnect,
+    Future<void> Function(StudioWorker worker, String action)?
+        onWorkspaceWorkerScheduling,
     required this.onGrant,
     this.onOpenDownloads,
-    this.onConnect,
-    this.onWorkspaceWorkerScheduling,
   });
 
   final List<StudioWorkspace> workspaces;
   final List<StudioWorker> workspaceWorkers;
   final String? initialWorkspaceId;
   final ValueChanged<String?>? onSelectWorkspace;
-  final VoidCallback onAdd;
-  final ValueChanged<StudioWorkspace> onRename;
-  final ValueChanged<StudioWorkspace> onUpdate;
-  final ValueChanged<StudioWorkspace> onRevoke;
   final ValueChanged<StudioWorkspace> onGrant;
   final VoidCallback? onOpenDownloads;
-  final Future<void> Function(StudioWorkspace)? onConnect;
-  final Future<void> Function(StudioWorker worker, String action)?
-      onWorkspaceWorkerScheduling;
 
   @override
   State<WorkspacesPage> createState() => _WorkspacesPageState();
@@ -99,26 +94,11 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text('Workspaces',
-                        style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.3)),
-                  ),
-                  if (widget.workspaces.isNotEmpty)
-                    Tooltip(
-                      message: 'Connect Workspace',
-                      child: FilledButton.icon(
-                        onPressed: widget.onAdd,
-                        icon: const Icon(Icons.add),
-                        label: const Text('Connect Workspace'),
-                      ),
-                    ),
-                ],
-              ),
+              const Text('Workspaces',
+                  style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.3)),
               const SizedBox(height: 6),
               Text(
                 'Execution capacity, Workers, project access, and recent activity.',
@@ -127,9 +107,7 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
               ),
               const SizedBox(height: 12),
               if (widget.workspaces.isEmpty)
-                _EmptyWorkspaces(
-                    onAdd: widget.onAdd,
-                    onOpenDownloads: widget.onOpenDownloads)
+                _EmptyWorkspaces(onOpenDownloads: widget.onOpenDownloads)
               else
                 ...widget.workspaces.map((workspace) {
                   final expanded = _expanded.contains(workspace.id);
@@ -165,29 +143,6 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
                               ),
                               _StatusPill(
                                   status: _statusLabel(workspace.status)),
-                              PopupMenuButton<String>(
-                                tooltip: 'Workspace actions',
-                                onSelected: (action) => switch (action) {
-                                  'rename' => widget.onRename(workspace),
-                                  'update' => widget.onUpdate(workspace),
-                                  'grant' => widget.onGrant(workspace),
-                                  'revoke' => widget.onRevoke(workspace),
-                                  _ => null,
-                                },
-                                itemBuilder: (_) => const [
-                                  PopupMenuItem(
-                                      value: 'rename', child: Text('Rename')),
-                                  PopupMenuItem(
-                                      value: 'update',
-                                      child: Text('Update Workspace')),
-                                  PopupMenuItem(
-                                      value: 'grant',
-                                      child: Text('Grant to Project')),
-                                  PopupMenuItem(
-                                      value: 'revoke',
-                                      child: Text('Unpair Workspace')),
-                                ],
-                              ),
                               Icon(expanded
                                   ? Icons.expand_less
                                   : Icons.expand_more),
@@ -206,12 +161,7 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
                               workspace: workspace,
                               workers: localWorkers,
                               onGrant: () => widget.onGrant(workspace),
-                              onUpdate: () => widget.onUpdate(workspace),
-                              onConnect: widget.onConnect == null
-                                  ? null
-                                  : () => widget.onConnect!(workspace),
                               onOpenDownloads: widget.onOpenDownloads,
-                              onScheduling: widget.onWorkspaceWorkerScheduling,
                             ),
                           ),
                       ],
@@ -257,28 +207,19 @@ class _WorkspaceCardBody extends StatelessWidget {
     required this.workspace,
     required this.workers,
     required this.onGrant,
-    required this.onUpdate,
-    required this.onConnect,
     required this.onOpenDownloads,
-    required this.onScheduling,
   });
 
   final StudioWorkspace workspace;
   final List<StudioWorker> workers;
   final VoidCallback onGrant;
-  final VoidCallback onUpdate;
-  final Future<void> Function()? onConnect;
   final VoidCallback? onOpenDownloads;
-  final Future<void> Function(StudioWorker, String)? onScheduling;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final installed =
         workspace.appVersion.isNotEmpty && workspace.appVersion != '—';
-    final legacyPlaceholder = !workspace.hasRuntimeIdentity &&
-        const {'offline', 'enrolled', 'not_connected', 'pairing'}
-            .contains(workspace.status.toLowerCase());
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -333,21 +274,12 @@ class _WorkspaceCardBody extends StatelessWidget {
                   : 'No Workers have synced yet. Configure your first Worker in Conclave Workspace on this computer.',
               style: TextStyle(color: theme.colorScheme.onSurfaceVariant))
         else
-          ...workers.map((worker) => _WorkerRow(
-                worker: worker,
-                onScheduling: onScheduling,
-              )),
+          ...workers.map((worker) => _WorkerRow(worker: worker)),
         const SizedBox(height: 12),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: [
-            if (legacyPlaceholder && onConnect != null)
-              OutlinedButton.icon(
-                onPressed: onConnect,
-                icon: const Icon(Icons.link_outlined),
-                label: const Text('Connect Machine'),
-              ),
             if (onOpenDownloads != null)
               OutlinedButton.icon(
                 onPressed: onOpenDownloads,
@@ -356,11 +288,6 @@ class _WorkspaceCardBody extends StatelessWidget {
                     ? 'Workspace downloads'
                     : 'Download Conclave Workspace'),
               ),
-            TextButton.icon(
-              onPressed: onUpdate,
-              icon: const Icon(Icons.system_update_outlined),
-              label: const Text('Update'),
-            ),
           ],
         ),
       ],
@@ -369,9 +296,8 @@ class _WorkspaceCardBody extends StatelessWidget {
 }
 
 class _WorkerRow extends StatefulWidget {
-  const _WorkerRow({required this.worker, required this.onScheduling});
+  const _WorkerRow({required this.worker});
   final StudioWorker worker;
-  final Future<void> Function(StudioWorker, String)? onScheduling;
 
   @override
   State<_WorkerRow> createState() => _WorkerRowState();
@@ -383,10 +309,6 @@ class _WorkerRowState extends State<_WorkerRow> {
   @override
   Widget build(BuildContext context) {
     final worker = widget.worker;
-    final action = switch (worker.schedulingState) {
-      'enabled' || 'draining' => 'disable',
-      _ => 'enable',
-    };
     final readiness = _readinessLabel(worker.status);
     final credential = _credentialLabel(worker.credentialStatus);
     return Column(
@@ -414,22 +336,8 @@ class _WorkerRowState extends State<_WorkerRow> {
               ],
             ),
           ),
-          trailing: widget.onScheduling == null
-              ? Icon(_showDiagnostics ? Icons.expand_less : Icons.expand_more)
-              : Wrap(
-                  spacing: 2,
-                  children: [
-                    TextButton(
-                      onPressed: () => widget.onScheduling!(worker, action),
-                      child: Text(action == 'enable' ? 'Enable' : 'Disable'),
-                    ),
-                    if (worker.schedulingState == 'enabled')
-                      TextButton(
-                        onPressed: () => widget.onScheduling!(worker, 'drain'),
-                        child: const Text('Drain'),
-                      ),
-                  ],
-                ),
+          trailing:
+              Icon(_showDiagnostics ? Icons.expand_less : Icons.expand_more),
         ),
         if (_showDiagnostics)
           Padding(
@@ -565,8 +473,7 @@ class _StatusPill extends StatelessWidget {
 }
 
 class _EmptyWorkspaces extends StatelessWidget {
-  const _EmptyWorkspaces({required this.onAdd, required this.onOpenDownloads});
-  final VoidCallback onAdd;
+  const _EmptyWorkspaces({required this.onOpenDownloads});
   final VoidCallback? onOpenDownloads;
 
   @override
@@ -579,11 +486,9 @@ class _EmptyWorkspaces extends StatelessWidget {
                 style: TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             const Text(
-                'Connect a computer running Conclave Workspace to make local Workers available to your Projects.'),
+                'Register a Workspace from the Conclave Workspace desktop app. Its status and Workers will appear here for Project activity.'),
             const SizedBox(height: 14),
             Wrap(spacing: 8, children: [
-              FilledButton(
-                  onPressed: onAdd, child: const Text('Connect Workspace')),
               if (onOpenDownloads != null)
                 OutlinedButton(
                     onPressed: onOpenDownloads,

@@ -31,49 +31,7 @@ void main() {
     architecture: '—',
   );
 
-  group('Phase 10: Workspace Creation & Explicit Pairing Acceptance', () {
-    test('pairing intent is created without a permanent Workspace', () async {
-      final requests = <http.BaseRequest>[];
-      final client = MockClient((request) async {
-        requests.add(request);
-        if (request.method == 'POST' &&
-            request.url.path == '/api/workspace-pairing-intents') {
-          return http.Response(
-            jsonEncode({
-              'id': 'pair-1',
-              'token': 'conclave_pair_opaque-once',
-              'status': 'pending',
-              'createdAt': '2026-09-26T12:00:00Z',
-              'expiresAt': '2026-09-26T12:15:00Z',
-            }),
-            201,
-          );
-        }
-        return http.Response('{"error":"not_found"}', 404);
-      });
-      final api = StudioApiClient(
-        baseUrl: 'https://cloud.test/api',
-        client: client,
-      );
-
-      final created = await api.createWorkspacePairingIntent();
-
-      expect(created.id, 'pair-1');
-      expect(created.token, 'conclave_pair_opaque-once');
-      expect(created.status, 'pending');
-      expect(requests, hasLength(1));
-      expect(requests.single.url.path, '/api/workspace-pairing-intents');
-
-      final body = jsonDecode((requests.single as http.Request).body)
-          as Map<String, dynamic>;
-      expect(body, {'expiresMinutes': 15});
-
-      expect(
-        requests.any((req) => req.url.path == '/api/workspaces'),
-        isFalse,
-      );
-    });
-
+  group('Phase 10: Workspace Enrollment Acceptance', () {
     test('Enrollment code is created only on explicit Connect machine action',
         () async {
       final paths = <String>[];
@@ -102,11 +60,9 @@ void main() {
     });
 
     testWidgets(
-        'Full Pairing Flow: Not connected -> Connect machine -> Pairing -> Online with platform',
+        'Workspace operational status progresses from not connected to online',
         (tester) async {
-      var connectMachineTriggered = false;
-
-      // 1. Initial State: Not connected
+      // 1. Initial State: Not connected. AX only observes this state.
       await tester.pumpWidget(scaffold(WorkspacesPage(
         workspaces: const [initialWorkspace],
         onAdd: () {},
@@ -114,18 +70,14 @@ void main() {
         onUpdate: (_) {},
         onRevoke: (_) {},
         onGrant: (_) {},
-        onConnect: (_) async => connectMachineTriggered = true,
       )));
       await tester.pumpAndSettle();
 
       expect(find.text('Connection status'), findsOneWidget);
       expect(find.text('Not connected'), findsNWidgets(2));
       expect(find.text('Machine'), findsOneWidget);
-      expect(find.text('Connect Machine'), findsOneWidget);
-
-      await tester.ensureVisible(find.text('Connect Machine'));
-      await tester.tap(find.text('Connect Machine'));
-      expect(connectMachineTriggered, isTrue);
+      expect(find.text('Connect Machine'), findsNothing);
+      expect(find.text('Pairing code'), findsNothing);
 
       // 2. Transition State: Pairing
       const pairingWorkspace = StudioWorkspace(

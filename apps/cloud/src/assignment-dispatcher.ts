@@ -93,6 +93,9 @@ async function dispatchWorkspaceWorkerAssignment(
       if (!response.ok) return false;
       const status = (await response.json()) as {
         online?: boolean;
+        // `online` describes the logical runtime session. Transport is
+        // diagnostic only; both WebSocket and long-poll are dispatchable.
+        activeTransport?: "websocket" | "http_long_poll" | null;
         workspaceRuntimeId?: string | null;
         executionWorkspaceId?: string | null;
       };
@@ -249,6 +252,8 @@ async function dispatchWorkspaceWorkerAssignment(
     const stub = env.CONCLAVE_WORKSPACE_GATEWAY.get(
       env.CONCLAVE_WORKSPACE_GATEWAY.idFromName(target.workspaceId),
     );
+    // Dispatch through the Workspace Gateway's logical outbound path. The
+    // Gateway writes to its active WebSocket or long-poll event queue.
     const response = await stub.fetch("http://gateway/dispatch-assignment", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

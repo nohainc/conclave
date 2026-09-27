@@ -198,7 +198,13 @@ Adapters are infrastructure, not separately installed product apps.
 
 ## 5. Workspace lifecycle
 
-### 5.1 Pair an installation
+### 5.1 Legacy pairing compatibility flow
+
+This subsection documents the compatibility path retained for older supported
+desktop releases. Current AX and desktop builds do not expose this flow. Cloud
+pairing endpoints and `workspace_pairing_intents` remain until the published
+desktop compatibility window has elapsed; the removal gate is tracked in
+`docs/roadmaps/WORKSPACE_AUTH_TRANSPORT_IMPLEMENTATION.md`.
 
 Conclave AX creates a short-lived, owner-scoped pairing intent. No permanent
 Workspace exists yet, and Cloud stores only a hash of the one-time code. The

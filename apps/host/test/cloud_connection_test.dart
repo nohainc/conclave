@@ -8,10 +8,11 @@ import 'package:conclave_protocol/workspace_runtime_protocol.dart'
     show workspaceRuntimeProtocolVersion;
 import 'package:conclave_host/worker_executor.dart';
 import 'package:conclave_host/worker_protocol.dart';
+import 'package:conclave_host/workspace_transport.dart';
 import 'package:test/test.dart';
 import 'fixture_copy.dart';
 
-class FakeSocket implements HostCloudSocket {
+class FakeSocket implements WorkspaceTransport {
   final controller = StreamController<Object?>();
   final sent = <Object>[];
 
@@ -59,6 +60,79 @@ void main() {
     expect(payload['hostId'], 'host-1');
     expect(payload['workspaceId'], 'workspace-1');
     expect(payload['capabilities'], isA<Map<String, dynamic>>());
+    await connection.close();
+  });
+
+  test('hands fallback back to WSS only after sync reconciliation', () async {
+    final fallback = FakeSocket();
+    final recovered = FakeSocket();
+    var socketAttempts = 0;
+    final connection = HostCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-handover'),
+      hostId: 'runtime-handover',
+      workspaceId: 'workspace-handover',
+      factory: (_) async {
+        socketAttempts++;
+        if (socketAttempts <= 2) throw const SocketException('offline');
+        return recovered;
+      },
+      fallbackFactory: (_) async => fallback,
+      workerInventoryProvider: () async => const [],
+      heartbeat: const Duration(hours: 1),
+      webSocketFailureLimit: 2,
+      webSocketProbeInterval: const Duration(milliseconds: 20),
+      reconnectBaseDelay: const Duration(milliseconds: 1),
+      reconnectMaxDelay: const Duration(milliseconds: 2),
+    );
+
+    Future<void> acknowledge(FakeSocket socket, String id) async {
+      final messages = socket.sent
+          .map((item) => jsonDecode(item as String) as Map<String, dynamic>);
+      final hello =
+          messages.firstWhere((item) => item['type'] == 'workspace.hello');
+      socket.controller.add(jsonEncode({
+        'protocol': 'conclave.workspace-runtime-protocol',
+        'protocolVersion': workspaceRuntimeProtocolVersion,
+        'messageId': '$id-hello-ack',
+        'correlationId': hello['messageId'],
+        'timestamp': DateTime.now().toUtc().toIso8601String(),
+        'type': 'workspace.hello.ack',
+        'workspaceRuntimeId': 'runtime-handover',
+        'executionWorkspaceId': 'workspace-handover',
+        'payload': {'sessionId': '$id-session'},
+      }));
+      await waitFor(() => socket.sent.any((item) =>
+          (jsonDecode(item as String) as Map<String, dynamic>)['type'] ==
+          'workspace.sync.request'));
+      final sync = socket.sent
+          .map((item) => jsonDecode(item as String) as Map<String, dynamic>)
+          .firstWhere((item) => item['type'] == 'workspace.sync.request');
+      socket.controller.add(jsonEncode({
+        'protocol': 'conclave.workspace-runtime-protocol',
+        'protocolVersion': workspaceRuntimeProtocolVersion,
+        'messageId': '$id-sync-result',
+        'correlationId': sync['messageId'],
+        'timestamp': DateTime.now().toUtc().toIso8601String(),
+        'type': 'workspace.sync.result',
+        'workspaceRuntimeId': 'runtime-handover',
+        'executionWorkspaceId': 'workspace-handover',
+        'payload': {'assignmentStates': []},
+      }));
+      await waitFor(
+          () => connection.connectionStage == HostConnectionStage.ready);
+    }
+
+    await connection.connect();
+    expect(connection.activeTransportMode, 'http_long_poll');
+    await acknowledge(fallback, 'fallback');
+    await waitFor(() => socketAttempts == 3);
+    expect(fallback.controller.isClosed, isTrue);
+    await waitFor(
+        () => connection.activeTransportMode == 'switching_to_websocket');
+    expect(connection.connectionStage, HostConnectionStage.authenticating);
+    await acknowledge(recovered, 'recovered');
+    expect(connection.activeTransportMode, 'websocket');
     await connection.close();
   });
 

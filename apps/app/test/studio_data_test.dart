@@ -49,27 +49,6 @@ class _ReadModelClient extends http.BaseClient {
 }
 
 void main() {
-  test('pairing status refresh retains the one-time copyable code', () {
-    const created = StudioWorkspacePairingIntent(
-      id: 'pair-1',
-      status: 'pending',
-      expiresAt: '2026-09-27T12:00:00.000Z',
-      createdAt: '2026-09-27T11:45:00.000Z',
-      token: 'conclave_pair_one-time-code',
-    );
-    const status = StudioWorkspacePairingIntent(
-      id: 'pair-1',
-      status: 'pending',
-      expiresAt: '2026-09-27T12:00:00.000Z',
-      createdAt: '2026-09-27T11:45:00.000Z',
-    );
-
-    final refreshed = created.withStatus(status);
-
-    expect(refreshed.token, created.token);
-    expect(refreshed.status, 'pending');
-  });
-
   test('loads and clears the Cloud session boundary', () async {
     final client = _JsonClient({
       'authenticated': true,
@@ -492,35 +471,6 @@ void main() {
     await api.revokeWorkspace(workspaceId: 'workspace-1');
     expect(client.lastRequest?.method, 'DELETE');
     expect(client.lastRequest?.url.path, '/api/workspaces/workspace-1');
-  });
-
-  test('AX reads claimed pairing status and resolves its Workspace ID',
-      () async {
-    final client = _JsonClient({
-      'pairingIntent': {
-        'id': 'pairing-1',
-        'status': 'claimed',
-        'workspaceId': 'workspace-paired',
-        'createdAt': '2026-09-26T12:00:00Z',
-        'expiresAt': '2026-09-26T12:15:00Z',
-      },
-    }, statusCode: 200);
-    final api = StudioApiClient(
-      baseUrl: 'https://conclave.test/api',
-      client: client,
-    );
-
-    final intent = await api.getWorkspacePairingIntent(
-      pairingIntentId: 'pairing-1',
-    );
-
-    expect(client.lastRequest?.method, 'GET');
-    expect(
-      client.lastRequest?.url.path,
-      '/api/workspace-pairing-intents/pairing-1',
-    );
-    expect(intent.status, 'claimed');
-    expect(intent.workspaceId, 'workspace-paired');
   });
 
   test('creates an AI Account with Host-local setup metadata', () async {

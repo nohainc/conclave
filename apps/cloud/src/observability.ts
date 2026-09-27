@@ -13,7 +13,7 @@ export interface CorrelationContext {
 }
 
 const SECRET_KEY =
-  /(secret|token|password|api[_-]?key|authorization|cookie|raw[_-]?credential|private[_-]?key)/i;
+  /(secret|token|password|api[_-]?key|authorization|cookie|credential(?!profile|status|id)|bearer|user[_-]?code|private[_-]?key)/i;
 const MAX_STRING_LENGTH = 512;
 const MAX_ARRAY_LENGTH = 50;
 const MAX_OBJECT_KEYS = 80;

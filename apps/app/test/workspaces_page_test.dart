@@ -34,6 +34,8 @@ void main() {
         'architecture': 'arm64',
         'hostname': 'Vitalii-MacBook-Pro',
         'appVersion': '1.0.3',
+        'activeTransport': 'http_long_poll',
+        'connectionMode': 'Connected · HTTPS fallback',
         'runtimeCapabilitiesJson': '["dart", "shell"]',
       });
 
@@ -42,6 +44,8 @@ void main() {
       expect(workspace.architecture, 'arm64');
       expect(workspace.hostname, 'Vitalii-MacBook-Pro');
       expect(workspace.appVersion, '1.0.3');
+      expect(workspace.activeTransport, 'http_long_poll');
+      expect(workspace.connectionMode, 'Connected · HTTPS fallback');
       expect(workspace.runtimeCapabilities, ['dart', 'shell']);
     });
 
@@ -61,6 +65,8 @@ void main() {
         'workerCount': 3,
         'activeTaskCount': 2,
         'hasRuntimeIdentity': 1,
+        'activeTransport': 'http_long_poll',
+        'connectionMode': 'Connected · HTTPS fallback',
       });
 
       expect(workspace.runtimeCapabilities,
@@ -78,6 +84,7 @@ void main() {
 
       expect(find.text('Vitalii’s MacBook Pro'), findsOneWidget);
       expect(find.text('vitalii-macbook.local'), findsOneWidget);
+      expect(find.text('Connected · HTTPS fallback'), findsOneWidget);
       expect(find.text('1.4.2'), findsOneWidget);
       expect(find.text('dart · Up to 2 concurrent Workers'), findsOneWidget);
       expect(find.textContaining('3 Workers'), findsOneWidget);
@@ -107,14 +114,12 @@ void main() {
       expect(find.textContaining('package '), findsNothing);
     });
 
-    testWidgets('shows the Workspace list without page-level tabs',
+    testWidgets('shows the Workspace list without lifecycle controls',
         (tester) async {
       final snapshot = studioFixtureSnapshot();
-      var addWorkspaceCalled = false;
 
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: snapshot.workspaces,
-        onAdd: () => addWorkspaceCalled = true,
         onRename: (_) {},
         onUpdate: (_) {},
         onRevoke: (_) {},
@@ -127,8 +132,10 @@ void main() {
       expect(find.text(snapshot.workspaces.first.name), findsOneWidget);
       expect(find.widgetWithText(Tab, 'AI Accounts'), findsNothing);
 
-      await tester.tap(find.byTooltip('Connect Workspace'));
-      expect(addWorkspaceCalled, isTrue);
+      expect(find.byTooltip('Connect Workspace'), findsNothing);
+      expect(find.text('Rename'), findsNothing);
+      expect(find.text('Update Workspace'), findsNothing);
+      expect(find.text('Unpair Workspace'), findsNothing);
 
       expect(find.text('Connect Account'), findsNothing);
       expect(find.text('Make available'), findsNothing);
@@ -201,13 +208,11 @@ void main() {
       expect(find.text('Add legacy Cloud Worker'), findsNothing);
     });
 
-    testWidgets('keeps Connect Workspace available when none exist',
+    testWidgets('empty state explains desktop registration and offers download',
         (tester) async {
-      var addWorkspaceCalled = false;
       var downloadsOpened = false;
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: const [],
-        onAdd: () => addWorkspaceCalled = true,
         onOpenDownloads: () => downloadsOpened = true,
         onRename: (_) {},
         onUpdate: (_) {},
@@ -217,8 +222,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('No Workspaces connected'), findsOneWidget);
-      await tester.tap(find.text('Connect Workspace'));
-      expect(addWorkspaceCalled, isTrue);
+      expect(find.text('Connect Workspace'), findsNothing);
+      expect(
+          find.textContaining(
+              'Register a Workspace from the Conclave Workspace desktop app'),
+          findsOneWidget);
       await tester.tap(find.text('Download Conclave Workspace'));
       expect(downloadsOpened, isTrue);
     });
@@ -410,11 +418,9 @@ void main() {
           findsOneWidget);
       expect(find.text('Allowed models'), findsNothing);
 
-      await tester.ensureVisible(find.text('Disable'));
-      await tester.tap(find.text('Disable'));
-      await tester.ensureVisible(find.text('Drain'));
-      await tester.tap(find.text('Drain'));
-      expect(actions, ['disable', 'drain']);
+      expect(find.text('Disable'), findsNothing);
+      expect(find.text('Drain'), findsNothing);
+      expect(actions, isEmpty);
     });
 
     testWidgets('Workers are grouped only under their owning Workspace ID',
@@ -513,8 +519,7 @@ void main() {
       );
     });
 
-    testWidgets('disconnected Workspace offers the Connect Machine flow',
-        (tester) async {
+    testWidgets('disconnected Workspace stays read-only', (tester) async {
       StudioWorkspace? connectedWorkspace;
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: const [
@@ -535,10 +540,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Offline'), findsNWidgets(2));
-      expect(find.text('Connect Machine'), findsOneWidget);
-      await tester.ensureVisible(find.text('Connect Machine'));
-      await tester.tap(find.text('Connect Machine'));
-      expect(connectedWorkspace?.id, 'workspace-offline');
+      expect(find.text('Connect Machine'), findsNothing);
+      expect(connectedWorkspace, isNull);
     });
 
     testWidgets('zero Workers explains local desktop configuration',
@@ -563,7 +566,7 @@ void main() {
       );
     });
 
-    testWidgets('disabled Worker exposes the Enable scheduling action',
+    testWidgets('disabled Worker displays scheduling state without controls',
         (tester) async {
       final actions = <String>[];
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
@@ -603,9 +606,8 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      await tester.ensureVisible(find.text('Enable'));
-      await tester.tap(find.text('Enable'));
-      expect(actions, ['enable']);
+      expect(find.text('Enable'), findsNothing);
+      expect(actions, isEmpty);
     });
 
     testWidgets('renders without layout exceptions in a scroll view',

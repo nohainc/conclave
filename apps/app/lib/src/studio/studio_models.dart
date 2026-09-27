@@ -630,48 +630,6 @@ class StudioWorkspaceEnrollment {
       );
 }
 
-class StudioWorkspacePairingIntent {
-  const StudioWorkspacePairingIntent({
-    required this.id,
-    required this.status,
-    required this.expiresAt,
-    required this.createdAt,
-    this.token,
-    this.workspaceId,
-  });
-
-  final String id;
-  final String status;
-  final String expiresAt;
-  final String createdAt;
-  final String? token;
-  final String? workspaceId;
-
-  /// Applies a status poll while retaining the one-time token returned only
-  /// by create/regenerate responses.
-  StudioWorkspacePairingIntent withStatus(
-    StudioWorkspacePairingIntent status,
-  ) =>
-      StudioWorkspacePairingIntent(
-        id: status.id,
-        status: status.status,
-        expiresAt: status.expiresAt,
-        createdAt: status.createdAt,
-        token: status.token ?? token,
-        workspaceId: status.workspaceId,
-      );
-
-  factory StudioWorkspacePairingIntent.fromJson(Map<String, dynamic> json) =>
-      StudioWorkspacePairingIntent(
-        id: _string(json, 'id'),
-        status: _string(json, 'status', 'pending'),
-        expiresAt: _string(json, 'expiresAt'),
-        createdAt: _string(json, 'createdAt'),
-        token: _string(json, 'token').isEmpty ? null : _string(json, 'token'),
-        workspaceId: json['workspaceId']?.toString(),
-      );
-}
-
 class StudioCredentialProfile {
   const StudioCredentialProfile({
     required this.id,
@@ -1032,6 +990,8 @@ class StudioWorkspace {
     this.architecture = '—',
     this.hostname = '—',
     this.appVersion = '—',
+    this.activeTransport,
+    this.connectionMode,
     this.runtimeCapabilities = const [],
     this.factsUpdatedAt,
     this.updateChannel = 'stable',
@@ -1051,6 +1011,8 @@ class StudioWorkspace {
   final String architecture;
   final String hostname;
   final String appVersion;
+  final String? activeTransport;
+  final String? connectionMode;
   final List<String> runtimeCapabilities;
   final String? factsUpdatedAt;
   final String updateChannel;
@@ -1073,6 +1035,8 @@ class StudioWorkspace {
         architecture: _string(json, 'architecture'),
         hostname: _string(json, 'hostname'),
         appVersion: _string(json, 'appVersion'),
+        activeTransport: json['activeTransport']?.toString(),
+        connectionMode: json['connectionMode']?.toString(),
         runtimeCapabilities:
             _runtimeCapabilityLabels(json, 'runtimeCapabilitiesJson'),
         factsUpdatedAt: json['factsUpdatedAt']?.toString(),
@@ -1101,6 +1065,8 @@ class StudioWorkspace {
         architecture: architecture,
         hostname: hostname,
         appVersion: appVersion,
+        activeTransport: activeTransport,
+        connectionMode: connectionMode,
         runtimeCapabilities: runtimeCapabilities,
         factsUpdatedAt: factsUpdatedAt,
         updateChannel: updateChannel,

@@ -30,12 +30,24 @@ export async function routeWorkerRequest(
     const workspaceEnrollmentRedeem =
       request.method === "POST" &&
       url.pathname === "/api/workspace-runtime/enroll";
+    const desktopWorkspaceRegistration = request.method === "POST" &&
+      url.pathname === "/api/workspace-runtime/register";
     const workspaceRuntimeUnpair =
       request.method === "POST" &&
       url.pathname === "/api/workspace-runtime/unpair";
+    const workspaceRuntimeTransport = request.method === "POST" &&
+      (url.pathname === "/api/workspace-runtime/sessions" ||
+        url.pathname === "/api/workspace-runtime/events" ||
+        url.pathname === "/api/workspace-runtime/poll" ||
+        /^\/api\/workspace-runtime\/sessions\/[^/]+\/close$/.test(url.pathname));
+    const desktopAuthPath = url.pathname.startsWith("/api/desktop-auth/");
+    const desktopAuthCookieMutation =
+      desktopAuthPath && !url.pathname.endsWith("/approve");
     if (
-      !workspaceEnrollmentRedeem &&
+      !workspaceEnrollmentRedeem && !desktopWorkspaceRegistration &&
       !workspaceRuntimeUnpair &&
+      !workspaceRuntimeTransport &&
+      !desktopAuthCookieMutation &&
       (request.method === "POST" ||
         request.method === "PUT" ||
         request.method === "PATCH" ||
@@ -46,8 +58,73 @@ export async function routeWorkerRequest(
     if (workspaceEnrollmentRedeem) {
       return await handlers.handleRedeemWorkspaceEnrollment!(request, env, ctx);
     }
+    if (desktopWorkspaceRegistration) {
+      return await handlers.handleRegisterWorkspaceFromDesktop!(request, env, ctx);
+    }
     if (workspaceRuntimeUnpair) {
       return await handlers.handleUnpairWorkspaceRuntime!(request, env);
+    }
+    if (workspaceRuntimeTransport) {
+      return await handlers.handleWorkspaceRuntimeTransport!(request, env);
+    }
+    if (
+      request.method === "POST" &&
+      url.pathname === "/api/desktop-auth/intents"
+    ) {
+      return await handlers.handleCreateDesktopAuthIntent!(request, env);
+    }
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/desktop-auth/session"
+    ) {
+      return await handlers.handleGetDesktopHumanSession!(request, env);
+    }
+    const desktopIntentMatch = url.pathname.match(
+      /^\/api\/desktop-auth\/intents\/([^/]+)(?:\/(approve|claim))?$/,
+    );
+    if (desktopIntentMatch?.[1]) {
+      const intentId = decodeURIComponent(desktopIntentMatch[1]);
+      if (request.method === "GET" && !desktopIntentMatch[2]) {
+        return await handlers.handleDesktopAuthIntentStatus!(
+          request,
+          env,
+          intentId,
+        );
+      }
+      if (request.method === "POST" && desktopIntentMatch[2] === "approve") {
+        return await handlers.handleApproveDesktopAuthIntent!(
+          request,
+          env,
+          intentId,
+        );
+      }
+      if (request.method === "POST" && desktopIntentMatch[2] === "claim") {
+        return await handlers.handleClaimDesktopAuthIntent!(
+          request,
+          env,
+          intentId,
+        );
+      }
+    }
+    const desktopSessionRevokeMatch = url.pathname.match(
+      /^\/api\/desktop-auth\/sessions\/([^/]+)\/revoke$/,
+    );
+    if (request.method === "POST" && desktopSessionRevokeMatch?.[1]) {
+      return await handlers.handleRevokeDesktopHumanSession!(
+        request,
+        env,
+        decodeURIComponent(desktopSessionRevokeMatch[1]),
+      );
+    }
+    const desktopSessionRotateMatch = url.pathname.match(
+      /^\/api\/desktop-auth\/sessions\/([^/]+)\/rotate$/,
+    );
+    if (request.method === "POST" && desktopSessionRotateMatch?.[1]) {
+      return await handlers.handleRotateDesktopHumanSession!(
+        request,
+        env,
+        decodeURIComponent(desktopSessionRotateMatch[1]),
+      );
     }
     if (request.method === "GET" && url.pathname === "/api/session") {
       return await handlers.handleSession!(request, env, ctx);

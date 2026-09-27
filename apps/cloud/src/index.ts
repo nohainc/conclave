@@ -66,6 +66,14 @@ function applyCorsHeaders(
 export const routeHandlers = {
   handleSession: handlers.handleSession,
   handleSessionLogout: handlers.handleSessionLogout,
+  handleCreateDesktopAuthIntent: handlers.handleCreateDesktopAuthIntent,
+  handleDesktopAuthIntentStatus: handlers.handleDesktopAuthIntentStatus,
+  handleApproveDesktopAuthIntent: handlers.handleApproveDesktopAuthIntent,
+  handleClaimDesktopAuthIntent: handlers.handleClaimDesktopAuthIntent,
+  handleRevokeDesktopHumanSession: handlers.handleRevokeDesktopHumanSession,
+  handleGetDesktopHumanSession: handlers.handleGetDesktopHumanSession,
+  handleRegisterWorkspaceFromDesktop: handlers.handleRegisterWorkspaceFromDesktop,
+  handleRotateDesktopHumanSession: handlers.handleRotateDesktopHumanSession,
   handleCompleteStepUp: handlers.handleCompleteStepUp,
   handleListPendingInvitations: handlers.handleListPendingInvitations,
   handleConnectorRequest: handlers.handleConnectorRequest,
@@ -95,6 +103,7 @@ export const routeHandlers = {
   handleInternalDispatchTaskAssignment:
     handlers.handleInternalDispatchTaskAssignment,
   handleWorkspaceGatewayConnect: handlers.handleWorkspaceGatewayConnect,
+  handleWorkspaceRuntimeTransport: handlers.handleWorkspaceRuntimeTransport,
   handleEnrollHost: handlers.handleEnrollHost,
   handleBindHostWorkspace: handlers.handleBindHostWorkspace,
   handleListHostEnrollments: handlers.handleListHostEnrollments,

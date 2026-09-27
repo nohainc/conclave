@@ -27,6 +27,10 @@ Conclave AX
 
 # Phase 0 — Freeze shared contracts
 
+**Status:** Implemented — shared TypeScript contracts are frozen at
+`conclave.desktop-auth-transport` 1.0. See
+[Desktop Authentication and Runtime Transport Contracts](../protocol/DESKTOP_AUTH_TRANSPORT_CONTRACTS.md).
+
 ## Goal
 
 Prevent desktop and Cloud implementations from diverging.
@@ -59,6 +63,13 @@ starts.
 ---
 
 # Phase 1 — Desktop human authentication
+
+**Status:** Implemented. Cloud now issues one-time desktop auth intents and
+independently revocable/rotatable desktop management sessions. The Workspace
+opens the intent in the system browser, AX reuses its existing Better Auth
+login and asks the user to confirm the desktop code, then Workspace validates
+the issued session and stores it in OS secure storage. See the shared
+[contract](../protocol/DESKTOP_AUTH_TRANSPORT_CONTRACTS.md).
 
 ## Cloud
 
@@ -240,19 +251,19 @@ Add an Account section:
 
 ~~~text
 Account
-Vitalii Noha
-Signed in
+Signed in as <Conclave account>
 
-[Account details]
-[Sign out / Disconnect Workspace]
+[Sign in] [Sign out]
+[Recover Workspace connection] [Disconnect Workspace]
+[Reset local Workspace]
 ~~~
 
 Define explicit actions:
 
 ### Sign out of management session
 
-Revokes/removes human desktop session only. Decide product policy carefully:
-ordinary human-session expiry must not terminate running assignments.
+Revokes/removes the human desktop session only. It does not disconnect the
+Workspace or terminate running assignments.
 
 ### Disconnect Workspace
 
@@ -267,6 +278,11 @@ Explicit operation that:
 ### Reset local Workspace
 
 Separate destructive advanced action.
+
+When the runtime credential is missing or revoked, recovery uses the desktop
+human bearer credential over HTTPS to re-register the persistent installation
+and obtain a fresh runtime credential. It does not depend on WebSocket
+availability.
 
 Do not conflate these actions.
 
@@ -287,6 +303,13 @@ All normal ownership/recovery actions are understandable from the desktop app.
 ## Goal
 
 AX observes execution capacity but does not manage local machine lifecycle.
+
+The AX Workspaces page now presents Workspace and Worker state as operational
+information. It does not generate pairing codes, connect machines, rename or
+update local Workspaces, unpair/reset local installations, or change remote
+Worker scheduling. Project access remains managed through Project-facing
+controls. Existing server APIs are retained while remaining callers are
+audited.
 
 Remove from normal Workspaces UI:
 
@@ -570,6 +593,14 @@ Transport can switch without duplicate or lost assignment execution.
 
 Ensure all essential Workspace operations survive WSS failure.
 
+The Workspace now has a transport-neutral message interface, a WebSocket
+adapter, and an HTTP long-poll adapter that forwards the same versioned runtime
+messages. Cloud's session, event, poll, and close routes forward into the same
+Workspace Gateway Durable Object. Both transports share hello/sync, runtime
+facts, inventory snapshots and tombstones, heartbeat, assignment delivery and
+acknowledgement, progress, result/failure, cancellation, and checkout/control
+message handling.
+
 Fallback must support:
 
 - hello;
@@ -665,12 +696,21 @@ informational badge.
 
 ## Exit
 
+Implemented in the desktop snapshot and read-only AX Workspace projection.
+Desktop diagnostics retain the last WSS failure separately from current HTTPS
+fallback health, including while fallback is healthy.
+
 Users can immediately tell whether the Workspace is offline, authenticated but
 degraded, or fully realtime.
 
 ---
 
 # Phase 10 — Scheduling and Project integration
+
+**Status:** Implemented. Scheduler selection checks the Workspace Gateway's
+logical runtime `online` state and identity without gating on the active
+transport. Assignment dispatch targets the Gateway logical outbound path;
+the Gateway sends over WebSocket or queues the event for HTTPS long-poll.
 
 ## Goal
 
@@ -707,6 +747,13 @@ The same Work Request succeeds through either WSS or HTTP fallback.
 
 # Phase 11 — Security hardening
 
+**Status:** Implemented and covered by focused Cloud security tests. Runtime
+Gateway APIs accept only runtime credentials; desktop human APIs accept only
+desktop human sessions; installation ownership rejects another User; HTTP
+poll cursors are fenced to the current runtime session; replayed event IDs stay
+deduplicated across session recreation; diagnostic logging redacts credential
+fields.
+
 Test separately:
 
 ## Desktop human session
@@ -742,6 +789,12 @@ Human and machine authentication remain independently enforceable.
 ---
 
 # Phase 12 — Acceptance and deployment gates
+
+**Status:** Implemented. CI and the production deployment workflow run the
+V7 runtime acceptance for WebSocket and forced HTTPS fallback, followed by
+fallback-to-WebSocket handover with an exactly-once assignment assertion. The
+deployed production WebSocket Gateway smoke test remains required after
+deployment.
 
 Add automated acceptance for:
 
@@ -802,9 +855,12 @@ Both transports are independently proven in production-facing acceptance.
 
 # Phase 13 — Remove pairing-first legacy UX
 
-Only after desktop auth/registration is stable:
+Desktop authenticated registration/recovery is implemented. The current
+desktop and AX clients no longer expose pairing-first onboarding. Cloud
+pairing compatibility remains enabled because no released-version migration
+window is documented as complete.
 
-Remove/deprecate:
+Completed client cleanup:
 
 - AX pairing-intent creation UI;
 - desktop pairing-code dialog as the normal path;
@@ -812,8 +868,11 @@ Remove/deprecate:
 - legacy unpaired placeholder onboarding;
 - old copy saying "create pairing code in AX".
 
-Keep a migration/recovery compatibility path for older desktop installations
-for a defined release window.
+Keep the Cloud migration/recovery compatibility path for older desktop
+installations through a defined release window. Before removing it, publish
+the minimum supported desktop version, confirm a released version with
+authenticated registration/recovery, and use release/usage telemetry to
+confirm supported older clients have migrated.
 
 Audit and later remove:
 
@@ -821,8 +880,8 @@ Audit and later remove:
 - one-time pairing endpoints;
 - old tests/docs.
 
-Do not drop migration tables until supported old clients are past the
-compatibility window.
+Do not drop migration tables or remove pairing endpoints until supported old
+clients are past the compatibility window. This cleanup remains pending.
 
 ## Exit
 
@@ -847,9 +906,9 @@ Install Conclave Workspace
 5. **Desktop ownership/recovery UX; remove Repair pairing**
 6. **AX Workspaces read-only migration**
 7. **Transport abstraction**
-8. **Cloud long-poll Gateway endpoints**
+8. **Cloud long-poll Gateway endpoints** — implemented: runtime-credential-authenticated session, event, poll, and close routes forward to the existing per-Workspace Gateway Durable Object. Inbound events reuse the same runtime protocol handler as WebSocket; outbound protocol messages are enveloped and queued for cursor-based long-poll delivery. A single active poll per session is enforced.
 9. **Desktop HTTP fallback**
-10. **Transport handover/liveness**
+10. **Transport handover/liveness** — implemented in the Workspace coordinator: bounded WSS attempts precede HTTPS fallback, a low-frequency WSS probe closes fallback before connecting, and assignment delivery remains gated until hello, sync reconciliation, and inventory sync complete. Cloud reports the active transport and treats HTTP sessions without recent poll/event activity as offline.
 11. **Scheduler/dispatcher transport-neutral integration**
 12. **Security/failure acceptance**
 13. **Production fallback smoke**

@@ -5,7 +5,7 @@ import 'package:conclave_app/src/features/workspace/workspaces_page.dart';
 import 'package:conclave_app/src/studio/studio_models.dart';
 
 void main() {
-  testWidgets('empty Workspaces invites users to connect a desktop',
+  testWidgets('empty Workspaces explains desktop-owned registration',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
@@ -24,12 +24,12 @@ void main() {
     ));
 
     expect(find.text('Workspaces'), findsOneWidget);
-    expect(find.text('Connect Workspace'), findsOneWidget);
+    expect(find.text('Connect Workspace'), findsNothing);
     expect(find.text('Pair Workspace'), findsNothing);
     expect(find.text('No Workspaces connected'), findsOneWidget);
     expect(
       find.text(
-          'Connect a computer running Conclave Workspace to make local Workers available to your Projects.'),
+          'Register a Workspace from the Conclave Workspace desktop app. Its status and Workers will appear here for Project activity.'),
       findsOneWidget,
     );
     expect(find.text('Download Conclave Workspace'), findsOneWidget);
@@ -99,8 +99,7 @@ void main() {
     expect(find.text('Connect Machine'), findsNothing);
   });
 
-  testWidgets('legacy unpaired placeholder retains Connect Machine',
-      (tester) async {
+  testWidgets('legacy unpaired placeholder remains read-only', (tester) async {
     const workspace = StudioWorkspace(
       id: 'workspace-placeholder',
       name: 'Existing Workspace',
@@ -127,10 +126,9 @@ void main() {
     ));
 
     expect(find.text('Existing Workspace'), findsOneWidget);
-    expect(find.text('Connect Machine'), findsOneWidget);
-    await tester.ensureVisible(find.text('Connect Machine'));
-    await tester.tap(find.text('Connect Machine'));
-    await tester.pump();
-    expect(connectCount, 1);
+    expect(find.text('Connect Machine'), findsNothing);
+    expect(find.text('Pairing code'), findsNothing);
+    expect(find.text('Create pairing code'), findsNothing);
+    expect(connectCount, 0);
   });
 }

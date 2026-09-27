@@ -224,28 +224,28 @@ credentials.
   the authenticated owner. Existing pairing remains as a migration path until
   supported old desktop releases age out.
 - New V7 execution Workspaces cannot be created with `POST /api/workspaces`;
-  that endpoint returns `410 Gone` for the V7 authorization model. AX uses
-  pairing intents. The retained non-V7 handler path exists only for historical
-  compatibility and is not called by current AX.
-- Legacy, unpaired Workspace placeholders are retained during migration. The
-  Workspace read model identifies whether an active runtime identity exists;
-  AX shows the old **Connect Machine** enrollment flow only for an unpaired
-  placeholder. Pairing it keeps its existing Workspace ID and owner. A new
-  pairing intent never adopts or renames that placeholder.
+  that endpoint returns `410 Gone` for the V7 authorization model. Current AX
+  has no pairing-intent creation API or pairing action. Cloud keeps the legacy
+  pairing handlers only for older supported desktop releases during migration.
+- Legacy, unpaired Workspace placeholders remain visible as read-only records
+  during migration. AX does not offer **Connect Machine** or another pairing
+  action for them. Desktop authenticated registration creates or recovers a
+  Workspace only for the authenticated owner.
 - An offline Workspace with an active runtime identity remains paired. AX
   keeps showing it as offline and does not ask it to claim a new code. Its
   saved runtime credential and Gateway reconnect path remain authoritative.
 - If the desktop is missing/rejected for its runtime credential, it uses its
   human desktop session over HTTPS to inspect ownership and recover/rotate the
   runtime credential. Normal recovery does not require AX and does not expose a
-  **Repair pairing** action. An installation owned by a different User is an
+  pairing repair action. An installation owned by a different User is an
   explicit ownership conflict and is never transferred silently.
 - Worker inventory appears only after the desktop has synchronized it.
 - Home may summarize Projects, Workspaces, and Active Runs. It must not make
   Workers a separate top-level destination; a Ready Workers metric, if kept,
   opens or focuses the Workspaces page.
 - Setup guidance is: install and configure Workers locally in Conclave
-  Workspace, pair the installation, then grant Project access as needed.
+  Workspace, sign in to register the installation, then grant Project access
+  as needed.
 
 ## Migration and backward compatibility
 
@@ -254,15 +254,16 @@ temporary pairing-intent table and the installation ID/index without changing
 Workspace lifecycle rows or existing runtime credential hashes. Existing
 paired desktops keep authenticating with their saved runtime credential and
 reconnect through the same Workspace Gateway. They do not need to pair again
-after an upgrade.
+after an upgrade. Pairing endpoints and their table remain compatibility
+surface for older supported desktop releases; remove them only after release
+telemetry and the published compatibility window show those clients have
+migrated. No such completed release window is recorded yet.
 
-The selected placeholder policy is to keep legacy unpaired Workspace records
-and their owner-scoped **Connect Machine** enrollment flow until connected.
-Those records are not silently converted to a pairing intent or attached to a
-different account. Runtime enrollment rejects an installation that is already
-bound to a different active Workspace; explicitly unpaired/revoked installations
-follow the existing recovery rules. New users use pairing intents, which do not
-create a Workspace until a desktop claims one.
+The selected placeholder policy is to retain legacy unpaired Workspace records
+until migrated or retired. They remain read-only in AX and are not silently
+converted or attached to a different account. Runtime enrollment rejects an
+installation already bound to another active Workspace. New installations use
+desktop authenticated registration and recovery.
 
 ## Routing compatibility contract
 

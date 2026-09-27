@@ -72,7 +72,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
   List<StudioWorker> workspaceWorkers = const [];
   bool workspaceWorkerInventoryLoaded = false;
   Map<String, int> workspaceProjectGrantCounts = const {};
-  StudioWorkspaceEnrollment? enrollmentResult;
   StudioQualityPreset selectedQuality = StudioQualityPreset.balanced;
   String selectedExecutionModel = 'Auto';
   bool showAdvancedExecution = false;
@@ -84,6 +83,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
   final authEmailController = TextEditingController();
   final authPasswordController = TextEditingController();
   final authConfirmPasswordController = TextEditingController();
+  final desktopAuthCodeController = TextEditingController();
   final List<StudioChatMessage> localChatMessages = [];
   final List<_PendingChatMessage> pendingChatMessages = [];
   final List<StudioNotification> notifications = [];
@@ -104,6 +104,8 @@ class _StudioAppState extends State<ConclaveAppShell> {
   bool authSignUp = false;
   bool authResetRequest = false;
   bool authBusy = false;
+  bool desktopAuthBusy = false;
+  String? desktopAuthError;
   String? authNotice;
   String? authError;
   String? pendingRunPrompt;
@@ -304,6 +306,18 @@ class _StudioAppState extends State<ConclaveAppShell> {
           isLoading = false;
         });
         browserNavigation.replaceWithLogin(navigation.toUri());
+        return;
+      }
+      if (navigation.kind == StudioRouteKind.login &&
+          navigation.loginReturnTo != null) {
+        final target = StudioNavigation.fromUri(
+          Uri.parse(navigation.loginReturnTo!),
+        );
+        if (mounted) setState(() => navigation = target);
+        browserNavigation.replace(target.toUri());
+      }
+      if (navigation.kind == StudioRouteKind.desktopAuthApproval) {
+        if (mounted) setState(() => isLoading = false);
         return;
       }
       await _loadWorkspaces();
@@ -1080,77 +1094,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
     }
   }
 
-  Future<void> _revokeWorkspace(String workspaceId) async {
-    if (workspaceId.isEmpty) return;
-    try {
-      await store.workspaces.revoke(workspaceId);
-      await _loadWorkspaces();
-      await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
-      if (mounted) {
-        _showSnackBar('Workspace revoked.');
-      }
-    } catch (error) {
-      if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
-    }
-  }
-
-  Future<void> _announceWorkspaceUpdate(StudioWorkspace workspace) async {
-    final workspaceId = snapshot.workspaceId;
-    if (workspaceId == null || workspaceId.isEmpty) return;
-    try {
-      await store.workspaces.announceUpdate(
-        workspaceId,
-        workspace.id,
-        channel: workspace.updateChannel,
-      );
-      await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
-      if (!mounted) return;
-      _showSnackBar('Update announced to the Workspace.');
-    } catch (error) {
-      if (mounted) setState(() => loadError = error.toString());
-    }
-  }
-
-  Future<void> _renameWorkspace(StudioWorkspace workspace) async {
-    var name = workspace.name;
-    final updated = await showDialog<String>(
-      context: navigatorKey.currentContext ?? context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Rename Workspace'),
-        content: TextFormField(
-          initialValue: workspace.name,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Workspace name'),
-          onChanged: (value) => name = value,
-          onFieldSubmitted: (value) {
-            if (value.trim().isNotEmpty) {
-              Navigator.pop(dialogContext, value.trim());
-            }
-          },
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel')),
-          FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, name.trim()),
-              child: const Text('Save')),
-        ],
-      ),
-    );
-    final workspaceId = snapshot.workspaceId;
-    if (updated == null || updated.trim().isEmpty || workspaceId == null) {
-      return;
-    }
-    try {
-      await store.workspaces.update(workspace.id, updated.trim());
-      await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
-      if (mounted) _showSnackBar('Workspace renamed.');
-    } catch (error) {
-      if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
-    }
-  }
-
   Future<void> _grantWorkspace(StudioWorkspace workspace) async {
     if (snapshot.projects.isEmpty) {
       _showSnackBar('Create a Project before granting Workspace access.');
@@ -1198,346 +1141,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
     } catch (error) {
       if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
     }
-  }
-
-  Future<void> _enrollWorkspace() async {
-    try {
-      var pairingIntent = await store.workspaces.createPairingIntent();
-      if (!mounted) return;
-      Timer? statusTimer;
-      var completing = false;
-      var pollInFlight = false;
-      final workspaceId = await showDialog<String>(
-        context: navigatorKey.currentContext ?? context,
-        builder: (dialogContext) => StatefulBuilder(
-          builder: (context, setDialogState) {
-            statusTimer ??=
-                Timer.periodic(const Duration(seconds: 2), (_) async {
-              if (!dialogContext.mounted || completing || pollInFlight) return;
-              pollInFlight = true;
-              try {
-                final current = pairingIntent;
-                final response =
-                    await store.workspaces.pairingIntent(pairingIntent.id);
-                if (!dialogContext.mounted) return;
-                // The status endpoint intentionally never returns the raw
-                // one-time token. Keep the token from creation in memory, and
-                // avoid rebuilding the selectable code on every unchanged poll
-                // (which interrupts browser text selection).
-                final updated = current.withStatus(response);
-                if (updated.status != current.status ||
-                    updated.workspaceId != current.workspaceId ||
-                    updated.expiresAt != current.expiresAt) {
-                  setDialogState(() => pairingIntent = updated);
-                }
-                if (updated.status == 'claimed' &&
-                    updated.workspaceId != null) {
-                  completing = true;
-                  await _loadWorkspaces();
-                  if (!dialogContext.mounted) return;
-                  setDialogState(() {});
-                  await Future<void>.delayed(
-                      const Duration(milliseconds: 1400));
-                  if (dialogContext.mounted) {
-                    Navigator.pop(dialogContext, updated.workspaceId);
-                  }
-                }
-              } catch (_) {
-                // Keep the code visible; the next poll can recover from transient failures.
-              } finally {
-                pollInFlight = false;
-              }
-            });
-            final claimed = pairingIntent.status == 'claimed';
-            return AlertDialog(
-              title: const Text('Connecting a Workspace'),
-              content: SizedBox(
-                width: 420,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (claimed) ...[
-                      const Text('✓ Workspace connected',
-                          style: TextStyle(fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 12),
-                      Text(store.workspaces.items
-                              .where((item) =>
-                                  item.id == pairingIntent.workspaceId)
-                              .map((item) => item.name)
-                              .firstOrNull ??
-                          'Workspace'),
-                      const SizedBox(height: 4),
-                      Text(_connectedWorkspaceDetails(
-                          pairingIntent.workspaceId)),
-                    ] else ...[
-                      const Text(
-                        'Install and open Conclave Workspace on the computer you want to connect. Choose its Workspace name on that computer.',
-                      ),
-                      const SizedBox(height: 16),
-                      const Text('Pairing code',
-                          style: TextStyle(fontWeight: FontWeight.w700)),
-                    ],
-                    const SizedBox(height: 20),
-                    if (!claimed)
-                      SelectableText(
-                        pairingIntent.token ?? 'Pairing code unavailable',
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                    if (!claimed) ...[
-                      const SizedBox(height: 4),
-                      Text(_enrollmentExpiryLabel(pairingIntent.expiresAt)),
-                      const SizedBox(height: 14),
-                      Text(pairingIntent.status == 'expired'
-                          ? 'This code expired. Generate a new code to continue.'
-                          : pairingIntent.status == 'cancelled'
-                              ? 'This pairing code was cancelled.'
-                              : 'Waiting for the desktop application…'),
-                    ],
-                  ],
-                ),
-              ),
-              actions: [
-                if (!claimed)
-                  OutlinedButton.icon(
-                    onPressed: () => browserNavigation.openExternal(
-                      Uri.parse(conclaveDownloadsUrl),
-                    ),
-                    icon: const Icon(Icons.download_rounded),
-                    label: const Text('Download Conclave Workspace'),
-                  ),
-                if (!claimed)
-                  TextButton.icon(
-                    onPressed: pairingIntent.token == null
-                        ? null
-                        : () async {
-                            await Clipboard.setData(
-                                ClipboardData(text: pairingIntent.token!));
-                            if (dialogContext.mounted) {
-                              _showSnackBar('Pairing code copied.');
-                            }
-                          },
-                    icon: const Icon(Icons.copy_rounded),
-                    label: const Text('Copy code'),
-                  ),
-                if (!claimed)
-                  TextButton(
-                    onPressed: () async {
-                      try {
-                        await store.workspaces
-                            .cancelPairingIntent(pairingIntent.id);
-                        if (dialogContext.mounted) {
-                          Navigator.pop(dialogContext);
-                        }
-                      } catch (error) {
-                        if (dialogContext.mounted) {
-                          _showSnackBar('$error', type: ToastType.error);
-                        }
-                      }
-                    },
-                    child: const Text('Cancel'),
-                  ),
-                if (!claimed)
-                  TextButton(
-                    onPressed: () async {
-                      try {
-                        final replacement = await store.workspaces
-                            .regeneratePairingIntent(pairingIntent.id);
-                        if (dialogContext.mounted) {
-                          setDialogState(() => pairingIntent = replacement);
-                        }
-                      } catch (error) {
-                        if (dialogContext.mounted) {
-                          _showSnackBar('$error', type: ToastType.error);
-                        }
-                      }
-                    },
-                    child: const Text('Generate new code'),
-                  ),
-                if (claimed)
-                  FilledButton(
-                    onPressed: () =>
-                        Navigator.pop(dialogContext, pairingIntent.workspaceId),
-                    child: const Text('Open Workspace'),
-                  ),
-              ],
-            );
-          },
-        ),
-      );
-      statusTimer?.cancel();
-      if (workspaceId != null && mounted) {
-        await _loadWorkspaces();
-        _navigateTo(StudioNavigation.workspaces(workspaceId: workspaceId));
-      }
-    } catch (error) {
-      if (mounted) _showSnackBar('$error', type: ToastType.error);
-    }
-  }
-
-  String _connectedWorkspaceDetails(String? workspaceId) {
-    final workspace = store.workspaces.items
-        .where((item) => item.id == workspaceId)
-        .firstOrNull;
-    if (workspace == null) return 'Connected';
-    final workers = workspaceWorkers
-        .where((worker) =>
-            worker.workspaceId == workspace.id && worker.status != 'removed')
-        .length;
-    final platform = switch (workspace.platform.toLowerCase()) {
-      'macos' => 'macOS',
-      'windows' => 'Windows',
-      'linux' => 'Linux',
-      _ => workspace.platform,
-    };
-    final architectureName = switch (workspace.architecture.toLowerCase()) {
-      'arm64' || 'aarch64' => 'Apple Silicon',
-      'x64' || 'x86_64' || 'amd64' => 'Intel / x64',
-      '—' || '' => '',
-      _ => workspace.architecture,
-    };
-    final architecture = architectureName.isEmpty ? '' : ' · $architectureName';
-    return '$platform$architecture\n$workers ${workers == 1 ? 'Worker' : 'Workers'}';
-  }
-
-  Future<void> _connectWorkspace(StudioWorkspace workspace) async {
-    try {
-      var enrollment = await store.workspaces.createEnrollment(workspace.id);
-      if (!mounted) return;
-      setState(() => enrollmentResult = enrollment);
-      await showDialog<void>(
-        context: navigatorKey.currentContext ?? context,
-        builder: (dialogContext) => StatefulBuilder(
-          builder: (context, setDialogState) {
-            final currentEnrollment = enrollment;
-            return AlertDialog(
-              title: Text('Connect ${workspace.name}'),
-              content: SizedBox(
-                width: 420,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      '1. Install Conclave Workspace',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 8),
-                    OutlinedButton.icon(
-                      onPressed: () => browserNavigation.openExternal(
-                        Uri.parse(conclaveDownloadsUrl),
-                      ),
-                      icon: const Icon(Icons.download_outlined),
-                      label: const Text('Download Conclave Workspace'),
-                    ),
-                    const SizedBox(height: 18),
-                    const Text('2. Open the application.'),
-                    const SizedBox(height: 18),
-                    const Text(
-                      '3. Enter this pairing code:',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: SelectableText(
-                            currentEnrollment.token,
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Copy code',
-                          onPressed: () async {
-                            await Clipboard.setData(
-                                ClipboardData(text: currentEnrollment.token));
-                            if (context.mounted) {
-                              _showSnackBar('Pairing code copied.');
-                            }
-                          },
-                          icon: const Icon(Icons.copy_rounded),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(_enrollmentExpiryLabel(currentEnrollment.expiresAt)),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () async {
-                    try {
-                      final refreshed =
-                          await store.workspaces.createEnrollment(workspace.id);
-                      if (dialogContext.mounted) {
-                        setDialogState(() => enrollment = refreshed);
-                        setState(() => enrollmentResult = refreshed);
-                      }
-                    } catch (error) {
-                      if (dialogContext.mounted) {
-                        _showSnackBar('$error', type: ToastType.error);
-                      }
-                    }
-                  },
-                  child: const Text('Generate new code'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('Done'),
-                ),
-              ],
-            );
-          },
-        ),
-      );
-      await _loadWorkspaces();
-    } catch (error) {
-      if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
-    }
-  }
-
-  String _enrollmentExpiryLabel(String value) {
-    final expiresAt = DateTime.tryParse(value)?.toLocal();
-    if (expiresAt == null) return 'Expiration: $value';
-    final remaining = expiresAt.difference(DateTime.now());
-    if (remaining.isNegative) return 'Expired';
-    final minutes = remaining.inMinutes;
-    if (minutes < 60) {
-      return 'Expires in ${minutes == 1 ? '1 minute' : '$minutes minutes'}';
-    }
-    final hours = (minutes / 60).ceil();
-    return 'Expires in ${hours == 1 ? '1 hour' : '$hours hours'}';
-  }
-
-  @override
-  void dispose() {
-    refreshTimer?.cancel();
-    navigationSubscription?.cancel();
-    lifecycleSubscription?.cancel();
-    realtimeSubscription?.cancel();
-    unawaited(realtimeClient.close());
-    browserNavigation.dispose();
-    _searchQueryController.removeListener(_onSearchQueryChanged);
-    _searchQueryController.dispose();
-    _searchFocusNode.dispose();
-    objectiveController.dispose();
-    revisionController.dispose();
-    chatController.dispose();
-    promptResponseController.dispose();
-    authNameController.dispose();
-    authEmailController.dispose();
-    authPasswordController.dispose();
-    authConfirmPasswordController.dispose();
-    super.dispose();
   }
 
   Future<void> _createGoal() async {
@@ -1600,6 +1203,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
                   if (isLoading) return _loadingScaffold();
                   if (authRequired) return _authScaffold();
                   if (loadError != null) return _errorScaffold();
+                  if (navigation.kind == StudioRouteKind.desktopAuthApproval) {
+                    return _desktopAuthApprovalView();
+                  }
                   final isDesktop =
                       ConclaveBrand.isDesktop(constraints.maxWidth);
                   final shell = _shellContext;
@@ -1929,6 +1535,93 @@ class _StudioAppState extends State<ConclaveAppShell> {
         ),
       ),
     );
+  }
+
+  Widget _desktopAuthApprovalView() {
+    final user = store.auth.viewer;
+    return Scaffold(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Card(
+            margin: const EdgeInsets.all(24),
+            child: Padding(
+              padding: const EdgeInsets.all(28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Sign in to Conclave Workspace',
+                      style: Theme.of(context).textTheme.headlineSmall),
+                  const SizedBox(height: 12),
+                  Text(
+                      'Approve this request for ${user?.displayName ?? user?.email ?? 'your account'}. Compare the code below with the one shown in Conclave Workspace before continuing.'),
+                  const SizedBox(height: 22),
+                  TextField(
+                    controller: desktopAuthCodeController,
+                    autofocus: true,
+                    maxLength: 8,
+                    keyboardType: TextInputType.number,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    decoration: const InputDecoration(
+                        labelText: '8-digit code from Conclave Workspace',
+                        border: OutlineInputBorder()),
+                  ),
+                  if (desktopAuthError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(desktopAuthError!,
+                        style: TextStyle(
+                            color: Theme.of(context).colorScheme.error)),
+                  ],
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    onPressed: desktopAuthBusy ? null : _approveDesktopAuth,
+                    child: Text(
+                        desktopAuthBusy ? 'Approving…' : 'Approve sign-in'),
+                  ),
+                  TextButton(
+                    onPressed: desktopAuthBusy
+                        ? null
+                        : () => _navigateTo(const StudioNavigation.home(),
+                            replace: true),
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _approveDesktopAuth() async {
+    final intentId = navigation.desktopAuthIntentId;
+    final code = desktopAuthCodeController.text.trim();
+    if (intentId == null || !RegExp(r'^\d{8}$').hasMatch(code)) {
+      setState(() => desktopAuthError =
+          'Enter the 8-digit code shown in Conclave Workspace.');
+      return;
+    }
+    setState(() {
+      desktopAuthBusy = true;
+      desktopAuthError = null;
+    });
+    try {
+      await widget.dataSource
+          .approveDesktopAuthIntent(intentId: intentId, userCode: code);
+      if (!mounted) return;
+      _navigateTo(const StudioNavigation.home(), replace: true);
+      _showSnackBar(
+          'Conclave Workspace sign-in approved. Return to the desktop app.');
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        desktopAuthBusy = false;
+        desktopAuthError = error.toString();
+      });
+    }
   }
 
   Widget _errorScaffold() => Scaffold(
@@ -2590,6 +2283,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
       case StudioRouteKind.home:
       case StudioRouteKind.chat:
       case StudioRouteKind.login:
+      case StudioRouteKind.desktopAuthApproval:
         break;
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -3746,27 +3440,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
     if (mounted) setState(() => workspaceProjectGrantCounts = counts);
   }
 
-  Future<void> _setWorkspaceWorkerScheduling(
-      StudioWorker worker, String action) async {
-    try {
-      await widget.dataSource
-          .setWorkspaceWorkerScheduling(workerId: worker.id, action: action);
-      final refreshed = await widget.dataSource.loadWorkspaceWorkerInventory();
-      if (mounted) {
-        setState(() {
-          workspaceWorkers = refreshed;
-          workspaceWorkerInventoryLoaded = true;
-        });
-      }
-      if (mounted) {
-        _showSnackBar(
-            'Worker scheduling ${action == 'drain' ? 'drain requested' : '${action}d'}.');
-      }
-    } catch (error) {
-      if (mounted) _showSnackBar('$error', type: ToastType.error);
-    }
-  }
-
   Widget _workspacesView() => WorkspacesPage(
         workspaces: _workspaceCards(),
         workspaceWorkers: workspaceWorkers,
@@ -3778,16 +3451,10 @@ class _StudioAppState extends State<ConclaveAppShell> {
             _navigateTo(const StudioNavigation.workspaces());
           }
         },
-        onAdd: _enrollWorkspace,
-        onRename: _renameWorkspace,
-        onUpdate: _announceWorkspaceUpdate,
-        onRevoke: (workspace) => _revokeWorkspace(workspace.id),
-        onConnect: _connectWorkspace,
         onOpenDownloads: () => browserNavigation.openExternal(
           Uri.parse(conclaveDownloadsUrl),
         ),
         onGrant: _grantWorkspace,
-        onWorkspaceWorkerScheduling: _setWorkspaceWorkerScheduling,
       );
 
   Widget _profileSecurityView() {

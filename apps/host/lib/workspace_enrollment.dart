@@ -35,7 +35,9 @@ class WorkspaceEnrollmentResult {
       workspaceRuntimeId: requiredString('workspaceRuntimeId'),
       workspaceId: requiredString('workspaceId'),
       workspaceName: requiredString('workspaceName'),
-      authToken: requiredString('authToken'),
+      authToken: requiredString(json.containsKey('runtimeCredential')
+          ? 'runtimeCredential'
+          : 'authToken'),
     );
   }
 }
@@ -388,8 +390,7 @@ class WorkspacePairingException implements Exception {
           lowerError.contains('unsupported')) {
         return WorkspacePairingException(
           kind: WorkspacePairingErrorKind.versionUnsupported,
-          message:
-              'This version of Conclave Workspace is no longer supported.',
+          message: 'This version of Conclave Workspace is no longer supported.',
           action: 'Please update Conclave Workspace to the latest version.',
           statusCode: statusCode,
           serverError: serverError,
@@ -508,6 +509,57 @@ class WorkspaceEnrollmentClient {
   final Duration timeout;
   final HttpClient _client;
 
+  Future<WorkspaceEnrollmentResult> register({
+    required String credential,
+    required SafeMachineFacts facts,
+  }) async {
+    final base = Uri.tryParse(cloudUrl.trim());
+    if (base == null ||
+        !const {'https', 'http'}.contains(base.scheme) ||
+        base.host.isEmpty) {
+      throw ArgumentError('Cloud URL must be an HTTP(S) origin.');
+    }
+    final uri = base.replace(
+        path:
+            '${base.path.replaceFirst(RegExp(r'/$'), '')}/api/workspace-runtime/register',
+        query: null,
+        fragment: null);
+    final request = await _client.postUrl(uri).timeout(timeout);
+    request.headers.contentType = ContentType.json;
+    request.headers
+        .set(HttpHeaders.authorizationHeader, 'Bearer ${credential.trim()}');
+    final payload = facts.toJson(token: 'desktop-registration');
+    payload.remove('token');
+    payload['contractVersion'] = '1.0';
+    payload['proposedWorkspaceName'] = payload.remove('name');
+    request.write(jsonEncode(payload));
+    final response = await request.close().timeout(timeout);
+    final body = await utf8.decoder.bind(response).join().timeout(timeout);
+    if (response.statusCode != HttpStatus.created) {
+      String? detail, code;
+      try {
+        final parsed = jsonDecode(body);
+        if (parsed is Map) {
+          detail = parsed['error'] as String?;
+          code = parsed['code'] as String?;
+        }
+      } on Object {
+        detail = body;
+      }
+      throw WorkspacePairingException.fromError(
+          statusCode: response.statusCode,
+          serverError: detail,
+          serverCode: code);
+    }
+    final parsed = jsonDecode(body);
+    if (parsed is! Map) {
+      throw const FormatException(
+          'Workspace registration response is invalid.');
+    }
+    return WorkspaceEnrollmentResult.fromJson(
+        Map<String, Object?>.from(parsed));
+  }
+
   Future<WorkspaceEnrollmentResult> redeem({
     required String token,
     required String hostname,
@@ -604,6 +656,38 @@ class WorkspacePairingService {
 
   final Directory dataDirectory;
   final SecureCredentialStore _credentialStore;
+
+  Future<HostRegistration> registerWithDesktopSession({
+    required String cloudUrl,
+    required String desktopCredential,
+    required SafeMachineFacts facts,
+  }) async {
+    final client = WorkspaceEnrollmentClient(cloudUrl: cloudUrl);
+    try {
+      final result =
+          await client.register(credential: desktopCredential, facts: facts);
+      await _credentialStore.write(result.workspaceRuntimeId, result.authToken);
+      final registration = HostRegistration(
+        hostId: result.workspaceRuntimeId,
+        workspaceId: result.workspaceId,
+        cloudUrl: cloudUrl.trim().replaceFirst(RegExp(r'/$'), ''),
+        name: result.workspaceName,
+        hostname: facts.hostname,
+        installationId: facts.installationId,
+        credentialRef: 'workspace-runtime:${result.workspaceRuntimeId}',
+        pairedAt: DateTime.now().toUtc().toIso8601String(),
+      );
+      try {
+        await HostRegistrationStore(dataDirectory).write(registration);
+      } on Object {
+        await _credentialStore.delete(result.workspaceRuntimeId);
+        rethrow;
+      }
+      return registration;
+    } finally {
+      client.close();
+    }
+  }
 
   /// Clears only the stale Cloud registration after its Workspace has been
   /// revoked in AX. Stable installation identity and local Worker state stay

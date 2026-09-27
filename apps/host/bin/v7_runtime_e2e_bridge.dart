@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:conclave_host/cloud_connection.dart';
+import 'package:conclave_host/workspace_transport.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:conclave_host/configured_worker_registry.dart';
 import 'package:conclave_host/v7_adapter_package_store.dart';
@@ -42,10 +43,15 @@ String _platform() {
 }
 
 Future<void> main(List<String> args) async {
-  if (args.length != 1) {
-    throw ArgumentError('temporary Workspace data path required');
+  if (args.isEmpty || args.length > 4) {
+    throw ArgumentError(
+        'temporary Workspace data path and optional transport settings required');
   }
-  final root = Directory(args.single);
+  final root = Directory(args.first);
+  final forceFallback = args.length > 1 && args[1] != 'websocket';
+  final probeFallback = args.length > 1 && args[1] == 'http_long_poll_handover';
+  final fallbackBaseUri = args.length > 2 ? Uri.parse(args[2]) : null;
+  final runtimeCredential = args.length > 3 ? args[3] : '';
   await root.create(recursive: true);
   const workspaceId = 'workspace-v7-e2e';
   const runtimeId = 'runtime-v7-e2e';
@@ -191,6 +197,7 @@ exec __DART__ "$(dirname "$0")/adapter.dart"
 
   final incoming = StreamController<Object?>();
   final socket = _BridgeSocket(incoming.stream);
+  var webSocketAttempts = 0;
   final workRoot = Directory('${root.path}/work-root')
     ..createSync(recursive: true);
   late final HostCloudConnection connection;
@@ -224,7 +231,25 @@ exec __DART__ "$(dirname "$0")/adapter.dart"
     ),
     hostId: runtimeId,
     workspaceId: workspaceId,
-    factory: (_) async => socket,
+    factory: (_) async {
+      webSocketAttempts++;
+      if (forceFallback && (!probeFallback || webSocketAttempts <= 2)) {
+        throw const SocketException('WSS intentionally disabled by acceptance');
+      }
+      return socket;
+    },
+    fallbackFactory: forceFallback
+        ? (_) => HttpLongPollWorkspaceTransport.connect(
+              baseUri: fallbackBaseUri!,
+              workspaceRuntimeId: runtimeId,
+              runtimeCredential: runtimeCredential,
+              pollWait: const Duration(seconds: 1),
+            )
+        : null,
+    webSocketFailureLimit: 2,
+    webSocketProbeInterval: probeFallback
+        ? const Duration(milliseconds: 1500)
+        : const Duration(minutes: 5),
     name: 'V7 E2E Workspace',
     heartbeat: const Duration(hours: 1),
     assignmentHandler: handler.call,
@@ -258,10 +283,17 @@ exec __DART__ "$(dirname "$0")/adapter.dart"
     },
   );
   await connection.connect();
+  final transportStatusTimer = probeFallback
+      ? Timer.periodic(
+          const Duration(milliseconds: 50),
+          (_) => stdout.writeln('@transport=${connection.activeTransportMode}'),
+        )
+      : null;
   final inputDone = Completer<void>();
   stdin.transform(utf8.decoder).transform(const LineSplitter()).listen(
       (line) async {
     if (line == '{"bridge":"close"}') {
+      transportStatusTimer?.cancel();
       await connection.close();
       await incoming.close();
       if (!inputDone.isCompleted) inputDone.complete();

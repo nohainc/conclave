@@ -81,6 +81,10 @@ abstract interface class StudioDataSource {
   Future<void> registerPasskey(String name);
   Future<void> deletePasskey(String id);
   Future<void> signInWithPasskey();
+  Future<void> approveDesktopAuthIntent({
+    required String intentId,
+    required String userCode,
+  });
   Future<List<StudioWorkspace>> loadWorkspaces();
   Future<List<StudioProject>> loadProjects({bool includeArchived = false});
   Future<List<Map<String, dynamic>>> loadProjectWorkspaces({
@@ -214,19 +218,6 @@ abstract interface class StudioDataSource {
   Future<StudioWorkspaceEnrollment> createWorkspaceEnrollment({
     required String workspaceId,
     int expiresHours = 24,
-  });
-  Future<StudioWorkspacePairingIntent> createWorkspacePairingIntent({
-    int expiresMinutes = 15,
-  });
-  Future<StudioWorkspacePairingIntent> getWorkspacePairingIntent({
-    required String pairingIntentId,
-  });
-  Future<StudioWorkspacePairingIntent> regenerateWorkspacePairingIntent({
-    required String pairingIntentId,
-    int expiresMinutes = 15,
-  });
-  Future<void> cancelWorkspacePairingIntent({
-    required String pairingIntentId,
   });
 }
 
@@ -792,6 +783,32 @@ class StudioApiClient implements StudioDataSource {
   @override
   Future<void> signInWithPasskey() async {
     await passkeyBrowser.signIn(baseUrl);
+  }
+
+  @override
+  Future<void> approveDesktopAuthIntent({
+    required String intentId,
+    required String userCode,
+  }) async {
+    final response = await client.post(
+      Uri.parse(
+          '$baseUrl/desktop-auth/intents/${Uri.encodeComponent(intentId)}/approve'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({'userCode': userCode}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      var message =
+          'Workspace sign-in approval failed (${response.statusCode})';
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map && decoded['error'] is String) {
+          message = decoded['error'] as String;
+        }
+      } on Object {
+        // Keep the status-based message for non-JSON error responses.
+      }
+      throw StudioApiException(message, statusCode: response.statusCode);
+    }
   }
 
   @override
@@ -1579,87 +1596,4 @@ class StudioApiClient implements StudioDataSource {
         jsonDecode(response.body) as Map<String, dynamic>);
   }
 
-  @override
-  Future<StudioWorkspacePairingIntent> createWorkspacePairingIntent({
-    int expiresMinutes = 15,
-  }) async {
-    final response = await client.post(
-      Uri.parse('$baseUrl/workspace-pairing-intents'),
-      headers: _headers(contentType: 'application/json'),
-      body: jsonEncode({'expiresMinutes': expiresMinutes}),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StudioApiException(
-        'Workspace pairing intent creation failed (${response.statusCode})',
-        statusCode: response.statusCode,
-      );
-    }
-    return StudioWorkspacePairingIntent.fromJson(
-      jsonDecode(response.body) as Map<String, dynamic>,
-    );
-  }
-
-  @override
-  Future<StudioWorkspacePairingIntent> getWorkspacePairingIntent({
-    required String pairingIntentId,
-  }) async {
-    final response = await client.get(
-      Uri.parse(
-        '$baseUrl/workspace-pairing-intents/${Uri.encodeComponent(pairingIntentId)}',
-      ),
-      headers: _headers(),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StudioApiException(
-        'Workspace pairing status failed (${response.statusCode})',
-        statusCode: response.statusCode,
-      );
-    }
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    return StudioWorkspacePairingIntent.fromJson(
-      body['pairingIntent'] as Map<String, dynamic>,
-    );
-  }
-
-  @override
-  Future<StudioWorkspacePairingIntent> regenerateWorkspacePairingIntent({
-    required String pairingIntentId,
-    int expiresMinutes = 15,
-  }) async {
-    final response = await client.post(
-      Uri.parse(
-        '$baseUrl/workspace-pairing-intents/${Uri.encodeComponent(pairingIntentId)}/regenerate',
-      ),
-      headers: _headers(contentType: 'application/json'),
-      body: jsonEncode({'expiresMinutes': expiresMinutes}),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StudioApiException(
-        'Workspace pairing code regeneration failed (${response.statusCode})',
-        statusCode: response.statusCode,
-      );
-    }
-    return StudioWorkspacePairingIntent.fromJson(
-      jsonDecode(response.body) as Map<String, dynamic>,
-    );
-  }
-
-  @override
-  Future<void> cancelWorkspacePairingIntent({
-    required String pairingIntentId,
-  }) async {
-    final response = await client.post(
-      Uri.parse(
-        '$baseUrl/workspace-pairing-intents/${Uri.encodeComponent(pairingIntentId)}/cancel',
-      ),
-      headers: _headers(contentType: 'application/json'),
-      body: '{}',
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StudioApiException(
-        'Workspace pairing cancellation failed (${response.statusCode})',
-        statusCode: response.statusCode,
-      );
-    }
-  }
 }

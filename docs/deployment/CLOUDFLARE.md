@@ -111,7 +111,12 @@ Actions -> Deploy Conclave AX App -> Run workflow
 Before applying production D1 migrations or deploying Workers, the workflow
 runs the V7 runtime assignment and inventory recovery end-to-end tests. These
 tests use the same Workspace Gateway URI and protocol preflight as the desktop
-runtime; a failure stops the production deployment.
+runtime; a failure stops the production deployment. The V7 runtime acceptance
+keeps the real Workspace child execution over WebSocket and adds forced WSS
+failure followed by HTTPS fallback readiness, inventory synchronization,
+scheduler dispatch, assignment execution, and persisted result verification.
+A third run hands over from fallback to WebSocket, completes hello/sync
+reconciliation, and asserts the assignment was delivered exactly once.
 
 After deploying `app.conclaveax.com`, the same workflow runs
 `scripts/production-workspace-gateway-smoke.mjs` as a production acceptance

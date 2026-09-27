@@ -219,6 +219,15 @@ export class WorkspaceGateway implements DurableObject {
   private sessionId: string | null = null;
   private correlationId: string | null = null;
   private projectionWriteChain: Promise<void> = Promise.resolve();
+  private httpEvents: Array<{
+    cursor: number;
+    envelope: Record<string, unknown>;
+  }> = [];
+  private httpCursor = 0;
+  private httpWaiter: (() => void) | null = null;
+  private httpEventIds = new Set<string>();
+  private httpPersistChain: Promise<void> = Promise.resolve();
+  private httpLastActivityAt: string | null = null;
 
   constructor(
     private readonly state: DurableObjectState,
@@ -228,15 +237,24 @@ export class WorkspaceGateway implements DurableObject {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     this.restoreAcceptedSocket();
+    await this.restoreHttpRuntime();
     if (request.headers.get("Upgrade")?.toLowerCase() === "websocket") {
       return this.connectSocket(request, url);
     }
     if (request.method === "GET" && url.pathname === "/status") {
+      const lastActivityAt = await this.lastRuntimeActivityAt();
+      const live = this.isActivityRecent(lastActivityAt);
       return Response.json({
-        online: this.socket !== null,
+        online: live,
+        activeTransport: live
+          ? this.socket
+            ? "websocket"
+            : "http_long_poll"
+          : null,
         executionWorkspaceId: this.executionWorkspaceId,
         workspaceRuntimeId: this.workspaceRuntimeId,
         sessionId: this.sessionId,
+        lastActivityAt,
       });
     }
     if (request.method === "POST" && url.pathname === "/disconnect-runtime") {
@@ -247,6 +265,9 @@ export class WorkspaceGateway implements DurableObject {
     }
     if (request.method === "POST" && url.pathname === "/cancel-assignment") {
       return this.cancelAssignment(request);
+    }
+    if (request.method === "POST" && url.pathname.startsWith("/runtime/")) {
+      return this.handleHttpRuntimeRequest(request, url.pathname);
     }
     if (request.method === "POST" && url.pathname === "/provision-checkout") {
       return this.provisionCheckout(request);
@@ -261,6 +282,317 @@ export class WorkspaceGateway implements DurableObject {
       return this.sendCheckoutCommand(request, "checkout.finalize");
     }
     return Response.json({ error: "Not found" }, { status: 404 });
+  }
+
+  private async handleHttpRuntimeRequest(
+    request: Request,
+    path: string,
+  ): Promise<Response> {
+    this.correlationId = requestIdFor(request);
+    const body = (await request.json().catch(() => null)) as Record<
+      string,
+      unknown
+    > | null;
+    if (!body || typeof body !== "object")
+      return Response.json({ error: "Invalid request body" }, { status: 400 });
+    const token = extractBearerToken(request.headers);
+    const runtimeId =
+      path === "/runtime/sessions"
+        ? body.workspaceRuntimeId
+        : this.workspaceRuntimeId;
+    const sessionId =
+      typeof body.sessionId === "string" ? body.sessionId : null;
+    if (!token || typeof runtimeId !== "string")
+      return Response.json(
+        { error: "Runtime credential required" },
+        { status: 401 },
+      );
+    const identity = await findWorkspaceRuntimeIdentity(
+      this.env.CONCLAVE_DB,
+      runtimeId,
+    );
+    if (
+      !identity ||
+      identity.executionWorkspaceId !== this.state.id.name ||
+      identity.credentialTokenHash !== (await hashToken(token))
+    ) {
+      return Response.json(
+        { error: "Invalid or revoked Workspace runtime credential" },
+        { status: 401 },
+      );
+    }
+    if (
+      path !== "/runtime/sessions" &&
+      (!sessionId ||
+        sessionId !== this.sessionId ||
+        runtimeId !== this.workspaceRuntimeId)
+    ) {
+      return Response.json(
+        { error: "Runtime session not found" },
+        { status: 404 },
+      );
+    }
+    if (path === "/runtime/sessions") {
+      if (body.contractVersion !== "1.0")
+        return Response.json(
+          { error: "Unsupported contract version" },
+          { status: 400 },
+        );
+      if (this.socket) {
+        try {
+          this.socket.close(1000, "Superseded by HTTP long-poll");
+        } catch {}
+      }
+      this.socket = null;
+      this.executionWorkspaceId = identity.executionWorkspaceId;
+      this.workspaceRuntimeId = runtimeId;
+      this.sessionId = `session-${crypto.randomUUID()}`;
+      this.httpEvents = [];
+      this.httpCursor = 0;
+      this.httpLastActivityAt = new Date().toISOString();
+      const now = new Date().toISOString();
+      await this.env.CONCLAVE_DB.prepare(
+        "UPDATE workspace_sessions SET disconnected_at = ?1 WHERE runtime_identity_id = ?2 AND disconnected_at IS NULL",
+      )
+        .bind(now, runtimeId)
+        .run();
+      await this.env.CONCLAVE_DB.prepare(
+        "INSERT INTO workspace_sessions (id, workspace_id, runtime_identity_id, client_version, protocol_version, connected_at, last_heartbeat_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
+      )
+        .bind(
+          this.sessionId,
+          this.executionWorkspaceId,
+          runtimeId,
+          "unknown",
+          WORKSPACE_RUNTIME_PROTOCOL_VERSION,
+          now,
+        )
+        .run();
+      await this.env.CONCLAVE_DB.prepare(
+        "UPDATE execution_workspaces SET status = 'online', updated_at = ?1 WHERE id = ?2",
+      )
+        .bind(now, this.executionWorkspaceId)
+        .run();
+      await this.persistHttpRuntime();
+      return Response.json({
+        sessionId: this.sessionId,
+        serverTime: now,
+        pollTimeoutMs: 25000,
+        heartbeatIntervalMs: 15000,
+        cursor: "0",
+      });
+    }
+    if (path === "/runtime/events") {
+      if (
+        !Array.isArray(body.events) ||
+        body.events.length < 1 ||
+        body.events.length > 100
+      )
+        return Response.json(
+          { error: "events must contain 1 to 100 items" },
+          { status: 400 },
+        );
+      const acceptedEventIds: string[] = [];
+      const rejected: Array<{ eventId: string; code: string }> = [];
+      for (const raw of body.events) {
+        if (!raw || typeof raw !== "object") continue;
+        const envelope = raw as Record<string, unknown>;
+        if (
+          envelope.contract !== "conclave.desktop-auth-transport" ||
+          envelope.version !== "1.0" ||
+          typeof envelope.eventId !== "string" ||
+          !envelope.message
+        ) {
+          if (typeof envelope.eventId === "string")
+            rejected.push({
+              eventId: envelope.eventId,
+              code: "invalid_event_envelope",
+            });
+          continue;
+        }
+        if (this.httpEventIds.has(envelope.eventId)) {
+          acceptedEventIds.push(envelope.eventId);
+          continue;
+        }
+        try {
+          const message = parseWorkspaceRuntimeMessage(envelope.message);
+          await this.handleMessage(JSON.stringify(message), sessionId!);
+          this.httpEventIds.add(envelope.eventId);
+          acceptedEventIds.push(envelope.eventId);
+        } catch {
+          rejected.push({
+            eventId: envelope.eventId,
+            code: "invalid_or_unprocessed_message",
+          });
+        }
+      }
+      this.httpLastActivityAt = new Date().toISOString();
+      await this.persistHttpRuntime();
+      return Response.json({
+        acceptedEventIds,
+        rejected,
+        cursor: String(this.httpCursor),
+      });
+    }
+    if (path === "/runtime/poll") {
+      const cursor = Number(body.cursor);
+      if (
+        !Number.isSafeInteger(cursor) ||
+        cursor < 0 ||
+        cursor > this.httpCursor ||
+        !Number.isInteger(body.waitMs) ||
+        (body.waitMs as number) < 0 ||
+        (body.waitMs as number) > 60000
+      )
+        return Response.json(
+          { error: "Invalid cursor or waitMs" },
+          { status: 400 },
+        );
+      // The request cursor acknowledges events from the previous successful
+      // response. Keep newly returned events queued until that acknowledgement
+      // arrives so a dropped poll response can be retried without data loss.
+      this.httpEvents = this.httpEvents.filter(
+        (entry) => entry.cursor > cursor,
+      );
+      let events = this.httpEvents
+        .filter((entry) => entry.cursor > cursor)
+        .slice(0, 100);
+      if (!events.length && body.waitMs) {
+        if (this.httpWaiter)
+          return Response.json(
+            { error: "A poll is already active for this session" },
+            { status: 409 },
+          );
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(() => {
+            if (this.httpWaiter === wake) this.httpWaiter = null;
+            resolve();
+          }, body.waitMs as number);
+          const wake = () => {
+            clearTimeout(timer);
+            resolve();
+          };
+          this.httpWaiter = wake;
+        });
+        events = this.httpEvents
+          .filter((entry) => entry.cursor > cursor)
+          .slice(0, 100);
+      }
+      const nextCursor = events.length
+        ? events[events.length - 1]!.cursor
+        : cursor;
+      this.httpLastActivityAt = new Date().toISOString();
+      await this.persistHttpRuntime();
+      return Response.json({
+        cursor: String(nextCursor),
+        events: events.map((entry) => entry.envelope),
+        serverTime: new Date().toISOString(),
+        timedOut: events.length === 0,
+      });
+    }
+    if (
+      path === `/runtime/sessions/${encodeURIComponent(sessionId!)}/close` ||
+      path === "/runtime/close"
+    ) {
+      const now = new Date().toISOString();
+      this.queueProjectionWrite(
+        () =>
+          this.env.CONCLAVE_DB.prepare(
+            "UPDATE workspace_sessions SET disconnected_at = ?1 WHERE id = ?2",
+          )
+            .bind(now, sessionId)
+            .run(),
+        "session_disconnect_update_failed",
+        {
+          workspaceId: this.executionWorkspaceId ?? undefined,
+          runtimeId,
+          requestId: this.correlationId ?? undefined,
+        },
+      );
+      if (this.executionWorkspaceId)
+        this.queueProjectionWrite(
+          () =>
+            this.env.CONCLAVE_DB.prepare(
+              "UPDATE execution_workspaces SET status = 'offline', updated_at = ?1 WHERE id = ?2",
+            )
+              .bind(now, this.executionWorkspaceId)
+              .run(),
+          "workspace_offline_projection_failed",
+          { workspaceId: this.executionWorkspaceId, runtimeId },
+        );
+      this.sessionId = null;
+      this.httpLastActivityAt = null;
+      await this.state.storage.delete("http-runtime");
+      return Response.json({ closed: true, closedAt: now });
+    }
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
+
+  private async restoreHttpRuntime(): Promise<void> {
+    if (this.sessionId || this.socket) return;
+    const active = await this.state.storage.get<{
+      sessionId: string;
+      executionWorkspaceId: string;
+      workspaceRuntimeId: string;
+      cursor: number;
+      events: Array<{ cursor: number; envelope: Record<string, unknown> }>;
+      eventIds: string[];
+      lastActivityAt?: string;
+    }>("http-runtime");
+    if (!active) return;
+    this.sessionId = active.sessionId;
+    this.executionWorkspaceId = active.executionWorkspaceId;
+    this.workspaceRuntimeId = active.workspaceRuntimeId;
+    this.httpCursor = active.cursor;
+    this.httpEvents = active.events;
+    this.httpEventIds = new Set(active.eventIds ?? []);
+    this.httpLastActivityAt = active.lastActivityAt ?? null;
+  }
+
+  private isActivityRecent(lastActivityAt: string | null): boolean {
+    const activity = lastActivityAt ? Date.parse(lastActivityAt) : Number.NaN;
+    return Number.isFinite(activity) && Date.now() - activity <= 60000;
+  }
+
+  private async lastRuntimeActivityAt(): Promise<string | null> {
+    if (this.socket && this.sessionId) {
+      const session = await this.env.CONCLAVE_DB.prepare(
+        "SELECT last_heartbeat_at AS lastActivityAt FROM workspace_sessions WHERE id = ?1",
+      )
+        .bind(this.sessionId)
+        .first<{ lastActivityAt: string }>();
+      return session?.lastActivityAt ?? null;
+    }
+    return this.sessionId ? this.httpLastActivityAt : null;
+  }
+
+  private async isRuntimeLive(): Promise<boolean> {
+    return (
+      (this.socket !== null || this.sessionId !== null) &&
+      this.isActivityRecent(await this.lastRuntimeActivityAt())
+    );
+  }
+
+  private persistHttpRuntime(): Promise<void> {
+    if (
+      !this.sessionId ||
+      !this.executionWorkspaceId ||
+      !this.workspaceRuntimeId
+    )
+      return Promise.resolve();
+    const snapshot = {
+      sessionId: this.sessionId,
+      executionWorkspaceId: this.executionWorkspaceId,
+      workspaceRuntimeId: this.workspaceRuntimeId,
+      cursor: this.httpCursor,
+      events: this.httpEvents,
+      eventIds: [...this.httpEventIds],
+      lastActivityAt: this.httpLastActivityAt,
+    };
+    this.httpPersistChain = this.httpPersistChain.then(() =>
+      this.state.storage.put("http-runtime", snapshot),
+    );
+    return this.httpPersistChain;
   }
 
   private restoreAcceptedSocket(): void {
@@ -296,14 +628,38 @@ export class WorkspaceGateway implements DurableObject {
     if (!runtimeId) {
       return Response.json({ error: "runtimeId is required" }, { status: 400 });
     }
-    if (this.workspaceRuntimeId !== runtimeId || !this.socket) {
+    if (
+      this.workspaceRuntimeId !== runtimeId ||
+      (!this.socket && !this.sessionId)
+    ) {
       return Response.json({ disconnected: false });
     }
-    try {
-      this.socket.close(1000, "Workspace runtime unpaired");
-    } catch {
-      // The runtime credential is already revoked; a failed close cannot
-      // restore authorization or permit future reconnects.
+    if (this.socket) {
+      try {
+        this.socket.close(1000, "Workspace runtime unpaired");
+      } catch {
+        // The runtime credential is already revoked; a failed close cannot
+        // restore authorization or permit future reconnects.
+      }
+    } else if (this.sessionId) {
+      const now = new Date().toISOString();
+      await this.env.CONCLAVE_DB.prepare(
+        "UPDATE workspace_sessions SET disconnected_at = ?1 WHERE id = ?2",
+      )
+        .bind(now, this.sessionId)
+        .run();
+      if (this.executionWorkspaceId) {
+        await this.env.CONCLAVE_DB.prepare(
+          "UPDATE execution_workspaces SET status = 'offline', updated_at = ?1 WHERE id = ?2",
+        )
+          .bind(now, this.executionWorkspaceId)
+          .run();
+      }
+      this.sessionId = null;
+      this.httpLastActivityAt = null;
+      await this.state.storage.delete("http-runtime");
+      this.httpWaiter?.();
+      this.httpWaiter = null;
     }
     return Response.json({ disconnected: true });
   }
@@ -403,6 +759,14 @@ export class WorkspaceGateway implements DurableObject {
         // The stale socket is fenced by session id below.
       }
     }
+    if (this.sessionId) {
+      await this.env.CONCLAVE_DB.prepare(
+        "UPDATE workspace_sessions SET disconnected_at = ?1 WHERE id = ?2 AND disconnected_at IS NULL",
+      )
+        .bind(now, this.sessionId)
+        .run();
+    }
+    await this.state.storage.delete("http-runtime");
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];
@@ -711,6 +1075,55 @@ export class WorkspaceGateway implements DurableObject {
       case "worker.inventory":
         await this.recordWorkerInventory(message.payload);
         return;
+      case "assignment.ack": {
+        const payload = message.payload as Record<string, unknown>;
+        const accepted = payload.accepted ?? payload.status === "accepted";
+        await this.env.CONCLAVE_DB.prepare(
+          `UPDATE worker_assignments SET status = ?1, updated_at = ?2
+           WHERE id = ?3 AND execution_workspace_id = ?4
+             AND runtime_identity_id = ?5
+             AND status IN ('created', 'dispatched', 'acknowledged', 'running')`,
+        )
+          .bind(
+            accepted ? "acknowledged" : "failed",
+            now,
+            message.assignmentId,
+            this.executionWorkspaceId,
+            this.workspaceRuntimeId,
+          )
+          .run();
+        return;
+      }
+      case "assignment.progress": {
+        const payload = message.payload as Record<string, unknown>;
+        const workspaceId =
+          this.executionWorkspaceId ?? message.executionWorkspaceId;
+        if (!workspaceId) return;
+        await createEventPublisher(this.env).publish({
+          type: "assignment.progress",
+          durable: false,
+          workspaceId,
+          hostId: this.workspaceRuntimeId ?? message.workspaceRuntimeId,
+          runId: message.runId,
+          taskId: message.taskId,
+          attemptId: message.attemptId,
+          assignmentId: message.assignmentId,
+          idempotencyKey: `assignment-progress:${message.messageId}`,
+          payload: {
+            entityId: message.assignmentId,
+            workerId: message.workerId,
+            percentage:
+              typeof payload.percentage === "number" ? payload.percentage : 0,
+            message: typeof payload.message === "string" ? payload.message : "",
+            ...(typeof payload.metrics === "object" &&
+            payload.metrics !== null &&
+            !Array.isArray(payload.metrics)
+              ? { summary: JSON.stringify(payload.metrics).slice(0, 32768) }
+              : {}),
+          },
+        });
+        return;
+      }
       case "workstream.status":
         // Runtime readiness is logical-only. Never persist or relay a local
         // absolute path, repository clone path, or checkout path.
@@ -739,6 +1152,23 @@ export class WorkspaceGateway implements DurableObject {
           message.payload as never,
         );
         return;
+      case "assignment.cancel.ack": {
+        const payload = message.payload as Record<string, unknown>;
+        if (payload.cancelled === true) {
+          await recordAssignmentCancelled(
+            this.env.CONCLAVE_DB,
+            message.assignmentId!,
+            {
+              status: "cancelled",
+              reason:
+                typeof payload.reason === "string"
+                  ? payload.reason
+                  : "Cancelled by Workspace runtime",
+            },
+          );
+        }
+        return;
+      }
       default:
         return;
     }
@@ -957,7 +1387,7 @@ export class WorkspaceGateway implements DurableObject {
   }
 
   private async provisionCheckout(request: Request): Promise<Response> {
-    if (!this.socket) {
+    if (!(await this.isRuntimeLive())) {
       return Response.json({ error: "Workspace is offline" }, { status: 503 });
     }
     const body = (await request.json()) as Record<string, unknown>;
@@ -1028,7 +1458,7 @@ export class WorkspaceGateway implements DurableObject {
     request: Request,
     type: "checkout.recover" | "checkout.archive" | "checkout.finalize",
   ): Promise<Response> {
-    if (!this.socket)
+    if (!(await this.isRuntimeLive()))
       return Response.json({ error: "Workspace is offline" }, { status: 503 });
     const body = (await request.json()) as Record<string, unknown>;
     if (
@@ -1167,7 +1597,7 @@ export class WorkspaceGateway implements DurableObject {
   }
 
   private async dispatchAssignment(request: Request): Promise<Response> {
-    if (!this.socket)
+    if (!(await this.isRuntimeLive()))
       return Response.json({ error: "Workspace is offline" }, { status: 503 });
     const body = (await request.json()) as WorkspaceAssignmentCorrelation & {
       payload: unknown;
@@ -1211,7 +1641,7 @@ export class WorkspaceGateway implements DurableObject {
   }
 
   private async cancelAssignment(request: Request): Promise<Response> {
-    if (!this.socket)
+    if (!(await this.isRuntimeLive()))
       return Response.json({ error: "Workspace is offline" }, { status: 503 });
     const body = (await request.json()) as WorkspaceAssignmentCorrelation & {
       payload: unknown;
@@ -1229,11 +1659,30 @@ export class WorkspaceGateway implements DurableObject {
   }
 
   private send(message: Record<string, unknown>): void {
-    if (!this.socket) return;
-    this.socket.send(serializeWorkspaceRuntimeMessage(message as never));
+    const serialized = serializeWorkspaceRuntimeMessage(message as never);
+    if (this.socket) {
+      this.socket.send(serialized);
+      return;
+    }
+    if (!this.sessionId || !this.workspaceRuntimeId) return;
+    this.httpLastActivityAt = new Date().toISOString();
+    this.httpCursor += 1;
+    this.httpEvents.push({
+      cursor: this.httpCursor,
+      envelope: {
+        contract: "conclave.desktop-auth-transport",
+        version: "1.0",
+        eventId: `srv-${this.httpCursor}`,
+        occurredAt: new Date().toISOString(),
+        message: JSON.parse(serialized),
+      },
+    });
+    void this.persistHttpRuntime();
+    this.httpWaiter?.();
+    this.httpWaiter = null;
   }
 
   private sendError(error: string): void {
-    this.socket?.send(JSON.stringify({ error }));
+    if (this.socket) this.socket.send(JSON.stringify({ error }));
   }
 }

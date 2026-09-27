@@ -7,7 +7,6 @@ import 'package:conclave_host/main.dart';
 import 'package:conclave_host/platform_runtime.dart';
 import 'package:conclave_host/secure_credentials.dart';
 import 'package:conclave_host/workspace_enrollment.dart';
-import 'package:conclave_host/workspace_pairing_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -135,13 +134,11 @@ void main() {
   Future<void> pumpDashboard(
     WidgetTester tester,
     HostUiSnapshot snapshot, {
-    VoidCallback? onPair,
-    Future<void> Function(WorkspacePairingRequest request)? onPairRequest,
     VoidCallback? onDisconnect,
-    VoidCallback? onUnpair,
     VoidCallback? onReset,
-    Future<void> Function()? onRecoverPairing,
+    Future<void> Function()? onRecoverCredential,
     VoidCallback? onAccountAction,
+    Future<void> Function()? onSignIn,
     VoidCallback? onQuit,
     Future<void> Function()? onRetry,
     Future<void> Function()? onExportDiagnostics,
@@ -149,20 +146,17 @@ void main() {
     LocalConfiguredWorkerRegistry? localWorkerRegistry,
     SecureCredentialStore? credentialStore,
     Future<void> Function()? onAddWorker,
-    Future<String> Function()? resolveComputerName,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: HostDashboard(
             snapshot: snapshot,
-            onPair: onPair,
-            onPairRequest: onPairRequest,
-            onRecoverPairing: onRecoverPairing,
+            onRecoverCredential: onRecoverCredential,
             onDisconnect: onDisconnect,
-            onUnpair: onUnpair,
             onReset: onReset,
             onAccountAction: onAccountAction,
+            onSignIn: onSignIn,
             onQuit: onQuit,
             onRetry: onRetry,
             onExportDiagnostics: onExportDiagnostics,
@@ -171,183 +165,31 @@ void main() {
             credentialStore:
                 credentialStore ?? const PlatformSecureCredentialStore(),
             onAddWorker: onAddWorker,
-            resolveComputerName: resolveComputerName,
           ),
         ),
       ),
     );
   }
 
-  testWidgets(
-      'first launch presents clean workspace tab with inline connect card, work root, and diagnostics',
+  testWidgets('first launch uses authenticated registration instead of pairing',
       (tester) async {
-    tester.view.physicalSize = const Size(800, 1400);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    WorkspacePairingRequest? capturedRequest;
     await pumpDashboard(
       tester,
       const HostUiSnapshot(
         mode: HostUiMode.firstLaunch,
-        title: 'Pair this Workspace',
-        detail: 'Connect this machine to Conclave to begin.',
+        title: 'Workspace is ready to connect',
+        detail: 'Sign in to register this computer.',
         hostname: 'test-mac',
-        workspaceName: "Vitalii's MacBook Pro",
-        workRootPath: '/Users/test/Work',
       ),
-      onPairRequest: (request) async => capturedRequest = request,
-      resolveComputerName: () async => "Vitalii's MacBook Pro",
+      onSignIn: () async {},
+      onRecoverCredential: () async {},
     );
 
-    expect(find.text('Workspace name'), findsOneWidget);
-    expect(find.text("Vitalii's MacBook Pro"), findsOneWidget);
-    expect(find.text('Pairing code'), findsOneWidget);
-    expect(find.text('Advanced options'), findsNothing);
-    expect(find.widgetWithText(FilledButton, 'Connect'), findsOneWidget);
-    expect(find.widgetWithText(TextField, 'Work Root'), findsOneWidget);
-    final workRootField =
-        tester.widget<TextField>(find.widgetWithText(TextField, 'Work Root'));
-    expect(workRootField.readOnly, isTrue);
-    expect(find.text('Browse'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Open folder'), findsOneWidget);
-    expect(find.text('Advanced & Diagnostics'), findsOneWidget);
-    expect(find.text('Projects'), findsNothing);
-    expect(find.text('Chats'), findsNothing);
-
-    // Enter code and connect
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Pairing code'),
-      'code-987',
-    );
-    await tester.tap(find.text('Connect'));
-    await tester.pumpAndSettle();
-
-    expect(capturedRequest, isNotNull);
-    expect(capturedRequest!.workspaceName, "Vitalii's MacBook Pro");
-    expect(capturedRequest!.token, 'code-987');
-  });
-
-  testWidgets(
-      'first-launch pairing form displays differentiated error messages and actions on failure',
-      (tester) async {
-    tester.view.physicalSize = const Size(800, 1200);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    Object? pairingErrorToThrow;
-    String? copiedPairingError;
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      SystemChannels.platform,
-      (call) async {
-        if (call.method == 'Clipboard.setData') {
-          copiedPairingError = (call.arguments as Map)['text'] as String?;
-        }
-        return null;
-      },
-    );
-    addTearDown(() => tester.binding.defaultBinaryMessenger
-        .setMockMethodCallHandler(SystemChannels.platform, null));
-
-    await pumpDashboard(
-      tester,
-      const HostUiSnapshot(
-        mode: HostUiMode.ready,
-        paired: false,
-        title: 'Pair this Workspace',
-        detail: 'Connect this machine to Conclave to begin.',
-        hostname: 'test-mac',
-        workspaceName: "Vitalii's Custom Mac",
-      ),
-      onPairRequest: (request) async {
-        final error = pairingErrorToThrow;
-        if (error != null) {
-          throw error;
-        }
-      },
-      resolveComputerName: () async => "Vitalii's Custom Mac",
-    );
-
-    // 1. Expired code
-    pairingErrorToThrow = const WorkspacePairingException(
-      kind: WorkspacePairingErrorKind.expiredCode,
-      message: 'This pairing code has expired.',
-      action: 'Generate a new code in Conclave AX and try again.',
-    );
-
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Pairing code'),
-      'expired-token-123',
-    );
-    await tester.tap(find.text('Connect'));
-    await tester.pumpAndSettle();
-
-    expect(
-        find.textContaining('This pairing code has expired.'), findsOneWidget);
-    expect(
-        find.textContaining(
-            'Generate a new code in Conclave AX and try again.'),
-        findsOneWidget);
-    expect(find.byTooltip('Copy pairing error'), findsOneWidget);
-    final copyPairingError = tester.widget<IconButton>(find.ancestor(
-      of: find.byTooltip('Copy pairing error'),
-      matching: find.byType(IconButton),
-    ));
-    copyPairingError.onPressed!();
-    await tester.pump();
-    expect(copiedPairingError, contains('This pairing code has expired.'));
-    expect(copiedPairingError, contains('Generate a new code in Conclave AX'));
-    tester
-        .state<ScaffoldMessengerState>(find.byType(ScaffoldMessenger))
-        .hideCurrentSnackBar();
-    await tester.pumpAndSettle();
-    // Custom name is retained
-    expect(find.text("Vitalii's Custom Mac"), findsOneWidget);
-
-    // 2. Already used code
-    pairingErrorToThrow = const WorkspacePairingException(
-      kind: WorkspacePairingErrorKind.alreadyUsed,
-      message: 'This pairing code has already been used.',
-      action:
-          'Generate a fresh pairing code in Conclave AX to connect this Workspace.',
-    );
-
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Pairing code'),
-      'used-token-456',
-    );
-    await tester.tap(find.text('Connect'));
-    await tester.pumpAndSettle();
-
-    expect(find.textContaining('This pairing code has already been used.'),
-        findsOneWidget);
-    expect(
-        find.textContaining(
-            'Generate a fresh pairing code in Conclave AX to connect this Workspace.'),
-        findsOneWidget);
-
-    // 3. Cloud unavailable
-    pairingErrorToThrow = const WorkspacePairingException(
-      kind: WorkspacePairingErrorKind.cloudUnavailable,
-      message: 'Unable to connect to Conclave Cloud.',
-      action: 'Check your internet connection or verify the Cloud URL.',
-    );
-
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Pairing code'),
-      'valid-looking-code',
-    );
-    await tester.tap(find.text('Connect'));
-    await tester.pumpAndSettle();
-
-    expect(find.textContaining('Unable to connect to Conclave Cloud.'),
-        findsOneWidget);
-    expect(
-        find.textContaining(
-            'Check your internet connection or verify the Cloud URL.'),
-        findsOneWidget);
+    expect(find.text('Account'), findsOneWidget);
+    expect(find.text('Sign in'), findsOneWidget);
+    expect(find.text('Register Workspace'), findsOneWidget);
+    expect(find.text('Pairing code'), findsNothing);
+    expect(find.text('Connect'), findsNothing);
   });
 
   testWidgets('offline Workspace displays recovery panel with retry',
@@ -377,10 +219,9 @@ void main() {
         workspaceId: 'workspace-1',
         hostId: 'runtime-1',
         workspaceName: 'Development Mac',
-        canRecoverPairing: true,
       ),
       onRetry: () async => retried = true,
-      onRecoverPairing: () async => recoveryPrepared = true,
+      onRecoverCredential: () async => recoveryPrepared = true,
     );
 
     expect(find.text('Network unavailable'), findsOneWidget);
@@ -389,7 +230,7 @@ void main() {
     expect(find.text('Pairing code'), findsNothing);
     expect(find.widgetWithText(FilledButton, 'Connect'), findsNothing);
     expect(find.text('Retry connection'), findsOneWidget);
-    expect(find.text('Prepare to pair again'), findsOneWidget);
+    expect(find.text('Recover Workspace connection'), findsOneWidget);
     expect(find.byTooltip('Copy error message'), findsOneWidget);
     await tester.tap(find.byTooltip('Copy error message'));
     await tester.pump();
@@ -397,7 +238,7 @@ void main() {
     expect(find.text('Error message copied'), findsOneWidget);
     await tester.tap(find.text('Retry connection'));
     expect(retried, isTrue);
-    await tester.tap(find.text('Prepare to pair again'));
+    await tester.tap(find.text('Recover Workspace connection'));
     expect(recoveryPrepared, isTrue);
   });
 
@@ -414,7 +255,7 @@ void main() {
       const HostUiSnapshot(
         mode: HostUiMode.ready,
         title: 'Workspace is ready',
-        detail: 'This machine is paired and ready to run assigned work.',
+        detail: 'This computer is registered and ready to run assigned work.',
         paired: true,
         cloudConnected: true,
         workspaceName: 'MacBook Pro',
@@ -424,7 +265,6 @@ void main() {
         logsPath: '/tmp/host.log',
         updateSummary: 'Up to date',
       ),
-      onPair: () {},
     );
 
     // Only Workspace and Workers tabs exist in top navigation
@@ -736,8 +576,8 @@ void main() {
       tester,
       const HostUiSnapshot(
         mode: HostUiMode.ready,
-        title: 'Pair this Workspace',
-        detail: 'Pairing needed',
+        title: 'Connect this Workspace',
+        detail: 'Sign in to register this computer.',
         paired: false,
         hostname: 'test-mac',
       ),
