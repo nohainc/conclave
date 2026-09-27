@@ -2142,19 +2142,16 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
   }
 }
 
-enum _ShellAccessMode {
-  checking,
-  signedOut,
-  signInRequired,
-  signedIn,
-  reauthRequired,
-}
-
 class _ShellAccess {
-  const _ShellAccess(this.mode, [this.session]);
+  const _ShellAccess(
+    this.humanAuth, {
+    this.session,
+    this.signInRequired = false,
+  });
 
-  final _ShellAccessMode mode;
+  final HumanAuthState humanAuth;
   final DesktopHumanSession? session;
+  final bool signInRequired;
 }
 
 /// Selects a shell only after validating the desktop management session.
@@ -2223,7 +2220,7 @@ class _WorkspaceShellRouterState extends State<WorkspaceShellRouter> {
   Future<_ShellAccess> _loadAccess() async {
     final access = await _resolveAccess();
     widget.onManagementAuthRequiredChanged?.call(
-      access.mode == _ShellAccessMode.reauthRequired,
+      access.humanAuth == HumanAuthState.reauthRequired,
     );
     return access;
   }
@@ -2233,16 +2230,19 @@ class _WorkspaceShellRouterState extends State<WorkspaceShellRouter> {
         widget.snapshot.desiredRuntimeConnected;
     _ShellAccess invalidSession([DesktopHumanSession? session]) => _ShellAccess(
           runtimeIntendedConnected
-              ? _ShellAccessMode.reauthRequired
-              : _ShellAccessMode.signInRequired,
-          session,
+              ? HumanAuthState.reauthRequired
+              : HumanAuthState.signedOut,
+          session: session,
+          signInRequired: true,
         );
 
     final stored = await widget.credentialStore.read(desktopHumanCredentialKey);
     if (stored == null || stored.isEmpty) {
-      return _ShellAccess(widget.snapshot.paired && runtimeIntendedConnected
-          ? _ShellAccessMode.reauthRequired
-          : _ShellAccessMode.signedOut);
+      return _ShellAccess(
+        widget.snapshot.paired && runtimeIntendedConnected
+            ? HumanAuthState.reauthRequired
+            : HumanAuthState.signedOut,
+      );
     }
 
     try {
@@ -2277,7 +2277,10 @@ class _WorkspaceShellRouterState extends State<WorkspaceShellRouter> {
       final ownerUserId = widget.snapshot.ownerUserId;
       if (widget.snapshot.paired &&
           (ownerUserId == null || ownerUserId != session.userId)) {
-        return _ShellAccess(_ShellAccessMode.reauthRequired, session);
+        return _ShellAccess(
+          HumanAuthState.reauthRequired,
+          session: session,
+        );
       }
       final restored = await widget.restoreSession(session);
       if (restored == null ||
@@ -2291,12 +2294,39 @@ class _WorkspaceShellRouterState extends State<WorkspaceShellRouter> {
           jsonEncode(restored.toSecureJson()),
         );
       }
-      return _ShellAccess(_ShellAccessMode.signedIn, restored);
+      return _ShellAccess(HumanAuthState.signedIn, session: restored);
     } on Object {
       return runtimeIntendedConnected
-          ? _ShellAccess(_ShellAccessMode.reauthRequired)
-          : _ShellAccess(_ShellAccessMode.signInRequired);
+          ? _ShellAccess(HumanAuthState.reauthRequired)
+          : _ShellAccess(HumanAuthState.signedOut, signInRequired: true);
     }
+  }
+
+  WorkspaceLifecycleState _lifecycleState(_ShellAccess access) {
+    final snapshot = widget.snapshot;
+    final stage = snapshot.connectionStage;
+    final connecting = snapshot.mode == HostUiMode.starting ||
+        stage == HostConnectionStage.validating ||
+        stage == HostConnectionStage.connecting ||
+        stage == HostConnectionStage.authenticating ||
+        stage == HostConnectionStage.synchronizing ||
+        stage == HostConnectionStage.reconnecting ||
+        stage == HostConnectionStage.switchingToWebSocket;
+    final participation = snapshot.cloudConnected
+        ? WorkspaceParticipationState.connected
+        : snapshot.desiredRuntimeConnected && connecting
+            ? WorkspaceParticipationState.connecting
+            : WorkspaceParticipationState.disconnected;
+    return WorkspaceLifecycleState(
+      humanAuth: access.humanAuth,
+      participation: participation,
+      managementLock: widget.managementLocked
+          ? ManagementLockState.locked
+          : ManagementLockState.unlocked,
+      desiredRuntime: snapshot.desiredRuntimeConnected
+          ? DesiredRuntimeState.connected
+          : DesiredRuntimeState.disconnected,
+    );
   }
 
   void _showAbout() {
@@ -2316,36 +2346,25 @@ class _WorkspaceShellRouterState extends State<WorkspaceShellRouter> {
         future: _access,
         builder: (context, result) {
           final access = result.data;
-          if (access == null || access.mode == _ShellAccessMode.checking) {
+          if (access == null) {
             return const _MinimalShell(
               version: conclaveWorkspaceAppVersion,
               child: Center(child: CircularProgressIndicator()),
             );
           }
-          switch (access.mode) {
-            case _ShellAccessMode.checking:
-              return const _MinimalShell(
-                version: conclaveWorkspaceAppVersion,
-                child: Center(child: CircularProgressIndicator()),
-              );
-            case _ShellAccessMode.signedOut:
-              return _MinimalShell(
-                version: widget.snapshot.appVersion,
-                onAbout: _showAbout,
-                onQuit: widget.onQuit,
-                child: _SignedOutShell(onSignIn: widget.onSignIn),
-              );
-            case _ShellAccessMode.signInRequired:
+          final lifecycle = _lifecycleState(access);
+          switch (lifecycle.humanAuth) {
+            case HumanAuthState.signedOut:
               return _MinimalShell(
                 version: widget.snapshot.appVersion,
                 onAbout: _showAbout,
                 onQuit: widget.onQuit,
                 child: _SignedOutShell(
                   onSignIn: widget.onSignIn,
-                  signInRequired: true,
+                  signInRequired: access.signInRequired,
                 ),
               );
-            case _ShellAccessMode.reauthRequired:
+            case HumanAuthState.reauthRequired:
               return _MinimalShell(
                 version: widget.snapshot.appVersion,
                 onAbout: _showAbout,
@@ -2355,8 +2374,8 @@ class _WorkspaceShellRouterState extends State<WorkspaceShellRouter> {
                   onSignIn: widget.onSignIn,
                 ),
               );
-            case _ShellAccessMode.signedIn:
-              if (widget.managementLocked) {
+            case HumanAuthState.signedIn:
+              if (lifecycle.managementLock == ManagementLockState.locked) {
                 return _MinimalShell(
                   version: widget.snapshot.appVersion,
                   onAbout: _showAbout,

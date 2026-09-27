@@ -3,7 +3,26 @@ import 'dart:io';
 
 import 'package:conclave_host/workspace_lifecycle.dart';
 import 'package:conclave_host/workspace_lifecycle_store.dart';
+import 'package:conclave_host/host.dart';
+import 'package:conclave_host/host_configuration.dart';
+import 'package:conclave_host/secure_credentials.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+class _MemoryCredentials implements SecureCredentialStore {
+  final values = <String, String>{};
+
+  @override
+  String? readSync(String key) => values[key];
+
+  @override
+  Future<String?> read(String key) async => readSync(key);
+
+  @override
+  Future<void> write(String key, String value) async => values[key] = value;
+
+  @override
+  Future<void> delete(String key) async => values.remove(key);
+}
 
 void main() {
   test('every lifecycle dimension can be constructed independently', () {
@@ -166,6 +185,60 @@ void main() {
 
     expect(store.readSync().desiredRuntime, DesiredRuntimeState.disconnected);
     expect(store.file.existsSync(), isFalse);
+  });
+
+  test('connected legacy migration preserves the existing Workspace install',
+      () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'workspace-connected-migration-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    const registration = HostRegistration(
+      hostId: 'runtime-existing',
+      workspaceId: 'workspace-existing',
+      cloudUrl: 'https://cloud.example.test',
+      name: 'Existing Workspace',
+      hostname: 'existing-machine',
+      ownerUserId: 'owner-existing',
+      installationId: 'install_existing',
+      credentialRef: 'workspace-runtime:runtime-existing',
+    );
+    final registrationStore = HostRegistrationStore(directory);
+    await registrationStore.write(registration);
+    final credentials = _MemoryCredentials()
+      ..values['runtime-existing'] = 'runtime-secret-existing'
+      ..values['worker-provider'] = 'provider-secret-existing';
+    final workerFile = File('${directory.path}/configured-workers.json');
+    await workerFile.writeAsString('{"worker":"worker-existing"}');
+    final workRoot = Directory('${directory.path}/Work');
+    await workRoot.create(recursive: true);
+    final workFile = File('${workRoot.path}/keep.txt');
+    await workFile.writeAsString('existing work');
+
+    final preferences = WorkspaceLifecyclePreferencesStore(directory);
+    await preferences.migrateLegacyIfNeeded(
+      hasRuntimeRegistrationAndCredential:
+          registrationStore.readSync() != null &&
+              credentials.readSync(registration.hostId) != null,
+    );
+    final config = HostConfig.fromArgs(
+      ['--data-dir', directory.path, '--work-root', workRoot.path],
+      credentialStore: credentials,
+    );
+
+    expect(
+        preferences.readSync().desiredRuntime, DesiredRuntimeState.connected);
+    expect(registrationStore.readSync()?.hostId, registration.hostId);
+    expect(registrationStore.readSync()?.workspaceId, registration.workspaceId);
+    expect(registrationStore.readSync()?.installationId,
+        registration.installationId);
+    expect(config.hostId, registration.hostId);
+    expect(config.workspaceId, registration.workspaceId);
+    expect(config.installationId, registration.installationId);
+    expect(config.authToken, 'runtime-secret-existing');
+    expect(credentials.readSync('worker-provider'), 'provider-secret-existing');
+    expect(await workerFile.readAsString(), '{"worker":"worker-existing"}');
+    expect(await workFile.readAsString(), 'existing work');
   });
 
   test('local Workspace reset marks disconnected and retains chosen settings',

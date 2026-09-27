@@ -1232,6 +1232,29 @@ already satisfied.
 Upgrade does not disconnect valid existing Workspace runtimes and the code has
 one explicit lifecycle state machine.
 
+## Implementation status
+
+- Startup migrates an installation to `desiredRuntimeState = connected` only
+  when its saved Workspace registration and secure runtime credential both
+  exist. A previously saved `disconnected` value is retained.
+- Added a migration acceptance test that verifies the Workspace, runtime and
+  installation IDs, runtime credential, Worker/provider credential, configured
+  Worker data, and Work Root contents survive the migration.
+- Human sign-in performs ownership inspection and stores the human session; it
+  does not register or start a Workspace. Registration/recovery remains in the
+  explicit Connect Workspace action. A stored but invalid runtime is presented
+  for recovery and is never silently replaced during sign-in/startup.
+- The shell router now uses shared `HumanAuthState` and
+  `WorkspaceLifecycleState`; the duplicate private shell access mode was
+  removed. Existing signed-out and lifecycle-gated management shells remain in
+  place.
+- Legacy pairing services and Cloud compatibility endpoints remain available;
+  this lifecycle migration does not remove the ADR-013 compatibility path.
+
+The targeted Flutter lifecycle, shell, host lifecycle, and desktop-auth suites
+pass (49 tests); Dart analysis passes. No Cloud or persistence schema migration
+was required.
+
 ---
 
 # Phase 17 — Documentation and release validation
