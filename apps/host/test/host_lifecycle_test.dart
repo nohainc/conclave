@@ -27,8 +27,11 @@ void main() {
           'wss://cloud.example.test/api/workspace-gateway/connect?workspaceRuntimeId=$runtimeId'),
       hostId: runtimeId,
       workspaceId: workspaceId,
+      // The platform's WebSocket error text is not stable across macOS/Linux
+      // and may omit the HTTP status. Missing saved credentials are enough to
+      // offer the explicit recovery action.
       factory: (_) async => throw const WebSocketException(
-        'HTTP status code: 401',
+        'Connection failed',
       ),
     );
     final lifecycle = HostLifecycleController(

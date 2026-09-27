@@ -342,8 +342,7 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
         paired: hostId != null && workspaceId != null,
         canRecoverPairing: hostId != null &&
             workspaceId != null &&
-            host.config.authToken == null &&
-            startupError.toString().contains('401'),
+            host.config.authToken == null,
         statusLabel: 'Offline',
       );
     }
