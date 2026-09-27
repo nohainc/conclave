@@ -1,6 +1,6 @@
 # ADR-005: Better Auth for human authentication
 
-**Status:** Accepted  
+**Status:** Accepted; machine-side human-authentication clause superseded by [ADR-013](ADR-013-desktop-auth-and-dual-transport.md)  
 **Date:** 2026-09-23
 
 ## Context
@@ -64,10 +64,13 @@ infrastructure. It may provide an edge security boundary for those surfaces,
 but it is no longer an application authentication dependency and application
 authorization must not depend on Access identity headers being present.
 
-Hosts do not log in through Better Auth. An authorized human pairs a Host; the
-Host then uses its Conclave machine credential for Cloud connectivity.
-Credential Profiles are not Better Auth sessions and never become a substitute
-for human identity or authorization.
+At the time of this decision, machine-side applications did not establish a
+human Better Auth session. ADR-013 supersedes that part of the decision for
+Conclave Workspace: the desktop now gains a separate human management session
+derived from Better Auth while retaining an independently scoped runtime
+machine credential for execution. Human and runtime credentials must never be
+interchangeable. Credential Profiles/Worker credentials remain separate from
+both.
 
 ## Required boundary
 
