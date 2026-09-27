@@ -118,12 +118,37 @@ class HostConfig {
   static Uri? _cloudSocketUri(String value, {String? workspaceRuntimeId}) {
     final uri = Uri.tryParse(value);
     if (uri == null) return null;
-    if (uri.scheme == 'ws' || uri.scheme == 'wss') return uri;
-    if (uri.scheme != 'http' && uri.scheme != 'https') return uri;
-    return uri.replace(
-      scheme: uri.scheme == 'https' ? 'wss' : 'ws',
-      path:
-          '${uri.path.replaceFirst(RegExp(r'/$'), '')}/api/workspace-gateway/connect',
+    final socketScheme = switch (uri.scheme) {
+      'https' => 'wss',
+      'http' => 'ws',
+      'wss' => 'wss',
+      'ws' => 'ws',
+      _ => null,
+    };
+    if (socketScheme == null) return uri;
+
+    final isHttpOrigin = uri.scheme == 'http' || uri.scheme == 'https';
+    final existingPath = uri.path.replaceFirst(RegExp(r'/$'), '');
+    final path = isHttpOrigin || uri.path.isEmpty || uri.path == '/'
+        ? '$existingPath/api/workspace-gateway/connect'
+        : uri.path;
+
+    // dart:io's WebSocket.connect converts ws(s) to http(s) internally and
+    // copies Uri.port. For ws(s) Uri.port may be 0 when omitted, which turns
+    // the actual handshake URL into https://host:0/... . Materialize the
+    // protocol default here so the SDK receives 443/80 instead.
+    final port = uri.hasPort
+        ? uri.port
+        : socketScheme == 'wss'
+            ? 443
+            : 80;
+
+    return Uri(
+      scheme: socketScheme,
+      userInfo: uri.userInfo,
+      host: uri.host,
+      port: port,
+      path: path,
       queryParameters: {
         ...uri.queryParameters,
         if (workspaceRuntimeId != null)
