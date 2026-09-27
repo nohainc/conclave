@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { dispatchTaskAssignment } from "../src/assignment-dispatcher.js";
 import { handleV7WorkerScheduling } from "../src/routes/handlers.js";
 import { WorkspaceGateway } from "../src/workspace-gateway.js";
@@ -101,6 +101,7 @@ describe("V7 runtime assignment acceptance", () => {
   let child: ChildProcessWithoutNullStreams | undefined;
   let scratch: string | undefined;
   afterEach(async () => {
+    vi.restoreAllMocks();
     if (child && child.exitCode === null) {
       child.stdin.write('{"bridge":"close"}\n');
       child.stdin.end();
@@ -115,6 +116,10 @@ describe("V7 runtime assignment acceptance", () => {
 
   it("dispatches V7-only work through Cloud Gateway and the real Workspace child adapter, then persists the result", async () => {
     const sqlite = new DatabaseSync(":memory:");
+    const gatewayLogs: string[] = [];
+    vi.spyOn(console, "log").mockImplementation((record) => {
+      gatewayLogs.push(String(record));
+    });
     sqlite.exec("PRAGMA foreign_keys = ON");
     for (const file of migrationFiles) {
       sqlite.exec(
@@ -209,6 +214,7 @@ describe("V7 runtime assignment acceptance", () => {
       executionWorkspaceId: string | null;
       workspaceRuntimeId: string | null;
       sessionId: string | null;
+      correlationId: string | null;
       handleMessage(data: unknown, sessionId: string): Promise<void>;
     };
     Object.assign(privateGateway, {
@@ -216,6 +222,7 @@ describe("V7 runtime assignment acceptance", () => {
       executionWorkspaceId: "workspace-v7-e2e",
       workspaceRuntimeId: "runtime-v7-e2e",
       sessionId: gatewaySession,
+      correlationId: "v7-e2e-request-ray",
     });
 
     scratch = mkdtempSync(join(tmpdir(), "conclave-v7-e2e-"));
@@ -368,6 +375,27 @@ describe("V7 runtime assignment acceptance", () => {
       hostMessages.some((message) => message.type === "assignment.progress"),
     ).toBe(true);
     expect(hostResult.assignmentId).toBe(dispatched.assignmentId);
+    const protocolLogs = gatewayLogs
+      .map(
+        (record) =>
+          JSON.parse(record) as {
+            message: string;
+            correlation?: { requestId?: string };
+          },
+      )
+      .filter((record) => record.message.startsWith("GW-1"));
+    expect(protocolLogs.map((record) => record.message)).toEqual(
+      expect.arrayContaining([
+        "GW-10 workspace_hello_received",
+        "GW-11 workspace_hello_ack_sent",
+        "GW-12 workspace_sync_completed",
+      ]),
+    );
+    expect(
+      protocolLogs.every(
+        (record) => record.correlation?.requestId === "v7-e2e-request-ray",
+      ),
+    ).toBe(true);
 
     const assignment = await db
       .prepare(

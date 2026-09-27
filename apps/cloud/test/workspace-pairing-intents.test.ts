@@ -2,7 +2,7 @@ import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { hashToken } from "../../../packages/security/src/index.js";
 import {
   handleCancelWorkspacePairingIntent,
@@ -108,6 +108,7 @@ const ownerContext = (userId: string) => ({
 describe("Workspace pairing intents", () => {
   const databases: DatabaseSync[] = [];
   afterEach(() => {
+    vi.restoreAllMocks();
     for (const database of databases.splice(0)) database.close();
   });
 
@@ -560,12 +561,22 @@ describe("Workspace pairing intents", () => {
       authToken: string;
     };
 
-    let forwardedWebSocketRequest: Request | null = null;
+    const forwardedRequest: { request: Request | null } = { request: null };
+    const gatewayLogs: string[] = [];
+    vi.spyOn(console, "log").mockImplementation((message) => {
+      gatewayLogs.push(String(message));
+    });
+    vi.spyOn(console, "warn").mockImplementation((message) => {
+      gatewayLogs.push(String(message));
+    });
+    vi.spyOn(console, "error").mockImplementation((message) => {
+      gatewayLogs.push(String(message));
+    });
     Object.assign(env, {
       CONCLAVE_WORKSPACE_GATEWAY: {
         getByName: () => ({
           fetch: async (request: Request) => {
-            forwardedWebSocketRequest = request;
+            forwardedRequest.request = request;
             return Response.json({
               workspaceRuntimeId: new URL(request.url).searchParams.get(
                 "workspaceRuntimeId",
@@ -581,24 +592,53 @@ describe("Workspace pairing intents", () => {
         headers: {
           upgrade: "websocket",
           authorization: `Bearer ${runtime.authToken}`,
+          "cf-ray": "gateway-request-ray-123",
         },
       },
     );
     const reconnect = await handleWorkspaceGatewayConnect(connectRequest, env);
     expect(reconnect.status).toBe(200);
-    expect(forwardedWebSocketRequest).toBe(connectRequest);
-    expect(forwardedWebSocketRequest?.headers.get("upgrade")).toBe("websocket");
-    expect(forwardedWebSocketRequest?.headers.get("authorization")).toBe(
+    expect(forwardedRequest.request).toBe(connectRequest);
+    expect(forwardedRequest.request?.headers.get("upgrade")).toBe("websocket");
+    expect(forwardedRequest.request?.headers.get("cf-ray")).toBe(
+      "gateway-request-ray-123",
+    );
+    expect(forwardedRequest.request?.headers.get("authorization")).toBe(
       `Bearer ${runtime.authToken}`,
     );
     expect(
-      new URL(forwardedWebSocketRequest!.url).searchParams.get(
+      new URL(forwardedRequest.request!.url).searchParams.get(
         "workspaceRuntimeId",
       ),
     ).toBe(runtime.workspaceRuntimeId);
     expect(await reconnect.json()).toEqual({
       workspaceRuntimeId: runtime.workspaceRuntimeId,
     });
+    const records = gatewayLogs.map(
+      (record) =>
+        JSON.parse(record) as {
+          message: string;
+          correlation?: { requestId?: string };
+        },
+    );
+    expect(records.map((record) => record.message)).toEqual(
+      expect.arrayContaining([
+        "GW-01 workspace_gateway_request_received",
+        "GW-02 runtime_authentication_started",
+        "GW-03 runtime_authenticated",
+        "GW-04 forwarding_to_workspace_gateway_do",
+        "GW-04 workspace_gateway_do_response_received",
+      ]),
+    );
+    expect(
+      records
+        .filter((record) => record.message.startsWith("GW-"))
+        .every(
+          (record) =>
+            record.correlation?.requestId === "gateway-request-ray-123",
+        ),
+    ).toBe(true);
+    expect(gatewayLogs.join("\n")).not.toContain(runtime.authToken);
     expect(
       sqlite
         .prepare("SELECT COUNT(*) AS count FROM execution_workspaces")

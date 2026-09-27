@@ -65,3 +65,15 @@ upgrade. If the client URI is valid and the current Workspace build still
 receives 400, check that Cloud is running the release which forwards the
 original upgrade `Request` into the Durable Object (`c1b8708` or a later
 commit). A repository commit does not deploy the production Cloud Worker.
+
+## Cloud Gateway checkpoints
+
+The Cloud Worker and `WorkspaceGateway` emit structured `GW-01` through
+`GW-12` records for upgrade receipt, runtime authentication, forwarding,
+Durable Object acceptance, `workspace.hello`, and synchronization. Search the
+Worker logs by the `correlation.requestId` value. On production requests this
+is Cloudflare's `CF-Ray` ID, which is already on the original upgrade request
+and is preserved when it is forwarded unchanged. The Durable Object stores
+that ID in the WebSocket attachment so hello and sync records retain it after
+the handshake. These records include runtime and Workspace IDs, but never
+credential values, authorization headers, cookies, or provider secrets.

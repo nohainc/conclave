@@ -67,6 +67,7 @@ describe("V7 Workspace inventory recovery acceptance", () => {
     const internal = gateway as unknown as {
       executionWorkspaceId: string;
       workspaceRuntimeId: string;
+      correlationId: string;
       socket: { send(value: string): void };
       handleMessage(data: unknown, sessionId: string): Promise<void>;
       recordWorkerInventory(payload: unknown): Promise<void>;
@@ -74,6 +75,7 @@ describe("V7 Workspace inventory recovery acceptance", () => {
     const replies: string[] = [];
     internal.executionWorkspaceId = "workspace-a";
     internal.workspaceRuntimeId = "runtime-a";
+    internal.correlationId = "inventory-recovery-ray";
     internal.socket = { send: (value) => replies.push(value) };
     const hello = {
       protocol: "conclave.workspace-runtime-protocol",

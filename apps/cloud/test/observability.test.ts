@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isTrustedRealtimeOrigin,
+  requestIdFor,
   sanitizeDiagnostics,
   structuredLogRecord,
 } from "../src/observability.js";
@@ -42,6 +43,15 @@ describe("observability", () => {
       assignmentId: "assignment-1",
       credentialProfileId: "profile-1",
     });
+  });
+
+  it("uses Cloudflare's generated Ray ID to correlate forwarded requests", () => {
+    const request = new Request(
+      "https://app.conclave.test/api/workspace-gateway/connect",
+      { headers: { "cf-ray": "ray-123-lhr" } },
+    );
+    expect(requestIdFor(request)).toBe("ray-123-lhr");
+    expect(requestIdFor(new Request(request))).toBe("ray-123-lhr");
   });
 
   it("requires a trusted Origin for browser realtime upgrades", () => {

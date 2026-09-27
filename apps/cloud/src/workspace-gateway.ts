@@ -15,6 +15,7 @@ import {
   extractBearerToken,
   hashToken,
 } from "../../../packages/security/src/index.js";
+import { logStructured, requestIdFor } from "./observability.js";
 
 const jsonArray = (value: unknown): string[] => {
   if (typeof value !== "string") return [];
@@ -186,11 +187,37 @@ export async function isWorkspaceRuntimeAuthorized(
   return row ?? null;
 }
 
+async function findWorkspaceRuntimeIdentity(
+  db: Pick<D1Database, "prepare">,
+  workspaceRuntimeId: string,
+): Promise<{
+  executionWorkspaceId: string;
+  credentialTokenHash: string;
+} | null> {
+  const row = await db
+    .prepare(
+      `SELECT wri.workspace_id AS executionWorkspaceId,
+              wri.credential_token_hash AS credentialTokenHash
+       FROM workspace_runtime_identities wri
+       JOIN execution_workspaces ew ON ew.id = wri.workspace_id
+       WHERE wri.id = ?1
+         AND wri.revoked_at IS NULL
+         AND ew.status <> 'revoked'`,
+    )
+    .bind(workspaceRuntimeId)
+    .first<{
+      executionWorkspaceId: string;
+      credentialTokenHash: string;
+    }>();
+  return row ?? null;
+}
+
 export class WorkspaceGateway implements DurableObject {
   private socket: WebSocket | null = null;
   private executionWorkspaceId: string | null = null;
   private workspaceRuntimeId: string | null = null;
   private sessionId: string | null = null;
+  private correlationId: string | null = null;
 
   constructor(
     private readonly state: DurableObjectState,
@@ -254,25 +281,90 @@ export class WorkspaceGateway implements DurableObject {
   }
 
   private async connectSocket(request: Request, url: URL): Promise<Response> {
+    const correlationId = requestIdFor(request);
     const workspaceRuntimeId = url.searchParams.get("workspaceRuntimeId");
     const token = extractBearerToken(request.headers);
-    if (!workspaceRuntimeId || !token) {
+    let runtimeLookupFailed = false;
+    let runtimeIdentity: Awaited<
+      ReturnType<typeof findWorkspaceRuntimeIdentity>
+    > = null;
+    if (workspaceRuntimeId) {
+      try {
+        runtimeIdentity = await findWorkspaceRuntimeIdentity(
+          this.env.CONCLAVE_DB,
+          workspaceRuntimeId,
+        );
+      } catch {
+        runtimeLookupFailed = true;
+        runtimeIdentity = null;
+      }
+    }
+    const expectedWorkspaceId = this.state.id.name;
+    const runtimeIdMatches = Boolean(
+      runtimeIdentity &&
+      (!expectedWorkspaceId ||
+        runtimeIdentity.executionWorkspaceId === expectedWorkspaceId),
+    );
+    logStructured(
+      "info",
+      "GW-05 durable_object_request_received",
+      { requestId: correlationId, runtimeId: workspaceRuntimeId ?? undefined },
+      {
+        upgradeHeaderPresent:
+          request.headers.get("Upgrade")?.toLowerCase() === "websocket",
+        runtimeIdMatches,
+        runtimeLookupFailed,
+      },
+    );
+
+    if (
+      !workspaceRuntimeId ||
+      !token ||
+      !runtimeIdentity ||
+      !runtimeIdMatches
+    ) {
+      logStructured(
+        "warn",
+        "GW-06 durable_object_runtime_authentication_failed",
+        {
+          requestId: correlationId,
+          runtimeId: workspaceRuntimeId ?? undefined,
+        },
+        {
+          reason: runtimeLookupFailed
+            ? "runtime_identity_lookup_failed"
+            : "runtime_identity_mismatch_or_missing_credential",
+        },
+      );
       return Response.json(
         { error: "workspaceRuntimeId and runtime credential are required" },
         { status: 401 },
       );
     }
-    const authorized = await isWorkspaceRuntimeAuthorized(
-      this.env.CONCLAVE_DB,
-      workspaceRuntimeId,
-      await hashToken(token),
-    );
+
+    const authorized =
+      runtimeIdentity.credentialTokenHash === (await hashToken(token));
     if (!authorized) {
+      logStructured(
+        "warn",
+        "GW-06 durable_object_runtime_authentication_failed",
+        {
+          requestId: correlationId,
+          runtimeId: workspaceRuntimeId,
+          workspaceId: runtimeIdentity.executionWorkspaceId,
+        },
+        { reason: "invalid_or_revoked_credential" },
+      );
       return Response.json(
         { error: "Invalid or revoked Workspace runtime credential" },
         { status: 401 },
       );
     }
+    logStructured("info", "GW-06 durable_object_runtime_authenticated", {
+      requestId: correlationId,
+      runtimeId: workspaceRuntimeId,
+      workspaceId: runtimeIdentity.executionWorkspaceId,
+    });
 
     if (this.socket) {
       try {
@@ -287,14 +379,26 @@ export class WorkspaceGateway implements DurableObject {
     const sessionId = `session-${crypto.randomUUID()}`;
     server.serializeAttachment({
       sessionId,
-      executionWorkspaceId: authorized.executionWorkspaceId,
+      executionWorkspaceId: runtimeIdentity.executionWorkspaceId,
       workspaceRuntimeId,
+      correlationId,
+    });
+    logStructured("info", "GW-07 websocket_accepting", {
+      requestId: correlationId,
+      runtimeId: workspaceRuntimeId,
+      workspaceId: runtimeIdentity.executionWorkspaceId,
     });
     this.state.acceptWebSocket(server);
+    logStructured("info", "GW-08 websocket_accepted", {
+      requestId: correlationId,
+      runtimeId: workspaceRuntimeId,
+      workspaceId: runtimeIdentity.executionWorkspaceId,
+    });
     this.socket = server;
-    this.executionWorkspaceId = authorized.executionWorkspaceId;
+    this.executionWorkspaceId = runtimeIdentity.executionWorkspaceId;
     this.workspaceRuntimeId = workspaceRuntimeId;
     this.sessionId = sessionId;
+    this.correlationId = correlationId;
 
     const now = new Date().toISOString();
     await this.env.CONCLAVE_DB.prepare(
@@ -305,7 +409,7 @@ export class WorkspaceGateway implements DurableObject {
     )
       .bind(
         sessionId,
-        authorized.executionWorkspaceId,
+        runtimeIdentity.executionWorkspaceId,
         workspaceRuntimeId,
         "0.1.0",
         WORKSPACE_RUNTIME_PROTOCOL_VERSION,
@@ -316,9 +420,14 @@ export class WorkspaceGateway implements DurableObject {
     await this.env.CONCLAVE_DB.prepare(
       "UPDATE execution_workspaces SET status = 'online', updated_at = ?1 WHERE id = ?2",
     )
-      .bind(now, authorized.executionWorkspaceId)
+      .bind(now, runtimeIdentity.executionWorkspaceId)
       .run();
 
+    logStructured("info", "GW-09 returning_http_101", {
+      requestId: correlationId,
+      runtimeId: workspaceRuntimeId,
+      workspaceId: runtimeIdentity.executionWorkspaceId,
+    });
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -327,12 +436,14 @@ export class WorkspaceGateway implements DurableObject {
       sessionId: string;
       executionWorkspaceId: string;
       workspaceRuntimeId: string;
+      correlationId?: string;
     } | null;
     if (!attachment) return;
     this.socket = socket;
     this.sessionId = attachment.sessionId;
     this.executionWorkspaceId = attachment.executionWorkspaceId;
     this.workspaceRuntimeId = attachment.workspaceRuntimeId;
+    this.correlationId = attachment.correlationId ?? this.correlationId;
     void this.handleMessage(data, attachment.sessionId);
   }
 
@@ -413,6 +524,14 @@ export class WorkspaceGateway implements DurableObject {
     switch (message.type) {
       case "workspace.hello":
         {
+          const correlation = {
+            requestId: this.correlationId ?? undefined,
+            runtimeId: this.workspaceRuntimeId ?? undefined,
+            workspaceId: this.executionWorkspaceId ?? undefined,
+          };
+          logStructured("info", "GW-10 workspace_hello_received", correlation, {
+            protocolMessageId: message.messageId,
+          });
           const facts = runtimeFacts(message.payload);
           await this.env.CONCLAVE_DB.prepare(
             `INSERT INTO workspace_runtime_facts
@@ -449,6 +568,16 @@ export class WorkspaceGateway implements DurableObject {
           workspaceRuntimeId: this.workspaceRuntimeId ?? undefined,
           payload: { sessionId, heartbeatIntervalMs: 15000, serverTime: now },
         });
+        logStructured(
+          "info",
+          "GW-11 workspace_hello_ack_sent",
+          {
+            requestId: this.correlationId ?? undefined,
+            runtimeId: this.workspaceRuntimeId ?? undefined,
+            workspaceId: this.executionWorkspaceId ?? undefined,
+          },
+          { protocolCorrelationId: message.messageId },
+        );
         return;
       case "workspace.heartbeat":
         if (message.payload && typeof message.payload === "object") {
@@ -472,6 +601,16 @@ export class WorkspaceGateway implements DurableObject {
         return;
       case "workspace.sync.request":
         await this.syncWorkspace(message.messageId);
+        logStructured(
+          "info",
+          "GW-12 workspace_sync_completed",
+          {
+            requestId: this.correlationId ?? undefined,
+            runtimeId: this.workspaceRuntimeId ?? undefined,
+            workspaceId: this.executionWorkspaceId ?? undefined,
+          },
+          { protocolCorrelationId: message.messageId },
+        );
         return;
       case "worker.inventory":
         await this.recordWorkerInventory(message.payload);
