@@ -5,11 +5,12 @@ import 'package:conclave_host/assignment_journal.dart';
 import 'package:conclave_host/cloud_connection.dart';
 import 'package:conclave_host/host.dart';
 import 'package:conclave_host/host_configuration.dart';
+import 'package:conclave_host/workspace_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:conclave_host/main.dart';
 
-class _SilentWorkspaceSocket implements HostCloudSocket {
+class _SilentWorkspaceSocket implements WorkspaceTransport {
   final _messages = StreamController<Object?>.broadcast();
 
   @override

@@ -39,6 +39,61 @@ Future<void> waitFor(
   }
 }
 
+Future<void> completeHandshake(
+  HostCloudConnection connection,
+  FakeSocket socket, {
+  String sessionId = 'test-session',
+}) async {
+  Map<String, dynamic> sentMessage(String type) => socket.sent
+      .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+      .firstWhere((message) => message['type'] == type);
+
+  final legacy = connection.uri.path.contains('/host') &&
+      !connection.uri.path.contains('workspace-gateway');
+  final protocol = legacy
+      ? 'conclave.host-protocol'
+      : 'conclave.workspace-runtime-protocol';
+  final version = legacy ? '4.1' : workspaceRuntimeProtocolVersion;
+  final helloType = legacy ? 'host.hello' : 'workspace.hello';
+  await waitFor(() => socket.sent.any((message) =>
+      (jsonDecode(message as String) as Map<String, dynamic>)['type'] ==
+      helloType));
+  final hello = sentMessage(helloType);
+  socket.controller.add(jsonEncode({
+    'protocol': protocol,
+    'protocolVersion': version,
+    'messageId': 'test-hello-ack',
+    if (!legacy) 'correlationId': hello['messageId'],
+    'timestamp': DateTime.now().toUtc().toIso8601String(),
+    'type': legacy ? 'host.hello.ack' : 'workspace.hello.ack',
+    if (legacy) 'hostId': connection.hostId,
+    if (legacy) 'workspaceId': connection.workspaceId,
+    if (!legacy) 'workspaceRuntimeId': connection.hostId,
+    if (!legacy) 'executionWorkspaceId': connection.workspaceId,
+    'payload': {'sessionId': sessionId},
+  }));
+
+  final syncType = legacy ? 'host.sync.request' : 'workspace.sync.request';
+  await waitFor(() => socket.sent.any((message) =>
+      (jsonDecode(message as String) as Map<String, dynamic>)['type'] ==
+      syncType));
+  final sync = sentMessage(syncType);
+  socket.controller.add(jsonEncode({
+    'protocol': protocol,
+    'protocolVersion': version,
+    'messageId': 'test-sync-result',
+    if (!legacy) 'correlationId': sync['messageId'],
+    'timestamp': DateTime.now().toUtc().toIso8601String(),
+    'type': legacy ? 'host.sync.response' : 'workspace.sync.result',
+    if (legacy) 'hostId': connection.hostId,
+    if (legacy) 'workspaceId': connection.workspaceId,
+    if (!legacy) 'workspaceRuntimeId': connection.hostId,
+    if (!legacy) 'executionWorkspaceId': connection.workspaceId,
+    'payload': {'assignmentStates': []},
+  }));
+  await waitFor(() => connection.connectionStage == HostConnectionStage.ready);
+}
+
 void main() {
   test('connects outbound and sends hello', () async {
     final socket = FakeSocket();
@@ -709,6 +764,7 @@ void main() {
       assignmentJournal: journal,
     );
     await connection.connect();
+    await completeHandshake(connection, socket);
 
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
@@ -771,6 +827,7 @@ void main() {
       },
     );
     await connection.connect();
+    await completeHandshake(connection, socket);
     connection.beginDrain();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.workspace-runtime-protocol',
@@ -822,6 +879,7 @@ void main() {
       },
     );
     await connection.connect();
+    await completeHandshake(connection, socket);
 
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
@@ -938,6 +996,7 @@ void main() {
       factory: (_) async => socket,
     );
     await connection.connect();
+    await completeHandshake(connection, socket);
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
       'protocolVersion': '4.1',
@@ -976,6 +1035,7 @@ void main() {
       },
     );
     await connection.connect();
+    await completeHandshake(connection, socket);
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
       'protocolVersion': '4.1',
@@ -1020,6 +1080,7 @@ void main() {
       },
     );
     await connection.connect();
+    await completeHandshake(connection, socket);
 
     Map<String, Object?> assignment() => {
           'protocol': 'conclave.host-protocol',
@@ -1092,6 +1153,7 @@ void main() {
       },
     );
     await connection.connect();
+    await completeHandshake(connection, socket);
 
     final assignment = <String, Object?>{
       'protocol': 'conclave.host-protocol',
@@ -1207,6 +1269,7 @@ void main() {
       assignmentJournal: journal,
     );
     await connection.connect();
+    await completeHandshake(connection, socket);
     try {
       socket.controller.add(jsonEncode({
         'protocol': 'conclave.host-protocol',
@@ -1337,6 +1400,7 @@ void main() {
       reconnectMaxDelay: const Duration(milliseconds: 5),
     );
     await connection.connect();
+    await completeHandshake(connection, first);
     first.controller.add(jsonEncode({
       'protocol': 'conclave.workspace-runtime-protocol',
       'protocolVersion': workspaceRuntimeProtocolVersion,
@@ -1370,6 +1434,7 @@ void main() {
           final decoded = jsonDecode(message as String) as Map<String, dynamic>;
           return decoded['type'] == 'workspace.hello';
         }));
+    await completeHandshake(connection, recovered, sessionId: 'recovered');
     recovered.controller.add(jsonEncode({
       'protocol': 'conclave.workspace-runtime-protocol',
       'protocolVersion': workspaceRuntimeProtocolVersion,

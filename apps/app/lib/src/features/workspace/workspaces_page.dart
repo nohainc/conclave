@@ -232,6 +232,9 @@ class _WorkspaceCardBody extends StatelessWidget {
             _Fact(
                 label: 'Connection status',
                 value: _statusLabel(workspace.status)),
+            _Fact(
+                label: 'Connection mode',
+                value: _display(workspace.connectionMode ?? '—')),
             _Fact(label: 'Machine', value: _machine(workspace)),
             _Fact(label: 'Hostname', value: _display(workspace.hostname)),
             _Fact(label: 'App version', value: _display(workspace.appVersion)),

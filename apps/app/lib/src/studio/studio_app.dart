@@ -295,6 +295,29 @@ class _StudioAppState extends State<ConclaveAppShell> {
     unawaited(_loadSession());
   }
 
+  @override
+  void dispose() {
+    refreshTimer?.cancel();
+    _searchQueryController.removeListener(_onSearchQueryChanged);
+    _searchQueryController.dispose();
+    _searchFocusNode.dispose();
+    objectiveController.dispose();
+    revisionController.dispose();
+    chatController.dispose();
+    authNameController.dispose();
+    authEmailController.dispose();
+    authPasswordController.dispose();
+    authConfirmPasswordController.dispose();
+    desktopAuthCodeController.dispose();
+    promptResponseController.dispose();
+    unawaited(navigationSubscription?.cancel());
+    unawaited(lifecycleSubscription?.cancel());
+    unawaited(realtimeSubscription?.cancel());
+    unawaited(realtimeClient.close());
+    browserNavigation.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadSession() async {
     try {
       final session = await store.auth.load();

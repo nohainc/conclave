@@ -6,7 +6,6 @@ import 'package:conclave_host/cloud_connection.dart';
 import 'package:conclave_host/main.dart';
 import 'package:conclave_host/platform_runtime.dart';
 import 'package:conclave_host/secure_credentials.dart';
-import 'package:conclave_host/workspace_enrollment.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -225,8 +224,7 @@ void main() {
     );
 
     expect(find.text('Network unavailable'), findsOneWidget);
-    expect(find.text('Development Mac'), findsOneWidget);
-    expect(find.text('Offline'), findsNWidgets(2));
+    expect(find.text('Offline'), findsOneWidget);
     expect(find.text('Pairing code'), findsNothing);
     expect(find.widgetWithText(FilledButton, 'Connect'), findsNothing);
     expect(find.text('Retry connection'), findsOneWidget);
@@ -475,7 +473,7 @@ void main() {
   });
 
   testWidgets(
-      'workspace tab displays work root, disconnect from AX, and reset local workspace',
+      'workspace tab displays work root and Account lifecycle actions',
       (tester) async {
     var disconnected = false;
     var reset = false;
@@ -505,11 +503,7 @@ void main() {
     expect(find.text('Work Root'), findsOneWidget);
     expect(find.text('/workspace/root'), findsOneWidget);
 
-    await tester.ensureVisible(find.text('Advanced & Diagnostics'));
-    await tester.tap(find.text('Advanced & Diagnostics'));
-    await tester.pumpAndSettle();
-
-    final disconnectBtn = find.text('Disconnect from Conclave AX');
+    final disconnectBtn = find.text('Disconnect Workspace');
     await tester.ensureVisible(disconnectBtn);
     await tester.pumpAndSettle();
     expect(disconnectBtn, findsOneWidget);
