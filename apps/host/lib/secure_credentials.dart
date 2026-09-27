@@ -148,13 +148,18 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
     if (_effectivePlatform == 'macos') {
       final keychain = nativeKeychain;
       if (keychain != null) {
-        await keychain.delete(service: service, account: key);
-        if (_needsSynchronousCache(key)) {
-          final cacheKey = _cacheKey(key);
-          _cache.remove(cacheKey);
-          _loaded.add(cacheKey);
+        try {
+          await keychain.delete(service: service, account: key);
+          if (_needsSynchronousCache(key)) {
+            final cacheKey = _cacheKey(key);
+            _cache.remove(cacheKey);
+            _loaded.add(cacheKey);
+          }
+          return;
+        } on Object {
+          // Recovery must still be possible if the native channel is absent.
+          // Fall through to macOS's OS credential helper below.
         }
-        return;
       }
     }
     final command = currentCredentialBackend.delete(service, key);

@@ -18,6 +18,32 @@ import 'workspace_enrollment.dart';
 import 'workspace_pairing_dialog.dart';
 import 'workspace_runtime.dart';
 
+void showCopyableErrorSnackBar(BuildContext context, String message) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      duration: const Duration(seconds: 20),
+      content: Row(
+        children: [
+          Expanded(child: SelectableText(message)),
+          IconButton(
+            tooltip: 'Copy error message',
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.copy, size: 18),
+            color: Theme.of(context).colorScheme.onInverseSurface,
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: message));
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Error message copied')),
+              );
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 Future<AdapterPrerequisiteResult> _probeLocalWorkerPrerequisite(
     String workerTypeId) async {
   final types =
@@ -957,8 +983,9 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(dialogContext).showSnackBar(
-          SnackBar(content: Text('Could not prepare pairing recovery: $error')),
+        showCopyableErrorSnackBar(
+          dialogContext,
+          'Could not prepare pairing recovery: $error',
         );
       }
     }

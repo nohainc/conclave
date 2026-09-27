@@ -87,6 +87,50 @@ class _FakeWorkerRegistry extends LocalConfiguredWorkerRegistry {
 }
 
 void main() {
+  testWidgets('pairing error notification has a working copy action',
+      (tester) async {
+    tester.view.physicalSize = const Size(1000, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    String? copiedText;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copiedText = (call.arguments as Map)['text'] as String?;
+        }
+        return null;
+      },
+    );
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+
+    const error = 'Could not prepare pairing recovery: MissingPluginException';
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: TextButton(
+            onPressed: () => showCopyableErrorSnackBar(context, error),
+            child: const Text('Show error'),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('Show error'));
+    await tester.pump();
+    expect(find.text(error), findsOneWidget);
+    expect(find.byTooltip('Copy error message'), findsOneWidget);
+
+    final copyButton = tester.widget<IconButton>(find.ancestor(
+      of: find.byTooltip('Copy error message'),
+      matching: find.byType(IconButton),
+    ));
+    copyButton.onPressed!();
+    await tester.pump();
+    expect(copiedText, error);
+  });
+
   Future<void> pumpDashboard(
     WidgetTester tester,
     HostUiSnapshot snapshot, {

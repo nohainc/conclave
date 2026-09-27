@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -68,5 +70,24 @@ void main() {
       await store.readForSynchronousConfig('runtime-startup-fallback-test'),
       isNull,
     );
+  });
+
+  test('credential deletion falls back when the Keychain channel is missing',
+      () async {
+    if (!Platform.isMacOS) return;
+    const channel = MethodChannel('com.conclave.workspace/keychain');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      throw MissingPluginException('Keychain channel unavailable');
+    });
+    addTearDown(() => TestDefaultBinaryMessengerBinding
+        .instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null));
+
+    const store = PlatformSecureCredentialStore(
+      platform: 'macos',
+      nativeKeychain: FlutterMacKeychainBridge(),
+    );
+    await store.delete('runtime-recovery-fallback-test');
   });
 }
