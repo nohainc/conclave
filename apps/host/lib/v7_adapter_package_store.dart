@@ -301,8 +301,9 @@ class V7AdapterPackageStore {
     required LocalConfiguredWorker worker,
     required SecureCredentialReader readCredential,
   }) async {
+    final adapterTypeId = adapterPackageTypeId(worker.workerTypeId);
     final activeFile = File(
-        '${root.path}${Platform.pathSeparator}${worker.workerTypeId}${Platform.pathSeparator}active.json');
+        '${root.path}${Platform.pathSeparator}$adapterTypeId${Platform.pathSeparator}active.json');
     if (!await activeFile.exists()) return null;
     final rawPointer = jsonDecode(await activeFile.readAsString());
     if (rawPointer is! Map || rawPointer['version'] is! String) {
@@ -316,7 +317,7 @@ class V7AdapterPackageStore {
           'installed adapter does not satisfy the local version policy');
     }
     final packageRoot = Directory(
-        '${root.path}${Platform.pathSeparator}${worker.workerTypeId}${Platform.pathSeparator}$version');
+        '${root.path}${Platform.pathSeparator}$adapterTypeId${Platform.pathSeparator}$version');
     final manifestFile =
         File('${packageRoot.path}${Platform.pathSeparator}manifest.json');
     if (!await manifestFile.exists()) {
@@ -328,7 +329,7 @@ class V7AdapterPackageStore {
     final admitted = await V7AdapterAdmission.admit(
       input: manifest,
       packageRoot: packageRoot,
-      expectedWorkerTypeId: worker.workerTypeId,
+      expectedWorkerTypeId: adapterTypeId,
       verifiedPackageDigest: digest,
       platform: platform,
       trustPolicy: trustPolicy,
@@ -368,7 +369,7 @@ class V7AdapterPackageStore {
     );
     return V7AdapterLaunch(
       processSpec: spec,
-      workerTypeId: worker.workerTypeId,
+      workerTypeId: adapterTypeId,
       adapterVersion: admitted.adapterVersion,
       config: Map.unmodifiable(worker.adapterConfig),
       defaultModel: worker.defaultModel,
@@ -381,8 +382,9 @@ class V7AdapterPackageStore {
   /// a version or capabilities to the Cloud projection.
   Future<Map<String, Object?>?> activeManifestSummary(
       LocalConfiguredWorker worker) async {
+    final adapterTypeId = adapterPackageTypeId(worker.workerTypeId);
     final activeFile = File(
-        '${root.path}${Platform.pathSeparator}${worker.workerTypeId}${Platform.pathSeparator}active.json');
+        '${root.path}${Platform.pathSeparator}$adapterTypeId${Platform.pathSeparator}active.json');
     if (!await activeFile.exists()) return null;
     final rawPointer = jsonDecode(await activeFile.readAsString());
     if (rawPointer is! Map || rawPointer['version'] is! String) {
@@ -390,7 +392,7 @@ class V7AdapterPackageStore {
     }
     final version = _safeVersion(rawPointer['version']);
     final packageRoot = Directory(
-        '${root.path}${Platform.pathSeparator}${worker.workerTypeId}${Platform.pathSeparator}$version');
+        '${root.path}${Platform.pathSeparator}$adapterTypeId${Platform.pathSeparator}$version');
     final manifestFile =
         File('${packageRoot.path}${Platform.pathSeparator}manifest.json');
     if (!await manifestFile.exists()) return null;
@@ -403,7 +405,7 @@ class V7AdapterPackageStore {
     final admitted = await V7AdapterAdmission.admit(
       input: manifest,
       packageRoot: packageRoot,
-      expectedWorkerTypeId: worker.workerTypeId,
+      expectedWorkerTypeId: adapterTypeId,
       verifiedPackageDigest: digest,
       platform: platform,
       trustPolicy: trustPolicy,

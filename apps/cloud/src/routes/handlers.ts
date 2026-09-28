@@ -4934,6 +4934,63 @@ async function handleCreateChatMessage(
 // V6 Workstream Discuss / Work API
 // =========================================================================
 
+function normalizeWorkstreamWorkerUsagePolicy(value: unknown): {
+  policy: Record<string, unknown>;
+  workerIds: string[];
+} {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new HttpError(400, "executionPolicy must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (
+    input.version !== 1 ||
+    !["configured_only", "configured_then_any"].includes(String(input.fallbackPolicy)) ||
+    !input.roles || typeof input.roles !== "object" || Array.isArray(input.roles)
+  ) {
+    throw new HttpError(400, "executionPolicy is invalid");
+  }
+  const roles = input.roles as Record<string, unknown>;
+  if (Object.keys(roles).length > 64) throw new HttpError(400, "executionPolicy has too many roles");
+  const workerIds = new Set<string>();
+  const normalizedRoles: Record<string, Record<string, unknown>> = {};
+  for (const [rawRole, rawBinding] of Object.entries(roles)) {
+    const role = rawRole.trim().toLowerCase();
+    if (!role || role.length > 80 || !rawBinding || typeof rawBinding !== "object" || Array.isArray(rawBinding)) {
+      throw new HttpError(400, "executionPolicy role binding is invalid");
+    }
+    const binding = rawBinding as Record<string, unknown>;
+    const normalized: Record<string, unknown> = {};
+    for (const key of ["workspaceId", "workerId", "model"] as const) {
+      if (binding[key] !== undefined) {
+        const max = key === "model" ? 160 : 200;
+        if (typeof binding[key] !== "string" || binding[key].length > max) {
+          throw new HttpError(400, `executionPolicy ${key} is invalid`);
+        }
+        normalized[key] = binding[key].trim();
+      }
+    }
+    if (typeof normalized.workerId === "string") workerIds.add(normalized.workerId);
+    if (binding.fallbackWorkerIds !== undefined) {
+      if (!Array.isArray(binding.fallbackWorkerIds) || binding.fallbackWorkerIds.length > 32 || binding.fallbackWorkerIds.some((id) => typeof id !== "string" || id.length > 200)) {
+        throw new HttpError(400, "executionPolicy fallbackWorkerIds is invalid");
+      }
+      normalized.fallbackWorkerIds = [...new Set(binding.fallbackWorkerIds)];
+      for (const id of normalized.fallbackWorkerIds as string[]) workerIds.add(id);
+    }
+    if (binding.cloudConcurrencyLimit !== undefined) {
+      if (!Number.isInteger(binding.cloudConcurrencyLimit) || Number(binding.cloudConcurrencyLimit) < 1 || Number(binding.cloudConcurrencyLimit) > 1024) {
+        throw new HttpError(400, "executionPolicy cloudConcurrencyLimit must be between 1 and 1024");
+      }
+      normalized.cloudConcurrencyLimit = Number(binding.cloudConcurrencyLimit);
+    }
+    normalizedRoles[role] = normalized;
+  }
+  return {
+    policy: { version: 1, fallbackPolicy: input.fallbackPolicy, roles: normalizedRoles },
+    workerIds: [...workerIds],
+  };
+}
+
 function workstreamMetadata(
   row: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -4948,6 +5005,10 @@ function workstreamMetadata(
     status: String(row.status),
     lead: row.leadUserId ?? row.lead_user_id ?? null,
     accessPolicy,
+    executionPolicy: parseJson(
+      row.executionPolicyJson ?? row.policyJson,
+      { version: 1, fallbackPolicy: "configured_only", roles: {} },
+    ),
     primaryWorkspace:
       accessPolicy.primaryWorkspaceId ??
       accessPolicy.primary_workspace_id ??
@@ -5010,9 +5071,12 @@ export async function handleListProjectWorkstreams(
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT id, project_id AS projectId, name, status,
             access_policy_json AS accessPolicyJson,
+            usage.policy_json AS executionPolicyJson,
             lead_user_id AS leadUserId,
             created_at AS createdAt, updated_at AS updatedAt
-     FROM workstreams WHERE project_id = ?1 ORDER BY created_at ASC`,
+     FROM workstreams
+     LEFT JOIN workstream_worker_usage_policies usage ON usage.workstream_id = workstreams.id
+     WHERE project_id = ?1 ORDER BY created_at ASC`,
   )
     .bind(projectId)
     .all<Record<string, unknown>>();
@@ -5130,6 +5194,27 @@ export async function handleUpdateWorkstream(
   if (typeof accessPolicy !== "object" || accessPolicy === null) {
     throw new HttpError(400, "accessPolicy must be an object");
   }
+  const rawExecutionPolicy = body.executionPolicy;
+  let executionPolicy: Record<string, unknown> | undefined;
+  if (rawExecutionPolicy !== undefined) {
+    const normalized = normalizeWorkstreamWorkerUsagePolicy(rawExecutionPolicy);
+    executionPolicy = normalized.policy;
+    if (normalized.workerIds.length > 0) {
+      const grants = await env.CONCLAVE_DB.prepare(
+        `SELECT i.worker_id FROM workspace_worker_inventory i
+         JOIN workspace_project_grants g ON g.workspace_id = i.workspace_id
+         WHERE g.project_id = ?1 AND g.status = 'active'
+           AND (g.expires_at IS NULL OR g.expires_at > ?2)
+           AND i.status != 'removed'`,
+      )
+        .bind(workstream.projectId, new Date().toISOString())
+        .all<{ worker_id: string }>();
+      const eligibleIds = new Set((grants.results ?? []).map((row) => row.worker_id));
+      if (normalized.workerIds.some((workerId) => !eligibleIds.has(workerId))) {
+        throw new HttpError(409, "Selected Workers must belong to a Workspace with an active Project grant");
+      }
+    }
+  }
   if (name.trim().toLowerCase() !== workstream.name.trim().toLowerCase()) {
     const duplicate = await env.CONCLAVE_DB.prepare(
       `SELECT id FROM workstreams
@@ -5154,6 +5239,63 @@ export async function handleUpdateWorkstream(
   )
     .bind(name, status, JSON.stringify(accessPolicy), now, workstreamId)
     .run();
+  if (executionPolicy !== undefined) {
+    await env.CONCLAVE_DB.prepare(
+      `INSERT INTO workstream_worker_usage_policies
+         (workstream_id, policy_json, updated_by_user_id, updated_at)
+       VALUES (?1, ?2, ?3, ?4)
+       ON CONFLICT(workstream_id) DO UPDATE SET policy_json = excluded.policy_json,
+         updated_by_user_id = excluded.updated_by_user_id, updated_at = excluded.updated_at`,
+    )
+      .bind(workstreamId, JSON.stringify(executionPolicy), context.userId, now)
+      .run();
+    const roles = executionPolicy.roles as Record<string, Record<string, unknown>>;
+    const selectedWorkerIds = new Set<string>();
+    for (const binding of Object.values(roles)) {
+      if (typeof binding.workerId === "string") selectedWorkerIds.add(binding.workerId);
+      for (const id of Array.isArray(binding.fallbackWorkerIds) ? binding.fallbackWorkerIds : []) {
+        if (typeof id === "string") selectedWorkerIds.add(id);
+      }
+    }
+    if (executionPolicy.fallbackPolicy === "configured_then_any") {
+      const fallbackWorkers = await env.CONCLAVE_DB.prepare(
+        `SELECT DISTINCT i.worker_id FROM workspace_worker_inventory i
+         JOIN workspace_project_grants g ON g.workspace_id = i.workspace_id
+         WHERE g.project_id = ?1 AND g.status = 'active'
+           AND (g.expires_at IS NULL OR g.expires_at > ?2)
+           AND i.status != 'removed'`,
+      )
+        .bind(workstream.projectId, now)
+        .all<{ worker_id: string }>();
+      for (const row of fallbackWorkers.results ?? []) selectedWorkerIds.add(row.worker_id);
+    }
+    for (const workerId of selectedWorkerIds) {
+      await env.CONCLAVE_DB.prepare(
+        `INSERT INTO v7_worker_scheduling (worker_id, state, updated_by_user_id, updated_at)
+         VALUES (?1, 'enabled', ?2, ?3)
+         ON CONFLICT(worker_id) DO UPDATE SET state = 'enabled',
+           updated_by_user_id = excluded.updated_by_user_id, updated_at = excluded.updated_at,
+           drain_requested_by_user_id = NULL, drain_requested_at = NULL, drain_completed_at = NULL`,
+      )
+        .bind(workerId, context.userId, now)
+        .run();
+      await env.CONCLAVE_DB.prepare(
+        `INSERT INTO v7_worker_scheduling_audit
+           (id, worker_id, actor_user_id, action, requested_at, completed_at)
+         VALUES (?1, ?2, ?3, 'enabled', ?4, ?4)`,
+      )
+        .bind(crypto.randomUUID(), workerId, context.userId, now)
+        .run();
+    }
+  }
+  const savedPolicyJson = executionPolicy === undefined
+    ? await env.CONCLAVE_DB.prepare(
+        "SELECT policy_json FROM workstream_worker_usage_policies WHERE workstream_id = ?1",
+      )
+        .bind(workstreamId)
+        .first<{ policy_json: string }>()
+        .then((row) => row?.policy_json)
+    : JSON.stringify(executionPolicy);
   return json({
     workstream: workstreamMetadata({
       id: workstream.id,
@@ -5161,6 +5303,7 @@ export async function handleUpdateWorkstream(
       name,
       status,
       accessPolicyJson: JSON.stringify(accessPolicy),
+      executionPolicyJson: savedPolicyJson,
       leadUserId: workstream.lead.userId,
       createdAt: workstream.createdAt,
       updatedAt: now,
@@ -7797,19 +7940,14 @@ export async function handleListWorkspaceWorkerInventory(
   const context = await securityContext(request, env, ctx);
   const workspaceId = new URL(request.url).searchParams.get("workspaceId");
   const rows = await env.CONCLAVE_DB.prepare(
-    `SELECT i.worker_id, i.workspace_id, ew.name AS workspace_name,
-            i.worker_type_id, i.name, i.status, i.auth_strategy,
-            i.default_model, i.allowed_models_json, i.capabilities_json,
-            i.local_permissions_summary_json, i.local_concurrency_limit,
-            i.adapter_version, i.credential_status, i.revision,
-            i.created_at, i.updated_at, i.last_seen_at, i.removed_at,
-            s.state AS scheduling_state, s.cloud_concurrency_limit
+    `SELECT i.worker_id, i.workspace_id,
+            i.worker_type_id, i.status, i.readiness_state, i.capabilities_json,
+            i.local_concurrency_limit, i.adapter_version,
+            i.last_seen_at, i.removed_at
        FROM workspace_worker_inventory i
-       JOIN execution_workspaces ew ON ew.id = i.workspace_id
-       LEFT JOIN v7_worker_scheduling s ON s.worker_id = i.worker_id
       WHERE i.owner_user_id = ?1
         AND (?2 IS NULL OR i.workspace_id = ?2)
-      ORDER BY ew.name, i.name, i.worker_id`,
+      ORDER BY i.workspace_id, i.worker_type_id, i.worker_id`,
   )
     .bind(context.userId, workspaceId)
     .all<Record<string, unknown>>();
@@ -7825,33 +7963,19 @@ export async function handleListWorkspaceWorkerInventory(
     workers: (rows.results ?? []).map((row) => ({
       id: String(row.worker_id),
       workspaceId: String(row.workspace_id),
-      workspaceName: String(row.workspace_name),
       workerTypeId: String(row.worker_type_id),
-      name: String(row.name),
       status: String(row.status),
-      authStrategy: String(row.auth_strategy),
-      defaultModel:
-        row.default_model == null ? null : String(row.default_model),
-      allowedModels: parseArray(row.allowed_models_json),
+      readinessState: String(row.readiness_state),
+      attentionReasonCode:
+        row.readiness_state === "ready" || row.readiness_state === "disabled"
+          ? null
+          : String(row.readiness_state),
       capabilities: parseArray(row.capabilities_json),
-      localPermissionsSummary: parseArray(row.local_permissions_summary_json),
       localConcurrencyLimit: Number(row.local_concurrency_limit),
       adapterVersion:
         row.adapter_version == null ? null : String(row.adapter_version),
-      credentialStatus: String(row.credential_status),
-      revision: Number(row.revision),
-      createdAt: String(row.created_at),
-      updatedAt: String(row.updated_at),
       lastSeenAt: String(row.last_seen_at),
       removedAt: row.removed_at == null ? null : String(row.removed_at),
-      schedulingState:
-        row.scheduling_state == null
-          ? "disabled"
-          : String(row.scheduling_state),
-      cloudConcurrencyLimit:
-        row.cloud_concurrency_limit == null
-          ? null
-          : Number(row.cloud_concurrency_limit),
     })),
   });
 }
@@ -7866,14 +7990,13 @@ export async function handleV7WorkerScheduling(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   const worker = await env.CONCLAVE_DB.prepare(
-    `SELECT i.workspace_id, i.status, i.credential_status
+    `SELECT i.workspace_id, i.status
        FROM workspace_worker_inventory i WHERE i.worker_id = ?1 AND i.owner_user_id = ?2`,
   )
     .bind(workerId, context.userId)
     .first<{
       workspace_id: string;
       status: string;
-      credential_status: string;
     }>();
   if (!worker) throw new HttpError(404, "Workspace Worker not found");
   const now = new Date().toISOString();
@@ -7882,9 +8005,7 @@ export async function handleV7WorkerScheduling(
       throw new HttpError(400, "Unknown Worker scheduling action");
     }
     if (
-      action === "enable" &&
-      (worker.status !== "ready" ||
-        !["ready", "not_required"].includes(worker.credential_status))
+      action === "enable" && worker.status !== "ready"
     ) {
       throw new HttpError(409, "Worker is not locally ready");
     }

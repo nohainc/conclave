@@ -363,6 +363,11 @@ class StudioWorkstream {
     required this.primaryWorkspace,
     required this.currentCheckpoint,
     required this.queueStatus,
+    this.executionPolicy = const {
+      'version': 1,
+      'fallbackPolicy': 'configured_only',
+      'roles': <String, dynamic>{},
+    },
     this.archived = false,
   });
 
@@ -375,6 +380,7 @@ class StudioWorkstream {
   final String primaryWorkspace;
   final String currentCheckpoint;
   final String queueStatus;
+  final Map<String, dynamic> executionPolicy;
   final bool archived;
 
   factory StudioWorkstream.fromJson(Map<String, dynamic> json) =>
@@ -388,6 +394,13 @@ class StudioWorkstream {
         primaryWorkspace: _string(json, 'primaryWorkspace', 'Not selected'),
         currentCheckpoint: _string(json, 'currentCheckpoint', 'Not started'),
         queueStatus: _string(json, 'queueStatus', 'Idle'),
+        executionPolicy: json['executionPolicy'] is Map
+            ? Map<String, dynamic>.from(json['executionPolicy'] as Map)
+            : const {
+                'version': 1,
+                'fallbackPolicy': 'configured_only',
+                'roles': <String, dynamic>{},
+              },
         archived: json['archived'] == true,
       );
 }
@@ -555,56 +568,35 @@ class StudioWorker {
   const StudioWorker({
     required this.id,
     required this.workspaceId,
-    required this.workspaceName,
     required this.workerTypeId,
-    required this.name,
     required this.status,
-    required this.authStrategy,
-    required this.credentialStatus,
+    required this.readinessState,
+    this.attentionReasonCode,
     required this.localConcurrencyLimit,
-    required this.revision,
     required this.capabilities,
-    required this.allowedModels,
-    this.schedulingState = 'disabled',
-    this.cloudConcurrencyLimit,
-    this.defaultModel,
     this.adapterVersion,
   });
 
   final String id;
   final String workspaceId;
-  final String workspaceName;
   final String workerTypeId;
-  final String name;
   final String status;
-  final String authStrategy;
-  final String credentialStatus;
+  final String readinessState;
+  final String? attentionReasonCode;
   final int localConcurrencyLimit;
-  final int revision;
-  final String? defaultModel;
   final String? adapterVersion;
   final List<String> capabilities;
-  final List<String> allowedModels;
-  final String schedulingState;
-  final int? cloudConcurrencyLimit;
 
   factory StudioWorker.fromJson(Map<String, dynamic> json) => StudioWorker(
         id: _string(json, 'id'),
         workspaceId: _string(json, 'workspaceId'),
-        workspaceName: _string(json, 'workspaceName'),
         workerTypeId: _string(json, 'workerTypeId'),
-        name: _string(json, 'name'),
         status: _string(json, 'status', 'needs_attention'),
-        authStrategy: _string(json, 'authStrategy', 'none'),
-        credentialStatus: _string(json, 'credentialStatus', 'error'),
+        readinessState: _string(json, 'readinessState', 'test_failed'),
+        attentionReasonCode: json['attentionReasonCode']?.toString(),
         localConcurrencyLimit: json['localConcurrencyLimit'] as int? ?? 1,
-        revision: json['revision'] as int? ?? 0,
-        defaultModel: json['defaultModel']?.toString(),
         adapterVersion: json['adapterVersion']?.toString(),
         capabilities: _strings(json, 'capabilities'),
-        allowedModels: _strings(json, 'allowedModels'),
-        schedulingState: _string(json, 'schedulingState', 'disabled'),
-        cloudConcurrencyLimit: json['cloudConcurrencyLimit'] as int?,
       );
 }
 

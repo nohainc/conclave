@@ -37,13 +37,13 @@ configure Workers in the Conclave Workspace desktop app, and create a Project.
 Authentication and local readiness problems direct users back to that desktop
 runtime.
 
-Workspace-owned Worker inventory remains visible in AX, but the normal
-Workspaces surface is moving to an operationally read-only model. Pairing,
-recovery, local Worker lifecycle, credentials, permissions, and runtime
-connection management belong to Conclave Workspace. Project/Workstream
-authorization remains a Cloud/AX concern. Existing remote scheduling-control
-APIs may remain temporarily for compatibility/internal use while their product
-surface is retired.
+Workspace-owned Worker inventory remains visible in AX as operational
+readiness. Pairing, recovery, local Worker lifecycle, credentials, permissions,
+and runtime connection management belong to Conclave Workspace. AX owns actual
+Project/Workstream Worker use: task role, Workspace/Worker selection, model,
+fallback policy, Cloud scheduling state, and Cloud concurrency ceilings. These
+choices live with Project and Workstream policy, not local Worker setup. See
+[ADR-016](../decisions/ADR-016-ax-owned-worker-usage.md).
 
 ## 2. Conclave Cloud
 
@@ -108,7 +108,7 @@ Conclave Cloud never executes an external AI/model/tool directly.
 
 One normal Conclave Workspace installation runs per machine/OS-user installation.
 
-Configured Workers are created/authenticated locally and belong to exactly one Workspace. Safe Worker inventory is synchronized to Cloud for scheduling and remote control.
+Configured Workers are created/authenticated locally and belong to exactly one Workspace. Safe Worker readiness is synchronized to Cloud; AX Workstream policy determines how that capacity is used.
 
 Conclave Workspace is background-first. Human desktop authentication is
 distinct from Workspace runtime participation and from Worker/provider
@@ -128,14 +128,18 @@ Projects, Workstreams, Discuss, Work orchestration and Project administration re
 
 A Worker Type is a signed integration adapter definition, not a user-installed application and not an AI model.
 
-Examples:
-- Codex;
-- Antigravity;
-- Claude Code;
-- OpenAI API;
-- Gemini API;
-- Anthropic API;
-- Ollama.
+The frozen first-party v1 product catalog contains:
+- **ChatGPT**, powered locally by Codex CLI (`codex`);
+- **Gemini**, powered locally by Antigravity CLI (`agy`).
+
+Each Workspace has one stable slot for each type and at most one configured
+Worker per slot. The CLI owns provider authentication and billing mode; Conclave
+does not ask the user to choose subscription versus API-key authentication or
+store the provider credentials. See the
+[Worker catalog contract v1](../specifications/FIRST_PARTY_WORKER_CATALOG_V1.md).
+
+Other adapters may remain in the implementation or historical records during
+migration, but are not part of the supported first-party v1 catalog.
 
 Adapter packages are installed/verified by Conclave Workspace and execute out-of-process as child processes.
 
@@ -144,7 +148,8 @@ One adapter package/version may serve many local configured Workers of the same 
 A configured Worker:
 - belongs to exactly one Workspace;
 - has one local authentication/configuration context;
-- may define default/allowed models;
+- is displayed using its fixed product type name, without a configurable Worker name;
+- does not own model defaults or allow-lists; model choice comes from the Work/Assignment;
 - is synchronized to Cloud as safe metadata/readiness;
 - does not connect directly to Conclave Cloud.
 

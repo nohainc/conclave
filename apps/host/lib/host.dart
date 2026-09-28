@@ -12,6 +12,7 @@ import 'v7_adapter_package_store.dart';
 import 'worker_trust_policy.dart';
 import 'release_trust_roots.dart';
 import 'workspace_paths.dart';
+import 'worker_readiness.dart';
 
 export 'configured_worker_registry.dart';
 export 'release_trust_roots.dart';
@@ -237,6 +238,7 @@ class Host {
     SecureCredentialStore? credentialStore,
     V7AdapterPackageStore? adapterPackageStore,
     LocalConfiguredWorkerRegistry? localWorkerRegistry,
+    this.workerReadinessMonitor,
     String Function(String)? redactLog,
     this.logFileMaxBytes = 1024 * 1024,
   })  : _configuredLogOutput = logOutput,
@@ -268,6 +270,7 @@ class Host {
   final SecureCredentialStore credentialStore;
   final V7AdapterPackageStore adapterPackageStore;
   final LocalConfiguredWorkerRegistry? localWorkerRegistry;
+  final WorkerReadinessMonitor? workerReadinessMonitor;
   final HostCloudConnection? cloudConnection;
   final HostStatusProvider? statusProvider;
   final HostStatusProvider? updateStatusProvider;
@@ -313,6 +316,7 @@ class Host {
       }),
     );
     _running = true;
+    await workerReadinessMonitor?.start();
     _signalSubscriptions.addAll(
       currentPlatformRuntime.watchTermination(() => unawaited(stop())),
     );
@@ -331,6 +335,7 @@ class Host {
   Future<void> stop() async {
     if (!_running) return;
     _running = false;
+    await workerReadinessMonitor?.dispose();
     for (final subscription in _signalSubscriptions) {
       await subscription.cancel();
     }

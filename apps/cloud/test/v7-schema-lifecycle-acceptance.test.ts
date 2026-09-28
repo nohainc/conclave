@@ -29,6 +29,9 @@ const migrationFiles = [
   "0026_remove_v6_configured_workers.sql",
   "0027_public_key_release_trust.sql",
   "0028_workspace_pairing_intents.sql",
+  "0031_worker_readiness_state.sql",
+  "0032_worker_inventory_safe_projection.sql",
+  "0033_workstream_worker_usage_policy.sql",
 ];
 
 const schema = migrationFiles

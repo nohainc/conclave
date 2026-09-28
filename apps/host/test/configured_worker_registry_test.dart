@@ -29,27 +29,28 @@ void main() {
     if (await directory.exists()) await directory.delete(recursive: true);
   });
 
-  test(
-      'creates local Workers, enforces local name uniqueness, and increments revisions',
-      () async {
+  test('enforces one Worker per type while allowing custom names', () async {
     final created = await registry.create(
-      name: 'Codex Personal',
-      workerTypeId: 'codex',
+      name: 'My Assistant',
+      workerTypeId: 'chatgpt',
       authStrategy: 'browser_auth',
     );
+    expect(created.workerTypeId, 'chatgpt');
     expect(created.revision, 1);
     final updated = await registry.update(
       created.id,
-      (worker) => worker.copyWith(name: 'Codex Work'),
+      (worker) => worker.copyWith(name: 'My Work Assistant'),
     );
     expect(updated.id, created.id);
     expect(updated.revision, 2);
     await registry.create(
-        name: 'Gemini', workerTypeId: 'gemini-api', authStrategy: 'api_key');
+        name: 'My Assistant',
+        workerTypeId: 'gemini',
+        authStrategy: 'browser_auth');
     await expectLater(
       registry.create(
-          name: 'codex work',
-          workerTypeId: 'codex',
+          name: 'Another ChatGPT',
+          workerTypeId: 'chatgpt',
           authStrategy: 'browser_auth'),
       throwsArgumentError,
     );
@@ -129,8 +130,100 @@ void main() {
     expect((await registry.list()).single.id, 'worker-old');
     final migrated =
         jsonDecode(await file.readAsString()) as Map<String, dynamic>;
-    expect(migrated['schemaVersion'], 4);
+    expect(migrated['schemaVersion'], 7);
     expect(migrated['workers'][0].containsKey('ownerUserId'), isFalse);
+  });
+
+  test('migrates adapter type IDs and deterministically removes duplicates',
+      () async {
+    Map<String, Object?> record({
+      required String id,
+      required String name,
+      required String type,
+      required String status,
+      required String credentialStatus,
+      required String createdAt,
+      String? defaultModel,
+      List<String> allowedModels = const [],
+    }) =>
+        {
+          'id': id,
+          'workspaceId': 'workspace-1',
+          'name': name,
+          'workerTypeId': type,
+          'authStrategy': 'browser_auth',
+          'credentialRef': null,
+          'defaultModel': defaultModel,
+          'adapterConfig': <String, Object?>{},
+          'allowedModels': allowedModels,
+          'localPermissions': <String>[],
+          'localConcurrencyLimit': 1,
+          'adapterVersionPolicy': null,
+          'status': status,
+          'credentialStatus': credentialStatus,
+          'revision': 1,
+          'createdAt': createdAt,
+          'updatedAt': createdAt,
+        };
+    final rawWorkers = [
+      record(
+        id: 'codex-needs-attention',
+        name: 'Codex Personal',
+        type: 'codex',
+        status: LocalWorkerStatus.needsAttention.name,
+        credentialStatus: LocalWorkerCredentialStatus.needsAuthentication.name,
+        createdAt: '2026-09-26T00:00:00.000Z',
+      ),
+      record(
+        id: 'codex-ready',
+        name: 'Codex Work',
+        type: 'codex',
+        status: LocalWorkerStatus.ready.name,
+        credentialStatus: LocalWorkerCredentialStatus.ready.name,
+        createdAt: '2026-09-27T00:00:00.000Z',
+        defaultModel: 'old-default',
+        allowedModels: ['old-default'],
+      ),
+      record(
+        id: 'antigravity-stable',
+        name: 'Antigravity',
+        type: 'antigravity',
+        status: LocalWorkerStatus.needsAttention.name,
+        credentialStatus: LocalWorkerCredentialStatus.needsAuthentication.name,
+        createdAt: '2026-09-26T00:00:00.000Z',
+      ),
+    ];
+    final checksumPayload = jsonEncode({
+      'schemaVersion': 4,
+      'workers': rawWorkers,
+    });
+    final file = File(
+        '${directory.path}${Platform.pathSeparator}configured-workers.json');
+    await file.writeAsString(jsonEncode({
+      'schemaVersion': 4,
+      'workers': rawWorkers,
+      'checksum': sha256.convert(utf8.encode(checksumPayload)).toString(),
+    }));
+
+    final migrated = await registry.list();
+    expect(migrated.map((worker) => worker.workerTypeId).toSet(),
+        {'chatgpt', 'gemini'});
+    expect(
+        migrated.singleWhere((worker) => worker.workerTypeId == 'chatgpt').id,
+        'codex-ready');
+    final chatgpt =
+        migrated.singleWhere((worker) => worker.workerTypeId == 'chatgpt');
+    expect(chatgpt.name, 'ChatGPT');
+    expect(chatgpt.defaultModel, isNull);
+    expect(chatgpt.allowedModels, isEmpty);
+    final gemini =
+        migrated.singleWhere((worker) => worker.workerTypeId == 'gemini');
+    expect(gemini.id, 'antigravity-stable');
+    expect(gemini.name, 'Gemini');
+    final written =
+        jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+    expect(written['schemaVersion'], 7);
+    expect((written['workers'] as List), hasLength(2));
   });
 
   test(
@@ -171,10 +264,12 @@ void main() {
     expect(tombstone.credentialRef, isNull);
     final replacement = await registry.create(
       name: 'Codex',
-      workerTypeId: 'codex',
+      workerTypeId: 'chatgpt',
       authStrategy: 'browser_auth',
     );
-    expect(replacement.id, isNot(worker.id));
+    expect(replacement.id, worker.id);
+    expect(replacement.revision, worker.revision + 3);
+    expect((await registry.list(includeRemoved: true)), hasLength(1));
   });
 
   test('Worker removal awaits cancellation before writing its tombstone',

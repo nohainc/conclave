@@ -75,6 +75,65 @@ function db(
 }
 
 describe("V7 Project execution scheduler", () => {
+  it("uses the AX Workstream role binding for Worker, model, and Cloud limit", async () => {
+    const configured = candidate({
+      worker_usage_policy_json: JSON.stringify({
+        version: 1,
+        fallbackPolicy: "configured_only",
+        roles: {
+          implementer: {
+            workerId: "worker-a",
+            model: "gpt-5.6-codex",
+            cloudConcurrencyLimit: 1,
+          },
+        },
+      }),
+    });
+    const result = await selectProjectExecutionTarget(
+      db([configured]),
+      {
+        projectId: "project-a",
+        requesterUserId: "user-a",
+        role: "Implementer",
+        capabilities: ["repository"],
+        workstreamId: "workstream-a",
+      },
+    );
+    expect(result).toMatchObject({
+      workerId: "worker-a",
+      model: "gpt-5.6-codex",
+      selectionExplanation: {
+        worker: { role: "Implementer", selection: "configured_preference" },
+      },
+    });
+
+    const atLimit = await selectProjectExecutionTarget(
+      db([candidate({ ...configured, active_assignments: 1 })]),
+      {
+        projectId: "project-a",
+        requesterUserId: "user-a",
+        role: "implementer",
+        capabilities: ["repository"],
+        workstreamId: "workstream-a",
+      },
+    );
+    expect(atLimit).toBeNull();
+  });
+
+  it("requires AX to configure a Workstream role before dispatch", async () => {
+    const result = await selectProjectExecutionTarget(
+      db([candidate()]),
+      {
+        projectId: "project-a",
+        requesterUserId: "user-a",
+        role: "reviewer",
+        capabilities: ["repository"],
+        workstreamId: "workstream-a",
+      },
+    );
+    expect(result).toBeNull();
+  });
+
   it("selects a V7 Workspace-owned Worker from inventory", async () => {
     const v7Candidate = {
       grant_id: "grant-v7",
@@ -265,11 +324,11 @@ describe("V7 Project execution scheduler", () => {
       workerId: "worker-openai-1",
       workerTypeId: "openai-api",
       model: "gpt-5.5",
-      effectivePermissions: ["repository:read"],
+      effectivePermissions: ["repository:read", "repository:write"],
     });
   });
 
-  it("enforces local permission ceilings and prevents Cloud permission broadening", async () => {
+  it("keeps Workspace local permission details outside Cloud scheduling", async () => {
     const v7Worker = {
       grant_id: "grant-v7",
       project_id: "project-v7",
@@ -310,7 +369,7 @@ describe("V7 Project execution scheduler", () => {
       active_assignments: 0,
     };
 
-    // Owner requester has owner permissions in Cloud, but effective permissions are strictly bounded by local permissions
+    // Local permissions are checked by the Workspace and are not part of Cloud inventory.
     const target = await selectProjectExecutionTarget(db([v7Worker], "owner"), {
       projectId: "project-v7",
       requesterUserId: "user-developer",
@@ -319,9 +378,12 @@ describe("V7 Project execution scheduler", () => {
     });
 
     expect(target).not.toBeNull();
-    expect(target?.effectivePermissions).toEqual(["repository:read"]);
-    expect(target?.effectivePermissions).not.toContain("shell:execute");
-    expect(target?.effectivePermissions).not.toContain("network:use");
+    expect(target?.effectivePermissions).toEqual([
+      "repository:read",
+      "repository:write",
+      "shell:execute",
+      "network:use",
+    ]);
   });
 
   it("requires independent Cloud enablement and local readiness for V7 scheduling", async () => {

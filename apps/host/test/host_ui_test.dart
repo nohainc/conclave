@@ -172,7 +172,6 @@ void main() {
     Future<void> Function(String path)? onChangeWorkRoot,
     LocalConfiguredWorkerRegistry? localWorkerRegistry,
     SecureCredentialStore? credentialStore,
-    Future<void> Function()? onAddWorker,
     bool signedIn = false,
   }) async {
     await tester.pumpWidget(
@@ -198,7 +197,6 @@ void main() {
             // Keychain. Tests covering Keychain behavior provide a mocked
             // native bridge explicitly.
             credentialStore: credentialStore ?? _MemoryCredentialStore(),
-            onAddWorker: onAddWorker,
             signedIn: signedIn,
           ),
         ),
@@ -366,7 +364,8 @@ void main() {
     expect(find.text('Workers'), findsWidgets);
     await tester.tap(find.text('Workers').first);
     await tester.pumpAndSettle();
-    expect(find.text('Add Worker'), findsOneWidget);
+    expect(find.text('ChatGPT'), findsOneWidget);
+    expect(find.text('Gemini'), findsOneWidget);
     await tester.tap(find.text('Workspace').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Register'));
@@ -441,7 +440,8 @@ void main() {
     expect(find.text('Workers'), findsWidgets);
     await tester.tap(find.text('Workers').first);
     await tester.pumpAndSettle();
-    expect(find.text('Add Worker'), findsOneWidget);
+    expect(find.text('ChatGPT'), findsOneWidget);
+    expect(find.text('Gemini'), findsOneWidget);
     await tester.tap(find.text('Workspace').first);
     await tester.pumpAndSettle();
     expect(find.text('Connect'), findsOneWidget);
@@ -1134,16 +1134,12 @@ void main() {
     expect(openFolderBtn, findsNothing);
   });
 
-  testWidgets('workers surface stays hidden until Workspace is Ready',
+  testWidgets('Workers catalog stays hidden until Workspace is Ready',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-
-    var addWorkerCalled = false;
-    final registry = _FakeWorkerRegistry([]);
-    final credentials = _MemoryCredentialStore();
 
     await pumpDashboard(
       tester,
@@ -1154,23 +1150,16 @@ void main() {
         paired: false,
         hostname: 'test-mac',
       ),
-      localWorkerRegistry: registry,
-      credentialStore: credentials,
-      onAddWorker: () async => addWorkerCalled = true,
+      localWorkerRegistry: _FakeWorkerRegistry([]),
     );
 
     expect(find.text('Workers'), findsNothing);
-    expect(
-        find.text(
-            'Local AI models and execution adapters running on this machine.'),
-        findsNothing);
-    expect(find.text('Configured Workers'), findsNothing);
+    expect(find.text('ChatGPT'), findsNothing);
+    expect(find.text('Gemini'), findsNothing);
     expect(find.text('Add Worker'), findsNothing);
-    expect(addWorkerCalled, isFalse);
   });
 
-  testWidgets(
-      'switching to workers surface when paired displays configured workers area',
+  testWidgets('Workers page always shows the fixed ChatGPT and Gemini catalog',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;
@@ -1188,29 +1177,96 @@ void main() {
         cloudConnected: true,
         workspaceName: 'Office Mac',
       ),
+      localWorkerRegistry: _FakeWorkerRegistry([]),
     );
 
     await tester.tap(find.text('Workers').first);
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('worker-catalog-chatgpt')));
+    await tester.pumpAndSettle();
 
-    expect(find.text('Configured Workers'), findsNothing);
-    expect(
-        find.text(
-            'Local AI models and execution adapters running on this machine.'),
-        findsOneWidget);
-    expect(find.text('Add Worker'), findsOneWidget);
+    expect(find.text('ChatGPT'), findsOneWidget);
+    expect(find.text('Gemini'), findsOneWidget);
+    expect(find.text('Codex CLI'), findsOneWidget);
+    expect(find.text('Antigravity CLI'), findsOneWidget);
+    expect(find.text('Not configured'), findsNWidgets(2));
+    expect(find.text('Set up'), findsNWidgets(2));
+    expect(find.text('Add Worker'), findsNothing);
+    expect(find.text('No local Workers configured'), findsNothing);
+    expect(find.byKey(const Key('worker-type-selector')), findsNothing);
   });
 
-  testWidgets(
-      'workers surface displays worker cards with health badges, auth attention, and detail dialog',
+  testWidgets('fixed catalog rows merge configured Worker status by type',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    final initialWorker = LocalConfiguredWorker(
-      id: 'w-1',
+    final chatGptWorker = LocalConfiguredWorker(
+      id: 'w-chatgpt',
+      workspaceId: 'ws-test',
+      name: 'ChatGPT local',
+      workerTypeId: 'chatgpt',
+      authStrategy: 'browser_auth',
+      credentialRef: null,
+      defaultModel: null,
+      adapterConfig: const {},
+      allowedModels: const [],
+      localPermissions: const ['workstream_filesystem', 'shell_execution'],
+      localConcurrencyLimit: 1,
+      adapterVersionPolicy: null,
+      status: LocalWorkerStatus.ready,
+      credentialStatus: LocalWorkerCredentialStatus.ready,
+      revision: 1,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    );
+
+    await pumpDashboard(
+      tester,
+      const HostUiSnapshot(
+        mode: HostUiMode.ready,
+        title: 'Workspace is ready',
+        detail: 'Ready',
+        paired: true,
+        workspaceReady: true,
+        cloudConnected: true,
+        workspaceName: 'Office Mac',
+      ),
+      localWorkerRegistry: _FakeWorkerRegistry([chatGptWorker]),
+    );
+    await tester.tap(find.text('Workers').first);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('worker-catalog-chatgpt')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('ChatGPT'), findsOneWidget);
+    expect(find.text('Gemini'), findsOneWidget);
+    expect(find.text('Ready'), findsOneWidget);
+    expect(find.text('Configure'), findsOneWidget);
+    expect(find.text('Not configured'), findsOneWidget);
+    expect(find.text('Set up'), findsOneWidget);
+    expect(find.textContaining('ChatGPT local'), findsNothing);
+    await tester.tap(find.text('Ready').first);
+    await tester.pumpAndSettle();
+    expect(find.text('ChatGPT local'), findsNothing);
+    expect(find.text('Default Model'), findsNothing);
+    expect(find.text('Allowed Models'), findsNothing);
+    expect(find.text('Authentication readiness'), findsOneWidget);
+    expect(find.text('Concurrency'), findsOneWidget);
+  });
+
+  testWidgets(
+      'legacy Worker records stay stored but are absent from v1 catalog',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final legacyWorker = LocalConfiguredWorker(
+      id: 'w-legacy',
       workspaceId: 'ws-test',
       name: 'Primary Claude Worker',
       workerTypeId: 'claude-code',
@@ -1228,11 +1284,8 @@ void main() {
       createdAt: '2026-01-01T00:00:00Z',
       updatedAt: '2026-01-01T00:00:00Z',
     );
+    final registry = _FakeWorkerRegistry([legacyWorker]);
 
-    final registry = _FakeWorkerRegistry([initialWorker]);
-    final credentials = _MemoryCredentialStore();
-
-    var addWorkerCalled = false;
     await pumpDashboard(
       tester,
       const HostUiSnapshot(
@@ -1245,53 +1298,21 @@ void main() {
         workspaceName: 'Office Mac',
       ),
       localWorkerRegistry: registry,
-      credentialStore: credentials,
-      onAddWorker: () async => addWorkerCalled = true,
     );
-
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-
-    // Switch to Workers surface
     await tester.tap(find.text('Workers').first);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pumpAndSettle();
 
-    expect(find.text('Primary Claude Worker'), findsOneWidget);
-    expect(find.text('Ready'), findsWidgets);
-
-    // Tap Add Worker
-    await tester.tap(find.text('Add Worker'));
-    expect(addWorkerCalled, isTrue);
-
-    // Tap worker card to open detail dialog
-    await tester.tap(find.text('Primary Claude Worker'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-
-    // Check detail dialog contents
-    expect(find.text('Worker Type'), findsOneWidget);
-    expect(find.text('Claude Code'), findsOneWidget);
-    expect(find.text('claude-3-7-sonnet'), findsWidgets);
-    expect(find.text('Concurrency'), findsOneWidget);
-    expect(find.text('1 concurrent runs'), findsOneWidget);
-    expect(find.text('Edit Worker'), findsOneWidget);
-    expect(find.text('Disable locally'), findsOneWidget);
-    expect(find.text('Remove'), findsOneWidget);
-
-    // Disable locally
-    await tester.tap(find.text('Disable locally'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-
-    // Status is updated to Disabled
-    final updatedList = await registry.list();
-    expect(updatedList.first.status, LocalWorkerStatus.disabled);
+    expect(find.text('ChatGPT'), findsOneWidget);
+    expect(find.text('Gemini'), findsOneWidget);
+    expect(find.text('Primary Claude Worker'), findsNothing);
+    expect(find.text('Claude Code'), findsNothing);
+    expect((await registry.list()).single.id, legacyWorker.id);
   });
 
   group('deriveLocalWorkerHealth', () {
     LocalConfiguredWorker makeWorker({
       LocalWorkerStatus status = LocalWorkerStatus.ready,
+      WorkerReadinessState readinessState = WorkerReadinessState.ready,
       LocalWorkerCredentialStatus credentialStatus =
           LocalWorkerCredentialStatus.ready,
       String authStrategy = 'browser_auth',
@@ -1312,6 +1333,7 @@ void main() {
         localConcurrencyLimit: 2,
         adapterVersionPolicy: 'latest',
         status: status,
+        readinessState: readinessState,
         credentialStatus: credentialStatus,
         revision: 42,
         createdAt: '2026-01-01T00:00:00Z',
@@ -1325,66 +1347,19 @@ void main() {
     });
 
     test('derives Disabled for disabled worker', () {
-      final worker = makeWorker(status: LocalWorkerStatus.disabled);
+      final worker = makeWorker(
+        status: LocalWorkerStatus.disabled,
+        readinessState: WorkerReadinessState.disabled,
+      );
       expect(deriveLocalWorkerHealth(worker), 'Disabled');
     });
 
-    test('derives Sign in required when authentication is needed or expired',
+    test('exposes the exact readiness state without guessing from credentials',
         () {
-      expect(
-        deriveLocalWorkerHealth(
-          makeWorker(
-              status: LocalWorkerStatus.needsAttention,
-              credentialStatus:
-                  LocalWorkerCredentialStatus.needsAuthentication),
-        ),
-        'Sign in required',
-      );
-      expect(
-        deriveLocalWorkerHealth(
-          makeWorker(credentialStatus: LocalWorkerCredentialStatus.expired),
-        ),
-        'Sign in required',
-      );
-    });
-
-    test('derives CLI missing when cliMissing flag is present', () {
-      final worker = makeWorker(
-        status: LocalWorkerStatus.needsAttention,
-        adapterConfig: {'cliMissing': true},
-      );
-      expect(deriveLocalWorkerHealth(worker), 'CLI missing');
-    });
-
-    test('derives Adapter unavailable when adapterMissing flag is present', () {
-      final worker = makeWorker(
-        status: LocalWorkerStatus.needsAttention,
-        adapterConfig: {'adapterMissing': true},
-      );
-      expect(deriveLocalWorkerHealth(worker), 'Adapter unavailable');
-    });
-
-    test('derives Endpoint unavailable for local endpoint error', () {
-      final worker = makeWorker(
-        authStrategy: 'local_endpoint',
-        status: LocalWorkerStatus.needsAttention,
-        credentialStatus: LocalWorkerCredentialStatus.error,
-      );
-      expect(deriveLocalWorkerHealth(worker), 'Endpoint unavailable');
-    });
-
-    test('derives Credential invalid for API key error', () {
-      final worker = makeWorker(
-        authStrategy: 'api_key',
-        status: LocalWorkerStatus.needsAttention,
-        credentialStatus: LocalWorkerCredentialStatus.error,
-      );
-      expect(deriveLocalWorkerHealth(worker), 'Credential invalid');
-    });
-
-    test('derives Permission required when localPermissions is empty', () {
-      final worker = makeWorker(permissions: const []);
-      expect(deriveLocalWorkerHealth(worker), 'Permission required');
+      for (final state in WorkerReadinessState.values) {
+        expect(deriveLocalWorkerHealth(makeWorker(readinessState: state)),
+            state.label);
+      }
     });
   });
 

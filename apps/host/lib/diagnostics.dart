@@ -96,6 +96,7 @@ Future<Map<String, Object?>> buildHostDiagnostics({
       'workerId': worker.id,
       'workerTypeId': worker.workerTypeId,
       'status': worker.status.name,
+      'readinessState': worker.readinessState.wireValue,
       'credentialStatus': worker.credentialStatus.name,
       'adapterVersion': adapter?['adapterVersion'],
       'prerequisites': prerequisites,

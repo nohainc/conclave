@@ -44,6 +44,7 @@ describe("V7 Workspace inventory recovery acceptance", () => {
       CREATE TABLE workspace_worker_inventory (
         worker_id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, owner_user_id TEXT NOT NULL,
         worker_type_id TEXT NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL,
+        readiness_state TEXT NOT NULL DEFAULT 'test_failed',
         auth_strategy TEXT NOT NULL, default_model TEXT, allowed_models_json TEXT NOT NULL,
         capabilities_json TEXT NOT NULL, local_permissions_summary_json TEXT NOT NULL,
         local_concurrency_limit INTEGER NOT NULL, adapter_version TEXT, credential_status TEXT NOT NULL,
@@ -111,12 +112,15 @@ describe("V7 Workspace inventory recovery acceptance", () => {
     const report = {
       workerId: "worker-shared-id",
       workerTypeId: "fixture-worker",
-      name: "Local Worker",
+      name: "Private Worker Name",
       status: "ready",
+      readinessState: "ready",
       revision: 1,
       localConcurrencyLimit: 1,
-      authStrategy: "none",
-      credentialStatus: "not_required",
+      authStrategy: "api_key",
+      credentialStatus: "ready",
+      defaultModel: "private-model-choice",
+      allowedModels: ["private-allow-list"],
       capabilities: ["code"],
       localPermissionsSummary: ["workspace:read"],
       createdAt: "2026-09-26T00:00:00.000Z",
@@ -134,14 +138,43 @@ describe("V7 Workspace inventory recovery acceptance", () => {
     });
     let row = sqlite
       .prepare(
-        "SELECT workspace_id, status, revision, removed_by_snapshot FROM workspace_worker_inventory WHERE worker_id = ?",
+        "SELECT workspace_id, name, status, readiness_state, auth_strategy, default_model, allowed_models_json, local_permissions_summary_json, credential_status, revision, removed_by_snapshot FROM workspace_worker_inventory WHERE worker_id = ?",
       )
       .get("worker-shared-id") as Record<string, unknown>;
     expect(row).toMatchObject({
       workspace_id: "workspace-a",
+      name: "fixture-worker",
       status: "ready",
+      readiness_state: "ready",
+      auth_strategy: "none",
+      default_model: null,
+      allowed_models_json: "[]",
+      local_permissions_summary_json: "[]",
+      credential_status: "not_required",
       revision: 1,
       removed_by_snapshot: 0,
+    });
+
+    await internal.recordWorkerInventory({
+      fullSnapshot: false,
+      workers: [
+        {
+          ...report,
+          workerId: "worker-unready",
+          name: "Unready Worker",
+          readinessState: "unsupported_cli_version",
+        },
+      ],
+    });
+    expect(
+      sqlite
+        .prepare(
+          "SELECT status, readiness_state FROM workspace_worker_inventory WHERE worker_id = ?",
+        )
+        .get("worker-unready"),
+    ).toMatchObject({
+      status: "needs_attention",
+      readiness_state: "unsupported_cli_version",
     });
 
     await internal.recordWorkerInventory({ fullSnapshot: true, workers: [] });
@@ -192,7 +225,7 @@ describe("V7 Workspace inventory recovery acceptance", () => {
       .get("worker-shared-id") as Record<string, unknown>;
     expect(row).toMatchObject({
       workspace_id: "workspace-a",
-      name: "Local Worker",
+      name: "fixture-worker",
       revision: 1,
     });
 

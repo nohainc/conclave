@@ -202,7 +202,7 @@ void main() {
       expect(find.text('Workers'), findsNWidgets(2));
       expect(find.text('Codex Personal'), findsOneWidget);
       expect(find.text('Codex'), findsOneWidget);
-      expect(find.text('Cloud scheduling · Disabled'), findsOneWidget);
+      expect(find.textContaining('Cloud scheduling'), findsNothing);
       expect(find.text('Auth strategy'), findsNothing);
       expect(find.textContaining('credentialRef'), findsNothing);
       expect(find.text('Add legacy Cloud Worker'), findsNothing);
@@ -326,16 +326,11 @@ void main() {
       const localWorker = StudioWorker(
         id: 'local-worker-1',
         workspaceId: 'workspace-macbook',
-        workspaceName: 'Development Workspace',
         workerTypeId: 'codex',
-        name: 'Codex Local',
         status: 'ready',
-        authStrategy: 'browser_auth',
-        credentialStatus: 'ready',
+        readinessState: 'ready',
         localConcurrencyLimit: 2,
-        revision: 5,
         capabilities: ['code'],
-        allowedModels: ['gpt-5.5'],
       );
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: snapshot.workspaces,
@@ -347,31 +342,26 @@ void main() {
         onGrant: (_) {},
       )));
       await tester.pumpAndSettle();
-      expect(find.text('Codex Local'), findsOneWidget);
+      expect(find.text('ChatGPT'), findsOneWidget);
       expect(find.text('Codex Personal'), findsNothing);
       expect(find.text('AI Accounts'), findsNothing);
       expect(find.byTooltip('Remove binding'), findsNothing);
     });
 
-    testWidgets('Worker rows show V7 status and scheduling controls',
-        (tester) async {
+    testWidgets('Worker rows show safe readiness only', (tester) async {
       final worker = StudioWorker.fromJson({
-        'id': 'worker-claude',
+        'id': 'worker-chatgpt',
         'workspaceId': 'workspace-1',
         'workspaceName': 'Build Mac',
-        'workerTypeId': 'claude-code',
-        'name': 'Claude on Build Mac',
+        'workerTypeId': 'chatgpt',
         'status': 'ready',
-        'authStrategy': 'browser_auth',
-        'credentialStatus': 'expired',
+        'readinessState': 'ready',
         'localConcurrencyLimit': 2,
-        'revision': 3,
         'capabilities': ['code'],
-        'allowedModels': ['claude-sonnet'],
-        'schedulingState': 'enabled',
-        'defaultModel': 'claude-sonnet-4',
+        'authStrategy': 'must-not-display',
+        'credentialStatus': 'must-not-display',
+        'model': 'must-not-display',
       });
-      final actions = <String>[];
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: const [
           StudioWorkspace(
@@ -390,37 +380,27 @@ void main() {
         onUpdate: (_) {},
         onRevoke: (_) {},
         onGrant: (_) {},
-        onWorkspaceWorkerScheduling: (worker, action) async {
-          actions.add(action);
-        },
       )));
       await tester.pumpAndSettle();
 
-      expect(find.text('Claude on Build Mac'), findsOneWidget);
-      expect(find.text('Claude Code'), findsOneWidget);
-      expect(find.text('Model · claude-sonnet-4'), findsOneWidget);
+      expect(find.text('ChatGPT'), findsOneWidget);
       expect(find.text('Ready locally'), findsOneWidget);
-      expect(find.text('Sign-in expired'), findsOneWidget);
-      expect(find.text('Cloud scheduling · Enabled'), findsOneWidget);
+      expect(find.textContaining('Cloud scheduling'), findsNothing);
+      expect(find.textContaining('Model'), findsNothing);
       expect(
         find.text(
-            'Configure and authenticate Workers in Conclave Workspace on this computer. Synced Workers appear here for Cloud scheduling.'),
+            'Conclave Workspace reports local readiness. Choose Workers for a Project or Workstream in its Execution settings.'),
         findsOneWidget,
       );
       expect(find.text('Authentication · browser_auth'), findsNothing);
 
-      await tester.tap(find.text('Claude on Build Mac'));
+      await tester.tap(find.text('ChatGPT').first);
       await tester.pumpAndSettle();
-      expect(find.textContaining('Local attention'), findsOneWidget);
-      expect(
-          find.textContaining(
-              'Complete sign-in or setup in Conclave Workspace on Build Mac.'),
-          findsOneWidget);
+      expect(find.textContaining('Local attention'), findsNothing);
       expect(find.text('Allowed models'), findsNothing);
 
       expect(find.text('Disable'), findsNothing);
       expect(find.text('Drain'), findsNothing);
-      expect(actions, isEmpty);
     });
 
     testWidgets('Workers are grouped only under their owning Workspace ID',
@@ -437,16 +417,11 @@ void main() {
       StudioWorker worker(String id, String workspaceId) => StudioWorker(
             id: id,
             workspaceId: workspaceId,
-            workspaceName: 'Workspace $workspaceId',
             workerTypeId: 'ollama',
-            name: 'Worker $id',
             status: 'ready',
-            authStrategy: 'none',
-            credentialStatus: 'not_required',
+            readinessState: 'ready',
             localConcurrencyLimit: 1,
-            revision: 1,
             capabilities: const [],
-            allowedModels: const [],
           );
 
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
@@ -566,9 +541,8 @@ void main() {
       );
     });
 
-    testWidgets('disabled Worker displays scheduling state without controls',
+    testWidgets('Workspace inventory does not expose usage controls',
         (tester) async {
-      final actions = <String>[];
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: const [
           StudioWorkspace(
@@ -585,16 +559,11 @@ void main() {
           StudioWorker(
             id: 'worker-disabled',
             workspaceId: 'workspace-enable',
-            workspaceName: 'Enable Workspace',
             workerTypeId: 'ollama',
-            name: 'Local model',
             status: 'ready',
-            authStrategy: 'local_endpoint',
-            credentialStatus: 'not_required',
+            readinessState: 'ready',
             localConcurrencyLimit: 1,
-            revision: 1,
             capabilities: [],
-            allowedModels: [],
           ),
         ],
         onAdd: () {},
@@ -602,12 +571,11 @@ void main() {
         onUpdate: (_) {},
         onRevoke: (_) {},
         onGrant: (_) {},
-        onWorkspaceWorkerScheduling: (_, action) async => actions.add(action),
       )));
       await tester.pumpAndSettle();
 
       expect(find.text('Enable'), findsNothing);
-      expect(actions, isEmpty);
+      expect(find.textContaining('Cloud scheduling'), findsNothing);
     });
 
     testWidgets('renders without layout exceptions in a scroll view',

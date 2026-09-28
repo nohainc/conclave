@@ -195,13 +195,13 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
         builder: (context, setDialogState) {
           void submit() {
             final alreadyConnected = projectWorkspaces.any((pw) {
-              final pwId =
-                  (pw['workspaceId'] ?? pw['id'] ?? '').toString();
+              final pwId = (pw['workspaceId'] ?? pw['id'] ?? '').toString();
               return pwId == selectedId;
             });
             if (alreadyConnected) {
               setDialogState(() {
-                errorText = 'This Workspace is already connected to this Project.';
+                errorText =
+                    'This Workspace is already connected to this Project.';
               });
               return;
             }
@@ -1408,16 +1408,54 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   final _discussionController = TextEditingController();
   String _workflow = 'Full Cycle';
   final List<_DiscussionItem> _discussion = [];
+  List<StudioWorker> _eligibleWorkers = const [];
+  Map<String, String> _projectWorkspaceNames = const {};
+  late Map<String, dynamic> _usagePolicy;
+  bool _loadingUsage = true;
+  bool _savingUsage = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 2,
-      initialIndex: widget.initialTab.clamp(0, 1),
+      length: 3,
+      initialIndex: widget.initialTab.clamp(0, 2),
       vsync: this,
     );
+    _usagePolicy = Map<String, dynamic>.from(widget.workstream.executionPolicy);
     _loadDiscussion();
+    _loadUsageChoices();
+  }
+
+  Future<void> _loadUsageChoices() async {
+    final ds = widget.dataSource;
+    if (ds == null) {
+      setState(() => _loadingUsage = false);
+      return;
+    }
+    try {
+      final loaded = await Future.wait([
+        ds.loadWorkspaceWorkerInventory(),
+        ds.loadProjectWorkspaces(projectId: widget.project.id),
+      ]);
+      if (!mounted) return;
+      final grants = loaded[1] as List<Map<String, dynamic>>;
+      final names = <String, String>{};
+      for (final grant in grants) {
+        final id = (grant['workspaceId'] ?? grant['id'] ?? '').toString();
+        if (id.isEmpty) continue;
+        names[id] = (grant['workspaceName'] ?? grant['name'] ?? id).toString();
+      }
+      setState(() {
+        _eligibleWorkers = (loaded[0] as List<StudioWorker>)
+            .where((worker) => names.containsKey(worker.workspaceId))
+            .toList();
+        _projectWorkspaceNames = names;
+        _loadingUsage = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingUsage = false);
+    }
   }
 
   Future<void> _loadDiscussion() async {
@@ -1456,7 +1494,12 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   void didUpdateWidget(WorkstreamPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.initialTab != widget.initialTab) {
-      _tabController.animateTo(widget.initialTab.clamp(0, 1));
+      _tabController.animateTo(widget.initialTab.clamp(0, 2));
+    }
+    if (oldWidget.workstream.executionPolicy !=
+        widget.workstream.executionPolicy) {
+      _usagePolicy =
+          Map<String, dynamic>.from(widget.workstream.executionPolicy);
     }
   }
 
@@ -1485,14 +1528,16 @@ class _WorkstreamPageState extends State<WorkstreamPage>
                 tabs: const [
                   Tab(text: 'Discuss'),
                   Tab(text: 'Work'),
+                  Tab(text: 'Execution'),
                 ],
               ),
             ),
             const SizedBox(height: 16),
             if (_tabController.index == 0)
               _discuss(context)
-            else
+            else if (_tabController.index == 1)
               _work(context),
+            if (_tabController.index == 2) _executionPolicyView(),
           ],
         ),
       );
@@ -1575,6 +1620,308 @@ class _WorkstreamPageState extends State<WorkstreamPage>
         onWorkflowChanged: (value) => setState(() => _workflow = value),
         onRun: _runWork,
       );
+
+  Widget _executionPolicyView() {
+    final roles = _usagePolicy['roles'] is Map
+        ? Map<String, dynamic>.from(_usagePolicy['roles'] as Map)
+        : <String, dynamic>{};
+    final fallback =
+        _usagePolicy['fallbackPolicy']?.toString() ?? 'configured_only';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Worker usage for this Workstream',
+            style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 6),
+        const Text(
+          'Choose the Workspace Worker, model, fallback behavior, and Cloud concurrency ceiling for each task role. The selected Worker must be Ready on its Workspace.',
+        ),
+        const SizedBox(height: 14),
+        DropdownButtonFormField<String>(
+          initialValue: fallback,
+          decoration:
+              const InputDecoration(labelText: 'Scheduling and fallback'),
+          items: const [
+            DropdownMenuItem(
+              value: 'configured_only',
+              child: Text('Use only selected Workers'),
+            ),
+            DropdownMenuItem(
+              value: 'configured_then_any',
+              child:
+                  Text('Prefer selected Workers, then use any eligible Worker'),
+            ),
+          ],
+          onChanged: !_canExecute || _savingUsage
+              ? null
+              : (value) {
+                  if (value != null) {
+                    setState(() => _usagePolicy = {
+                          ..._usagePolicy,
+                          'fallbackPolicy': value,
+                          'roles': roles,
+                        });
+                  }
+                },
+        ),
+        const SizedBox(height: 12),
+        if (_loadingUsage)
+          const LinearProgressIndicator()
+        else if (_eligibleWorkers.isEmpty)
+          const Text(
+              'Grant a Workspace to this Project and configure a Worker before selecting execution capacity.')
+        else if (roles.isEmpty)
+          const Text(
+              'No role preferences yet. Add a role to choose its Workspace Worker and model.')
+        else
+          ...roles.entries.map((entry) {
+            final binding = entry.value is Map
+                ? Map<String, dynamic>.from(entry.value as Map)
+                : <String, dynamic>{};
+            final selected = _eligibleWorkers
+                .where((worker) => worker.id == binding['workerId'])
+                .firstOrNull;
+            final model = binding['model']?.toString();
+            final limit = binding['cloudConcurrencyLimit']?.toString();
+            final workerLabel = selected == null
+                ? 'Any eligible Worker'
+                : '${_usageWorkerName(selected)} · ${_projectWorkspaceNames[selected.workspaceId] ?? selected.workspaceId}';
+            return Card(
+              child: ListTile(
+                title: Text(entry.key),
+                subtitle: Text([
+                  workerLabel,
+                  if (model != null && model.isNotEmpty) 'Model: $model',
+                  if (limit != null) 'Cloud limit: $limit concurrent',
+                ].join(' · ')),
+                trailing: Wrap(
+                  spacing: 4,
+                  children: [
+                    IconButton(
+                      tooltip: 'Edit role usage',
+                      onPressed: !_canExecute || _savingUsage
+                          ? null
+                          : () => _editUsageRole(entry.key, binding),
+                      icon: const Icon(Icons.edit_outlined),
+                    ),
+                    IconButton(
+                      tooltip: 'Remove role',
+                      onPressed: !_canExecute || _savingUsage
+                          ? null
+                          : () {
+                              final next = Map<String, dynamic>.from(roles)
+                                ..remove(entry.key);
+                              _saveUsagePolicy(
+                                  {..._usagePolicy, 'roles': next});
+                            },
+                      icon: const Icon(Icons.delete_outline),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          children: [
+            OutlinedButton.icon(
+              onPressed: !_canExecute || _savingUsage || _loadingUsage
+                  ? null
+                  : () => _editUsageRole('', const {}),
+              icon: const Icon(Icons.add),
+              label: const Text('Add role'),
+            ),
+            FilledButton.icon(
+              onPressed: !_canExecute || _savingUsage
+                  ? null
+                  : () => _saveUsagePolicy(_usagePolicy),
+              icon: _savingUsage
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.save_outlined),
+              label: const Text('Save usage policy'),
+            ),
+          ],
+        ),
+        if (!_canExecute)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text(
+                'A Project owner or collaborator can change Worker usage.'),
+          ),
+      ],
+    );
+  }
+
+  String _usageWorkerName(StudioWorker worker) => switch (worker.workerTypeId) {
+        'chatgpt' => 'ChatGPT',
+        'gemini' => 'Gemini',
+        _ => worker.workerTypeId,
+      };
+
+  Future<void> _editUsageRole(
+    String existingRole,
+    Map<String, dynamic> current,
+  ) async {
+    final roleController = TextEditingController(text: existingRole);
+    final modelController =
+        TextEditingController(text: current['model']?.toString() ?? '');
+    final eligibleWorkerIds =
+        _eligibleWorkers.map((worker) => worker.id).toSet();
+    var selectedWorker = current['workerId']?.toString() ?? '';
+    if (!eligibleWorkerIds.contains(selectedWorker)) selectedWorker = '';
+    var fallbackWorker = (current['fallbackWorkerIds'] as List?)
+            ?.whereType<String>()
+            .firstOrNull ??
+        '';
+    if (!eligibleWorkerIds.contains(fallbackWorker) ||
+        fallbackWorker == selectedWorker) {
+      fallbackWorker = '';
+    }
+    final concurrencyController = TextEditingController(
+      text: current['cloudConcurrencyLimit']?.toString() ?? '1',
+    );
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(
+              existingRole.isEmpty ? 'Add role usage' : 'Edit $existingRole'),
+          content: SizedBox(
+            width: 460,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: roleController,
+                    enabled: existingRole.isEmpty,
+                    decoration: const InputDecoration(labelText: 'Task role'),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedWorker,
+                    decoration: const InputDecoration(
+                        labelText: 'Preferred Workspace Worker'),
+                    items: [
+                      const DropdownMenuItem(
+                          value: '', child: Text('Choose a Worker')),
+                      ..._eligibleWorkers.map((worker) => DropdownMenuItem(
+                            value: worker.id,
+                            child: Text(
+                                '${_usageWorkerName(worker)} · ${_projectWorkspaceNames[worker.workspaceId] ?? worker.workspaceId}'),
+                          )),
+                    ],
+                    onChanged: (value) => setDialogState(() {
+                      selectedWorker = value ?? '';
+                      if (fallbackWorker == selectedWorker) fallbackWorker = '';
+                    }),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: fallbackWorker,
+                    decoration:
+                        const InputDecoration(labelText: 'Fallback Worker'),
+                    items: [
+                      const DropdownMenuItem(
+                          value: '', child: Text('No ordered fallback')),
+                      ..._eligibleWorkers
+                          .where((worker) => worker.id != selectedWorker)
+                          .map((worker) => DropdownMenuItem(
+                                value: worker.id,
+                                child: Text(
+                                    '${_usageWorkerName(worker)} · ${_projectWorkspaceNames[worker.workspaceId] ?? worker.workspaceId}'),
+                              )),
+                    ],
+                    onChanged: (value) =>
+                        setDialogState(() => fallbackWorker = value ?? ''),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: modelController,
+                    decoration:
+                        const InputDecoration(labelText: 'Model (optional)'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: concurrencyController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                        labelText: 'Cloud concurrency limit'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () {
+                final limit = int.tryParse(concurrencyController.text.trim());
+                if (roleController.text.trim().isEmpty ||
+                    selectedWorker.isEmpty ||
+                    limit == null ||
+                    limit < 1 ||
+                    limit > 1024) {
+                  return;
+                }
+                Navigator.pop(dialogContext, true);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (saved == true && mounted) {
+      final roles = _usagePolicy['roles'] is Map
+          ? Map<String, dynamic>.from(_usagePolicy['roles'] as Map)
+          : <String, dynamic>{};
+      final role = roleController.text.trim().toLowerCase();
+      final model = modelController.text.trim();
+      roles[role] = {
+        if (selectedWorker.isNotEmpty) 'workerId': selectedWorker,
+        if (fallbackWorker.isNotEmpty) 'fallbackWorkerIds': [fallbackWorker],
+        if (model.isNotEmpty) 'model': model,
+        'cloudConcurrencyLimit': int.parse(concurrencyController.text.trim()),
+      };
+      await _saveUsagePolicy({..._usagePolicy, 'roles': roles});
+    }
+    roleController.dispose();
+    modelController.dispose();
+    concurrencyController.dispose();
+  }
+
+  Future<void> _saveUsagePolicy(Map<String, dynamic> policy) async {
+    final ds = widget.dataSource;
+    if (ds == null) return;
+    setState(() => _savingUsage = true);
+    try {
+      final updated = await ds.updateWorkstream(
+        workstreamId: widget.workstream.id,
+        executionPolicy: policy,
+      );
+      if (!mounted) return;
+      setState(() {
+        _usagePolicy = Map<String, dynamic>.from(updated.executionPolicy);
+        _savingUsage = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Worker usage policy saved')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _savingUsage = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save Worker usage policy: $error')),
+      );
+    }
+  }
 
   void _runWork() {
     final text = _requestController.text.trim();
@@ -1828,10 +2175,8 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
             .toUpperCase()
         : 'U';
 
-    final textColor =
-        isDark ? Colors.white : const Color(0xff1f1d2b);
-    final metaColor =
-        isDark ? Colors.white38 : Colors.black45;
+    final textColor = isDark ? Colors.white : const Color(0xff1f1d2b);
+    final metaColor = isDark ? Colors.white38 : Colors.black45;
     final borderColor =
         isDark ? const Color(0xff2d2b42) : const Color(0xffe2e0ed);
 
@@ -1868,9 +2213,8 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                         style: TextStyle(
                           fontSize: 9,
                           fontWeight: FontWeight.bold,
-                          color: isDark
-                              ? Colors.white70
-                              : const Color(0xff4238a0),
+                          color:
+                              isDark ? Colors.white70 : const Color(0xff4238a0),
                         ),
                       ),
                     ),

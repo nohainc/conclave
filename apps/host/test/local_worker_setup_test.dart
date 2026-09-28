@@ -9,7 +9,6 @@ import 'package:conclave_host/adapter_prerequisite.dart';
 import 'package:conclave_host/configured_worker_registry.dart';
 import 'package:conclave_host/local_worker_setup.dart';
 import 'package:conclave_host/platform_runtime.dart';
-import 'package:conclave_host/secure_credentials.dart';
 
 class _TestPlatformRuntime implements PlatformRuntime {
   @override
@@ -39,26 +38,9 @@ class _TestPlatformRuntime implements PlatformRuntime {
       {required bool force}) async {}
 }
 
-class _MemoryCredentialStore implements SecureCredentialStore {
-  final values = <String, String>{};
-
-  @override
-  String? readSync(String key) => values[key];
-
-  @override
-  Future<String?> read(String key) async => readSync(key);
-
-  @override
-  Future<void> write(String key, String value) async => values[key] = value;
-
-  @override
-  Future<void> delete(String key) async => values.remove(key);
-}
-
 void main() {
   late Directory directory;
   late LocalConfiguredWorkerRegistry registry;
-  late _MemoryCredentialStore credentials;
   var workerSequence = 0;
 
   setUp(() async {
@@ -70,317 +52,240 @@ void main() {
       platform: _TestPlatformRuntime(),
       idGenerator: () => 'worker-${++workerSequence}',
     );
-    credentials = _MemoryCredentialStore();
   });
 
   tearDown(() async {
     if (await directory.exists()) await directory.delete(recursive: true);
   });
 
-  test(
-      'stores API credentials securely and keeps unvalidated Workers in Needs attention',
-      () async {
-    final worker = await LocalWorkerSetupService(
-      registry: registry,
-      credentialStore: credentials,
-    ).create(
-      type: LocalWorkerTypeOption.supported[3],
-      name: 'API Work',
-      apiKey: 'private-key-value',
-      defaultModel: 'model-a',
-      endpointUrl: '',
-      allowedModels: const ['model-a'],
-      permissions: const ['network_openai'],
-      adapterReady: false,
-      prerequisiteReady: false,
+  test('v1 local catalog contains only ChatGPT and Gemini CLI integrations',
+      () {
+    expect(
+      LocalWorkerTypeOption.supported.map((type) => type.id).toList(),
+      ['chatgpt', 'gemini'],
     );
-    expect(worker.workerTypeId, 'openai-api');
+    expect(
+      LocalWorkerTypeOption.supported.map((type) => type.name).toList(),
+      ['ChatGPT', 'Gemini'],
+    );
+    expect(
+      LocalWorkerTypeOption.supported
+          .map((type) => type.executablePrerequisite!.executable)
+          .toList(),
+      ['codex', 'agy'],
+    );
+    final gemini = LocalWorkerTypeOption.supported.last;
+    expect(gemini.executablePrerequisite!.minimumVersion, '1.1.8');
+    expect(gemini.executablePrerequisite!.maximumVersion, '1.2.11');
+  });
+
+  test('CLI authentication is reflected without storing provider credentials',
+      () async {
+    final type = LocalWorkerTypeOption.supported.first;
+    final worker = await LocalWorkerSetupService(registry: registry).create(
+      type: type,
+      permissions: type.permissions,
+      adapterReady: true,
+      prerequisiteReady: true,
+      authenticationReady: false,
+    );
+    expect(worker.workerTypeId, 'chatgpt');
     expect(worker.status, LocalWorkerStatus.needsAttention);
     expect(worker.credentialStatus,
         LocalWorkerCredentialStatus.needsAuthentication);
-    expect(worker.credentialRef, 'worker-credential/worker-1');
-    expect(credentials.values[worker.credentialRef], 'private-key-value');
+    expect(worker.credentialRef, isNull);
     final file = File(
         '${directory.path}${Platform.pathSeparator}configured-workers.json');
-    expect(await file.readAsString(), isNot(contains('private-key-value')));
     expect(jsonDecode(await file.readAsString())['workers'], hasLength(1));
   });
 
-  test('API Worker rejects an insecure remote endpoint', () async {
-    await expectLater(
-      LocalWorkerSetupService(
-        registry: registry,
-        credentialStore: credentials,
-      ).create(
-        type: LocalWorkerTypeOption.supported[3],
-        name: 'Insecure API Worker',
-        apiKey: 'private-key-value',
-        defaultModel: 'model-a',
-        endpointUrl: 'http://api.example.test/v1',
-        allowedModels: const ['model-a'],
-        permissions: const ['network_openai'],
-        adapterReady: true,
-        prerequisiteReady: true,
-      ),
-      throwsA(isA<ArgumentError>()),
-    );
-    expect(await registry.list(), isEmpty);
-    expect(credentials.values, isEmpty);
-  });
-
-  test('API Worker requires a default or allow-listed model', () async {
-    await expectLater(
-      LocalWorkerSetupService(
-        registry: registry,
-        credentialStore: credentials,
-      ).create(
-        type: LocalWorkerTypeOption.supported[3],
-        name: 'No Model API Worker',
-        apiKey: 'private-key-value',
-        defaultModel: '',
-        endpointUrl: '',
-        allowedModels: const [],
-        permissions: const ['network_openai'],
-        adapterReady: true,
-        prerequisiteReady: true,
-      ),
-      throwsA(isA<ArgumentError>()),
-    );
-    expect(await registry.list(), isEmpty);
-    expect(credentials.values, isEmpty);
-  });
-
-  test('Ollama requires a validated local endpoint before it can be Ready',
+  test('ready CLI worker can be updated and local permissions require step-up',
       () async {
-    final worker = await LocalWorkerSetupService(
-      registry: registry,
-      credentialStore: credentials,
-    ).create(
-      type: LocalWorkerTypeOption.supported[6],
-      name: 'Local Ollama',
-      apiKey: '',
-      defaultModel: 'qwen-local',
-      endpointUrl: 'http://localhost:11434',
-      allowedModels: const ['qwen-local'],
-      permissions: LocalWorkerTypeOption.supported[6].permissions,
-      adapterReady: true,
-      prerequisiteReady: true,
-      authenticationReady: true,
-    );
-    expect(worker.status, LocalWorkerStatus.ready);
-    expect(worker.credentialStatus, LocalWorkerCredentialStatus.notRequired);
-    expect(worker.adapterConfig['endpointUrl'], 'http://localhost:11434');
-  });
-
-  test('Codex readiness uses local CLI authentication and retains it on edit',
-      () async {
+    final type = LocalWorkerTypeOption.supported.first;
     final service = LocalWorkerSetupService(
       registry: registry,
-      credentialStore: credentials,
       requireStepUp: (_) async => true,
     );
     final created = await service.create(
-      type: LocalWorkerTypeOption.supported.first,
-      name: 'Codex Personal',
-      apiKey: '',
-      defaultModel: 'gpt-5-codex',
-      endpointUrl: '',
-      allowedModels: const [],
-      permissions: LocalWorkerTypeOption.supported.first.permissions,
-      adapterReady: false,
-      prerequisiteReady: true,
-      authenticationReady: true,
-    );
-    expect(created.status, LocalWorkerStatus.needsAttention);
-    expect(created.credentialStatus, LocalWorkerCredentialStatus.ready);
-    final completed = await service.update(
-      current: created,
-      type: LocalWorkerTypeOption.supported.first,
-      name: created.name,
-      apiKey: '',
-      defaultModel: created.defaultModel ?? '',
-      endpointUrl: '',
-      allowedModels: const [],
-      permissions: LocalWorkerTypeOption.supported.first.permissions,
+      type: type,
+      permissions: type.permissions,
       adapterReady: true,
       prerequisiteReady: true,
       authenticationReady: true,
     );
-    expect(completed.status, LocalWorkerStatus.ready);
-    expect(completed.credentialStatus, LocalWorkerCredentialStatus.ready);
+    expect(created.status, LocalWorkerStatus.ready);
+    final updated = await service.update(
+      current: created,
+      type: type,
+      permissions: const ['workstream_filesystem'],
+      adapterReady: true,
+      prerequisiteReady: true,
+      authenticationReady: true,
+    );
+    expect(updated.name, 'ChatGPT');
+    expect(updated.defaultModel, isNull);
+    expect(updated.allowedModels, isEmpty);
+    expect(updated.status, LocalWorkerStatus.needsAttention);
   });
 
-  test('edits configuration while retaining or rotating secure credentials',
+  test('legacy Worker types cannot be configured through the v1 setup service',
       () async {
-    final service = LocalWorkerSetupService(
-      registry: registry,
-      credentialStore: credentials,
-      requireStepUp: (_) async => true,
-    );
-    final created = await service.create(
-      type: LocalWorkerTypeOption.supported[3],
-      name: 'API Work',
-      apiKey: 'old-secret',
-      defaultModel: 'model-a',
-      endpointUrl: '',
-      allowedModels: const ['model-a'],
-      permissions: LocalWorkerTypeOption.supported[3].permissions,
-      adapterReady: true,
-      prerequisiteReady: true,
-      authenticationReady: true,
-    );
-    final retained = await service.update(
-      current: created,
-      type: LocalWorkerTypeOption.supported[3],
-      name: 'API Work Updated',
-      apiKey: '',
-      defaultModel: 'model-b',
-      endpointUrl: '',
-      allowedModels: const ['model-b'],
-      permissions: LocalWorkerTypeOption.supported[3].permissions,
-      adapterReady: true,
-      prerequisiteReady: true,
-      authenticationReady: true,
-    );
-    expect(retained.defaultModel, 'model-b');
-    expect(retained.credentialRef, created.credentialRef);
-    expect(credentials.values[created.credentialRef], 'old-secret');
-
-    final rotated = await service.update(
-      current: retained,
-      type: LocalWorkerTypeOption.supported[3],
-      name: 'API Work Updated',
-      apiKey: 'new-secret',
-      defaultModel: 'model-b',
-      endpointUrl: '',
-      allowedModels: const ['model-b'],
-      permissions: LocalWorkerTypeOption.supported[3].permissions,
-      adapterReady: true,
-      prerequisiteReady: true,
-      authenticationReady: true,
-    );
-    expect(rotated.credentialRef, created.credentialRef);
-    expect(credentials.values[rotated.credentialRef], 'new-secret');
-    expect(credentials.values.containsKey(created.credentialRef), isTrue);
-    expect(rotated.status, LocalWorkerStatus.ready);
-
-    final duplicate = await service.create(
-      type: LocalWorkerTypeOption.supported[6],
-      name: 'Taken Name',
-      apiKey: '',
-      defaultModel: 'local-model',
-      endpointUrl: 'http://localhost:11434',
-      allowedModels: const [],
-      permissions: LocalWorkerTypeOption.supported[6].permissions,
-      adapterReady: true,
-      prerequisiteReady: true,
+    const retiredType = LocalWorkerTypeOption(
+      id: 'claude-code',
+      adapterId: 'claude-code',
+      name: 'Claude Code',
+      description: 'legacy test type',
+      authStrategy: 'browser_auth',
+      authLabel: 'legacy',
+      prerequisite: 'legacy',
+      permissions: ['workstream_filesystem'],
     );
     await expectLater(
-      service.update(
-        current: rotated,
-        type: LocalWorkerTypeOption.supported[3],
-        name: duplicate.name,
-        apiKey: 'failed-rotation',
-        defaultModel: 'model-b',
-        endpointUrl: '',
-        allowedModels: const ['model-b'],
-        permissions: LocalWorkerTypeOption.supported[3].permissions,
+      LocalWorkerSetupService(registry: registry).create(
+        type: retiredType,
+        permissions: retiredType.permissions,
         adapterReady: true,
         prerequisiteReady: true,
+        authenticationReady: true,
       ),
       throwsArgumentError,
     );
-    expect(credentials.values[rotated.credentialRef], 'new-secret');
-    expect((await registry.list()).first.name, 'API Work Updated');
+    expect(await registry.list(), isEmpty);
   });
 
-  test(
-      'Worker setup service fails closed before sensitive edits without step-up',
-      () async {
-    final worker = await LocalWorkerSetupService(
-      registry: registry,
-      credentialStore: credentials,
-    ).create(
-      type: LocalWorkerTypeOption.supported[3],
-      name: 'Protected API Worker',
-      apiKey: 'original-secret',
-      defaultModel: 'model-a',
-      endpointUrl: '',
-      allowedModels: const [],
-      permissions: const ['network_openai'],
-      adapterReady: true,
-      prerequisiteReady: true,
-      authenticationReady: true,
-    );
-    final service = LocalWorkerSetupService(
-      registry: registry,
-      credentialStore: credentials,
-    );
-
-    await expectLater(
-      service.update(
-        current: worker,
-        type: LocalWorkerTypeOption.supported[3],
-        name: worker.name,
-        apiKey: 'replacement-secret',
-        defaultModel: 'model-a',
-        endpointUrl: '',
-        allowedModels: const [],
-        permissions: const ['network_openai'],
-        adapterReady: true,
-        prerequisiteReady: true,
-      ),
-      throwsStateError,
-    );
-    await expectLater(
-      service.update(
-        current: worker,
-        type: LocalWorkerTypeOption.supported[3],
-        name: worker.name,
-        apiKey: '',
-        defaultModel: 'model-a',
-        endpointUrl: '',
-        allowedModels: const [],
-        permissions: const [],
-        adapterReady: true,
-        prerequisiteReady: true,
-      ),
-      throwsStateError,
-    );
-
-    expect(credentials.values[worker.credentialRef], 'original-secret');
-    expect((await registry.list()).single.localPermissions, ['network_openai']);
-  });
-
-  testWidgets('offers the v7 integration types in the local Add Worker dialog',
+  testWidgets('Worker setup dialog is fixed to its v1 catalog entry',
       (tester) async {
+    var prerequisiteChecks = 0;
+    var codexLoginOpens = 0;
     await tester.pumpWidget(MaterialApp(
       home: Builder(
-          builder: (context) => Scaffold(
-                body: TextButton(
-                  onPressed: () => showDialog<void>(
-                    context: context,
-                    builder: (_) => AddLocalWorkerDialog(
-                      registry: registry,
-                      credentialStore: credentials,
-                      adapterAvailable: (_, __) => false,
-                      probePrerequisite: (_) async =>
-                          const AdapterPrerequisiteResult(
-                        satisfied: false,
-                        message: 'not installed',
-                      ),
+        builder: (context) => Scaffold(
+          body: TextButton(
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (_) => AddLocalWorkerDialog(
+                registry: registry,
+                type: LocalWorkerTypeOption.supported.first,
+                adapterAvailable: (_, __) => false,
+                probePrerequisites: (_) async {
+                  prerequisiteChecks++;
+                  return const [
+                    AdapterPrerequisiteResult(
+                      satisfied: true,
+                      message: 'installed',
+                      detectedVersion: '0.158.0',
                     ),
-                  ),
-                  child: const Text('Start'),
-                ),
-              )),
+                    AdapterPrerequisiteResult(
+                      satisfied: true,
+                      message: 'installed',
+                      detectedVersion: '22.0.0',
+                    ),
+                  ];
+                },
+                validateAuthentication: (_) async => false,
+                launchAuthentication: (_) async {
+                  codexLoginOpens++;
+                },
+              ),
+            ),
+            child: const Text('Start'),
+          ),
+        ),
+      ),
     ));
     await tester.tap(find.text('Start'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('worker-type-selector')));
+    expect(find.text('Set up ChatGPT'), findsOneWidget);
+    expect(find.byKey(const Key('worker-type-selector')), findsNothing);
+    expect(find.text('Open Codex Login'), findsOneWidget);
+    expect(find.text('Codex CLI'), findsNWidgets(2));
+    expect(find.text('Codex authentication'), findsOneWidget);
+    expect(find.text('Login required'), findsOneWidget);
+    expect(find.text('Verified adapter'), findsOneWidget);
+    expect(find.text('Not installed or unverified'), findsOneWidget);
+    expect(prerequisiteChecks, 1);
+    await tester.ensureVisible(find.text('Check again'));
+    await tester.tap(find.text('Check again'));
     await tester.pumpAndSettle();
-    for (final type in LocalWorkerTypeOption.supported) {
-      expect(find.text(type.name), findsWidgets);
+    expect(prerequisiteChecks, 2);
+    await tester.ensureVisible(find.text('Open Codex Login'));
+    await tester.tap(find.text('Open Codex Login'));
+    await tester.pumpAndSettle();
+    expect(codexLoginOpens, 1);
+    expect(find.textContaining('Complete sign-in in Codex'), findsOneWidget);
+    for (final retired in [
+      'Claude Code',
+      'OpenAI API',
+      'Gemini API',
+      'Anthropic API',
+      'Ollama',
+    ]) {
+      expect(find.text(retired), findsNothing);
     }
+    expect(find.byKey(const Key('worker-api-key')), findsNothing);
+    expect(find.byKey(const Key('worker-name')), findsNothing);
+    expect(find.byKey(const Key('worker-default-model')), findsNothing);
+    expect(find.byKey(const Key('worker-allowed-models')), findsNothing);
+    expect(find.text('Discover available models'), findsNothing);
+  });
+
+  testWidgets('Gemini setup launches Antigravity and exposes rechecks',
+      (tester) async {
+    var checks = 0;
+    var opens = 0;
+    final gemini = LocalWorkerTypeOption.supported.last;
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: TextButton(
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (_) => AddLocalWorkerDialog(
+                registry: registry,
+                type: gemini,
+                adapterAvailable: (_, __) async => true,
+                probePrerequisites: (_) async {
+                  checks++;
+                  return const [
+                    AdapterPrerequisiteResult(
+                      satisfied: true,
+                      message: 'Antigravity CLI is within the supported range.',
+                      detectedVersion: '1.2.11',
+                    ),
+                    AdapterPrerequisiteResult(
+                      satisfied: true,
+                      message: 'Node.js is installed.',
+                      detectedVersion: '22.0.0',
+                    ),
+                  ];
+                },
+                validateAuthentication: (_) async => true,
+                launchAuthentication: (_) async {
+                  opens++;
+                },
+              ),
+            ),
+            child: const Text('Start Gemini setup'),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('Start Gemini setup'));
+    await tester.pumpAndSettle();
+    expect(find.text('Set up Gemini'), findsOneWidget);
+    expect(find.text('Antigravity authentication'), findsOneWidget);
+    expect(find.textContaining('1.2.11'), findsOneWidget);
+    expect(find.text('Open Antigravity'), findsOneWidget);
+    expect(checks, 1);
+    await tester.ensureVisible(find.text('Check again'));
+    await tester.tap(find.text('Check again'));
+    await tester.pumpAndSettle();
+    expect(checks, 2);
+    await tester.ensureVisible(find.text('Open Antigravity'));
+    await tester.tap(find.text('Open Antigravity'));
+    await tester.pumpAndSettle();
+    expect(opens, 1);
+    expect(find.textContaining('Antigravity opened'), findsOneWidget);
+    expect(find.byKey(const Key('worker-api-key')), findsNothing);
   });
 }

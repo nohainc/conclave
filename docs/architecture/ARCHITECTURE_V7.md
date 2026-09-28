@@ -5,6 +5,8 @@
 **Builds on:** Architecture v6 Workstreams + ADR-011 filesystem model  
 **Primary decision:** [ADR-012](../decisions/ADR-012-workspace-owned-local-workers.md)
 
+**Current first-party product catalog:** [ADR-015](../decisions/ADR-015-first-party-worker-v1-contract.md)
+
 ## 1. Executive decision
 
 V7 is the sole current Worker ownership architecture. It is not yet the
@@ -46,6 +48,13 @@ The complete mental model should fit in four lines:
 > **Workstream** = persistent unit of work and local working directory.  
 > **Workspace** = machine where AI can execute.  
 > **Worker** = locally configured AI/tool identity on that machine.
+
+For the first-party v1 product, each Workspace has exactly one stable ChatGPT
+slot backed by Codex CLI and one stable Gemini slot backed by Antigravity CLI.
+Provider authentication and billing mode belong to those local CLIs; this
+catalog does not include direct provider API Workers or other adapters. The
+broader V7 adapter list below documents implementation and compatibility scope,
+not the supported v1 product catalog.
 
 The user does not need to understand:
 
@@ -101,9 +110,9 @@ See [ADR-013](../decisions/ADR-013-desktop-auth-and-dual-transport.md) and the
           MacBook Pro                    Mac Mini
                |                           |
        +-------+--------+              +---+---+
-       |       |        |              |       |
-     Codex  Gemini API Claude        Codex  Ollama
-   Personal   Work     Review         Build   Local
+       |                |              |       |
+     ChatGPT          Gemini         ChatGPT  Gemini
+   (Codex CLI)         (agy)       (Codex CLI) (agy)
 ```
 
 Each configured Worker exists on one Workspace only.
@@ -184,15 +193,10 @@ A Worker adapter is signed integration code managed by Conclave Workspace.
 
 It owns translation between the Conclave assignment protocol and one external execution technology.
 
-Examples:
-
-- Codex adapter;
-- Antigravity adapter;
-- Claude Code adapter;
-- OpenAI API adapter;
-- Gemini API adapter;
-- Anthropic API adapter;
-- Ollama adapter.
+For the first-party v1 catalog, the supported mappings are ChatGPT to the
+Codex adapter/CLI and Gemini to the Antigravity adapter/CLI (`agy`). Other
+adapter implementations remain outside the supported v1 catalog during
+migration.
 
 Adapters are infrastructure, not separately installed product apps.
 
@@ -353,14 +357,11 @@ MacBook Pro
 ● Connected
 
 Workers
-Codex Personal       Ready
-Antigravity Personal Ready
-OpenAI API Work      Authentication required
-
-[+ Add Worker]
+ChatGPT               Ready
+Gemini                Needs attention
 
 Current work
-Authentication · Codex Personal · Running
+Authentication · ChatGPT · Running
 
 Machine
 Work Root   ...
@@ -441,6 +442,11 @@ Cloud always uses immutable Worker ID.
 
 ## 8. Worker Type / adapter model
 
+The general adapter machinery below is retained as architecture/implementation
+context. The supported first-party v1 catalog is narrowed by ADR-015 to
+ChatGPT via Codex CLI and Gemini via Antigravity CLI; the other examples in
+this section are not v1 product offerings.
+
 Worker Type describes an integration.
 
 Suggested metadata:
@@ -504,54 +510,47 @@ Same Worker protocol; no Cloud architecture change.
 
 ### 8.4 Worker Type naming rule
 
-Name a Worker Type after the execution integration that Conclave invokes.
-
-- **Codex** invokes Codex CLI. A user may authenticate Codex with a **ChatGPT account**. Do not call this a ChatGPT adapter.
-- **Antigravity** invokes Google Antigravity CLI, whose executable is `agy`. It may use a Google-account subscription/session. Do not rename it Gemini merely because its model family is Gemini.
-- **Gemini API** means direct Gemini API integration.
-- A future distinct **Gemini CLI** integration may be added as its own Worker Type if Conclave explicitly supports that product.
-
-Subscription/account brand, Worker Type and model are separate concepts.
+The product-facing v1 names are **ChatGPT** and **Gemini**. ChatGPT is
+implemented locally through Codex CLI (`codex`); Gemini is implemented through
+Google Antigravity CLI (`agy`). These names denote supported product slots,
+not direct provider API adapters. Provider login and billing mode are owned by
+the corresponding CLI; Conclave does not ask the user to select subscription
+versus API-key use. See [ADR-015](../decisions/ADR-015-first-party-worker-v1-contract.md).
 
 ## 9. Model selection
 
 Model is not Worker Type.
 
-A configured Worker may use:
+For the first-party v1 catalog, model selection belongs to the Work or
+Assignment. Workspace does not collect a Worker Name, local default model, or
+allowed-model list. Schema 6 clears previously stored local model defaults and
+allow-lists during migration. The adapter/tool validates whether it can run the
+requested model; local permissions and concurrency remain Workspace policy.
 
-- fixed model;
-- default model + allowed set;
-- provider/tool Auto mode.
-
-An Assignment may request a model.
-
-Effective model must satisfy:
-
-```text
-Assignment request
-∩ configured Worker allowed models
-∩ adapter/tool capabilities
-```
-
-If no model is explicitly requested, use configured Worker default/Auto.
+Older generic Worker contracts supported local model defaults and allow-lists;
+that behavior is retained only for historical compatibility and is not part of
+the v1 first-party catalog.
 
 ## 10. Local Worker creation
 
-### 10.1 Add Worker
+### 10.1 First-party v1 Workspace configuration
 
-Flow:
+The current v1 UI presents fixed ChatGPT and Gemini catalog slots rather than
+the earlier generic Add Worker flow. Configuration covers CLI/authentication/
+adapter readiness, local permissions, local concurrency, and diagnostics. It
+does not collect a Worker Name or local model defaults/allow-lists. See
+[ADR-015](../decisions/ADR-015-first-party-worker-v1-contract.md).
+
+Current flow:
 
 ```text
 Workers
--> Add Worker
--> choose Worker Type
--> name
+-> choose Configure on ChatGPT or Gemini slot
 -> prerequisite check
 -> authenticate/connect
--> model/defaults
 -> local permissions
 -> validate
--> create
+-> save fixed catalog slot
 -> sync safe projection
 ```
 
@@ -588,21 +587,23 @@ Suggested projection:
 ```text
 workerId
 workspaceId
-ownerUserId
-name
 workerTypeId
 status
+readinessState / attentionReasonCode
 capabilities
-supportedModels / model policy summary
-localPermissionSummary
 localConcurrencyLimit
 adapterVersion
-credentialStatus
 lastSeenAt
-revision
 ```
 
 Workspace sends idempotent upsert/tombstone events.
+
+The synchronized and AX-facing projection excludes Worker names, auth strategy,
+credential status or references, local permission names, model defaults and
+allow-lists, tokens, API keys, auth files, and local paths. Readiness details
+are stable reason codes; raw CLI/authentication output stays local. Discovered
+model or capability metadata may be added only when it is non-sensitive and
+does not reveal local credentials or paths.
 
 Cloud rejects inventory updates from any runtime other than the Worker's owning Workspace.
 
@@ -616,34 +617,45 @@ Sync triggers:
 
 - Worker created;
 - Worker edited;
-- credential state changed;
+- readiness changed after local authentication or execution prerequisites changed;
 - adapter updated;
 - permissions changed;
 - Worker removed;
-- periodic reconciliation;
+- readiness recheck at runtime startup, every five minutes, after app resume,
+  and on explicit setup recheck;
 - reconnect.
+
+Workspace persists an exact local readiness state (`ready`, `not_installed`,
+`sign_in_required`, `unsupported_cli_version`, `adapter_unavailable`,
+`disabled`, or `test_failed`) and publishes it as safe inventory metadata.
+Cloud keeps this detail separate from its existing coarse scheduling status;
+only local `ready` status is eligible for dispatch. Readiness probes validate
+CLI version/presence, provider-owned CLI authentication, adapter signature and
+integrity, and execution prerequisites without copying provider secrets.
 
 ### 12.2 Cloud -> local operational policy
 
-Cloud may synchronize:
+Cloud owns and applies Workstream usage policy, including:
 
-- scheduling enabled/disabled;
-- drain state;
-- Project/Workstream authorization context;
-- assignment;
-- cancellation;
-- local-action request such as reauthenticate/update attention.
+- role-to-Worker selection and ordered fallback;
+- model selection;
+- Workstream-specific Cloud concurrency ceiling;
+- Project/Workstream authorization context.
+
+The Workspace receives assignments and cancellations, not role/model policy as
+local configuration. AX owns the settings UI and Cloud validates every
+selection against active Project Workspace Grants.
 
 Cloud policy may narrow local Worker ability, never broaden it.
 
 Cloud persists a separate scheduling state (`enabled`, `disabled`, or
-`draining`) for each synchronized Worker. New and migrated inventory starts
-disabled. Scheduling requires local `ready` status and ready credentials as
-well as Cloud `enabled`; the Cloud control cannot change local credentials,
-permissions, ownership, or readiness. Drain rejects new assignments, lets
-active assignments finish, and transitions to disabled when a state read
-observes that active count has reached zero. The request and completion are
-audited with actor and time. A full inventory snapshot is authoritative:
+`draining`) for Cloud-side eligibility. Workstream policy can enable its
+selected/fallback capacity but cannot change local readiness, credentials,
+permissions, ownership, or local concurrency. Scheduling requires a local
+`ready` status and Cloud `enabled`. Drain rejects new assignments, lets active
+assignments finish, and transitions to disabled when a state read observes
+that active count has reached zero. The request and completion are audited
+with actor and time. A full inventory snapshot is authoritative:
 omitted Workers become tombstones and are disabled; a later source revision (or
 the same revision after an omission tombstone) may restore an omitted Worker.
 Explicit Worker tombstones continue to use strictly increasing source
@@ -665,12 +677,11 @@ Configured Worker
 -> owning Workspace
 -> active Workspace Project Grant
 -> Worker synced + ready
--> adapter ready
--> credential ready
--> capability/model compatible
--> local capacity available
+-> Workstream role mapping
+-> selected model/capability compatible
+-> local concurrency available
 -> Cloud scheduling enabled
--> Workstream policy allows Worker
+-> Workstream fallback policy allows Worker
 ```
 
 There is no Workspace-binding search for a configured Worker because Worker already has exactly one Workspace.
@@ -802,36 +813,36 @@ Machine-wide total active executions.
 
 Maximum simultaneous assignments for one configured Worker.
 
-Cloud may set a lower scheduling limit but cannot exceed local ceiling.
+AX Workstream policy sets a Cloud-side limit per task role. The scheduler takes
+the minimum of that limit, any Cloud Worker ceiling, and Workspace-reported
+local concurrency; it never asks Workspace to exceed its local ceiling.
 
 Stateful Workstream mutation lock is an additional independent constraint.
 
 ## 20. Remote controls in Conclave AX
 
-### Workers inventory
+### Workspace readiness inventory
 
 Show:
 
-- Worker name;
+- fixed Worker Type label;
 - Worker Type;
 - owning Workspace;
 - readiness;
-- adapter/tool status;
-- credential attention;
-- current active work;
-- scheduling state.
+- safe adapter/readiness attention reason.
 
-### Allowed actions
+### Workstream Execution policy
 
-Initial:
+AX owners/collaborators can:
 
-- open Worker details;
-- enable/disable scheduling;
-- drain;
-- inspect capabilities/status;
-- request local reauthentication;
-- navigate to owning Workspace;
-- use in Project/Workstream policy.
+- choose Workspace Workers per task role;
+- choose a model per role;
+- order a fallback Worker or allow any eligible Ready Worker;
+- set a Cloud-side concurrency limit.
+
+Workstream scheduling fails closed until a role mapping exists. The Workspace
+app reports readiness and handles local authentication, permissions, and
+execution setup.
 
 ### Not allowed initially
 
@@ -867,12 +878,12 @@ Action copy should say:
 
 Worker authorization remains Cloud-controlled.
 
-Project policy may allow:
+Project grants authorize Workspaces; Workstream Execution settings select:
 
-- any eligible Worker on granted Workspace;
-- explicit Worker IDs;
-- Worker Types;
-- models/capabilities.
+- role-to-Worker primary and fallback order;
+- model;
+- fallback behavior;
+- Cloud-side concurrency.
 
 Workstream policy can narrow Project policy.
 
@@ -1009,7 +1020,7 @@ A new user should be able to understand:
 
 ```text
 Install Conclave Workspace on a computer.
-Add/authenticate Workers on that computer.
+Configure its ChatGPT and Gemini slots using the local CLIs.
 Conclave AX discovers those Workers.
 Use them from Projects and Workstreams.
 ```
@@ -1024,7 +1035,8 @@ Do not declare v7 production-complete until:
 
 - desktop pairing + Workspace Gateway smoke succeeds against the target Cloud;
 - signed/notarized macOS build passes;
-- at least one real Codex and one real Antigravity execution succeed from locally configured Workers;
+- at least one real ChatGPT (Codex CLI) and one real Gemini (Antigravity CLI)
+  execution succeed from locally configured Workspace slots;
 - legacy Cloud-created/multi-Workspace Worker execution is no longer required;
 - adapter package verification no longer requires shipping the signing secret and uses asymmetric public-key trust.
 

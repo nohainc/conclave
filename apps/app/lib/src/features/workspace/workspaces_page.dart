@@ -20,8 +20,6 @@ class WorkspacesPage extends StatefulWidget {
     ValueChanged<StudioWorkspace>? onUpdate,
     ValueChanged<StudioWorkspace>? onRevoke,
     Future<void> Function(StudioWorkspace)? onConnect,
-    Future<void> Function(StudioWorker worker, String action)?
-        onWorkspaceWorkerScheduling,
     required this.onGrant,
     this.onOpenDownloads,
   });
@@ -267,7 +265,7 @@ class _WorkspaceCardBody extends StatelessWidget {
         const Padding(
           padding: EdgeInsets.only(bottom: 8),
           child: Text(
-            'Configure and authenticate Workers in Conclave Workspace on this computer. Synced Workers appear here for Cloud scheduling.',
+            'Conclave Workspace reports local readiness. Choose Workers for a Project or Workstream in its Execution settings.',
           ),
         ),
         if (workers.isEmpty)
@@ -313,7 +311,6 @@ class _WorkerRowState extends State<_WorkerRow> {
   Widget build(BuildContext context) {
     final worker = widget.worker;
     final readiness = _readinessLabel(worker.status);
-    final credential = _credentialLabel(worker.credentialStatus);
     return Column(
       children: [
         ListTile(
@@ -322,7 +319,7 @@ class _WorkerRowState extends State<_WorkerRow> {
           leading: Icon(worker.status == 'ready'
               ? Icons.check_circle_outline
               : Icons.warning_amber),
-          title: Text(worker.name),
+          title: Text(_workerTypeLabel(worker.workerTypeId)),
           subtitle: Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Wrap(
@@ -330,12 +327,9 @@ class _WorkerRowState extends State<_WorkerRow> {
               runSpacing: 4,
               children: [
                 _WorkerStatus(text: _workerTypeLabel(worker.workerTypeId)),
-                _WorkerStatus(text: 'Model · ${worker.defaultModel ?? 'Auto'}'),
                 _WorkerStatus(text: readiness),
-                _WorkerStatus(text: credential),
-                _WorkerStatus(
-                    text:
-                        'Cloud scheduling · ${_schedulingLabel(worker.schedulingState)}'),
+                if (worker.attentionReasonCode != null)
+                  _WorkerStatus(text: worker.attentionReasonCode!),
               ],
             ),
           ),
@@ -362,16 +356,11 @@ class _WorkerRowState extends State<_WorkerRow> {
                   _Diagnostic(
                       label: 'Local concurrency',
                       value: '${worker.localConcurrencyLimit}'),
-                  if (worker.cloudConcurrencyLimit != null)
-                    _Diagnostic(
-                        label: 'Cloud concurrency',
-                        value: '${worker.cloudConcurrencyLimit}'),
-                  if (credential != 'Authentication ready' &&
-                      credential != 'Authentication not required')
+                  if (worker.attentionReasonCode != null)
                     _Diagnostic(
                         label: 'Local attention',
                         value:
-                            'Complete sign-in or setup in Conclave Workspace on ${worker.workspaceName}.'),
+                            'Resolve ${worker.attentionReasonCode} in Conclave Workspace.'),
                 ],
               ),
             ),
@@ -422,22 +411,6 @@ String _readinessLabel(String value) => switch (value.toLowerCase()) {
       'removed' => 'Removed locally',
       'needs_attention' => 'Needs local attention',
       _ => 'Readiness · $value',
-    };
-
-String _credentialLabel(String value) => switch (value.toLowerCase()) {
-      'ready' => 'Authentication ready',
-      'not_required' => 'Authentication not required',
-      'needs_authentication' || 'missing' => 'Sign-in required',
-      'expired' => 'Sign-in expired',
-      'error' => 'Authentication needs attention',
-      _ => 'Authentication · $value',
-    };
-
-String _schedulingLabel(String value) => switch (value.toLowerCase()) {
-      'enabled' => 'Enabled',
-      'disabled' => 'Disabled',
-      'draining' => 'Draining',
-      _ => value,
     };
 
 class _Fact extends StatelessWidget {

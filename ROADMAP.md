@@ -16,6 +16,14 @@ Configured Workers are created/authenticated locally in Conclave Workspace,
 belong to exactly one Workspace, and synchronize only safe inventory/readiness
 to Cloud. Workers never connect directly to Conclave Cloud.
 
+The first-party v1 product catalog is frozen by
+[ADR-015](docs/decisions/ADR-015-first-party-worker-v1-contract.md): exactly
+one ChatGPT slot backed by Codex CLI and one Gemini slot backed by Antigravity
+CLI per Workspace. Provider login, credential storage, and subscription/API
+billing mode remain owned by the corresponding local CLI. Existing broader
+adapters and multi-instance records require a later migration phase and are not
+part of the v1 product catalog.
+
 ## Active work
 
 The detailed architecture roadmap is:

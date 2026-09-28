@@ -7,9 +7,49 @@ import 'package:crypto/crypto.dart';
 
 import 'platform_runtime.dart';
 
-const _registrySchemaVersion = 4;
+const _registrySchemaVersion = 7;
+
+/// Product Worker Type IDs are stable catalog identities. Adapter package IDs
+/// remain implementation details owned by the Workspace runtime.
+String canonicalWorkerTypeId(String workerTypeId) => switch (workerTypeId) {
+      'codex' => 'chatgpt',
+      'antigravity' => 'gemini',
+      _ => workerTypeId,
+    };
+
+String adapterPackageTypeId(String workerTypeId) => switch (workerTypeId) {
+      'chatgpt' => 'codex',
+      'gemini' => 'antigravity',
+      _ => workerTypeId,
+    };
+
+String productWorkerTypeName(String workerTypeId) =>
+    switch (canonicalWorkerTypeId(workerTypeId)) {
+      'chatgpt' => 'ChatGPT',
+      'gemini' => 'Gemini',
+      _ => workerTypeId,
+    };
 
 enum LocalWorkerStatus { needsAttention, ready, disabled, removed }
+
+enum WorkerReadinessState {
+  ready('ready', 'Ready'),
+  notInstalled('not_installed', 'Not installed'),
+  signInRequired('sign_in_required', 'Sign in required'),
+  unsupportedCliVersion('unsupported_cli_version', 'Unsupported CLI version'),
+  adapterUnavailable('adapter_unavailable', 'Adapter unavailable'),
+  disabled('disabled', 'Disabled'),
+  testFailed('test_failed', 'Test failed');
+
+  const WorkerReadinessState(this.wireValue, this.label);
+  final String wireValue;
+  final String label;
+
+  static WorkerReadinessState? parse(Object? value) =>
+      WorkerReadinessState.values
+          .where((state) => state.wireValue == value)
+          .firstOrNull;
+}
 
 enum LocalWorkerCredentialStatus {
   notRequired,
@@ -38,12 +78,20 @@ class LocalConfiguredWorker {
     required this.localPermissions,
     required this.localConcurrencyLimit,
     required this.adapterVersionPolicy,
-    required this.status,
+    required LocalWorkerStatus status,
+    WorkerReadinessState? readinessState,
     required this.credentialStatus,
     required this.revision,
     required this.createdAt,
     required this.updatedAt,
-  });
+  })  : status = status,
+        readinessState = readinessState ??
+            (status == LocalWorkerStatus.ready
+                ? WorkerReadinessState.ready
+                : status == LocalWorkerStatus.disabled ||
+                        status == LocalWorkerStatus.removed
+                    ? WorkerReadinessState.disabled
+                    : WorkerReadinessState.testFailed);
 
   final String id;
   final String workspaceId;
@@ -58,6 +106,7 @@ class LocalConfiguredWorker {
   final int localConcurrencyLimit;
   final String? adapterVersionPolicy;
   final LocalWorkerStatus status;
+  final WorkerReadinessState readinessState;
   final LocalWorkerCredentialStatus credentialStatus;
   final int revision;
   final String createdAt;
@@ -75,10 +124,12 @@ class LocalConfiguredWorker {
     int? localConcurrencyLimit,
     String? adapterVersionPolicy,
     LocalWorkerStatus? status,
+    WorkerReadinessState? readinessState,
     LocalWorkerCredentialStatus? credentialStatus,
     int? revision,
     String? updatedAt,
     bool clearCredentialRef = false,
+    bool clearModelConfiguration = false,
   }) =>
       LocalConfiguredWorker(
         id: id,
@@ -88,14 +139,18 @@ class LocalConfiguredWorker {
         authStrategy: authStrategy ?? this.authStrategy,
         credentialRef:
             clearCredentialRef ? null : credentialRef ?? this.credentialRef,
-        defaultModel: defaultModel ?? this.defaultModel,
+        defaultModel:
+            clearModelConfiguration ? null : defaultModel ?? this.defaultModel,
         adapterConfig: adapterConfig ?? this.adapterConfig,
-        allowedModels: allowedModels ?? this.allowedModels,
+        allowedModels: clearModelConfiguration
+            ? const []
+            : allowedModels ?? this.allowedModels,
         localPermissions: localPermissions ?? this.localPermissions,
         localConcurrencyLimit:
             localConcurrencyLimit ?? this.localConcurrencyLimit,
         adapterVersionPolicy: adapterVersionPolicy ?? this.adapterVersionPolicy,
         status: status ?? this.status,
+        readinessState: readinessState ?? this.readinessState,
         credentialStatus: credentialStatus ?? this.credentialStatus,
         revision: revision ?? this.revision,
         createdAt: createdAt,
@@ -116,6 +171,7 @@ class LocalConfiguredWorker {
         'localConcurrencyLimit': localConcurrencyLimit,
         'adapterVersionPolicy': adapterVersionPolicy,
         'status': status.name,
+        'readinessState': readinessState.wireValue,
         'credentialStatus': credentialStatus.name,
         'revision': revision,
         'createdAt': createdAt,
@@ -137,6 +193,7 @@ class LocalConfiguredWorker {
       'localConcurrencyLimit',
       'adapterVersionPolicy',
       'status',
+      'readinessState',
       'credentialStatus',
       'revision',
       'createdAt',
@@ -181,6 +238,18 @@ class LocalConfiguredWorker {
         LocalWorkerStatus.values.where((item) => item.name == json['status']);
     final credentialStatus = LocalWorkerCredentialStatus.values
         .where((item) => item.name == json['credentialStatus']);
+    final parsedReadinessState =
+        WorkerReadinessState.parse(json['readinessState']);
+    if (json['readinessState'] != null && parsedReadinessState == null) {
+      throw const FormatException('Worker readiness state is invalid');
+    }
+    final readinessState = parsedReadinessState ??
+        (json['status'] == LocalWorkerStatus.ready.name
+            ? WorkerReadinessState.ready
+            : json['status'] == LocalWorkerStatus.disabled.name ||
+                    json['status'] == LocalWorkerStatus.removed.name
+                ? WorkerReadinessState.disabled
+                : WorkerReadinessState.testFailed);
     final concurrency = json['localConcurrencyLimit'];
     final revision = json['revision'];
     if (status.isEmpty ||
@@ -208,6 +277,7 @@ class LocalConfiguredWorker {
       localConcurrencyLimit: concurrency,
       adapterVersionPolicy: adapterVersionPolicy as String?,
       status: status.first,
+      readinessState: readinessState,
       credentialStatus: credentialStatus.first,
       revision: revision,
       createdAt: required('createdAt'),
@@ -233,6 +303,7 @@ class LocalConfiguredWorkerRegistry {
     DateTime Function()? clock,
     String Function()? idGenerator,
     this.onWorkerRemoving,
+    this.onChanged,
   })  : platform = platform ?? currentPlatformRuntime,
         clock = clock ?? DateTime.now,
         idGenerator = idGenerator ?? _newWorkerId {
@@ -248,6 +319,7 @@ class LocalConfiguredWorkerRegistry {
   final DateTime Function() clock;
   final String Function() idGenerator;
   final Future<void> Function(String workerId)? onWorkerRemoving;
+  final FutureOr<void> Function()? onChanged;
   Future<void> _tail = Future<void>.value();
 
   File get file => File(
@@ -290,6 +362,7 @@ class LocalConfiguredWorkerRegistry {
     int localConcurrencyLimit = 1,
     String? adapterVersionPolicy,
     LocalWorkerStatus status = LocalWorkerStatus.needsAttention,
+    WorkerReadinessState? readinessState,
     LocalWorkerCredentialStatus credentialStatus =
         LocalWorkerCredentialStatus.needsAuthentication,
   }) =>
@@ -301,12 +374,21 @@ class LocalConfiguredWorkerRegistry {
             500) {
           throw StateError('A Workspace can sync at most 500 Workers.');
         }
+        final normalizedTypeId = canonicalWorkerTypeId(workerTypeId.trim());
+        final existingSlot = workers
+            .indexWhere((worker) => worker.workerTypeId == normalizedTypeId);
         final now = clock().toUtc().toIso8601String();
+        if (existingSlot >= 0 &&
+            workers[existingSlot].status != LocalWorkerStatus.removed) {
+          throw ArgumentError(
+              'This Worker Type is already configured in this Workspace');
+        }
+        final previous = existingSlot < 0 ? null : workers[existingSlot];
         final worker = LocalConfiguredWorker(
-          id: idGenerator(),
+          id: previous?.id ?? idGenerator(),
           workspaceId: workspaceId,
           name: name.trim(),
-          workerTypeId: workerTypeId.trim(),
+          workerTypeId: normalizedTypeId,
           authStrategy: authStrategy,
           credentialRef: credentialRef,
           defaultModel: defaultModel,
@@ -316,17 +398,29 @@ class LocalConfiguredWorkerRegistry {
           localConcurrencyLimit: localConcurrencyLimit,
           adapterVersionPolicy: adapterVersionPolicy,
           status: status,
+          readinessState: status == LocalWorkerStatus.disabled
+              ? WorkerReadinessState.disabled
+              : readinessState ??
+                  (status == LocalWorkerStatus.ready
+                      ? WorkerReadinessState.ready
+                      : WorkerReadinessState.testFailed),
           credentialStatus: credentialStatus,
-          revision: 1,
-          createdAt: now,
+          revision: (previous?.revision ?? 0) + 1,
+          createdAt: previous?.createdAt ?? now,
           updatedAt: now,
         );
-        if (workers.any((existing) => existing.id == worker.id)) {
+        if (previous == null &&
+            workers.any((existing) => existing.id == worker.id)) {
           throw StateError('Worker ID generator returned a duplicate ID');
         }
         _validateWorker(worker);
-        _validateNameUnique(workers, worker);
-        await _write([...workers, worker]);
+        _validateTypeUnique(workers, worker, excludingId: previous?.id);
+        if (previous == null) {
+          await _write([...workers, worker]);
+        } else {
+          workers[existingSlot] = worker;
+          await _write(workers);
+        }
         return worker;
       });
 
@@ -353,7 +447,11 @@ class LocalConfiguredWorkerRegistry {
               'Worker identity and ownership fields are immutable');
         }
         _validateWorker(updated);
-        _validateNameUnique(workers, updated, excludingId: workerId);
+        if (updated.workerTypeId !=
+            canonicalWorkerTypeId(updated.workerTypeId)) {
+          throw ArgumentError('Worker Type ID is not canonical');
+        }
+        _validateTypeUnique(workers, updated, excludingId: workerId);
         workers[index] = updated;
         await _write(workers);
         return updated;
@@ -430,6 +528,9 @@ class LocalConfiguredWorkerRegistry {
           (decoded['schemaVersion'] != 1 &&
               decoded['schemaVersion'] != 2 &&
               decoded['schemaVersion'] != 3 &&
+              decoded['schemaVersion'] != 4 &&
+              decoded['schemaVersion'] != 5 &&
+              decoded['schemaVersion'] != 6 &&
               decoded['schemaVersion'] != _registrySchemaVersion) ||
           decoded['workers'] is! List ||
           decoded['checksum'] is! String) {
@@ -442,7 +543,7 @@ class LocalConfiguredWorkerRegistry {
       if (decoded['checksum'] != expected) {
         throw const FormatException('checksum mismatch');
       }
-      final records = rawWorkers.map((item) {
+      var records = rawWorkers.map((item) {
         if (item is! Map) {
           throw const FormatException('Worker record must be an object');
         }
@@ -450,9 +551,20 @@ class LocalConfiguredWorkerRegistry {
         if (schemaVersion == 1) json.remove('ownerUserId');
         return LocalConfiguredWorker.fromJson(json);
       }).toList();
-      _validateAll(records);
       if (schemaVersion < _registrySchemaVersion) {
+        _validateLegacyRecords(records);
+        final migrated = _migrateRecords(records);
+        final keptIds = migrated.map((worker) => worker.id).toSet();
+        for (final duplicate in records.where((worker) =>
+            !keptIds.contains(worker.id) &&
+            worker.status != LocalWorkerStatus.removed)) {
+          await onWorkerRemoving?.call(duplicate.id);
+        }
+        records = migrated;
+        _validateAll(records);
         await _write(records);
+      } else {
+        _validateAll(records);
       }
       return records;
     } on Object catch (error) {
@@ -473,6 +585,14 @@ class LocalConfiguredWorkerRegistry {
       await temporary.writeAsString(jsonEncode(document), flush: true);
       await platform.restrictPermissions(temporary.path, directory: false);
       await temporary.rename(file.path);
+      final changed = onChanged;
+      if (changed != null) {
+        // Notify after the registry's mutation lock is released; inventory
+        // providers read this registry to build their Cloud snapshot.
+        unawaited(Future<void>.delayed(Duration.zero)
+            .then((_) => changed())
+            .catchError((Object _) {}));
+      }
     } finally {
       if (await temporary.exists()) await temporary.delete();
     }
@@ -480,15 +600,24 @@ class LocalConfiguredWorkerRegistry {
 
   void _validateAll(List<LocalConfiguredWorker> workers) {
     final ids = <String>{};
-    final names = <String>{};
+    final types = <String>{};
     for (final worker in workers) {
       _validateWorker(worker);
       if (!ids.add(worker.id)) {
         throw const FormatException('duplicate Worker ID');
       }
-      if (worker.status != LocalWorkerStatus.removed &&
-          !names.add(worker.name.toLowerCase())) {
-        throw const FormatException('duplicate Worker name');
+      if (!types.add(worker.workerTypeId)) {
+        throw const FormatException('duplicate Workspace Worker Type');
+      }
+    }
+  }
+
+  void _validateLegacyRecords(List<LocalConfiguredWorker> workers) {
+    final ids = <String>{};
+    for (final worker in workers) {
+      _validateWorker(worker);
+      if (!ids.add(worker.id)) {
+        throw const FormatException('duplicate Worker ID');
       }
     }
   }
@@ -551,15 +680,69 @@ class LocalConfiguredWorkerRegistry {
     }
   }
 
-  void _validateNameUnique(
+  void _validateTypeUnique(
       List<LocalConfiguredWorker> workers, LocalConfiguredWorker candidate,
       {String? excludingId}) {
     if (workers.any((worker) =>
         worker.id != excludingId &&
-        worker.status != LocalWorkerStatus.removed &&
-        worker.name.toLowerCase() == candidate.name.toLowerCase())) {
-      throw ArgumentError('Worker names must be unique within a Workspace');
+        worker.workerTypeId == candidate.workerTypeId)) {
+      throw ArgumentError(
+          'A Workspace can have only one record per Worker Type');
     }
+  }
+
+  List<LocalConfiguredWorker> _migrateRecords(
+      List<LocalConfiguredWorker> records) {
+    final normalized = records.map((worker) {
+      final canonicalType = canonicalWorkerTypeId(worker.workerTypeId);
+      return worker.copyWith(
+        workerTypeId: canonicalType,
+        name: productWorkerTypeName(canonicalType),
+        clearModelConfiguration: true,
+      );
+    }).toList();
+
+    final groups = <String, List<LocalConfiguredWorker>>{};
+    for (final worker in normalized) {
+      groups.putIfAbsent(worker.workerTypeId, () => []).add(worker);
+    }
+    final migrated = <LocalConfiguredWorker>[];
+    for (final group in groups.values) {
+      group.sort(_migrationPreference);
+      migrated.add(group.first);
+    }
+    migrated.sort((a, b) {
+      final byType = a.workerTypeId.compareTo(b.workerTypeId);
+      return byType != 0 ? byType : a.id.compareTo(b.id);
+    });
+    return migrated;
+  }
+
+  int _migrationPreference(LocalConfiguredWorker a, LocalConfiguredWorker b) {
+    int score(LocalConfiguredWorker worker) {
+      var value = switch (worker.status) {
+        LocalWorkerStatus.ready => 40,
+        LocalWorkerStatus.disabled => 30,
+        LocalWorkerStatus.needsAttention => 20,
+        LocalWorkerStatus.removed => 0,
+      };
+      if (worker.credentialStatus == LocalWorkerCredentialStatus.ready) {
+        value += 8;
+      }
+      if (worker.credentialRef != null) value += 4;
+      if (worker.defaultModel != null) value += 2;
+      if (worker.adapterConfig.isNotEmpty ||
+          worker.allowedModels.isNotEmpty ||
+          worker.localPermissions.isNotEmpty) {
+        value += 1;
+      }
+      return value;
+    }
+
+    final byConfiguration = score(b).compareTo(score(a));
+    if (byConfiguration != 0) return byConfiguration;
+    final byCreation = a.createdAt.compareTo(b.createdAt);
+    return byCreation != 0 ? byCreation : a.id.compareTo(b.id);
   }
 
   String _checksum(List<LocalConfiguredWorker> workers) {

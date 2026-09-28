@@ -110,6 +110,7 @@ abstract interface class StudioDataSource {
     required String workstreamId,
     String? name,
     String? status,
+    Map<String, dynamic>? executionPolicy,
   });
   Future<void> deleteWorkstream({required String workstreamId});
   Future<List<StudioDiscussionMessage>> loadDiscussionMessages({
@@ -413,6 +414,7 @@ class StudioApiClient implements StudioDataSource {
     required String workstreamId,
     String? name,
     String? status,
+    Map<String, dynamic>? executionPolicy,
   }) async {
     final response = await client.patch(
       Uri.parse('$baseUrl/workstreams/$workstreamId'),
@@ -420,6 +422,7 @@ class StudioApiClient implements StudioDataSource {
       body: jsonEncode({
         if (name != null) 'name': name,
         if (status != null) 'status': status,
+        if (executionPolicy != null) 'executionPolicy': executionPolicy,
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {

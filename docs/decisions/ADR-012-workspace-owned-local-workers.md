@@ -1,12 +1,19 @@
 # ADR-012: Workspace-Owned Workers and Managed Adapter Processes
 
-**Status:** Accepted; Workspace-owned Worker execution and V6 compatibility retirement implemented under Architecture v7. Production release gates remain open.
+**Status:** Accepted for the general Workspace-owned execution architecture. Its catalog, configured-Worker cardinality, naming, and local authentication UX are superseded for v1 by [ADR-015](ADR-015-first-party-worker-v1-contract.md). Production release gates remain open.
 
 **Date:** 2026-09-26  
 **Builds on:** ADR-008, ADR-009, ADR-010, ADR-011  
 **Partially supersedes:** ADR-010 configured-Worker ownership/cardinality and creation flow
 
 ## Context
+
+> **Current v1 product contract:** ADR-015 narrows the supported first-party
+> catalog to ChatGPT via Codex CLI and Gemini via Antigravity CLI, with one
+> stable slot of each type per Workspace and provider authentication owned by
+> the local CLI. The broader catalog and multiple-instance rules below record
+> the accepted V7 architecture and remain relevant to migration/history; they
+> are not the v1 product contract where they conflict with ADR-015.
 
 The current v6 implementation established a useful user-facing distinction between:
 

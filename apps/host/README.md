@@ -130,20 +130,15 @@ CONCLAVE_ENROLLMENT_TOKEN='conclave_enroll_...' \
   bash scripts/test-workspace-cloud-connection.sh
 ~~~
 
-## Worker naming
+## First-party Worker v1 contract
 
-- **Codex** Worker Type invokes Codex CLI; authentication may be a ChatGPT account.
-- **Antigravity** Worker Type invokes the `agy` CLI; authentication may be a Google account.
-- **Claude Code** invokes the locally authenticated `claude` CLI in headless mode. The CLI session is validated locally, and the adapter inherits the active Workstream directory.
-- **Ollama** connects to the configured local service, checks its version and installed models, and runs the selected model without storing a provider credential.
-- **OpenAI API**, **Gemini API**, and **Anthropic API** are direct API Worker Types.
+The supported product-facing Worker slots are **ChatGPT**, powered by Codex
+CLI (`codex`), and **Gemini**, powered by Antigravity CLI (`agy`). Each
+Workspace has one stable slot of each type and at most one configured Worker
+per slot. The corresponding CLI owns sign-in, credential storage, and billing
+mode; Conclave checks whether the CLI can execute and does not request or store
+provider credentials. See [ADR-015](../../docs/decisions/ADR-015-first-party-worker-v1-contract.md).
 
-API Workers validate locally stored credentials against provider model-list
-endpoints where available; the setup flow exposes returned model IDs for
-selection. Claude Code and Ollama adapter packages are installed only from
-trusted, signed catalog releases. Their protocol, mock-service and signed
-package admission tests run with `pnpm worker-adapters:test` and the Host adapter
-package tests.
-
-Worker Type names describe the integration Conclave invokes, not the model or
-subscription brand.
+Other adapters and their tests remain in the repository during compatibility
+and migration work, but are not offered as first-party v1 Workers. Worker
+readiness remains a local execution fact; Cloud receives only safe inventory.

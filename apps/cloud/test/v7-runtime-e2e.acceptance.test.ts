@@ -39,6 +39,9 @@ const migrationFiles = [
   "0029_workspace_sessions.sql",
   "0024_v7_worker_scheduling.sql",
   "0025_v7_assignment_runtime.sql",
+  "0031_worker_readiness_state.sql",
+  "0032_worker_inventory_safe_projection.sql",
+  "0033_workstream_worker_usage_policy.sql",
 ];
 
 class LocalD1Statement {

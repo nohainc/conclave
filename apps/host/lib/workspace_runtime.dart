@@ -16,6 +16,7 @@ import 'package:conclave_host/v7_adapter_package_store.dart';
 import 'package:conclave_host/v7_adapter_catalog.dart';
 import 'package:conclave_host/workspace_enrollment.dart';
 import 'package:conclave_host/workspace_transport.dart';
+import 'package:conclave_host/worker_readiness.dart';
 
 Set<WorkerPermission> _configuredPermissions() {
   final configured = Platform.environment['CONCLAVE_WORKER_PERMISSIONS'];
@@ -56,9 +57,13 @@ Future<Host> buildWorkspaceRuntime(
   final localWorkspaceId = await LocalWorkspaceIdentityStore(
     effectiveConfig.dataDirectory,
   ).getOrCreate(initialIdentity: effectiveConfig.workspaceId);
+  HostCloudConnection? connection;
   final localWorkerRegistry = LocalConfiguredWorkerRegistry(
     dataDirectory: effectiveConfig.dataDirectory,
     workspaceId: localWorkspaceId,
+    onChanged: () async {
+      await connection?.refreshWorkerInventory();
+    },
     onWorkerRemoving: (workerId) async {
       await workerExecutor.cancelWorker(workerId);
     },
@@ -162,7 +167,6 @@ Future<Host> buildWorkspaceRuntime(
     }
   }
 
-  late final HostCloudConnection? connection;
   connection = config.cloudUri != null &&
           config.hostId != null &&
           config.workspaceId != null
@@ -187,10 +191,16 @@ Future<Host> buildWorkspaceRuntime(
                 // Invalid, revoked, or permission-incompatible packages must
                 // not be advertised as active in the safe inventory.
               }
+              final readinessState =
+                  worker.status == LocalWorkerStatus.disabled ||
+                          worker.status == LocalWorkerStatus.removed
+                      ? WorkerReadinessState.disabled
+                      : adapterSummary == null
+                          ? WorkerReadinessState.adapterUnavailable
+                          : worker.readinessState;
               return <String, Object?>{
                 'workerId': worker.id,
                 'workerTypeId': worker.workerTypeId,
-                'name': worker.name,
                 'status': worker.status == LocalWorkerStatus.ready &&
                         adapterSummary == null
                     ? 'needs_attention'
@@ -199,25 +209,14 @@ Future<Host> buildWorkspaceRuntime(
                         LocalWorkerStatus.needsAttention => 'needs_attention',
                         LocalWorkerStatus.disabled => 'disabled',
                         LocalWorkerStatus.removed => 'removed',
-                      },
-                'authStrategy': worker.authStrategy,
-                'defaultModel': worker.defaultModel,
-                'allowedModels': worker.allowedModels,
+                },
+                'readinessState': readinessState.wireValue,
                 'capabilities':
                     adapterSummary?['capabilities'] ?? const <String>[],
-                'localPermissionsSummary': worker.localPermissions,
                 'localConcurrencyLimit': worker.localConcurrencyLimit,
                 // This records configured policy only when a concrete
                 // adapter build has been admitted and activated.
                 'adapterVersion': adapterSummary?['adapterVersion'],
-                'credentialStatus': switch (worker.credentialStatus) {
-                  LocalWorkerCredentialStatus.notRequired => 'not_required',
-                  LocalWorkerCredentialStatus.ready => 'ready',
-                  LocalWorkerCredentialStatus.needsAuthentication =>
-                    'needs_authentication',
-                  LocalWorkerCredentialStatus.expired => 'expired',
-                  LocalWorkerCredentialStatus.error => 'error',
-                },
                 'revision': worker.revision,
                 'createdAt': worker.createdAt,
                 'updatedAt': worker.updatedAt,
@@ -269,7 +268,7 @@ Future<Host> buildWorkspaceRuntime(
               item.status == LocalWorkerStatus.ready &&
               item.adapterVersionPolicy != null)) {
             await adapterCatalog.reconcileWorker(
-              worker.workerTypeId,
+              adapterPackageTypeId(worker.workerTypeId),
               channel:
                   worker.adapterVersionPolicy == 'beta' ? 'beta' : 'stable',
               allowActivation: canActivate,
@@ -284,10 +283,15 @@ Future<Host> buildWorkspaceRuntime(
       }());
     });
   }
+  final readinessMonitor = WorkerReadinessMonitor(
+    registry: localWorkerRegistry,
+    adapterStore: v7AdapterPackageStore,
+  );
   final engine = Host(
     config: effectiveConfig,
     credentialStore: secureCredentialStore,
     localWorkerRegistry: localWorkerRegistry,
+    workerReadinessMonitor: readinessMonitor,
     cloudConnection: connection,
     adapterPackageStore: v7AdapterPackageStore,
     statusProvider: () async {

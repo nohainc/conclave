@@ -6,29 +6,31 @@ implementation target until its production release gates pass.
 
 ## Product model
 
-> **Projects are collaboration. Workspaces provide machine execution. Workers
-> are created and configured locally by their owning Workspace. Cloud
-> authorizes and schedules; the owning Workspace executes.**
+> **Projects and Workstreams choose how Workers are used. Workspaces report
+> whether their local ChatGPT and Gemini Workers are ready and execute work.**
 
 ```text
 Conclave AX -> Conclave Cloud -> Conclave Workspace -> Worker adapter process
 ```
 
 - **Conclave AX** is the human-facing web application for Projects, Workstreams,
-  Discuss, Work, Workspace grants, scheduling controls, results and audit.
+  Discuss, Work, Workspace grants, Worker role/model/fallback policy, results
+  and audit.
 - **Conclave Cloud** is the authoritative collaboration and scheduling control
   plane. It stores safe Workspace inventory and never receives provider
   credentials.
 - **Conclave Workspace** is the persistent desktop runtime and machine security
   boundary. It owns local Workers, credentials, permissions, prerequisites,
   Work Root, adapter admission, process execution and local diagnostics.
-- **Worker Type** identifies a managed integration such as Codex, Claude Code,
-  an API provider, or Ollama. Models are Worker configuration, not Worker Types.
+- **Worker Type** identifies a managed integration. The frozen first-party v1
+  catalog is ChatGPT via Codex CLI and Gemini via Antigravity CLI; broader
+  adapters remain implementation/migration scope. Models are not Worker Types.
 
-Each configured Worker belongs to exactly one Workspace. Cloud scheduling state
-can enable, disable, or drain that Worker, but cannot make a locally unready
-Worker executable or broaden local permissions. Project/Workstream policy and
-Workspace grants narrow scheduling eligibility.
+Each configured Worker belongs to exactly one Workspace. AX Workstream policy
+chooses the Workspace/Worker for each task role, model, fallback behavior, and
+Cloud concurrency. Cloud scheduling state and Project grants bound eligibility;
+the Workspace's local Ready state, permissions, and concurrency remain the
+execution safety boundary. See [ADR-016](docs/decisions/ADR-016-ax-owned-worker-usage.md).
 
 ## Workstream and execution protocol
 
@@ -53,6 +55,9 @@ not describe V7 as the implemented baseline until all release gates pass.
 
 - [Architecture v7](docs/architecture/ARCHITECTURE_V7.md)
 - [ADR-012: Workspace-owned Workers](docs/decisions/ADR-012-workspace-owned-local-workers.md)
+- [ADR-015: First-party Worker v1 contract](docs/decisions/ADR-015-first-party-worker-v1-contract.md)
+- [ADR-016: AX-owned Worker usage](docs/decisions/ADR-016-ax-owned-worker-usage.md)
+- [First-party Worker catalog contract v1](docs/specifications/FIRST_PARTY_WORKER_CATALOG_V1.md)
 - [Applications and product boundaries](docs/architecture/APPLICATIONS.md)
 - [AX Workspaces UX and data contract](docs/architecture/WORKSPACES_UX_CONTRACT.md)
 - [Technology stack](docs/architecture/TECH_STACK.md)
@@ -66,5 +71,6 @@ not describe V7 as the implemented baseline until all release gates pass.
 ## Historical documents
 
 Architecture v4–v6 and ADR-009/ADR-010 preserve the decisions made during the
-earlier migration. Where their Worker ownership or Cloud binding rules conflict
-with ADR-012, ADR-012 and Architecture v7 define current behavior.
+earlier migration. ADR-012 defines the current general execution architecture;
+ADR-015 defines the current first-party v1 catalog, cardinality, and provider
+authentication boundary.

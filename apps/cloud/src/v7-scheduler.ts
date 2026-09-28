@@ -213,16 +213,15 @@ export async function selectProjectExecutionTarget(
             ep.allowed_worker_type_ids_json,
             ep.allowed_providers_json,
             ep.allowed_models_json,
+            usage.policy_json AS worker_usage_policy_json,
             ew.name AS workspace_name, ew.owner_user_id, ew.status AS workspace_status,
             wri.id AS runtime_identity_id,
             i.worker_id, i.worker_type_id,
             COALESCE(i.adapter_version, '1.0.0') AS worker_version,
-            i.capabilities_json, i.local_permissions_summary_json AS local_permissions_json,
-            i.allowed_models_json AS worker_allowed_models_json, i.default_model AS worker_default_model,
+            i.capabilities_json,
             i.status AS local_worker_status,
             vs.state AS cloud_scheduling_state,
             vs.cloud_concurrency_limit,
-            i.credential_status AS credential_status,
             i.worker_type_id AS provider,
             i.local_concurrency_limit AS local_concurrency_limit,
             (SELECT COUNT(*) FROM worker_assignments wa
@@ -232,6 +231,7 @@ export async function selectProjectExecutionTarget(
      FROM workspace_project_grants g
      LEFT JOIN workstream_execution_policies ep ON ep.workstream_id = ?4
      JOIN execution_workspaces ew ON ew.id = g.workspace_id
+     LEFT JOIN workstream_worker_usage_policies usage ON usage.workstream_id = ?4
      JOIN workspace_runtime_identities wri ON wri.workspace_id = ew.id AND wri.revoked_at IS NULL
      JOIN workspace_worker_inventory i ON i.workspace_id = ew.id AND i.status != 'removed'
      JOIN v7_worker_scheduling vs ON vs.worker_id = i.worker_id
@@ -255,6 +255,25 @@ export async function selectProjectExecutionTarget(
   const rejected: Array<Record<string, unknown>> = [];
   const liveWorkspaceChecks = new Map<string, Promise<boolean>>();
   const candidates = [...(v7Rows.results ?? [])].sort((left, right) => {
+    const preference = (row: Row): number => {
+      const policy = object(row.worker_usage_policy_json);
+      const roles = policy.roles && typeof policy.roles === "object"
+        ? policy.roles as Record<string, unknown>
+        : {};
+      const binding = roles[request.role.trim().toLowerCase()];
+      if (!binding || typeof binding !== "object") return Number.MAX_SAFE_INTEGER;
+      const value = binding as Record<string, unknown>;
+      const preferred = [
+        ...(typeof value.workerId === "string" ? [value.workerId] : []),
+        ...(Array.isArray(value.fallbackWorkerIds)
+          ? value.fallbackWorkerIds.filter((id): id is string => typeof id === "string")
+          : []),
+      ];
+      const index = preferred.indexOf(String(row.worker_id));
+      return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+    };
+    const configuredFirst = preference(left) - preference(right);
+    if (configuredFirst) return configuredFirst;
     const load =
       number(left.active_assignments) - number(right.active_assignments);
     return (
@@ -266,7 +285,21 @@ export async function selectProjectExecutionTarget(
     const workspaceId = String(row.workspace_id);
     const workerId = String(row.worker_id);
     const workerTypeId = String(row.worker_type_id);
-    const credentialStatus = String(row.credential_status ?? "unknown");
+    const usagePolicy = object(row.worker_usage_policy_json);
+    const roleBindings = usagePolicy.roles && typeof usagePolicy.roles === "object"
+      ? usagePolicy.roles as Record<string, unknown>
+      : {};
+    const rawRoleBinding = roleBindings[request.role.trim().toLowerCase()];
+    const roleBinding = rawRoleBinding && typeof rawRoleBinding === "object"
+      ? rawRoleBinding as Record<string, unknown>
+      : {};
+    const hasRoleBinding = Object.keys(roleBinding).length > 0;
+    const preferredWorkerIds = [
+      ...(typeof roleBinding.workerId === "string" ? [roleBinding.workerId] : []),
+      ...(Array.isArray(roleBinding.fallbackWorkerIds)
+        ? roleBinding.fallbackWorkerIds.filter((id): id is string => typeof id === "string")
+        : []),
+    ];
     const capabilities = strings(row.capabilities_json).map((value) =>
       value.toLowerCase(),
     );
@@ -277,11 +310,11 @@ export async function selectProjectExecutionTarget(
       (value) => value.toLowerCase(),
     );
     const provider = String(row.provider ?? "unknown");
-    const selectedModel =
-      request.model ??
-      (typeof row.worker_default_model === "string"
-        ? row.worker_default_model
-        : undefined);
+    const selectedModel = request.workstreamId &&
+      typeof roleBinding.model === "string" && roleBinding.model.trim().length > 0
+      ? roleBinding.model
+      : request.model ??
+        (typeof roleBinding.model === "string" ? roleBinding.model : undefined);
     const independenceKey = `${provider}:${workerTypeId}`;
     const concurrency = object(row.concurrency_json);
     const maxConcurrent = Math.min(
@@ -289,6 +322,9 @@ export async function selectProjectExecutionTarget(
       row.cloud_concurrency_limit == null
         ? 1024
         : number(row.cloud_concurrency_limit, 1024),
+      roleBinding.cloudConcurrencyLimit == null
+        ? 1024
+        : number(roleBinding.cloudConcurrencyLimit, 1024),
       number(concurrency.maxConcurrentAssignments, 1024),
     );
 
@@ -318,12 +354,21 @@ export async function selectProjectExecutionTarget(
       reject("local_worker_not_ready");
       continue;
     }
-    if (credentialStatus !== "ready" && credentialStatus !== "not_required") {
-      reject("local_credential_unavailable");
+    if (request.workstreamId && !hasRoleBinding) {
+      reject("workstream_role_policy_missing");
       continue;
     }
     if (request.workspaceId && request.workspaceId !== workspaceId) {
       reject("explicit_workspace_mismatch");
+      continue;
+    }
+    if (typeof roleBinding.workspaceId === "string" && roleBinding.workspaceId !== workspaceId) {
+      reject("workstream_role_workspace_mismatch");
+      continue;
+    }
+    if (request.workstreamId && usagePolicy.fallbackPolicy === "configured_only" &&
+        (preferredWorkerIds.length === 0 || !preferredWorkerIds.includes(workerId))) {
+      reject(preferredWorkerIds.length === 0 ? "no_worker_selected_for_role" : "worker_not_selected_for_role");
       continue;
     }
     if (request.workerId && request.workerId !== workerId) {
@@ -371,15 +416,6 @@ export async function selectProjectExecutionTarget(
       reject("model_not_allowed_by_workstream");
       continue;
     }
-    const workerAllowedModels = strings(row.worker_allowed_models_json);
-    if (
-      selectedModel &&
-      workerAllowedModels.length > 0 &&
-      !workerAllowedModels.includes(selectedModel)
-    ) {
-      reject("model_not_supported_by_worker");
-      continue;
-    }
     if (excluded.has(independenceKey)) {
       reject("provider_independence_conflict");
       continue;
@@ -390,9 +426,10 @@ export async function selectProjectExecutionTarget(
     }
 
     const grantPermissions = strings(row.allowed_permissions_json);
-    const workerPermissions = strings(
-      row.local_permissions_json ?? row.permissions_json,
-    );
+    // Local execution permissions stay on the Workspace. Cloud intersects
+    // project membership and grant policy; the Worker enforces its own local
+    // permission boundary when accepting/executing the assignment.
+    const workerPermissions = grantPermissions;
     const permissions = resolveEffectivePermissions({
       projectMemberPermissions: projectPermissions(membership.role),
       workspaceGrantPermissions: grantPermissions,
@@ -471,8 +508,12 @@ export async function selectProjectExecutionTarget(
           workerTypeId,
           version: row.worker_version,
           status: row.local_worker_status,
+          role: request.role,
+          selection: preferredWorkerIds.includes(workerId)
+            ? "configured_preference"
+            : "eligible_fallback",
+          fallbackPolicy: usagePolicy.fallbackPolicy ?? "configured_only",
         },
-        localAuthentication: { status: credentialStatus },
         filters: [
           "project_authorized",
           "grant_active",

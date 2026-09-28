@@ -297,6 +297,7 @@ class StudioFixtureDataSource implements StudioDataSource {
     required String workstreamId,
     String? name,
     String? status,
+    Map<String, dynamic>? executionPolicy,
   }) async =>
       StudioWorkstream(
         id: workstreamId,
@@ -308,6 +309,12 @@ class StudioFixtureDataSource implements StudioDataSource {
         primaryWorkspace: 'Not selected',
         currentCheckpoint: 'Not started',
         queueStatus: 'Idle',
+        executionPolicy: executionPolicy ??
+            const {
+              'version': 1,
+              'fallbackPolicy': 'configured_only',
+              'roles': <String, dynamic>{},
+            },
       );
 
   @override

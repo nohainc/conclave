@@ -4,11 +4,11 @@ import 'dart:async';
 import 'adapter_prerequisite.dart';
 import 'copyable_messages.dart';
 import 'configured_worker_registry.dart';
-import 'secure_credentials.dart';
 
 class LocalWorkerTypeOption {
   const LocalWorkerTypeOption({
     required this.id,
+    required this.adapterId,
     required this.name,
     required this.description,
     required this.authStrategy,
@@ -17,10 +17,10 @@ class LocalWorkerTypeOption {
     this.executablePrerequisite,
     this.additionalPrerequisites = const [],
     required this.permissions,
-    this.requiresApiKey = false,
   });
 
   final String id;
+  final String adapterId;
   final String name;
   final String description;
   final String authStrategy;
@@ -29,15 +29,15 @@ class LocalWorkerTypeOption {
   final AdapterExecutablePrerequisite? executablePrerequisite;
   final List<AdapterExecutablePrerequisite> additionalPrerequisites;
   final List<String> permissions;
-  final bool requiresApiKey;
 
   static const supported = <LocalWorkerTypeOption>[
     LocalWorkerTypeOption(
-      id: 'codex',
-      name: 'Codex',
-      description: 'Use a local Codex installation and account.',
+      id: 'chatgpt',
+      adapterId: 'codex',
+      name: 'ChatGPT',
+      description: 'Use ChatGPT through the Codex CLI on this computer.',
       authStrategy: 'browser_auth',
-      authLabel: 'ChatGPT account',
+      authLabel: 'Codex CLI',
       prerequisite: 'Codex CLI',
       executablePrerequisite: AdapterExecutablePrerequisite(
           executable: 'codex', minimumVersion: '0.158.0'),
@@ -47,369 +47,146 @@ class LocalWorkerTypeOption {
       permissions: ['workstream_filesystem', 'shell_execution'],
     ),
     LocalWorkerTypeOption(
-      id: 'antigravity',
-      name: 'Antigravity',
-      description: 'Use Antigravity on this machine.',
+      id: 'gemini',
+      adapterId: 'antigravity',
+      name: 'Gemini',
+      description: 'Use Gemini through the Antigravity CLI on this computer.',
       authStrategy: 'browser_auth',
-      authLabel: 'Google account',
+      authLabel: 'Antigravity CLI',
       prerequisite: 'Antigravity CLI',
       executablePrerequisite: AdapterExecutablePrerequisite(
-          executable: 'agy', minimumVersion: '1.0.0'),
+        executable: 'agy',
+        minimumVersion: '1.1.8',
+        maximumVersion: '1.2.11',
+      ),
       additionalPrerequisites: [
         AdapterExecutablePrerequisite(executable: 'node'),
       ],
       permissions: ['workstream_filesystem', 'shell_execution'],
     ),
-    LocalWorkerTypeOption(
-      id: 'claude-code',
-      name: 'Claude Code',
-      description: 'Use a local Claude Code installation.',
-      authStrategy: 'browser_auth',
-      authLabel: 'Claude account',
-      prerequisite: 'Claude Code CLI',
-      executablePrerequisite: AdapterExecutablePrerequisite(
-          executable: 'claude', minimumVersion: '2.1.41'),
-      additionalPrerequisites: [
-        AdapterExecutablePrerequisite(
-            executable: 'node', minimumVersion: '18.0.0'),
-      ],
-      permissions: ['workstream_filesystem', 'shell_execution'],
-    ),
-    LocalWorkerTypeOption(
-      id: 'openai-api',
-      name: 'OpenAI API',
-      description: 'Connect with a locally stored API key.',
-      authStrategy: 'api_key',
-      authLabel: 'API key',
-      prerequisite: 'OpenAI adapter',
-      executablePrerequisite: AdapterExecutablePrerequisite(
-          executable: 'node', minimumVersion: '18.0.0'),
-      permissions: ['network_openai'],
-      requiresApiKey: true,
-    ),
-    LocalWorkerTypeOption(
-      id: 'gemini-api',
-      name: 'Gemini API',
-      description: 'Connect with a locally stored API key.',
-      authStrategy: 'api_key',
-      authLabel: 'API key',
-      prerequisite: 'Gemini adapter',
-      executablePrerequisite: AdapterExecutablePrerequisite(
-          executable: 'node', minimumVersion: '18.0.0'),
-      permissions: ['network_google'],
-      requiresApiKey: true,
-    ),
-    LocalWorkerTypeOption(
-      id: 'anthropic-api',
-      name: 'Anthropic API',
-      description: 'Connect with a locally stored API key.',
-      authStrategy: 'api_key',
-      authLabel: 'API key',
-      prerequisite: 'Anthropic adapter',
-      executablePrerequisite: AdapterExecutablePrerequisite(
-          executable: 'node', minimumVersion: '18.0.0'),
-      permissions: ['network_anthropic'],
-      requiresApiKey: true,
-    ),
-    LocalWorkerTypeOption(
-      id: 'ollama',
-      name: 'Ollama',
-      description: 'Use a local Ollama installation.',
-      authStrategy: 'local_endpoint',
-      authLabel: 'Local service',
-      prerequisite: 'Ollama CLI',
-      executablePrerequisite: AdapterExecutablePrerequisite(
-          executable: 'node', minimumVersion: '18.0.0'),
-      permissions: ['network'],
-    ),
   ];
 }
 
-/// Persists local Worker configuration and directs credentials only to the
-/// secure credential store. Keeping this out of the widget makes the setup
-/// lifecycle independently testable.
+/// Persists local Worker configuration without accepting provider credentials.
 class LocalWorkerSetupService {
   const LocalWorkerSetupService({
     required this.registry,
-    required this.credentialStore,
     this.requireStepUp,
   });
 
   final LocalConfiguredWorkerRegistry registry;
-  final SecureCredentialStore credentialStore;
   final Future<bool> Function(String reason)? requireStepUp;
+
+  bool _isSupported(LocalWorkerTypeOption type) =>
+      LocalWorkerTypeOption.supported.any((option) => option.id == type.id);
 
   Future<LocalConfiguredWorker> create({
     required LocalWorkerTypeOption type,
-    required String name,
-    required String apiKey,
-    required String defaultModel,
-    required String endpointUrl,
-    required List<String> allowedModels,
     required List<String> permissions,
     required bool adapterReady,
     required bool prerequisiteReady,
     bool authenticationReady = false,
   }) async {
-    if (name.trim().isEmpty) throw ArgumentError('Enter a Worker name.');
-    if (type.requiresApiKey && apiKey.isEmpty) {
-      throw ArgumentError('Enter the API key.');
+    if (!_isSupported(type)) {
+      throw ArgumentError('This Worker Type is not supported in v1.');
     }
-    final endpoint = endpointUrl.trim();
-    final parsedEndpoint = endpoint.isEmpty ? null : Uri.tryParse(endpoint);
-    if (endpoint.isNotEmpty &&
-        (parsedEndpoint == null ||
-            !const {'http', 'https'}.contains(parsedEndpoint.scheme) ||
-            parsedEndpoint.host.isEmpty)) {
-      throw ArgumentError('Endpoint must be a valid HTTP or HTTPS URL.');
-    }
-    if (type.requiresApiKey &&
-        parsedEndpoint != null &&
-        ((parsedEndpoint.scheme != 'https' &&
-                !(parsedEndpoint.scheme == 'http' &&
-                    const {'localhost', '127.0.0.1', '::1'}
-                        .contains(parsedEndpoint.host))) ||
-            parsedEndpoint.userInfo.isNotEmpty ||
-            parsedEndpoint.hasQuery ||
-            parsedEndpoint.hasFragment)) {
-      throw ArgumentError(
-          'API endpoints must use HTTPS and cannot contain credentials, queries, or fragments.');
-    }
-    if (type.authStrategy == 'local_endpoint' && parsedEndpoint == null) {
-      throw ArgumentError('Enter the local service endpoint.');
-    }
-    if (type.requiresApiKey &&
-        defaultModel.trim().isEmpty &&
-        allowedModels.isEmpty) {
-      throw ArgumentError(
-          'Set a default model or allow at least one model for this API Worker.');
-    }
-    if (type.id == 'ollama' &&
-        defaultModel.trim().isEmpty &&
-        allowedModels.isEmpty) {
-      throw ArgumentError('Select an installed Ollama model.');
-    }
-    final authReady = switch (type.authStrategy) {
-      'api_key' => apiKey.isNotEmpty && authenticationReady,
-      'local_endpoint' => parsedEndpoint != null && authenticationReady,
-      'none' => true,
-      'browser_auth' => authenticationReady,
-      _ => false,
-    };
     final permissionsReady = type.permissions.every(permissions.contains);
-    final isReady =
-        authReady && adapterReady && prerequisiteReady && permissionsReady;
-    final worker = await registry.create(
-      name: name.trim(),
+    final isReady = authenticationReady &&
+        adapterReady &&
+        prerequisiteReady &&
+        permissionsReady;
+    return registry.create(
+      name: type.name,
       workerTypeId: type.id,
       authStrategy: type.authStrategy,
-      defaultModel: defaultModel.trim().isEmpty ? null : defaultModel.trim(),
-      adapterConfig: parsedEndpoint == null
-          ? const {}
-          : {'endpointUrl': parsedEndpoint.toString()},
-      allowedModels: allowedModels,
+      defaultModel: null,
+      adapterConfig: const {},
+      allowedModels: const [],
       localPermissions: permissions,
       status:
           isReady ? LocalWorkerStatus.ready : LocalWorkerStatus.needsAttention,
-      credentialStatus: type.authStrategy == 'local_endpoint'
-          ? LocalWorkerCredentialStatus.notRequired
-          : type.authStrategy == 'browser_auth' && authenticationReady
-              ? LocalWorkerCredentialStatus.ready
-              : LocalWorkerCredentialStatus.needsAuthentication,
+      credentialStatus: authenticationReady
+          ? LocalWorkerCredentialStatus.ready
+          : LocalWorkerCredentialStatus.needsAuthentication,
     );
-    if (!type.requiresApiKey) return worker;
-
-    final key = 'worker-credential/${worker.id}';
-    try {
-      await credentialStore.write(key, apiKey);
-      return await registry.update(
-        worker.id,
-        (current) => current.copyWith(
-          credentialRef: key,
-          credentialStatus: authReady
-              ? LocalWorkerCredentialStatus.ready
-              : LocalWorkerCredentialStatus.needsAuthentication,
-          status: isReady
-              ? LocalWorkerStatus.ready
-              : LocalWorkerStatus.needsAttention,
-        ),
-      );
-    } catch (_) {
-      await credentialStore.delete(key);
-      rethrow;
-    }
   }
 
   Future<LocalConfiguredWorker> update({
     required LocalConfiguredWorker current,
     required LocalWorkerTypeOption type,
-    required String name,
-    required String apiKey,
-    required String defaultModel,
-    required String endpointUrl,
-    required List<String> allowedModels,
     required List<String> permissions,
     required bool adapterReady,
     required bool prerequisiteReady,
     bool authenticationReady = false,
   }) async {
+    if (!_isSupported(type)) {
+      throw ArgumentError('This Worker Type is not supported in v1.');
+    }
     if (current.workerTypeId != type.id) {
       throw ArgumentError('Worker Type cannot be changed while editing.');
-    }
-    if (name.trim().isEmpty) throw ArgumentError('Enter a Worker name.');
-    final endpoint = endpointUrl.trim();
-    final parsedEndpoint = endpoint.isEmpty ? null : Uri.tryParse(endpoint);
-    if (endpoint.isNotEmpty &&
-        (parsedEndpoint == null ||
-            !const {'http', 'https'}.contains(parsedEndpoint.scheme) ||
-            parsedEndpoint.host.isEmpty)) {
-      throw ArgumentError('Endpoint must be a valid HTTP or HTTPS URL.');
-    }
-    if (type.requiresApiKey &&
-        parsedEndpoint != null &&
-        ((parsedEndpoint.scheme != 'https' &&
-                !(parsedEndpoint.scheme == 'http' &&
-                    const {'localhost', '127.0.0.1', '::1'}
-                        .contains(parsedEndpoint.host))) ||
-            parsedEndpoint.userInfo.isNotEmpty ||
-            parsedEndpoint.hasQuery ||
-            parsedEndpoint.hasFragment)) {
-      throw ArgumentError(
-          'API endpoints must use HTTPS and cannot contain credentials, queries, or fragments.');
-    }
-    if (type.authStrategy == 'local_endpoint' && parsedEndpoint == null) {
-      throw ArgumentError('Enter the local service endpoint.');
-    }
-    if (type.requiresApiKey &&
-        defaultModel.trim().isEmpty &&
-        allowedModels.isEmpty) {
-      throw ArgumentError(
-          'Set a default model or allow at least one model for this API Worker.');
-    }
-    if (type.id == 'ollama' &&
-        defaultModel.trim().isEmpty &&
-        allowedModels.isEmpty) {
-      throw ArgumentError('Select an installed Ollama model.');
-    }
-    if (type.requiresApiKey &&
-        apiKey.isEmpty &&
-        current.credentialRef == null) {
-      throw ArgumentError('Enter the API key.');
     }
     final permissionsChanged =
         permissions.length != current.localPermissions.length ||
             !permissions.toSet().containsAll(current.localPermissions);
-    if (permissionsChanged || apiKey.isNotEmpty) {
+    if (permissionsChanged) {
       final gate = requireStepUp;
-      final reason = permissionsChanged && apiKey.isNotEmpty
-          ? 'Change Worker permissions and replace provider credentials'
-          : permissionsChanged
-              ? 'Change local Worker execution permissions'
-              : 'Replace Worker provider credentials';
-      if (gate == null || !await gate(reason)) {
+      if (gate == null ||
+          !await gate('Change local Worker execution permissions')) {
         throw StateError(
             'Local authentication is required to save these changes.');
       }
     }
-    final credentialRef = apiKey.isEmpty
-        ? current.credentialRef
-        : 'worker-credential/${current.id}';
-    final previousSecret = apiKey.isNotEmpty && current.credentialRef != null
-        ? await credentialStore.read(current.credentialRef!)
-        : null;
-    late LocalConfiguredWorker updated;
-    try {
-      if (apiKey.isNotEmpty) {
-        await credentialStore.write(credentialRef!, apiKey);
-      }
-      final authReady = switch (type.authStrategy) {
-        'api_key' => credentialRef != null && authenticationReady,
-        'local_endpoint' => parsedEndpoint != null && authenticationReady,
-        'none' => true,
-        'browser_auth' => authenticationReady ||
-            current.credentialStatus == LocalWorkerCredentialStatus.ready,
-        _ => false,
-      };
-      final permissionsReady = type.permissions.every(permissions.contains);
-      final isReady =
-          authReady && adapterReady && prerequisiteReady && permissionsReady;
-      final status = current.status == LocalWorkerStatus.disabled
-          ? LocalWorkerStatus.disabled
-          : isReady
-              ? LocalWorkerStatus.ready
-              : LocalWorkerStatus.needsAttention;
-      updated = await registry.update(
-        current.id,
-        (record) => record.copyWith(
-          name: name.trim(),
-          defaultModel:
-              defaultModel.trim().isEmpty ? null : defaultModel.trim(),
-          adapterConfig: parsedEndpoint == null
-              ? const {}
-              : {'endpointUrl': parsedEndpoint.toString()},
-          allowedModels: allowedModels,
-          localPermissions: permissions,
-          credentialRef: credentialRef,
-          credentialStatus: type.requiresApiKey
-              ? authReady
-                  ? LocalWorkerCredentialStatus.ready
-                  : LocalWorkerCredentialStatus.needsAuthentication
-              : type.authStrategy == 'local_endpoint'
-                  ? LocalWorkerCredentialStatus.notRequired
-                  : type.authStrategy == 'browser_auth'
-                      ? authReady
-                          ? LocalWorkerCredentialStatus.ready
-                          : LocalWorkerCredentialStatus.needsAuthentication
-                      : LocalWorkerCredentialStatus.needsAuthentication,
-          status: status,
-        ),
-      );
-    } catch (_) {
-      if (apiKey.isNotEmpty) {
-        if (previousSecret == null) {
-          await credentialStore.delete(credentialRef!);
-        } else {
-          await credentialStore.write(credentialRef!, previousSecret);
-        }
-      }
-      rethrow;
-    }
-    return updated;
+    final authReady = authenticationReady ||
+        current.credentialStatus == LocalWorkerCredentialStatus.ready;
+    final permissionsReady = type.permissions.every(permissions.contains);
+    final isReady =
+        authReady && adapterReady && prerequisiteReady && permissionsReady;
+    final status = current.status == LocalWorkerStatus.disabled
+        ? LocalWorkerStatus.disabled
+        : isReady
+            ? LocalWorkerStatus.ready
+            : LocalWorkerStatus.needsAttention;
+    return registry.update(
+      current.id,
+      (record) => record.copyWith(
+        name: type.name,
+        clearModelConfiguration: true,
+        localPermissions: permissions,
+        credentialStatus: authReady
+            ? LocalWorkerCredentialStatus.ready
+            : LocalWorkerCredentialStatus.needsAuthentication,
+        status: status,
+      ),
+    );
   }
 }
 
-/// Local-only setup form. Adapter/prerequisite readiness is injected by the
-/// runtime; this UI never claims a Worker is Ready while either is unavailable.
+/// Local-only setup for one fixed first-party CLI Worker catalog entry.
 class AddLocalWorkerDialog extends StatefulWidget {
   const AddLocalWorkerDialog({
     required this.registry,
-    required this.credentialStore,
+    required this.type,
     required this.adapterAvailable,
-    required this.probePrerequisite,
+    required this.probePrerequisites,
     this.launchAuthentication,
     this.validateAuthentication,
-    this.validateApiCredential,
     this.ensureAdapter,
+    this.onReadinessChecked,
     this.worker,
     this.requireStepUp,
     super.key,
   });
 
   final LocalConfiguredWorkerRegistry registry;
-  final SecureCredentialStore credentialStore;
+  final LocalWorkerTypeOption type;
   final FutureOr<bool> Function(String workerTypeId, List<String> permissions)
       adapterAvailable;
-  final Future<AdapterPrerequisiteResult> Function(String workerTypeId)
-      probePrerequisite;
+  final Future<List<AdapterPrerequisiteResult>> Function(String workerTypeId)
+      probePrerequisites;
   final Future<void> Function(String workerTypeId)? launchAuthentication;
   final Future<bool> Function(String workerTypeId)? validateAuthentication;
-  final Future<List<String>> Function(
-    String workerTypeId,
-    String apiKey,
-    String endpointUrl,
-    List<String> localPermissions,
-  )? validateApiCredential;
   final Future<bool> Function(String workerTypeId)? ensureAdapter;
+  final Future<void> Function()? onReadinessChecked;
   final LocalConfiguredWorker? worker;
   final Future<bool> Function(String reason)? requireStepUp;
 
@@ -418,89 +195,41 @@ class AddLocalWorkerDialog extends StatefulWidget {
 }
 
 class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
-  final _name = TextEditingController();
-  final _apiKey = TextEditingController();
-  final _defaultModel = TextEditingController();
-  final _allowedModels = TextEditingController();
-  final _endpointUrl = TextEditingController();
-  late LocalWorkerTypeOption _type;
   final Set<String> _permissions = {};
   bool _saving = false;
-  bool _probing = false;
-  bool _replaceApiKey = false;
+  bool _checkingReadiness = false;
+  bool? _adapterReady;
+  bool? _authenticationReady;
+  List<AdapterPrerequisiteResult>? _prerequisiteResults;
   String? _error;
-  String? _prerequisiteMessage;
-  String? _adapterMessage;
-  String? _authenticationMessage;
-  List<String> _discoveredModels = const [];
+  String? _readinessError;
+
+  LocalWorkerTypeOption get _type => widget.type;
 
   @override
   void initState() {
     super.initState();
-    final worker = widget.worker;
-    _type = LocalWorkerTypeOption.supported.firstWhere(
-      (type) => type.id == worker?.workerTypeId,
-      orElse: () => LocalWorkerTypeOption.supported.first,
-    );
-    if (worker != null) {
-      _name.text = worker.name;
-      _defaultModel.text = worker.defaultModel ?? '';
-      _allowedModels.text = worker.allowedModels.join(', ');
-      _endpointUrl.text = worker.adapterConfig['endpointUrl'] as String? ?? '';
-      _permissions.addAll(worker.localPermissions);
-    } else {
-      _permissions.addAll(_type.permissions);
-      if (_type.id == 'ollama') {
-        _endpointUrl.text = 'http://localhost:11434';
-      }
-    }
+    _permissions.addAll(widget.worker?.localPermissions ?? _type.permissions);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _refreshReadiness();
+    });
   }
 
   @override
   void dispose() {
-    _name.dispose();
-    _apiKey.dispose();
-    _defaultModel.dispose();
-    _allowedModels.dispose();
-    _endpointUrl.dispose();
     super.dispose();
   }
 
-  Future<void> _create() async {
-    final name = _name.text.trim();
-    if (name.isEmpty) {
-      setState(() => _error = 'Enter a Worker name.');
-      return;
-    }
-    if (_type.requiresApiKey &&
-        _apiKey.text.isEmpty &&
-        (widget.worker == null || widget.worker!.credentialRef == null)) {
-      setState(() =>
-          _error = 'Enter the API key. It will be stored on this machine.');
-      return;
-    }
-    final currentWorker = widget.worker;
-    final permissionsChanged = currentWorker != null &&
-        (_permissions.length != currentWorker.localPermissions.length ||
-            !_permissions.containsAll(currentWorker.localPermissions));
-    final replacingCredential = currentWorker != null &&
-        _type.requiresApiKey &&
-        _apiKey.text.isNotEmpty;
-    if (permissionsChanged || replacingCredential) {
+  Future<void> _save() async {
+    final current = widget.worker;
+    final permissions = _permissions.toList()..sort();
+    final permissionsChanged = current != null &&
+        (permissions.length != current.localPermissions.length ||
+            !permissions.toSet().containsAll(current.localPermissions));
+    if (permissionsChanged) {
       final requireStepUp = widget.requireStepUp;
-      final reason = permissionsChanged && replacingCredential
-          ? 'Change Worker permissions and replace provider credentials'
-          : permissionsChanged
-              ? 'Change local Worker execution permissions'
-              : 'Replace Worker provider credentials';
-      if (requireStepUp == null) {
-        if (mounted) {
-          setState(() => _error =
-              'Local authentication is required to save these changes.');
-        }
-        return;
-      }
-      if (!await requireStepUp(reason)) {
+      if (requireStepUp == null ||
+          !await requireStepUp('Change local Worker execution permissions')) {
         if (mounted) {
           setState(() => _error =
               'Local authentication is required to save these changes.');
@@ -509,94 +238,40 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
       }
       if (!mounted) return;
     }
+
     setState(() {
       _saving = true;
       _error = null;
-      _authenticationMessage = null;
     });
     try {
-      final allowedModels = _allowedModels.text
-          .split(',')
-          .map((model) => model.trim())
-          .where((model) => model.isNotEmpty)
-          .toSet()
-          .toList();
+      final readiness = await _probeReadiness(
+        permissions,
+        installAdapter: true,
+      );
+      if (mounted) _publishReadiness(readiness);
       final service = LocalWorkerSetupService(
         registry: widget.registry,
-        credentialStore: widget.credentialStore,
         requireStepUp: widget.requireStepUp,
       );
-      final permissions = _permissions.toList()..sort();
-      var adapterReady =
-          await widget.adapterAvailable(_type.id, _permissions.toList());
-      if (!adapterReady && widget.ensureAdapter != null) {
-        final installed = await widget.ensureAdapter!(_type.id);
-        adapterReady =
-            await widget.adapterAvailable(_type.id, _permissions.toList());
-        if (!adapterReady && mounted) {
-          setState(() => _adapterMessage = installed
-              ? 'The installed adapter requests permissions this Worker has not been granted.'
-              : 'No trusted release for this Worker Type is available from Cloud.');
-        }
-      } else if (!adapterReady && mounted) {
-        setState(() => _adapterMessage =
-            'A trusted adapter must be installed before this Worker can be Ready.');
-      }
-      final prerequisiteResult = await widget.probePrerequisite(_type.id);
-      final prerequisiteReady = prerequisiteResult.satisfied;
-      final authenticationReady = switch (_type.authStrategy) {
-        'browser_auth' =>
-          await widget.validateAuthentication?.call(_type.id) ?? false,
-        'api_key' => adapterReady && prerequisiteReady
-            ? (await _validateApiCredential(permissions)).isNotEmpty
-            : false,
-        'local_endpoint' => adapterReady && prerequisiteReady
-            ? (await _validateApiCredential(permissions, localEndpoint: true))
-                .isNotEmpty
-            : false,
-        _ => false,
-      };
-      final selectedModels = {
-        if (_defaultModel.text.trim().isNotEmpty) _defaultModel.text.trim(),
-        ...allowedModels,
-      };
-      if (selectedModels.isNotEmpty &&
-          _discoveredModels.isNotEmpty &&
-          selectedModels.any((model) => !_discoveredModels.contains(model))) {
-        throw ArgumentError(
-            'Choose a model reported by the provider or Ollama endpoint.');
-      }
-      if (mounted) {
-        setState(() => _prerequisiteMessage = prerequisiteResult.message);
-      }
-      if (widget.worker == null) {
+      if (current == null) {
         await service.create(
           type: _type,
-          name: name,
-          apiKey: _apiKey.text,
-          defaultModel: _defaultModel.text,
-          endpointUrl: _endpointUrl.text,
-          allowedModels: allowedModels,
           permissions: permissions,
-          adapterReady: adapterReady,
-          prerequisiteReady: prerequisiteReady,
-          authenticationReady: authenticationReady,
+          adapterReady: readiness.adapterReady,
+          prerequisiteReady: readiness.prerequisitesReady,
+          authenticationReady: readiness.authenticationReady,
         );
       } else {
         await service.update(
-          current: widget.worker!,
+          current: current,
           type: _type,
-          name: name,
-          apiKey: _apiKey.text,
-          defaultModel: _defaultModel.text,
-          endpointUrl: _endpointUrl.text,
-          allowedModels: allowedModels,
           permissions: permissions,
-          adapterReady: adapterReady,
-          prerequisiteReady: prerequisiteReady,
-          authenticationReady: authenticationReady,
+          adapterReady: readiness.adapterReady,
+          prerequisiteReady: readiness.prerequisitesReady,
+          authenticationReady: readiness.authenticationReady,
         );
       }
+      await widget.onReadinessChecked?.call();
       if (mounted) Navigator.of(context).pop(true);
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
@@ -605,86 +280,85 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
     }
   }
 
-  Future<List<String>> _validateApiCredential(List<String> permissions,
-      {bool localEndpoint = false}) async {
-    final apiKey = localEndpoint
-        ? ''
-        : _apiKey.text.isNotEmpty
-            ? _apiKey.text
-            : widget.worker?.credentialRef == null
-                ? ''
-                : await widget.credentialStore
-                        .read(widget.worker!.credentialRef!) ??
-                    '';
-    if (!localEndpoint && apiKey.isEmpty) return const [];
-    final validator = widget.validateApiCredential;
-    if (validator == null) return const [];
+  Future<_LocalWorkerReadiness> _probeReadiness(
+    List<String> permissions, {
+    bool installAdapter = false,
+  }) async {
+    final prerequisiteResults =
+        await widget.probePrerequisites(_type.adapterId);
+    var adapterReady =
+        await widget.adapterAvailable(_type.adapterId, permissions);
+    if (!adapterReady && installAdapter && widget.ensureAdapter != null) {
+      await widget.ensureAdapter!(_type.adapterId);
+      adapterReady =
+          await widget.adapterAvailable(_type.adapterId, permissions);
+    }
+    final authenticationReady =
+        await widget.validateAuthentication?.call(_type.adapterId) ?? false;
+    return _LocalWorkerReadiness(
+      prerequisites: prerequisiteResults,
+      adapterReady: adapterReady,
+      authenticationReady: authenticationReady,
+    );
+  }
+
+  Future<void> _refreshReadiness({bool persist = false}) async {
+    if (_checkingReadiness || _saving) return;
+    setState(() {
+      _checkingReadiness = true;
+      _readinessError = null;
+    });
     try {
-      final models = await validator(
-        _type.id,
-        apiKey,
-        _endpointUrl.text,
-        permissions,
-      );
-      if (models.isEmpty && mounted) {
-        setState(() => _authenticationMessage =
-            'The API key could not be validated. Check it, then save again.');
-      }
-      if (mounted) setState(() => _discoveredModels = models);
-      return models;
-    } on Object {
-      if (mounted) {
-        setState(() => _authenticationMessage =
-            'The API key could not be validated. Check the key and endpoint, then save again.');
-      }
-      return const [];
+      final readiness = await _probeReadiness(_permissions.toList());
+      if (mounted) _publishReadiness(readiness);
+      if (persist) await widget.onReadinessChecked?.call();
+    } catch (error) {
+      if (mounted) setState(() => _readinessError = error.toString());
+    } finally {
+      if (mounted) setState(() => _checkingReadiness = false);
     }
   }
 
-  Future<void> _probeModels() async {
+  void _publishReadiness(_LocalWorkerReadiness readiness) {
     setState(() {
-      _probing = true;
-      _authenticationMessage = null;
+      _prerequisiteResults = readiness.prerequisites;
+      _adapterReady = readiness.adapterReady;
+      _authenticationReady = readiness.authenticationReady;
+      _readinessError = null;
     });
-    try {
-      final permissions = _permissions.toList()..sort();
-      final models = await _validateApiCredential(
-        permissions,
-        localEndpoint: _type.authStrategy == 'local_endpoint',
-      );
-      if (mounted) {
-        if (models.isNotEmpty) {
-          setState(() {
-            _discoveredModels = models;
-            if (_defaultModel.text.isEmpty && models.isNotEmpty) {
-              _defaultModel.text = models.first;
-            }
-          });
+  }
+
+  Future<void> _signIn() async {
+    if (widget.worker != null) {
+      final requireStepUp = widget.requireStepUp;
+      if (requireStepUp == null ||
+          !await requireStepUp('Replace Worker sign-in credentials')) {
+        if (mounted) {
+          setState(() => _error =
+              'Local authentication is required to replace Worker sign-in credentials.');
         }
+        return;
       }
-    } finally {
-      if (mounted) setState(() => _probing = false);
+    }
+    try {
+      await widget.launchAuthentication!(_type.adapterId);
+      if (mounted) {
+        setState(() => _error = _type.id == 'chatgpt'
+            ? 'Codex login opened. Complete sign-in in Codex, then select Check again.'
+            : 'Antigravity opened. Complete sign-in there, then select Check again.');
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = 'Could not start sign-in: $error');
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hasStoredKey =
-        widget.worker?.credentialRef != null && !_replaceApiKey;
-
     return AlertDialog(
-      title: Row(
-        children: [
-          Icon(
-            widget.worker == null ? Icons.add_circle_outline : Icons.edit_note,
-            size: 24,
-            color: theme.colorScheme.primary,
-          ),
-          const SizedBox(width: 10),
-          Text(widget.worker == null ? 'Add Worker' : 'Edit Worker'),
-        ],
-      ),
+      title: Text(widget.worker == null
+          ? 'Set up ${_type.name}'
+          : 'Configure ${_type.name}'),
       content: SizedBox(
         width: 520,
         child: SingleChildScrollView(
@@ -692,308 +366,112 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              DropdownButtonFormField<LocalWorkerTypeOption>(
-                key: const Key('worker-type-selector'),
-                initialValue: _type,
-                decoration: const InputDecoration(
-                  labelText: 'Worker Type',
-                  border: OutlineInputBorder(),
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                ),
-                items: [
-                  for (final type in LocalWorkerTypeOption.supported)
-                    DropdownMenuItem(
-                      value: type,
-                      child: Row(
-                        children: [
-                          Icon(_typeIcon(type.id), size: 18),
-                          const SizedBox(width: 10),
-                          Text(type.name,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w500)),
-                        ],
-                      ),
-                    )
-                ],
-                onChanged: _saving || widget.worker != null
-                    ? null
-                    : (type) => setState(() {
-                          _type = type!;
-                          _endpointUrl.text = type.id == 'ollama'
-                              ? 'http://localhost:11434'
-                              : '';
-                          _permissions.clear();
-                          _permissions.addAll(type.permissions);
-                          _discoveredModels = const [];
-                          _error = null;
-                        }),
-              ),
-              const SizedBox(height: 6),
-              Padding(
-                padding: const EdgeInsets.only(left: 4),
-                child: Text(
-                  _type.description,
+              Text(_type.description,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                  )),
+              const SizedBox(height: 16),
+              Text('Readiness',
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              if (_prerequisiteResults case final results?)
+                for (var i = 0; i < results.length; i++)
+                  _ReadinessRow(
+                    label: _prerequisiteLabel(i),
+                    result: results[i],
+                  )
+              else
+                const _ReadinessRow(
+                  label: 'CLI and execution prerequisites',
+                  value: 'Not checked',
+                ),
+              _ReadinessRow(
+                label: _type.id == 'chatgpt'
+                    ? 'Codex authentication'
+                    : 'Antigravity authentication',
+                value: _authenticationReady == null
+                    ? 'Not checked'
+                    : _authenticationReady!
+                        ? 'Ready'
+                        : 'Login required',
+              ),
+              _ReadinessRow(
+                label: 'Verified adapter',
+                value: _adapterReady == null
+                    ? 'Not checked'
+                    : _adapterReady!
+                        ? 'Ready'
+                        : 'Not installed or unverified',
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: _checkingReadiness || _saving
+                      ? null
+                      : () => _refreshReadiness(persist: true),
+                  icon: _checkingReadiness
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh, size: 16),
+                  label: Text(_checkingReadiness ? 'Checking…' : 'Check again'),
                 ),
               ),
-              const SizedBox(height: 16),
-              TextField(
-                key: const Key('worker-name'),
-                controller: _name,
-                decoration: const InputDecoration(
-                  labelText: 'Worker Name',
-                  hintText: 'e.g. Personal Claude, Local Ollama',
-                  border: OutlineInputBorder(),
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                ),
-              ),
-              const SizedBox(height: 16),
-              if (_type.requiresApiKey) ...[
-                if (hasStoredKey) ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(8),
-                      border:
-                          Border.all(color: theme.colorScheme.outlineVariant),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.check_circle,
-                            color: Colors.green, size: 20),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'API key stored securely',
-                                style: TextStyle(fontWeight: FontWeight.w500),
-                              ),
-                              Text(
-                                'Encrypted on this machine.',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () =>
-                              setState(() => _replaceApiKey = true),
-                          child: const Text('Replace key'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ] else ...[
-                  TextField(
-                    key: const Key('worker-api-key'),
-                    controller: _apiKey,
-                    obscureText: true,
-                    enableSuggestions: false,
-                    autocorrect: false,
-                    decoration: InputDecoration(
-                      labelText: _type.authLabel,
-                      hintText: 'Enter secret API key',
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 12),
-                      helperText:
-                          'Stored in this machine’s secure credential store.',
-                    ),
-                  ),
-                ],
-              ] else ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest
-                        .withValues(alpha: 0.35),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: theme.colorScheme.outlineVariant),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _type.authStrategy == 'browser_auth'
-                            ? Icons.account_circle_outlined
-                            : Icons.dns_outlined,
-                        size: 22,
-                        color: theme.colorScheme.primary,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(_type.authLabel,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w600)),
-                            const SizedBox(height: 2),
-                            Text(
-                              _type.authStrategy == 'browser_auth'
-                                  ? 'Sign in locally on this machine.'
-                                  : 'Uses a local service; no external credential required.',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (_type.authStrategy == 'browser_auth' &&
-                          (_type.id == 'codex' ||
-                              _type.id == 'antigravity' ||
-                              _type.id == 'claude-code') &&
-                          widget.launchAuthentication != null)
-                        FilledButton.tonalIcon(
-                          onPressed: _saving
-                              ? null
-                              : () async {
-                                  if (widget.worker != null) {
-                                    final requireStepUp = widget.requireStepUp;
-                                    if (requireStepUp == null ||
-                                        !await requireStepUp(
-                                            'Replace Worker sign-in credentials')) {
-                                      if (mounted) {
-                                        setState(() => _error =
-                                            'Local authentication is required to replace Worker sign-in credentials.');
-                                      }
-                                      return;
-                                    }
-                                    if (!mounted) return;
-                                  }
-                                  try {
-                                    await widget
-                                        .launchAuthentication!(_type.id);
-                                    if (mounted) {
-                                      setState(() => _error =
-                                          'Sign-in launched. Complete sign-in in browser/terminal, then save.');
-                                    }
-                                  } catch (error) {
-                                    if (mounted) {
-                                      setState(() => _error =
-                                          'Could not start sign-in: $error');
-                                    }
-                                  }
-                                },
-                          icon: const Icon(Icons.open_in_new, size: 16),
-                          label: const Text('Sign in'),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: 16),
-              if (_type.authStrategy == 'local_endpoint' ||
-                  _type.id == 'ollama') ...[
-                TextField(
-                  key: const Key('worker-endpoint'),
-                  controller: _endpointUrl,
-                  decoration: InputDecoration(
-                    labelText: 'Service Endpoint URL',
-                    hintText: 'http://localhost:11434',
-                    border: const OutlineInputBorder(),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 12),
-                    helperText:
-                        'Local Ollama endpoint accessible on this machine.',
-                  ),
-                ),
-              ] else ...[
-                TextField(
-                  key: const Key('worker-endpoint'),
-                  controller: _endpointUrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Custom Endpoint URL (optional)',
-                    hintText: 'Leave empty for default provider endpoint',
-                    border: OutlineInputBorder(),
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    helperText: 'Optional proxy or custom API base URL.',
-                  ),
-                ),
-              ],
-              if (widget.validateApiCredential != null &&
-                  (_type.requiresApiKey ||
-                      _type.authStrategy == 'local_endpoint')) ...[
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: _saving || _probing ? null : _probeModels,
-                    icon: _probing
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.manage_search, size: 18),
-                    label: const Text('Discover available models'),
-                  ),
-                ),
-              ],
-              if (_authenticationMessage != null) ...[
-                const SizedBox(height: 8),
+              if (_readinessError != null)
                 CopyableMessageText(
-                  _authenticationMessage!,
-                  style: TextStyle(
-                    color: theme.colorScheme.error,
-                    fontSize: 13,
-                  ),
+                  'Readiness check failed: $_readinessError',
+                  style: TextStyle(color: theme.colorScheme.error),
                   iconColor: theme.colorScheme.error,
                 ),
-              ],
-              const SizedBox(height: 12),
-              TextField(
-                key: const Key('worker-default-model'),
-                controller: _defaultModel,
-                decoration: InputDecoration(
-                  labelText: _type.authStrategy == 'local_endpoint'
-                      ? 'Default Model'
-                      : 'Default Model (optional)',
-                  hintText: _type.id == 'openai-api'
-                      ? 'gpt-4o'
-                      : _type.id == 'gemini-api'
-                          ? 'gemini-2.5-flash'
-                          : _type.id == 'anthropic-api'
-                              ? 'claude-3-7-sonnet'
-                              : 'e.g. qwen2.5-coder',
-                  border: const OutlineInputBorder(),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  helperText: _discoveredModels.isEmpty
-                      ? null
-                      : 'Discovered: ${_discoveredModels.take(8).join(', ')}',
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest
+                      .withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: theme.colorScheme.outlineVariant),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.account_circle_outlined, size: 22),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(_type.authLabel,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Authentication and billing are managed in the local CLI.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (widget.launchAuthentication != null)
+                      FilledButton.tonalIcon(
+                        onPressed:
+                            _saving || _checkingReadiness ? null : _signIn,
+                        icon: const Icon(Icons.open_in_new, size: 16),
+                        label: Text(_type.id == 'chatgpt'
+                            ? 'Open Codex Login'
+                            : 'Open Antigravity'),
+                      ),
+                  ],
                 ),
               ),
               const SizedBox(height: 16),
-              TextField(
-                key: const Key('worker-allowed-models'),
-                controller: _allowedModels,
-                decoration: const InputDecoration(
-                  labelText: 'Allowed Models (comma separated, optional)',
-                  hintText: 'e.g. gpt-4o, gpt-4o-mini',
-                  border: OutlineInputBorder(),
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  helperText: 'Limit assignments to specific approved models.',
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Local Permissions',
-                style: theme.textTheme.titleSmall
-                    ?.copyWith(fontWeight: FontWeight.w600),
-              ),
+              Text('Local Permissions',
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w600)),
               const SizedBox(height: 4),
               for (final permission in _type.permissions)
                 CheckboxListTile(
@@ -1013,111 +491,118 @@ class _AddLocalWorkerDialogState extends State<AddLocalWorkerDialog> {
                           }),
                 ),
               const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest
-                      .withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.info_outline,
-                        size: 16, color: theme.colorScheme.primary),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Required tool: ${_type.prerequisite}. This Worker becomes Ready once adapter, prerequisite CLI/tools, authentication, and permissions are verified.',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  ],
+              Text(
+                'Required tool: ${_type.prerequisite}. This Worker becomes Ready once its adapter, CLI, authentication, and permissions are verified.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
-              if (_prerequisiteMessage != null) ...[
-                const SizedBox(height: 8),
+              if (_error != null)
                 CopyableMessageText(
-                  'Prerequisite check: $_prerequisiteMessage',
-                  style: theme.textTheme.bodySmall,
+                  _error!,
+                  style: TextStyle(color: theme.colorScheme.error),
+                  iconColor: theme.colorScheme.error,
                 ),
-              ],
-              if (_adapterMessage != null) ...[
-                const SizedBox(height: 8),
-                CopyableMessageText(
-                  'Adapter check: $_adapterMessage',
-                  style: theme.textTheme.bodySmall,
-                ),
-              ],
-              if (_error != null) ...[
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color:
-                        theme.colorScheme.errorContainer.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.error_outline,
-                          size: 16, color: theme.colorScheme.error),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: CopyableMessageText(
-                          _error!,
-                          style: TextStyle(
-                            color: theme.colorScheme.onErrorContainer,
-                            fontSize: 13,
-                          ),
-                          iconColor: theme.colorScheme.onErrorContainer,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
             ],
           ),
         ),
       ),
       actions: [
         TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+          onPressed: _saving || _checkingReadiness
+              ? null
+              : () => Navigator.of(context).pop(false),
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: _saving ? null : _create,
-          child: Text(
-            _saving
-                ? 'Saving…'
-                : widget.worker == null
-                    ? 'Validate and create'
-                    : 'Save changes',
-          ),
+          onPressed: _saving || _checkingReadiness ? null : _save,
+          child: Text(_saving ? 'Saving…' : 'Save'),
         ),
       ],
     );
   }
 
-  static IconData _typeIcon(String id) => switch (id) {
-        'codex' => Icons.terminal,
-        'antigravity' => Icons.auto_awesome,
-        'claude-code' => Icons.code,
-        'openai-api' || 'gemini-api' || 'anthropic-api' => Icons.cloud_queue,
-        'ollama' => Icons.memory,
-        _ => Icons.smart_toy_outlined,
-      };
+  String _prerequisiteLabel(int index) {
+    final checks = [
+      if (_type.executablePrerequisite case final primary?) primary,
+      ..._type.additionalPrerequisites,
+    ];
+    if (index >= checks.length) return 'Execution prerequisite';
+    final executable = checks[index].executable;
+    return executable == 'codex'
+        ? 'Codex CLI'
+        : executable == 'agy'
+            ? 'Antigravity CLI'
+            : executable == 'node'
+                ? 'Node.js'
+                : executable;
+  }
 
   String _permissionLabel(String permission) => switch (permission) {
         'workstream_filesystem' => 'Read and modify Workstream files',
         'shell_execution' => 'Run local shell commands and tools',
-        'network' => 'Connect to network services',
-        'network_openai' => 'Send prompts to OpenAI API',
-        'network_google' => 'Send prompts to Gemini API',
-        'network_anthropic' => 'Send prompts to Anthropic API',
         _ => permission,
       };
+}
+
+class _LocalWorkerReadiness {
+  const _LocalWorkerReadiness({
+    required this.prerequisites,
+    required this.adapterReady,
+    required this.authenticationReady,
+  });
+
+  final List<AdapterPrerequisiteResult> prerequisites;
+  final bool adapterReady;
+  final bool authenticationReady;
+
+  bool get prerequisitesReady =>
+      prerequisites.isNotEmpty && prerequisites.every((item) => item.satisfied);
+}
+
+class _ReadinessRow extends StatelessWidget {
+  const _ReadinessRow({required this.label, this.result, this.value});
+
+  final String label;
+  final AdapterPrerequisiteResult? result;
+  final String? value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final status = result == null
+        ? value ?? 'Not checked'
+        : result!.satisfied
+            ? 'Ready${result!.detectedVersion == null ? '' : ' · ${result!.detectedVersion}'}'
+            : result!.message;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 164,
+            child: Text(label,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(fontWeight: FontWeight.w500)),
+          ),
+          Expanded(
+            child: result != null && !result!.satisfied
+                ? CopyableMessageText(
+                    status,
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.error),
+                    iconColor: theme.colorScheme.error,
+                  )
+                : Text(
+                    status,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
 }

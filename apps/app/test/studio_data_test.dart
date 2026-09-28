@@ -456,26 +456,23 @@ void main() {
     final worker = StudioWorker.fromJson({
       'id': 'worker-codex',
       'workspaceId': 'workspace-1',
-      'workspaceName': 'Build Workspace',
-      'workerTypeId': 'codex',
-      'name': 'Codex',
+      'workerTypeId': 'chatgpt',
       'status': 'ready',
-      'authStrategy': 'local_session',
-      'credentialStatus': 'ready',
+      'readinessState': 'ready',
       'localConcurrencyLimit': 2,
-      'revision': 4,
       'capabilities': ['code'],
-      'allowedModels': ['gpt-5-codex'],
-      'schedulingState': 'enabled',
-      'defaultModel': 'gpt-5-codex',
+      'authStrategy': 'must-not-be-retained',
+      'credentialStatus': 'must-not-be-retained',
+      'defaultModel': 'must-not-be-retained',
+      'allowedModels': ['must-not-be-retained'],
+      'name': 'must-not-be-retained',
       'apiKey': 'must-not-be-retained',
     });
 
     expect(worker.workspaceId, 'workspace-1');
-    expect(worker.workerTypeId, 'codex');
-    expect(worker.schedulingState, 'enabled');
+    expect(worker.workerTypeId, 'chatgpt');
     expect(worker.localConcurrencyLimit, 2);
-    expect(worker.allowedModels, ['gpt-5-codex']);
+    expect(worker.attentionReasonCode, isNull);
   });
 
   test(

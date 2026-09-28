@@ -16,7 +16,12 @@
   "modelSelectionMode": "allow_list",
   "prerequisites": [
     { "kind": "executable", "executable": "node" },
-    { "kind": "executable", "executable": "agy", "minimumVersion": "1.0.0" }
+    {
+      "kind": "executable",
+      "executable": "agy",
+      "minimumVersion": "1.1.8",
+      "maximumVersion": "1.2.11"
+    }
   ],
   "executable": "bin/conclave-antigravity-adapter.mjs",
   "launchArgs": [],

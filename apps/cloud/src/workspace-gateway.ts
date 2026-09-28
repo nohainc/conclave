@@ -1226,14 +1226,12 @@ export class WorkspaceGateway implements DurableObject {
       const item = raw as Record<string, unknown>;
       const workerId = item.workerId;
       const workerTypeId = item.workerTypeId;
-      const name = item.name;
       const status = item.status;
       const revision = item.revision;
       const concurrency = item.localConcurrencyLimit;
       if (
         typeof workerId !== "string" ||
         typeof workerTypeId !== "string" ||
-        typeof name !== "string" ||
         typeof status !== "string" ||
         !Number.isSafeInteger(revision) ||
         (revision as number) < 1 ||
@@ -1282,43 +1280,52 @@ export class WorkspaceGateway implements DurableObject {
         typeof value === "string" && value.trim().length <= max
           ? value.trim() || null
           : null;
-      const authStrategy = [
-        "none",
-        "browser_auth",
-        "api_key",
-        "local_endpoint",
-      ].includes(String(item.authStrategy))
-        ? String(item.authStrategy)
-        : "none";
-      const credentialStatus = [
-        "not_required",
+      const readinessState = [
         "ready",
-        "needs_authentication",
-        "expired",
-        "error",
-      ].includes(String(item.credentialStatus))
-        ? String(item.credentialStatus)
-        : "error";
+        "not_installed",
+        "sign_in_required",
+        "unsupported_cli_version",
+        "adapter_unavailable",
+        "disabled",
+        "test_failed",
+      ].includes(String(item.readinessState))
+        ? String(item.readinessState)
+        : status === "ready"
+          ? "ready"
+          : status === "disabled" || status === "removed"
+            ? "disabled"
+            : "test_failed";
+      const workerStatus = [
+        "ready",
+        "needs_attention",
+        "disabled",
+        "removed",
+      ].includes(status)
+        ? status === "ready" && readinessState !== "ready"
+          ? "needs_attention"
+          : status
+        : "needs_attention";
       await this.env.CONCLAVE_DB.prepare(
         `INSERT INTO workspace_worker_inventory
           (worker_id, workspace_id, owner_user_id, worker_type_id, name,
-           status, auth_strategy, default_model, allowed_models_json,
+           status, readiness_state, auth_strategy, default_model, allowed_models_json,
            capabilities_json, local_permissions_summary_json,
            local_concurrency_limit, adapter_version, credential_status,
            revision, created_at, updated_at, last_seen_at, removed_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
          ON CONFLICT(worker_id) DO UPDATE SET
            worker_type_id = excluded.worker_type_id,
            name = excluded.name,
            status = excluded.status,
-           auth_strategy = excluded.auth_strategy,
-           default_model = excluded.default_model,
-           allowed_models_json = excluded.allowed_models_json,
+           readiness_state = excluded.readiness_state,
+          auth_strategy = 'none',
+          default_model = NULL,
+          allowed_models_json = '[]',
            capabilities_json = excluded.capabilities_json,
-           local_permissions_summary_json = excluded.local_permissions_summary_json,
+          local_permissions_summary_json = '[]',
            local_concurrency_limit = excluded.local_concurrency_limit,
            adapter_version = excluded.adapter_version,
-           credential_status = excluded.credential_status,
+          credential_status = 'not_required',
            revision = excluded.revision,
            updated_at = excluded.updated_at,
            last_seen_at = excluded.last_seen_at,
@@ -1333,18 +1340,17 @@ export class WorkspaceGateway implements DurableObject {
           workspaceId,
           owner.owner_user_id,
           workerTypeId,
-          name.trim().slice(0, 200),
-          ["ready", "needs_attention", "disabled", "removed"].includes(status)
-            ? status
-            : "needs_attention",
-          authStrategy,
-          nullableText(item.defaultModel, 256),
-          arrayJson(item.allowedModels, 128),
+          workerTypeId.slice(0, 200),
+          workerStatus,
+          readinessState,
+          "none",
+          null,
+          "[]",
           arrayJson(item.capabilities, 128),
-          arrayJson(item.localPermissionsSummary, 64),
+          "[]",
           Math.min(1024, concurrency as number),
           nullableText(item.adapterVersion, 128),
-          credentialStatus,
+          "not_required",
           revision,
           nullableText(item.createdAt, 40) ?? now,
           now,

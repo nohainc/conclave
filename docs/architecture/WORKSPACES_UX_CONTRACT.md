@@ -35,8 +35,8 @@ Workspaces
 
 This contract defines the UX and frontend read model. The Workspaces page uses
 one `StudioWorkspace` model and one `StudioWorker` V7 inventory projection.
-Worker inventory, readiness, credential attention, Cloud scheduling, and
-Enable/Disable/Drain controls live inside each owning Workspace card. Legacy
+Worker inventory and readiness attention live inside each owning Workspace
+card. Actual Worker usage is configured in Project Workstreams. Legacy
 URLs continue to resolve to the canonical Workspaces page.
 
 ## Canonical Workspace overview model
@@ -93,48 +93,42 @@ ordinary Workspace card.
 
 ```text
 id
-name
 workerTypeId
-defaultModel?
-localReadiness       // ready | needs_attention | disabled | removed
-attentionReasonCode? // safe, actionable code; no provider output or secret
-schedulingState      // enabled | disabled | draining
-credentialState      // not_required | ready | needs_authentication | expired | error
+workspaceId
+status               // ready | needs_attention | disabled | removed
+readinessState       // stable safe readiness reason code
+attentionReasonCode? // set for actionable non-ready states
 adapterVersion?
 capabilities
 localConcurrencyLimit
-cloudConcurrencyLimit?
 lastSeenAt?
 ```
 
-The safe inventory fields originate in Conclave Workspace. Cloud stores the
-synchronized projection and owns `schedulingState` and the optional Cloud
-concurrency ceiling. Credential state and local readiness remain observations;
-Cloud controls cannot change them. Effective execution still requires local
-readiness, Cloud scheduling enabled, an online Workspace, active grants,
-matching Project/Workstream policy, capability/model compatibility, and
-available capacity.
+The safe inventory fields originate in Conclave Workspace. `status` and
+readiness reason are local observations; Cloud cannot change them. Cloud
+scheduling state and limits are separate Cloud-owned controls and do not appear
+in the Workspace readiness inventory.
 
-Normal Worker rows expose Worker name, friendly type, default model, local
-readiness, credential attention, and Cloud scheduling state. `Auto` is the
-presentation for no configured default model. Keep revisions, auth strategy,
-raw model allowlists, permission names, credential references, local paths,
-and internal IDs out of the normal row. An expanded diagnostics view may show
-adapter version, capabilities, concurrency limits, and safe local remediation
-guidance. Worker configuration and authentication are explicitly managed in
-Conclave Workspace on the owning computer.
+The projection may also include a supported CLI version and discovered
+non-sensitive model/capability metadata. The current implementation reports
+adapter version and adapter-declared capabilities; CLI version and discovered
+models are omitted until Workspace has a safe, validated source for them. AX
+derives the fixed product label from `workerTypeId`. Keep auth strategy,
+credential status/references, local permission names, local paths, model
+defaults/allow-lists, tokens, API keys, and auth files out of Cloud inventory.
+Raw command output is never an attention reason; use stable reason codes.
+Worker configuration and authentication remain in Conclave Workspace.
 
-The current backend still contains Cloud scheduling enable/disable/drain APIs,
-but ADR-013 removes those actions from the normal AX Workspaces UI for this
-phase. AX may not create/remove a local Worker, set credentials, approve local
-permissions, install a CLI, change an endpoint, repair the runtime connection,
-or change local model configuration. Local attention is informational and
-points to Conclave Workspace.
+The Workspaces page stays operational and read-only. AX may not create/remove
+a local Worker, set credentials, approve local permissions, install a CLI,
+change an endpoint, or repair the runtime connection. Worker usage controls
+belong to Workstream Execution settings and cannot change the Workspace's local
+readiness or permissions.
 
 The current Cloud Worker API is V7-shaped: `GET /api/v7/workers` reads the
-safe inventory projection, `GET /api/v7/workers/:id/scheduling` reads the
-Cloud scheduling state, and `POST /api/v7/workers/:id/scheduling/:action`
-applies `enable`, `disable`, or `drain`. The former
+safe readiness projection. Cloud scheduling APIs remain available for
+Cloud-owned controls, while normal Worker usage is selected from Workstream
+Execution settings. The former
 `/api[/v2]/workspaces/:id/workers` catalog and desired-state routes are retired.
 Workspace account and credential-profile APIs remain separate and are not
 covered by this Worker-route retirement.
@@ -142,10 +136,35 @@ covered by this Worker-route retirement.
 AX Workspaces is an operational read surface. It may show machine status,
 Workers, connection mode, version, last seen, activity, and Project-facing
 information. Pairing intent creation, Connect Machine, repair/re-pair, local
-Workspace lifecycle actions, and normal remote Worker scheduling controls are
-not part of the AX UX. Backend endpoints remain during the compatibility and
-caller-audit window; their continued presence does not authorize a UI caller to
-expose them.
+Workspace lifecycle actions, and local Worker setup are not part of the AX UX.
+Project/Workstream owners and collaborators choose actual usage in each
+Workstream's Execution settings.
+
+### `WorkstreamWorkerUsagePolicy`
+
+~~~json
+{
+  "version": 1,
+  "fallbackPolicy": "configured_only",
+  "roles": {
+    "implementer": {
+      "workerId": "stable-worker-id",
+      "fallbackWorkerIds": [],
+      "model": "provider-model-id",
+      "cloudConcurrencyLimit": 1
+    }
+  }
+}
+~~~
+
+AX stores this versioned policy in Cloud. Worker IDs are checked against active
+Project Workspace Grants. Policy selection controls scheduling enablement,
+primary/fallback ordering, model, and the Cloud concurrency ceiling; the
+Workspace's local readiness and concurrency remain execution safety checks.
+A Workstream assignment without a role mapping is not dispatched. With
+`configured_only`, only listed Workers are considered. With
+`configured_then_any`, listed Workers are preferred and other eligible,
+Cloud-enabled Workers may be used as fallback.
 
 Connection mode is read-only transport information. Render the display-ready
 mode as `Connected · WebSocket` or `Connected · HTTPS fallback`; the fallback
@@ -199,8 +218,8 @@ returned to AX.
 | Provider credentials and authentication | Conclave Workspace secure storage | Never read or write from AX |
 | Local permissions, CLI/prerequisite state, adapter health | Conclave Workspace | Show only safe readiness/attention summary |
 | Local concurrency ceiling | Conclave Workspace | Display only when useful; Cloud cannot increase it |
-| Cloud Worker scheduling state and Cloud concurrency ceiling | Cloud | Show if useful; normal AX Workspaces UI does not mutate it in ADR-013 phase |
-| Workspace-to-Project grants and Workstream policy | Cloud | AX owns authorization and grant controls |
+| Cloud scheduling state and concurrency limits | Cloud | AX selects them in Workstream Execution settings |
+| Workspace-to-Project grants and Workstream usage policy | Cloud | AX owns authorization, Worker role/model/fallback choices, and limits |
 | Active assignments, run attribution, audit | Cloud | Summarize activity; retain detailed audit views as needed |
 | Work Root, local files, process state, logs | Conclave Workspace | Do not expose local paths or secrets in ordinary AX UI |
 
@@ -337,12 +356,14 @@ when an inventory identity is available.
 
 ## ADR-013 target state
 
-The Workspaces page becomes an operationally read-only view of the user's
+The Workspaces page remains an operationally read-only view of the user's
 registered machines and synchronized Workers. It may display
 `WebSocket` or `HTTPS fallback` as the observed connection mode. Workspace
 registration, recovery, sign-in, local Worker management and transport
 selection live in Conclave Workspace. Project membership, Workspace Grants and
-Workstream execution policy remain Cloud/AX collaboration concerns.
+Workstream Worker usage policies remain Cloud/AX collaboration concerns. AX
+configures role-to-Worker and model selection, fallback behavior, and Cloud
+concurrency; Workspace supplies readiness and enforces local limits.
 
 See [ADR-013](../decisions/ADR-013-desktop-auth-and-dual-transport.md).
 
@@ -365,6 +386,7 @@ ADR-014 refines the desktop side of this UX contract:
 - A connected installation cannot switch to another Conclave user. Explicit
   Disconnect and Release ownership are required before an ownership change.
 - Connected installations may launch/reconnect automatically at OS login. AX
-  remains a read-only operational view of that state.
+  shows read-only machine and Worker readiness. Worker usage policy remains
+  editable in AX Workstreams.
 
 See [ADR-014](../decisions/ADR-014-workspace-desktop-lifecycle.md).
