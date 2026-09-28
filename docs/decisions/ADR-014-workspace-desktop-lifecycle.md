@@ -151,11 +151,19 @@ Install
 -> runtime available
 ~~~
 
-When signed in but disconnected, the app shows the Workspace connection/setup
-surface only.
+When signed in but disconnected, the app shows Workspace and Workers tabs.
+Workspace contains the connection/setup surface. Workers remains visible but
+shows a Connect prompt and exposes no Worker configuration controls until the
+Workspace has an active registration and runtime identity.
 
-The Workers tab becomes available after the Workspace has an active registration
-and runtime identity.
+Worker management becomes available after the Workspace has an active
+registration and runtime identity.
+
+The Workspace tab places **Sign out** in Account and **Disconnect Workspace**
+in the Connection section. Worker details live in the Workers tab, so the
+Workspace tab does not repeat a Worker summary. Version and update information
+belong in the application menu/About surface rather than a separate Application
+section in the Workspace tab.
 
 This is a product simplification, not a limitation of the local Worker model.
 

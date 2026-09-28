@@ -163,6 +163,7 @@ void main() {
     Future<void> Function()? onRecoverCredential,
     VoidCallback? onAccountAction,
     Future<void> Function()? onSignIn,
+    Future<void> Function()? onSignOut,
     VoidCallback? onQuit,
     Future<void> Function()? onRetry,
     Future<void> Function()? onExportDiagnostics,
@@ -170,6 +171,7 @@ void main() {
     LocalConfiguredWorkerRegistry? localWorkerRegistry,
     SecureCredentialStore? credentialStore,
     Future<void> Function()? onAddWorker,
+    bool signedIn = false,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -182,6 +184,7 @@ void main() {
             onReset: onReset,
             onAccountAction: onAccountAction,
             onSignIn: onSignIn,
+            onSignOut: onSignOut,
             onQuit: onQuit,
             onRetry: onRetry,
             onExportDiagnostics: onExportDiagnostics,
@@ -192,6 +195,7 @@ void main() {
             // native bridge explicitly.
             credentialStore: credentialStore ?? _MemoryCredentialStore(),
             onAddWorker: onAddWorker,
+            signedIn: signedIn,
           ),
         ),
       ),
@@ -360,6 +364,7 @@ void main() {
       ),
       credentialStore: credentials,
       onRecoverCredential: () async => connectStarted = true,
+      signedIn: true,
     );
     await tester.pumpAndSettle();
 
@@ -370,7 +375,13 @@ void main() {
         findsOneWidget);
     expect(find.text('Computer\nVitalii\'s MacBook Pro'), findsOneWidget);
     expect(find.text('Connect Workspace'), findsOneWidget);
-    expect(find.text('Workers'), findsNothing);
+    expect(find.text('Workers'), findsWidgets);
+    await tester.tap(find.text('Workers').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Workers are unavailable'), findsOneWidget);
+    expect(find.text('Add Worker'), findsNothing);
+    await tester.tap(find.text('Workspace').first);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Connect Workspace'));
     expect(connectStarted, isTrue);
   });
@@ -411,18 +422,42 @@ void main() {
         onSignOut: () async {},
         onRelease: () async => released = true,
         onQuit: () async {},
-        managementShellBuilder: () => const Text('MANAGEMENT DASHBOARD'),
+        managementShellBuilder: () => Scaffold(
+          body: HostDashboard(
+            snapshot: const HostUiSnapshot(
+              mode: HostUiMode.firstLaunch,
+              title: 'Workspace disconnected',
+              detail: 'This installation remains owned.',
+              paired: true,
+              workspaceReady: false,
+              cloudConnected: false,
+              ownerUserId: 'user-1',
+              hostname: 'test-mac',
+            ),
+            credentialStore: credentials,
+            signedIn: true,
+            onSignOut: () async {},
+            onRecoverCredential: () async {},
+            onRelease: () async => released = true,
+          ),
+        ),
       ),
     ));
     await tester.pumpAndSettle();
 
     expect(find.text('Connect Workspace'), findsOneWidget);
+    expect(find.text('Workspace'), findsOneWidget);
+    expect(find.text('Workers'), findsWidgets);
+    await tester.tap(find.text('Workers').first);
+    await tester.pumpAndSettle();
     expect(
       find.text('Connect this computer before configuring Workers.'),
       findsOneWidget,
     );
-    expect(find.text('Workspace'), findsOneWidget);
-    expect(find.text('Workers'), findsNothing);
+    expect(find.text('Add Worker'), findsNothing);
+    await tester.tap(find.text('Workspace').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Connect Workspace'), findsOneWidget);
     expect(find.text('Release Workspace from account'), findsNothing);
     await tester.ensureVisible(find.text('Advanced & Diagnostics'));
     await tester.tap(find.text('Advanced & Diagnostics'));
@@ -792,9 +827,9 @@ void main() {
     expect(find.text('Startup'), findsOneWidget);
     expect(find.text('Current work'), findsOneWidget);
     expect(find.text('Workers'), findsWidgets);
-    expect(find.text('View Workers'), findsOneWidget);
+    expect(find.text('View Workers'), findsNothing);
     expect(find.text('Work Root'), findsOneWidget);
-    expect(find.text('Application'), findsOneWidget);
+    expect(find.text('Application'), findsNothing);
     expect(find.text('Advanced & Diagnostics'), findsOneWidget);
 
     // No pairing form is shown when paired
@@ -804,7 +839,7 @@ void main() {
 
     // Removed sections are not on the Workspace tab
     expect(find.text('Current Work'), findsNothing);
-    expect(find.text('View Workers'), findsOneWidget);
+    expect(find.text('View Workers'), findsNothing);
     expect(find.bySemanticsLabel('Workspace status'), findsNothing);
   });
 
@@ -990,6 +1025,7 @@ void main() {
   testWidgets('workspace tab separates status from advanced lifecycle actions',
       (tester) async {
     var disconnected = false;
+    var signedOut = false;
     var released = false;
     var reset = false;
     tester.view.physicalSize = const Size(800, 1600);
@@ -1026,6 +1062,7 @@ void main() {
         workRootPath: '/workspace/root',
       ),
       onDisconnect: () => disconnected = true,
+      onSignOut: () async => signedOut = true,
       onRelease: () async => released = true,
       onReset: () => reset = true,
       credentialStore: credentials,
@@ -1033,17 +1070,17 @@ void main() {
 
     expect(find.text('Work Root'), findsOneWidget);
     expect(find.text('/workspace/root'), findsOneWidget);
-    expect(find.text('Disconnect Workspace'), findsNothing);
+    expect(find.text('Disconnect Workspace'), findsOneWidget);
+    expect(find.text('Sign out'), findsOneWidget);
+    await tester.ensureVisible(find.text('Disconnect Workspace'));
+    await tester.tap(find.text('Disconnect Workspace'));
+    expect(disconnected, isTrue);
+    await tester.ensureVisible(find.text('Sign out'));
+    await tester.tap(find.text('Sign out'));
+    expect(signedOut, isTrue);
     await tester.tap(find.text('Advanced & Diagnostics'));
     await tester.pumpAndSettle();
     expect(find.text('Workspace management'), findsOneWidget);
-
-    final disconnectBtn = find.text('Disconnect Workspace');
-    await tester.ensureVisible(disconnectBtn);
-    await tester.pumpAndSettle();
-    expect(disconnectBtn, findsOneWidget);
-    await tester.tap(disconnectBtn);
-    expect(disconnected, isTrue);
 
     final releaseButton = find.text('Release Workspace from account');
     await tester.ensureVisible(releaseButton);

@@ -2153,6 +2153,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp> {
       adapterPackageStore: lifecycle.host.adapterPackageStore,
       ensureAdapter: _ensureAdapterAvailable,
       onAddWorker: () => _addLocalWorker(context),
+      signedIn: true,
     );
   }
 
@@ -2457,27 +2458,7 @@ class _WorkspaceShellRouterState extends State<WorkspaceShellRouter> {
                   ),
                 );
               }
-              if (widget.snapshot.workspaceReady) {
-                return widget.managementShellBuilder();
-              }
-              return _MinimalShell(
-                version: widget.snapshot.appVersion,
-                onAbout: _showAbout,
-                onQuit: widget.onQuit,
-                child: _SignedInDisconnectedShell(
-                  session: access.session!,
-                  computerName: widget.snapshot.hostname ??
-                      widget.snapshot.workspaceName ??
-                      'This computer',
-                  isRegistered: widget.snapshot.paired,
-                  runtimeIntendedConnected: widget.snapshot.cloudConnected ||
-                      widget.snapshot.desiredRuntimeConnected,
-                  onConnect: widget.onConnectWorkspace,
-                  onSignOut: widget.onSignOut,
-                  onRelease: widget.onRelease,
-                  onLock: widget.onLock,
-                ),
-              );
+              return widget.managementShellBuilder();
           }
         },
       );
@@ -2617,113 +2598,6 @@ class _SignedOutShell extends StatelessWidget {
       );
 }
 
-class _SignedInDisconnectedShell extends StatelessWidget {
-  const _SignedInDisconnectedShell({
-    required this.session,
-    required this.computerName,
-    required this.isRegistered,
-    required this.runtimeIntendedConnected,
-    required this.onConnect,
-    required this.onSignOut,
-    this.onRelease,
-    this.onLock,
-  });
-
-  final DesktopHumanSession session;
-  final String computerName;
-  final bool isRegistered;
-  final bool runtimeIntendedConnected;
-  final Future<void> Function() onConnect;
-  final Future<void> Function() onSignOut;
-  final Future<void> Function()? onRelease;
-  final Future<void> Function()? onLock;
-
-  @override
-  Widget build(BuildContext context) => Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(28),
-              child: SingleChildScrollView(
-                child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Workspace',
-                          style: Theme.of(context).textTheme.headlineSmall),
-                      const SizedBox(height: 20),
-                      Text('Account',
-                          style: Theme.of(context).textTheme.titleMedium),
-                      Text('Signed in as ${session.displayName}',
-                          style: Theme.of(context).textTheme.titleSmall),
-                      Text(session.email),
-                      const SizedBox(height: 18),
-                      Text('Computer',
-                          style: Theme.of(context).textTheme.titleMedium),
-                      Text(computerName),
-                      const SizedBox(height: 18),
-                      Text(
-                        runtimeIntendedConnected
-                            ? 'Workspace is reconnecting. Worker management will be available when it is Ready.'
-                            : 'Not connected as a Workspace.',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      if (!runtimeIntendedConnected) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                            'Connect this computer before configuring Workers.',
-                            style: Theme.of(context).textTheme.bodySmall),
-                      ],
-                      const SizedBox(height: 22),
-                      Wrap(spacing: 8, runSpacing: 4, children: [
-                        FilledButton.icon(
-                          onPressed: () => unawaited(onConnect()),
-                          icon: const Icon(Icons.link),
-                          label: const Text('Connect Workspace'),
-                        ),
-                        TextButton(
-                          onPressed: () => unawaited(onSignOut()),
-                          child: const Text('Sign out'),
-                        ),
-                        if (onLock != null)
-                          OutlinedButton.icon(
-                            onPressed: () => unawaited(onLock!()),
-                            icon: const Icon(Icons.lock_outline),
-                            label: const Text('Lock Workspace'),
-                          ),
-                      ]),
-                      if (isRegistered && onRelease != null) ...[
-                        const SizedBox(height: 8),
-                        ExpansionTile(
-                          tilePadding: EdgeInsets.zero,
-                          title: const Text('Advanced & Diagnostics'),
-                          children: [
-                            const Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                'Release removes this Workspace from the account and allows another account to claim it.',
-                              ),
-                            ),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: TextButton(
-                                onPressed: () => unawaited(onRelease!()),
-                                child: const Text(
-                                    'Release Workspace from account'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ]),
-              ),
-            ),
-          ),
-        ),
-      );
-}
-
 class _ReauthRequiredShell extends StatelessWidget {
   const _ReauthRequiredShell({
     required this.runtimeConnected,
@@ -2789,6 +2663,7 @@ class HostDashboard extends StatefulWidget {
     this.adapterPackageStore,
     this.ensureAdapter,
     this.onAddWorker,
+    this.signedIn = false,
     super.key,
   });
 
@@ -2816,6 +2691,7 @@ class HostDashboard extends StatefulWidget {
   final V7AdapterPackageStore? adapterPackageStore;
   final Future<bool> Function(String workerTypeId)? ensureAdapter;
   final Future<void> Function()? onAddWorker;
+  final bool signedIn;
 
   @override
   State<HostDashboard> createState() => _HostDashboardState();
@@ -2982,7 +2858,7 @@ class _HostDashboardState extends State<HostDashboard> {
         ),
 
         // Two-Surface Horizontal Tab Switcher
-        if (snapshot.workspaceReady)
+        if (snapshot.workspaceReady || widget.signedIn)
           Container(
             width: double.infinity,
             color: theme.colorScheme.surface,
@@ -3019,10 +2895,11 @@ class _HostDashboardState extends State<HostDashboard> {
               constraints: const BoxConstraints(maxWidth: 820),
               child: IndexedStack(
                 index: _selectedSurface.index,
-                children: snapshot.workspaceReady
+                children: (snapshot.workspaceReady || widget.signedIn)
                     ? [
                         _WorkspaceTab(
                           snapshot: snapshot,
+                          signedIn: widget.signedIn,
                           onSignIn: widget.onSignIn,
                           credentialStore: widget.credentialStore,
                           accountRefreshToken: widget.workerRevision,
@@ -3035,11 +2912,9 @@ class _HostDashboardState extends State<HostDashboard> {
                           autoLockTimeout: widget.autoLockTimeout,
                           onAutoLockTimeoutChanged:
                               widget.onAutoLockTimeoutChanged,
-                          localWorkerRegistry: widget.localWorkerRegistry,
-                          workerRevision: widget.workerRevision,
-                          onViewWorkers: () => setState(
-                              () => _selectedSurface = HostSurface.workers),
-                          onDisconnect: widget.onDisconnect,
+                          onDisconnect: snapshot.workspaceReady
+                              ? widget.onDisconnect
+                              : null,
                           onRelease: widget.onRelease,
                           onReset: widget.onReset,
                           onSignOut: widget.onSignOut,
@@ -3060,6 +2935,7 @@ class _HostDashboardState extends State<HostDashboard> {
                     : [
                         _WorkspaceTab(
                           snapshot: snapshot,
+                          signedIn: widget.signedIn,
                           onSignIn: widget.onSignIn,
                           credentialStore: widget.credentialStore,
                           accountRefreshToken: widget.workerRevision,
@@ -3073,10 +2949,6 @@ class _HostDashboardState extends State<HostDashboard> {
                               widget.onAutoLockTimeoutChanged,
                           launchAtLogin: widget.launchAtLogin,
                           onLaunchAtLoginChanged: widget.onLaunchAtLoginChanged,
-                          localWorkerRegistry: widget.localWorkerRegistry,
-                          workerRevision: widget.workerRevision,
-                          onViewWorkers: () => setState(
-                              () => _selectedSurface = HostSurface.workers),
                           onDisconnect: widget.onDisconnect,
                           onRelease: widget.onRelease,
                           onReset: widget.onReset,
@@ -3155,11 +3027,13 @@ class _ConnectedAccountSection extends StatelessWidget {
   const _ConnectedAccountSection({
     required this.credentialStore,
     required this.refreshToken,
+    this.onSignOut,
     this.onLock,
   });
 
   final SecureCredentialStore credentialStore;
   final int refreshToken;
+  final Future<void> Function()? onSignOut;
   final VoidCallback? onLock;
 
   @override
@@ -3167,26 +3041,31 @@ class _ConnectedAccountSection extends StatelessWidget {
         margin: EdgeInsets.zero,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          child: Row(children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Account',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 4),
-                  _DesktopHumanAccountStatus(
-                      key: ValueKey(refreshToken),
-                      credentialStore: credentialStore),
-                ],
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(
+                child: Text('Account',
+                    style: Theme.of(context).textTheme.titleMedium),
               ),
-            ),
-            if (onLock != null)
-              OutlinedButton.icon(
-                onPressed: onLock,
-                icon: const Icon(Icons.lock_outline),
-                label: const Text('Lock'),
-              ),
+              Wrap(spacing: 8, children: [
+                if (onSignOut != null)
+                  OutlinedButton.icon(
+                    onPressed: () => unawaited(onSignOut!()),
+                    icon: const Icon(Icons.logout),
+                    label: const Text('Sign out'),
+                  ),
+                if (onLock != null)
+                  OutlinedButton.icon(
+                    onPressed: onLock,
+                    icon: const Icon(Icons.lock_outline),
+                    label: const Text('Lock'),
+                  ),
+              ]),
+            ]),
+            const SizedBox(height: 4),
+            _DesktopHumanAccountStatus(
+                key: ValueKey(refreshToken), credentialStore: credentialStore),
           ]),
         ),
       );
@@ -3231,91 +3110,10 @@ class _CurrentWorkSection extends StatelessWidget {
       );
 }
 
-class _WorkspaceWorkerSummary extends StatefulWidget {
-  const _WorkspaceWorkerSummary({
-    required this.registry,
-    required this.revision,
-    this.onViewWorkers,
-  });
-  final LocalConfiguredWorkerRegistry? registry;
-  final int revision;
-  final VoidCallback? onViewWorkers;
-
-  @override
-  State<_WorkspaceWorkerSummary> createState() =>
-      _WorkspaceWorkerSummaryState();
-}
-
-class _WorkspaceWorkerSummaryState extends State<_WorkspaceWorkerSummary> {
-  late Future<List<LocalConfiguredWorker>?> _workers;
-
-  Future<List<LocalConfiguredWorker>?> _load() =>
-      widget.registry?.list() ?? Future.value(null);
-
-  @override
-  void initState() {
-    super.initState();
-    _workers = _load();
-  }
-
-  @override
-  void didUpdateWidget(covariant _WorkspaceWorkerSummary oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.registry != widget.registry ||
-        oldWidget.revision != widget.revision) {
-      _workers = _load();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => Card(
-        margin: EdgeInsets.zero,
-        child: FutureBuilder<List<LocalConfiguredWorker>?>(
-          future: _workers,
-          builder: (context, result) {
-            final workers = result.data;
-            final summary = workers == null
-                ? (result.connectionState == ConnectionState.done
-                    ? 'Worker status unavailable'
-                    : 'Loading Workers…')
-                : '${workers.length} configured · ${workers.where((w) => deriveLocalWorkerHealth(w) == 'Ready').length} ready';
-            return ListTile(
-              leading: const Icon(Icons.memory_outlined),
-              title: const Text('Workers'),
-              subtitle: Text(summary),
-              trailing: TextButton(
-                onPressed: widget.onViewWorkers,
-                child: const Text('View Workers'),
-              ),
-            );
-          },
-        ),
-      );
-}
-
-class _WorkspaceApplicationSection extends StatelessWidget {
-  const _WorkspaceApplicationSection({required this.snapshot});
-  final HostUiSnapshot snapshot;
-
-  @override
-  Widget build(BuildContext context) => Card(
-        margin: EdgeInsets.zero,
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Application', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            _DetailRow(label: 'Version', value: snapshot.appVersion),
-            _DetailRow(label: 'Update', value: snapshot.updateSummary),
-          ]),
-        ),
-      );
-}
-
 class _WorkspaceTab extends StatelessWidget {
   const _WorkspaceTab({
     required this.snapshot,
+    this.signedIn = false,
     this.onSignIn,
     this.onSignOut,
     this.onRecoverCredential,
@@ -3332,12 +3130,10 @@ class _WorkspaceTab extends StatelessWidget {
     this.onAutoLockTimeoutChanged,
     this.launchAtLogin = false,
     this.onLaunchAtLoginChanged,
-    this.localWorkerRegistry,
-    this.workerRevision = 0,
-    this.onViewWorkers,
   });
 
   final HostUiSnapshot snapshot;
+  final bool signedIn;
   final Future<void> Function()? onSignIn;
   final Future<void> Function()? onSignOut;
   final Future<void> Function()? onRecoverCredential;
@@ -3354,9 +3150,6 @@ class _WorkspaceTab extends StatelessWidget {
   final ValueChanged<Duration?>? onAutoLockTimeoutChanged;
   final bool launchAtLogin;
   final ValueChanged<bool>? onLaunchAtLoginChanged;
-  final LocalConfiguredWorkerRegistry? localWorkerRegistry;
-  final int workerRevision;
-  final VoidCallback? onViewWorkers;
 
   @override
   Widget build(BuildContext context) {
@@ -3388,10 +3181,11 @@ class _WorkspaceTab extends StatelessWidget {
           _ConnectedAccountSection(
             credentialStore: credentialStore,
             refreshToken: accountRefreshToken,
+            onSignOut: onSignOut,
             onLock: onLock,
           ),
           const SizedBox(height: 12),
-          _PairedWorkspaceCard(snapshot: snapshot),
+          _PairedWorkspaceCard(snapshot: snapshot, onDisconnect: onDisconnect),
           const SizedBox(height: 12),
           _WorkspaceStartupSection(
             launchAtLogin: launchAtLogin,
@@ -3400,27 +3194,17 @@ class _WorkspaceTab extends StatelessWidget {
           const SizedBox(height: 12),
           _CurrentWorkSection(activeAssignments: snapshot.activeAssignments),
           const SizedBox(height: 12),
-          _WorkspaceWorkerSummary(
-            registry: localWorkerRegistry,
-            revision: workerRevision,
-            onViewWorkers: onViewWorkers,
-          ),
-          const SizedBox(height: 12),
           _WorkRootSection(
             workRootPath: snapshot.workRootPath,
             onChangeWorkRoot: onChangeWorkRoot,
           ),
           const SizedBox(height: 12),
-          _WorkspaceApplicationSection(snapshot: snapshot),
-          const SizedBox(height: 12),
           _WorkspaceDiagnosticsSection(
             snapshot: snapshot,
             onRetry: onRetry,
             onExportDiagnostics: onExportDiagnostics,
-            onDisconnect: onDisconnect,
             onRelease: onRelease,
             onReset: onReset,
-            onSignOut: onSignOut,
             autoLockTimeout: autoLockTimeout,
             onAutoLockTimeoutChanged: onAutoLockTimeoutChanged,
           ),
@@ -3429,8 +3213,10 @@ class _WorkspaceTab extends StatelessWidget {
             snapshot: snapshot,
             credentialStore: credentialStore,
             refreshToken: accountRefreshToken,
+            signedIn: signedIn,
             onSignIn: onSignIn,
             onSignOut: onSignOut,
+            onRelease: onRelease,
             onRecoverCredential: onRecoverCredential,
             onLock: onLock,
           ),
@@ -3445,8 +3231,10 @@ class _WorkspaceAccountSection extends StatelessWidget {
     required this.snapshot,
     required this.credentialStore,
     required this.refreshToken,
+    this.signedIn = false,
     this.onSignIn,
     this.onSignOut,
+    this.onRelease,
     this.onRecoverCredential,
     this.onLock,
   });
@@ -3454,14 +3242,17 @@ class _WorkspaceAccountSection extends StatelessWidget {
   final HostUiSnapshot snapshot;
   final SecureCredentialStore credentialStore;
   final int refreshToken;
+  final bool signedIn;
   final Future<void> Function()? onSignIn;
   final Future<void> Function()? onSignOut;
+  final Future<void> Function()? onRelease;
   final Future<void> Function()? onRecoverCredential;
   final VoidCallback? onLock;
 
   @override
   Widget build(BuildContext context) {
-    final signedIn = _hasValidCachedDesktopSession(credentialStore);
+    final signedIn =
+        this.signedIn || _hasValidCachedDesktopSession(credentialStore);
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -3507,6 +3298,28 @@ class _WorkspaceAccountSection extends StatelessWidget {
                   icon: const Icon(Icons.sync),
                   label: const Text('Connect Workspace')),
           ]),
+          if (snapshot.paired && onRelease != null) ...[
+            const SizedBox(height: 8),
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: const Text('Advanced & Diagnostics'),
+              children: [
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Release removes this Workspace from the account and allows another account to claim it.',
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: () => unawaited(onRelease!()),
+                    child: const Text('Release Workspace from account'),
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 8),
         ]),
       ),
@@ -3687,9 +3500,11 @@ class _DesktopHumanAccountStatusState
 class _PairedWorkspaceCard extends StatelessWidget {
   const _PairedWorkspaceCard({
     required this.snapshot,
+    this.onDisconnect,
   });
 
   final HostUiSnapshot snapshot;
+  final VoidCallback? onDisconnect;
 
   @override
   Widget build(BuildContext context) {
@@ -3756,6 +3571,17 @@ class _PairedWorkspaceCard extends StatelessWidget {
               ),
             ),
           ],
+          if (onDisconnect != null) ...[
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton.icon(
+                onPressed: onDisconnect,
+                icon: const Icon(Icons.link_off),
+                label: const Text('Disconnect Workspace'),
+              ),
+            ),
+          ],
         ]),
       ),
     );
@@ -3767,10 +3593,8 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
     required this.snapshot,
     this.onRetry,
     this.onExportDiagnostics,
-    this.onDisconnect,
     this.onRelease,
     this.onReset,
-    this.onSignOut,
     this.autoLockTimeout,
     this.onAutoLockTimeoutChanged,
   });
@@ -3778,10 +3602,8 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
   final HostUiSnapshot snapshot;
   final Future<void> Function()? onRetry;
   final Future<void> Function()? onExportDiagnostics;
-  final VoidCallback? onDisconnect;
   final Future<void> Function()? onRelease;
   final VoidCallback? onReset;
-  final Future<void> Function()? onSignOut;
   final Duration? autoLockTimeout;
   final ValueChanged<Duration?>? onAutoLockTimeoutChanged;
 
@@ -4072,18 +3894,6 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
               ]),
             const SizedBox(height: 8),
             Wrap(spacing: 10, runSpacing: 8, children: [
-              if (onDisconnect != null)
-                OutlinedButton.icon(
-                  onPressed: onDisconnect,
-                  icon: const Icon(Icons.link_off),
-                  label: const Text('Disconnect Workspace'),
-                ),
-              if (onSignOut != null)
-                TextButton.icon(
-                  onPressed: () => unawaited(onSignOut!()),
-                  icon: const Icon(Icons.logout),
-                  label: const Text('Sign out'),
-                ),
               if (onRelease != null)
                 TextButton.icon(
                   onPressed: () => unawaited(onRelease!()),
@@ -4257,6 +4067,36 @@ class _WorkersTabState extends State<_WorkersTab> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
+    if (!widget.isPaired) {
+      return ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Workers are unavailable',
+                      style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Connect this computer before configuring Workers.',
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: widget.onSwitchToWorkspace,
+                    icon: const Icon(Icons.computer),
+                    label: const Text('Go to Workspace'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
 
     return ListView(
       padding: const EdgeInsets.all(24),
