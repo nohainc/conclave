@@ -96,7 +96,7 @@ Future<AdapterPrerequisiteResult> probeAdapterExecutable(
   if (timeout <= Duration.zero || maxOutputBytes < 128) {
     throw ArgumentError('prerequisite probe bounds must be positive');
   }
-  final inheritedPath = searchPath ?? Platform.environment['PATH'] ?? '';
+  final inheritedPath = searchPath ?? workspaceCliSearchPath();
   Process process;
   try {
     process = await startIsolatedProcess(
@@ -164,7 +164,7 @@ Future<AdapterPrerequisiteResult> probeAdapterExecutable(
   if (match == null) {
     return const AdapterPrerequisiteResult(
       satisfied: false,
-      message: 'Prerequisite did not report a supported version.',
+      message: 'Prerequisite did not report a version.',
     );
   }
   final detected = '${match[1]}.${match[2]}.${match[3]}';
@@ -189,6 +189,25 @@ Future<AdapterPrerequisiteResult> probeAdapterExecutable(
     detectedVersion: detected,
     message: 'Prerequisite $detected is available.',
   );
+}
+
+/// GUI-launched macOS apps often inherit a minimal PATH instead of the
+/// interactive shell's PATH. Include common per-user and package-manager CLI
+/// locations while preserving paths explicitly supplied by the environment.
+String workspaceCliSearchPath() {
+  final home = Platform.environment['HOME'];
+  final paths = <String>[
+    if (Platform.environment['PATH'] case final path?)
+      ...path.split(Platform.isWindows ? ';' : ':'),
+    if (home != null && home.isNotEmpty) '$home/.local/bin',
+    if (home != null && home.isNotEmpty) '$home/.npm-global/bin',
+    if (!Platform.isWindows) '/opt/homebrew/bin',
+    if (!Platform.isWindows) '/usr/local/bin',
+  ];
+  return paths
+      .where((path) => path.isNotEmpty)
+      .toSet()
+      .join(Platform.isWindows ? ';' : ':');
 }
 
 int _compareVersions(String left, String right) {

@@ -47,29 +47,30 @@ When the connected, unlocked lifecycle state exposes the Workers page, it
 renders the two catalog slots in a fixed order: ChatGPT, then Gemini. The page
 does not have an Add Worker action, an empty-list state, or a Worker Type
 selector. Each slot combines its fixed catalog identity with the matching
-local configuration and readiness status, and its setup/configuration action
-is scoped to that slot. The normal configuration contains CLI, authentication,
-adapter readiness, local permissions, and local concurrency. Unsupported
-legacy records remain persisted during migration but are not rendered as v1
-catalog rows.
+local configuration and readiness status in one compact row. Rows do not
+expand and there is no details panel. The CLI and its detected version appear
+on the second line when the CLI version command succeeds. The status badge is
+on that same line. If the CLI is absent or its version command fails, the row
+shows a **Not configured** badge, a red reason on a third line, and a
+**Check again** action. Once the CLI is available, the row shows an
+enable/disable switch instead. Desktop probes also search common per-user
+CLI locations so GUI launch PATH differences do not hide installations. Local
+execution permissions use the fixed catalog policy and are not user-editable
+in the Workers page. Unsupported legacy records remain persisted during
+migration but are not rendered as v1 catalog rows.
 
 For the ChatGPT slot, readiness checks probe the installed `codex` CLI and its
-supported version, `codex login status`, the local adapter package through
-Workspace signature/integrity verification, and declared execution
-prerequisites such as Node.js. **Open Codex Login** launches `codex login`;
-**Check again** repeats the readiness probes after the user completes login.
-Codex retains and uses its own authentication state. Conclave never requests,
-stores, or logs OpenAI credentials.
+reported version, `codex login status`, and the local adapter package through
+Workspace signature/integrity verification. There is no Node.js prerequisite
+check or in-app login launcher. If authentication is missing, the user signs
+into Codex through its own CLI and then selects **Check again**. Codex retains
+and uses its own authentication state. Conclave never requests, stores, or
+logs OpenAI credentials.
 
-For the Gemini slot, readiness checks probe `agy` and Node.js, validate local
+For the Gemini slot, readiness checks probe the installed `agy` CLI and its
+reported version, validate local
 Antigravity authentication using its documented standalone `agy -p /usage`
-command, and verify the installed adapter package. The CLI compatibility range
-is explicitly bounded to `1.1.8` through `1.2.11`: 1.1.8 introduced the
-structured `stream-json` print output used by the adapter, and newer versions
-are admitted only after the supported range is deliberately reviewed and
-updated in both the Workspace catalog and adapter manifest. **Open Antigravity**
-starts the CLI's own login/onboarding flow; **Check again** repeats the local
-checks. Authentication output is discarded and only the exit status is used.
+command, and verify the installed adapter package. There is no Node.js prerequisite check or in-app login launcher. If authentication is missing, the user completes Antigravity's own sign-in flow outside Workspace and selects **Check again**. The CLI version is displayed for diagnostics; the catalog does not enforce minimum or maximum versions. **Check again** repeats the local checks. Authentication output is discarded and only the exit status is used.
 Google-account and Gemini API-key configuration remain within Antigravity;
 Conclave neither selects the mode nor reads, copies, stores, or logs its
 credentials.

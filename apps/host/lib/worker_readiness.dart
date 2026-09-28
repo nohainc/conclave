@@ -115,17 +115,16 @@ class WorkerReadinessMonitor {
       if (type == null) {
         return const WorkerReadinessAssessment(WorkerReadinessState.testFailed);
       }
-      final prerequisites = [
+      final prerequisites = <AdapterExecutablePrerequisite>[
         if (type.executablePrerequisite case final primary?) primary,
-        ...type.additionalPrerequisites,
       ];
-      final results =
-          await Future.wait(prerequisites.map(probeAdapterExecutable));
+      final results = await Future.wait<AdapterPrerequisiteResult>(
+        prerequisites.map(probeAdapterExecutable),
+      );
       final failed = results.where((item) => !item.satisfied).firstOrNull;
       if (failed != null) {
         final unsupported = failed.message.contains('older than required') ||
-            failed.message.contains('newer than supported') ||
-            failed.message.contains('did not report a supported version');
+            failed.message.contains('newer than supported');
         return WorkerReadinessAssessment(unsupported
             ? WorkerReadinessState.unsupportedCliVersion
             : WorkerReadinessState.notInstalled);
@@ -165,7 +164,11 @@ class WorkerReadinessMonitor {
         : ('agy', const ['-p', '/usage']);
     Process? process;
     try {
-      process = await startIsolatedProcess(command.$1, command.$2);
+      process = await startIsolatedProcess(
+        command.$1,
+        command.$2,
+        environment: {'PATH': workspaceCliSearchPath()},
+      );
       final stdout = process.stdout.drain<void>();
       final stderr = process.stderr.drain<void>();
       final exitCode =

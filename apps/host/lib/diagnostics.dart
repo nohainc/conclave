@@ -75,7 +75,6 @@ Future<Map<String, Object?>> buildHostDiagnostics({
     final declared = [
       if (option?.executablePrerequisite != null)
         option!.executablePrerequisite!,
-      ...?option?.additionalPrerequisites,
     ];
     for (final prerequisite in declared) {
       try {

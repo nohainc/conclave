@@ -1187,13 +1187,21 @@ void main() {
 
     expect(find.text('ChatGPT'), findsOneWidget);
     expect(find.text('Gemini'), findsOneWidget);
-    expect(find.text('Codex CLI'), findsOneWidget);
-    expect(find.text('Antigravity CLI'), findsOneWidget);
-    expect(find.text('Not configured'), findsNWidgets(2));
-    expect(find.text('Set up'), findsNWidgets(2));
+    expect(find.textContaining('Codex CLI'), findsOneWidget);
+    expect(find.textContaining('Antigravity CLI'), findsOneWidget);
+    expect(find.byType(ExpansionTile), findsNothing);
+    expect(find.text('Set up ChatGPT'), findsNothing);
+    expect(find.text('Set up Gemini'), findsNothing);
+    expect(find.text('Save Worker'), findsNothing);
+    expect(find.text('Save readiness'), findsNothing);
+    expect(find.text('Readiness'), findsNothing);
     expect(find.text('Add Worker'), findsNothing);
     expect(find.text('No local Workers configured'), findsNothing);
     expect(find.byKey(const Key('worker-type-selector')), findsNothing);
+    expect(
+        find.text('Check again').evaluate().length +
+            find.byType(Switch).evaluate().length,
+        2);
   });
 
   testWidgets('fixed catalog rows merge configured Worker status by type',
@@ -1243,18 +1251,18 @@ void main() {
 
     expect(find.text('ChatGPT'), findsOneWidget);
     expect(find.text('Gemini'), findsOneWidget);
-    expect(find.text('Ready'), findsOneWidget);
-    expect(find.text('Configure'), findsOneWidget);
-    expect(find.text('Not configured'), findsOneWidget);
-    expect(find.text('Set up'), findsOneWidget);
+    expect(find.byType(ExpansionTile), findsNothing);
+    expect(find.text('Save readiness'), findsNothing);
+    expect(find.text('Authentication'), findsNothing);
+    expect(
+        find.text('Check again').evaluate().length +
+            find.byType(Switch).evaluate().length,
+        2);
+    expect(find.text('Configure'), findsNothing);
     expect(find.textContaining('ChatGPT local'), findsNothing);
-    await tester.tap(find.text('Ready').first);
-    await tester.pumpAndSettle();
-    expect(find.text('ChatGPT local'), findsNothing);
     expect(find.text('Default Model'), findsNothing);
     expect(find.text('Allowed Models'), findsNothing);
-    expect(find.text('Authentication readiness'), findsOneWidget);
-    expect(find.text('Concurrency'), findsOneWidget);
+    expect(find.text('Permissions'), findsNothing);
   });
 
   testWidgets(

@@ -75,9 +75,13 @@ class CopyableMessageText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: SelectableText(message, style: style)),
+          Flexible(
+            fit: FlexFit.loose,
+            child: Text(message, style: style),
+          ),
           IconButton(
             tooltip: tooltip,
             visualDensity: VisualDensity.compact,
