@@ -167,9 +167,12 @@ void main() {
 
     await lifecycle.launch();
     expect(connection.isConnected, isFalse);
+    expect(lifecycle.uiSnapshot.mode, HostUiMode.starting);
+    expect(lifecycle.uiSnapshot.statusLabel, 'Connecting');
+    expect(lifecycle.uiSnapshot.cloudConnected, isFalse);
+    await connection.close();
     expect(lifecycle.uiSnapshot.mode, HostUiMode.offline);
     expect(lifecycle.uiSnapshot.statusLabel, 'Offline');
-    expect(lifecycle.uiSnapshot.cloudConnected, isFalse);
     await lifecycle.quit();
   });
 

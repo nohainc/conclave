@@ -20,7 +20,6 @@ command -v ditto >/dev/null 2>&1 || {
 }
 
 MODE="release"
-SKIP_CHECKS="${CONCLAVE_WORKSPACE_SKIP_CHECKS:-0}"
 OPEN_APP="0"
 
 while [[ $# -gt 0 ]]; do
@@ -31,10 +30,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --release)
       MODE="release"
-      shift
-      ;;
-    --skip-checks|-s)
-      SKIP_CHECKS="1"
       shift
       ;;
     --version|-v)
@@ -53,11 +48,11 @@ while [[ $# -gt 0 ]]; do
       echo "Usage: $(basename "$0") [options]"
       echo ""
       echo "Builds the Conclave Workspace desktop application for macOS."
+      echo "Run scripts/test-workspace-macos.sh separately for analysis and tests."
       echo ""
       echo "Options:"
       echo "  --release          Build in release mode (default)"
       echo "  --debug            Build in debug mode"
-      echo "  --skip-checks, -s  Skip flutter analyze and tests"
       echo "  --version, -v VER  Override workspace version"
       echo "  --sign IDENTITY    Developer ID signing identity"
       echo "  --open, -o         Open the built application bundle after build"
@@ -65,7 +60,6 @@ while [[ $# -gt 0 ]]; do
       echo ""
       echo "Environment variables:"
       echo "  CONCLAVE_WORKSPACE_VERSION           Workspace version override"
-      echo "  CONCLAVE_WORKSPACE_SKIP_CHECKS       Set to 1 to skip tests/analysis"
       echo "  CONCLAVE_MACOS_SIGN_IDENTITY         Signing identity"
       echo "  CONCLAVE_MACOS_NOTARY_PROFILE        Keychain profile for notarization"
       echo "  CONCLAVE_RELEASE_TRUST_KEYS_JSON     Public Ed25519 trust roots"
@@ -88,12 +82,6 @@ echo "Building Conclave Workspace $VERSION for macOS (mode: $MODE)"
 cd "$HOST_DIR"
 flutter clean
 flutter pub get
-
-if [[ "$SKIP_CHECKS" != "1" ]]; then
-  echo "Running static analysis and test suite..."
-  flutter analyze
-  flutter test
-fi
 
 if [[ "$MODE" == "debug" ]]; then
   flutter build macos --debug \

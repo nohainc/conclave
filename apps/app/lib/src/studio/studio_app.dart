@@ -106,7 +106,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
   bool desktopAuthBusy = false;
   bool desktopAuthApproved = false;
   bool desktopAuthCancelled = false;
-  bool desktopAuthCloseBlocked = false;
   String? _desktopAuthIntentId;
   Timer? _desktopAuthStatusTimer;
   bool _desktopAuthStatusRequestActive = false;
@@ -360,7 +359,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
       setState(() {
         desktopAuthApproved = approved;
         desktopAuthCancelled = !approved;
-        desktopAuthCloseBlocked = !browserNavigation.closeCurrentWindow();
       });
       _desktopAuthStatusTimer?.cancel();
     } on Object {
@@ -1637,18 +1635,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
                     const SizedBox(height: 12),
                     Text(desktopAuthApproved
                         ? 'Return to Conclave Workspace to finish signing in.'
-                        : 'This sign-in request was canceled. You can close this tab.'),
-                    if (desktopAuthCloseBlocked) ...[
-                      const SizedBox(height: 8),
-                      const Text(
-                          'Your browser did not allow this tab to close. You can close it now.'),
-                    ],
-                    const SizedBox(height: 16),
-                    OutlinedButton.icon(
-                      onPressed: _closeApprovedAuthTab,
-                      icon: const Icon(Icons.close),
-                      label: const Text('Close tab'),
-                    ),
+                        : 'This sign-in request was canceled.'),
+                    const SizedBox(height: 8),
+                    const Text('You can close this page, window, or tab.'),
                   ],
                 ),
               ),
@@ -1721,7 +1710,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
         desktopAuthBusy = false;
         desktopAuthApproved = true;
       });
-      _closeApprovedAuthTab();
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -1750,20 +1738,12 @@ class _StudioAppState extends State<ConclaveAppShell> {
         desktopAuthCancelled = true;
       });
       _desktopAuthStatusTimer?.cancel();
-      _closeApprovedAuthTab();
     } catch (error) {
       if (!mounted) return;
       setState(() {
         desktopAuthBusy = false;
         desktopAuthError = error.toString();
       });
-    }
-  }
-
-  void _closeApprovedAuthTab() {
-    final closed = browserNavigation.closeCurrentWindow();
-    if (!closed && mounted) {
-      setState(() => desktopAuthCloseBlocked = true);
     }
   }
 

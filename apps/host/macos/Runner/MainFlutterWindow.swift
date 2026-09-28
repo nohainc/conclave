@@ -42,8 +42,11 @@ private enum WorkspaceKeychainChannel {
           return
         }
         let valueData = Data(value.utf8)
-        let attributes = [kSecValueData as String: valueData] as CFDictionary
-        let updateStatus = SecItemUpdate(query as CFDictionary, attributes)
+        let attributes: [String: Any] = [
+          kSecValueData as String: valueData,
+          kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+        ]
+        let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
         if updateStatus == errSecSuccess {
           result(nil)
           return
@@ -54,6 +57,7 @@ private enum WorkspaceKeychainChannel {
         }
         var item = query
         item[kSecValueData as String] = valueData
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
         let addStatus = SecItemAdd(item as CFDictionary, nil)
         if addStatus == errSecSuccess {
           result(nil)

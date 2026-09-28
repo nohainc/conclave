@@ -54,6 +54,7 @@ void main() {
 
   test('restores the persisted desktop session shape without a wire audience',
       () {
+    final issuedAt = DateTime.now().toUtc();
     final session = DesktopHumanSession.fromSecureJson({
       'credential': 'desktop-session-secret',
       'sessionId': 'session-a',
@@ -64,9 +65,12 @@ void main() {
           .toUtc()
           .add(const Duration(days: 10))
           .toIso8601String(),
+      'issuedAt': issuedAt.toIso8601String(),
     });
 
     expect(session.userId, 'user-a');
+    expect(session.issuedAt, issuedAt);
+    expect(session.toSecureJson()['issuedAt'], issuedAt.toIso8601String());
     expect(session.toSecureJson(), isNot(contains('audience')));
   });
 

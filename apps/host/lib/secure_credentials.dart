@@ -42,7 +42,6 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
   final NativeSecureCredentialBridge? nativeKeychain;
 
   String get _effectivePlatform => _platform ?? Platform.operatingSystem;
-  bool _needsSynchronousCache(String key) => key.startsWith('runtime-');
 
   String _cacheKey(String key) => '$service\u0000$key';
 
@@ -55,9 +54,16 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
     if (command == null) return null;
     try {
       final result = Process.runSync(command.executable, command.arguments);
-      if (result.exitCode != 0) return null;
+      if (result.exitCode != 0) {
+        _cache[cacheKey] = null;
+        _loaded.add(cacheKey);
+        return null;
+      }
       final value = result.stdout.toString().trim();
-      return value.isEmpty ? null : value;
+      final resolved = value.isEmpty ? null : value;
+      _cache[cacheKey] = resolved;
+      _loaded.add(cacheKey);
+      return resolved;
     } on ProcessException {
       // Minimal Linux/CI environments may not have the platform credential
       // helper installed. Treat that as secure storage being unavailable,
@@ -69,15 +75,14 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
   @override
   Future<String?> read(String key) async {
     if (key.isEmpty) return null;
+    final cacheKey = _cacheKey(key);
+    if (_loaded.contains(cacheKey)) return _cache[cacheKey];
     if (_effectivePlatform == 'macos') {
       final keychain = nativeKeychain;
       if (keychain != null) {
         final value = await keychain.read(service: service, account: key);
-        if (_needsSynchronousCache(key)) {
-          final cacheKey = _cacheKey(key);
-          _cache[cacheKey] = value;
-          _loaded.add(cacheKey);
-        }
+        _cache[cacheKey] = value;
+        _loaded.add(cacheKey);
         return value;
       }
     }
@@ -108,6 +113,7 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
     if (key.isEmpty || value.isEmpty) {
       throw ArgumentError('credential key and value are required');
     }
+    final cacheKey = _cacheKey(key);
     if (_effectivePlatform == 'macos') {
       final keychain = nativeKeychain;
       if (keychain == null) {
@@ -116,11 +122,8 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
         );
       }
       await keychain.write(service: service, account: key, value: value);
-      if (_needsSynchronousCache(key)) {
-        final cacheKey = _cacheKey(key);
-        _cache[cacheKey] = value;
-        _loaded.add(cacheKey);
-      }
+      _cache[cacheKey] = value;
+      _loaded.add(cacheKey);
       return;
     }
     final command = currentCredentialBackend.write(service, key);
@@ -135,26 +138,21 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
     if (exitCode != 0) {
       throw StateError('OS secure credential storage rejected the write');
     }
-    if (_needsSynchronousCache(key)) {
-      final cacheKey = _cacheKey(key);
-      _cache[cacheKey] = value;
-      _loaded.add(cacheKey);
-    }
+    _cache[cacheKey] = value;
+    _loaded.add(cacheKey);
   }
 
   @override
   Future<void> delete(String key) async {
     if (key.isEmpty) return;
+    final cacheKey = _cacheKey(key);
+    _cache.remove(cacheKey);
+    _loaded.remove(cacheKey);
     if (_effectivePlatform == 'macos') {
       final keychain = nativeKeychain;
       if (keychain != null) {
         try {
           await keychain.delete(service: service, account: key);
-          if (_needsSynchronousCache(key)) {
-            final cacheKey = _cacheKey(key);
-            _cache.remove(cacheKey);
-            _loaded.add(cacheKey);
-          }
           return;
         } on Object {
           // Recovery must still be possible if the native channel is absent.
@@ -171,11 +169,6 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
         !error.contains('not found') &&
         !error.contains('could not be found')) {
       throw StateError('OS secure credential storage rejected the delete');
-    }
-    if (_needsSynchronousCache(key)) {
-      final cacheKey = _cacheKey(key);
-      _cache.remove(cacheKey);
-      _loaded.add(cacheKey);
     }
   }
 }

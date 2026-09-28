@@ -109,6 +109,8 @@ class WorkspaceLifecyclePreferencesStore {
             'ownerUserId': preferences.ownerUserId,
           if (preferences.ownerDisplayName != null)
             'ownerDisplayName': preferences.ownerDisplayName,
+          if (preferences.customWorkspaceName != null)
+            'customWorkspaceName': preferences.customWorkspaceName,
         }),
         flush: true,
       );
@@ -142,6 +144,9 @@ class WorkspaceLifecyclePreferencesStore {
           : null,
       ownerDisplayName: decoded['ownerDisplayName'] is String
           ? decoded['ownerDisplayName'] as String
+          : null,
+      customWorkspaceName: decoded['customWorkspaceName'] is String
+          ? decoded['customWorkspaceName'] as String
           : null,
     );
   }

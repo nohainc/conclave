@@ -57,6 +57,7 @@ class DesktopHumanSession {
     required this.displayName,
     required this.email,
     required this.expiresAt,
+    this.issuedAt,
   });
 
   final String credential;
@@ -65,6 +66,7 @@ class DesktopHumanSession {
   final String displayName;
   final String email;
   final DateTime expiresAt;
+  final DateTime? issuedAt;
 
   factory DesktopHumanSession.fromJson(Map<String, dynamic> json) {
     if (json['audience'] != 'conclave.desktop.management') {
@@ -89,6 +91,7 @@ class DesktopHumanSession {
       displayName: required(user['displayName'], 'displayName'),
       email: required(user['email'], 'email'),
       expiresAt: DateTime.parse(required(json['expiresAt'], 'expiresAt')),
+      issuedAt: DateTime.tryParse(json['issuedAt']?.toString() ?? ''),
     );
   }
 
@@ -108,6 +111,7 @@ class DesktopHumanSession {
       displayName: required('displayName'),
       email: required('email'),
       expiresAt: DateTime.parse(required('expiresAt')),
+      issuedAt: DateTime.tryParse(json['issuedAt']?.toString() ?? ''),
     );
   }
 
@@ -118,6 +122,7 @@ class DesktopHumanSession {
         'displayName': displayName,
         'email': email,
         'expiresAt': expiresAt.toUtc().toIso8601String(),
+        if (issuedAt != null) 'issuedAt': issuedAt!.toUtc().toIso8601String(),
       };
 }
 

@@ -2272,7 +2272,10 @@ async function handleRegisterWorkspaceFromDesktop(
   const existing = active ?? history[0];
   const outcome = existing ? "recovered" : "created";
   const workspaceId = existing?.workspaceId ?? `ws-${crypto.randomUUID()}`;
-  const workspaceName = existing?.workspaceName ?? name;
+  const workspaceName =
+    name && name.trim().length > 0
+      ? name.trim()
+      : (existing?.workspaceName ?? name);
   const runtimeId = `runtime-${crypto.randomUUID()}`;
   const credential = `conclave_workspace_tok_${crypto.randomUUID().replace(/-/g, "")}`;
   const credentialHash = await hashToken(credential);
@@ -2285,11 +2288,23 @@ async function handleRegisterWorkspaceFromDesktop(
       WHERE id = ?2 AND workspace_id = ?3 AND installation_id IS NULL`,
       ).bind(installationId, existing.runtimeId, existing.workspaceId),
     );
+  if (
+    existing &&
+    name &&
+    name.trim().length > 0 &&
+    name.trim() !== existing.workspaceName
+  ) {
+    statements.push(
+      env.CONCLAVE_DB.prepare(
+        `UPDATE execution_workspaces SET name = ?1, updated_at = ?2 WHERE id = ?3`,
+      ).bind(workspaceName, now, workspaceId),
+    );
+  }
   if (!existing)
     statements.push(
       env.CONCLAVE_DB.prepare(
         `INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at) VALUES (?1, ?2, ?3, 'offline', ?4, ?4)`,
-      ).bind(workspaceId, session.userId, name, now),
+      ).bind(workspaceId, session.userId, workspaceName, now),
     );
   if (active)
     statements.push(

@@ -1214,6 +1214,46 @@ describe("desktop human authentication", () => {
     expect(await response.json()).toMatchObject({
       outcome: "created",
       ownerUserId: "human-a",
+      workspaceName: "A's computer",
     });
+
+    const updateResponse = await handleRegisterWorkspaceFromDesktop(
+      new Request("https://app.conclave.test/api/workspace-runtime/register", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${humanCredential}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          contractVersion: "1.0",
+          installationId: "install_12345678-1234-4234-8234-123456789abc",
+          proposedWorkspaceName: "Updated Workspace Name",
+          hostname: "a-computer",
+          platform: "macos",
+          architecture: "arm64",
+          appVersion: "1.0.0",
+          runtimeCapabilities: {
+            os: "macos",
+            arch: "arm64",
+            appVersion: "1.0.0",
+            supportedRuntimes: ["dart"],
+            maxConcurrentWorkers: 2,
+          },
+        }),
+      }),
+      env,
+    );
+
+    expect(updateResponse.status).toBe(201);
+    expect(await updateResponse.json()).toMatchObject({
+      outcome: "recovered",
+      ownerUserId: "human-a",
+      workspaceName: "Updated Workspace Name",
+    });
+
+    const workspaceRecord = sqlite
+      .prepare("SELECT name FROM execution_workspaces LIMIT 1")
+      .get() as { name: string };
+    expect(workspaceRecord.name).toBe("Updated Workspace Name");
   });
 });

@@ -157,10 +157,12 @@ void main() {
   Future<void> pumpDashboard(
     WidgetTester tester,
     HostUiSnapshot snapshot, {
+    Future<void> Function()? onConnect,
+    Future<void> Function([String? name])? onRegister,
     VoidCallback? onDisconnect,
     Future<void> Function()? onRelease,
     VoidCallback? onReset,
-    Future<void> Function()? onRecoverCredential,
+    Future<void> Function([String? name])? onRecoverCredential,
     VoidCallback? onAccountAction,
     Future<void> Function()? onSignIn,
     Future<void> Function()? onSignOut,
@@ -178,6 +180,8 @@ void main() {
         home: Scaffold(
           body: HostDashboard(
             snapshot: snapshot,
+            onConnect: onConnect,
+            onRegister: onRegister,
             onRecoverCredential: onRecoverCredential,
             onDisconnect: onDisconnect,
             onRelease: onRelease,
@@ -205,33 +209,36 @@ void main() {
   testWidgets('first launch uses authenticated registration instead of pairing',
       (tester) async {
     var signInStarted = false;
-    var connectStarted = false;
-    await pumpDashboard(
-      tester,
-      const HostUiSnapshot(
-        mode: HostUiMode.firstLaunch,
-        title: 'Workspace is ready to connect',
-        detail: 'Sign in to register this computer.',
-        hostname: 'test-mac',
+    final credentials = _MemoryCredentialStore();
+    await tester.pumpWidget(MaterialApp(
+      home: WorkspaceShellRouter(
+        snapshot: const HostUiSnapshot(
+          mode: HostUiMode.firstLaunch,
+          title: 'Workspace is ready to connect',
+          detail: 'Sign in to register this computer.',
+          hostname: 'test-mac',
+        ),
+        credentialStore: credentials,
+        cloudUrl: 'https://cloud.example',
+        refreshToken: 0,
+        restoreSession: (_) async => null,
+        onSignIn: () async => signInStarted = true,
+        onConnectWorkspace: () async {},
+        onSignOut: () async {},
+        onQuit: () async {},
+        managementShellBuilder: () => const Text('MANAGEMENT DASHBOARD'),
       ),
-      credentialStore: _MemoryCredentialStore(),
-      onSignIn: () async => signInStarted = true,
-      onRecoverCredential: () async => connectStarted = true,
-    );
+    ));
+    await tester.pumpAndSettle();
 
-    expect(find.text('Account'), findsOneWidget);
     expect(find.text('Sign in'), findsOneWidget);
     expect(find.text('Connect Workspace'), findsNothing);
-    expect(find.text('This computer is not connected as a Workspace.'),
-        findsOneWidget);
     expect(find.text('Pairing code'), findsNothing);
     expect(find.text('Connect'), findsNothing);
 
     await tester.tap(find.text('Sign in'));
     await tester.pump();
     expect(signInStarted, isTrue);
-    expect(connectStarted, isFalse,
-        reason: 'Sign in must not invoke Workspace registration or startup.');
   });
 
   testWidgets('signed-out root shell exposes no management surfaces',
@@ -268,15 +275,15 @@ void main() {
     expect(find.text('Disconnect Workspace'), findsNothing);
     expect(find.text('Reset local Workspace'), findsNothing);
     expect(find.text('MANAGEMENT DASHBOARD'), findsNothing);
-    expect(find.textContaining('v'), findsWidgets);
-    expect(find.byTooltip('Quit Conclave Workspace'), findsOneWidget);
+    expect(find.byTooltip('Quit Conclave Workspace'), findsNothing);
+    expect(find.byIcon(Icons.menu), findsOneWidget);
 
     await tester.tap(find.text('Sign in'));
     await tester.pump();
     expect(signInStarted, isTrue);
   });
 
-  testWidgets('locked shell hides management surfaces until unlock',
+  testWidgets('signed-in session routes directly to management shell',
       (tester) async {
     final credentials = _MemoryCredentialStore()
       ..values[desktopHumanCredentialKey] = jsonEncode({
@@ -290,7 +297,6 @@ void main() {
             .toUtc()
             .toIso8601String(),
       });
-    var unlockRequested = false;
     var managementVisible = false;
     await tester.pumpWidget(MaterialApp(
       home: WorkspaceShellRouter(
@@ -313,8 +319,6 @@ void main() {
         onConnectWorkspace: () async {},
         onSignOut: () async {},
         onQuit: () async {},
-        managementLocked: true,
-        onUnlock: () async => unlockRequested = true,
         managementShellBuilder: () {
           managementVisible = true;
           return const Text('MANAGEMENT DASHBOARD');
@@ -323,20 +327,8 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('Workspace is locked.'), findsOneWidget);
-    expect(find.text('Runtime is still connected.'), findsOneWidget);
-    expect(find.text('MANAGEMENT DASHBOARD'), findsNothing);
-    expect(find.text('Workers'), findsNothing);
-    expect(find.text('/private/work/root'), findsNothing);
-    expect(find.text('sensitive-machine-name'), findsNothing);
-    expect(managementVisible, isFalse);
-
-    await tester.ensureVisible(find.text('Unlock'));
-    await tester.tap(find.text('Unlock'));
-    await tester.pump();
-    expect(unlockRequested, isTrue);
-    expect(managementVisible, isFalse,
-        reason: 'the shell itself cannot change runtime or reveal controls');
+    expect(find.text('MANAGEMENT DASHBOARD'), findsOneWidget);
+    expect(managementVisible, isTrue);
   });
 
   testWidgets('signed-in disconnected account exposes explicit Connect action',
@@ -363,31 +355,30 @@ void main() {
         hostname: "Vitalii's MacBook Pro",
       ),
       credentialStore: credentials,
-      onRecoverCredential: () async => connectStarted = true,
+      onRecoverCredential: ([name]) async => connectStarted = true,
       signedIn: true,
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Signed in as'), findsOneWidget);
-    expect(find.text('Vitalii Noha'), findsOneWidget);
     expect(find.text('vitalii@example.com'), findsOneWidget);
-    expect(find.text('This computer is not connected as a Workspace.'),
-        findsOneWidget);
-    expect(find.text('Computer\nVitalii\'s MacBook Pro'), findsOneWidget);
-    expect(find.text('Connect Workspace'), findsOneWidget);
+    expect(find.text('Register'), findsOneWidget);
+    expect(find.text('Connect'), findsOneWidget);
     expect(find.text('Workers'), findsWidgets);
     await tester.tap(find.text('Workers').first);
     await tester.pumpAndSettle();
-    expect(find.text('Workers are unavailable'), findsOneWidget);
-    expect(find.text('Add Worker'), findsNothing);
+    expect(find.text('Add Worker'), findsOneWidget);
     await tester.tap(find.text('Workspace').first);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Connect Workspace'));
+    await tester.tap(find.text('Register'));
     expect(connectStarted, isTrue);
   });
 
   testWidgets('disconnected owned Workspace can be explicitly released',
       (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final credentials = _MemoryCredentialStore()
       ..values[desktopHumanCredentialKey] = jsonEncode({
         'credential': 'human-session-secret',
@@ -437,7 +428,7 @@ void main() {
             credentialStore: credentials,
             signedIn: true,
             onSignOut: () async {},
-            onRecoverCredential: () async {},
+            onRecoverCredential: ([name]) async {},
             onRelease: () async => released = true,
           ),
         ),
@@ -445,27 +436,19 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('Connect Workspace'), findsOneWidget);
-    expect(find.text('Workspace'), findsOneWidget);
+    expect(find.text('Connect'), findsOneWidget);
+    expect(find.text('Workspace'), findsWidgets);
     expect(find.text('Workers'), findsWidgets);
     await tester.tap(find.text('Workers').first);
     await tester.pumpAndSettle();
-    expect(
-      find.text('Connect this computer before configuring Workers.'),
-      findsOneWidget,
-    );
-    expect(find.text('Add Worker'), findsNothing);
+    expect(find.text('Add Worker'), findsOneWidget);
     await tester.tap(find.text('Workspace').first);
     await tester.pumpAndSettle();
-    expect(find.text('Connect Workspace'), findsOneWidget);
-    expect(find.text('Release Workspace from account'), findsNothing);
-    await tester.ensureVisible(find.text('Advanced & Diagnostics'));
-    await tester.tap(find.text('Advanced & Diagnostics'));
+    expect(find.text('Connect'), findsOneWidget);
+    expect(find.text('Release'), findsOneWidget);
+    await tester.ensureVisible(find.text('Release'));
     await tester.pumpAndSettle();
-    expect(find.text('Release Workspace from account'), findsOneWidget);
-    await tester.ensureVisible(find.text('Release Workspace from account'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Release Workspace from account'));
+    await tester.tap(find.text('Release'));
     expect(released, isTrue);
   });
 
@@ -719,6 +702,10 @@ void main() {
 
   testWidgets('offline Workspace displays recovery panel with retry',
       (tester) async {
+    tester.view.physicalSize = const Size(1000, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     var retried = false;
     var recoveryPrepared = false;
     String? copiedText;
@@ -737,6 +724,7 @@ void main() {
       tester,
       const HostUiSnapshot(
         mode: HostUiMode.offline,
+        desiredRuntimeConnected: true,
         title: 'Workspace is offline',
         detail: 'The Workspace could not connect.',
         issue: 'Network unavailable',
@@ -746,7 +734,7 @@ void main() {
         workspaceName: 'Development Mac',
       ),
       onRetry: () async => retried = true,
-      onRecoverCredential: () async => recoveryPrepared = true,
+      onRecoverCredential: ([name]) async => recoveryPrepared = true,
       credentialStore: _MemoryCredentialStore()
         ..values[desktopHumanCredentialKey] = jsonEncode({
           'credential': 'human-session',
@@ -764,9 +752,8 @@ void main() {
     expect(find.text('Network unavailable'), findsOneWidget);
     expect(find.text('Offline'), findsWidgets);
     expect(find.text('Pairing code'), findsNothing);
-    expect(find.widgetWithText(FilledButton, 'Connect'), findsNothing);
     expect(find.text('Retry connection'), findsOneWidget);
-    expect(find.text('Connect Workspace'), findsOneWidget);
+    expect(find.text('Connect'), findsOneWidget);
     expect(find.byTooltip('Copy error message'), findsOneWidget);
     await tester.tap(find.byTooltip('Copy error message'));
     await tester.pump();
@@ -774,9 +761,9 @@ void main() {
     expect(find.text('Error message copied'), findsOneWidget);
     await tester.tap(find.text('Retry connection'));
     expect(retried, isTrue);
-    await tester.ensureVisible(find.text('Connect Workspace'));
+    await tester.ensureVisible(find.text('Connect'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Connect Workspace'));
+    await tester.tap(find.text('Connect'));
     expect(recoveryPrepared, isTrue);
   });
 
@@ -812,7 +799,6 @@ void main() {
     expect(find.text('Workers'), findsWidgets);
     expect(find.text('Overview'), findsNothing);
     expect(find.text('Settings'), findsNothing);
-    expect(find.text('Diagnostics'), findsNothing);
     expect(find.text('Projects'), findsNothing);
     expect(find.text('Workspace management'), findsNothing);
 
@@ -822,15 +808,16 @@ void main() {
     // Lifecycle sections are visible without opening diagnostics.
     expect(find.text('Workspace'), findsWidgets);
     expect(find.text('MacBook Pro'), findsOneWidget);
-    expect(find.text('Connection'), findsOneWidget);
+    expect(find.text('Connection'), findsNothing);
     expect(find.text('Connected · WebSocket'), findsOneWidget);
-    expect(find.text('Startup'), findsOneWidget);
-    expect(find.text('Current work'), findsOneWidget);
+    expect(find.text('Start at login'), findsOneWidget);
+    expect(find.text('Startup'), findsNothing);
+    expect(find.text('Current work'), findsNothing);
     expect(find.text('Workers'), findsWidgets);
     expect(find.text('View Workers'), findsNothing);
     expect(find.text('Work Root'), findsOneWidget);
     expect(find.text('Application'), findsNothing);
-    expect(find.text('Advanced & Diagnostics'), findsOneWidget);
+    expect(find.text('Diagnostics'), findsOneWidget);
 
     // No pairing form is shown when paired
     expect(find.text('Connect this Workspace'), findsNothing);
@@ -843,9 +830,8 @@ void main() {
     expect(find.bySemanticsLabel('Workspace status'), findsNothing);
   });
 
-  testWidgets('header overflow menu provides AX, updates, about, and quit',
+  testWidgets('header overflow menu provides AX, updates, and about',
       (tester) async {
-    var quitCalled = false;
     var retryCalled = false;
 
     await pumpDashboard(
@@ -860,7 +846,6 @@ void main() {
         statusLabel: 'Connected',
         hostname: 'MacBook Pro',
       ),
-      onQuit: () => quitCalled = true,
       onRetry: () async => retryCalled = true,
     );
 
@@ -868,10 +853,8 @@ void main() {
     expect(find.text('MacBook Pro'), findsOneWidget);
     expect(find.text('Connected'), findsWidgets);
 
-    // Verify HUD Quit icon button is visible and clickable
-    expect(find.byTooltip('Quit Conclave Workspace'), findsOneWidget);
-    await tester.tap(find.byTooltip('Quit Conclave Workspace'));
-    expect(quitCalled, isTrue);
+    // Verify HUD Quit icon button is not shown
+    expect(find.byTooltip('Quit Conclave Workspace'), findsNothing);
 
     // Open overflow menu (3 lines icon)
     await tester.tap(find.byIcon(Icons.menu));
@@ -908,6 +891,7 @@ void main() {
       tester,
       const HostUiSnapshot(
         mode: HostUiMode.installFailure,
+        desiredRuntimeConnected: true,
         title: 'Worker update needs attention',
         detail: 'The last Worker update could not be installed.',
         issue: 'Signature rejected',
@@ -929,7 +913,6 @@ void main() {
       'advanced diagnostics accordion starts collapsed and exposes IDs, logs, metrics upon expansion',
       (tester) async {
     var exported = false;
-    var retried = false;
     String? copiedConnectionDetails;
     tester.view.physicalSize = const Size(800, 1600);
     tester.view.devicePixelRatio = 1;
@@ -970,16 +953,15 @@ void main() {
         webSocketUpgradeStatus: 'failed (HTTP 400)',
       ),
       onExportDiagnostics: () async => exported = true,
-      onRetry: () async => retried = true,
     );
 
-    expect(find.text('Advanced & Diagnostics'), findsOneWidget);
+    expect(find.text('Diagnostics'), findsOneWidget);
 
     // Before expanding, internal section headers and IDs are collapsed / not shown
     expect(find.text('Runtime ID'), findsNothing);
 
-    await tester.ensureVisible(find.text('Advanced & Diagnostics'));
-    await tester.tap(find.text('Advanced & Diagnostics'));
+    await tester.ensureVisible(find.text('Diagnostics'));
+    await tester.tap(find.text('Diagnostics'));
     await tester.pumpAndSettle();
 
     // After expanding, details are exposed
@@ -1015,11 +997,27 @@ void main() {
     expect(copiedConnectionDetails, contains('HTTP 400'));
     expect(copiedConnectionDetails, isNot(contains('Bearer')));
 
-    final retryButton = find.text('Retry connection');
-    await tester.ensureVisible(retryButton);
-    await tester.pumpAndSettle();
-    await tester.tap(retryButton);
-    expect(retried, isTrue);
+    // Diagnostics section does not show Retry connection button
+    expect(find.text('Retry connection'), findsNothing);
+  });
+
+  test('runtime credential diagnostics reflect desired runtime state', () {
+    const disconnected = HostUiSnapshot(
+      mode: HostUiMode.firstLaunch,
+      title: 'Connect this Workspace',
+      detail: 'Sign in first.',
+    );
+    const connectedWithoutCredential = HostUiSnapshot(
+      mode: HostUiMode.offline,
+      title: 'Workspace is offline',
+      detail: 'Runtime connection needs attention.',
+      desiredRuntimeConnected: true,
+    );
+
+    expect(disconnected.runtimeCredentialStatus,
+        'Not needed while Workspace is disconnected');
+    expect(connectedWithoutCredential.runtimeCredentialStatus,
+        'Missing from secure storage');
   });
 
   testWidgets('workspace tab separates status from advanced lifecycle actions',
@@ -1068,28 +1066,29 @@ void main() {
       credentialStore: credentials,
     );
 
+    expect(find.text('test@example.com'), findsOneWidget);
     expect(find.text('Work Root'), findsOneWidget);
     expect(find.text('/workspace/root'), findsOneWidget);
-    expect(find.text('Disconnect Workspace'), findsOneWidget);
-    expect(find.text('Sign out'), findsOneWidget);
-    await tester.ensureVisible(find.text('Disconnect Workspace'));
-    await tester.tap(find.text('Disconnect Workspace'));
+    expect(find.text('Disconnect'), findsOneWidget);
+    await tester.ensureVisible(find.text('Disconnect'));
+    await tester.tap(find.text('Disconnect'));
     expect(disconnected, isTrue);
-    await tester.ensureVisible(find.text('Sign out'));
-    await tester.tap(find.text('Sign out'));
-    expect(signedOut, isTrue);
-    await tester.tap(find.text('Advanced & Diagnostics'));
+    expect(find.byIcon(Icons.menu), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.menu));
     await tester.pumpAndSettle();
-    expect(find.text('Workspace management'), findsOneWidget);
+    expect(find.text('Sign out'), findsOneWidget);
+    await tester.tap(find.text('Sign out'));
+    await tester.pumpAndSettle();
+    expect(signedOut, isTrue);
 
-    final releaseButton = find.text('Release Workspace from account');
+    final releaseButton = find.text('Release');
     await tester.ensureVisible(releaseButton);
     await tester.pumpAndSettle();
     expect(releaseButton, findsOneWidget);
     await tester.tap(releaseButton);
     expect(released, isTrue);
 
-    final resetBtn = find.text('Reset local Workspace');
+    final resetBtn = find.text('Reset');
     await tester.ensureVisible(resetBtn);
     await tester.pumpAndSettle();
     expect(resetBtn, findsOneWidget);
@@ -1098,7 +1097,7 @@ void main() {
   });
 
   testWidgets(
-      'workspace tab renders read-only work root field with browse button and open folder button below',
+      'workspace tab renders read-only work root field with browse button and no open folder button',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;
@@ -1119,19 +1118,20 @@ void main() {
       ),
     );
 
-    // Verify read-only TextField
-    final textFieldFinder = find.widgetWithText(TextField, 'Work Root');
-    expect(textFieldFinder, findsOneWidget);
-    final textField = tester.widget<TextField>(textFieldFinder);
+    // Verify read-only TextField and title
+    expect(find.text('Work Root'), findsOneWidget);
+    final workRootTextFieldFinder =
+        find.widgetWithText(TextField, '/custom/work/root');
+    expect(workRootTextFieldFinder, findsOneWidget);
+    final textField = tester.widget<TextField>(workRootTextFieldFinder);
     expect(textField.readOnly, isTrue);
-    expect(find.text('/custom/work/root'), findsOneWidget);
 
     // Verify Browse button
     expect(find.text('Browse'), findsOneWidget);
 
-    // Verify Open folder button below with FilledButton style
+    // Verify Open folder button is deleted
     final openFolderBtn = find.widgetWithText(FilledButton, 'Open folder');
-    expect(openFolderBtn, findsOneWidget);
+    expect(openFolderBtn, findsNothing);
   });
 
   testWidgets('workers surface stays hidden until Workspace is Ready',
@@ -1386,5 +1386,125 @@ void main() {
       final worker = makeWorker(permissions: const []);
       expect(deriveLocalWorkerHealth(worker), 'Permission required');
     });
+  });
+
+  testWidgets(
+      'workspace tab respects registration and connection state for buttons and field editability',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final credentials = _MemoryCredentialStore()
+      ..values[desktopHumanCredentialKey] = jsonEncode({
+        'credential': 'human-session-secret',
+        'sessionId': 'session-1',
+        'userId': 'user-1',
+        'displayName': 'Vitalii Noha',
+        'email': 'vitalii@example.com',
+        'expiresAt': DateTime.now()
+            .add(const Duration(hours: 1))
+            .toUtc()
+            .toIso8601String(),
+      });
+
+    // Case 1: Unregistered workspace
+    await pumpDashboard(
+      tester,
+      const HostUiSnapshot(
+        mode: HostUiMode.firstLaunch,
+        title: 'Connect this Workspace',
+        detail: 'Sign in to register this computer.',
+        hostname: 'test-mac',
+        paired: false,
+        workspaceReady: false,
+      ),
+      credentialStore: credentials,
+      signedIn: true,
+      onConnect: () async {},
+      onRegister: ([name]) async {},
+      onReset: () {},
+    );
+    await tester.pumpAndSettle();
+
+    // Connect button is disabled
+    final connectBtn = tester
+        .widget<FilledButton>(find.widgetWithText(FilledButton, 'Connect'));
+    expect(connectBtn.onPressed, isNull);
+
+    // Register button is enabled
+    final registerBtn = tester
+        .widget<FilledButton>(find.widgetWithText(FilledButton, 'Register'));
+    expect(registerBtn.onPressed, isNotNull);
+
+    // Workspace name is editable and enabled
+    final nameField =
+        tester.widget<TextField>(find.widgetWithText(TextField, 'test-mac'));
+    expect(nameField.readOnly, isFalse);
+    expect(nameField.enabled, isTrue);
+
+    // Work Root is enabled when disconnected
+    final workRootField = tester
+        .widget<TextField>(find.widgetWithText(TextField, 'Not configured'));
+    expect(workRootField.enabled, isTrue);
+
+    // Browse button is enabled
+    final browseBtn =
+        tester.widget<TextButton>(find.widgetWithText(TextButton, 'Browse'));
+    expect(browseBtn.onPressed, isNotNull);
+
+    // Case 2: Registered and connected workspace
+    await pumpDashboard(
+      tester,
+      const HostUiSnapshot(
+        mode: HostUiMode.ready,
+        title: 'Workspace is ready',
+        detail: 'Ready',
+        paired: true,
+        workspaceId: 'ws-123',
+        workspaceReady: true,
+        cloudConnected: true,
+        workspaceName: 'Registered Mac',
+        workRootPath: '/workspace/root',
+      ),
+      credentialStore: credentials,
+      signedIn: true,
+      onDisconnect: () {},
+      onRelease: () async {},
+      onReset: () {},
+    );
+    await tester.pumpAndSettle();
+
+    // Disconnect button is enabled
+    final disconnectBtn = tester
+        .widget<FilledButton>(find.widgetWithText(FilledButton, 'Disconnect'));
+    expect(disconnectBtn.onPressed, isNotNull);
+
+    // Release button is enabled
+    final releaseBtn = tester
+        .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Release'));
+    expect(releaseBtn.onPressed, isNotNull);
+
+    // Reset button is enabled
+    final resetBtn = tester
+        .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Reset'));
+    expect(resetBtn.onPressed, isNotNull);
+
+    // Workspace name is read-only and disabled
+    final regNameField = tester
+        .widget<TextField>(find.widgetWithText(TextField, 'Registered Mac'));
+    expect(regNameField.readOnly, isTrue);
+    expect(regNameField.enabled, isFalse);
+
+    // Work root is disabled when connected
+    final regWorkRootField = tester
+        .widget<TextField>(find.widgetWithText(TextField, '/workspace/root'));
+    expect(regWorkRootField.enabled, isFalse);
+
+    // Browse button is disabled when connected
+    final disabledBrowseBtn =
+        tester.widget<TextButton>(find.widgetWithText(TextButton, 'Browse'));
+    expect(disabledBrowseBtn.onPressed, isNull);
   });
 }

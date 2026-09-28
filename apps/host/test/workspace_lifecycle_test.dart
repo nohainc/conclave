@@ -124,17 +124,20 @@ void main() {
       autoLockTimeout: Duration(minutes: 5),
       ownerUserId: 'user-1',
       ownerDisplayName: 'Ada',
+      customWorkspaceName: 'My Custom Office Mac',
     ));
 
     final restored = preferencesStore.readSync();
     expect(restored.desiredRuntime, DesiredRuntimeState.connected);
     expect(restored.ownerUserId, 'user-1');
     expect(restored.autoLockTimeout, const Duration(minutes: 5));
+    expect(restored.customWorkspaceName, 'My Custom Office Mac');
     final raw = await preferencesStore.file.readAsString();
     final json = jsonDecode(raw) as Map<String, dynamic>;
     expect(json['schemaVersion'],
         WorkspaceLifecyclePreferencesStore.currentSchemaVersion);
     expect(json['desiredRuntimeState'], 'connected');
+    expect(json['customWorkspaceName'], 'My Custom Office Mac');
     expect(json.containsKey('desiredRuntime'), isFalse);
     expect(raw, isNot(contains('credential')));
     expect(raw, isNot(contains('secret')));

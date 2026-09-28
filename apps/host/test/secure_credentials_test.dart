@@ -49,7 +49,7 @@ void main() {
 
     await store.delete(account);
     expect(await store.read(account), isNull);
-    expect(calls, ['write', 'read', 'delete', 'read']);
+    expect(calls, ['write', 'delete', 'read']);
   });
 
   test('Keychain read failure falls back without blocking startup', () async {

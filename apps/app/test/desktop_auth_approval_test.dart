@@ -54,12 +54,11 @@ void main() {
     expect(find.text('Return to Conclave Workspace to finish signing in.'),
         findsOneWidget);
     expect(
-        find.text(
-            'Your browser did not allow this tab to close. You can close it now.'),
-        findsOneWidget);
+        find.text('You can close this page, window, or tab.'), findsOneWidget);
+    expect(find.text('Close tab'), findsNothing);
   });
 
-  testWidgets('a remotely canceled intent closes its browser tab automatically',
+  testWidgets('a remotely canceled intent explains how to close the page',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: ConclaveAppShell(
@@ -77,7 +76,7 @@ void main() {
 
     expect(find.text('Sign-in canceled'), findsOneWidget);
     expect(
-        find.textContaining('did not allow this tab to close'), findsOneWidget);
-    expect(find.text('Close tab'), findsOneWidget);
+        find.text('You can close this page, window, or tab.'), findsOneWidget);
+    expect(find.text('Close tab'), findsNothing);
   });
 }

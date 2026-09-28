@@ -56,7 +56,9 @@ jobs:
           echo "CONCLAVE_MACOS_SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
           xcrun notarytool store-credentials conclave-notary --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --keychain "$KEYCHAIN_PATH"
           echo 'CONCLAVE_MACOS_NOTARY_PROFILE=conclave-notary' >> "$GITHUB_ENV"
-      - name: Build, test, sign, and notarize Workspace
+      - name: Run Workspace analysis and tests
+        run: bash scripts/test-workspace-macos.sh
+      - name: Build, sign, and notarize Workspace
         env:
           CONCLAVE_WORKSPACE_VERSION: ${{ inputs.version }}
           CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON }}
