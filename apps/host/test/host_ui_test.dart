@@ -187,8 +187,10 @@ void main() {
             onExportDiagnostics: onExportDiagnostics,
             onChangeWorkRoot: onChangeWorkRoot,
             localWorkerRegistry: localWorkerRegistry,
-            credentialStore:
-                credentialStore ?? const PlatformSecureCredentialStore(),
+            // Build-time widget tests must never read the developer's actual
+            // Keychain. Tests covering Keychain behavior provide a mocked
+            // native bridge explicitly.
+            credentialStore: credentialStore ?? _MemoryCredentialStore(),
             onAddWorker: onAddWorker,
           ),
         ),
