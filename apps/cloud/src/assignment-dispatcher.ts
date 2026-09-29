@@ -3,6 +3,10 @@ import {
   type AssignmentFailurePayload,
   type AssignmentCancelPayload,
 } from "@conclave/host-protocol";
+import {
+  canonicalExecutionErrorCode,
+  executionErrorMessage,
+} from "@conclave/protocol";
 import type { GatewayEnv } from "./host-gateway.js";
 import { selectProjectExecutionTarget } from "./v7-scheduler.js";
 import { recordExecutionWorkspaceAudit } from "./v5-accounting.js";
@@ -227,11 +231,11 @@ async function dispatchWorkspaceWorkerAssignment(
     input: task.input ?? {},
   };
   if (!env.CONCLAVE_WORKSPACE_GATEWAY) {
-    const error =
-      "Workspace Gateway is not configured; assignment was not dispatched";
+    const code = "provider_unavailable";
+    const error = executionErrorMessage(code);
     await recordAssignmentError(env.CONCLAVE_DB, assignmentId, {
       error: {
-        code: "WORKSPACE_GATEWAY_NOT_CONFIGURED",
+        code,
         message: error,
         retryable: true,
       },
@@ -278,10 +282,11 @@ async function dispatchWorkspaceWorkerAssignment(
     )
       .bind(new Date().toISOString(), assignmentId)
       .run();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+  } catch {
+    const code = "provider_unavailable";
+    const message = executionErrorMessage(code);
     await recordAssignmentError(env.CONCLAVE_DB, assignmentId, {
-      error: { code: "GATEWAY_DISPATCH_FAILED", message, retryable: true },
+      error: { code, message, retryable: true },
       failedAt: new Date().toISOString(),
     });
     return {
@@ -376,6 +381,15 @@ export async function recordAssignmentError(
   failure: AssignmentFailurePayload,
 ): Promise<void> {
   const now = new Date().toISOString();
+  const code = canonicalExecutionErrorCode(failure.error?.code);
+  const normalizedFailure: AssignmentFailurePayload = {
+    error: {
+      code,
+      message: executionErrorMessage(code),
+      retryable: failure.error?.retryable === true,
+    },
+    failedAt: now,
+  };
 
   const existing = await db
     .prepare(`SELECT status, task_id FROM worker_assignments WHERE id = ?1`)
@@ -395,14 +409,14 @@ export async function recordAssignmentError(
     .prepare(
       `UPDATE worker_assignments SET status = 'failed', error_json = ?1, updated_at = ?2 WHERE id = ?3`,
     )
-    .bind(JSON.stringify(failure), now, assignmentId)
+    .bind(JSON.stringify(normalizedFailure), now, assignmentId)
     .run();
 
   await db
     .prepare(
       "UPDATE workflow_tasks SET status = 'failed', error = ?1, updated_at = ?2 WHERE id = ?3",
     )
-    .bind(failure.error.message, now, existing.task_id)
+    .bind(normalizedFailure.error.message, now, existing.task_id)
     .run();
 }
 

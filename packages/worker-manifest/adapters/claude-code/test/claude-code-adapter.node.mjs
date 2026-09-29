@@ -32,7 +32,7 @@ test("Claude Code adapter validates auth and returns normalized headless output"
     child.stdin.write(
       JSON.stringify({
         type: "initialize.request",
-        protocolVersion: "1.0",
+        protocolVersion: "2.1",
         requestId: "i",
         workerTypeId: "claude-code",
         adapterVersion: "1.0.0",
@@ -40,8 +40,8 @@ test("Claude Code adapter validates auth and returns normalized headless output"
     );
     child.stdin.write(
       JSON.stringify({
-        type: "validate.request",
-        protocolVersion: "1.0",
+        type: "probe.request",
+        protocolVersion: "2.1",
         requestId: "v",
         config: {},
       }) + "\n",
@@ -49,7 +49,7 @@ test("Claude Code adapter validates auth and returns normalized headless output"
     child.stdin.write(
       JSON.stringify({
         type: "execute.request",
-        protocolVersion: "1.0",
+        protocolVersion: "2.1",
         requestId: "e",
         assignmentId: "a",
         model: "",
@@ -63,7 +63,7 @@ test("Claude Code adapter validates auth and returns normalized headless output"
     });
     const frames = output.trim().split("\n").map(JSON.parse);
     assert.equal(
-      frames.find((frame) => frame.type === "validate.result").ready,
+      frames.find((frame) => frame.type === "probe.result").ready,
       true,
     );
     assert.equal(

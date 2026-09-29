@@ -239,6 +239,7 @@ class Host {
     V7AdapterPackageStore? adapterPackageStore,
     LocalConfiguredWorkerRegistry? localWorkerRegistry,
     this.workerReadinessMonitor,
+    this.workerShutdownHandler,
     String Function(String)? redactLog,
     this.logFileMaxBytes = 1024 * 1024,
   })  : _configuredLogOutput = logOutput,
@@ -271,6 +272,7 @@ class Host {
   final V7AdapterPackageStore adapterPackageStore;
   final LocalConfiguredWorkerRegistry? localWorkerRegistry;
   final WorkerReadinessMonitor? workerReadinessMonitor;
+  final Future<void> Function()? workerShutdownHandler;
   final HostCloudConnection? cloudConnection;
   final HostStatusProvider? statusProvider;
   final HostStatusProvider? updateStatusProvider;
@@ -340,7 +342,11 @@ class Host {
       await subscription.cancel();
     }
     _signalSubscriptions.clear();
-    await cloudConnection?.close();
+    try {
+      await cloudConnection?.close();
+    } finally {
+      await workerShutdownHandler?.call();
+    }
     await File('${config.dataDirectory.path}/host-state.json').writeAsString(
       jsonEncode({
         'status': 'stopped',

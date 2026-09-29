@@ -4,6 +4,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:conclave_protocol/conclave_protocol.dart'
+    hide workerProtocolVersion;
+
 import 'cloud_connection.dart';
 import 'worker_protocol.dart';
 import 'process_tree.dart';
@@ -11,6 +14,11 @@ import 'runtime_capabilities.dart';
 import 'workstream_directory.dart';
 import 'worker_trust_policy.dart';
 import 'v7_adapter_protocol.dart';
+
+Map<String, Object?> _safeAdapterProbeConfig(Map<String, Object?> config) => {
+      for (final key in const ['endpointUrl', 'organizationId', 'projectId'])
+        if (config[key] is String) key: config[key] as String,
+    };
 
 /// Provider-independent guidance attached to every Workstream execution.
 /// It describes the local directory contract without exposing paths or
@@ -65,14 +73,17 @@ class WorkerProcessSpec {
   WorkerProcessSpec copyWith({
     String? workingDirectory,
     int? maxConcurrentAssignments,
+    Map<String, String>? environment,
+    Set<String>? allowedEnvironmentVariables,
   }) =>
       WorkerProcessSpec(
         workerId: workerId,
         executable: executable,
         arguments: arguments,
         workingDirectory: workingDirectory ?? this.workingDirectory,
-        environment: environment,
-        allowedEnvironmentVariables: allowedEnvironmentVariables,
+        environment: environment ?? this.environment,
+        allowedEnvironmentVariables:
+            allowedEnvironmentVariables ?? this.allowedEnvironmentVariables,
         secretValues: secretValues,
         maxConcurrentAssignments:
             maxConcurrentAssignments ?? this.maxConcurrentAssignments,
@@ -98,7 +109,9 @@ typedef WorkerProcessResolver = FutureOr<WorkerProcessSpec?> Function(
   String workerId,
 );
 typedef V7AdapterResolver = FutureOr<V7AdapterLaunch?> Function(
-    String workerId);
+  String workerId, {
+  String? expectedWorkerTypeId,
+});
 typedef WorkerProcessTerminator = Future<void> Function(
   Process process, {
   required bool force,
@@ -131,6 +144,8 @@ class WorkerProcessExecutor {
   final _reservedOperations = <String>{};
   final _cancelledBeforeLaunch = <String>{};
   final _operationWorkers = <String, String>{};
+  bool _shuttingDown = false;
+  Future<void>? _shutdownFuture;
 
   static Future<Process> _launch(WorkerProcessSpec spec) {
     final executableName = spec.executable.split(Platform.pathSeparator).last;
@@ -157,6 +172,9 @@ class WorkerProcessExecutor {
     String? operationId,
     WorkerNotificationHandler? onNotification,
   }) async {
+    if (_shuttingDown) {
+      throw StateError('Workspace is shutting down');
+    }
     if (maxStdoutBytes <= 0 || maxStderrBytes <= 0) {
       throw ArgumentError('worker output limits must be positive');
     }
@@ -210,22 +228,42 @@ class WorkerProcessExecutor {
     String? operationId,
     V7AdapterProgressHandler? onProgress,
   }) async {
+    if (_shuttingDown) {
+      throw const V7AdapterExecutionFailure(
+        code: 'cancelled',
+        message: 'Workspace is shutting down.',
+      );
+    }
     if (maxStdoutBytes <= 0 || maxStderrBytes <= 0) {
       throw ArgumentError('adapter output limits must be positive');
     }
     final processId = operationId ??
         'host-adapter-${DateTime.now().microsecondsSinceEpoch}-${++_operationSequence}';
     final elapsed = Stopwatch()..start();
-    await _acquireWorkerSlot(
-      spec.workerId,
-      spec.maxConcurrentAssignments,
-      processId,
-      timeout,
-    );
+    try {
+      await _acquireWorkerSlot(
+        spec.workerId,
+        spec.maxConcurrentAssignments,
+        processId,
+        timeout,
+      );
+    } on TimeoutException {
+      throw const V7AdapterExecutionFailure(
+        code: 'timeout',
+        message:
+            'The assignment exceeded its time limit while waiting for a local slot.',
+        retryable: true,
+      );
+    }
     final remaining = timeout - elapsed.elapsed;
     if (remaining <= Duration.zero) {
       _releaseWorkerSlot(spec.workerId, processId);
-      throw TimeoutException('Adapter timed out before launch', timeout);
+      throw const V7AdapterExecutionFailure(
+        code: 'timeout',
+        message:
+            'The assignment exceeded its time limit before execution started.',
+        retryable: true,
+      );
     }
     try {
       return await _executeV7AdapterProcess(
@@ -241,6 +279,12 @@ class WorkerProcessExecutor {
         maxStderrBytes: maxStderrBytes,
         operationId: processId,
         onProgress: onProgress,
+      );
+    } on TimeoutException {
+      throw const V7AdapterExecutionFailure(
+        code: 'timeout',
+        message: 'The assignment exceeded its time limit.',
+        retryable: true,
       );
     } finally {
       _releaseWorkerSlot(spec.workerId, processId);
@@ -265,13 +309,14 @@ class WorkerProcessExecutor {
     final elapsed = Stopwatch()..start();
     if (_cancelledBeforeLaunch.remove(operationId)) {
       await _terminateGracefully(process);
-      throw ProcessException(
-          'cancelled', const [], 'Adapter cancelled before launch');
+      throw const V7AdapterExecutionFailure(
+        code: 'cancelled',
+        message: 'The assignment was cancelled.',
+      );
     }
     _activeProcesses[operationId] = process;
     var stdoutBytes = 0;
     var stderrBytes = 0;
-    final stderrPreview = StringBuffer();
     final pending = <String, Completer<Map<String, Object?>>>{};
     var expectedAssignmentId = '';
     var expectedProgressRequestId = '';
@@ -286,8 +331,10 @@ class WorkerProcessExecutor {
     }
 
     _activeCancellations[operationId] = () {
-      fail(ProcessException(
-          'cancelled', const [], 'Adapter assignment cancelled'));
+      fail(const V7AdapterExecutionFailure(
+        code: 'cancelled',
+        message: 'The assignment was cancelled.',
+      ));
     };
     final stdoutSubscription = process.stdout
         .transform(StreamTransformer<List<int>, List<int>>.fromHandlers(
@@ -337,16 +384,16 @@ class WorkerProcessExecutor {
         });
     final stderrSubscription = process.stderr.listen((chunk) {
       stderrBytes += chunk.length;
-      if (stderrPreview.length < 4096) {
-        stderrPreview.write(utf8.decode(chunk, allowMalformed: true));
-      }
       if (stderrBytes > maxStderrBytes) {
         fail(StateError('adapter stderr exceeded $maxStderrBytes bytes'));
       }
     });
     unawaited(process.exitCode.then((code) {
       if (!failed && pending.values.any((item) => !item.isCompleted)) {
-        fail(StateError('adapter exited with code $code before replying'));
+        fail(const V7AdapterExecutionFailure(
+          code: 'execution_failed',
+          message: 'The local adapter stopped before completing the request.',
+        ));
       }
     }));
     Future<Map<String, Object?>> request(
@@ -377,10 +424,12 @@ class WorkerProcessExecutor {
       });
       pending.remove(requestId);
       if (frame['type'] == 'error') {
-        throw StateError(redactSecrets(
-          'adapter ${frame['code']}: ${frame['message']}',
-          spec.secretValues,
-        ));
+        final code = canonicalExecutionErrorCode(frame['code']);
+        throw V7AdapterExecutionFailure(
+          code: code,
+          message: executionErrorMessage(code),
+          retryable: frame['retryable'] == true,
+        );
       }
       if (frame['type'] != responseType) {
         throw StateError('adapter returned ${frame['type']} for $type');
@@ -397,29 +446,48 @@ class WorkerProcessExecutor {
       if (initialize['adapterVersion'] != adapterVersion) {
         throw StateError('adapter initialize version mismatch');
       }
-      final version = await request('version.request', 'version.result', {});
-      if (version['adapterVersion'] != adapterVersion ||
-          version['protocolVersion'] != v7AdapterProtocolVersion) {
-        throw StateError('adapter version handshake mismatch');
-      }
-      final health = await request('health.request', 'health.result', {});
-      if (health['healthy'] != true) {
-        throw StateError('adapter health check failed');
-      }
-      final validation = await request('validate.request', 'validate.result', {
-        'config': config,
+      final probe = await request('probe.request', 'probe.result', {
+        'config': _safeAdapterProbeConfig(config),
       });
-      if (validation['ready'] != true) {
-        throw StateError(redactSecrets(
-          'adapter validation failed: ${jsonEncode(validation['issues'])}',
-          spec.secretValues,
-        ));
+      if (probe['ready'] != true) {
+        final issues = probe['issues'] as List? ?? const [];
+        final issueCode = issues
+            .whereType<Map>()
+            .map((issue) => issue['code'])
+            .whereType<String>()
+            .firstWhere(
+              (value) => const {
+                'worker_not_ready',
+                'cli_not_found',
+                'authentication_required',
+                'unsupported_cli_version',
+                'permission_denied',
+                'permission_configuration_required',
+                'execution_test_failed',
+                'model_not_supported',
+                'quota_exhausted',
+                'provider_unavailable',
+                'timeout',
+                'cancelled',
+                'internal_adapter_error',
+                'execution_failed',
+              }.contains(value),
+              orElse: () => 'internal_adapter_error',
+            );
+        final code = canonicalExecutionErrorCode(switch (issueCode) {
+          'permission_configuration_required' => 'permission_denied',
+          'execution_test_failed' => 'execution_failed',
+          _ => issueCode,
+        });
+        throw V7AdapterExecutionFailure(
+          code: code,
+          message: executionErrorMessage(code),
+        );
       }
       if (validateOnly) {
         final remaining = timeout - elapsed.elapsed;
         if (remaining <= Duration.zero) {
-          throw TimeoutException(
-              'adapter credential validation timed out', timeout);
+          throw TimeoutException('adapter readiness probe timed out', timeout);
         }
         await process.stdin.close();
         final exitCode = await process.exitCode.timeout(remaining);
@@ -428,8 +496,7 @@ class WorkerProcessExecutor {
         }
         return {
           'validated': true,
-          'models':
-              List<String>.from(validation['models'] as List? ?? const []),
+          'models': List<String>.from(probe['models'] as List? ?? const []),
         };
       }
       expectedAssignmentId = operationId;
@@ -449,22 +516,31 @@ class WorkerProcessExecutor {
       await process.stdin.flush();
       final remaining = timeout - elapsed.elapsed;
       if (remaining <= Duration.zero) {
-        fail(TimeoutException('adapter execution timed out', timeout));
-        throw TimeoutException('adapter execution timed out', timeout);
+        const failure = V7AdapterExecutionFailure(
+          code: 'timeout',
+          message: 'The assignment exceeded its time limit.',
+          retryable: true,
+        );
+        fail(failure);
+        throw failure;
       }
       final result =
           await executeResponse.future.timeout(remaining, onTimeout: () {
-        fail(TimeoutException('adapter execution timed out', timeout));
-        throw TimeoutException(
-          'adapter execution timed out; stderr: ${redactSecrets(stderrPreview.toString(), spec.secretValues)}',
-          timeout,
+        const failure = V7AdapterExecutionFailure(
+          code: 'timeout',
+          message: 'The assignment exceeded its time limit.',
+          retryable: true,
         );
+        fail(failure);
+        throw failure;
       });
       if (result['type'] == 'error') {
-        throw StateError(redactSecrets(
-          'adapter ${result['code']}: ${result['message']}',
-          spec.secretValues,
-        ));
+        final code = canonicalExecutionErrorCode(result['code']);
+        throw V7AdapterExecutionFailure(
+          code: code,
+          message: executionErrorMessage(code),
+          retryable: result['retryable'] == true,
+        );
       }
       if (result['type'] != 'result' || result['assignmentId'] != operationId) {
         throw StateError('adapter terminal result correlation is invalid');
@@ -493,9 +569,9 @@ class WorkerProcessExecutor {
     }
   }
 
-  /// Runs an installed adapter's startup and declared health check without
-  /// sending Worker configuration, credentials, or an assignment prompt.
-  Future<void> checkV7AdapterHealth(
+  /// Runs an installed adapter's startup and declared health check. A caller
+  /// may request a tiny explicit execution test; routine probes omit it.
+  Future<Map<String, Object?>> checkV7AdapterHealth(
     WorkerProcessSpec spec, {
     required String workerTypeId,
     required String adapterVersion,
@@ -503,8 +579,10 @@ class WorkerProcessExecutor {
     Duration timeout = const Duration(seconds: 5),
     int maxStdoutBytes = 1024 * 1024,
     int maxStderrBytes = 256 * 1024,
+    bool allowNotReady = false,
+    String? executionTestPrompt,
   }) async {
-    if (!const {'protocol', 'process_exit'}.contains(healthCheckMode) ||
+    if (healthCheckMode != 'protocol' ||
         timeout <= Duration.zero ||
         maxStdoutBytes <= 0 ||
         maxStderrBytes <= 0) {
@@ -517,6 +595,7 @@ class WorkerProcessExecutor {
     var failed = false;
     Completer<Map<String, Object?>>? pending;
     String? expectedRequestId;
+    String? expectedResponseType;
     void fail(Object error) {
       if (failed) return;
       failed = true;
@@ -545,6 +624,8 @@ class WorkerProcessExecutor {
           try {
             final frame = parseV7AdapterFrame(line);
             if (frame['requestId'] == expectedRequestId &&
+                (frame['type'] == expectedResponseType ||
+                    frame['type'] == 'error') &&
                 pending != null &&
                 !pending!.isCompleted) {
               pending!.complete(frame);
@@ -576,6 +657,7 @@ class WorkerProcessExecutor {
       final requestId =
           'health-${DateTime.now().microsecondsSinceEpoch}-${++_requestSequence}';
       expectedRequestId = requestId;
+      expectedResponseType = responseType;
       final response = Completer<Map<String, Object?>>();
       pending = response;
       process.stdin.writeln(serializeV7AdapterFrame({
@@ -590,11 +672,8 @@ class WorkerProcessExecutor {
         throw TimeoutException('adapter $type timed out', remaining);
       });
       pending = null;
-      if (frame['type'] != responseType) {
+      if (frame['type'] != responseType && frame['type'] != 'error') {
         throw StateError('adapter returned an unexpected health response');
-      }
-      if (frame['type'] == 'error') {
-        throw StateError('adapter health error: ${frame['message']}');
       }
       return frame;
     }
@@ -605,31 +684,54 @@ class WorkerProcessExecutor {
         'workerTypeId': workerTypeId,
         'adapterVersion': adapterVersion,
       });
-      if (initialized['adapterVersion'] != adapterVersion) {
+      if (initialized['type'] == 'error' ||
+          initialized['adapterVersion'] != adapterVersion) {
         throw StateError('adapter initialize version mismatch');
       }
-      final version = await request('version.request', 'version.result', {});
-      if (version['adapterVersion'] != adapterVersion ||
-          version['protocolVersion'] != v7AdapterProtocolVersion) {
-        throw StateError('adapter version handshake mismatch');
+      final probe = await request('probe.request', 'probe.result', {});
+      if (probe['type'] == 'error' ||
+          probe['checkKind'] != 'readiness' ||
+          (probe['ready'] != true && !allowNotReady)) {
+        throw StateError('adapter readiness probe failed');
       }
-      if (healthCheckMode == 'protocol') {
-        final health = await request('health.request', 'health.result', {});
-        if (health['healthy'] != true) {
-          throw StateError('adapter protocol health check failed');
-        }
-      } else {
-        await process.stdin.close();
-        final remaining = timeout - elapsed.elapsed;
-        if (remaining <= Duration.zero) {
-          throw TimeoutException(
-              'adapter process-exit check timed out', timeout);
-        }
-        final code = await process.exitCode.timeout(remaining);
-        if (code != 0) {
-          throw StateError('adapter process-exit health check failed');
+      if (probe['ready'] == true && executionTestPrompt != null) {
+        final execution = await request('execute.request', 'result', {
+          'assignmentId':
+              'readiness-test-${DateTime.now().microsecondsSinceEpoch}',
+          'prompt': executionTestPrompt,
+        });
+        final resultText = execution['output'];
+        final successful = execution['type'] == 'result' &&
+            resultText is String &&
+            resultText.trim() == 'OK';
+        if (!successful) {
+          final errorCode = execution['code'];
+          final reasonCode = switch (errorCode) {
+            'cli_not_found' => 'cli_not_found',
+            'authentication_required' => 'authentication_required',
+            'permission_configuration_required' =>
+              'permission_configuration_required',
+            _ => 'execution_test_failed',
+          };
+          return {
+            ...probe,
+            'ready': false,
+            'issues': [
+              {
+                'code': reasonCode,
+                'message': switch (reasonCode) {
+                  'authentication_required' =>
+                    'Sign in to Antigravity on this computer, then test again.',
+                  'permission_configuration_required' =>
+                    'Update Antigravity permission settings, then test again.',
+                  _ => 'The Antigravity execution test did not complete.',
+                },
+              }
+            ],
+          };
         }
       }
+      return probe;
     } catch (_) {
       if (!failed) fail(StateError('adapter health check failed'));
       rethrow;
@@ -853,6 +955,33 @@ class WorkerProcessExecutor {
     return true;
   }
 
+  /// Stops accepting work and terminates every active, starting, and queued
+  /// process tree. A reserved operation cancelled during launch observes the
+  /// pre-launch cancellation marker immediately after its process is created.
+  Future<void> shutdown() => _shutdownFuture ??= _performShutdown();
+
+  Future<void> _performShutdown() async {
+    _shuttingDown = true;
+    final operations = _operationWorkers.keys.toList(growable: false);
+    for (final operationId in operations) {
+      await cancel(operationId);
+    }
+    // Cancellation may have raced a process launch. Wait until each operation
+    // has observed cancellation and completed its process cleanup path.
+    while (_operationWorkers.isNotEmpty) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      for (final operationId
+          in _operationWorkers.keys.toList(growable: false)) {
+        if (_activeProcesses.containsKey(operationId)) {
+          await cancel(operationId);
+        } else if (_reservedOperations.contains(operationId) ||
+            _queuedOperations.containsKey(operationId)) {
+          await cancel(operationId);
+        }
+      }
+    }
+  }
+
   /// Cancels every active, starting, or locally queued operation owned by a
   /// Worker before Workspace removes that Worker and its credentials.
   Future<int> cancelWorker(String workerId) async {
@@ -873,6 +1002,9 @@ class WorkerProcessExecutor {
     String operationId,
     Duration timeout,
   ) async {
+    if (_shuttingDown) {
+      throw StateError('Workspace is shutting down');
+    }
     if (_activeProcesses.containsKey(operationId) ||
         _queuedOperations.containsKey(operationId) ||
         _reservedOperations.contains(operationId)) {
@@ -909,6 +1041,9 @@ class WorkerProcessExecutor {
           );
         },
       );
+      if (_shuttingDown || _cancelledBeforeLaunch.contains(operationId)) {
+        throw StateError('Worker assignment was cancelled before launch');
+      }
     } finally {
       _queuedOperations.remove(operationId);
     }
@@ -953,6 +1088,8 @@ class V7AdapterLaunch {
     this.config = const {},
     this.defaultModel,
     this.allowedModels = const {},
+    this.executablePath,
+    this.cliVersion,
   });
 
   final WorkerProcessSpec processSpec;
@@ -961,6 +1098,19 @@ class V7AdapterLaunch {
   final Map<String, Object?> config;
   final String? defaultModel;
   final Set<String> allowedModels;
+  final String? executablePath;
+  final String? cliVersion;
+
+  V7AdapterLaunch copyWith({WorkerProcessSpec? processSpec}) => V7AdapterLaunch(
+        processSpec: processSpec ?? this.processSpec,
+        workerTypeId: workerTypeId,
+        adapterVersion: adapterVersion,
+        config: config,
+        defaultModel: defaultModel,
+        allowedModels: allowedModels,
+        executablePath: executablePath,
+        cliVersion: cliVersion,
+      );
 }
 
 Map<String, String> safeWorkerEnvironment(
@@ -1030,7 +1180,12 @@ class WorkerAssignmentHandler {
     if (workerId is! String || workerId.isEmpty) {
       throw StateError('assignment workerId is required');
     }
-    final v7Adapter = await resolveV7Adapter?.call(workerId);
+    final expectedWorkerTypeId = context.payload['workerTypeId'];
+    final v7Adapter = await resolveV7Adapter?.call(
+      workerId,
+      expectedWorkerTypeId:
+          expectedWorkerTypeId is String ? expectedWorkerTypeId : null,
+    );
     final spec = v7Adapter?.processSpec ?? await resolve(workerId);
     if (spec == null) throw StateError('worker is not installed: $workerId');
     rejectWorkerControlledPaths(context.payload);
@@ -1079,13 +1234,19 @@ class WorkerAssignmentHandler {
     if (requestedPermissions != null) {
       if (requestedPermissions is! List ||
           requestedPermissions.any((item) => item is! String)) {
-        throw StateError('assignment permissions must be a list of strings');
+        throw V7AdapterExecutionFailure(
+          code: 'permission_denied',
+          message: executionErrorMessage('permission_denied'),
+        );
       }
       final denied = requestedPermissions.whereType<String>().firstWhere(
           (permission) => !runtimePermissionAllowed(permission, allowed),
           orElse: () => '');
       if (denied.isNotEmpty) {
-        throw StateError('assignment permission is not allowed: $denied');
+        throw V7AdapterExecutionFailure(
+          code: 'permission_denied',
+          message: executionErrorMessage('permission_denied'),
+        );
       }
     }
     Future<HostAssignmentResult> execute() async {
@@ -1196,13 +1357,19 @@ class WorkerAssignmentHandler {
     if (requested != null &&
         adapter.allowedModels.isNotEmpty &&
         !adapter.allowedModels.contains(requested)) {
-      throw StateError('requested model is outside the local Worker policy');
+      throw V7AdapterExecutionFailure(
+        code: 'model_not_supported',
+        message: executionErrorMessage('model_not_supported'),
+      );
     }
     final selected = requested ?? adapter.defaultModel;
     if (selected != null &&
         adapter.allowedModels.isNotEmpty &&
         !adapter.allowedModels.contains(selected)) {
-      throw StateError('default model is outside the local Worker policy');
+      throw V7AdapterExecutionFailure(
+        code: 'model_not_supported',
+        message: executionErrorMessage('model_not_supported'),
+      );
     }
     return selected;
   }

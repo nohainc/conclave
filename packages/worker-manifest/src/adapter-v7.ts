@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EXECUTION_ERROR_CODES } from "@conclave/protocol";
 
 const nonEmpty = z.string().trim().min(1);
 const semver = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
@@ -65,7 +66,7 @@ export const V7AdapterManifestSchema = z
       .default([]),
     healthCheck: z
       .object({
-        mode: z.enum(["protocol", "process_exit"]),
+        mode: z.literal("protocol"),
         timeoutMs: z.number().int().min(100).max(30_000).default(5_000),
       })
       .strict(),
@@ -132,13 +133,40 @@ export function parseV7AdapterManifest(input: unknown): V7AdapterManifest {
   return V7AdapterManifestSchema.parse(input);
 }
 
-export const V7_ADAPTER_PROTOCOL_VERSION = "1.0" as const;
+export const V7_ADAPTER_PROTOCOL_VERSION = "2.1" as const;
 export const V7_ADAPTER_MAX_FRAME_BYTES = 1_048_576;
 
 const requestId = nonEmpty.max(128);
 const assignmentId = nonEmpty.max(128);
 const message = nonEmpty.max(16_384);
+const adapterVersion = nonEmpty.max(128);
+const safeEndpointUrl = z
+  .string()
+  .max(2048)
+  .refine((value) => {
+    try {
+      const url = new URL(value);
+      const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+      return (
+        (url.protocol === "https:" || (local && url.protocol === "http:")) &&
+        !url.username &&
+        !url.password &&
+        !url.search &&
+        !url.hash
+      );
+    } catch {
+      return false;
+    }
+  }, "Probe endpoint must not contain credentials or query data");
+const probeConfig = z
+  .object({
+    endpointUrl: safeEndpointUrl.optional(),
+    organizationId: z.string().max(256).optional(),
+    projectId: z.string().max(256).optional(),
+  })
+  .strict();
 const adapterCapabilities = z.array(nonEmpty.max(128)).max(128);
+const toolVersion = nonEmpty.max(128).nullable();
 const issues = z
   .array(z.object({ code: nonEmpty.max(128), message }).strict())
   .max(128);
@@ -153,34 +181,34 @@ export const V7AdapterMessageSchema = z.discriminatedUnion("type", [
     .extend({
       type: z.literal("initialize.request"),
       requestId,
-      workerTypeId: nonEmpty,
-      adapterVersion: nonEmpty,
+      workerTypeId: nonEmpty.max(128),
+      adapterVersion,
     })
     .strict(),
   requestBase
     .extend({
       type: z.literal("initialize.result"),
       requestId,
-      adapterVersion: nonEmpty,
+      adapterVersion,
       capabilities: adapterCapabilities,
     })
     .strict(),
   requestBase
     .extend({
-      type: z.literal("validate.request"),
+      type: z.literal("probe.request"),
       requestId,
-      config: z.record(
-        z.string(),
-        z.union([z.string().max(4096), z.number(), z.boolean(), z.null()]),
-      ),
+      config: probeConfig.optional(),
     })
     .strict(),
   requestBase
     .extend({
-      type: z.literal("validate.result"),
+      type: z.literal("probe.result"),
       requestId,
       ready: z.boolean(),
+      toolVersion,
+      checkKind: z.literal("readiness"),
       issues,
+      models: z.array(nonEmpty.max(256)).max(500).optional(),
     })
     .strict(),
   requestBase
@@ -226,29 +254,9 @@ export const V7AdapterMessageSchema = z.discriminatedUnion("type", [
       type: z.literal("error"),
       requestId,
       assignmentId: assignmentId.optional(),
-      code: nonEmpty.max(128),
+      code: z.enum(EXECUTION_ERROR_CODES),
       message,
-      retryable: z.boolean().default(false),
-    })
-    .strict(),
-  requestBase.extend({ type: z.literal("health.request"), requestId }).strict(),
-  requestBase
-    .extend({
-      type: z.literal("health.result"),
-      requestId,
-      healthy: z.boolean(),
-      message: z.string().max(2048).optional(),
-    })
-    .strict(),
-  requestBase
-    .extend({ type: z.literal("version.request"), requestId })
-    .strict(),
-  requestBase
-    .extend({
-      type: z.literal("version.result"),
-      requestId,
-      adapterVersion: nonEmpty,
-      protocolVersion: nonEmpty,
+      retryable: z.boolean(),
     })
     .strict(),
 ]);

@@ -4,6 +4,8 @@ const schemaPath = "packages/protocol/schema/conclave-message.schema.json";
 const schema = JSON.parse(await readFile(schemaPath, "utf8"));
 const protocolName = schema.properties.protocol.const;
 const protocolVersion = schema["x-protocol-version"];
+const executionErrorCodes = schema["x-execution-error-codes"];
+const executionErrorMessages = schema["x-execution-error-messages"];
 const messageTypes = schema["x-message-types"];
 const messagePayloads = schema["x-message-payloads"];
 const requiredFields = schema.required;
@@ -16,6 +18,14 @@ const localProtocols = schema["x-local-protocols"];
 if (
   typeof protocolName !== "string" ||
   typeof protocolVersion !== "string" ||
+  !Array.isArray(executionErrorCodes) ||
+  executionErrorCodes.length === 0 ||
+  executionErrorCodes.some((code) => typeof code !== "string") ||
+  typeof executionErrorMessages !== "object" ||
+  executionErrorMessages === null ||
+  executionErrorCodes.some(
+    (code) => typeof executionErrorMessages[code] !== "string",
+  ) ||
   !Array.isArray(requiredFields) ||
   requiredFields.some((field) => typeof field !== "string") ||
   !Array.isArray(messageTypes) ||
@@ -114,10 +124,25 @@ const tsPayloads = messageTypes
       `  ${messageType}: ${JSON.stringify(messagePayloads[messageType])},`,
   )
   .join("\n");
+const tsExecutionErrorCodes = executionErrorCodes
+  .map((code) => `  ${JSON.stringify(code)},`)
+  .join("\n");
+const tsExecutionErrorMessages = executionErrorCodes
+  .map(
+    (code) =>
+      `  ${JSON.stringify(code)}: ${JSON.stringify(executionErrorMessages[code])},`,
+  )
+  .join("\n");
 const ts = `// GENERATED FILE. Do not edit by hand.
 
 export const PROTOCOL_NAME = ${JSON.stringify(protocolName)} as const;
 export const PROTOCOL_VERSION = ${JSON.stringify(protocolVersion)} as const;
+export const EXECUTION_ERROR_CODES = [
+${tsExecutionErrorCodes}
+] as const;
+export const EXECUTION_ERROR_MESSAGES = {
+${tsExecutionErrorMessages}
+} as const;
 export const REQUIRED_ENVELOPE_FIELDS = [
 ${tsFields}
 ] as const;
@@ -264,6 +289,15 @@ const dartPayloads = messageTypes
       `  '${messageType}': '${messagePayloads[messageType].replaceAll("$", "\\$")}',`,
   )
   .join("\n");
+const dartExecutionErrorCodes = executionErrorCodes
+  .map((code) => `  '${code}',`)
+  .join("\n");
+const dartExecutionErrorMessages = executionErrorCodes
+  .map(
+    (code) =>
+      `  '${code}': '${executionErrorMessages[code].replaceAll("'", "\\'")}',`,
+  )
+  .join("\n");
 
 const dartHostMessageTypes = hostProtocol.messageTypes
   .map((messageType) => `  '${messageType}',`)
@@ -310,6 +344,12 @@ const dart = `// GENERATED FILE. Do not edit by hand.
 
 const protocolName = '${protocolName}';
 const protocolVersion = '${protocolVersion}';
+const executionErrorCodes = <String>{
+${dartExecutionErrorCodes}
+};
+const executionErrorMessages = <String, String>{
+${dartExecutionErrorMessages}
+};
 const requiredEnvelopeFields = <String>[
 ${dartFields}
 ];

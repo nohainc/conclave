@@ -50,12 +50,20 @@ Required protected configuration is declared by the workflow:
   and app-specific password secrets;
 - `CONCLAVE_WORKSPACE_ED25519_SEED` secret and
   `CONCLAVE_WORKSPACE_SIGNING_KEY_ID` variable;
+- `CONCLAVE_ADAPTER_ED25519_SEED` secret and
+  `CONCLAVE_ADAPTER_SIGNING_KEY_ID` variable; the configured public trust roots
+  must include this adapter key;
 - `CONCLAVE_RELEASE_PUBLISH_TOKEN` secret and `CLOUD_API_URL` variable;
 - `CONCLAVE_RELEASE_TRUST_KEYS_JSON` variable containing public roots.
 
-Use `scripts/build-workspace-macos.sh` for a local build. A local build may be
-unsigned and is not production release evidence. Apple signing/notarization is
-complementary to Conclave's signed release metadata.
+The build packages stable Codex and Antigravity adapters with the protected
+adapter signing key, verifies both archives against the configured public
+trust roots, and embeds them as app assets. Generated package archives and
+manifests are build outputs and are not committed. Use
+`scripts/build-workspace-macos.sh` for a local build with the adapter signing
+configuration available. A local build may be unsigned and is not production
+release evidence. Apple signing/notarization is complementary to Conclave's
+signed release metadata.
 
 ## Production readiness limit
 

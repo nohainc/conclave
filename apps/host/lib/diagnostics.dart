@@ -7,8 +7,9 @@ import 'host.dart';
 import 'platform_runtime.dart';
 import 'workspace_enrollment.dart';
 import 'v7_adapter_package_store.dart';
-import 'local_worker_setup.dart';
-import 'adapter_prerequisite.dart';
+import 'first_party_worker_adapter_descriptor.dart';
+import 'first_party_worker_adapter_probe.dart';
+import 'worker_readiness.dart';
 
 const _diagnosticSecretPattern =
     r'(secret|token|password|api[_-]?key|authorization|cookie|raw[_-]?credential|private[_-]?key)';
@@ -68,25 +69,22 @@ Future<Map<String, Object?>> buildHostDiagnostics({
     } on Object {
       // Keep diagnostics safe when the package is invalid or revoked.
     }
-    final matchingOptions = LocalWorkerTypeOption.supported
-        .where((item) => item.id == worker.workerTypeId);
-    final option = matchingOptions.isEmpty ? null : matchingOptions.first;
+    final descriptor = FirstPartyWorkerAdapterDescriptor.forProductWorkerTypeId(
+      worker.workerTypeId,
+    );
     final prerequisites = <Map<String, Object?>>[];
-    final declared = [
-      if (option?.executablePrerequisite != null)
-        option!.executablePrerequisite!,
-    ];
-    for (final prerequisite in declared) {
+    if (descriptor != null) {
       try {
-        final result = await probeAdapterExecutable(prerequisite);
+        final result =
+            await const FirstPartyWorkerAdapterProbe().probe(descriptor);
         prerequisites.add({
-          'executable': prerequisite.executable,
-          'satisfied': result.satisfied,
-          'version': result.detectedVersion,
+          'executable': result.executable,
+          'satisfied': result.versionProbe.satisfied,
+          'version': result.versionProbe.detectedVersion,
         });
       } on Object {
         prerequisites.add({
-          'executable': prerequisite.executable,
+          'executable': descriptor.executableCandidates.join(' or '),
           'satisfied': false,
         });
       }
@@ -96,8 +94,17 @@ Future<Map<String, Object?>> buildHostDiagnostics({
       'workerTypeId': worker.workerTypeId,
       'status': worker.status.name,
       'readinessState': worker.readinessState.wireValue,
+      if (descriptor != null)
+        'probeReasonCode':
+            firstPartyWorkerProbeReasonCodeForState(worker.readinessState)
+                .wireValue,
       'credentialStatus': worker.credentialStatus.name,
       'adapterVersion': adapter?['adapterVersion'],
+      'adapter': adapter,
+      'lastLiveTest': {
+        'at': worker.lastLiveTestAt,
+        'passed': worker.lastLiveTestPassed,
+      },
       'prerequisites': prerequisites,
     });
   }

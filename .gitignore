@@ -22,3 +22,5 @@ apps/site/.astro/
 apps/site/dist/
 apps/agent_app/pubspec.lock
 apps/agent_engine/pubspec.lock
+apps/host/assets/adapters/*.tgz
+apps/host/assets/adapters/*.json

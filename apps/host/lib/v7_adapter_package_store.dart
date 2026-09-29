@@ -6,7 +6,11 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 
+import 'bundled_adapter_package.dart';
 import 'configured_worker_registry.dart';
+import 'first_party_worker_adapter_descriptor.dart';
+import 'first_party_worker_cli_locator.dart';
+import 'adapter_prerequisite.dart';
 import 'v7_adapter_admission.dart';
 import 'worker_executor.dart';
 import 'worker_trust_policy.dart';
@@ -22,6 +26,8 @@ class V7AdapterPackageStore {
     WorkerProcessExecutor? executor,
     String? platform,
     this.maxPackageBytes = 512 * 1024 * 1024,
+    this.cliLocator = const FirstPartyWorkerCliExecutableLocator(),
+    this.loadBundledPackage,
   })  : platform = platform ?? _currentPlatform(),
         executor = executor ?? WorkerProcessExecutor();
 
@@ -31,6 +37,45 @@ class V7AdapterPackageStore {
   final WorkerProcessExecutor executor;
   final String platform;
   final int maxPackageBytes;
+  final FirstPartyWorkerCliExecutableLocator cliLocator;
+  final Future<BundledAdapterPackage?> Function(String workerTypeId)?
+      loadBundledPackage;
+
+  /// Makes a first-party adapter available without contacting Cloud. A
+  /// verified active release wins, then the verified last-known-good release,
+  /// then the signed package embedded in the Workspace application.
+  Future<bool> ensureFirstPartyAdapterAvailable(String workerTypeId) async {
+    final descriptor =
+        FirstPartyWorkerAdapterDescriptor.forAdapterPackageId(workerTypeId);
+    if (descriptor == null) return false;
+    if (await hasVerifiedActivePackage(
+        workerTypeId, descriptor.requiredLocalPermissions)) {
+      return true;
+    }
+    if (await restoreLastHealthyVersion(workerTypeId) &&
+        await hasVerifiedActivePackage(
+            workerTypeId, descriptor.requiredLocalPermissions)) {
+      return true;
+    }
+    final loader = loadBundledPackage;
+    if (loader == null) return false;
+    final bundled = await loader(workerTypeId);
+    if (bundled == null ||
+        bundled.manifest['workerTypeId'] != workerTypeId ||
+        bundled.manifest['releaseChannel'] != 'stable') {
+      return false;
+    }
+    try {
+      await installArchive(
+        archiveBytes: bundled.archiveBytes,
+        expectedManifest: bundled.manifest,
+      );
+    } on Object {
+      return false;
+    }
+    return hasVerifiedActivePackage(
+        workerTypeId, descriptor.requiredLocalPermissions);
+  }
 
   /// Extracts a Cloud-delivered gzip-compressed tar package into a private
   /// staging directory, rejects links and unsafe/duplicate paths, then applies
@@ -301,7 +346,9 @@ class V7AdapterPackageStore {
     required LocalConfiguredWorker worker,
     required SecureCredentialReader readCredential,
   }) async {
-    final adapterTypeId = adapterPackageTypeId(worker.workerTypeId);
+    final adapterTypeId = FirstPartyWorkerAdapterDescriptor.adapterPackageIdFor(
+      worker.workerTypeId,
+    );
     final activeFile = File(
         '${root.path}${Platform.pathSeparator}$adapterTypeId${Platform.pathSeparator}active.json');
     if (!await activeFile.exists()) return null;
@@ -367,13 +414,49 @@ class V7AdapterPackageStore {
       localConcurrencyLimit: worker.localConcurrencyLimit,
       availableSecrets: secrets,
     );
+    String? cliPath;
+    String? cliVersion;
+    final descriptor = FirstPartyWorkerAdapterDescriptor.forProductWorkerTypeId(
+        worker.workerTypeId);
+    var processSpec = spec;
+    if (descriptor != null && worker.executablePath != null) {
+      final located = await cliLocator.locate(
+        descriptor,
+        cachedPath: worker.executablePath,
+      );
+      if (located == null) {
+        throw const FirstPartyCliResolutionException.cliNotFound();
+      }
+      cliPath = located.path;
+      cliVersion = located.versionProbe.detectedVersion;
+      if (!located.versionProbe.satisfied) {
+        throw FirstPartyCliResolutionException.unsupportedVersion(
+          located.path,
+          located.versionProbe.detectedVersion,
+        );
+      }
+      processSpec = spec.copyWith(
+        environment: {
+          ...spec.environment,
+          'PATH': workspaceCliSearchPath(),
+          'CONCLAVE_CLI_EXECUTABLE': cliPath,
+        },
+        allowedEnvironmentVariables: {
+          ...spec.allowedEnvironmentVariables,
+          'PATH',
+          'CONCLAVE_CLI_EXECUTABLE',
+        },
+      );
+    }
     return V7AdapterLaunch(
-      processSpec: spec,
+      processSpec: processSpec,
       workerTypeId: adapterTypeId,
       adapterVersion: admitted.adapterVersion,
       config: Map.unmodifiable(worker.adapterConfig),
       defaultModel: worker.defaultModel,
       allowedModels: worker.allowedModels.toSet(),
+      executablePath: cliPath,
+      cliVersion: cliVersion,
     );
   }
 
@@ -382,7 +465,9 @@ class V7AdapterPackageStore {
   /// a version or capabilities to the Cloud projection.
   Future<Map<String, Object?>?> activeManifestSummary(
       LocalConfiguredWorker worker) async {
-    final adapterTypeId = adapterPackageTypeId(worker.workerTypeId);
+    final adapterTypeId = FirstPartyWorkerAdapterDescriptor.adapterPackageIdFor(
+      worker.workerTypeId,
+    );
     final activeFile = File(
         '${root.path}${Platform.pathSeparator}$adapterTypeId${Platform.pathSeparator}active.json');
     if (!await activeFile.exists()) return null;
@@ -422,7 +507,12 @@ class V7AdapterPackageStore {
       throw const FormatException('active V7 adapter capabilities are invalid');
     }
     return {
+      'adapterPackageId': adapterTypeId,
       'adapterVersion': version,
+      'publisher': admitted.publisher,
+      'signingKeyId': manifest['signingKeyId'],
+      'releaseChannel': manifest['releaseChannel'],
+      'signatureVerified': true,
       'capabilities': List<String>.unmodifiable(capabilities.cast<String>()),
     };
   }
@@ -610,18 +700,36 @@ class V7AdapterPackageStore {
     Directory packageRoot,
     V7AdapterAdmission admitted,
   ) async {
-    await executor.checkV7AdapterHealth(
-      WorkerProcessSpec(
-        workerId: 'adapter-health:${admitted.workerTypeId}',
-        executable: admitted.executable.path,
-        arguments: admitted.launchArgs,
-        workingDirectory: packageRoot.path,
-      ),
+    final descriptor = FirstPartyWorkerAdapterDescriptor.forAdapterPackageId(
+        admitted.workerTypeId);
+    var spec = WorkerProcessSpec(
+      workerId: 'adapter-health:${admitted.workerTypeId}',
+      executable: admitted.executable.path,
+      arguments: admitted.launchArgs,
+      workingDirectory: packageRoot.path,
+      environment: {'PATH': workspaceCliSearchPath()},
+      allowedEnvironmentVariables: const {'PATH'},
+    );
+    final probe = await executor.checkV7AdapterHealth(
+      spec,
       workerTypeId: admitted.workerTypeId,
       adapterVersion: admitted.adapterVersion,
       healthCheckMode: admitted.healthCheckMode,
       timeout: Duration(milliseconds: admitted.healthCheckTimeoutMs),
+      allowNotReady: descriptor != null,
     );
+    final issues = probe['issues'];
+    final localReadinessIssue = issues is List &&
+        issues.any((issue) =>
+            issue is Map &&
+            const {
+              'authentication_required',
+              'cli_not_found',
+              'tool_unavailable',
+            }.contains(issue['code']));
+    if (descriptor != null && probe['ready'] != true && !localReadinessIssue) {
+      throw StateError('first-party adapter readiness probe failed');
+    }
   }
 
   Future<void> _activate(Directory typeRoot, String version,

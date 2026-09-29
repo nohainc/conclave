@@ -22,7 +22,7 @@ export interface V7ExecutionTarget {
   readonly workspaceProjectGrantId: string;
   /** Configured Worker identity selected for this assignment. */
   readonly workerId: string;
-  /** Worker Type/catalog identity used to resolve the package. */
+  /** Product Worker Type ID reported by Workspace and selected by policy. */
   readonly workerTypeId: string;
   readonly workerVersion: string;
   readonly model: string | null;

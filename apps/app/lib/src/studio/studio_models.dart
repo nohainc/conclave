@@ -10,15 +10,27 @@ enum RunStatus {
   cancelled
 }
 
-enum TaskStatus { completed, running, ready, blocked, pending }
+enum TaskStatus {
+  completed,
+  running,
+  ready,
+  blocked,
+  pending,
+  failed,
+  cancelled
+}
 
 extension TaskStatusHelpers on TaskStatus {
   bool get isCompleted => this == TaskStatus.completed;
   bool get isRunning => this == TaskStatus.running;
   bool get isBlocked => this == TaskStatus.blocked;
+  bool get isFailed =>
+      this == TaskStatus.failed || this == TaskStatus.cancelled;
   bool get isPending => this == TaskStatus.pending || this == TaskStatus.ready;
   String get label => switch (this) {
         TaskStatus.completed => 'Completed',
+        TaskStatus.failed => 'Failed',
+        TaskStatus.cancelled => 'Cancelled',
         TaskStatus.running => 'Running',
         TaskStatus.ready => 'Ready',
         TaskStatus.blocked => 'Blocked',
@@ -29,7 +41,7 @@ extension TaskStatusHelpers on TaskStatus {
 extension StudioTaskHelpers on StudioTask {
   bool get isCompleted => status.isCompleted;
   bool get isRunning => status.isRunning;
-  bool get isFailed => status == TaskStatus.blocked;
+  bool get isFailed => status.isFailed || status == TaskStatus.blocked;
   String get stage => phase.isNotEmpty ? phase : 'Execution';
   String? get assignedWorkerId => worker.isNotEmpty ? worker : null;
 }
@@ -667,6 +679,8 @@ class StudioTask {
     required this.detail,
     required this.progress,
     required this.dependencies,
+    this.errorCode,
+    this.errorMessage,
   });
 
   final String id;
@@ -677,6 +691,8 @@ class StudioTask {
   final String detail;
   final double progress;
   final List<String> dependencies;
+  final String? errorCode;
+  final String? errorMessage;
 
   factory StudioTask.fromJson(Map<String, dynamic> json) => StudioTask(
       id: _string(json, 'id'),
@@ -688,7 +704,12 @@ class StudioTask {
       worker: _string(json, 'worker'),
       detail: _string(json, 'detail'),
       progress: (json['progress'] as num?)?.toDouble() ?? 0,
-      dependencies: _strings(json, 'dependencies'));
+      dependencies: _strings(json, 'dependencies'),
+      errorCode:
+          json['errorCode'] is String ? json['errorCode'] as String : null,
+      errorMessage: json['errorMessage'] is String
+          ? json['errorMessage'] as String
+          : null);
 }
 
 class StudioFinding {

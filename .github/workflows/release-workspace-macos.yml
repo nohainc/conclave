@@ -62,6 +62,8 @@ jobs:
         env:
           CONCLAVE_WORKSPACE_VERSION: ${{ inputs.version }}
           CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON }}
+          CONCLAVE_ADAPTER_ED25519_SEED: ${{ secrets.CONCLAVE_ADAPTER_ED25519_SEED }}
+          CONCLAVE_ADAPTER_SIGNING_KEY_ID: ${{ vars.CONCLAVE_ADAPTER_SIGNING_KEY_ID }}
         run: bash scripts/build-workspace-macos.sh
       - name: Verify notarized app archive
         env:

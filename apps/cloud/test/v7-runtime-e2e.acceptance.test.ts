@@ -129,9 +129,35 @@ describe("V7 runtime assignment acceptance", () => {
     fallbackServer = undefined;
   });
 
-  it.each(["websocket", "http_long_poll", "http_long_poll_handover"] as const)(
-    "executes V7-only work through the real Workspace child over %s and persists the result",
-    async (transportMode) => {
+  const scenarios = [
+    ...(
+      ["websocket", "http_long_poll", "http_long_poll_handover"] as const
+    ).map((transportMode) => ({
+      label: `${transportMode} fixture adapter`,
+      transportMode,
+      firstPartyAdapter: null,
+    })),
+    {
+      label: "Codex adapter with a fake CLI",
+      transportMode: "websocket" as const,
+      firstPartyAdapter: "codex",
+    },
+    {
+      label: "Antigravity adapter with a fake CLI",
+      transportMode: "websocket" as const,
+      firstPartyAdapter: "antigravity",
+    },
+  ] as const;
+
+  it.each(scenarios)(
+    "executes Cloud assignment through Workspace for $label and persists the result",
+    async ({ transportMode, firstPartyAdapter }) => {
+      const workerTypeId =
+        firstPartyAdapter === "codex"
+          ? "chatgpt"
+          : firstPartyAdapter === "antigravity"
+            ? "gemini"
+            : "fixture-worker";
       const sqlite = new DatabaseSync(":memory:");
       const gatewayLogs: string[] = [];
       vi.spyOn(console, "log").mockImplementation((record) => {
@@ -155,14 +181,16 @@ describe("V7 runtime assignment acceptance", () => {
       INSERT INTO execution_workspaces VALUES ('workspace-v7-e2e', 'owner', 'Test Workspace', 'online', '${now}', '${now}');
       INSERT INTO workspace_runtime_identities (id, workspace_id, credential_key_ref, credential_token_hash, created_at) VALUES ('runtime-v7-e2e', 'workspace-v7-e2e', 'secure-store-ref', '${runtimeCredentialHash}', '${now}');
       INSERT INTO workspace_sessions (id, workspace_id, runtime_identity_id, client_version, protocol_version, connected_at, last_heartbeat_at) VALUES ('session-v7-e2e', 'workspace-v7-e2e', 'runtime-v7-e2e', '1.0.0', '5.1', '${now}', '${now}');
-      INSERT INTO workers VALUES ('fixture-worker', 'Fixture Worker Type', 'active', '${now}', '${now}');
+      INSERT INTO workers VALUES ('${workerTypeId}', '${workerTypeId}', 'active', '${now}', '${now}');
       INSERT INTO projects (id, owner_user_id, name, description, created_at, updated_at) VALUES ('project-e2e', 'owner', 'Display Project Name', NULL, '${now}', '${now}');
       INSERT INTO project_memberships VALUES ('membership-e2e', 'project-e2e', 'owner', 'owner', '${now}', '${now}');
       INSERT INTO workspace_project_grants (id, project_id, workspace_id, granted_by_user_id, status, scope, allowed_permissions_json, allowed_worker_capabilities_json, concurrency_json, created_at, updated_at)
         VALUES ('grant-e2e', 'project-e2e', 'workspace-v7-e2e', 'owner', 'active', 'project_repository', '["repository:read","repository:write"]', '["code"]', '{"maxConcurrentAssignments":1}', '${now}', '${now}');
       INSERT INTO workstreams VALUES ('workstream-e2e', 'project-e2e', 'Display Workstream Name', 'active', '{}', 'owner', '${now}', '${now}');
+      INSERT INTO workstream_worker_usage_policies (workstream_id, policy_json, updated_by_user_id, updated_at)
+        VALUES ('workstream-e2e', '{"version":1,"fallbackPolicy":"configured_only","roles":{"implementer":{"workerId":"worker-local-v7-e2e","model":"fixture-model"}}}', 'owner', '${now}');
       INSERT INTO workstream_execution_policies (workstream_id, mode, primary_workspace_id, require_checkout, max_concurrent_work_requests, allowed_configured_worker_ids_json, allowed_worker_type_ids_json, allowed_providers_json, allowed_models_json)
-        VALUES ('workstream-e2e', 'stateless', NULL, 0, 1, '[]', '["fixture-worker"]', '[]', '["fixture-model"]');
+        VALUES ('workstream-e2e', 'stateless', NULL, 0, 1, '[]', '["${workerTypeId}"]', '[]', '["fixture-model"]');
       INSERT INTO runs (id, project_id, workstream_id, status, created_at, updated_at)
         VALUES ('run-e2e', 'project-e2e', 'workstream-e2e', 'created', '${now}', '${now}');
       INSERT INTO workflow_definitions (id, project_id, name, description, current_version_id, created_by_user_id, created_at, updated_at)
@@ -342,14 +370,13 @@ describe("V7 runtime assignment acceptance", () => {
           "bin/v7_runtime_e2e_bridge.dart",
           scratch,
           transportMode,
-          ...(transportMode !== "websocket"
-            ? [
-                `http://127.0.0.1:${
-                  (fallbackServer?.address() as { port: number }).port
-                }`,
-                runtimeCredential,
-              ]
-            : []),
+          transportMode !== "websocket"
+            ? `http://127.0.0.1:${
+                (fallbackServer?.address() as { port: number }).port
+              }`
+            : "",
+          transportMode !== "websocket" ? runtimeCredential : "",
+          firstPartyAdapter ?? "",
         ],
         {
           cwd: fileURLToPath(new URL("../../host/", import.meta.url)),
@@ -452,7 +479,7 @@ describe("V7 runtime assignment acceptance", () => {
         .first<Record<string, unknown>>();
       expect(inventory).toMatchObject({
         workspace_id: "workspace-v7-e2e",
-        worker_type_id: "fixture-worker",
+        worker_type_id: workerTypeId,
         status: "ready",
         credential_status: "not_required",
       });
@@ -617,7 +644,7 @@ describe("V7 runtime assignment acceptance", () => {
         .first<Record<string, unknown>>();
       expect(assignment).toMatchObject({
         status: "completed",
-        worker_id: "fixture-worker",
+        worker_id: workerTypeId,
         workspace_worker_id: "worker-local-v7-e2e",
         configured_worker_id: null,
         execution_workspace_id: "workspace-v7-e2e",
@@ -625,22 +652,36 @@ describe("V7 runtime assignment acceptance", () => {
       const persisted = JSON.parse(String(assignment?.output_json)) as {
         output?: { text?: string };
       };
-      const output = JSON.parse(String(persisted.output?.text)) as {
-        cwd: string;
-        file: string;
-      };
-      expect(output.cwd).toBe(
-        join(
-          realpathSync(scratch),
-          "work-root",
-          "project-e2e",
-          "workstream-e2e",
-        ),
+      const expectedCwd = join(
+        realpathSync(scratch),
+        "work-root",
+        "project-e2e",
+        "workstream-e2e",
       );
-      expect(output.file).toBe("written-by-real-adapter-process");
-      expect(readFileSync(join(output.cwd, "v7-e2e-output.txt"), "utf8")).toBe(
-        output.file,
-      );
+      if (firstPartyAdapter === null) {
+        const output = JSON.parse(String(persisted.output?.text)) as {
+          cwd: string;
+          file: string;
+        };
+        expect(output.cwd).toBe(expectedCwd);
+        expect(output.file).toBe("written-by-real-adapter-process");
+        expect(
+          readFileSync(join(output.cwd, "v7-e2e-output.txt"), "utf8"),
+        ).toBe(output.file);
+      } else {
+        const expectedOutput =
+          firstPartyAdapter === "codex"
+            ? "fake Codex execution completed"
+            : "fake Antigravity execution completed";
+        expect(persisted.output?.text).toBe(expectedOutput);
+        expect(
+          readFileSync(join(expectedCwd, "first-party-cli.txt"), "utf8").trim(),
+        ).toBe(
+          firstPartyAdapter === "codex"
+            ? "fake Codex execution"
+            : "fake Antigravity execution",
+        );
+      }
       expect(String(assignment?.output_json)).not.toMatch(
         /test-only-adapter-signing-secret|secure-store-ref|apiKey|cookie/i,
       );
@@ -660,7 +701,7 @@ describe("V7 runtime assignment acceptance", () => {
       ) as Record<string, unknown>;
       expect(permissionSnapshot).toMatchObject({
         configuredWorkerId: "worker-local-v7-e2e",
-        workerTypeId: "fixture-worker",
+        workerTypeId,
         workspaceId: "workspace-v7-e2e",
       });
       const task = await db
@@ -669,7 +710,9 @@ describe("V7 runtime assignment acceptance", () => {
         .first<Record<string, unknown>>();
       expect(task?.status).toBe("completed");
       expect(String(task?.output_json)).toContain(
-        "written-by-real-adapter-process",
+        firstPartyAdapter === null
+          ? "written-by-real-adapter-process"
+          : `fake ${firstPartyAdapter === "codex" ? "Codex" : "Antigravity"} execution completed`,
       );
     },
     60000,

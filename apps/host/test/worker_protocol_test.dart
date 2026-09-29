@@ -84,7 +84,7 @@ void main() {
     expect(
       () => WorkerIdentity.parse({
         'workerId': 'conclave.echo',
-        'protocolVersion': '2.0',
+        'protocolVersion': '2.1',
       }),
       throwsA(isA<WorkerProtocolViolation>()),
     );

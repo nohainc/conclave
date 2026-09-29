@@ -2,7 +2,7 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 
-const protocolVersion = "1.0";
+const protocolVersion = "2.1";
 let adapterVersion = "1.0.0";
 let child = null;
 let activeRequest = null;
@@ -118,23 +118,18 @@ async function handle(frame) {
         capabilities: ["code", "repository", "shell"],
       });
       break;
-    case "version.request":
-      send("version.result", frame.requestId, { adapterVersion });
-      break;
-    case "health.request":
-      send("health.result", frame.requestId, { healthy: true });
-      break;
-    case "validate.request": {
+    case "probe.request": {
       const ready = await authenticated();
-      send("validate.result", frame.requestId, {
+      send("probe.result", frame.requestId, {
         ready,
+        toolVersion: null,
+        checkKind: "readiness",
         issues: ready
           ? []
           : [
               {
                 code: "authentication_required",
-                message:
-                  "Sign in with `claude auth login`, then validate again.",
+                message: "Sign in with `claude auth login`, then check again.",
               },
             ],
       });
@@ -174,9 +169,11 @@ async function handle(frame) {
         send("error", frame.requestId, {
           assignmentId: frame.assignmentId,
           code: /auth|login|credential/i.test(message)
-            ? "authentication_expired"
-            : "claude_execution_failed",
-          message,
+            ? "authentication_required"
+            : "execution_failed",
+          message: /auth|login|credential/i.test(message)
+            ? "Sign in to the configured provider on this computer."
+            : "The assignment could not be completed.",
           retryable: /auth|login|credential/i.test(message),
         });
       } finally {
@@ -199,8 +196,8 @@ for await (const line of input) {
   } catch (error) {
     send("error", activeRequest ?? "invalid", {
       ...(activeAssignment ? { assignmentId: activeAssignment } : {}),
-      code: "invalid_request",
-      message: bounded(error.message, 2048),
+      code: "internal_adapter_error",
+      message: "The local Worker integration needs attention.",
       retryable: false,
     });
   }

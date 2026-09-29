@@ -156,12 +156,22 @@ class V7AdapterCatalogClient {
     String channel = 'stable',
     required bool allowActivation,
   }) async {
+    // Keep a locally verified release available before any Cloud operation.
+    // This seeds new Workspaces offline and leaves an installed fallback in
+    // place if catalog discovery or a later download fails.
+    if (allowActivation) {
+      await packageStore.ensureFirstPartyAdapterAvailable(workerTypeId);
+    }
     await refreshTrustState();
     // Revocation immediately blocks new assignments through inventory health,
     // but never swaps the process underneath an in-flight assignment.
     if (!allowActivation) return;
     if (!await packageStore.hasVerifiedActivePackage(workerTypeId)) {
-      await packageStore.restoreLastHealthyVersion(workerTypeId);
+      final restored =
+          await packageStore.restoreLastHealthyVersion(workerTypeId);
+      if (!restored) {
+        await packageStore.ensureFirstPartyAdapterAvailable(workerTypeId);
+      }
     }
     await installLatest(workerTypeId, channel: channel);
   }

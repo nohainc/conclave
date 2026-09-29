@@ -49,6 +49,26 @@ class _ReadModelClient extends http.BaseClient {
 }
 
 void main() {
+  test('reads canonical execution error details for Studio tasks', () {
+    final task = StudioTask.fromJson({
+      'id': 'task-error',
+      'title': 'Implement feature',
+      'phase': 'Execution',
+      'status': 'failed',
+      'worker': 'ChatGPT',
+      'detail': 'Implement feature',
+      'progress': 0,
+      'dependencies': <String>[],
+      'errorCode': 'authentication_required',
+      'errorMessage': 'Sign in to the configured provider on this computer.',
+    });
+
+    expect(task.status, TaskStatus.failed);
+    expect(task.errorCode, 'authentication_required');
+    expect(task.errorMessage,
+        'Sign in to the configured provider on this computer.');
+  });
+
   test('approves desktop sign-in without a comparison code', () async {
     final client = _JsonClient(const <String, dynamic>{}, statusCode: 200);
     final api = StudioApiClient(

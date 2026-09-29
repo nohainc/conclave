@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 import 'package:test/test.dart';
 
+import 'package:conclave_host/bundled_adapter_package.dart';
 import 'package:conclave_host/v7_adapter_catalog.dart';
 import 'package:conclave_host/v7_adapter_package_store.dart';
 import 'package:conclave_host/worker_trust_policy.dart';
@@ -54,17 +56,14 @@ Future<void> main() async {
   var version = '';
   await for (final line in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
     final request = jsonDecode(line) as Map<String, dynamic>;
-    final base = {'protocolVersion': '1.0', 'requestId': request['requestId']};
+    final base = {'protocolVersion': '2.1', 'requestId': request['requestId']};
     switch (request['type']) {
       case 'initialize.request':
         version = request['adapterVersion'] as String;
         stdout.writeln(jsonEncode({...base, 'type': 'initialize.result', 'adapterVersion': version, 'capabilities': <String>[]}));
         break;
-      case 'version.request':
-        stdout.writeln(jsonEncode({...base, 'type': 'version.result', 'adapterVersion': version}));
-        break;
-      case 'health.request':
-        stdout.writeln(jsonEncode({...base, 'type': 'health.result', 'healthy': true}));
+      case 'probe.request':
+        stdout.writeln(jsonEncode({...base, 'type': 'probe.result', 'ready': true, 'toolVersion': null, 'checkKind': 'readiness', 'issues': <Object>[] }));
         break;
     }
   }
@@ -80,7 +79,7 @@ Future<void> main() async {
     final manifest = <String, Object?>{
       'workerTypeId': 'codex',
       'adapterVersion': '1.0.0',
-      'protocolVersion': '1.0',
+      'protocolVersion': '2.1',
       'publisher': 'conclave',
       'displayName': 'Codex',
       'supportedPlatforms': [platform],
@@ -125,7 +124,7 @@ Future<void> main() async {
               'workerTypeId': 'codex',
               'version': '1.0.0',
               'channel': 'stable',
-              'protocolVersion': '1.0',
+              'protocolVersion': '2.1',
               'supportedPlatforms': [platform],
               'manifest': manifest,
               'packageDigest': digest,
@@ -161,6 +160,102 @@ Future<void> main() async {
       client.close();
       await server.close(force: true);
       await serving;
+    }
+  });
+
+  test('seeds bundled adapter before an offline Cloud reconciliation',
+      () async {
+    final offlineSource = Directory('${temp.path}/offline-bundle');
+    await Directory('${offlineSource.path}/bin').create(recursive: true);
+    await File('${offlineSource.path}/bin/adapter.dart').writeAsString('''
+import 'dart:convert';
+import 'dart:io';
+Future<void> main() async {
+  var version = '';
+  await for (final line in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
+    final request = jsonDecode(line) as Map<String, dynamic>;
+    final base = {'protocolVersion': '2.1', 'requestId': request['requestId']};
+    if (request['type'] == 'initialize.request') {
+      version = request['adapterVersion'] as String;
+      stdout.writeln(jsonEncode({...base, 'type': 'initialize.result', 'adapterVersion': version, 'capabilities': <String>[]}));
+    } else if (request['type'] == 'probe.request') {
+      stdout.writeln(jsonEncode({...base, 'type': 'probe.result', 'ready': true, 'toolVersion': null, 'checkKind': 'readiness', 'issues': <Object>[]}));
+    }
+  }
+}
+''');
+    await compileDartExecutable(
+      File('${offlineSource.path}/bin/adapter.dart'),
+      Directory('${offlineSource.path}/bin'),
+      name: 'adapter',
+    );
+    final digest = await store.digestDirectory(offlineSource);
+    final manifest = <String, Object?>{
+      'workerTypeId': 'codex',
+      'adapterVersion': '1.0.0',
+      'protocolVersion': '2.1',
+      'publisher': 'conclave',
+      'displayName': 'Codex',
+      'supportedPlatforms': [platform],
+      'capabilities': ['code'],
+      'permissions': <String>[],
+      'authStrategies': ['browser_auth'],
+      'modelSelectionMode': 'allow_list',
+      'prerequisites': <Object>[],
+      'executable': 'bin/adapter${Platform.isWindows ? '.exe' : ''}',
+      'launchArgs': <String>[],
+      'secretRequirements': <Object>[],
+      'healthCheck': {'mode': 'protocol', 'timeoutMs': 5000},
+      'packageDigest': digest,
+      'signingKeyId': fixtureKeyId,
+      'signature': '',
+      'releaseChannel': 'stable',
+    };
+    await fixture.signAdapterManifest(manifest, digest, publisher: 'conclave');
+    await File('${offlineSource.path}/manifest.json')
+        .writeAsString(jsonEncode(manifest));
+    final archive = Archive();
+    await for (final entity
+        in offlineSource.list(recursive: true, followLinks: false)) {
+      if (entity is! File) continue;
+      final name = entity.path
+          .substring(offlineSource.path.length + 1)
+          .replaceAll(Platform.pathSeparator, '/');
+      final entry = ArchiveFile.bytes(name, await entity.readAsBytes());
+      entry.mode = (await entity.stat()).mode & 0x1ff;
+      archive.addFile(entry);
+    }
+    final bundledBytes = Uint8List.fromList(
+      GZipEncoder().encode(TarEncoder().encode(archive)),
+    );
+    store = V7AdapterPackageStore(
+      root: Directory('${temp.path}/offline-installed'),
+      trustPolicy: trustPolicy,
+      allowedPermissions: WorkerPermission.values.toSet(),
+      platform: platform,
+      loadBundledPackage: (workerTypeId) async => workerTypeId == 'codex'
+          ? BundledAdapterPackage(
+              archiveBytes: bundledBytes,
+              manifest: manifest,
+            )
+          : null,
+    );
+    final client = V7AdapterCatalogClient(
+      cloudUri: Uri.parse('http://127.0.0.1:1'),
+      packageStore: store,
+      timeout: const Duration(milliseconds: 100),
+    );
+    try {
+      await expectLater(
+        client.reconcileWorker(
+          'codex',
+          allowActivation: true,
+        ),
+        throwsA(anything),
+      );
+      expect(await store.hasVerifiedActivePackage('codex'), isTrue);
+    } finally {
+      client.close();
     }
   });
 }

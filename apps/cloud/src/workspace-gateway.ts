@@ -1634,15 +1634,24 @@ export class WorkspaceGateway implements DurableObject {
         { status: 409 },
       );
     }
-    this.send({
-      protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
-      protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
-      messageId: `message-${crypto.randomUUID()}`,
-      timestamp: new Date().toISOString(),
-      type: "assignment.start",
-      ...body,
-      payload: body.payload,
-    });
+    let assignmentMessage: WorkspaceRuntimeMessage;
+    try {
+      assignmentMessage = parseWorkspaceRuntimeMessage({
+        protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
+        protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
+        messageId: `message-${crypto.randomUUID()}`,
+        timestamp: new Date().toISOString(),
+        type: "assignment.start",
+        ...body,
+        payload: body.payload,
+      });
+    } catch {
+      return Response.json(
+        { error: "Assignment must identify a product Worker Type" },
+        { status: 400 },
+      );
+    }
+    this.send({ ...assignmentMessage });
     return Response.json({ delivered: true });
   }
 

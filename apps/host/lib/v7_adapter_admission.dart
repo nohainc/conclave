@@ -3,6 +3,7 @@ import 'dart:io';
 import 'adapter_prerequisite.dart';
 import 'worker_executor.dart';
 import 'worker_trust_policy.dart';
+import 'v7_adapter_protocol.dart';
 
 /// A v7 adapter manifest admitted against the local machine's trust boundary.
 /// The caller must verify the downloaded package digest before constructing it.
@@ -85,7 +86,7 @@ class V7AdapterAdmission {
     if (workerTypeId != expectedWorkerTypeId ||
         !RegExp(r'^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$')
             .hasMatch(version) ||
-        protocolVersion != '1.0' ||
+        protocolVersion != v7AdapterProtocolVersion ||
         !RegExp(r'^[a-f0-9]{64}$').hasMatch(digest) ||
         digest != verifiedPackageDigest.toLowerCase()) {
       throw const FormatException(
@@ -132,7 +133,7 @@ class V7AdapterAdmission {
       AdapterExecutablePrerequisite.fromJson(prerequisite);
     }
     final health = _object(value['healthCheck'], 'healthCheck');
-    if (!const {'protocol', 'process_exit'}.contains(health['mode']) ||
+    if (health['mode'] != 'protocol' ||
         health['timeoutMs'] is! int ||
         (health['timeoutMs'] as int) < 100 ||
         (health['timeoutMs'] as int) > 30000) {

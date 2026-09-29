@@ -1,3 +1,5 @@
+import type { ExecutionErrorCode } from "@conclave/protocol";
+
 /**
  * Conclave AX current Core domain entities.
  *
@@ -253,7 +255,7 @@ export interface LegacyWorkerAssignment {
 export type AssignmentTerminalStatus = "completed" | "failed" | "cancelled";
 
 export interface AssignmentError {
-  readonly code: string;
+  readonly code: ExecutionErrorCode;
   readonly message: string;
   readonly retryable: boolean;
   readonly details?: Record<string, unknown>;

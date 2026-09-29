@@ -27,7 +27,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: flutter pub get
         working-directory: apps/host
-      - name: Real V7 Cloud to Workspace execution
+      - name: Cloud to Workspace E2E with fixture and fake provider CLIs
         run: DART_EXECUTABLE="$(command -v dart)" pnpm exec vitest run apps/cloud/test/v7-runtime-e2e.acceptance.test.ts apps/cloud/test/v7-inventory-recovery.acceptance.test.ts
 
   typescript:
@@ -51,6 +51,8 @@ jobs:
       - run: pnpm production:preflight
       - run: pnpm auth:access-guard
       - run: pnpm v4:architecture-guard
+      - name: Fake CLI adapter and protocol tests
+        run: pnpm worker-adapters:test
       - run: pnpm check
       - name: Real Cloud/D1 application E2E
         run: pnpm app:e2e

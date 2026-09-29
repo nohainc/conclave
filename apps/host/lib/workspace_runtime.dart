@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:conclave_protocol/conclave_protocol.dart';
 import 'package:conclave_host/host.dart';
+import 'package:conclave_host/bundled_adapter_asset_loader.dart';
 import 'package:conclave_host/host_configuration.dart';
 import 'package:conclave_host/assignment_journal.dart';
 import 'package:conclave_host/cloud_connection.dart';
+import 'package:conclave_host/first_party_worker_adapter_descriptor.dart';
 import 'package:conclave_host/worker_executor.dart';
 import 'package:conclave_host/workstream_directory.dart';
 import 'package:conclave_host/workstream_path.dart';
@@ -72,6 +75,7 @@ Future<Host> buildWorkspaceRuntime(
     root: WorkspacePaths(config.dataDirectory).adaptersDirectory,
     trustPolicy: workerTrustPolicy,
     allowedPermissions: _configuredPermissions(),
+    loadBundledPackage: loadBundledFirstPartyAdapter,
   );
   final adapterCatalog = config.cloudUri == null
       ? null
@@ -91,23 +95,83 @@ Future<Host> buildWorkspaceRuntime(
   final workerHandler = WorkerAssignmentHandler(
     executor: workerExecutor,
     resolve: (_) async => null,
-    resolveV7Adapter: (workerId) async {
+    resolveV7Adapter: (workerId, {expectedWorkerTypeId}) async {
       final worker = await localWorkerRegistry.find(workerId);
       if (worker == null) {
-        throw StateError('Workspace-owned Worker is not present locally');
+        throw V7AdapterExecutionFailure(
+          code: 'worker_not_ready',
+          message: executionErrorMessage('worker_not_ready'),
+        );
+      }
+      if (expectedWorkerTypeId != null &&
+          worker.workerTypeId != expectedWorkerTypeId) {
+        throw V7AdapterExecutionFailure(
+          code: 'worker_not_ready',
+          message: executionErrorMessage('worker_not_ready'),
+        );
       }
       if (worker.status != LocalWorkerStatus.ready ||
           (worker.authStrategy == 'api_key' &&
               worker.credentialStatus != LocalWorkerCredentialStatus.ready)) {
-        throw StateError('local Worker is not ready for execution');
+        final readinessCode = worker.credentialStatus ==
+                LocalWorkerCredentialStatus.needsAuthentication
+            ? 'authentication_required'
+            : switch (worker.readinessState) {
+                WorkerReadinessState.notInstalled => 'cli_not_found',
+                WorkerReadinessState.signInRequired =>
+                  'authentication_required',
+                WorkerReadinessState.unsupportedCliVersion =>
+                  'unsupported_cli_version',
+                WorkerReadinessState.adapterUnavailable =>
+                  'internal_adapter_error',
+                _ => 'worker_not_ready',
+              };
+        throw V7AdapterExecutionFailure(
+          code: readinessCode,
+          message: executionErrorMessage(readinessCode),
+        );
+      }
+      final descriptor =
+          FirstPartyWorkerAdapterDescriptor.forProductWorkerTypeId(
+              worker.workerTypeId);
+      if (descriptor != null && expectedWorkerTypeId == null) {
+        throw V7AdapterExecutionFailure(
+          code: 'worker_not_ready',
+          message: executionErrorMessage('worker_not_ready'),
+        );
+      }
+      if (descriptor != null &&
+          (worker.executablePath == null || worker.cliVersion == null)) {
+        final errorCode = worker.executablePath == null
+            ? 'cli_not_found'
+            : 'unsupported_cli_version';
+        throw V7AdapterExecutionFailure(
+          code: errorCode,
+          message: executionErrorMessage(errorCode),
+        );
       }
       final adapter = await v7AdapterPackageStore.resolve(
         worker: worker,
         readCredential: secureCredentialStore.read,
       );
       if (adapter == null) {
-        throw StateError(
-            'no trusted adapter is installed for ${worker.workerTypeId}');
+        throw V7AdapterExecutionFailure(
+          code: 'internal_adapter_error',
+          message: executionErrorMessage('internal_adapter_error'),
+        );
+      }
+      final executablePath = adapter.executablePath;
+      final cliVersion = adapter.cliVersion;
+      if (executablePath == null || cliVersion == null) return adapter;
+      if (worker.executablePath != executablePath ||
+          worker.cliVersion != cliVersion) {
+        await localWorkerRegistry.update(
+          worker.id,
+          (current) => current.copyWith(
+            executablePath: executablePath,
+            cliVersion: cliVersion,
+          ),
+        );
       }
       return adapter;
     },
@@ -209,7 +273,7 @@ Future<Host> buildWorkspaceRuntime(
                         LocalWorkerStatus.needsAttention => 'needs_attention',
                         LocalWorkerStatus.disabled => 'disabled',
                         LocalWorkerStatus.removed => 'removed',
-                },
+                      },
                 'readinessState': readinessState.wireValue,
                 'capabilities':
                     adapterSummary?['capabilities'] ?? const <String>[],
@@ -268,7 +332,9 @@ Future<Host> buildWorkspaceRuntime(
               item.status == LocalWorkerStatus.ready &&
               item.adapterVersionPolicy != null)) {
             await adapterCatalog.reconcileWorker(
-              adapterPackageTypeId(worker.workerTypeId),
+              FirstPartyWorkerAdapterDescriptor.adapterPackageIdFor(
+                worker.workerTypeId,
+              ),
               channel:
                   worker.adapterVersionPolicy == 'beta' ? 'beta' : 'stable',
               allowActivation: canActivate,
@@ -286,12 +352,15 @@ Future<Host> buildWorkspaceRuntime(
   final readinessMonitor = WorkerReadinessMonitor(
     registry: localWorkerRegistry,
     adapterStore: v7AdapterPackageStore,
+    executor: workerExecutor,
+    readCredential: secureCredentialStore.read,
   );
   final engine = Host(
     config: effectiveConfig,
     credentialStore: secureCredentialStore,
     localWorkerRegistry: localWorkerRegistry,
     workerReadinessMonitor: readinessMonitor,
+    workerShutdownHandler: workerExecutor.shutdown,
     cloudConnection: connection,
     adapterPackageStore: v7AdapterPackageStore,
     statusProvider: () async {

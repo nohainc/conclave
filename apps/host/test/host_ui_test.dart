@@ -5,6 +5,9 @@ import 'dart:io';
 import 'package:conclave_host/configured_worker_registry.dart';
 import 'package:conclave_host/cloud_connection.dart';
 import 'package:conclave_host/desktop_auth.dart';
+import 'package:conclave_host/adapter_prerequisite.dart';
+import 'package:conclave_host/first_party_worker_adapter_descriptor.dart';
+import 'package:conclave_host/first_party_worker_adapter_probe.dart';
 import 'package:conclave_host/main.dart';
 import 'package:conclave_host/platform_runtime.dart';
 import 'package:conclave_host/secure_credentials.dart';
@@ -86,6 +89,21 @@ class _FakeWorkerRegistry extends LocalConfiguredWorkerRegistry {
     throw StateError('Worker not found');
   }
 }
+
+Future<FirstPartyWorkerCliProbeResult> _fakeWorkerCliProbe(
+  FirstPartyWorkerAdapterDescriptor type, {
+  String? cachedExecutablePath,
+}) async =>
+    FirstPartyWorkerCliProbeResult(
+      executable: type.executableCandidates.first,
+      executablePath: cachedExecutablePath ??
+          '/test/bin/${type.executableCandidates.first}',
+      versionProbe: const AdapterPrerequisiteResult(
+        satisfied: true,
+        message: 'Version verified.',
+        detectedVersion: '1.2.3',
+      ),
+    );
 
 void main() {
   testWidgets('pairing error notification has a working copy action',
@@ -197,6 +215,7 @@ void main() {
             // Keychain. Tests covering Keychain behavior provide a mocked
             // native bridge explicitly.
             credentialStore: credentialStore ?? _MemoryCredentialStore(),
+            workerCliProbe: _fakeWorkerCliProbe,
             signedIn: signedIn,
           ),
         ),
@@ -429,6 +448,7 @@ void main() {
             onSignOut: () async {},
             onRecoverCredential: ([name]) async {},
             onRelease: () async => released = true,
+            workerCliProbe: _fakeWorkerCliProbe,
           ),
         ),
       ),
@@ -497,6 +517,7 @@ void main() {
           body: HostDashboard(
             snapshot: snapshot,
             credentialStore: credentials,
+            workerCliProbe: _fakeWorkerCliProbe,
           ),
         ),
       ),
@@ -817,7 +838,7 @@ void main() {
     expect(find.text('View Workers'), findsNothing);
     expect(find.text('Work Root'), findsOneWidget);
     expect(find.text('Application'), findsNothing);
-    expect(find.text('Diagnostics'), findsOneWidget);
+    expect(find.text('Advanced Diagnostics'), findsOneWidget);
 
     // No pairing form is shown when paired
     expect(find.text('Connect this Workspace'), findsNothing);
@@ -863,7 +884,6 @@ void main() {
     expect(find.text('Open Conclave AX'), findsOneWidget);
     expect(find.text('Check for Updates'), findsOneWidget);
     expect(find.text('About'), findsOneWidget);
-    expect(find.text('Advanced Diagnostics'), findsNothing);
 
     // Tap Check for Updates
     await tester.tap(find.text('Check for Updates'));
@@ -955,13 +975,13 @@ void main() {
       onExportDiagnostics: () async => exported = true,
     );
 
-    expect(find.text('Diagnostics'), findsOneWidget);
+    expect(find.text('Advanced Diagnostics'), findsOneWidget);
 
     // Before expanding, internal section headers and IDs are collapsed / not shown
     expect(find.text('Runtime ID'), findsNothing);
 
-    await tester.ensureVisible(find.text('Diagnostics'));
-    await tester.tap(find.text('Diagnostics'));
+    await tester.ensureVisible(find.text('Advanced Diagnostics'));
+    await tester.tap(find.text('Advanced Diagnostics'));
     await tester.pumpAndSettle();
 
     // After expanding, details are exposed
@@ -1224,11 +1244,14 @@ void main() {
       localPermissions: const ['workstream_filesystem', 'shell_execution'],
       localConcurrencyLimit: 1,
       adapterVersionPolicy: null,
-      status: LocalWorkerStatus.ready,
+      status: LocalWorkerStatus.needsAttention,
+      readinessState: WorkerReadinessState.adapterUnavailable,
       credentialStatus: LocalWorkerCredentialStatus.ready,
       revision: 1,
       createdAt: '2026-01-01T00:00:00Z',
       updatedAt: '2026-01-01T00:00:00Z',
+      lastLiveTestAt: '2026-01-02T03:04:05Z',
+      lastLiveTestPassed: false,
     );
 
     await pumpDashboard(
@@ -1251,6 +1274,14 @@ void main() {
 
     expect(find.text('ChatGPT'), findsOneWidget);
     expect(find.text('Gemini'), findsOneWidget);
+    expect(find.text('Conclave integration needs attention'), findsWidgets);
+    expect(find.textContaining('CLI usability:'), findsWidgets);
+    expect(find.textContaining('Last live test: Failed ·'), findsOneWidget);
+    expect(find.textContaining('Last live test: Not run'), findsOneWidget);
+    expect(find.textContaining('Adapter unavailable'), findsNothing);
+    expect(find.textContaining('Adapter version'), findsNothing);
+    expect(find.textContaining('Signature'), findsNothing);
+    expect(find.textContaining('Release channel'), findsNothing);
     expect(find.byType(ExpansionTile), findsNothing);
     expect(find.text('Save readiness'), findsNothing);
     expect(find.text('Authentication'), findsNothing);

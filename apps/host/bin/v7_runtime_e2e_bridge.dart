@@ -43,7 +43,7 @@ String _platform() {
 }
 
 Future<void> main(List<String> args) async {
-  if (args.isEmpty || args.length > 4) {
+  if (args.isEmpty || args.length > 5) {
     throw ArgumentError(
         'temporary Workspace data path and optional transport settings required');
   }
@@ -52,11 +52,23 @@ Future<void> main(List<String> args) async {
   final probeFallback = args.length > 1 && args[1] == 'http_long_poll_handover';
   final fallbackBaseUri = args.length > 2 ? Uri.parse(args[2]) : null;
   final runtimeCredential = args.length > 3 ? args[3] : '';
+  final firstPartyAdapter =
+      args.length > 4 && args[4].isNotEmpty ? args[4] : null;
+  if (firstPartyAdapter != null &&
+      !const {'codex', 'antigravity'}.contains(firstPartyAdapter)) {
+    throw ArgumentError('unknown first-party adapter fixture');
+  }
   await root.create(recursive: true);
   const workspaceId = 'workspace-v7-e2e';
   const runtimeId = 'runtime-v7-e2e';
   const workerId = 'worker-local-v7-e2e';
-  const typeId = 'fixture-worker';
+  final typeId = switch (firstPartyAdapter) {
+    'codex' => 'chatgpt',
+    'antigravity' => 'gemini',
+    _ => 'fixture-worker',
+  };
+  final adapterTypeId = firstPartyAdapter ?? typeId;
+  const modelId = 'fixture-model';
   const signingSeed = <int>[
     0,
     1,
@@ -94,6 +106,7 @@ Future<void> main(List<String> args) async {
   const allowedPermissions = {
     WorkerPermission.readWorkspace,
     WorkerPermission.writeWorkspace,
+    WorkerPermission.shell,
   };
   final signer = await Ed25519().newKeyPairFromSeed(signingSeed);
   final publicKey = await signer.extractPublicKey();
@@ -106,36 +119,45 @@ Future<void> main(List<String> args) async {
     idGenerator: () => workerId,
   );
   final worker = await registry.create(
-    name: 'V7 E2E local fixture',
+    name: firstPartyAdapter == null ? 'V7 E2E local fixture' : typeId,
     workerTypeId: typeId,
-    authStrategy: 'none',
-    defaultModel: 'fixture-model',
-    allowedModels: const ['fixture-model'],
-    localPermissions: const [
+    authStrategy: firstPartyAdapter == null ? 'none' : 'browser_auth',
+    defaultModel: modelId,
+    allowedModels: const [modelId],
+    localPermissions: [
       'repository:read',
       'repository:write',
       'workspace:read',
       'workspace:write',
+      if (firstPartyAdapter != null) 'shell:execute',
     ],
     localConcurrencyLimit: 1,
     adapterVersionPolicy: 'stable',
     status: LocalWorkerStatus.ready,
     credentialStatus: LocalWorkerCredentialStatus.notRequired,
+    executablePath: firstPartyAdapter == null
+        ? null
+        : '${root.path}${Platform.pathSeparator}source${Platform.pathSeparator}bin${Platform.pathSeparator}${firstPartyAdapter == 'codex' ? 'codex' : 'agy'}',
+    cliVersion: firstPartyAdapter == 'codex'
+        ? '1.2.3'
+        : firstPartyAdapter == 'antigravity'
+            ? '4.5.6'
+            : null,
   );
   final source = Directory('${root.path}/source');
   await Directory('${source.path}/bin').create(recursive: true);
-  await File('${source.path}/bin/adapter.dart').writeAsString(r'''
+  var adapterExecutable = 'bin/adapter';
+  if (firstPartyAdapter == null) {
+    await File('${source.path}/bin/adapter.dart').writeAsString(r'''
 import 'dart:convert';
 import 'dart:io';
 Future<void> main() async {
   await for (final line in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
     final request = jsonDecode(line) as Map<String, dynamic>;
-    final base = {'protocolVersion': '1.0', 'requestId': request['requestId']};
+    final base = {'protocolVersion': '2.1', 'requestId': request['requestId']};
     switch (request['type']) {
       case 'initialize.request': stdout.writeln(jsonEncode({...base, 'type': 'initialize.result', 'adapterVersion': '1.0.0', 'capabilities': <String>[]}));
-      case 'version.request': stdout.writeln(jsonEncode({...base, 'type': 'version.result', 'adapterVersion': '1.0.0'}));
-      case 'health.request': stdout.writeln(jsonEncode({...base, 'type': 'health.result', 'healthy': true}));
-      case 'validate.request': stdout.writeln(jsonEncode({...base, 'type': 'validate.result', 'ready': true, 'issues': <Object>[]}));
+      case 'probe.request': stdout.writeln(jsonEncode({...base, 'type': 'probe.result', 'ready': true, 'toolVersion': null, 'checkKind': 'readiness', 'issues': <Object>[]}));
       case 'execute.request':
         final cwd = Directory.current.path;
         await File('$cwd/v7-e2e-output.txt').writeAsString('written-by-real-adapter-process');
@@ -145,14 +167,55 @@ Future<void> main() async {
   }
 }
 ''');
-  final launcher = File('${source.path}/bin/adapter');
-  await launcher.writeAsString(r'''#!/bin/sh
+    final launcher = File('${source.path}/bin/adapter');
+    await launcher.writeAsString(r'''#!/bin/sh
 exec __DART__ "$(dirname "$0")/adapter.dart"
 '''
-      .replaceFirst('__DART__', Platform.resolvedExecutable));
-  final chmod = await Process.run('chmod', ['700', launcher.path]);
-  if (chmod.exitCode != 0) {
-    throw StateError('could not mark fixture executable');
+        .replaceFirst('__DART__', Platform.resolvedExecutable));
+    final chmod = await Process.run('chmod', ['700', launcher.path]);
+    if (chmod.exitCode != 0) {
+      throw StateError('could not mark fixture executable');
+    }
+  } else {
+    final repositoryRoot =
+        File(Platform.script.toFilePath()).parent.parent.parent.parent;
+    final adapterFileName = firstPartyAdapter == 'codex'
+        ? 'conclave-codex-adapter.mjs'
+        : 'conclave-antigravity-adapter.mjs';
+    final adapterSource = File(
+      '${repositoryRoot.path}${Platform.pathSeparator}packages${Platform.pathSeparator}worker-manifest${Platform.pathSeparator}adapters${Platform.pathSeparator}$firstPartyAdapter${Platform.pathSeparator}bin${Platform.pathSeparator}$adapterFileName',
+    );
+    await adapterSource.copy('${source.path}/bin/$adapterFileName');
+    adapterExecutable = 'bin/$adapterFileName';
+    final cliName = firstPartyAdapter == 'codex' ? 'codex' : 'agy';
+    final fakeCli = File('${source.path}/bin/$cliName');
+    await fakeCli.writeAsString(firstPartyAdapter == 'codex'
+        ? r'''#!/bin/sh
+if [ "$1" = "--version" ]; then echo 'codex 1.2.3'; exit 0; fi
+if [ "$1" = "login" ] && [ "$2" = "status" ]; then echo 'Logged in'; exit 0; fi
+cat >/dev/null
+printf '%s\n' 'fake Codex execution' > "$PWD/first-party-cli.txt"
+printf '%s\n' '{"type":"turn.started"}'
+printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"fake Codex execution completed"}}'
+printf '%s\n' '{"type":"turn.completed"}'
+'''
+        : r'''#!/bin/sh
+if [ "$1" = "--version" ]; then echo 'agy 4.5.6'; exit 0; fi
+cat >/dev/null
+printf '%s\n' 'fake Antigravity execution' > "$PWD/first-party-cli.txt"
+printf '%s\n' '{"event":"init","conversation_id":"fixture","init":{"cwd":"."}}'
+printf '%s\n' '{"event":"step_update","step_update":{"state":"RUNNING"}}'
+printf '%s\n' '{"event":"result","result":{"status":"SUCCESS","response":"fake Antigravity execution completed"}}'
+''');
+    final chmod = await Process.run('chmod', ['700', fakeCli.path]);
+    if (chmod.exitCode != 0) {
+      throw StateError('could not mark fake provider CLI executable');
+    }
+    final chmodAdapter = await Process.run(
+        'chmod', ['700', '${source.path}/$adapterExecutable']);
+    if (chmodAdapter.exitCode != 0) {
+      throw StateError('could not mark first-party adapter executable');
+    }
   }
 
   final store = V7AdapterPackageStore(
@@ -162,19 +225,27 @@ exec __DART__ "$(dirname "$0")/adapter.dart"
     platform: _platform(),
   );
   final digest = await store.digestDirectory(source);
+  final adapterPermissions = firstPartyAdapter == null
+      ? ['workspace:read', 'workspace:write']
+      : ['workspace:read', 'workspace:write', 'shell:execute'];
   final manifest = <String, Object?>{
-    'workerTypeId': typeId,
+    'workerTypeId': adapterTypeId,
     'adapterVersion': '1.0.0',
-    'protocolVersion': '1.0',
+    'protocolVersion': '2.1',
     'publisher': 'Conclave Test',
-    'displayName': 'V7 deterministic E2E fixture',
+    'displayName': firstPartyAdapter == null
+        ? 'V7 deterministic E2E fixture'
+        : firstPartyAdapter == 'codex'
+            ? 'Codex fake CLI E2E fixture'
+            : 'Antigravity fake CLI E2E fixture',
     'supportedPlatforms': [_platform()],
-    'capabilities': ['code'],
-    'permissions': ['workspace:read', 'workspace:write'],
-    'authStrategies': ['none'],
+    'capabilities':
+        firstPartyAdapter == null ? ['code'] : ['code', 'repository', 'shell'],
+    'permissions': adapterPermissions,
+    'authStrategies': [firstPartyAdapter == null ? 'none' : 'browser_auth'],
     'modelSelectionMode': 'allow_list',
     'prerequisites': <Object>[],
-    'executable': 'bin/adapter',
+    'executable': adapterExecutable,
     'launchArgs': <String>[],
     'secretRequirements': <Object>[],
     'healthCheck': {'mode': 'protocol', 'timeoutMs': 5000},
@@ -204,7 +275,7 @@ exec __DART__ "$(dirname "$0")/adapter.dart"
   final handler = WorkerAssignmentHandler(
     executor: WorkerProcessExecutor(),
     resolve: (_) async => null,
-    resolveV7Adapter: (id) async {
+    resolveV7Adapter: (id, {expectedWorkerTypeId}) async {
       final local = await registry.find(id);
       if (local == null || local.status != LocalWorkerStatus.ready) return null;
       return store.resolve(worker: local, readCredential: (_) => null);

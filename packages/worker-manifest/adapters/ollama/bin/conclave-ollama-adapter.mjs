@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createInterface } from "node:readline";
 
-const protocolVersion = "1.0";
+const protocolVersion = "2.1";
 const modelsLimit = 500;
 let adapterVersion = "1.0.0";
 let endpoint = "http://localhost:11434";
@@ -46,13 +46,7 @@ async function handle(frame) {
         capabilities: ["text_generation"],
       });
       break;
-    case "version.request":
-      send("version.result", frame.requestId, { adapterVersion });
-      break;
-    case "health.request":
-      send("health.result", frame.requestId, { healthy: true });
-      break;
-    case "validate.request": {
+    case "probe.request": {
       const configured = frame.config?.endpointUrl;
       try {
         const candidate = new URL(
@@ -74,22 +68,26 @@ async function handle(frame) {
           );
         endpoint = candidate.toString().replace(/\/$/, "");
         const models = await discover();
-        send("validate.result", frame.requestId, {
+        send("probe.result", frame.requestId, {
           ready: models.length > 0,
+          toolVersion: null,
+          checkKind: "readiness",
           issues: models.length
             ? []
             : [
                 {
                   code: "models_missing",
                   message:
-                    "Ollama is available, but no models are installed. Pull a model, then validate again.",
+                    "Ollama is available, but no models are installed. Pull a model, then check again.",
                 },
               ],
           models,
         });
       } catch (error) {
-        send("validate.result", frame.requestId, {
+        send("probe.result", frame.requestId, {
           ready: false,
+          toolVersion: null,
+          checkKind: "readiness",
           issues: [
             {
               code: "ollama_unavailable",
@@ -106,7 +104,7 @@ async function handle(frame) {
       if (!model) {
         send("error", frame.requestId, {
           assignmentId: frame.assignmentId,
-          code: "model_required",
+          code: "worker_not_ready",
           message: "Select an installed Ollama model.",
           retryable: false,
         });
@@ -121,7 +119,7 @@ async function handle(frame) {
         if (!installed.includes(model)) {
           send("error", frame.requestId, {
             assignmentId: frame.assignmentId,
-            code: "model_not_found",
+            code: "model_not_supported",
             message: "The selected model is not installed in Ollama.",
             retryable: false,
           });
@@ -151,8 +149,8 @@ async function handle(frame) {
       } catch (error) {
         send("error", frame.requestId, {
           assignmentId: frame.assignmentId,
-          code: "ollama_request_failed",
-          message: error.message || "Ollama request failed.",
+          code: "provider_unavailable",
+          message: "Ollama request failed. Review local service diagnostics.",
           retryable: true,
         });
       }
@@ -170,8 +168,8 @@ for await (const line of input) {
     await handle(JSON.parse(line));
   } catch (error) {
     send("error", "invalid", {
-      code: "invalid_request",
-      message: error.message || "Invalid request.",
+      code: "internal_adapter_error",
+      message: "The local Worker integration needs attention.",
       retryable: false,
     });
   }

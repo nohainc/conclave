@@ -55,7 +55,7 @@ void main() {
         StudioWorker(
           id: 'ready-1',
           workspaceId: 'workspace-1',
-          workerTypeId: 'codex',
+          workerTypeId: 'chatgpt',
           status: 'ready',
           readinessState: 'ready',
           localConcurrencyLimit: 1,

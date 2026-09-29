@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  EXECUTION_ERROR_CODES,
+  EXECUTION_ERROR_MESSAGES,
+} from "@conclave/protocol";
 
 export const WORKSPACE_RUNTIME_PROTOCOL_NAME =
   "conclave.workspace-runtime-protocol" as const;
@@ -46,11 +50,19 @@ export type WorkspaceRuntimeMessageType =
 
 const nonEmptyString = z.string().trim().min(1);
 const timestamp = z.string().datetime();
+const executionErrorCode = z.enum(EXECUTION_ERROR_CODES);
+
+/** Product-facing Worker Type IDs. Adapter package IDs are never valid here. */
+export const WorkspaceProductWorkerTypeIdSchema = nonEmptyString
+  .max(128)
+  .refine((id) => id !== "codex" && id !== "antigravity", {
+    message: "adapter package IDs are not Workspace product Worker Types",
+  });
 
 export const WorkspaceWorkerInventoryEntrySchema = z
   .object({
     workerId: nonEmptyString.max(128),
-    workerTypeId: nonEmptyString.max(128),
+    workerTypeId: WorkspaceProductWorkerTypeIdSchema,
     name: nonEmptyString.max(200),
     status: z.enum(["ready", "needs_attention", "disabled", "removed"]),
     authStrategy: z.enum(["none", "browser_auth", "api_key", "local_endpoint"]),
@@ -121,6 +133,61 @@ export const workspaceRuntimeEnvelopeSchema = z
         }
       }
     }
+    if (message.type === "assignment.start") {
+      const payload = z
+        .object({
+          snapshot: z
+            .object({
+              workerTypeId: WorkspaceProductWorkerTypeIdSchema,
+            })
+            .passthrough(),
+          input: z.record(z.string(), z.unknown()).optional(),
+        })
+        .passthrough()
+        .safeParse(message.payload);
+      if (!payload.success) {
+        for (const issue of payload.error.issues) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["payload", ...issue.path],
+            message: issue.message,
+          });
+        }
+      }
+    }
+    if (message.type === "assignment.error") {
+      const payload = z
+        .object({
+          error: z
+            .object({
+              code: executionErrorCode,
+              message: nonEmptyString.max(512),
+              retryable: z.boolean(),
+            })
+            .strict()
+            .superRefine((error, errorCtx) => {
+              if (error.message !== EXECUTION_ERROR_MESSAGES[error.code]) {
+                errorCtx.addIssue({
+                  code: z.ZodIssueCode.custom,
+                  path: ["message"],
+                  message:
+                    "assignment errors must use the canonical safe message",
+                });
+              }
+            }),
+        })
+        .passthrough()
+        .safeParse(message.payload);
+      if (!payload.success) {
+        for (const issue of payload.error.issues) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["payload", ...issue.path],
+            message: issue.message,
+          });
+        }
+      }
+    }
   });
 
 export type WorkspaceRuntimeMessage = z.infer<
@@ -143,5 +210,5 @@ export function parseWorkspaceRuntimeMessage(
 export function serializeWorkspaceRuntimeMessage(
   input: WorkspaceRuntimeMessage,
 ): string {
-  return JSON.stringify(workspaceRuntimeEnvelopeSchema.parse(input));
+  return JSON.stringify(parseWorkspaceRuntimeMessage(input));
 }

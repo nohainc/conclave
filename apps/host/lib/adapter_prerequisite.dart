@@ -195,19 +195,33 @@ Future<AdapterPrerequisiteResult> probeAdapterExecutable(
 /// interactive shell's PATH. Include common per-user and package-manager CLI
 /// locations while preserving paths explicitly supplied by the environment.
 String workspaceCliSearchPath() {
-  final home = Platform.environment['HOME'];
+  final environment = Platform.environment;
   final paths = <String>[
-    if (Platform.environment['PATH'] case final path?)
+    if (environment['PATH'] case final path?)
       ...path.split(Platform.isWindows ? ';' : ':'),
-    if (home != null && home.isNotEmpty) '$home/.local/bin',
-    if (home != null && home.isNotEmpty) '$home/.npm-global/bin',
-    if (!Platform.isWindows) '/opt/homebrew/bin',
-    if (!Platform.isWindows) '/usr/local/bin',
+    ...workspaceKnownCliDirectories(environment: environment),
   ];
   return paths
       .where((path) => path.isNotEmpty)
       .toSet()
       .join(Platform.isWindows ? ';' : ':');
+}
+
+/// Known install directories shared by version probing, authentication checks,
+/// and the first-party executable locator.
+List<String> workspaceKnownCliDirectories({
+  Map<String, String>? environment,
+}) {
+  final env = environment ?? Platform.environment;
+  final home = env['HOME'] ?? env['USERPROFILE'];
+  return [
+    if (home != null && home.isNotEmpty) '$home/.local/bin',
+    if (home != null && home.isNotEmpty) '$home/.npm-global/bin',
+    if (home != null && home.isNotEmpty) '$home/bin',
+    if (!Platform.isWindows) '/opt/homebrew/bin',
+    if (!Platform.isWindows) '/usr/local/bin',
+    if (!Platform.isWindows) '/opt/local/bin',
+  ];
 }
 
 int _compareVersions(String left, String right) {

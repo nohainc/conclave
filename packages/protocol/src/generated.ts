@@ -2,6 +2,34 @@
 
 export const PROTOCOL_NAME = "conclave.protocol" as const;
 export const PROTOCOL_VERSION = "0.1" as const;
+export const EXECUTION_ERROR_CODES = [
+  "worker_not_ready",
+  "cli_not_found",
+  "authentication_required",
+  "unsupported_cli_version",
+  "model_not_supported",
+  "permission_denied",
+  "quota_exhausted",
+  "provider_unavailable",
+  "timeout",
+  "cancelled",
+  "internal_adapter_error",
+  "execution_failed",
+] as const;
+export const EXECUTION_ERROR_MESSAGES = {
+  "worker_not_ready": "The selected Worker is not ready on its Workspace.",
+  "cli_not_found": "The required local CLI could not be found.",
+  "authentication_required": "Sign in to the configured provider on this computer.",
+  "unsupported_cli_version": "The installed local CLI version is not supported.",
+  "model_not_supported": "The selected model is not supported by this Worker.",
+  "permission_denied": "A local permission required for this assignment was denied.",
+  "quota_exhausted": "The provider's usage limit has been reached.",
+  "provider_unavailable": "The provider is temporarily unavailable.",
+  "timeout": "The assignment exceeded its time limit.",
+  "cancelled": "The assignment was cancelled.",
+  "internal_adapter_error": "The local Worker integration needs attention.",
+  "execution_failed": "The assignment could not be completed.",
+} as const;
 export const REQUIRED_ENVELOPE_FIELDS = [
   "protocol",
   "version",

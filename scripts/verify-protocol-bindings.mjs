@@ -14,6 +14,24 @@ if (schema["x-protocol-version"] !== "0.1") {
 if (schema.properties.protocol.const !== "conclave.protocol") {
   throw new Error("canonical protocol schema has an unexpected protocol name");
 }
+const executionErrorCodes = schema["x-execution-error-codes"];
+const executionErrorMessages = schema["x-execution-error-messages"];
+if (
+  !Array.isArray(executionErrorCodes) ||
+  executionErrorCodes.length === 0 ||
+  typeof executionErrorMessages !== "object" ||
+  executionErrorMessages === null ||
+  executionErrorCodes.some(
+    (code) =>
+      typeof code !== "string" ||
+      typeof executionErrorMessages[code] !== "string",
+  ) ||
+  Object.keys(executionErrorMessages).some(
+    (code) => !executionErrorCodes.includes(code),
+  )
+) {
+  throw new Error("canonical execution error taxonomy is incomplete");
+}
 const requiredFields = schema.required;
 const messageTypes = schema["x-message-types"];
 const messagePayloads = schema["x-message-payloads"];
@@ -102,6 +120,14 @@ if (!typescript.includes('from "./generated.js"')) {
   throw new Error(
     "TypeScript protocol binding does not import generated constants",
   );
+}
+for (const code of executionErrorCodes) {
+  if (
+    !generated.includes(JSON.stringify(code)) ||
+    !generatedDart.includes(`'${code}'`)
+  ) {
+    throw new Error(`generated execution error taxonomy is missing ${code}`);
+  }
 }
 const hostProtocol = schema["x-host-protocol"];
 if (

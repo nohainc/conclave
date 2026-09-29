@@ -14,7 +14,7 @@ void main() {
     final value = <String, Object?>{
       'workerTypeId': 'codex',
       'adapterVersion': '1.2.3',
-      'protocolVersion': '1.0',
+      'protocolVersion': '2.1',
       'publisher': 'Conclave',
       'displayName': 'Codex',
       'supportedPlatforms': ['linux-x64'],

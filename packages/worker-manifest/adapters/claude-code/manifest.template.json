@@ -1,7 +1,7 @@
 {
   "workerTypeId": "claude-code",
   "adapterVersion": "1.0.0",
-  "protocolVersion": "1.0",
+  "protocolVersion": "2.1",
   "publisher": "conclave",
   "displayName": "Claude Code",
   "supportedPlatforms": [

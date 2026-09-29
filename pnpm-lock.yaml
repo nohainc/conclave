@@ -95,6 +95,9 @@ importers:
 
   packages/host-protocol:
     dependencies:
+      '@conclave/protocol':
+        specifier: workspace:*
+        version: link:../protocol
       zod:
         specifier: ^4.1.11
         version: 4.6.5
@@ -125,6 +128,9 @@ importers:
 
   packages/worker-manifest:
     dependencies:
+      '@conclave/protocol':
+        specifier: workspace:*
+        version: link:../protocol
       zod:
         specifier: ^3.24.2
         version: 3.25.76

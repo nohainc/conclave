@@ -63,6 +63,8 @@ while [[ $# -gt 0 ]]; do
       echo "  CONCLAVE_MACOS_SIGN_IDENTITY         Signing identity"
       echo "  CONCLAVE_MACOS_NOTARY_PROFILE        Keychain profile for notarization"
       echo "  CONCLAVE_RELEASE_TRUST_KEYS_JSON     Public Ed25519 trust roots"
+      echo "  CONCLAVE_ADAPTER_ED25519_SEED        Adapter package signing seed"
+      echo "  CONCLAVE_ADAPTER_SIGNING_KEY_ID      Adapter package signing key ID"
       exit 0
       ;;
     *)
@@ -82,6 +84,32 @@ echo "Building Conclave Workspace $VERSION for macOS (mode: $MODE)"
 cd "$HOST_DIR"
 flutter clean
 flutter pub get
+
+if [[ -z "${CONCLAVE_ADAPTER_ED25519_SEED:-}" || -z "${CONCLAVE_ADAPTER_SIGNING_KEY_ID:-}" ]]; then
+  echo "Bundled first-party adapters require CONCLAVE_ADAPTER_ED25519_SEED and CONCLAVE_ADAPTER_SIGNING_KEY_ID." >&2
+  exit 1
+fi
+
+ADAPTER_ASSET_DIR="$HOST_DIR/assets/adapters"
+mkdir -p "$ADAPTER_ASSET_DIR"
+rm -f "$ADAPTER_ASSET_DIR/codex.tgz" "$ADAPTER_ASSET_DIR/codex.json" \
+  "$ADAPTER_ASSET_DIR/antigravity.tgz" "$ADAPTER_ASSET_DIR/antigravity.json"
+
+for ADAPTER_ID in codex antigravity; do
+  ARCHIVE="$ADAPTER_ASSET_DIR/$ADAPTER_ID.tgz"
+  MANIFEST="$ARCHIVE.manifest.json"
+  CONCLAVE_WORKER_TRUST_PUBLISHER=conclave \
+  CONCLAVE_RELEASE_SIGNING_SEED="$CONCLAVE_ADAPTER_ED25519_SEED" \
+  CONCLAVE_RELEASE_SIGNING_KEY_ID="$CONCLAVE_ADAPTER_SIGNING_KEY_ID" \
+    dart run bin/package_v7_adapter.dart \
+      --source "../../packages/worker-manifest/adapters/$ADAPTER_ID" \
+      --output "$ARCHIVE" --channel stable
+  dart run \
+    -DCONCLAVE_RELEASE_TRUST_KEYS_JSON="${CONCLAVE_RELEASE_TRUST_KEYS_JSON:-{}}" \
+    bin/verify_v7_adapter_release.dart "$ARCHIVE" "$MANIFEST"
+  cp "$MANIFEST" "$ADAPTER_ASSET_DIR/$ADAPTER_ID.json"
+  rm -f "$MANIFEST"
+done
 
 if [[ "$MODE" == "debug" ]]; then
   flutter build macos --debug \

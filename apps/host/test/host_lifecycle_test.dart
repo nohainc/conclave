@@ -196,6 +196,23 @@ void main() {
     expect(lifecycle.running, isFalse);
   });
 
+  test('Host shutdown invokes the Worker process-tree shutdown hook', () async {
+    final directory = await Directory.systemTemp.createTemp('conclave-stop-');
+    var shutdownCalls = 0;
+    final host = Host(
+      config: HostConfig(dataDirectory: directory),
+      workerShutdownHandler: () async {
+        shutdownCalls++;
+      },
+    );
+
+    await host.start();
+    await host.stop();
+    await host.stop();
+
+    expect(shutdownCalls, 1);
+  });
+
   test('pause and resume affect assignment intake, not runtime lifecycle',
       () async {
     final directory = await Directory.systemTemp.createTemp('conclave-pause-');

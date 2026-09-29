@@ -6,6 +6,14 @@ export 'realtime_events.dart';
 export 'workspace_runtime_protocol.dart';
 import 'generated_protocol.dart';
 
+bool isExecutionErrorCode(Object? value) => executionErrorCodes.contains(value);
+
+String canonicalExecutionErrorCode(Object? value) =>
+    isExecutionErrorCode(value) ? value! as String : 'internal_adapter_error';
+
+String executionErrorMessage(Object? code) =>
+    executionErrorMessages[canonicalExecutionErrorCode(code)]!;
+
 class ProtocolException implements Exception {
   const ProtocolException(this.message);
   final String message;

@@ -50,9 +50,8 @@ Future<void> completeHandshake(
 
   final legacy = connection.uri.path.contains('/host') &&
       !connection.uri.path.contains('workspace-gateway');
-  final protocol = legacy
-      ? 'conclave.host-protocol'
-      : 'conclave.workspace-runtime-protocol';
+  final protocol =
+      legacy ? 'conclave.host-protocol' : 'conclave.workspace-runtime-protocol';
   final version = legacy ? '4.1' : workspaceRuntimeProtocolVersion;
   final helloType = legacy ? 'host.hello' : 'workspace.hello';
   await waitFor(() => socket.sent.any((message) =>
@@ -812,6 +811,62 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('reports normalized adapter failures to Cloud without changing codes',
+      () async {
+    final socket = FakeSocket();
+    final connection = HostCloudConnection(
+      uri: Uri.parse('wss://cloud.test/host'),
+      hostId: 'host-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      assignmentHandler: (_) async => throw const V7AdapterExecutionFailure(
+        code: 'quota_exhausted',
+        message:
+            'The provider rejected this request because a usage limit was reached.',
+        retryable: false,
+      ),
+    );
+    await connection.connect();
+    await completeHandshake(connection, socket);
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.host-protocol',
+      'protocolVersion': '4.1',
+      'messageId': 'server-normalized-adapter-error',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'assignment.start',
+      'workspaceId': 'workspace-1',
+      'hostId': 'host-1',
+      'workerId': 'worker-1',
+      'runId': 'run-error',
+      'taskId': 'task-error',
+      'attemptId': 'attempt-error',
+      'assignmentId': 'assignment-error',
+      'idempotencyKey': 'idem-error',
+      'payload': {
+        'objective': 'test normalized error',
+        'role': 'implementer',
+        'workerId': 'chatgpt',
+        'resolvedWorkerVersion': '1.0.0',
+        'input': {},
+        'contextArtifactIds': [],
+        'timeoutMs': 1000,
+      },
+    }));
+    await waitFor(() => socket.sent.any((message) {
+          final decoded = jsonDecode(message as String) as Map<String, dynamic>;
+          return decoded['type'] == 'assignment.error';
+        }));
+    final errorMessage = socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .firstWhere((message) => message['type'] == 'assignment.error');
+    final error = (errorMessage['payload'] as Map<String, dynamic>)['error']
+        as Map<String, dynamic>;
+    expect(error['code'], 'quota_exhausted');
+    expect(error['retryable'], isFalse);
+    expect(error['message'], contains('usage limit'));
+    await connection.close();
+  });
+
   test('paused or draining Workspace rejects new assignments', () async {
     final socket = FakeSocket();
     var executions = 0;
@@ -1018,7 +1073,7 @@ void main() {
         .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
         .firstWhere((message) => message['type'] == 'assignment.error');
     expect((error['payload'] as Map<String, dynamic>)['error']['code'],
-        'assignment_context_mismatch');
+        'worker_not_ready');
     await connection.close();
   });
 
@@ -1057,7 +1112,7 @@ void main() {
         .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
         .firstWhere((message) => message['type'] == 'assignment.error');
     expect((error['payload'] as Map<String, dynamic>)['error']['code'],
-        'malformed_assignment');
+        'execution_failed');
     await connection.close();
   });
 

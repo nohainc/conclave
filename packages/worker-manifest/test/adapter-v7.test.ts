@@ -93,6 +93,84 @@ describe("Architecture v7 adapter manifest and protocol", () => {
     ).toThrow(/1 MB protocol limit/);
   });
 
+  it("requires request IDs and accepts only the bounded secret-free probe shape", () => {
+    const probe = {
+      type: "probe.result",
+      protocolVersion: V7_ADAPTER_PROTOCOL_VERSION,
+      requestId: "probe-1",
+      ready: true,
+      toolVersion: "1.2.3",
+      checkKind: "readiness",
+      issues: [],
+    } as const;
+    expect(parseV7AdapterFrame(JSON.stringify(probe))).toEqual(probe);
+    expect(() =>
+      parseV7AdapterFrame(
+        JSON.stringify({ ...probe, providerToken: "secret-value" }),
+      ),
+    ).toThrow();
+    expect(() =>
+      parseV7AdapterFrame(JSON.stringify({ ...probe, requestId: undefined })),
+    ).toThrow();
+    expect(() =>
+      parseV7AdapterFrame(
+        JSON.stringify({ ...probe, toolVersion: "v".repeat(129) }),
+      ),
+    ).toThrow();
+    expect(() =>
+      parseV7AdapterFrame(
+        JSON.stringify({
+          ...probe,
+          issues: [{ code: "x", message: "y", secret: "z" }],
+        }),
+      ),
+    ).toThrow();
+  });
+
+  it("allows only canonical provider-independent execution error codes", () => {
+    const error = {
+      type: "error",
+      protocolVersion: V7_ADAPTER_PROTOCOL_VERSION,
+      requestId: "error-1",
+      assignmentId: "assignment-1",
+      code: "permission_denied",
+      message: "A local permission required for this assignment was denied.",
+      retryable: false,
+    } as const;
+    expect(parseV7AdapterFrame(JSON.stringify(error))).toEqual(error);
+    expect(() =>
+      parseV7AdapterFrame(
+        JSON.stringify({ ...error, code: "tool_permission_denied" }),
+      ),
+    ).toThrow();
+  });
+
+  it("allows only non-secret, bounded probe configuration", () => {
+    const request = {
+      type: "probe.request",
+      protocolVersion: V7_ADAPTER_PROTOCOL_VERSION,
+      requestId: "probe-request-1",
+      config: { endpointUrl: "https://api.example.test/v1" },
+    } as const;
+    expect(parseV7AdapterFrame(JSON.stringify(request))).toEqual(request);
+    expect(() =>
+      parseV7AdapterFrame(
+        JSON.stringify({
+          ...request,
+          config: { endpointUrl: "https://api.example.test/?token=secret" },
+        }),
+      ),
+    ).toThrow();
+    expect(() =>
+      parseV7AdapterFrame(
+        JSON.stringify({
+          ...request,
+          config: { providerToken: "secret" },
+        }),
+      ),
+    ).toThrow();
+  });
+
   it("rejects malformed JSON and unknown protocol message types", () => {
     expect(() => parseV7AdapterFrame("{")).toThrow();
     expect(() =>

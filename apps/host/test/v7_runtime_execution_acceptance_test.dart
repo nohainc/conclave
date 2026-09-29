@@ -55,19 +55,13 @@ import 'dart:io';
 Future<void> main() async {
   await for (final line in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
     final request = jsonDecode(line) as Map<String, dynamic>;
-    final base = {'protocolVersion': '1.0', 'requestId': request['requestId']};
+    final base = {'protocolVersion': '2.1', 'requestId': request['requestId']};
     switch (request['type']) {
       case 'initialize.request':
         stdout.writeln(jsonEncode({...base, 'type': 'initialize.result', 'adapterVersion': '1.0.0', 'capabilities': <String>[]}));
         break;
-      case 'version.request':
-        stdout.writeln(jsonEncode({...base, 'type': 'version.result', 'adapterVersion': '1.0.0'}));
-        break;
-      case 'health.request':
-        stdout.writeln(jsonEncode({...base, 'type': 'health.result', 'healthy': true}));
-        break;
-      case 'validate.request':
-        stdout.writeln(jsonEncode({...base, 'type': 'validate.result', 'ready': true, 'issues': <Object>[]}));
+      case 'probe.request':
+        stdout.writeln(jsonEncode({...base, 'type': 'probe.result', 'ready': true, 'toolVersion': null, 'checkKind': 'readiness', 'issues': <Object>[]}));
         break;
       case 'execute.request':
         final cwd = Directory.current.path;
@@ -95,7 +89,7 @@ Future<void> main() async {
     final manifest = <String, Object?>{
       'workerTypeId': 'test-adapter',
       'adapterVersion': '1.0.0',
-      'protocolVersion': '1.0',
+      'protocolVersion': '2.1',
       'publisher': 'Conclave Test',
       'displayName': 'Deterministic test adapter',
       'supportedPlatforms': ['linux-x64'],
@@ -124,7 +118,7 @@ Future<void> main() async {
     final handler = WorkerAssignmentHandler(
       executor: WorkerProcessExecutor(),
       resolve: (_) async => null,
-      resolveV7Adapter: (workerId) async {
+      resolveV7Adapter: (workerId, {expectedWorkerTypeId}) async {
         final local = await registry.find(workerId);
         if (local == null || local.status != LocalWorkerStatus.ready) {
           return null;

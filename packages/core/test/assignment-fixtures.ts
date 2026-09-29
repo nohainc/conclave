@@ -78,7 +78,7 @@ export function worker(
           status: "failed",
           output: null,
           error: {
-            code: "unavailable",
+            code: "provider_unavailable",
             message: "unavailable",
             retryable: true,
           },

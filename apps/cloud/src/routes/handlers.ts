@@ -100,7 +100,11 @@ import {
   type WorkstreamExecutionPolicy,
   type WorkflowVersion,
 } from "@conclave/core";
-import { parseMachineCheckEvidence } from "@conclave/protocol";
+import {
+  canonicalExecutionErrorCode,
+  executionErrorMessage,
+  parseMachineCheckEvidence,
+} from "@conclave/protocol";
 import { createEventPublisher } from "../event-publisher.js";
 
 function parseJson<T = Record<string, unknown>>(
@@ -4944,18 +4948,29 @@ function normalizeWorkstreamWorkerUsagePolicy(value: unknown): {
   const input = value as Record<string, unknown>;
   if (
     input.version !== 1 ||
-    !["configured_only", "configured_then_any"].includes(String(input.fallbackPolicy)) ||
-    !input.roles || typeof input.roles !== "object" || Array.isArray(input.roles)
+    !["configured_only", "configured_then_any"].includes(
+      String(input.fallbackPolicy),
+    ) ||
+    !input.roles ||
+    typeof input.roles !== "object" ||
+    Array.isArray(input.roles)
   ) {
     throw new HttpError(400, "executionPolicy is invalid");
   }
   const roles = input.roles as Record<string, unknown>;
-  if (Object.keys(roles).length > 64) throw new HttpError(400, "executionPolicy has too many roles");
+  if (Object.keys(roles).length > 64)
+    throw new HttpError(400, "executionPolicy has too many roles");
   const workerIds = new Set<string>();
   const normalizedRoles: Record<string, Record<string, unknown>> = {};
   for (const [rawRole, rawBinding] of Object.entries(roles)) {
     const role = rawRole.trim().toLowerCase();
-    if (!role || role.length > 80 || !rawBinding || typeof rawBinding !== "object" || Array.isArray(rawBinding)) {
+    if (
+      !role ||
+      role.length > 80 ||
+      !rawBinding ||
+      typeof rawBinding !== "object" ||
+      Array.isArray(rawBinding)
+    ) {
       throw new HttpError(400, "executionPolicy role binding is invalid");
     }
     const binding = rawBinding as Record<string, unknown>;
@@ -4969,24 +4984,46 @@ function normalizeWorkstreamWorkerUsagePolicy(value: unknown): {
         normalized[key] = binding[key].trim();
       }
     }
-    if (typeof normalized.workerId === "string") workerIds.add(normalized.workerId);
+    if (typeof normalized.workerId === "string")
+      workerIds.add(normalized.workerId);
     if (binding.fallbackWorkerIds !== undefined) {
-      if (!Array.isArray(binding.fallbackWorkerIds) || binding.fallbackWorkerIds.length > 32 || binding.fallbackWorkerIds.some((id) => typeof id !== "string" || id.length > 200)) {
-        throw new HttpError(400, "executionPolicy fallbackWorkerIds is invalid");
+      if (
+        !Array.isArray(binding.fallbackWorkerIds) ||
+        binding.fallbackWorkerIds.length > 32 ||
+        binding.fallbackWorkerIds.some(
+          (id) => typeof id !== "string" || id.length > 200,
+        )
+      ) {
+        throw new HttpError(
+          400,
+          "executionPolicy fallbackWorkerIds is invalid",
+        );
       }
       normalized.fallbackWorkerIds = [...new Set(binding.fallbackWorkerIds)];
-      for (const id of normalized.fallbackWorkerIds as string[]) workerIds.add(id);
+      for (const id of normalized.fallbackWorkerIds as string[])
+        workerIds.add(id);
     }
     if (binding.cloudConcurrencyLimit !== undefined) {
-      if (!Number.isInteger(binding.cloudConcurrencyLimit) || Number(binding.cloudConcurrencyLimit) < 1 || Number(binding.cloudConcurrencyLimit) > 1024) {
-        throw new HttpError(400, "executionPolicy cloudConcurrencyLimit must be between 1 and 1024");
+      if (
+        !Number.isInteger(binding.cloudConcurrencyLimit) ||
+        Number(binding.cloudConcurrencyLimit) < 1 ||
+        Number(binding.cloudConcurrencyLimit) > 1024
+      ) {
+        throw new HttpError(
+          400,
+          "executionPolicy cloudConcurrencyLimit must be between 1 and 1024",
+        );
       }
       normalized.cloudConcurrencyLimit = Number(binding.cloudConcurrencyLimit);
     }
     normalizedRoles[role] = normalized;
   }
   return {
-    policy: { version: 1, fallbackPolicy: input.fallbackPolicy, roles: normalizedRoles },
+    policy: {
+      version: 1,
+      fallbackPolicy: input.fallbackPolicy,
+      roles: normalizedRoles,
+    },
     workerIds: [...workerIds],
   };
 }
@@ -5005,10 +5042,11 @@ function workstreamMetadata(
     status: String(row.status),
     lead: row.leadUserId ?? row.lead_user_id ?? null,
     accessPolicy,
-    executionPolicy: parseJson(
-      row.executionPolicyJson ?? row.policyJson,
-      { version: 1, fallbackPolicy: "configured_only", roles: {} },
-    ),
+    executionPolicy: parseJson(row.executionPolicyJson ?? row.policyJson, {
+      version: 1,
+      fallbackPolicy: "configured_only",
+      roles: {},
+    }),
     primaryWorkspace:
       accessPolicy.primaryWorkspaceId ??
       accessPolicy.primary_workspace_id ??
@@ -5209,9 +5247,14 @@ export async function handleUpdateWorkstream(
       )
         .bind(workstream.projectId, new Date().toISOString())
         .all<{ worker_id: string }>();
-      const eligibleIds = new Set((grants.results ?? []).map((row) => row.worker_id));
+      const eligibleIds = new Set(
+        (grants.results ?? []).map((row) => row.worker_id),
+      );
       if (normalized.workerIds.some((workerId) => !eligibleIds.has(workerId))) {
-        throw new HttpError(409, "Selected Workers must belong to a Workspace with an active Project grant");
+        throw new HttpError(
+          409,
+          "Selected Workers must belong to a Workspace with an active Project grant",
+        );
       }
     }
   }
@@ -5249,11 +5292,17 @@ export async function handleUpdateWorkstream(
     )
       .bind(workstreamId, JSON.stringify(executionPolicy), context.userId, now)
       .run();
-    const roles = executionPolicy.roles as Record<string, Record<string, unknown>>;
+    const roles = executionPolicy.roles as Record<
+      string,
+      Record<string, unknown>
+    >;
     const selectedWorkerIds = new Set<string>();
     for (const binding of Object.values(roles)) {
-      if (typeof binding.workerId === "string") selectedWorkerIds.add(binding.workerId);
-      for (const id of Array.isArray(binding.fallbackWorkerIds) ? binding.fallbackWorkerIds : []) {
+      if (typeof binding.workerId === "string")
+        selectedWorkerIds.add(binding.workerId);
+      for (const id of Array.isArray(binding.fallbackWorkerIds)
+        ? binding.fallbackWorkerIds
+        : []) {
         if (typeof id === "string") selectedWorkerIds.add(id);
       }
     }
@@ -5267,7 +5316,8 @@ export async function handleUpdateWorkstream(
       )
         .bind(workstream.projectId, now)
         .all<{ worker_id: string }>();
-      for (const row of fallbackWorkers.results ?? []) selectedWorkerIds.add(row.worker_id);
+      for (const row of fallbackWorkers.results ?? [])
+        selectedWorkerIds.add(row.worker_id);
     }
     for (const workerId of selectedWorkerIds) {
       await env.CONCLAVE_DB.prepare(
@@ -5288,14 +5338,15 @@ export async function handleUpdateWorkstream(
         .run();
     }
   }
-  const savedPolicyJson = executionPolicy === undefined
-    ? await env.CONCLAVE_DB.prepare(
-        "SELECT policy_json FROM workstream_worker_usage_policies WHERE workstream_id = ?1",
-      )
-        .bind(workstreamId)
-        .first<{ policy_json: string }>()
-        .then((row) => row?.policy_json)
-    : JSON.stringify(executionPolicy);
+  const savedPolicyJson =
+    executionPolicy === undefined
+      ? await env.CONCLAVE_DB.prepare(
+          "SELECT policy_json FROM workstream_worker_usage_policies WHERE workstream_id = ?1",
+        )
+          .bind(workstreamId)
+          .first<{ policy_json: string }>()
+          .then((row) => row?.policy_json)
+      : JSON.stringify(executionPolicy);
   return json({
     workstream: workstreamMetadata({
       id: workstream.id,
@@ -8004,9 +8055,7 @@ export async function handleV7WorkerScheduling(
     if (!action || !["enable", "disable", "drain"].includes(action)) {
       throw new HttpError(400, "Unknown Worker scheduling action");
     }
-    if (
-      action === "enable" && worker.status !== "ready"
-    ) {
+    if (action === "enable" && worker.status !== "ready") {
       throw new HttpError(409, "Worker is not locally ready");
     }
     const state =
@@ -10394,7 +10443,11 @@ async function handleStudioSnapshot(
        GROUP BY p.id ORDER BY p.display_name`,
     ).all(),
     env.CONCLAVE_DB.prepare(
-      `SELECT t.id, t.objective AS title, ph.name AS phase, t.status, t.role AS worker, t.objective AS detail, CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END AS progress, '[]' AS dependencies, '—' AS tokens, '—' AS cost FROM tasks t JOIN phases ph ON ph.id = t.phase_id JOIN runs r ON r.id = ph.run_id JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${scopedOwnership} ORDER BY t.created_at DESC LIMIT 100`,
+      `SELECT t.id, t.objective AS title, ph.name AS phase, t.status, t.role AS worker, t.objective AS detail, CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END AS progress, '[]' AS dependencies, '—' AS tokens, '—' AS cost,
+              CASE WHEN t.status IN ('failed', 'cancelled') THEN
+                (SELECT json_extract(wa.error_json, '$.error.code') FROM worker_assignments wa WHERE wa.task_id = t.id AND wa.status IN ('failed', 'cancelled') ORDER BY wa.updated_at DESC LIMIT 1)
+              ELSE NULL END AS errorCode
+       FROM tasks t JOIN phases ph ON ph.id = t.phase_id JOIN runs r ON r.id = ph.run_id JOIN goals g ON g.id = r.goal_id JOIN projects p ON p.id = g.project_id WHERE ${scopedOwnership} ORDER BY t.created_at DESC LIMIT 100`,
     )
       .bind(...scopedOwnershipBind)
       .all(),
@@ -10581,6 +10634,15 @@ async function handleStudioSnapshot(
     tasks: (tasks.results ?? []).map((row) => ({
       ...row,
       dependencies: mapJson(row.dependencies),
+      ...(typeof row.errorCode === "string"
+        ? (() => {
+            const errorCode = canonicalExecutionErrorCode(row.errorCode);
+            return {
+              errorCode,
+              errorMessage: executionErrorMessage(errorCode),
+            };
+          })()
+        : { errorCode: null, errorMessage: null }),
     })),
     findings: findings.results ?? [],
     events: events.results ?? [],

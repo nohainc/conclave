@@ -27,8 +27,8 @@ function candidate(overrides: Record<string, unknown> = {}) {
     workspace_status: "online",
     runtime_identity_id: "runtime-a",
     worker_id: "worker-a",
-    worker_type_id: "codex",
-    publisher: "codex",
+    worker_type_id: "chatgpt",
+    publisher: "chatgpt",
     worker_version: "1.0.0",
     capabilities_json: JSON.stringify(["repository"]),
     local_permissions_json: JSON.stringify([
@@ -40,7 +40,7 @@ function candidate(overrides: Record<string, unknown> = {}) {
     local_worker_status: "ready",
     cloud_scheduling_state: "enabled",
     credential_status: "ready",
-    provider: "codex",
+    provider: "chatgpt",
     local_concurrency_limit: 2,
     active_assignments: 0,
     allowed_workspace_worker_ids_json: "[]",
@@ -101,6 +101,7 @@ describe("V7 Project execution scheduler", () => {
     );
     expect(result).toMatchObject({
       workerId: "worker-a",
+      workerTypeId: "chatgpt",
       model: "gpt-5.6-codex",
       selectionExplanation: {
         worker: { role: "Implementer", selection: "configured_preference" },
@@ -134,6 +135,33 @@ describe("V7 Project execution scheduler", () => {
     expect(result).toBeNull();
   });
 
+  it("treats Workstream Worker Type policy as product IDs", async () => {
+    const configured = {
+      ...candidate(),
+      worker_usage_policy_json: JSON.stringify({
+        roles: { implementer: { workerId: "worker-a" } },
+      }),
+    };
+    const request = {
+      projectId: "project-a",
+      requesterUserId: "user-a",
+      role: "implementer",
+      capabilities: ["repository"],
+      workstreamId: "workstream-a",
+    };
+    const adapterIdPolicy = await selectProjectExecutionTarget(
+      db([{ ...configured, allowed_worker_type_ids_json: '["codex"]' }]),
+      request,
+    );
+    expect(adapterIdPolicy).toBeNull();
+
+    const productIdPolicy = await selectProjectExecutionTarget(
+      db([{ ...configured, allowed_worker_type_ids_json: '["chatgpt"]' }]),
+      request,
+    );
+    expect(productIdPolicy?.workerTypeId).toBe("chatgpt");
+  });
+
   it("selects a V7 Workspace-owned Worker from inventory", async () => {
     const v7Candidate = {
       grant_id: "grant-v7",
@@ -163,8 +191,8 @@ describe("V7 Project execution scheduler", () => {
       workspace_status: "online",
       runtime_identity_id: "runtime-v7",
       worker_id: "worker-antigravity-1",
-      worker_type_id: "antigravity",
-      publisher: "antigravity",
+      worker_type_id: "gemini",
+      publisher: "gemini",
       worker_version: "1.0.0",
       capabilities_json: JSON.stringify(["code", "shell"]),
       local_permissions_json: JSON.stringify([
@@ -174,7 +202,7 @@ describe("V7 Project execution scheduler", () => {
       local_worker_status: "ready",
       cloud_scheduling_state: "enabled",
       credential_status: "ready",
-      provider: "antigravity",
+      provider: "gemini",
       local_concurrency_limit: 2,
       active_assignments: 0,
     };
@@ -193,7 +221,7 @@ describe("V7 Project execution scheduler", () => {
       projectId: "project-v7",
       workspaceId: "workspace-v7",
       workerId: "worker-antigravity-1",
-      workerTypeId: "antigravity",
+      workerTypeId: "gemini",
       effectivePermissions: ["repository:read", "repository:write"],
     });
   });
@@ -355,8 +383,8 @@ describe("V7 Project execution scheduler", () => {
       workspace_status: "online",
       runtime_identity_id: "runtime-v7",
       worker_id: "worker-sandboxed",
-      worker_type_id: "codex",
-      publisher: "codex",
+      worker_type_id: "chatgpt",
+      publisher: "chatgpt",
       worker_version: "1.0.0",
       capabilities_json: JSON.stringify(["code"]),
       // Local worker manifest / local permissions ONLY permit repository:read
@@ -364,7 +392,7 @@ describe("V7 Project execution scheduler", () => {
       local_worker_status: "ready",
       cloud_scheduling_state: "enabled",
       credential_status: "ready",
-      provider: "codex",
+      provider: "chatgpt",
       local_concurrency_limit: 1,
       active_assignments: 0,
     };
@@ -391,7 +419,7 @@ describe("V7 Project execution scheduler", () => {
       ...candidate(),
       workspace_id: "workspace-v7",
       worker_id: "worker-v7",
-      worker_type_id: "codex",
+      worker_type_id: "chatgpt",
       capabilities_json: '["repository"]',
       local_permissions_json: '["repository:read"]',
       credential_status: "ready",
@@ -510,12 +538,12 @@ describe("V7 Project execution scheduler", () => {
     const v7Row = {
       ...candidate(),
       worker_id: "workspace-worker",
-      worker_type_id: "codex",
+      worker_type_id: "chatgpt",
       local_worker_status: "ready",
       cloud_scheduling_state: "enabled",
       local_concurrency_limit: 1,
       local_permissions_json: '["repository:read"]',
-      provider: "codex",
+      provider: "chatgpt",
       credential_status: "ready",
       active_assignments: 0,
     };

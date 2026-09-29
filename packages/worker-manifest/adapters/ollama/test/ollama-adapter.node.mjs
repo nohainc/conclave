@@ -34,7 +34,7 @@ test("Ollama adapter checks service and models, then executes selected model", a
     child.stdin.write(
       JSON.stringify({
         type: "initialize.request",
-        protocolVersion: "1.0",
+        protocolVersion: "2.1",
         requestId: "i",
         workerTypeId: "ollama",
         adapterVersion: "1.0.0",
@@ -42,8 +42,8 @@ test("Ollama adapter checks service and models, then executes selected model", a
     );
     child.stdin.write(
       JSON.stringify({
-        type: "validate.request",
-        protocolVersion: "1.0",
+        type: "probe.request",
+        protocolVersion: "2.1",
         requestId: "v",
         config: { endpointUrl: "http://localhost:11434" },
       }) + "\n",
@@ -51,7 +51,7 @@ test("Ollama adapter checks service and models, then executes selected model", a
     child.stdin.write(
       JSON.stringify({
         type: "execute.request",
-        protocolVersion: "1.0",
+        protocolVersion: "2.1",
         requestId: "e",
         assignmentId: "a",
         model: "qwen:latest",
@@ -64,7 +64,7 @@ test("Ollama adapter checks service and models, then executes selected model", a
       child.once("close", resolve);
     });
     const frames = output.trim().split("\n").map(JSON.parse);
-    const validation = frames.find((frame) => frame.type === "validate.result");
+    const validation = frames.find((frame) => frame.type === "probe.result");
     assert.equal(validation.ready, true);
     assert.deepEqual(validation.models, ["qwen:latest"]);
     assert.equal(

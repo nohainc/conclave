@@ -34,15 +34,25 @@ execution safety boundary. See [ADR-016](docs/decisions/ADR-016-ax-owned-worker-
 
 ## Workstream and execution protocol
 
+Conclave has three distinct protocol boundaries: the Human Product Protocol
+between AX and Cloud, the Workspace Runtime Protocol between the Workspace
+runtime and Cloud's Workspace Gateway, and the Local Adapter Protocol between
+the Workspace process supervisor and a local adapter child process. They share
+canonical domain IDs/types but never share or forward wire envelopes. AX does
+not speak the Workspace Runtime Protocol, and adapters never connect directly
+to Cloud. See the [Protocol Boundaries contract](docs/architecture/PROTOCOL_BOUNDARIES.md)
+for endpoint, credential, transport, and schema ownership.
+
 Each Workstream has an ID-derived local directory under the Workspace Work
 Root. Stateful execution is fenced and restricted to the Workstream Primary
 Workspace. Stateless work may use another eligible Workspace only when grants
 and policy allow it.
 
-The initial V7 adapter protocol consists of `initialize`, `validate`,
-`execute`, `progress`, `result`, `error`, `health`, and `version` messages.
-Interactive request/response input is a future versioned extension unless a
-production-supported adapter requires it.
+The V7 Local Adapter Protocol version 2.1 consists of
+`initialize.request/result`, `probe.request/result`, `execute.request`,
+`progress`, `result`, and `error`. Each exchange carries a request ID. Probe
+results contain readiness, a safe tool version, check kind, and bounded issues;
+the wire schema has no provider token or account-secret fields.
 
 ## Implementation status
 

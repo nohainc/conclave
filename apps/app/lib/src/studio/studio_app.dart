@@ -3219,9 +3219,11 @@ class _StudioAppState extends State<ConclaveAppShell> {
     final active = selectedTaskId == task.id;
     final color = task.status == TaskStatus.completed
         ? const Color(0xff43b17f)
-        : task.status == TaskStatus.running
-            ? const Color(0xff6254d9)
-            : const Color(0xffaaa8b2);
+        : task.status.isFailed
+            ? const Color(0xffb64b4b)
+            : task.status == TaskStatus.running
+                ? const Color(0xff6254d9)
+                : const Color(0xffaaa8b2);
     return InkWell(
         onTap: () => setState(() => selectedTaskId = task.id),
         borderRadius: BorderRadius.circular(9),
@@ -3238,9 +3240,11 @@ class _StudioAppState extends State<ConclaveAppShell> {
               Icon(
                   task.status == TaskStatus.completed
                       ? Icons.check_circle_rounded
-                      : task.status == TaskStatus.running
-                          ? Icons.timelapse_rounded
-                          : Icons.radio_button_unchecked,
+                      : task.status.isFailed
+                          ? Icons.error_rounded
+                          : task.status == TaskStatus.running
+                              ? Icons.timelapse_rounded
+                              : Icons.radio_button_unchecked,
                   size: 17,
                   color: color),
               const SizedBox(width: 9),
@@ -3296,6 +3300,22 @@ class _StudioAppState extends State<ConclaveAppShell> {
           Text(task.detail,
               style: const TextStyle(
                   color: Color(0xff777683), fontSize: 12, height: 1.45)),
+          if (task.errorCode != null) ...[
+            const SizedBox(height: 8),
+            Text(task.errorMessage ?? 'The assignment could not be completed.',
+                key: const ValueKey('task-execution-error-message'),
+                style: const TextStyle(
+                    color: Color(0xff9a3d3d),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 3),
+            Text('Error code: ${task.errorCode}',
+                key: const ValueKey('task-execution-error-code'),
+                style: const TextStyle(
+                    color: Color(0xff9a3d3d),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600)),
+          ],
           const SizedBox(height: 18),
           _detailLine(Icons.person_outline, 'Worker', task.worker),
           _detailLine(

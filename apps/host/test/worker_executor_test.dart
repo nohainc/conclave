@@ -21,6 +21,122 @@ Future<void> main() async {
   return directory;
 }
 
+Future<Directory> createProcessTreeAdapter(String mode) async {
+  final directory = await Directory.systemTemp.createTemp('v7-process-tree-');
+  final grandchild = File('${directory.path}/grandchild.dart');
+  final cli = File('${directory.path}/cli.dart');
+  final adapter = File('${directory.path}/adapter.dart');
+  await grandchild.writeAsString('''
+import 'dart:async';
+import 'dart:io';
+Future<void> main() async {
+  final heartbeat = File(Platform.environment['TREE_HEARTBEAT']!);
+  while (true) {
+    await heartbeat.writeAsString(DateTime.now().microsecondsSinceEpoch.toString());
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+  }
+}
+''');
+  await cli.writeAsString('''
+import 'dart:async';
+import 'dart:io';
+Future<void> main(List<String> args) async {
+  final grandchild = await Process.start(Platform.resolvedExecutable,
+      [${jsonEncode(grandchild.path)}], environment: {
+        'TREE_HEARTBEAT': args[1],
+      });
+  await File(args[0]).writeAsString(grandchild.pid.toString());
+  await File(args[2]).writeAsString(grandchild.pid.toString());
+  final startupDeadline = DateTime.now().add(const Duration(seconds: 3));
+  while (!await File(args[1]).exists() && DateTime.now().isBefore(startupDeadline)) {
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  if (${jsonEncode(mode)} == 'cli_crash') exit(7);
+  if (${jsonEncode(mode)} == 'cli_hang') {
+    while (true) await Future<void>.delayed(const Duration(hours: 1));
+  }
+  await grandchild.kill();
+}
+''');
+  await adapter.writeAsString('''
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+Future<void> main() async {
+  if (${jsonEncode(mode)} == 'adapter_crash') exit(8);
+  if (${jsonEncode(mode)} == 'adapter_hang') {
+    while (true) await Future<void>.delayed(const Duration(hours: 1));
+  }
+  if (${jsonEncode(mode)} == 'stdout_overflow') { stdout.write(List.filled(100000, 'x').join()); await stdout.flush(); while (true) await Future<void>.delayed(const Duration(hours: 1)); }
+  if (${jsonEncode(mode)} == 'stderr_overflow') { stderr.write(List.filled(100000, 'x').join()); await stderr.flush(); while (true) await Future<void>.delayed(const Duration(hours: 1)); }
+  await for (final line in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
+    final request = jsonDecode(line) as Map<String, dynamic>;
+    final base = {'protocolVersion': '2.1', 'requestId': request['requestId']};
+    if (request['type'] == 'initialize.request') {
+      stdout.writeln(jsonEncode({...base, 'type': 'initialize.result', 'adapterVersion': request['adapterVersion'], 'capabilities': <String>[]}));
+    } else if (request['type'] == 'probe.request') {
+      stdout.writeln(jsonEncode({...base, 'type': 'probe.result', 'ready': true, 'toolVersion': '1.0.0', 'checkKind': 'readiness', 'issues': <Object>[]}));
+    } else if (request['type'] == 'execute.request') {
+      final cli = await Process.start(Platform.resolvedExecutable, ['${cli.path}',
+          ${jsonEncode('${directory.path}/grandchild.pid')},
+          ${jsonEncode('${directory.path}/heartbeat')},
+          ${jsonEncode('${directory.path}/cli.pid')}]);
+      cli.stdout.listen((_) {});
+      cli.stderr.listen((_) {});
+      final code = await cli.exitCode;
+      if (code == 0) {
+        stdout.writeln(jsonEncode({...base, 'type': 'result', 'assignmentId': request['assignmentId'], 'output': 'done', 'artifacts': <Object>[]}));
+      } else {
+        stdout.writeln(jsonEncode({...base, 'type': 'error', 'assignmentId': request['assignmentId'], 'code': 'execution_failed', 'message': 'The local CLI failed.', 'retryable': false}));
+      }
+    }
+  }
+}
+''');
+  return directory;
+}
+
+WorkerProcessSpec processTreeAdapterSpec(
+        Directory directory, String workerId) =>
+    WorkerProcessSpec(
+      workerId: workerId,
+      executable: 'dart',
+      arguments: ['run', '${directory.path}/adapter.dart'],
+      workingDirectory: directory.path,
+    );
+
+Future<void> expectTreeHeartbeatStopped(
+  Directory directory, {
+  bool required = false,
+}) async {
+  final heartbeat = File('${directory.path}/heartbeat');
+  final deadline = DateTime.now().add(const Duration(seconds: 5));
+  while (!await heartbeat.exists() && DateTime.now().isBefore(deadline)) {
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+  if (!await heartbeat.exists()) {
+    expect(required, isFalse,
+        reason: 'the CLI grandchild never started its heartbeat');
+    return;
+  }
+  String? stoppedAt;
+  while (DateTime.now().isBefore(deadline)) {
+    try {
+      final before = await heartbeat.readAsString();
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      final after = await heartbeat.readAsString();
+      if (before == after) {
+        stoppedAt = after;
+        break;
+      }
+    } on FileSystemException {
+      // Retry while a terminated child releases the file.
+    }
+  }
+  expect(stoppedAt, isNotNull,
+      reason: 'a CLI grandchild continued running after its assignment ended');
+}
+
 void main() {
   test('does not inherit unrelated Host secrets into worker processes', () {
     final environment = safeWorkerEnvironment(
@@ -82,15 +198,11 @@ Future<void> main() async {
   await for (final line in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
     final request = jsonDecode(line) as Map<String, dynamic>;
     final type = request['type'];
-    final base = {'protocolVersion': '1.0', 'requestId': request['requestId']};
+    final base = {'protocolVersion': '2.1', 'requestId': request['requestId']};
     if (type == 'initialize.request') {
       stdout.writeln(jsonEncode({...base, 'type': 'initialize.result', 'adapterVersion': '1.2.3', 'capabilities': <String>[] }));
-    } else if (type == 'version.request') {
-      stdout.writeln(jsonEncode({...base, 'type': 'version.result', 'adapterVersion': '1.2.3'}));
-    } else if (type == 'health.request') {
-      stdout.writeln(jsonEncode({...base, 'type': 'health.result', 'healthy': true}));
-    } else if (type == 'validate.request') {
-      stdout.writeln(jsonEncode({...base, 'type': 'validate.result', 'ready': true, 'issues': <Object>[] }));
+    } else if (type == 'probe.request') {
+      stdout.writeln(jsonEncode({...base, 'type': 'probe.result', 'ready': true, 'toolVersion': null, 'checkKind': 'readiness', 'issues': <Object>[] }));
     } else if (type == 'execute.request') {
       stdout.writeln(jsonEncode({...base, 'type': 'progress', 'assignmentId': request['assignmentId'], 'message': 'working', 'percentage': 50}));
       stdout.writeln(jsonEncode({...base, 'type': 'result', 'assignmentId': request['assignmentId'], 'output': request['prompt'], 'artifacts': [{'name': 'trace', 'mediaType': 'text/plain', 'content': request['prompt']}] }));
@@ -140,6 +252,179 @@ Future<void> main() async {
     expect(validation['validated'], isTrue);
   });
 
+  test('preserves normalized V7 adapter execution errors', () async {
+    final directory = await Directory.systemTemp.createTemp('v7-error-');
+    addTearDown(() => directory.delete(recursive: true));
+    final script = File('${directory.path}/adapter.dart');
+    await script.writeAsString(r'''
+import 'dart:convert';
+import 'dart:io';
+Future<void> main() async {
+  await for (final line in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
+    final request = jsonDecode(line) as Map<String, dynamic>;
+    final base = {'protocolVersion': '2.1', 'requestId': request['requestId']};
+    switch (request['type']) {
+      case 'initialize.request': stdout.writeln(jsonEncode({...base, 'type': 'initialize.result', 'adapterVersion': request['adapterVersion'], 'capabilities': <String>[] }));
+      case 'probe.request': stdout.writeln(jsonEncode({...base, 'type': 'probe.result', 'ready': true, 'toolVersion': null, 'checkKind': 'readiness', 'issues': <Object>[] }));
+      case 'execute.request': stdout.writeln(jsonEncode({...base, 'type': 'error', 'assignmentId': request['assignmentId'], 'code': 'quota_exhausted', 'message': 'The provider rejected this request because a usage limit was reached.', 'retryable': false }));
+    }
+  }
+}
+''');
+
+    await expectLater(
+      WorkerProcessExecutor().executeV7Adapter(
+        WorkerProcessSpec(
+          workerId: 'v7-error-test',
+          executable: 'dart',
+          arguments: ['run', script.path],
+          workingDirectory: directory.path,
+        ),
+        workerTypeId: 'codex',
+        adapterVersion: '1.2.3',
+        prompt: 'test',
+        operationId: 'v7-error-assignment',
+      ),
+      throwsA(
+        isA<V7AdapterExecutionFailure>()
+            .having((error) => error.code, 'code', 'quota_exhausted')
+            .having((error) => error.retryable, 'retryable', false),
+      ),
+    );
+  });
+
+  test('normalizes adapter assignment timeout and cancellation', () async {
+    final directory = await createSilentWorker();
+    addTearDown(() => directory.delete(recursive: true));
+    WorkerProcessSpec spec(String workerId) => WorkerProcessSpec(
+          workerId: workerId,
+          executable: 'dart',
+          arguments: ['run', '${directory.path}/silent.dart'],
+          workingDirectory: directory.path,
+        );
+
+    await expectLater(
+      WorkerProcessExecutor().executeV7Adapter(
+        spec('v7-timeout'),
+        workerTypeId: 'codex',
+        adapterVersion: '1.0.0',
+        prompt: 'test',
+        timeout: const Duration(milliseconds: 200),
+      ),
+      throwsA(isA<V7AdapterExecutionFailure>().having(
+        (error) => error.code,
+        'code',
+        'timeout',
+      )),
+    );
+
+    final executor = WorkerProcessExecutor();
+    final execution = executor.executeV7Adapter(
+      spec('v7-cancel'),
+      workerTypeId: 'codex',
+      adapterVersion: '1.0.0',
+      prompt: 'test',
+      operationId: 'v7-cancel-assignment',
+      timeout: const Duration(seconds: 5),
+    );
+    final cancellation = expectLater(
+      execution,
+      throwsA(isA<V7AdapterExecutionFailure>().having(
+        (error) => error.code,
+        'code',
+        'cancelled',
+      )),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    expect(await executor.cancel('v7-cancel-assignment'), isTrue);
+    await cancellation;
+  });
+
+  test('runs a requested first-party headless execution check through adapter',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('v7-probe-test-');
+    addTearDown(() => directory.delete(recursive: true));
+    final script = File('${directory.path}/adapter.dart');
+    await script.writeAsString(r'''
+import 'dart:convert';
+import 'dart:io';
+Future<void> main() async {
+  await for (final line in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
+    final request = jsonDecode(line) as Map<String, dynamic>;
+    final base = {'protocolVersion': '2.1', 'requestId': request['requestId']};
+    switch (request['type']) {
+      case 'initialize.request': stdout.writeln(jsonEncode({...base, 'type': 'initialize.result', 'adapterVersion': request['adapterVersion'], 'capabilities': <String>[] }));
+      case 'probe.request': stdout.writeln(jsonEncode({...base, 'type': 'probe.result', 'ready': true, 'toolVersion': '4.5.6', 'checkKind': 'readiness', 'issues': <Object>[] }));
+      case 'execute.request':
+        stdout.writeln(jsonEncode({...base, 'type': 'progress', 'assignmentId': request['assignmentId'], 'message': 'testing'}));
+        stdout.writeln(jsonEncode({...base, 'type': 'result', 'assignmentId': request['assignmentId'], 'output': 'OK\n', 'artifacts': <Object>[] }));
+    }
+  }
+}
+''');
+
+    final result = await WorkerProcessExecutor().checkV7AdapterHealth(
+      WorkerProcessSpec(
+        workerId: 'gemini-readiness-test',
+        executable: 'dart',
+        arguments: ['run', script.path],
+        workingDirectory: directory.path,
+      ),
+      workerTypeId: 'antigravity',
+      adapterVersion: '1.0.0',
+      healthCheckMode: 'protocol',
+      allowNotReady: true,
+      executionTestPrompt: 'Reply with exactly the word OK. Do not use tools.',
+    );
+
+    expect(result['ready'], isTrue);
+    expect(result['toolVersion'], '4.5.6');
+  });
+
+  test(
+      'returns only a safe auth reason when headless readiness execution fails',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('v7-probe-auth-');
+    addTearDown(() => directory.delete(recursive: true));
+    final script = File('${directory.path}/adapter.dart');
+    await script.writeAsString(r'''
+import 'dart:convert';
+import 'dart:io';
+Future<void> main() async {
+  await for (final line in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
+    final request = jsonDecode(line) as Map<String, dynamic>;
+    final base = {'protocolVersion': '2.1', 'requestId': request['requestId']};
+    switch (request['type']) {
+      case 'initialize.request': stdout.writeln(jsonEncode({...base, 'type': 'initialize.result', 'adapterVersion': request['adapterVersion'], 'capabilities': <String>[] }));
+      case 'probe.request': stdout.writeln(jsonEncode({...base, 'type': 'probe.result', 'ready': true, 'toolVersion': '4.5.6', 'checkKind': 'readiness', 'issues': <Object>[] }));
+      case 'execute.request': stdout.writeln(jsonEncode({...base, 'type': 'error', 'assignmentId': request['assignmentId'], 'code': 'authentication_required', 'message': 'safe message', 'retryable': false}));
+    }
+  }
+}
+''');
+
+    final result = await WorkerProcessExecutor().checkV7AdapterHealth(
+      WorkerProcessSpec(
+        workerId: 'gemini-readiness-auth-test',
+        executable: 'dart',
+        arguments: ['run', script.path],
+        workingDirectory: directory.path,
+      ),
+      workerTypeId: 'antigravity',
+      adapterVersion: '1.0.0',
+      healthCheckMode: 'protocol',
+      allowNotReady: true,
+      executionTestPrompt: 'Reply with exactly the word OK. Do not use tools.',
+    );
+
+    expect(result['ready'], isFalse);
+    expect(
+      (result['issues'] as List).single['code'],
+      'authentication_required',
+    );
+    expect(result.toString(), isNot(contains('provider-secret')));
+  });
+
   test('assignment resolution selects an admitted V7 adapter when available',
       () async {
     final directory = await Directory.systemTemp.createTemp('v7-assignment-');
@@ -151,12 +436,10 @@ import 'dart:io';
 Future<void> main() async {
   await for (final line in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
     final request = jsonDecode(line) as Map<String, dynamic>;
-    final base = {'protocolVersion': '1.0', 'requestId': request['requestId']};
+    final base = {'protocolVersion': '2.1', 'requestId': request['requestId']};
     switch (request['type']) {
       case 'initialize.request': stdout.writeln(jsonEncode({...base, 'type': 'initialize.result', 'adapterVersion': '1.2.3', 'capabilities': <String>[] }));
-      case 'version.request': stdout.writeln(jsonEncode({...base, 'type': 'version.result', 'adapterVersion': '1.2.3'}));
-      case 'health.request': stdout.writeln(jsonEncode({...base, 'type': 'health.result', 'healthy': true}));
-      case 'validate.request': stdout.writeln(jsonEncode({...base, 'type': 'validate.result', 'ready': true, 'issues': <Object>[] }));
+      case 'probe.request': stdout.writeln(jsonEncode({...base, 'type': 'probe.result', 'ready': true, 'toolVersion': null, 'checkKind': 'readiness', 'issues': <Object>[] }));
       case 'execute.request': stdout.writeln(jsonEncode({...base, 'type': 'result', 'assignmentId': request['assignmentId'], 'output': request['prompt']}));
     }
   }
@@ -165,7 +448,7 @@ Future<void> main() async {
     final handler = WorkerAssignmentHandler(
       executor: WorkerProcessExecutor(),
       resolve: (_) => null,
-      resolveV7Adapter: (_) => V7AdapterLaunch(
+      resolveV7Adapter: (_, {expectedWorkerTypeId}) => V7AdapterLaunch(
         processSpec: WorkerProcessSpec(
           workerId: 'workspace-worker-1',
           executable: 'dart',
@@ -398,8 +681,11 @@ Future<void> main() async {
           'permissions': ['shell:execute'],
         },
       )),
-      throwsA(predicate((error) =>
-          error.toString().contains('assignment permission is not allowed'))),
+      throwsA(isA<V7AdapterExecutionFailure>().having(
+        (error) => error.code,
+        'code',
+        'permission_denied',
+      )),
     );
   });
 
@@ -457,6 +743,182 @@ Future<void> main() async {
     } finally {
       await directory.delete(recursive: true);
     }
+  });
+
+  test('adapter crashes fail the assignment without leaving a process tree',
+      () async {
+    final directory = await createProcessTreeAdapter('adapter_crash');
+    addTearDown(() => directory.delete(recursive: true));
+    await expectLater(
+      WorkerProcessExecutor().executeV7Adapter(
+        processTreeAdapterSpec(directory, 'adapter-crash'),
+        workerTypeId: 'chatgpt',
+        adapterVersion: '1.0.0',
+        prompt: 'test',
+        timeout: const Duration(seconds: 3),
+      ),
+      throwsA(isA<V7AdapterExecutionFailure>().having(
+        (error) => error.code,
+        'code',
+        'execution_failed',
+      )),
+    );
+  });
+
+  test('CLI crashes map to a stable adapter failure', () async {
+    final directory = await createProcessTreeAdapter('cli_crash');
+    addTearDown(() => directory.delete(recursive: true));
+    await expectLater(
+      WorkerProcessExecutor().executeV7Adapter(
+        processTreeAdapterSpec(directory, 'cli-crash'),
+        workerTypeId: 'gemini',
+        adapterVersion: '1.0.0',
+        prompt: 'test',
+        timeout: const Duration(seconds: 5),
+      ),
+      throwsA(isA<V7AdapterExecutionFailure>().having(
+        (error) => error.code,
+        'code',
+        'execution_failed',
+      )),
+    );
+    await expectTreeHeartbeatStopped(directory, required: true);
+  });
+
+  test('adapter hang is stopped at the assignment timeout', () async {
+    final directory = await createProcessTreeAdapter('adapter_hang');
+    addTearDown(() => directory.delete(recursive: true));
+    await expectLater(
+      WorkerProcessExecutor().executeV7Adapter(
+        processTreeAdapterSpec(directory, 'adapter-hang'),
+        workerTypeId: 'chatgpt',
+        adapterVersion: '1.0.0',
+        prompt: 'test',
+        timeout: const Duration(milliseconds: 300),
+      ),
+      throwsA(isA<V7AdapterExecutionFailure>().having(
+        (error) => error.code,
+        'code',
+        'timeout',
+      )),
+    );
+  });
+
+  test('CLI hang timeout terminates CLI and its grandchild', () async {
+    final directory = await createProcessTreeAdapter('cli_hang');
+    addTearDown(() => directory.delete(recursive: true));
+    await expectLater(
+      WorkerProcessExecutor().executeV7Adapter(
+        processTreeAdapterSpec(directory, 'cli-hang'),
+        workerTypeId: 'gemini',
+        adapterVersion: '1.0.0',
+        prompt: 'test',
+        operationId: 'cli-hang-timeout',
+        timeout: const Duration(seconds: 2),
+      ),
+      throwsA(isA<V7AdapterExecutionFailure>().having(
+        (error) => error.code,
+        'code',
+        'timeout',
+      )),
+    );
+    await expectTreeHeartbeatStopped(directory, required: true);
+  });
+
+  test('Cloud cancellation callback terminates the assignment process tree',
+      () async {
+    final directory = await createProcessTreeAdapter('cli_hang');
+    addTearDown(() => directory.delete(recursive: true));
+    final executor = WorkerProcessExecutor();
+    final execution = executor.executeV7Adapter(
+      processTreeAdapterSpec(directory, 'cloud-cancel'),
+      workerTypeId: 'chatgpt',
+      adapterVersion: '1.0.0',
+      prompt: 'test',
+      operationId: 'cloud-cancelled-assignment',
+      timeout: const Duration(seconds: 10),
+    );
+    final failed = expectLater(
+      execution,
+      throwsA(isA<V7AdapterExecutionFailure>().having(
+        (error) => error.code,
+        'code',
+        'cancelled',
+      )),
+    );
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (!await File('${directory.path}/heartbeat').exists() &&
+        DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    // This is the callback invoked by HostCloudConnection for
+    // assignment.cancel; exercise its real executor target with a live tree.
+    expect(await executor.cancel('cloud-cancelled-assignment'), isTrue);
+    await failed;
+    await expectTreeHeartbeatStopped(directory, required: true);
+  });
+
+  test('Workspace shutdown terminates active assignment process trees',
+      () async {
+    final directory = await createProcessTreeAdapter('cli_hang');
+    addTearDown(() => directory.delete(recursive: true));
+    final executor = WorkerProcessExecutor();
+    final execution = executor.executeV7Adapter(
+      processTreeAdapterSpec(directory, 'shutdown-tree'),
+      workerTypeId: 'gemini',
+      adapterVersion: '1.0.0',
+      prompt: 'test',
+      operationId: 'shutdown-tree-assignment',
+      timeout: const Duration(seconds: 10),
+    );
+    final failed = expectLater(
+      execution,
+      throwsA(isA<V7AdapterExecutionFailure>().having(
+        (error) => error.code,
+        'code',
+        'cancelled',
+      )),
+    );
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (!await File('${directory.path}/heartbeat').exists() &&
+        DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    await executor.shutdown();
+    await failed;
+    await expectTreeHeartbeatStopped(directory, required: true);
+  });
+
+  test('adapter stdout overflow terminates the adapter process', () async {
+    final directory = await createProcessTreeAdapter('stdout_overflow');
+    addTearDown(() => directory.delete(recursive: true));
+    await expectLater(
+      WorkerProcessExecutor().executeV7Adapter(
+        processTreeAdapterSpec(directory, 'stdout-overflow'),
+        workerTypeId: 'chatgpt',
+        adapterVersion: '1.0.0',
+        prompt: 'test',
+        maxStdoutBytes: 1024,
+        timeout: const Duration(seconds: 3),
+      ),
+      throwsA(anything),
+    );
+  });
+
+  test('adapter stderr overflow terminates the adapter process', () async {
+    final directory = await createProcessTreeAdapter('stderr_overflow');
+    addTearDown(() => directory.delete(recursive: true));
+    await expectLater(
+      WorkerProcessExecutor().executeV7Adapter(
+        processTreeAdapterSpec(directory, 'stderr-overflow'),
+        workerTypeId: 'gemini',
+        adapterVersion: '1.0.0',
+        prompt: 'test',
+        maxStderrBytes: 1024,
+        timeout: const Duration(seconds: 3),
+      ),
+      throwsA(anything),
+    );
   });
 
   test('cancels an active worker process by operation ID', () async {

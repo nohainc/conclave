@@ -10,7 +10,7 @@ const base = {
   protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
   messageId: "message-1",
   timestamp: "2026-09-24T12:00:00.000Z",
-  payload: {},
+  payload: { snapshot: { workerTypeId: "chatgpt" }, input: {} },
 };
 
 describe("Workspace Runtime protocol", () => {
@@ -39,6 +39,7 @@ describe("Workspace Runtime protocol", () => {
         attemptId: "attempt-a",
         assignmentId: "assignment-a",
         idempotencyKey: "idem-a",
+        payload: { snapshot: { workerTypeId: "chatgpt" }, input: {} },
       }).type,
     ).toBe("assignment.start");
   });
@@ -71,8 +72,8 @@ describe("Workspace Runtime protocol", () => {
   it("accepts only bounded safe Worker inventory projections", () => {
     const worker = {
       workerId: "worker-a",
-      workerTypeId: "codex",
-      name: "Codex Personal",
+      workerTypeId: "chatgpt",
+      name: "ChatGPT Personal",
       status: "needs_attention",
       authStrategy: "browser_auth",
       defaultModel: null,
@@ -94,6 +95,18 @@ describe("Workspace Runtime protocol", () => {
         payload: { workers: [worker], fullSnapshot: true },
       }).type,
     ).toBe("worker.inventory");
+    for (const adapterPackageId of ["codex", "antigravity"]) {
+      expect(() =>
+        parseWorkspaceRuntimeMessage({
+          ...base,
+          type: "worker.inventory",
+          payload: {
+            workers: [{ ...worker, workerTypeId: adapterPackageId }],
+            fullSnapshot: true,
+          },
+        }),
+      ).toThrow(/adapter package IDs/);
+    }
     expect(() =>
       parseWorkspaceRuntimeMessage({
         ...base,
@@ -112,5 +125,86 @@ describe("Workspace Runtime protocol", () => {
         payload: { workers: [worker], fullSnapshot: true },
       }),
     ).toThrow(/requires Workspace protocol 5.1/);
+  });
+
+  it("rejects adapter package IDs in Cloud assignment snapshots", () => {
+    const assignment = {
+      ...base,
+      type: "assignment.start",
+      executionWorkspaceId: "workspace-a",
+      workspaceRuntimeId: "runtime-a",
+      workerId: "worker-a",
+      runId: "run-a",
+      taskId: "task-a",
+      attemptId: "attempt-a",
+      assignmentId: "assignment-a",
+      idempotencyKey: "idem-a",
+      payload: { snapshot: { workerTypeId: "chatgpt" }, input: {} },
+    };
+    expect(parseWorkspaceRuntimeMessage(assignment).type).toBe(
+      "assignment.start",
+    );
+    for (const adapterPackageId of ["codex", "antigravity"]) {
+      expect(() =>
+        parseWorkspaceRuntimeMessage({
+          ...assignment,
+          payload: { snapshot: { workerTypeId: adapterPackageId }, input: {} },
+        }),
+      ).toThrow(/adapter package IDs/);
+    }
+  });
+
+  it("accepts only canonical assignment error codes", () => {
+    const identity = {
+      executionWorkspaceId: "workspace-a",
+      workspaceRuntimeId: "runtime-a",
+      workerId: "worker-a",
+      runId: "run-a",
+      taskId: "task-a",
+      attemptId: "attempt-a",
+      assignmentId: "assignment-a",
+      idempotencyKey: "idem-a",
+    };
+    const assignmentError = {
+      ...base,
+      ...identity,
+      type: "assignment.error",
+      payload: {
+        status: "failed",
+        error: {
+          code: "permission_denied",
+          message:
+            "A local permission required for this assignment was denied.",
+          retryable: false,
+        },
+      },
+    };
+    expect(parseWorkspaceRuntimeMessage(assignmentError).type).toBe(
+      "assignment.error",
+    );
+    expect(() =>
+      parseWorkspaceRuntimeMessage({
+        ...assignmentError,
+        payload: {
+          ...assignmentError.payload,
+          error: {
+            ...assignmentError.payload.error,
+            code: "tool_permission_denied",
+          },
+        },
+      }),
+    ).toThrow();
+    expect(() =>
+      parseWorkspaceRuntimeMessage({
+        ...assignmentError,
+        payload: {
+          ...assignmentError.payload,
+          error: {
+            ...assignmentError.payload.error,
+            message: "provider stderr: secret diagnostic",
+          },
+        },
+      }),
+    ).toThrow(/canonical safe message/);
   });
 });

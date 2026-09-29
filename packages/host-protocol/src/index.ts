@@ -1,5 +1,9 @@
 import { z } from "zod";
 import {
+  EXECUTION_ERROR_CODES,
+  EXECUTION_ERROR_MESSAGES,
+} from "@conclave/protocol";
+import {
   HOST_PROTOCOL_NAME,
   HOST_PROTOCOL_VERSION,
   HOST_PROTOCOL_MAX_MESSAGE_SIZE_BYTES,
@@ -20,6 +24,9 @@ import {
 } from "./generated.js";
 export * from "./workspace-runtime.js";
 export * from "./desktop-auth-transport.js";
+
+export const ExecutionErrorCodeSchema = z.enum(EXECUTION_ERROR_CODES);
+export type ExecutionErrorCode = z.infer<typeof ExecutionErrorCodeSchema>;
 
 export {
   HOST_PROTOCOL_NAME,
@@ -75,6 +82,24 @@ export const MAX_MESSAGE_SIZE_BYTES = HOST_PROTOCOL_MAX_MESSAGE_SIZE_BYTES;
 
 const nonEmptyStr = z.string().trim().min(1);
 const timestampStr = z.string().datetime();
+
+export const ExecutionErrorPayloadSchema = z
+  .object({
+    code: ExecutionErrorCodeSchema,
+    message: nonEmptyStr.max(512),
+    retryable: z.boolean().default(false),
+  })
+  .strict()
+  .superRefine((error, ctx) => {
+    if (error.message !== EXECUTION_ERROR_MESSAGES[error.code]) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["message"],
+        message: "assignment errors must use the canonical safe message",
+      });
+    }
+  });
+export type ExecutionErrorPayload = z.infer<typeof ExecutionErrorPayloadSchema>;
 
 // ============================================================================
 // Host Protocol Envelopes & Types (Cloud <-> Host)
@@ -418,14 +443,7 @@ export type HostAssignmentResultPayload = z.infer<
 export const HostAssignmentErrorPayloadSchema = z
   .object({
     assignmentId: nonEmptyStr,
-    error: z
-      .object({
-        code: nonEmptyStr,
-        message: nonEmptyStr,
-        retryable: z.boolean().default(false),
-        details: z.record(z.string(), z.unknown()).optional(),
-      })
-      .strict(),
+    error: ExecutionErrorPayloadSchema,
     failedAt: timestampStr,
   })
   .strict();
@@ -1214,14 +1232,7 @@ export type LegacyAssignmentResultPayload = z.infer<
 
 export const AssignmentFailurePayloadSchema = z
   .object({
-    error: z
-      .object({
-        code: nonEmptyStr,
-        message: nonEmptyStr,
-        retryable: z.boolean().default(false),
-        details: z.record(z.string(), z.unknown()).optional(),
-      })
-      .strict(),
+    error: ExecutionErrorPayloadSchema,
     failedAt: timestampStr,
   })
   .strict();

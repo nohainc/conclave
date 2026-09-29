@@ -47,6 +47,11 @@ Cloud controls only remote scheduling state and authorization.
 - The real V7 E2E acceptance path exercises Cloud scheduling, Workspace Gateway,
   local Worker resolution, adapter admission/child execution, progress, and
   result persistence without a usable V6 binding candidate.
+- The deterministic Cloud-to-Workspace E2E matrix also launches the shipped
+  Codex and Antigravity adapters against fake CLIs, so it verifies both
+  first-party protocol bridges without provider credentials or live requests.
+  See [first-party Worker testing](FIRST_PARTY_WORKER_TESTING.md) for the full
+  test pyramid and production acceptance gate.
 - V6 Worker mutation APIs, runtime fallback, and obsolete persistence were
   retired through forward migrations. Historical migrations remain unchanged.
 - Adapter and Workspace release metadata use Ed25519 public-key verification;
@@ -87,23 +92,24 @@ download/verification, drain, bundle staging/replacement, restart, health
 check, and rollback need to work as one native update transaction. Keep this
 gate open until an end-to-end app update test proves the transaction.
 
-## Initial V7 adapter protocol
+## Current V7 adapter protocol
 
-Protocol version 1.0 contains these operations/events:
+Protocol version 2.1 contains these operations/events:
 
 ```text
-initialize
-validate
-execute
+initialize.request/result
+probe.request/result
+execute.request
 progress
 result
 error
-health
-version
 ```
 
-Interactive request/response input is not part of the initial protocol. Add it
-only as a versioned extension when a production-supported adapter requires it.
+Every exchange uses a request ID. Probe returns readiness, nullable safe tool
+version, check kind, and bounded issues. Strict field validation and a 1 MB
+frame cap reject unknown or oversized content; provider tokens and account
+secrets are not protocol fields. Version 1.0's overlapping validate, health,
+and version exchanges are superseded.
 
 ## Historical architecture notes
 

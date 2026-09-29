@@ -2,9 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:conclave_protocol/conclave_protocol.dart';
+
 import 'assignment_journal.dart';
 import 'runtime_capabilities.dart';
-import 'package:conclave_protocol/conclave_protocol.dart';
 import 'worker_protocol.dart';
 import 'workspace_enrollment.dart';
 import 'workspace_transport.dart';
@@ -88,6 +89,22 @@ class HostConnectionPreflightException implements Exception {
   const HostConnectionPreflightException(this.message);
 
   final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// A normalized local adapter failure safe to report across the runtime link.
+class V7AdapterExecutionFailure implements Exception {
+  const V7AdapterExecutionFailure({
+    required this.code,
+    required this.message,
+    this.retryable = false,
+  });
+
+  final String code;
+  final String message;
+  final bool retryable;
 
   @override
   String toString() => message;
@@ -1145,8 +1162,7 @@ class HostCloudConnection {
       _sendAssignmentError(
         socket,
         message,
-        'assignment_context_mismatch',
-        'Assignment is not addressed to this host/workspace',
+        'worker_not_ready',
         retryable: false,
       );
       return;
@@ -1164,8 +1180,7 @@ class HostCloudConnection {
       _sendAssignmentError(
         socket,
         message,
-        'malformed_assignment',
-        payloadError,
+        'execution_failed',
         retryable: false,
       );
       return;
@@ -1219,9 +1234,7 @@ class HostCloudConnection {
         _sendAssignmentError(
           socket,
           message,
-          'assignment_replayed_failure',
-          previous.result?['error']?.toString() ??
-              'Assignment already failed locally',
+          'internal_adapter_error',
           retryable: true,
         );
       } else if (previous.status == AssignmentStatus.cancelled) {
@@ -1286,15 +1299,18 @@ class HostCloudConnection {
         result: {'summary': result.summary, 'artifactIds': result.artifactIds},
       );
     } catch (error) {
+      final normalizedError = error is V7AdapterExecutionFailure ? error : null;
+      final errorCode = canonicalExecutionErrorCode(normalizedError?.code);
+      final errorMessage = executionErrorMessage(errorCode);
       socket.send(jsonEncode(_assignmentEnvelope(
         'assignment.error',
         correlation,
         {
           'status': 'failed',
           'error': {
-            'code': 'host_assignment_failed',
-            'message': '$error',
-            'retryable': true,
+            'code': errorCode,
+            'message': errorMessage,
+            'retryable': normalizedError?.retryable ?? true,
           },
         },
       )));
@@ -1302,7 +1318,10 @@ class HostCloudConnection {
         context.assignmentId,
         AssignmentStatus.failed,
         context: context,
-        result: {'error': '$error'},
+        result: {
+          'error': errorMessage,
+          'errorCode': errorCode,
+        },
       );
     } finally {
       _activeAssignments.remove(context.assignmentId);
@@ -1437,18 +1456,18 @@ class HostCloudConnection {
   void _sendAssignmentError(
     HostCloudSocket socket,
     Map<String, dynamic> message,
-    String code,
-    String errorMessage, {
+    String code, {
     required bool retryable,
   }) {
+    final canonicalCode = canonicalExecutionErrorCode(code);
     socket.send(jsonEncode(_assignmentEnvelope(
       'assignment.error',
       _assignmentCorrelation(message),
       {
         'status': 'failed',
         'error': {
-          'code': code,
-          'message': errorMessage,
+          'code': canonicalCode,
+          'message': executionErrorMessage(canonicalCode),
           'retryable': retryable,
         },
       },
@@ -1674,6 +1693,17 @@ class HostCloudConnection {
     _closing = true;
     final wakeup = _reconnectWakeup;
     if (wakeup != null && !wakeup.isCompleted) wakeup.complete();
+    final cancelAssignment = assignmentCancellationHandler;
+    if (cancelAssignment != null) {
+      for (final assignmentId in _activeAssignments.toList(growable: false)) {
+        try {
+          await cancelAssignment(assignmentId, 'Workspace shutdown');
+        } on Object {
+          // Workspace shutdown must continue even if a cancellation callback
+          // fails; the executor shutdown hook is the final cleanup boundary.
+        }
+      }
+    }
     _heartbeatTimer?.cancel();
     _heartbeatTimeoutTimer?.cancel();
     _protocolHandshakeTimer?.cancel();

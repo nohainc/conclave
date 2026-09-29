@@ -347,28 +347,32 @@ reachability remains outstanding.
 ## Protocol
 
 Structured stdin/stdout:
-- initialize;
-- validate;
-- execute;
+- initialize.request/result;
+- probe.request/result;
+- execute.request;
 - progress;
 - result;
 - error;
-- health/version.
 
-The Host executor implements these messages with bounded output, the shared
+Protocol version 2.0 requires request IDs on every exchange and applies strict
+field validation and bounded frame sizes. The Host executor implements these
+messages with bounded output, the shared
 local Worker concurrency gate, process-tree cancellation, and secret redaction.
 `WorkerAssignmentHandler` resolves active V7 adapters from the Workspace-owned
 package store and dispatches them through the V7 executor; assignments for
 Workers outside the local registry keep the v6 JSON-RPC path. Workstream CWD
 resolution, local permission checks, and stateful mutation locks wrap either
-path. Staged installs run the declared health handshake before activation, and
-rollback re-verifies and health-checks the selected installed version. The
+path. Staged installs run the initialize/probe handshake before activation, and
+rollback re-verifies and probes the selected installed version. The
 installer accepts pre-extracted local directories and bounded gzip tar
 archives. Cloud now provides immutable V7 adapter release publication, catalog
 filtering, publisher-scoped revocation, and R2 downloads. Add Worker fetches a
 supported release, checks the archive SHA-256 and exact catalog manifest, and
-installs through the signed package store. Periodic update/revocation
-reconciliation and first-party adapter coverage remain to be completed.
+installs through the signed package store. Workspace app releases embed signed
+stable Codex and Antigravity packages as offline baselines. Local setup seeds
+these packages before Cloud access, and periodic signed update/revocation
+reconciliation preserves the active verified release or recovers to the
+last-known-good or bundled version when an update fails.
 
 ## Exit
 

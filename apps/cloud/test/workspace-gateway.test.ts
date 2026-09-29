@@ -106,6 +106,28 @@ describe("Workspace runtime Gateway", () => {
       sessionId: created.sessionId,
     });
 
+    const invalidProductDispatch = await gateway.fetch(
+      new Request("https://gateway.internal/dispatch-assignment", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          executionWorkspaceId: workspaceId,
+          workspaceRuntimeId: "runtime-http-fallback",
+          workerId: "worker-http-fallback",
+          runId: "run-http-fallback",
+          taskId: "task-http-fallback",
+          attemptId: "attempt-http-fallback",
+          assignmentId: "assignment-http-fallback",
+          idempotencyKey: "idem-http-fallback",
+          payload: {
+            snapshot: { workerTypeId: "codex" },
+            input: { objective: "fallback assignment" },
+          },
+        }),
+      }),
+    );
+    expect(invalidProductDispatch.status).toBe(400);
+
     const dispatch = await gateway.fetch(
       new Request("https://gateway.internal/dispatch-assignment", {
         method: "POST",
@@ -119,7 +141,10 @@ describe("Workspace runtime Gateway", () => {
           attemptId: "attempt-http-fallback",
           assignmentId: "assignment-http-fallback",
           idempotencyKey: "idem-http-fallback",
-          payload: { input: "fallback assignment" },
+          payload: {
+            snapshot: { workerTypeId: "chatgpt" },
+            input: { objective: "fallback assignment" },
+          },
         }),
       }),
     );
@@ -380,7 +405,10 @@ describe("Workspace runtime Gateway", () => {
           attemptId: "attempt-a",
           assignmentId: "assignment-cursor-test",
           idempotencyKey: "idem-a",
-          payload: {},
+          payload: {
+            snapshot: { workerTypeId: "gemini" },
+            input: {},
+          },
         }),
       }),
     );

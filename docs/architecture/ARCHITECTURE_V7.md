@@ -38,7 +38,10 @@ The user installs one machine-side product:
 
 There are no separately installed Worker applications.
 
-Conclave Workspace manages signed Worker adapter packages and launches them as isolated child processes for assignments.
+Conclave Workspace manages signed Worker adapter packages and launches them as
+isolated child processes for assignments. First-party Workspace builds embed
+the stable Codex and Antigravity releases as offline baselines; signed Cloud
+releases upgrade them without removing the last-known-good or bundled fallback.
 
 ## 2. Product mental model
 
@@ -118,6 +121,14 @@ See [ADR-013](../decisions/ADR-013-desktop-auth-and-dual-transport.md) and the
 Each configured Worker exists on one Workspace only.
 
 ## 4. Application boundaries
+
+The three protocol boundaries are frozen by the
+[Protocol Boundaries contract](PROTOCOL_BOUNDARIES.md): AX ↔ Cloud Human
+Product Protocol, Workspace ↔ Cloud Workspace Runtime Protocol, and Workspace
+↔ adapter Local Adapter Protocol. The protocols share canonical domain IDs
+and types only; their wire schemas and credentials remain separate. AX MUST
+NOT speak the Workspace Runtime Protocol, and adapters MUST NOT communicate
+directly with Cloud.
 
 ### 4.1 Conclave AX
 
@@ -744,20 +755,20 @@ One assignment child process is default.
 
 Prefer structured stdin/stdout protocol.
 
-Initial protocol messages:
+Protocol version 2.1 messages:
 
-- initialize;
-- validate;
-- execute;
-- progress;
-- result;
-- error;
-- health/version.
+- `initialize.request` / `initialize.result`;
+- `probe.request` / `probe.result`;
+- `execute.request`;
+- `progress`, `result`, and `error`.
 
-Cancellation is enforced by the Workspace process supervisor. Interactive
-request/response input is deferred until a supported adapter requires it; add it
-through an explicit versioned protocol extension rather than implying that the
-initial V7 schema already supports it.
+Every request and response is correlated by `requestId`; progress and terminal
+execution frames carry the originating execute request ID. The strict schema
+rejects unknown fields, applies per-field and 1 MB frame limits, and contains no
+provider token or account-secret fields. A readiness probe performs only
+low-cost local checks; an execution test that consumes provider quota is a
+separate future operation. Cancellation is enforced by the Workspace process
+supervisor.
 
 Protocol must include:
 
@@ -784,6 +795,17 @@ Requirements:
 - process-group/tree termination;
 - temp-file cleanup;
 - exit status normalization.
+
+Each assignment owns one Workspace-launched adapter process and its complete
+descendant tree. On POSIX, the supervisor isolates the tree in a process group
+and signals the group; it retains recursive descendant discovery as a
+fallback. On Windows, termination targets the process tree. Cloud assignment
+cancellation, assignment timeout, output-limit failure, Worker removal, and
+Workspace shutdown all terminate the assignment tree. Shutdown rejects
+new assignments and cancels operations that are active, starting, or queued.
+The supervisor waits briefly after graceful termination and then force-kills
+the remaining tree. Adapter/CLI exit or protocol failures stay scoped to that
+assignment and do not stop the Workspace runtime.
 
 A crashed adapter must not disconnect the Workspace runtime.
 

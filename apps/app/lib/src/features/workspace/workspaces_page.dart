@@ -345,7 +345,9 @@ class _WorkerRowState extends State<_WorkerRow> {
                 spacing: 18,
                 runSpacing: 8,
                 children: [
-                  _Diagnostic(label: 'Worker Type', value: worker.workerTypeId),
+                  _Diagnostic(
+                      label: 'Worker Type',
+                      value: _workerTypeLabel(worker.workerTypeId)),
                   _Diagnostic(
                       label: 'Adapter', value: worker.adapterVersion ?? '—'),
                   _Diagnostic(
@@ -391,13 +393,13 @@ class _Diagnostic extends StatelessWidget {
 }
 
 String _workerTypeLabel(String value) => switch (value.toLowerCase()) {
+      'chatgpt' => 'ChatGPT',
+      'gemini' => 'Gemini',
       'claude-code' => 'Claude Code',
       'anthropic-api' => 'Anthropic API',
       'openai-api' => 'OpenAI API',
       'gemini-api' => 'Gemini API',
-      'antigravity' => 'Antigravity',
       'ollama' => 'Ollama',
-      'codex' => 'Codex',
       _ => value
           .split(RegExp(r'[-_]'))
           .where((part) => part.isNotEmpty)

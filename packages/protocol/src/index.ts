@@ -1,10 +1,17 @@
 import { z } from "zod";
 
-import { PROTOCOL_NAME, PROTOCOL_VERSION } from "./generated.js";
+import {
+  EXECUTION_ERROR_CODES,
+  EXECUTION_ERROR_MESSAGES,
+  PROTOCOL_NAME,
+  PROTOCOL_VERSION,
+} from "./generated.js";
 
 export {
   PROTOCOL_NAME,
   PROTOCOL_VERSION,
+  EXECUTION_ERROR_CODES,
+  EXECUTION_ERROR_MESSAGES,
   REQUIRED_ENVELOPE_FIELDS,
   HOST_PROTOCOL_NAME,
   HOST_PROTOCOL_VERSION,
@@ -21,6 +28,21 @@ export {
 } from "./generated.js";
 export * from "./generated-local-protocols.js";
 export * from "./realtime-events.js";
+
+export type ExecutionErrorCode = (typeof EXECUTION_ERROR_CODES)[number];
+
+export function isExecutionErrorCode(value: unknown): value is ExecutionErrorCode {
+  return typeof value === "string" &&
+    (EXECUTION_ERROR_CODES as readonly string[]).includes(value);
+}
+
+export function canonicalExecutionErrorCode(value: unknown): ExecutionErrorCode {
+  return isExecutionErrorCode(value) ? value : "internal_adapter_error";
+}
+
+export function executionErrorMessage(code: ExecutionErrorCode): string {
+  return EXECUTION_ERROR_MESSAGES[code];
+}
 
 const protocolVersionPattern = /^\d+\.\d+(?:\.\d+)?$/;
 

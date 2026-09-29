@@ -24,7 +24,11 @@ Conclave AX has three primary applications and one extension type.
 
 Conclave AX is the web application. It is not packaged as the machine-side executor. Native mobile clients may be added later without changing the Workspace runtime boundary.
 
-Conclave AX communicates only with Conclave Cloud.
+Conclave AX communicates only with Conclave Cloud through the Human Product
+Protocol. It MUST NOT connect to the Workspace Runtime Protocol or send
+machine-authenticated runtime messages. Protocol ownership and the explicit
+Workspace-to-adapter boundary are defined in the
+[Protocol Boundaries contract](PROTOCOL_BOUNDARIES.md).
 
 The canonical execution-capacity destination in AX is **Workspaces**. Workers
 appear inside their owning Workspace rather than as an independent top-level
@@ -72,6 +76,9 @@ choices live with Project and Workstream policy, not local Worker setup. See
 - artifacts.
 
 Conclave Cloud never executes an external AI/model/tool directly.
+Cloud exposes separate human-facing product APIs and an authenticated
+Workspace Gateway. The former serves AX and human management operations; the
+latter speaks only the Workspace Runtime Protocol with Conclave Workspace.
 
 ## 3. Conclave Workspace
 
@@ -142,6 +149,11 @@ Other adapters may remain in the implementation or historical records during
 migration, but are not part of the supported first-party v1 catalog.
 
 Adapter packages are installed/verified by Conclave Workspace and execute out-of-process as child processes.
+
+Adapters speak only the versioned Local Adapter Protocol with their local
+Workspace supervisor. They MUST NOT speak to Cloud or receive Workspace runtime
+credentials. Workspace translates between the adapter's local frames and the
+Workspace Runtime Protocol.
 
 One adapter package/version may serve many local configured Workers of the same Worker Type.
 

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:conclave_host/configured_worker_registry.dart';
+import 'package:conclave_host/first_party_worker_adapter_descriptor.dart';
 import 'package:conclave_host/local_worker_setup.dart';
 import 'package:conclave_host/platform_runtime.dart';
 
@@ -59,35 +60,78 @@ void main() {
   test('v1 local catalog contains only ChatGPT and Gemini CLI integrations',
       () {
     expect(
-      LocalWorkerTypeOption.supported.map((type) => type.id).toList(),
+      FirstPartyWorkerAdapterDescriptor.all
+          .map((type) => type.productWorkerTypeId)
+          .toList(),
       ['chatgpt', 'gemini'],
     );
     expect(
-      LocalWorkerTypeOption.supported.map((type) => type.name).toList(),
+      FirstPartyWorkerAdapterDescriptor.all
+          .map((type) => type.productName)
+          .toList(),
       ['ChatGPT', 'Gemini'],
     );
     expect(
-      LocalWorkerTypeOption.supported
-          .map((type) => type.executablePrerequisite!.executable)
+      FirstPartyWorkerAdapterDescriptor.all
+          .map((type) => type.executableCandidates.single)
           .toList(),
       ['codex', 'agy'],
     );
-    final gemini = LocalWorkerTypeOption.supported.last;
-    expect(gemini.executablePrerequisite!.minimumVersion, isNull);
-    expect(gemini.executablePrerequisite!.maximumVersion, isNull);
+    final chatgpt = FirstPartyWorkerAdapterDescriptor.all.first;
+    expect(chatgpt.productWorkerTypeId, 'chatgpt');
+    expect(chatgpt.productName, 'ChatGPT');
+    expect(chatgpt.adapterPackageId, 'codex');
+    expect(chatgpt.probeStrategy.id, 'codex_login_status');
+    expect(chatgpt.probeStrategy.authenticationArguments, ['login', 'status']);
+    expect(chatgpt.supportedCliVersionRange.minimum, isNull);
+    expect(chatgpt.supportedCliVersionRange.maximum, isNull);
+    expect(chatgpt.defaultLocalConcurrency, 1);
+    expect(chatgpt.requiredLocalPermissions,
+        ['workstream_filesystem', 'shell_execution']);
+    final gemini = FirstPartyWorkerAdapterDescriptor.all.last;
+    expect(gemini.productWorkerTypeId, 'gemini');
+    expect(gemini.productName, 'Gemini');
+    expect(gemini.supportedCliVersionRange.minimum, isNull);
+    expect(gemini.supportedCliVersionRange.maximum, isNull);
+    expect(gemini.adapterPackageId, 'antigravity');
+    expect(gemini.defaultLocalConcurrency, 1);
+    expect(gemini.requiredLocalPermissions,
+        ['workstream_filesystem', 'shell_execution']);
+    expect(gemini.probeStrategy.id, 'antigravity_headless_execution');
+    expect(gemini.probeStrategy.authenticationArguments, isEmpty);
+    expect(gemini.probeStrategy.setupExecutionTestPrompt,
+        'Reply with exactly the word OK. Do not use tools.');
+    expect(
+      FirstPartyWorkerAdapterDescriptor.canonicalProductWorkerTypeId('codex'),
+      'chatgpt',
+    );
+    expect(
+      FirstPartyWorkerAdapterDescriptor.canonicalProductWorkerTypeId(
+          'antigravity'),
+      'gemini',
+    );
+    expect(
+      FirstPartyWorkerAdapterDescriptor.adapterPackageIdFor('chatgpt'),
+      'codex',
+    );
+    expect(
+      FirstPartyWorkerAdapterDescriptor.adapterPackageIdFor('gemini'),
+      'antigravity',
+    );
   });
 
   test('CLI authentication is reflected without storing provider credentials',
       () async {
-    final type = LocalWorkerTypeOption.supported.first;
+    final type = FirstPartyWorkerAdapterDescriptor.all.first;
     final worker = await LocalWorkerSetupService(registry: registry).create(
       type: type,
-      permissions: type.permissions,
+      permissions: type.requiredLocalPermissions,
       adapterReady: true,
       prerequisiteReady: true,
       authenticationReady: false,
     );
     expect(worker.workerTypeId, 'chatgpt');
+    expect(worker.localConcurrencyLimit, type.defaultLocalConcurrency);
     expect(worker.status, LocalWorkerStatus.needsAttention);
     expect(worker.credentialStatus,
         LocalWorkerCredentialStatus.needsAuthentication);
@@ -99,14 +143,14 @@ void main() {
 
   test('ready CLI worker can be updated and local permissions require step-up',
       () async {
-    final type = LocalWorkerTypeOption.supported.first;
+    final type = FirstPartyWorkerAdapterDescriptor.all.first;
     final service = LocalWorkerSetupService(
       registry: registry,
       requireStepUp: (_) async => true,
     );
     final created = await service.create(
       type: type,
-      permissions: type.permissions,
+      permissions: type.requiredLocalPermissions,
       adapterReady: true,
       prerequisiteReady: true,
       authenticationReady: true,
@@ -126,27 +170,14 @@ void main() {
     expect(updated.status, LocalWorkerStatus.needsAttention);
   });
 
-  test('legacy Worker types cannot be configured through the v1 setup service',
-      () async {
-    const retiredType = LocalWorkerTypeOption(
-      id: 'claude-code',
-      adapterId: 'claude-code',
-      name: 'Claude Code',
-      description: 'legacy test type',
-      authStrategy: 'browser_auth',
-      prerequisite: 'legacy',
-      permissions: ['workstream_filesystem'],
+  test('descriptor registry excludes non-v1 product Worker Types', () {
+    expect(
+      FirstPartyWorkerAdapterDescriptor.forProductWorkerTypeId('claude-code'),
+      isNull,
     );
-    await expectLater(
-      LocalWorkerSetupService(registry: registry).create(
-        type: retiredType,
-        permissions: retiredType.permissions,
-        adapterReady: true,
-        prerequisiteReady: true,
-        authenticationReady: true,
-      ),
-      throwsArgumentError,
+    expect(
+      FirstPartyWorkerAdapterDescriptor.forAdapterPackageId('claude-code'),
+      isNull,
     );
-    expect(await registry.list(), isEmpty);
   });
 }

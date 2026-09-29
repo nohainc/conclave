@@ -5,30 +5,10 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 
+import 'first_party_worker_adapter_descriptor.dart';
 import 'platform_runtime.dart';
 
-const _registrySchemaVersion = 7;
-
-/// Product Worker Type IDs are stable catalog identities. Adapter package IDs
-/// remain implementation details owned by the Workspace runtime.
-String canonicalWorkerTypeId(String workerTypeId) => switch (workerTypeId) {
-      'codex' => 'chatgpt',
-      'antigravity' => 'gemini',
-      _ => workerTypeId,
-    };
-
-String adapterPackageTypeId(String workerTypeId) => switch (workerTypeId) {
-      'chatgpt' => 'codex',
-      'gemini' => 'antigravity',
-      _ => workerTypeId,
-    };
-
-String productWorkerTypeName(String workerTypeId) =>
-    switch (canonicalWorkerTypeId(workerTypeId)) {
-      'chatgpt' => 'ChatGPT',
-      'gemini' => 'Gemini',
-      _ => workerTypeId,
-    };
+const _registrySchemaVersion = 10;
 
 enum LocalWorkerStatus { needsAttention, ready, disabled, removed }
 
@@ -37,7 +17,8 @@ enum WorkerReadinessState {
   notInstalled('not_installed', 'Not installed'),
   signInRequired('sign_in_required', 'Sign in required'),
   unsupportedCliVersion('unsupported_cli_version', 'Unsupported CLI version'),
-  adapterUnavailable('adapter_unavailable', 'Adapter unavailable'),
+  adapterUnavailable(
+      'adapter_unavailable', 'Conclave integration needs attention'),
   disabled('disabled', 'Disabled'),
   testFailed('test_failed', 'Test failed');
 
@@ -84,6 +65,10 @@ class LocalConfiguredWorker {
     required this.revision,
     required this.createdAt,
     required this.updatedAt,
+    this.executablePath,
+    this.cliVersion,
+    this.lastLiveTestAt,
+    this.lastLiveTestPassed,
   })  : status = status,
         readinessState = readinessState ??
             (status == LocalWorkerStatus.ready
@@ -111,6 +96,10 @@ class LocalConfiguredWorker {
   final int revision;
   final String createdAt;
   final String updatedAt;
+  final String? executablePath;
+  final String? cliVersion;
+  final String? lastLiveTestAt;
+  final bool? lastLiveTestPassed;
 
   LocalConfiguredWorker copyWith({
     String? name,
@@ -130,6 +119,11 @@ class LocalConfiguredWorker {
     String? updatedAt,
     bool clearCredentialRef = false,
     bool clearModelConfiguration = false,
+    String? executablePath,
+    String? cliVersion,
+    String? lastLiveTestAt,
+    bool? lastLiveTestPassed,
+    bool clearExecutable = false,
   }) =>
       LocalConfiguredWorker(
         id: id,
@@ -155,6 +149,11 @@ class LocalConfiguredWorker {
         revision: revision ?? this.revision,
         createdAt: createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
+        executablePath:
+            clearExecutable ? null : executablePath ?? this.executablePath,
+        cliVersion: clearExecutable ? null : cliVersion ?? this.cliVersion,
+        lastLiveTestAt: lastLiveTestAt ?? this.lastLiveTestAt,
+        lastLiveTestPassed: lastLiveTestPassed ?? this.lastLiveTestPassed,
       );
 
   Map<String, Object?> toJson() => {
@@ -176,6 +175,10 @@ class LocalConfiguredWorker {
         'revision': revision,
         'createdAt': createdAt,
         'updatedAt': updatedAt,
+        'executablePath': executablePath,
+        'cliVersion': cliVersion,
+        'lastLiveTestAt': lastLiveTestAt,
+        'lastLiveTestPassed': lastLiveTestPassed,
       };
 
   factory LocalConfiguredWorker.fromJson(Map<String, dynamic> json) {
@@ -198,6 +201,10 @@ class LocalConfiguredWorker {
       'revision',
       'createdAt',
       'updatedAt',
+      'executablePath',
+      'cliVersion',
+      'lastLiveTestAt',
+      'lastLiveTestPassed',
     };
     if (json.keys.any((key) => !allowedKeys.contains(key))) {
       throw const FormatException(
@@ -224,11 +231,22 @@ class LocalConfiguredWorker {
     final defaultModel = json['defaultModel'];
     final adapterConfig = json['adapterConfig'];
     final adapterVersionPolicy = json['adapterVersionPolicy'];
+    final executablePath = json['executablePath'];
+    final cliVersion = json['cliVersion'];
+    final lastLiveTestAt = json['lastLiveTestAt'];
+    final lastLiveTestPassed = json['lastLiveTestPassed'];
     if (credentialRef != null && credentialRef is! String ||
         defaultModel != null && defaultModel is! String ||
         adapterVersionPolicy != null && adapterVersionPolicy is! String) {
       throw const FormatException(
           'Worker registry optional text fields are invalid');
+    }
+    if (executablePath != null && executablePath is! String ||
+        cliVersion != null && cliVersion is! String ||
+        lastLiveTestAt != null && lastLiveTestAt is! String ||
+        lastLiveTestPassed != null && lastLiveTestPassed is! bool) {
+      throw const FormatException(
+          'Worker readiness diagnostic fields are invalid');
     }
     if (adapterConfig != null && adapterConfig is! Map) {
       throw const FormatException(
@@ -282,6 +300,10 @@ class LocalConfiguredWorker {
       revision: revision,
       createdAt: required('createdAt'),
       updatedAt: required('updatedAt'),
+      executablePath: executablePath as String?,
+      cliVersion: cliVersion as String?,
+      lastLiveTestAt: lastLiveTestAt as String?,
+      lastLiveTestPassed: lastLiveTestPassed as bool?,
     );
   }
 }
@@ -359,12 +381,14 @@ class LocalConfiguredWorkerRegistry {
     Map<String, Object?> adapterConfig = const {},
     List<String> allowedModels = const [],
     List<String> localPermissions = const [],
-    int localConcurrencyLimit = 1,
+    int? localConcurrencyLimit,
     String? adapterVersionPolicy,
     LocalWorkerStatus status = LocalWorkerStatus.needsAttention,
     WorkerReadinessState? readinessState,
     LocalWorkerCredentialStatus credentialStatus =
         LocalWorkerCredentialStatus.needsAuthentication,
+    String? executablePath,
+    String? cliVersion,
   }) =>
       _locked(() async {
         final workers = await _read();
@@ -374,7 +398,14 @@ class LocalConfiguredWorkerRegistry {
             500) {
           throw StateError('A Workspace can sync at most 500 Workers.');
         }
-        final normalizedTypeId = canonicalWorkerTypeId(workerTypeId.trim());
+        final normalizedTypeId =
+            FirstPartyWorkerAdapterDescriptor.canonicalProductWorkerTypeId(
+          workerTypeId.trim(),
+        );
+        final descriptor =
+            FirstPartyWorkerAdapterDescriptor.forProductWorkerTypeId(
+          normalizedTypeId,
+        );
         final existingSlot = workers
             .indexWhere((worker) => worker.workerTypeId == normalizedTypeId);
         final now = clock().toUtc().toIso8601String();
@@ -387,7 +418,7 @@ class LocalConfiguredWorkerRegistry {
         final worker = LocalConfiguredWorker(
           id: previous?.id ?? idGenerator(),
           workspaceId: workspaceId,
-          name: name.trim(),
+          name: descriptor?.productName ?? name.trim(),
           workerTypeId: normalizedTypeId,
           authStrategy: authStrategy,
           credentialRef: credentialRef,
@@ -395,7 +426,8 @@ class LocalConfiguredWorkerRegistry {
           adapterConfig: Map.unmodifiable(adapterConfig),
           allowedModels: List.unmodifiable(allowedModels),
           localPermissions: List.unmodifiable(localPermissions),
-          localConcurrencyLimit: localConcurrencyLimit,
+          localConcurrencyLimit:
+              localConcurrencyLimit ?? descriptor?.defaultLocalConcurrency ?? 1,
           adapterVersionPolicy: adapterVersionPolicy,
           status: status,
           readinessState: status == LocalWorkerStatus.disabled
@@ -408,6 +440,8 @@ class LocalConfiguredWorkerRegistry {
           revision: (previous?.revision ?? 0) + 1,
           createdAt: previous?.createdAt ?? now,
           updatedAt: now,
+          executablePath: executablePath ?? previous?.executablePath,
+          cliVersion: cliVersion ?? previous?.cliVersion,
         );
         if (previous == null &&
             workers.any((existing) => existing.id == worker.id)) {
@@ -436,7 +470,13 @@ class LocalConfiguredWorkerRegistry {
         if (current.status == LocalWorkerStatus.removed) {
           throw StateError('Removed Worker records cannot be edited');
         }
-        final updated = change(current).copyWith(
+        final proposed = change(current);
+        final descriptor =
+            FirstPartyWorkerAdapterDescriptor.forProductWorkerTypeId(
+          current.workerTypeId,
+        );
+        final updated = proposed.copyWith(
+          name: descriptor?.productName ?? proposed.name,
           revision: current.revision + 1,
           updatedAt: clock().toUtc().toIso8601String(),
         );
@@ -448,7 +488,9 @@ class LocalConfiguredWorkerRegistry {
         }
         _validateWorker(updated);
         if (updated.workerTypeId !=
-            canonicalWorkerTypeId(updated.workerTypeId)) {
+            FirstPartyWorkerAdapterDescriptor.canonicalProductWorkerTypeId(
+              updated.workerTypeId,
+            )) {
           throw ArgumentError('Worker Type ID is not canonical');
         }
         _validateTypeUnique(workers, updated, excludingId: workerId);
@@ -531,6 +573,9 @@ class LocalConfiguredWorkerRegistry {
               decoded['schemaVersion'] != 4 &&
               decoded['schemaVersion'] != 5 &&
               decoded['schemaVersion'] != 6 &&
+              decoded['schemaVersion'] != 7 &&
+              decoded['schemaVersion'] != 8 &&
+              decoded['schemaVersion'] != 9 &&
               decoded['schemaVersion'] != _registrySchemaVersion) ||
           decoded['workers'] is! List ||
           decoded['checksum'] is! String) {
@@ -553,7 +598,10 @@ class LocalConfiguredWorkerRegistry {
       }).toList();
       if (schemaVersion < _registrySchemaVersion) {
         _validateLegacyRecords(records);
-        final migrated = _migrateRecords(records);
+        final migrated = _migrateRecords(
+          records,
+          clearModelConfiguration: schemaVersion < 7,
+        );
         final keptIds = migrated.map((worker) => worker.id).toSet();
         for (final duplicate in records.where((worker) =>
             !keptIds.contains(worker.id) &&
@@ -633,6 +681,18 @@ class LocalConfiguredWorkerRegistry {
       throw ArgumentError(
           'Worker registry record violates identity or configuration invariants');
     }
+    if (worker.executablePath != null &&
+        !_isAbsoluteExecutablePath(worker.executablePath!)) {
+      throw ArgumentError('executablePath must be an absolute path');
+    }
+    if (worker.cliVersion != null &&
+        !RegExp(r'^\d+\.\d+\.\d+$').hasMatch(worker.cliVersion!)) {
+      throw ArgumentError('cliVersion must be a detected semantic version');
+    }
+    if ((worker.executablePath == null) != (worker.cliVersion == null)) {
+      throw ArgumentError(
+          'executablePath and cliVersion must be stored together');
+    }
     if (worker.credentialRef != null &&
         worker.credentialRef != 'worker-credential/${worker.id}') {
       throw ArgumentError(
@@ -680,6 +740,10 @@ class LocalConfiguredWorkerRegistry {
     }
   }
 
+  bool _isAbsoluteExecutablePath(String path) => Platform.isWindows
+      ? RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path) || path.startsWith(r'\\')
+      : path.startsWith('/');
+
   void _validateTypeUnique(
       List<LocalConfiguredWorker> workers, LocalConfiguredWorker candidate,
       {String? excludingId}) {
@@ -692,13 +756,23 @@ class LocalConfiguredWorkerRegistry {
   }
 
   List<LocalConfiguredWorker> _migrateRecords(
-      List<LocalConfiguredWorker> records) {
+    List<LocalConfiguredWorker> records, {
+    required bool clearModelConfiguration,
+  }) {
     final normalized = records.map((worker) {
-      final canonicalType = canonicalWorkerTypeId(worker.workerTypeId);
+      final canonicalType =
+          FirstPartyWorkerAdapterDescriptor.canonicalProductWorkerTypeId(
+        worker.workerTypeId,
+      );
       return worker.copyWith(
         workerTypeId: canonicalType,
-        name: productWorkerTypeName(canonicalType),
-        clearModelConfiguration: true,
+        name: FirstPartyWorkerAdapterDescriptor.productNameFor(canonicalType),
+        // Cloud rejects stale adapter package IDs. Advancing the revision
+        // ensures its inventory upsert accepts the canonical product ID.
+        revision: canonicalType == worker.workerTypeId
+            ? worker.revision
+            : worker.revision + 1,
+        clearModelConfiguration: clearModelConfiguration,
       );
     }).toList();
 

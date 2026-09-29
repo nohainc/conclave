@@ -2,7 +2,9 @@ import 'dart:convert';
 
 import 'package:archive/archive.dart';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:conclave_host/bundled_adapter_package.dart';
 import 'package:conclave_host/configured_worker_registry.dart';
 import 'package:conclave_host/v7_adapter_package_store.dart';
 import 'package:conclave_host/worker_trust_policy.dart';
@@ -24,7 +26,13 @@ void main() {
     WorkerPermission.shell,
   };
 
-  Future<void> writeAdapterProgram({bool healthy = true}) async {
+  Future<void> writeAdapterProgram({
+    bool healthy = true,
+    String? issueCode,
+  }) async {
+    final issues = issueCode == null
+        ? '<Object>[]'
+        : "<Object>[{'code': '$issueCode', 'message': 'Local CLI is not ready'}]";
     await File('${source.path}/bin/adapter.dart').writeAsString('''
 import 'dart:convert';
 import 'dart:io';
@@ -32,11 +40,10 @@ Future<void> main() async {
   var adapterVersion = '';
   await for (final line in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
     final request = jsonDecode(line) as Map<String, dynamic>;
-    final base = {'protocolVersion': '1.0', 'requestId': request['requestId']};
+    final base = {'protocolVersion': '2.1', 'requestId': request['requestId']};
     switch (request['type']) {
       case 'initialize.request': adapterVersion = request['adapterVersion'] as String; stdout.writeln(jsonEncode({...base, 'type': 'initialize.result', 'adapterVersion': adapterVersion, 'capabilities': <String>[] })); break;
-      case 'version.request': stdout.writeln(jsonEncode({...base, 'type': 'version.result', 'adapterVersion': adapterVersion})); break;
-      case 'health.request': stdout.writeln(jsonEncode({...base, 'type': 'health.result', 'healthy': $healthy})); break;
+      case 'probe.request': stdout.writeln(jsonEncode({...base, 'type': 'probe.result', 'ready': $healthy, 'toolVersion': null, 'checkKind': 'readiness', 'issues': $issues })); break;
       default: stdout.writeln(jsonEncode({...base, 'type': 'error', 'code': 'unexpected', 'message': 'unexpected health request', 'retryable': false})); break;
     }
   }
@@ -73,7 +80,7 @@ Future<void> main() async {
     final manifest = <String, Object?>{
       'workerTypeId': 'codex',
       'adapterVersion': version,
-      'protocolVersion': '1.0',
+      'protocolVersion': '2.1',
       'publisher': 'Conclave',
       'displayName': 'Codex',
       'supportedPlatforms': ['linux-x64'],
@@ -115,7 +122,7 @@ Future<void> main() async {
         id: id,
         workspaceId: 'workspace-1',
         name: name,
-        workerTypeId: 'codex',
+        workerTypeId: 'chatgpt',
         authStrategy: 'api_key',
         credentialRef: credentialRef ?? 'worker-credential/$id',
         defaultModel: 'gpt-5.5',
@@ -183,6 +190,61 @@ Future<void> main() async {
         '1.2.3');
   });
 
+  test('seeds a missing first-party adapter from the bundled signed release',
+      () async {
+    await writeManifest('1.2.3');
+    final manifest = Map<String, Object?>.from(
+      jsonDecode(await File('${source.path}/manifest.json').readAsString())
+          as Map,
+    );
+    final archive = Uint8List.fromList(await packSource());
+    store = V7AdapterPackageStore(
+      root: Directory('${temp.path}/bundled-installed'),
+      trustPolicy: fixture.trustPolicy,
+      allowedPermissions: permissions,
+      platform: 'linux-x64',
+      loadBundledPackage: (workerTypeId) async => workerTypeId == 'codex'
+          ? BundledAdapterPackage(archiveBytes: archive, manifest: manifest)
+          : null,
+    );
+
+    expect(await store.ensureFirstPartyAdapterAvailable('codex'), isTrue);
+    expect(await store.hasVerifiedActivePackage('codex'), isTrue);
+    final pointer = jsonDecode(
+      await File('${temp.path}/bundled-installed/codex/active.json')
+          .readAsString(),
+    ) as Map;
+    expect(pointer['version'], '1.2.3');
+  });
+
+  test('failed update keeps the bundled adapter active', () async {
+    await writeManifest('1.2.3');
+    final manifest = Map<String, Object?>.from(
+      jsonDecode(await File('${source.path}/manifest.json').readAsString())
+          as Map,
+    );
+    final archive = Uint8List.fromList(await packSource());
+    store = V7AdapterPackageStore(
+      root: Directory('${temp.path}/bundled-update-installed'),
+      trustPolicy: fixture.trustPolicy,
+      allowedPermissions: permissions,
+      platform: 'linux-x64',
+      loadBundledPackage: (_) async =>
+          BundledAdapterPackage(archiveBytes: archive, manifest: manifest),
+    );
+    expect(await store.ensureFirstPartyAdapterAvailable('codex'), isTrue);
+
+    await writeAdapterProgram(healthy: false);
+    await writeManifest('1.3.0');
+    await expectLater(store.install(sourceDirectory: source), throwsStateError);
+
+    final launch = await store.resolve(
+      worker: localWorker(),
+      readCredential: (_) => 'private-api-key',
+    );
+    expect(launch?.adapterVersion, '1.2.3');
+  });
+
   test('does not report a missing or untrusted adapter as usable', () async {
     expect(await store.hasVerifiedActivePackage('codex'), isFalse);
     expect(await store.hasVerifiedActivePackage('../codex'), isFalse);
@@ -232,6 +294,22 @@ Future<void> main() async {
         {'PROVIDER_API_KEY': 'private-api-key'});
     expect(launch.processSpec.secretValues, {'private-api-key'});
     expect(launch.allowedModels, {'gpt-5.5'});
+  });
+
+  test('Advanced Diagnostics summary exposes safe adapter verification facts',
+      () async {
+    await writeManifest('1.2.3', releaseChannel: 'beta');
+    await store.install(sourceDirectory: source);
+
+    final summary = await store.activeManifestSummary(localWorker());
+
+    expect(summary?['adapterPackageId'], 'codex');
+    expect(summary?['adapterVersion'], '1.2.3');
+    expect(summary?['publisher'], 'Conclave');
+    expect(summary?['signingKeyId'], fixtureKeyId);
+    expect(summary?['releaseChannel'], 'beta');
+    expect(summary?['signatureVerified'], isTrue);
+    expect(summary?.containsKey('signature'), isFalse);
   });
 
   test('rejects modified installed package before assignment resolution',
@@ -290,6 +368,21 @@ Future<void> main() async {
     expect(launch?.adapterVersion, '1.2.3');
   });
 
+  test('first-party package installs when CLI authentication is required',
+      () async {
+    await writeAdapterProgram(
+        healthy: false, issueCode: 'authentication_required');
+    await writeManifest('1.2.3');
+
+    await store.install(sourceDirectory: source);
+
+    final launch = await store.resolve(
+      worker: localWorker(),
+      readCredential: (_) => 'private-api-key',
+    );
+    expect(launch?.adapterVersion, '1.2.3');
+  });
+
   test('rollback re-verifies and health-checks before changing activation',
       () async {
     await writeManifest('1.2.3');
@@ -305,10 +398,13 @@ Future<void> main() async {
     expect(launch?.adapterVersion, '1.2.3');
   });
 
-  test('process-exit health mode waits for a clean adapter shutdown', () async {
+  test('adapter packages require the initialize/probe health contract',
+      () async {
     await writeManifest('1.2.3', healthMode: 'process_exit');
-    final installed = await store.install(sourceDirectory: source);
-    expect(await installed.exists(), isTrue);
+    await expectLater(
+      store.install(sourceDirectory: source),
+      throwsFormatException,
+    );
   });
 
   test('stable Worker policy rejects a signed beta adapter', () async {

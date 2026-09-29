@@ -18,6 +18,11 @@ import type {
   V4ResolvedExecutionTarget,
 } from "@conclave/core";
 import {
+  canonicalExecutionErrorCode,
+  executionErrorMessage,
+  type ExecutionErrorCode,
+} from "@conclave/protocol";
+import {
   executeForgeGoal,
   type ForgeWorker,
   type ForgeWorkerRequest,
@@ -691,17 +696,20 @@ class HostGatewayForgeWorker implements ForgeWorker {
         };
       }
       if (row?.status === "failed" || row?.status === "cancelled") {
+        const assignmentError = this.assignmentError(row.error_json);
+        const code =
+          row.status === "cancelled"
+            ? "cancelled"
+            : (assignmentError?.code ?? "execution_failed");
         return this.failed(
-          this.assignmentError(row.error_json) ??
-            `ExecutionHost assignment ended with status ${row.status}`,
+          assignmentError?.message ?? executionErrorMessage(code),
+          false,
+          code,
         );
       }
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
-    return this.failed(
-      "Timed out waiting for ExecutionHost assignment result",
-      true,
-    );
+    return this.failed(executionErrorMessage("timeout"), true, "timeout");
   }
 
   private async dispatch(
@@ -924,7 +932,11 @@ class HostGatewayForgeWorker implements ForgeWorker {
       : "HEAD";
   }
 
-  private failed(message: string, retryable = false): WorkerAssignmentResult {
+  private failed(
+    message: string,
+    retryable = false,
+    code: ExecutionErrorCode = "execution_failed",
+  ): WorkerAssignmentResult {
     return {
       assignmentId: "",
       workspaceId: this.worker.workspaceId,
@@ -937,7 +949,7 @@ class HostGatewayForgeWorker implements ForgeWorker {
       output: null,
       artifactIds: [],
       completedAt: new Date().toISOString(),
-      error: { code: "agent_assignment_failed", message, retryable },
+      error: { code, message, retryable },
     };
   }
 
@@ -952,13 +964,19 @@ class HostGatewayForgeWorker implements ForgeWorker {
     }
   }
 
-  private assignmentError(value: string | null): string | null {
+  private assignmentError(
+    value: string | null,
+  ): { code: ExecutionErrorCode; message: string } | null {
     if (!value) return null;
     try {
-      const parsed = JSON.parse(value) as { error?: { message?: unknown } };
-      return typeof parsed.error?.message === "string"
-        ? parsed.error.message
-        : null;
+      const parsed = JSON.parse(value) as {
+        error?: { code?: unknown; message?: unknown };
+      };
+      const code = canonicalExecutionErrorCode(parsed.error?.code);
+      return {
+        code,
+        message: executionErrorMessage(code),
+      };
     } catch {
       return null;
     }

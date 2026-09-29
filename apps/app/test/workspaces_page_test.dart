@@ -168,8 +168,8 @@ void main() {
         'id': 'local-worker-1',
         'workspaceId': 'workspace-1',
         'workspaceName': 'Build Mac',
-        'workerTypeId': 'codex',
-        'name': 'Codex Personal',
+        'workerTypeId': 'chatgpt',
+        'name': 'ChatGPT Personal',
         'status': 'ready',
         'authStrategy': 'browser_auth',
         'credentialStatus': 'ready',
@@ -200,8 +200,7 @@ void main() {
       )));
       await tester.pumpAndSettle();
       expect(find.text('Workers'), findsNWidgets(2));
-      expect(find.text('Codex Personal'), findsOneWidget);
-      expect(find.text('Codex'), findsOneWidget);
+      expect(find.text('ChatGPT'), findsNWidgets(2));
       expect(find.textContaining('Cloud scheduling'), findsNothing);
       expect(find.text('Auth strategy'), findsNothing);
       expect(find.textContaining('credentialRef'), findsNothing);
@@ -326,7 +325,7 @@ void main() {
       const localWorker = StudioWorker(
         id: 'local-worker-1',
         workspaceId: 'workspace-macbook',
-        workerTypeId: 'codex',
+        workerTypeId: 'chatgpt',
         status: 'ready',
         readinessState: 'ready',
         localConcurrencyLimit: 2,
@@ -342,7 +341,7 @@ void main() {
         onGrant: (_) {},
       )));
       await tester.pumpAndSettle();
-      expect(find.text('ChatGPT'), findsOneWidget);
+      expect(find.text('ChatGPT'), findsNWidgets(2));
       expect(find.text('Codex Personal'), findsNothing);
       expect(find.text('AI Accounts'), findsNothing);
       expect(find.byTooltip('Remove binding'), findsNothing);
@@ -383,7 +382,7 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      expect(find.text('ChatGPT'), findsOneWidget);
+      expect(find.text('ChatGPT'), findsNWidgets(2));
       expect(find.text('Ready locally'), findsOneWidget);
       expect(find.textContaining('Cloud scheduling'), findsNothing);
       expect(find.textContaining('Model'), findsNothing);
@@ -414,10 +413,11 @@ void main() {
             workerCount: 1,
             activeTaskCount: 0,
           );
-      StudioWorker worker(String id, String workspaceId) => StudioWorker(
+      StudioWorker worker(String id, String workspaceId, String workerTypeId) =>
+          StudioWorker(
             id: id,
             workspaceId: workspaceId,
-            workerTypeId: 'ollama',
+            workerTypeId: workerTypeId,
             status: 'ready',
             readinessState: 'ready',
             localConcurrencyLimit: 1,
@@ -426,7 +426,10 @@ void main() {
 
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: [workspace('one'), workspace('two')],
-        workspaceWorkers: [worker('one', 'one'), worker('two', 'two')],
+        workspaceWorkers: [
+          worker('one', 'one', 'chatgpt'),
+          worker('two', 'two', 'gemini'),
+        ],
         onAdd: () {},
         onRename: (_) {},
         onUpdate: (_) {},
@@ -439,26 +442,24 @@ void main() {
       final firstCard = tester.widget<Card>(cards.at(0));
       final secondCard = tester.widget<Card>(cards.at(1));
       expect(firstCard, isNot(same(secondCard)));
-      expect(
-          find.descendant(of: cards.at(0), matching: find.text('Worker one')),
-          findsOneWidget);
-      expect(
-          find.descendant(of: cards.at(0), matching: find.text('Worker two')),
+      expect(find.descendant(of: cards.at(0), matching: find.text('ChatGPT')),
+          findsNWidgets(2));
+      expect(find.descendant(of: cards.at(0), matching: find.text('Gemini')),
           findsNothing);
-      expect(
-          find.descendant(of: cards.at(1), matching: find.text('Worker two')),
-          findsOneWidget);
+      expect(find.descendant(of: cards.at(1), matching: find.text('Gemini')),
+          findsNWidgets(2));
     });
 
-    testWidgets('needs-authentication points to Conclave Workspace desktop',
+    testWidgets('needs-attention points to Conclave Workspace desktop',
         (tester) async {
       final worker = StudioWorker.fromJson({
         'id': 'worker-needs-auth',
         'workspaceId': 'workspace-auth',
         'workspaceName': 'Auth Mac',
-        'workerTypeId': 'codex',
-        'name': 'Codex Personal',
+        'workerTypeId': 'chatgpt',
+        'name': 'ChatGPT Personal',
         'status': 'needs_attention',
+        'attentionReasonCode': 'authentication_required',
         'authStrategy': 'browser_auth',
         'credentialStatus': 'needs_authentication',
         'localConcurrencyLimit': 1,
@@ -483,15 +484,13 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      expect(find.text('Sign-in required'), findsOneWidget);
-      await tester.tap(find.text('Codex Personal'));
+      expect(find.text('Needs local attention'), findsOneWidget);
+      await tester.tap(find.text('ChatGPT').first);
       await tester.pumpAndSettle();
       expect(
-        find.textContaining(
-          'Complete sign-in or setup in Conclave Workspace on Auth Mac.',
-        ),
-        findsOneWidget,
-      );
+          find.textContaining(
+              'Resolve authentication_required in Conclave Workspace.'),
+          findsOneWidget);
     });
 
     testWidgets('disconnected Workspace stays read-only', (tester) async {

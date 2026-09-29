@@ -32,7 +32,7 @@ Conclave AX -> Conclave Cloud -> Conclave Workspace -> configured Worker -> adap
 - Cloudflare D1 for structured state.
 - Cloudflare R2 for artifacts, Worker packages, and releases.
 - Better Auth for human authentication.
-- Versioned structured V7 adapter protocol between Workspace runtime and adapter processes (`initialize`, `validate`, `execute`, `progress`, `result`, `error`, `health`, `version`). Interactive request/response input is a future protocol extension unless a supported adapter requires it.
+- Versioned structured V7 Local Adapter Protocol between Workspace and adapter processes (`initialize.request/result`, `probe.request/result`, `execute.request`, `progress`, `result`, `error`). Every exchange has a request ID; provider tokens and account secrets are not protocol fields.
 - GitHub Actions for CI/CD.
 - Wrangler for Cloudflare deployment.
 

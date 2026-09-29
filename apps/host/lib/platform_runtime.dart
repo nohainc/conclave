@@ -30,6 +30,7 @@ final PlatformRuntime _platformRuntime =
 
 final class PosixRuntime implements PlatformRuntime {
   final Map<int, Set<int>> _knownDescendants = {};
+  final Set<int> _isolatedProcessGroups = {};
 
   @override
   String get operatingSystem => Platform.operatingSystem;
@@ -63,18 +64,103 @@ final class PosixRuntime implements PlatformRuntime {
       {String? workingDirectory,
       Map<String, String>? environment,
       bool includeParentEnvironment = true}) async {
+    if (Platform.isLinux) {
+      try {
+        final process = await Process.start(
+          'setsid',
+          [executable, ...arguments],
+          workingDirectory: workingDirectory,
+          environment: environment,
+          includeParentEnvironment: includeParentEnvironment,
+          runInShell: false,
+        );
+        _isolatedProcessGroups.add(process.pid);
+        return process;
+      } on ProcessException {
+        // Fall back to the portable process-group helper below.
+      }
+    }
+
+    final grouped = await _startWithNewProcessGroup(
+      executable,
+      arguments,
+      workingDirectory: workingDirectory,
+      environment: environment,
+      includeParentEnvironment: includeParentEnvironment,
+    );
+    if (grouped != null) return grouped;
+
+    return Process.start(
+      executable,
+      arguments,
+      workingDirectory: workingDirectory,
+      environment: environment,
+      includeParentEnvironment: includeParentEnvironment,
+      runInShell: false,
+    );
+  }
+
+  Future<Process?> _startWithNewProcessGroup(
+    String executable,
+    List<String> arguments, {
+    String? workingDirectory,
+    Map<String, String>? environment,
+    required bool includeParentEnvironment,
+  }) async {
+    Directory? handshakeDirectory;
+    Process? process;
     try {
-      return await Process.start('setsid', [executable, ...arguments],
-          workingDirectory: workingDirectory,
-          environment: environment,
-          includeParentEnvironment: includeParentEnvironment,
-          runInShell: false);
+      handshakeDirectory = await Directory.systemTemp.createTemp(
+        'conclave-process-group-',
+      );
+      final handshake = File('${handshakeDirectory.path}/ready');
+      const groupSetup = r'''
+my $ok = setpgid(0, 0) == 0;
+open my $ready, ">", $ARGV[0] or exit 126;
+print $ready ($ok ? "group" : "fallback");
+close $ready;
+shift @ARGV;
+exec @ARGV or exit 127;
+''';
+      process = await Process.start(
+        '/usr/bin/perl',
+        ['-MPOSIX', '-e', groupSetup, handshake.path, executable, ...arguments],
+        workingDirectory: workingDirectory,
+        environment: environment,
+        includeParentEnvironment: includeParentEnvironment,
+        runInShell: false,
+      );
+      final deadline = DateTime.now().add(const Duration(seconds: 2));
+      var exited = false;
+      unawaited(process.exitCode.then((_) => exited = true));
+      while (!await handshake.exists() &&
+          !exited &&
+          DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      if (!await handshake.exists()) {
+        process.kill(ProcessSignal.sigkill);
+        return null;
+      }
+      final isolated = (await handshake.readAsString()) == 'group';
+      await handshakeDirectory.delete(recursive: true);
+      handshakeDirectory = null;
+      if (isolated) _isolatedProcessGroups.add(process.pid);
+      return process;
     } on ProcessException {
-      return Process.start(executable, arguments,
-          workingDirectory: workingDirectory,
-          environment: environment,
-          includeParentEnvironment: includeParentEnvironment,
-          runInShell: false);
+      if (process != null) process.kill(ProcessSignal.sigkill);
+      return null;
+    } on FileSystemException {
+      if (process != null) process.kill(ProcessSignal.sigkill);
+      return null;
+    } finally {
+      if (handshakeDirectory != null) {
+        try {
+          await handshakeDirectory.delete(recursive: true);
+        } on FileSystemException {
+          // The helper may already have removed the temporary directory.
+        }
+      }
     }
   }
 
@@ -83,6 +169,22 @@ final class PosixRuntime implements PlatformRuntime {
       {required bool force}) async {
     final signal = force ? '-KILL' : '-TERM';
     final dartSignal = force ? ProcessSignal.sigkill : ProcessSignal.sigterm;
+    if (_isolatedProcessGroups.contains(process.pid)) {
+      var groupSignalSucceeded = false;
+      try {
+        final result =
+            await Process.run('kill', [signal, '--', '-${process.pid}'])
+                .timeout(const Duration(seconds: 2));
+        groupSignalSucceeded = result.exitCode == 0;
+      } on Object {
+        // The process may have left the group; try descendant discovery below.
+      }
+      if (groupSignalSucceeded) {
+        process.kill(dartSignal);
+        if (force) _isolatedProcessGroups.remove(process.pid);
+        return;
+      }
+    }
     final descendants = _knownDescendants.putIfAbsent(process.pid, () => {});
     descendants.addAll(await _processDescendants(process.pid));
     final orderedPids = descendants.toList().reversed.toList();

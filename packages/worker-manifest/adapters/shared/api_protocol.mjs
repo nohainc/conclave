@@ -3,7 +3,7 @@ import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 import { providers } from "./providers/index.mjs";
 
-export const protocolVersion = "1.0";
+export const protocolVersion = "2.1";
 export const maxPromptBytes = 512 * 1024;
 const maxResponseBytes = 2 * 1024 * 1024;
 const maxResultBytes = 500_000;
@@ -127,16 +127,7 @@ async function handle(frame) {
         capabilities: ["text_generation"],
       });
       return;
-    case "version.request":
-      send("version.result", frame.requestId, {
-        adapterVersion,
-        protocolVersion,
-      });
-      return;
-    case "health.request":
-      send("health.result", frame.requestId, { healthy: true });
-      return;
-    case "validate.request":
+    case "probe.request":
       config = Object.fromEntries(
         Object.entries(frame.config ?? {}).filter(
           ([key, value]) =>
@@ -146,8 +137,10 @@ async function handle(frame) {
         ),
       );
       if (!process.env.CONCLAVE_PROVIDER_API_KEY) {
-        send("validate.result", frame.requestId, {
+        send("probe.result", frame.requestId, {
           ready: false,
+          toolVersion: null,
+          checkKind: "readiness",
           issues: [
             {
               code: "credential_missing",
@@ -156,8 +149,10 @@ async function handle(frame) {
           ],
         });
       } else if (!endpointConfigIsValid(config)) {
-        send("validate.result", frame.requestId, {
+        send("probe.result", frame.requestId, {
           ready: false,
+          toolVersion: null,
+          checkKind: "readiness",
           issues: [
             {
               code: "endpoint_invalid",
@@ -171,18 +166,23 @@ async function handle(frame) {
             apiKey: process.env.CONCLAVE_PROVIDER_API_KEY,
             config,
           });
-          send("validate.result", frame.requestId, {
+          send("probe.result", frame.requestId, {
             ready: true,
+            toolVersion: null,
+            checkKind: "readiness",
             issues: [],
             models: Array.isArray(models) ? models.slice(0, 500) : [],
           });
         } catch (error) {
-          send("validate.result", frame.requestId, {
+          send("probe.result", frame.requestId, {
             ready: false,
+            toolVersion: null,
+            checkKind: "readiness",
             issues: [
               {
                 code: "credential_invalid",
-                message: error.message || "Provider API key validation failed.",
+                message:
+                  "Provider authentication failed. Check the key stored in Conclave Workspace.",
               },
             ],
           });
@@ -197,7 +197,7 @@ async function handle(frame) {
       if (typeof frame.model !== "string" || !frame.model.trim()) {
         send("error", frame.requestId, {
           assignmentId: frame.assignmentId,
-          code: "model_required",
+          code: "worker_not_ready",
           message:
             "Set a default model for this API Worker in Conclave Workspace.",
           retryable: false,
@@ -218,7 +218,7 @@ async function handle(frame) {
         if (Buffer.byteLength(output, "utf8") > maxResultBytes) {
           send("error", frame.requestId, {
             assignmentId: frame.assignmentId,
-            code: "result_too_large",
+            code: "execution_failed",
             message: "Provider response exceeded the adapter result limit.",
             retryable: false,
           });
@@ -230,10 +230,24 @@ async function handle(frame) {
           artifacts: [],
         });
       } catch (error) {
+        const status = error?.status ?? error?.statusCode;
+        const message = typeof error?.message === "string"
+          ? error.message.toLowerCase()
+          : "";
+        const code = status === 401 || status === 403
+          ? "authentication_required"
+          : status === 429
+            ? "quota_exhausted"
+            : typeof status === "number" && status >= 500
+              ? "provider_unavailable"
+              : /model.{0,30}(unsupported|not found|invalid)/.test(message)
+                ? "model_not_supported"
+                : "execution_failed";
         send("error", frame.requestId, {
           assignmentId: frame.assignmentId,
-          code: "provider_request_failed",
-          message: error.message || "Provider request failed.",
+          code,
+          message:
+            "Provider request failed. Check local provider configuration.",
           retryable: error.retryable === true,
         });
       }
@@ -258,8 +272,8 @@ if (
     } catch (error) {
       send("error", frame?.requestId ?? "invalid", {
         ...(frame?.assignmentId ? { assignmentId: frame.assignmentId } : {}),
-        code: "invalid_request",
-        message: error.message || "Invalid adapter request.",
+        code: "internal_adapter_error",
+        message: "The local Worker integration needs attention.",
         retryable: false,
       });
     }

@@ -15,6 +15,9 @@
 | Artifacts/packages | Cloudflare R2 |
 | Durable orchestration | Cloudflare Workflows |
 | Workspace connectivity | Durable Objects + WebSocket |
+| AX-to-Cloud product boundary | HTTPS APIs + browser realtime, human session |
+| Workspace-to-Cloud runtime boundary | Workspace Runtime Protocol over WSS, HTTPS long-poll fallback |
+| Workspace-to-adapter boundary | Local Adapter Protocol over NDJSON stdin/stdout |
 | Web hosting | Cloudflare static assets / Worker deployment |
 | TypeScript tests | Vitest |
 | Dart/Flutter tests | dart test / flutter_test |
@@ -63,6 +66,12 @@ The persistent runtime process owns:
 - minimal local UI/tray behavior.
 
 Adapter execution remains in separate per-assignment OS child processes, retaining crash/cancellation/security isolation while keeping the Cloud connection/runtime stable.
+Workspace owns each adapter's full descendant tree. Assignment cancellation,
+timeout, output overflow, Worker removal, and runtime shutdown signal that
+tree, escalate from graceful termination to force termination, and wait for
+the executor cleanup path before shutdown completes. POSIX process groups are
+used where supported, with recursive process discovery as fallback; Windows
+uses process-tree termination.
 
 ## Worker adapters
 
@@ -87,7 +96,10 @@ A configured Worker is local configuration/state that references one adapter typ
 
 ## Cross-language contracts
 
-Keep one canonical protocol schema source.
+Keep one canonical schema source per protocol boundary. The Human Product,
+Workspace Runtime, and Local Adapter contracts have separate endpoint owners,
+authentication, versions, and wire schemas. Their shared domain IDs/types do
+not justify sharing an envelope or importing another boundary's transport.
 
 Generate/validate TypeScript and Dart bindings.
 
@@ -156,10 +168,11 @@ are implemented. V7 is not yet the declared implemented baseline: production
 Worker live acceptance, full failure/security acceptance, and native macOS
 `.app` update/recovery remain release gates.
 
-The adapter protocol version 1.0 defines `initialize`, `validate`, `execute`,
-`progress`, `result`, `error`, `health`, and `version`. Interactive
-request/response input is intentionally deferred to a future versioned
-extension unless required by a production-supported adapter.
+The Local Adapter Protocol version 2.1 defines correlated
+`initialize.request/result`, `probe.request/result`, `execute.request`,
+`progress`, `result`, and `error` frames. Probe results expose readiness,
+safe tool version, check kind, and bounded issues. Provider tokens and account
+secrets are not protocol fields.
 
 See the [Architecture v7 Completion Plan](../roadmaps/ARCHITECTURE_V7_COMPLETION.md),
 [release operations](../deployment/WORKSPACE_RELEASES.md), and

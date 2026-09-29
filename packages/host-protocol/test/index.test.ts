@@ -394,14 +394,26 @@ describe("Conclave Host & Worker Protocol v4", () => {
         payload: {
           assignmentId: "asgn-v4-001",
           error: {
-            code: "PROCESS_CRASHED",
-            message: "Process exited with code 1",
+            code: "internal_adapter_error",
+            message: "The local Worker integration needs attention.",
             retryable: true,
           },
           failedAt: "2026-09-23T10:03:00.000Z",
         },
       };
       expect(parseHostMessage(errorMsg).type).toBe("assignment.error");
+      expect(() =>
+        parseHostMessage({
+          ...errorMsg,
+          payload: {
+            ...errorMsg.payload,
+            error: {
+              ...errorMsg.payload.error,
+              message: "provider stderr: secret diagnostic",
+            },
+          },
+        }),
+      ).toThrow(/canonical safe message/);
 
       const cancelMsg = {
         ...hostAssignmentEnvelope,
