@@ -20,10 +20,16 @@ Future<void> main(List<String> args) async {
     final signingSeed = Platform.environment['CONCLAVE_RELEASE_SIGNING_SEED'];
     final signingKeyId =
         Platform.environment['CONCLAVE_RELEASE_SIGNING_KEY_ID'];
-    if (signingSeed == null ||
-        signingSeed.isEmpty ||
-        signingKeyId == null ||
-        signingKeyId.isEmpty) {
+    final unsignedBundledAdapter = options['unsigned'] == 'true';
+    if (unsignedBundledAdapter && options['channel'] != 'stable') {
+      throw StateError(
+          'Unsigned adapter packages are only supported for bundled local development builds.');
+    }
+    if (!unsignedBundledAdapter &&
+        (signingSeed == null ||
+            signingSeed.isEmpty ||
+            signingKeyId == null ||
+            signingKeyId.isEmpty)) {
       throw StateError(
           'Set CONCLAVE_RELEASE_SIGNING_SEED and CONCLAVE_RELEASE_SIGNING_KEY_ID in the release environment.');
     }
@@ -31,14 +37,16 @@ Future<void> main(List<String> args) async {
       throw ArgumentError('Adapter source directory does not exist.');
     }
 
-    final seed = base64.decode(signingSeed);
-    if (seed.length != 32) {
+    final seed = unsignedBundledAdapter ? null : base64.decode(signingSeed!);
+    if (seed != null && seed.length != 32) {
       throw StateError('Ed25519 signing seed must be 32 bytes.');
     }
-    final signer = await Ed25519().newKeyPairFromSeed(seed);
-    final publicKey = await signer.extractPublicKey();
+    final signer =
+        seed == null ? null : await Ed25519().newKeyPairFromSeed(seed);
+    final publicKey = await signer?.extractPublicKey();
     final trustPolicy = WorkerTrustPolicy(trustedPublicKeys: {
-      publisher: {signingKeyId: base64.encode(publicKey.bytes)},
+      if (publicKey != null)
+        publisher: {signingKeyId!: base64.encode(publicKey.bytes)},
     });
     final store = V7AdapterPackageStore(
       root: Directory('${Directory.systemTemp.path}/conclave-package-check'),
@@ -78,15 +86,18 @@ Future<void> main(List<String> args) async {
       manifest['packageDigest'] = digest;
       final channel = options['channel'];
       if (channel != null) manifest['releaseChannel'] = channel;
-      manifest['signingKeyId'] = signingKeyId;
+      manifest['signingKeyId'] = unsignedBundledAdapter ? '' : signingKeyId;
       manifest['signature'] = '';
-      final unsigned = Map<String, Object?>.from(manifest)..remove('signature');
-      final signature = await Ed25519().sign(
-        utf8.encode(
-            'conclave-v7-adapter-release-v1\n$digest\n${canonicalJson(unsigned)}'),
-        keyPair: signer,
-      );
-      manifest['signature'] = base64.encode(signature.bytes);
+      if (signer != null) {
+        final unsigned = Map<String, Object?>.from(manifest)
+          ..remove('signature');
+        final signature = await Ed25519().sign(
+          utf8.encode(
+              'conclave-v7-adapter-release-v1\n$digest\n${canonicalJson(unsigned)}'),
+          keyPair: signer,
+        );
+        manifest['signature'] = base64.encode(signature.bytes);
+      }
       await manifestFile.writeAsString(jsonEncode(manifest), flush: true);
 
       final platforms = manifest['supportedPlatforms'];
@@ -103,6 +114,7 @@ Future<void> main(List<String> args) async {
         platform: platforms.first as String,
         trustPolicy: trustPolicy,
         allowedPermissions: WorkerPermission.values.toSet(),
+        allowUnsignedBundledAdapter: unsignedBundledAdapter,
       );
       final archive = Archive();
       final files = <File>[];
@@ -155,21 +167,33 @@ Future<void> main(List<String> args) async {
 Map<String, String> _arguments(List<String> args) {
   if (args.length < 4 || args[0] != '--source' || args[2] != '--output') {
     throw ArgumentError(
-        'Usage: dart run bin/package_v7_adapter.dart --source <adapter-dir> --output <release.tgz>');
+        'Usage: dart run bin/package_v7_adapter.dart --source <adapter-dir> --output <release.tgz> [--channel stable] [--unsigned]');
   }
   if (args[1].trim().isEmpty || args[3].trim().isEmpty) {
     throw ArgumentError('Source and output paths must not be empty.');
   }
   final result = {'source': args[1], 'output': args[3]};
-  if (args.length > 4) {
-    if (args.length != 6 ||
-        args[4] != '--channel' ||
-        !const {'development', 'beta', 'stable'}.contains(args[5])) {
-      throw ArgumentError(
-          'Optional channel must be development, beta, or stable.');
+  for (var index = 4; index < args.length; index++) {
+    switch (args[index]) {
+      case '--channel':
+        if (index + 1 >= args.length ||
+            !const {'development', 'beta', 'stable'}
+                .contains(args[index + 1])) {
+          throw ArgumentError('Channel must be development, beta, or stable.');
+        }
+        result['channel'] = args[++index];
+        break;
+      case '--unsigned':
+        if (result['unsigned'] == 'true') {
+          throw ArgumentError('Unsigned option may only be specified once.');
+        }
+        result['unsigned'] = 'true';
+        break;
+      default:
+        throw ArgumentError('Unsupported adapter packaging option.');
     }
-    result['channel'] = args[5];
   }
+  result['unsigned'] ??= 'false';
   return result;
 }
 

@@ -59,11 +59,14 @@ Required protected configuration is declared by the workflow:
 The build packages stable Codex and Antigravity adapters with the protected
 adapter signing key, verifies both archives against the configured public
 trust roots, and embeds them as app assets. Generated package archives and
-manifests are build outputs and are not committed. Use
-`scripts/build-workspace-macos.sh` for a local build with the adapter signing
-configuration available. A local build may be unsigned and is not production
-release evidence. Apple signing/notarization is complementary to Conclave's
-signed release metadata.
+manifests are build outputs and are not committed. By default,
+`scripts/build-workspace-macos.sh` makes a local build with unsigned bundled
+first-party adapters. That build accepts unsigned code only for embedded
+ChatGPT/Gemini adapters; Cloud-delivered adapters remain signature-verified.
+Use `--sign-adapters` with the protected adapter signing configuration for a
+product release. Apple app signing/notarization is separate from adapter
+package signing and Conclave's signed release metadata. A local build is not
+production release evidence.
 
 ## Production readiness limit
 

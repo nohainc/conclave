@@ -82,6 +82,8 @@ void main() {
     expect(chatgpt.productName, 'ChatGPT');
     expect(chatgpt.adapterPackageId, 'codex');
     expect(chatgpt.probeStrategy.id, 'codex_login_status');
+    expect(chatgpt.probeStrategy.setupExecutionTestPrompt,
+        'Reply with exactly the word OK. Do not use tools.');
     expect(chatgpt.probeStrategy.authenticationArguments, ['login', 'status']);
     expect(chatgpt.supportedCliVersionRange.minimum, isNull);
     expect(chatgpt.supportedCliVersionRange.maximum, isNull);

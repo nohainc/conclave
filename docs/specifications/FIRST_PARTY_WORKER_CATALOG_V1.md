@@ -73,7 +73,9 @@ does not have an Add Worker action, an empty-list state, or a Worker Type
 selector. Each slot combines its fixed catalog identity with the matching
 local configuration and readiness status in one compact row. The normal row
 shows the provider CLI name and version, CLI usability, last live-test result,
-and local readiness. Rows do not expand and there is no details panel. If the
+and local readiness. A failed manual test shows the CLI checks, execution call,
+test prompt, expected reply, and bounded actual reply or stable failure result,
+with a copy action. Raw stderr and tool output are not shown. If the
 CLI is absent or its version command fails, the row shows a **Not configured**
 badge, a short CLI-specific reason, and a **Check again** action. Once the CLI
 is available, the row shows an enable/disable switch and a **Test** action for
@@ -88,24 +90,32 @@ normal Workers page and setup errors do not expose adapter package versions,
 signatures, signing keys, or release channels. An internal bridge failure is
 shown as **Conclave integration needs attention**. Advanced Diagnostics may
 include the package ID, version, publisher, signing-key ID, release channel,
-and signature-verification result for support troubleshooting.
+and signature-verification result for support troubleshooting. This readiness
+label means Workspace could not start or communicate with its local adapter;
+the failed-test diagnostic provides safe next steps.
 
-Workspace app builds embed stable signed `codex` and `antigravity` adapter
-archives. First-party setup verifies and seeds the bundled adapter before any
-Cloud request, so a clean installation can configure Workers offline. The
-existing signed Cloud release flow remains the silent upgrade path. A failed
-download, signature check, compatibility check, or health check leaves the
-last-known-good adapter active; when no installed candidate is usable,
-Workspace falls back to its verified bundled release.
+Product release builds embed stable signed `codex` and `antigravity` adapter
+archives. Local builds may embed unsigned first-party archives and enable them
+only through their app-bundled fallback; Cloud-delivered archives always
+require signature verification. First-party setup verifies and seeds the
+bundled adapter before any Cloud request, so a clean installation can
+configure Workers offline. The existing signed Cloud release flow remains the
+silent upgrade path. A failed download, signature check, compatibility check,
+or health check leaves the last-known-good adapter active; when no installed
+candidate is usable, Workspace falls back to its bundled package.
 
 The Workspace resolves executables in this order: a cached absolute path that
 still passes the descriptor's version check, the current process PATH, then
 known per-user and platform install directories. The versioned local registry
-stores only the selected absolute executable path and detected semantic
-version; it does not store PATH or provider account data. Assignment launch
+stores the selected absolute executable path, detected semantic version, and a
+bounded safe diagnostic from the latest failed manual test; it does not store
+PATH, raw CLI output, or provider account data. Assignment launch
 revalidates the cached path, rescans if it is missing or unsupported, and gives
 the adapter the selected absolute path so launch does not depend on the GUI
-process PATH. If discovery fails, the stale path and version are cleared.
+process PATH. Readiness recovery also adds the validated CLI's parent directory
+to adapter installation and health-check PATH, so colocated runtimes such as
+Node remain available when Workspace starts from Finder or a login item. If
+discovery fails, the stale path and version are cleared.
 
 The locator tests model Terminal with a CLI directory in PATH, Finder with the
 system PATH and a known install directory, and normal login-item startup with a
@@ -121,7 +131,10 @@ version and a safe readiness issue code such as `cli_not_found` or
 `authentication_required`. Workspace normalizes that result to one of the
 stable readiness reason codes `cli_not_found`, `unsupported_cli_version`,
 `authentication_required`, `execution_test_failed`, or `ready`. Raw CLI stderr
-is never returned to the UI. No provider token is sent to the adapter; Codex
+is not returned to the UI. A failed manual test may capture up to 4 KiB of
+adapter-process stderr; the complete locally stored transcript is capped at
+1000 characters and known secrets are redacted. It is not synchronized to
+Cloud. No provider token is sent to the adapter; Codex
 uses its own local authentication state. If authentication is missing, the
 user signs into Codex through its own CLI and selects **Check again**. There is
 no Node.js prerequisite check or in-app login launcher.
@@ -139,8 +152,10 @@ execution error taxonomy: `worker_not_ready`, `cli_not_found`,
 `permission_denied`, `quota_exhausted`, `provider_unavailable`, `timeout`,
 `cancelled`, `internal_adapter_error`, and `execution_failed`. Provider-specific
 parsing stays inside the adapter. The adapter and Workspace discard raw provider
-stderr before returning assignment failures; Cloud persists and exposes only a
-canonical code and its generic display message.
+CLI stderr before returning assignment failures; Cloud persists and exposes only a
+canonical code and its generic display message. Adapter-process stderr captured
+during manual readiness tests is bounded, secret-redacted, and kept in local
+diagnostics only.
 
 For the Gemini slot, Workspace uses the same adapter initialize/probe exchange.
 The Antigravity adapter runs its version check locally. Its explicit setup or
@@ -155,7 +170,7 @@ one fresh `agy` process with `--input-format stream-json` and
 that turn. `init`, `step_update`, and terminal `result` events are translated
 to the shared adapter protocol. The CLI sandbox is enabled; the adapter never
 uses `--dangerously-skip-permissions`. Raw tool output, provider diagnostics,
-and stderr are never exposed. Its child process receives the same minimal
+and CLI stderr are never exposed. Its child process receives the same minimal
 runtime environment policy as Codex and no injected provider credentials.
 If authentication is missing, the user completes Antigravity's own sign-in
 flow outside Workspace and selects **Test** again. The CLI version is
@@ -169,8 +184,14 @@ Readiness is continuously rechecked at Workspace start, every five minutes,
 when the desktop app resumes, and when a user explicitly rechecks setup. The
 local state is one of `Ready`, `Not installed`, `Sign in required`,
 `Unsupported CLI version`, `Conclave integration needs attention`, `Disabled`,
-or `Test failed`. A manual live test stores its local result and timestamp;
-routine readiness checks do not replace that last-test record.
+or `Test failed`. A manual live test stores its local result and timestamp,
+plus a bounded safe diagnostic on failure; a successful test clears the old
+diagnostic. Diagnostics remain local and are omitted from Cloud inventory.
+Routine readiness checks do not replace that last-test record.
+Before probing a configured first-party slot, Workspace validates its active
+adapter and restores a verified last-known-good or embedded package when the
+active package is missing or invalid. This recovery runs locally and does not
+depend on a Cloud adapter release being available.
 Changed state is persisted locally and immediately included in the next safe
 Cloud inventory snapshot. Cloud retains the coarse scheduling gate separately:
 only `Ready` Workers are eligible for dispatch. Provider credentials and local

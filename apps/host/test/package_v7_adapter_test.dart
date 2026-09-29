@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:conclave_host/bundled_adapter_package.dart';
 import 'package:conclave_host/configured_worker_registry.dart';
 import 'package:conclave_host/v7_adapter_package_store.dart';
 import 'package:conclave_host/worker_trust_policy.dart';
@@ -262,5 +263,83 @@ void main() {
               .exists(),
           isTrue);
     }
+  });
+
+  test('creates unsigned local bundles without release signing keys', () async {
+    final output = await Directory.systemTemp.createTemp('unsigned-bundle-');
+    addTearDown(() => output.delete(recursive: true));
+    final archive = File('${output.path}/codex.tgz');
+    final packaged = await Process.run(
+      'dart',
+      [
+        'run',
+        'bin/package_v7_adapter.dart',
+        '--source',
+        '../../packages/worker-manifest/adapters/codex',
+        '--output',
+        archive.path,
+        '--channel',
+        'stable',
+        '--unsigned',
+      ],
+      workingDirectory: Directory.current.path,
+      environment: {
+        ...Platform.environment,
+        'CONCLAVE_WORKER_TRUST_PUBLISHER': 'conclave',
+        'CONCLAVE_RELEASE_SIGNING_SEED': '',
+        'CONCLAVE_RELEASE_SIGNING_KEY_ID': '',
+      },
+    );
+    expect(packaged.exitCode, 0, reason: packaged.stderr.toString());
+    final manifest = Map<String, Object?>.from(
+        jsonDecode(await File('${archive.path}.manifest.json').readAsString())
+            as Map);
+    expect(manifest['signingKeyId'], isEmpty);
+    expect(manifest['signature'], isEmpty);
+    final verified = await Process.run(
+      'dart',
+      [
+        'run',
+        'bin/verify_v7_adapter_release.dart',
+        archive.path,
+        '${archive.path}.manifest.json',
+        '--allow-unsigned-bundled',
+      ],
+      workingDirectory: Directory.current.path,
+      environment: Platform.environment,
+    );
+    expect(verified.exitCode, 0, reason: verified.stderr.toString());
+
+    final store = V7AdapterPackageStore(
+      root: Directory('${output.path}/store'),
+      trustPolicy: WorkerTrustPolicy(),
+      allowedPermissions: WorkerPermission.values.toSet(),
+      allowUnsignedBundledAdapters: true,
+      loadBundledPackage: (_) async => BundledAdapterPackage(
+        archiveBytes: await archive.readAsBytes(),
+        manifest: manifest,
+      ),
+      platform: '${Platform.isMacOS ? 'macos' : 'linux'}-'
+          '${Platform.version.toLowerCase().contains('arm64') ? 'arm64' : 'x64'}',
+    );
+    expect(await store.ensureFirstPartyAdapterAvailable('codex'), isTrue);
+    expect(await store.hasVerifiedActivePackage('codex'), isTrue);
+    final strictStore = V7AdapterPackageStore(
+      root: Directory('${output.path}/strict-store'),
+      trustPolicy: WorkerTrustPolicy(),
+      allowedPermissions: WorkerPermission.values.toSet(),
+      // Development builds still reject unsigned Cloud/catalog installs;
+      // only the app-bundled path opts in to unsigned admission.
+      allowUnsignedBundledAdapters: true,
+      platform: '${Platform.isMacOS ? 'macos' : 'linux'}-'
+          '${Platform.version.toLowerCase().contains('arm64') ? 'arm64' : 'x64'}',
+    );
+    await expectLater(
+      strictStore.installArchive(
+        archiveBytes: await archive.readAsBytes(),
+        expectedManifest: manifest,
+      ),
+      throwsStateError,
+    );
   });
 }

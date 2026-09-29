@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:conclave_host/adapter_prerequisite.dart';
 import 'package:conclave_host/configured_worker_registry.dart';
 import 'package:conclave_host/first_party_worker_adapter_descriptor.dart';
 import 'package:conclave_host/first_party_worker_cli_locator.dart';
@@ -34,6 +35,35 @@ class _ReadinessPlatform implements PlatformRuntime {
   @override
   Future<void> terminateProcessTree(Process process,
       {required bool force}) async {}
+}
+
+class _MissingFirstPartyAdapterStore extends V7AdapterPackageStore {
+  _MissingFirstPartyAdapterStore({
+    required super.root,
+    required super.cliLocator,
+  }) : super(
+          trustPolicy: WorkerTrustPolicy(),
+          allowedPermissions: WorkerPermission.values.toSet(),
+        );
+
+  final ensuredPackageIds = <String>[];
+  final ensuredSearchDirectories = <List<String>>[];
+
+  @override
+  Future<bool> hasVerifiedActivePackage(String workerTypeId,
+          [List<String>? localPermissions,
+          List<String> additionalPathDirectories = const []]) async =>
+      false;
+
+  @override
+  Future<bool> ensureFirstPartyAdapterAvailable(
+    String workerTypeId, {
+    List<String> additionalPathDirectories = const [],
+  }) async {
+    ensuredPackageIds.add(workerTypeId);
+    ensuredSearchDirectories.add(additionalPathDirectories);
+    return false;
+  }
 }
 
 void main() {
@@ -70,6 +100,59 @@ void main() {
           .wireValue,
       'ready',
     );
+  });
+
+  test('readiness restores the first-party fallback before adapter probing',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('worker-fallback-');
+    addTearDown(() => directory.delete(recursive: true));
+    final cliDirectory = Directory('${directory.path}/bin');
+    await cliDirectory.create(recursive: true);
+    final cli = File('${cliDirectory.path}/codex');
+    await cli.writeAsString('fake codex CLI');
+    final registry = LocalConfiguredWorkerRegistry(
+      dataDirectory: directory,
+      workspaceId: 'workspace-fallback',
+      platform: _ReadinessPlatform(),
+      idGenerator: () => 'worker-chatgpt',
+    );
+    await registry.create(
+      name: 'ChatGPT',
+      workerTypeId: 'chatgpt',
+      authStrategy: 'browser_auth',
+      localPermissions: const ['workstream_filesystem', 'shell_execution'],
+      executablePath: cli.path,
+      cliVersion: '0.158.0',
+    );
+    final adapterStore = _MissingFirstPartyAdapterStore(
+      root: Directory('${directory.path}/adapters'),
+      cliLocator: FirstPartyWorkerCliExecutableLocator(
+        environment: const {'PATH': ''},
+        knownDirectories: const [],
+        probeExecutable: (_, {searchPath}) async =>
+            const AdapterPrerequisiteResult(
+          satisfied: true,
+          detectedVersion: '0.158.0',
+          message: 'CLI is available.',
+        ),
+      ),
+    );
+    final monitor = WorkerReadinessMonitor(
+      registry: registry,
+      adapterStore: adapterStore,
+    );
+
+    await monitor.checkNow();
+
+    expect(adapterStore.ensuredPackageIds, ['codex']);
+    expect(adapterStore.ensuredSearchDirectories, [
+      [cliDirectory.path],
+    ]);
+    final worker = (await registry.list()).single;
+    expect(worker.readinessState, WorkerReadinessState.adapterUnavailable);
+    expect(worker.executablePath, cli.path);
+    expect(worker.cliVersion, '0.158.0');
+    await monitor.dispose();
   });
 
   test('rechecks configured Workers and syncs changed readiness state',
@@ -225,6 +308,52 @@ void main() {
     expect(gemini.lastLiveTestPassed, isTrue);
     expect(gemini.lastLiveTestAt, isNotNull);
     expect(chatgpt.lastLiveTestAt, isNull);
+    await monitor.dispose();
+  });
+
+  test('manual failed test retains safe local details and success clears them',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('worker-details-');
+    addTearDown(() => directory.delete(recursive: true));
+    final registry = LocalConfiguredWorkerRegistry(
+      dataDirectory: directory,
+      workspaceId: 'workspace-test-details',
+      platform: _ReadinessPlatform(),
+      idGenerator: () => 'worker-chatgpt',
+    );
+    final worker = await registry.create(
+      name: 'ChatGPT',
+      workerTypeId: 'chatgpt',
+      authStrategy: 'browser_auth',
+      status: LocalWorkerStatus.ready,
+      readinessState: WorkerReadinessState.ready,
+      credentialStatus: LocalWorkerCredentialStatus.ready,
+    );
+    var shouldFail = true;
+    final monitor = WorkerReadinessMonitor(
+      registry: registry,
+      adapterStore: V7AdapterPackageStore(
+        root: Directory('${directory.path}/adapters'),
+        trustPolicy: WorkerTrustPolicy(),
+        allowedPermissions: WorkerPermission.values.toSet(),
+      ),
+      assessWorker: (_) async => shouldFail
+          ? const WorkerReadinessAssessment(
+              WorkerReadinessState.adapterUnavailable)
+          : const WorkerReadinessAssessment(WorkerReadinessState.ready),
+    );
+
+    await monitor.checkNow(executionTest: true, workerTypeId: 'chatgpt');
+    final failed = (await registry.find(worker.id))!;
+    expect(failed.lastLiveTestPassed, isFalse);
+    expect(failed.lastLiveTestDetails, contains('execution_test_failed'));
+    expect(failed.lastLiveTestDetails, contains('local integration'));
+
+    shouldFail = false;
+    await monitor.checkNow(executionTest: true, workerTypeId: 'chatgpt');
+    final passed = (await registry.find(worker.id))!;
+    expect(passed.lastLiveTestPassed, isTrue);
+    expect(passed.lastLiveTestDetails, isNull);
     await monitor.dispose();
   });
 

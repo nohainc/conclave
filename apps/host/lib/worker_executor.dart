@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:conclave_protocol/conclave_protocol.dart'
     hide workerProtocolVersion;
@@ -47,6 +48,77 @@ Object? _redactValue(Object? value, Iterable<String> secrets) {
     };
   }
   return value;
+}
+
+String _readinessTestDiagnostic({
+  required String workerTypeId,
+  required String prompt,
+  required bool promptSent,
+  required String readinessResult,
+  required String result,
+}) {
+  final workerName = switch (workerTypeId) {
+    'chatgpt' || 'codex' => 'ChatGPT / Codex',
+    'gemini' || 'antigravity' => 'Gemini / Antigravity',
+    _ => 'Worker',
+  };
+  final readinessCalls = switch (workerTypeId) {
+    'chatgpt' || 'codex' => '`codex --version`; `codex login status`',
+    'gemini' || 'antigravity' => '`agy --version`',
+    _ => 'local CLI version and readiness checks',
+  };
+  final executionCall = switch (workerTypeId) {
+    'chatgpt' ||
+    'codex' =>
+      '`codex --ask-for-approval never --sandbox workspace-write exec '
+          '--json --ephemeral --color never --skip-git-repo-check '
+          '--cd <Workspace test directory> -`',
+    'gemini' ||
+    'antigravity' =>
+      '`agy --input-format stream-json --output-format stream-json '
+          '--sandbox --print-timeout 5m`',
+    _ => 'local adapter execution test',
+  };
+  return [
+    'Worker: $workerName',
+    'Readiness calls: $readinessCalls',
+    'Readiness result: $readinessResult',
+    'Execution call: $executionCall',
+    'Prompt submitted to adapter: ${promptSent ? 'yes' : 'no'}',
+    'Prompt: "$prompt"',
+    'Expected: exactly "OK"',
+    'Received: $result',
+  ].join('\n');
+}
+
+String _boundedTestResult(Object? value) {
+  final text =
+      value is String && value.trim().isNotEmpty ? value : 'no result returned';
+  final visible = text.replaceAll(RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F]'), '');
+  if (visible.length <= 320) return visible;
+  return '${visible.substring(0, 317)}…';
+}
+
+String _readinessCheckSummary(
+  String workerTypeId,
+  Map<String, Object?> probe,
+) {
+  final tool = switch (workerTypeId) {
+    'chatgpt' || 'codex' => 'Codex',
+    'gemini' || 'antigravity' => 'Antigravity',
+    _ => 'CLI',
+  };
+  final version = probe['toolVersion'];
+  if (probe['ready'] == true) {
+    return workerTypeId == 'chatgpt' || workerTypeId == 'codex'
+        ? 'passed: $tool ${version ?? 'version detected'}; login status passed'
+        : 'passed: $tool ${version ?? 'version detected'}; authentication is checked by the execution test';
+  }
+  final issues = probe['issues'] as List? ?? const [];
+  final issue = issues.whereType<Map>().firstOrNull;
+  if (issue == null) return 'failed: no successful readiness result returned';
+  return 'failed: ${issue['code'] ?? 'readiness_failed'} — '
+      '${_boundedTestResult(issue['message'])}';
 }
 
 class WorkerProcessSpec {
@@ -592,15 +664,39 @@ class WorkerProcessExecutor {
     final elapsed = Stopwatch()..start();
     var stdoutBytes = 0;
     var stderrBytes = 0;
+    const maxDiagnosticStderrBytes = 4096;
+    final adapterStderr = BytesBuilder(copy: false);
+    var adapterStderrTruncated = false;
     var failed = false;
     Completer<Map<String, Object?>>? pending;
     String? expectedRequestId;
     String? expectedResponseType;
+    String? activeRequestType;
+    Map<String, Object?>? lastProbeResult;
+    String adapterStderrDetails() {
+      final captured =
+          utf8.decode(adapterStderr.toBytes(), allowMalformed: true);
+      // Keep diagnostics local and redact any known secrets before they are
+      // persisted with the user's manual test transcript.
+      final redacted = redactSecrets(captured, spec.secretValues).trim();
+      if (redacted.isEmpty) return '';
+      final bounded = redacted.length <= 1200
+          ? redacted
+          : '${redacted.substring(0, 1197)}…';
+      return 'Adapter stderr (local, redacted):\n$bounded'
+          '${adapterStderrTruncated ? '\n[stderr truncated]' : ''}';
+    }
+
+    Object withAdapterStderr(Object error) {
+      final details = adapterStderrDetails();
+      return details.isEmpty ? error : StateError('$error\n$details');
+    }
+
     void fail(Object error) {
       if (failed) return;
       failed = true;
       if (pending != null && !pending!.isCompleted) {
-        pending!.completeError(error);
+        pending!.completeError(withAdapterStderr(error));
       }
       unawaited(_terminator(process, force: true));
     }
@@ -636,6 +732,12 @@ class WorkerProcessExecutor {
         });
     final stderrSubscription = process.stderr.listen((chunk) {
       stderrBytes += chunk.length;
+      final remaining = maxDiagnosticStderrBytes - adapterStderr.length;
+      if (remaining > 0) {
+        adapterStderr.add(
+            chunk.length <= remaining ? chunk : chunk.sublist(0, remaining));
+      }
+      if (adapterStderr.length < stderrBytes) adapterStderrTruncated = true;
       if (stderrBytes > maxStderrBytes) {
         fail(StateError('adapter health stderr exceeded its limit'));
       }
@@ -650,6 +752,7 @@ class WorkerProcessExecutor {
       String responseType,
       Map<String, Object?> fields,
     ) async {
+      activeRequestType = type;
       final remaining = timeout - elapsed.elapsed;
       if (remaining <= Duration.zero) {
         throw TimeoutException('adapter health check timed out', timeout);
@@ -689,6 +792,7 @@ class WorkerProcessExecutor {
         throw StateError('adapter initialize version mismatch');
       }
       final probe = await request('probe.request', 'probe.result', {});
+      lastProbeResult = probe;
       if (probe['type'] == 'error' ||
           probe['checkKind'] != 'readiness' ||
           (probe['ready'] != true && !allowNotReady)) {
@@ -716,6 +820,19 @@ class WorkerProcessExecutor {
           return {
             ...probe,
             'ready': false,
+            'testDetails': _readinessTestDiagnostic(
+              workerTypeId: workerTypeId,
+              prompt: executionTestPrompt,
+              promptSent: true,
+              readinessResult: _readinessCheckSummary(workerTypeId, probe),
+              result: [
+                execution['type'] == 'result'
+                    ? _boundedTestResult(resultText)
+                    : '${execution['code'] ?? 'execution_failed'}: '
+                        '${_boundedTestResult(execution['message'])}',
+                adapterStderrDetails(),
+              ].where((part) => part.isNotEmpty).join('\n'),
+            ),
             'issues': [
               {
                 'code': reasonCode,
@@ -731,9 +848,93 @@ class WorkerProcessExecutor {
           };
         }
       }
+      if (executionTestPrompt != null && probe['ready'] != true) {
+        final issues = probe['issues'] as List? ?? const [];
+        final issue = issues.whereType<Map>().firstOrNull;
+        final result = issue == null
+            ? 'The readiness check did not pass; execution prompt was not sent.'
+            : '${issue['code'] ?? 'readiness_failed'}: '
+                '${_boundedTestResult(issue['message'])}; execution prompt was not sent.';
+        return {
+          ...probe,
+          'testDetails': _readinessTestDiagnostic(
+            workerTypeId: workerTypeId,
+            prompt: executionTestPrompt,
+            promptSent: false,
+            readinessResult: _readinessCheckSummary(workerTypeId, probe),
+            result: result,
+          ),
+        };
+      }
       return probe;
-    } catch (_) {
+    } on TimeoutException {
+      if (!failed) fail(StateError('adapter health check timed out'));
+      if (executionTestPrompt != null) {
+        final promptWasSubmitted = activeRequestType == 'execute.request';
+        final probe = lastProbeResult ?? const <String, Object?>{};
+        final readinessResult = lastProbeResult == null
+            ? 'no response returned from the adapter readiness probe'
+            : _readinessCheckSummary(workerTypeId, probe);
+        return {
+          ...probe,
+          'ready': false,
+          'testDetails': _readinessTestDiagnostic(
+            workerTypeId: workerTypeId,
+            prompt: executionTestPrompt,
+            promptSent: promptWasSubmitted,
+            readinessResult: readinessResult,
+            result: [
+              '${activeRequestType ?? 'adapter startup'} timed out',
+              adapterStderrDetails(),
+            ].where((part) => part.isNotEmpty).join('\n'),
+          ),
+          'issues': [
+            {
+              'code': 'execution_test_failed',
+              'message': promptWasSubmitted
+                  ? 'The local execution test timed out.'
+                  : 'The local adapter readiness check timed out.',
+            }
+          ],
+        };
+      }
+      rethrow;
+    } catch (error) {
       if (!failed) fail(StateError('adapter health check failed'));
+      final details = adapterStderrDetails();
+      if (executionTestPrompt != null) {
+        final promptWasSubmitted = activeRequestType == 'execute.request';
+        final probe = lastProbeResult ?? const <String, Object?>{};
+        final readinessResult = lastProbeResult == null
+            ? 'no response returned from the adapter readiness probe'
+            : _readinessCheckSummary(workerTypeId, probe);
+        final errorText = error.toString();
+        return {
+          ...probe,
+          'ready': false,
+          'testDetails': _readinessTestDiagnostic(
+            workerTypeId: workerTypeId,
+            prompt: executionTestPrompt,
+            promptSent: promptWasSubmitted,
+            readinessResult: readinessResult,
+            result: [
+              errorText,
+              if (details.isNotEmpty && !errorText.contains(details)) details,
+            ].join('\n'),
+          ),
+          'issues': [
+            {
+              'code': 'execution_test_failed',
+              'message': promptWasSubmitted
+                  ? 'The local execution test failed.'
+                  : 'The local adapter readiness check failed.',
+            }
+          ],
+        };
+      }
+      if (details.isNotEmpty && !error.toString().contains(details)) {
+        throw withAdapterStderr(error);
+      }
       rethrow;
     } finally {
       await process.stdin.close();
@@ -1129,6 +1330,24 @@ Map<String, String> safeWorkerEnvironment(
     'LANG',
     'LC_ALL',
     'LC_CTYPE',
+    // TLS certificate configuration for provider connections.
+    'SSL_CERT_FILE',
+    'SSL_CERT_DIR',
+    // XDG base directories used by CLI tools to locate configuration,
+    // data, and state files (including auth tokens and session data).
+    'XDG_CONFIG_HOME',
+    'XDG_DATA_HOME',
+    'XDG_STATE_HOME',
+    'XDG_CACHE_HOME',
+    // Google Cloud authentication configuration directories. Without
+    // these, the Antigravity CLI cannot locate cached auth tokens and
+    // hangs during headless execution.
+    'GOOGLE_APPLICATION_CREDENTIALS',
+    'CLOUDSDK_CONFIG',
+    'GCLOUD_DIR',
+    // Disable colour output and interactive prompts in headless workers.
+    'NO_COLOR',
+    'TERM',
   ]) {
     final value = Platform.environment[name];
     if (value != null && value.isNotEmpty) environment[name] = value;

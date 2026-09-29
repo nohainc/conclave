@@ -61,6 +61,7 @@ Future<void> main(List<String> args) async {
   await adapter.writeAsString('''
 import 'dart:async';
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 Future<void> main() async {
   if (${jsonEncode(mode)} == 'adapter_crash') exit(8);
@@ -418,11 +419,95 @@ Future<void> main() async {
     );
 
     expect(result['ready'], isFalse);
+    expect(result['testDetails'], contains('Expected: exactly "OK"'));
+    expect(result['testDetails'], contains('authentication_required'));
+    expect(result['testDetails'], contains('Prompt submitted to adapter: yes'));
+    expect(result['testDetails'], contains('Readiness result: passed'));
+    expect(result['testDetails'], contains('`agy --version`'));
+    expect(result['testDetails'], contains('`agy --input-format stream-json'));
     expect(
       (result['issues'] as List).single['code'],
       'authentication_required',
     );
     expect(result.toString(), isNot(contains('provider-secret')));
+  });
+
+  test('retains the real stage when a headless execution test times out',
+      () async {
+    final directory =
+        await Directory.systemTemp.createTemp('v7-probe-execution-timeout-');
+    addTearDown(() => directory.delete(recursive: true));
+    final script = File('${directory.path}/adapter.dart');
+    await script.writeAsString(r'''
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+Future<void> main() async {
+  await for (final line in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
+    final request = jsonDecode(line) as Map<String, dynamic>;
+    final base = {'protocolVersion': '2.1', 'requestId': request['requestId']};
+    switch (request['type']) {
+      case 'initialize.request': stdout.writeln(jsonEncode({...base, 'type': 'initialize.result', 'adapterVersion': request['adapterVersion'], 'capabilities': <String>[] }));
+      case 'probe.request': stdout.writeln(jsonEncode({...base, 'type': 'probe.result', 'ready': true, 'toolVersion': '4.5.6', 'checkKind': 'readiness', 'issues': <Object>[] }));
+      case 'execute.request': await Completer<void>().future;
+    }
+  }
+}
+''');
+
+    final result = await WorkerProcessExecutor().checkV7AdapterHealth(
+      WorkerProcessSpec(
+        workerId: 'gemini-readiness-timeout-test',
+        executable: 'dart',
+        arguments: ['run', script.path],
+        workingDirectory: directory.path,
+      ),
+      workerTypeId: 'antigravity',
+      adapterVersion: '1.0.0',
+      healthCheckMode: 'protocol',
+      allowNotReady: true,
+      timeout: const Duration(milliseconds: 300),
+      executionTestPrompt: 'Reply with exactly the word OK. Do not use tools.',
+    );
+
+    expect(result['ready'], isFalse);
+    expect(result['testDetails'], contains('Readiness result: passed'));
+    expect(result['testDetails'], contains('Prompt submitted to adapter: yes'));
+    expect(result['testDetails'], contains('execute.request timed out'));
+  });
+
+  test('includes bounded adapter stderr when a readiness adapter crashes',
+      () async {
+    final directory =
+        await Directory.systemTemp.createTemp('v7-probe-adapter-crash-');
+    addTearDown(() => directory.delete(recursive: true));
+    final script = File('${directory.path}/adapter.dart');
+    await script.writeAsString(r'''
+import 'dart:io';
+Future<void> main() async {
+  stderr.writeln('adapter failed while starting the local bridge');
+  exit(7);
+}
+''');
+
+    final result = await WorkerProcessExecutor().checkV7AdapterHealth(
+      WorkerProcessSpec(
+        workerId: 'gemini-readiness-crash-test',
+        executable: 'dart',
+        arguments: ['run', script.path],
+        workingDirectory: directory.path,
+      ),
+      workerTypeId: 'antigravity',
+      adapterVersion: '1.0.0',
+      healthCheckMode: 'protocol',
+      allowNotReady: true,
+      executionTestPrompt: 'Reply with exactly the word OK. Do not use tools.',
+    );
+
+    expect(result['ready'], isFalse);
+    expect(result['testDetails'], contains('Prompt submitted to adapter: no'));
+    expect(result['testDetails'], contains('adapter failed while starting'));
+    expect(result['testDetails'], contains('Adapter stderr (local, redacted)'));
   });
 
   test('assignment resolution selects an admitted V7 adapter when available',

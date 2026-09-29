@@ -74,13 +74,22 @@ headless entrypoint share the same runtime composition in
 
 The current macOS release target requires macOS 12 or newer.
 
-Build a macOS release package from repository root:
+Build a local macOS Workspace app from repository root:
 
 ~~~text
 bash scripts/build-workspace-macos.sh
 ~~~
 
-Optional release environment:
+By default, this local build packages unsigned first-party adapters and enables
+their use only as app-bundled development packages. It does not need adapter
+release keys. Cloud-downloaded adapters still require trusted signatures.
+Apple Developer ID signing is separately optional via `--sign`.
+
+For a product release, pass `--sign-adapters` and provide the protected adapter
+signing seed, key ID, and public trust roots. The release workflow does this
+automatically. Never put private signing seeds in the repository.
+
+Optional environment:
 - `CONCLAVE_MACOS_SIGN_IDENTITY` — Developer ID Application identity;
 - `CONCLAVE_MACOS_NOTARY_PROFILE` — `notarytool` keychain profile;
 - `CONCLAVE_WORKSPACE_VERSION` — override build version.

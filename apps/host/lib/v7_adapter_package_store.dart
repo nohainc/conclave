@@ -19,6 +19,11 @@ import 'worker_trust_policy.dart';
 /// data directory. The package digest is the SHA-256 of the sorted file tree,
 /// excluding only the root manifest.json to avoid a signature cycle.
 class V7AdapterPackageStore {
+  static const _defaultAllowUnsignedBundledAdapters = bool.fromEnvironment(
+    'CONCLAVE_ALLOW_UNSIGNED_BUNDLED_ADAPTERS',
+    defaultValue: false,
+  );
+
   V7AdapterPackageStore({
     required this.root,
     required this.trustPolicy,
@@ -28,6 +33,7 @@ class V7AdapterPackageStore {
     this.maxPackageBytes = 512 * 1024 * 1024,
     this.cliLocator = const FirstPartyWorkerCliExecutableLocator(),
     this.loadBundledPackage,
+    this.allowUnsignedBundledAdapters = _defaultAllowUnsignedBundledAdapters,
   })  : platform = platform ?? _currentPlatform(),
         executor = executor ?? WorkerProcessExecutor();
 
@@ -40,21 +46,36 @@ class V7AdapterPackageStore {
   final FirstPartyWorkerCliExecutableLocator cliLocator;
   final Future<BundledAdapterPackage?> Function(String workerTypeId)?
       loadBundledPackage;
+  final bool allowUnsignedBundledAdapters;
 
   /// Makes a first-party adapter available without contacting Cloud. A
   /// verified active release wins, then the verified last-known-good release,
-  /// then the signed package embedded in the Workspace application.
-  Future<bool> ensureFirstPartyAdapterAvailable(String workerTypeId) async {
+  /// then the package embedded in the Workspace application. Local builds may
+  /// explicitly enable unsigned admission for those embedded first-party
+  /// packages; Cloud-delivered archives always use strict signed admission.
+  Future<bool> ensureFirstPartyAdapterAvailable(
+    String workerTypeId, {
+    List<String> additionalPathDirectories = const [],
+  }) async {
     final descriptor =
         FirstPartyWorkerAdapterDescriptor.forAdapterPackageId(workerTypeId);
     if (descriptor == null) return false;
     if (await hasVerifiedActivePackage(
-        workerTypeId, descriptor.requiredLocalPermissions)) {
+      workerTypeId,
+      descriptor.requiredLocalPermissions,
+      additionalPathDirectories,
+    )) {
       return true;
     }
-    if (await restoreLastHealthyVersion(workerTypeId) &&
+    if (await restoreLastHealthyVersion(
+          workerTypeId,
+          additionalPathDirectories: additionalPathDirectories,
+        ) &&
         await hasVerifiedActivePackage(
-            workerTypeId, descriptor.requiredLocalPermissions)) {
+          workerTypeId,
+          descriptor.requiredLocalPermissions,
+          additionalPathDirectories,
+        )) {
       return true;
     }
     final loader = loadBundledPackage;
@@ -66,24 +87,43 @@ class V7AdapterPackageStore {
       return false;
     }
     try {
-      await installArchive(
+      await _installArchive(
         archiveBytes: bundled.archiveBytes,
         expectedManifest: bundled.manifest,
+        allowUnsignedBundledAdapter: _allowUnsignedFor(workerTypeId),
+        additionalPathDirectories: additionalPathDirectories,
       );
     } on Object {
       return false;
     }
     return hasVerifiedActivePackage(
-        workerTypeId, descriptor.requiredLocalPermissions);
+      workerTypeId,
+      descriptor.requiredLocalPermissions,
+      additionalPathDirectories,
+    );
   }
 
   /// Extracts a Cloud-delivered gzip-compressed tar package into a private
   /// staging directory, rejects links and unsafe/duplicate paths, then applies
-  /// the normal digest, signature, permission, and health checks before the
-  /// package can become active.
+  /// normal digest, permission, and health checks before activation. Signature
+  /// verification is mandatory by default; the explicit unsigned option is
+  /// restricted to first-party packages in builds configured for local use.
   Future<Directory> installArchive({
     required List<int> archiveBytes,
     Map<String, Object?>? expectedManifest,
+    bool allowUnsignedBundledAdapter = false,
+  }) =>
+      _installArchive(
+        archiveBytes: archiveBytes,
+        expectedManifest: expectedManifest,
+        allowUnsignedBundledAdapter: allowUnsignedBundledAdapter,
+      );
+
+  Future<Directory> _installArchive({
+    required List<int> archiveBytes,
+    Map<String, Object?>? expectedManifest,
+    bool allowUnsignedBundledAdapter = false,
+    List<String> additionalPathDirectories = const [],
   }) async {
     if (archiveBytes.isEmpty || archiveBytes.length > maxPackageBytes) {
       throw StateError('adapter archive is empty or exceeds size limit');
@@ -157,7 +197,17 @@ class V7AdapterPackageStore {
               'downloaded adapter manifest does not match its catalog release');
         }
       }
-      return await install(sourceDirectory: staging);
+      final manifestValue = jsonDecode(await manifestFile.readAsString());
+      final manifestWorkerTypeId =
+          manifestValue is Map ? manifestValue['workerTypeId'] : null;
+      final allowUnsigned = allowUnsignedBundledAdapter &&
+          manifestWorkerTypeId is String &&
+          _allowUnsignedFor(manifestWorkerTypeId);
+      return await _install(
+        sourceDirectory: staging,
+        allowUnsignedBundledAdapter: allowUnsigned,
+        additionalPathDirectories: additionalPathDirectories,
+      );
     } finally {
       if (await staging.exists()) await staging.delete(recursive: true);
     }
@@ -185,7 +235,14 @@ class V7AdapterPackageStore {
     return parts.join('/');
   }
 
-  Future<Directory> install({required Directory sourceDirectory}) async {
+  Future<Directory> install({required Directory sourceDirectory}) =>
+      _install(sourceDirectory: sourceDirectory);
+
+  Future<Directory> _install({
+    required Directory sourceDirectory,
+    bool allowUnsignedBundledAdapter = false,
+    List<String> additionalPathDirectories = const [],
+  }) async {
     final sourceRoot = await sourceDirectory.resolveSymbolicLinks();
     final manifestFile =
         File('$sourceRoot${Platform.pathSeparator}manifest.json');
@@ -208,6 +265,7 @@ class V7AdapterPackageStore {
       platform: platform,
       trustPolicy: trustPolicy,
       allowedPermissions: allowedPermissions,
+      allowUnsignedBundledAdapter: allowUnsignedBundledAdapter,
     );
     final typeRoot =
         Directory('${root.path}${Platform.pathSeparator}$workerTypeId');
@@ -233,8 +291,13 @@ class V7AdapterPackageStore {
         platform: platform,
         trustPolicy: trustPolicy,
         allowedPermissions: allowedPermissions,
+        allowUnsignedBundledAdapter: _allowUnsignedFor(workerTypeId),
       );
-      await _healthCheck(target, existingAdmission);
+      await _healthCheck(
+        target,
+        existingAdmission,
+        additionalPathDirectories: additionalPathDirectories,
+      );
       await _activate(typeRoot, adapterVersion);
       return target;
     }
@@ -254,8 +317,13 @@ class V7AdapterPackageStore {
         platform: platform,
         trustPolicy: trustPolicy,
         allowedPermissions: allowedPermissions,
+        allowUnsignedBundledAdapter: allowUnsignedBundledAdapter,
       );
-      await _healthCheck(staging, stagedAdmission);
+      await _healthCheck(
+        staging,
+        stagedAdmission,
+        additionalPathDirectories: additionalPathDirectories,
+      );
       await staging.rename(target.path);
     } catch (_) {
       if (await staging.exists()) await staging.delete(recursive: true);
@@ -296,6 +364,7 @@ class V7AdapterPackageStore {
       platform: platform,
       trustPolicy: trustPolicy,
       allowedPermissions: allowedPermissions,
+      allowUnsignedBundledAdapter: _allowUnsignedFor(workerTypeId),
     );
     await _healthCheck(packageRoot, admitted);
     await _activate(
@@ -306,7 +375,10 @@ class V7AdapterPackageStore {
 
   /// Restores the last previously active adapter only after independently
   /// rechecking its current signature, digest, permissions, platform and health.
-  Future<bool> restoreLastHealthyVersion(String workerTypeId) async {
+  Future<bool> restoreLastHealthyVersion(
+    String workerTypeId, {
+    List<String> additionalPathDirectories = const [],
+  }) async {
     _safeTypeId(workerTypeId);
     final typeRoot =
         Directory('${root.path}${Platform.pathSeparator}$workerTypeId');
@@ -333,8 +405,13 @@ class V7AdapterPackageStore {
         platform: platform,
         trustPolicy: trustPolicy,
         allowedPermissions: allowedPermissions,
+        allowUnsignedBundledAdapter: _allowUnsignedFor(workerTypeId),
       );
-      await _healthCheck(packageRoot, admitted);
+      await _healthCheck(
+        packageRoot,
+        admitted,
+        additionalPathDirectories: additionalPathDirectories,
+      );
       await _activate(typeRoot, version, rememberPrevious: false);
       return true;
     } on Object {
@@ -381,6 +458,7 @@ class V7AdapterPackageStore {
       platform: platform,
       trustPolicy: trustPolicy,
       allowedPermissions: allowedPermissions,
+      allowUnsignedBundledAdapter: _allowUnsignedFor(adapterTypeId),
     );
     trustPolicy.requirePermissions(
       admitted.permissions,
@@ -438,7 +516,9 @@ class V7AdapterPackageStore {
       processSpec = spec.copyWith(
         environment: {
           ...spec.environment,
-          'PATH': workspaceCliSearchPath(),
+          'PATH': workspaceCliSearchPath(
+            additionalDirectories: [File(located.path).parent.path],
+          ),
           'CONCLAVE_CLI_EXECUTABLE': cliPath,
         },
         allowedEnvironmentVariables: {
@@ -460,7 +540,7 @@ class V7AdapterPackageStore {
     );
   }
 
-  /// Returns only signed, digest-verified public adapter metadata for safe
+  /// Returns only admitted, digest-verified public adapter metadata for safe
   /// inventory synchronization. Invalid or revoked packages never contribute
   /// a version or capabilities to the Cloud projection.
   Future<Map<String, Object?>?> activeManifestSummary(
@@ -495,6 +575,7 @@ class V7AdapterPackageStore {
       platform: platform,
       trustPolicy: trustPolicy,
       allowedPermissions: allowedPermissions,
+      allowUnsignedBundledAdapter: _allowUnsignedFor(adapterTypeId),
     );
     trustPolicy.requirePermissions(
         admitted.permissions, _workerPermissions(worker.localPermissions));
@@ -512,7 +593,7 @@ class V7AdapterPackageStore {
       'publisher': admitted.publisher,
       'signingKeyId': manifest['signingKeyId'],
       'releaseChannel': manifest['releaseChannel'],
-      'signatureVerified': true,
+      'signatureVerified': (manifest['signature'] as String).isNotEmpty,
       'capabilities': List<String>.unmodifiable(capabilities.cast<String>()),
     };
   }
@@ -559,6 +640,7 @@ class V7AdapterPackageStore {
       platform: platform,
       trustPolicy: trustPolicy,
       allowedPermissions: allowedPermissions,
+      allowUnsignedBundledAdapter: _allowUnsignedFor(workerTypeId),
     );
     trustPolicy.requirePermissions(
         admitted.permissions, _workerPermissions(localPermissions));
@@ -592,8 +674,11 @@ class V7AdapterPackageStore {
 
   /// Returns true only when the active package still passes digest, signature,
   /// platform, permission, and protocol health admission checks.
-  Future<bool> hasVerifiedActivePackage(String workerTypeId,
-      [List<String>? localPermissions]) async {
+  Future<bool> hasVerifiedActivePackage(
+    String workerTypeId, [
+    List<String>? localPermissions,
+    List<String> additionalPathDirectories = const [],
+  ]) async {
     try {
       _safeTypeId(workerTypeId);
       final pointer = File(
@@ -618,6 +703,7 @@ class V7AdapterPackageStore {
         platform: platform,
         trustPolicy: trustPolicy,
         allowedPermissions: allowedPermissions,
+        allowUnsignedBundledAdapter: _allowUnsignedFor(workerTypeId),
       );
       if (localPermissions != null) {
         trustPolicy.requirePermissions(
@@ -625,7 +711,11 @@ class V7AdapterPackageStore {
           _workerPermissions(localPermissions),
         );
       }
-      await _healthCheck(packageRoot, admitted);
+      await _healthCheck(
+        packageRoot,
+        admitted,
+        additionalPathDirectories: additionalPathDirectories,
+      );
       return admitted.adapterVersion == version;
     } on Object {
       return false;
@@ -698,8 +788,9 @@ class V7AdapterPackageStore {
 
   Future<void> _healthCheck(
     Directory packageRoot,
-    V7AdapterAdmission admitted,
-  ) async {
+    V7AdapterAdmission admitted, {
+    List<String> additionalPathDirectories = const [],
+  }) async {
     final descriptor = FirstPartyWorkerAdapterDescriptor.forAdapterPackageId(
         admitted.workerTypeId);
     var spec = WorkerProcessSpec(
@@ -707,7 +798,11 @@ class V7AdapterPackageStore {
       executable: admitted.executable.path,
       arguments: admitted.launchArgs,
       workingDirectory: packageRoot.path,
-      environment: {'PATH': workspaceCliSearchPath()},
+      environment: {
+        'PATH': workspaceCliSearchPath(
+          additionalDirectories: additionalPathDirectories,
+        ),
+      },
       allowedEnvironmentVariables: const {'PATH'},
     );
     final probe = await executor.checkV7AdapterHealth(
@@ -761,6 +856,9 @@ class V7AdapterPackageStore {
               platform: platform,
               trustPolicy: trustPolicy,
               allowedPermissions: allowedPermissions,
+              allowUnsignedBundledAdapter: _allowUnsignedFor(
+                typeRoot.path.split(Platform.pathSeparator).last,
+              ),
             );
             await _healthCheck(previousRoot, admitted);
             await rollback.writeAsString(
@@ -778,6 +876,11 @@ class V7AdapterPackageStore {
         flush: true);
     await temporary.rename(target.path);
   }
+
+  bool _allowUnsignedFor(String workerTypeId) =>
+      allowUnsignedBundledAdapters &&
+      FirstPartyWorkerAdapterDescriptor.forAdapterPackageId(workerTypeId) !=
+          null;
 
   String _safeTypeId(Object? value) {
     if (value is! String ||

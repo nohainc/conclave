@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'configured_worker_registry.dart';
 import 'first_party_worker_adapter_descriptor.dart';
@@ -38,12 +39,14 @@ class WorkerReadinessAssessment {
     this.credentialStatus,
     this.executablePath,
     this.cliVersion,
+    this.diagnosticDetails,
     FirstPartyWorkerProbeReasonCode? reasonCode,
   }) : _reasonCode = reasonCode;
   final WorkerReadinessState state;
   final LocalWorkerCredentialStatus? credentialStatus;
   final String? executablePath;
   final String? cliVersion;
+  final String? diagnosticDetails;
   final FirstPartyWorkerProbeReasonCode? _reasonCode;
   FirstPartyWorkerProbeReasonCode get reasonCode =>
       _reasonCode ?? firstPartyWorkerProbeReasonCodeForState(state);
@@ -147,12 +150,17 @@ class WorkerReadinessMonitor {
       final liveTestPassed = executionTest
           ? state == WorkerReadinessState.ready
           : worker.lastLiveTestPassed;
+      final liveTestDetails = executionTest &&
+              state != WorkerReadinessState.ready
+          ? assessment.diagnosticDetails ?? _safeTestDetails(worker, assessment)
+          : worker.lastLiveTestDetails;
       if (worker.readinessState == state &&
           worker.credentialStatus == credentialStatus &&
           worker.executablePath == assessment.executablePath &&
           worker.cliVersion == assessment.cliVersion &&
           worker.lastLiveTestAt == liveTestAt &&
           worker.lastLiveTestPassed == liveTestPassed &&
+          worker.lastLiveTestDetails == liveTestDetails &&
           ((state == WorkerReadinessState.ready) ==
               (worker.status == LocalWorkerStatus.ready)) &&
           !executionTest) {
@@ -174,12 +182,83 @@ class WorkerReadinessMonitor {
           cliVersion: assessment.cliVersion,
           lastLiveTestAt: liveTestAt,
           lastLiveTestPassed: liveTestPassed,
+          lastLiveTestDetails: liveTestDetails,
+          clearLastLiveTestDetails:
+              executionTest && state == WorkerReadinessState.ready,
           clearExecutable: assessment.executablePath == null ||
               assessment.cliVersion == null,
         ),
       );
     }
     // The registry's onChanged hook sends a fresh full inventory snapshot.
+  }
+
+  String _safeTestDetails(
+    LocalConfiguredWorker worker,
+    WorkerReadinessAssessment assessment,
+  ) {
+    final code = assessment.reasonCode.wireValue;
+    final guidance = switch (assessment.reasonCode) {
+      FirstPartyWorkerProbeReasonCode.cliNotFound =>
+        'The required CLI could not be found. Install it or make it available to Workspace, then select Check again.',
+      FirstPartyWorkerProbeReasonCode.unsupportedCliVersion =>
+        'The installed CLI version is not supported by this Workspace build.',
+      FirstPartyWorkerProbeReasonCode.authenticationRequired =>
+        'Sign in to the provider CLI on this computer, then run Test again.',
+      FirstPartyWorkerProbeReasonCode.permissionConfigurationRequired =>
+        'Update the CLI permission settings on this computer, then run Test again.',
+      FirstPartyWorkerProbeReasonCode.executionTestFailed => assessment.state ==
+              WorkerReadinessState.adapterUnavailable
+          ? 'Workspace could not start or communicate with its local integration. Try Test again, then open Advanced Diagnostics if it continues.'
+          : 'The local readiness or execution check did not complete. Open Advanced Diagnostics for more information.',
+      FirstPartyWorkerProbeReasonCode.ready =>
+        'No failure details are available. Run Test again if the issue continues.',
+    };
+    final descriptor = FirstPartyWorkerAdapterDescriptor.forProductWorkerTypeId(
+      worker.workerTypeId,
+    );
+    final cli = descriptor?.executableCandidates.firstOrNull ?? 'CLI';
+    final readinessCalls = switch (worker.workerTypeId) {
+      'chatgpt' => '`$cli --version`; `$cli login status`',
+      _ => '`$cli --version`',
+    };
+    final executionCall = switch (worker.workerTypeId) {
+      'chatgpt' => '`codex --ask-for-approval never --sandbox workspace-write '
+          'exec --json --ephemeral --color never --skip-git-repo-check '
+          '--cd <Workspace test directory> -`',
+      'gemini' => '`agy --input-format stream-json --output-format stream-json '
+          '--sandbox --print-timeout 5m`',
+      _ => 'local adapter execution test',
+    };
+    final prompt = descriptor?.probeStrategy.setupExecutionTestPrompt;
+    final promptStatus =
+        assessment.state == WorkerReadinessState.adapterUnavailable ||
+                assessment.state == WorkerReadinessState.signInRequired ||
+                assessment.state == WorkerReadinessState.notInstalled ||
+                assessment.state == WorkerReadinessState.unsupportedCliVersion
+            ? 'Not sent; intended prompt: "$prompt".'
+            : prompt == null
+                ? 'No execution prompt is configured.'
+                : '"$prompt" (submission could not be confirmed)';
+    final readinessResult = switch (assessment.state) {
+      WorkerReadinessState.adapterUnavailable =>
+        'failed: Workspace could not complete the local adapter readiness probe',
+      WorkerReadinessState.notInstalled => 'failed: CLI not found',
+      WorkerReadinessState.unsupportedCliVersion =>
+        'failed: installed CLI version is unsupported',
+      WorkerReadinessState.signInRequired =>
+        'failed: provider CLI authentication is required',
+      _ => 'failed: ${assessment.reasonCode.wireValue}',
+    };
+    return [
+      'Test failed ($code)',
+      'Readiness calls: $readinessCalls',
+      'Readiness result: $readinessResult',
+      'Execution call: $executionCall',
+      'Prompt: $promptStatus',
+      'Expected: exactly "OK"',
+      'Result: $guidance',
+    ].join('\n');
   }
 
   Future<WorkerReadinessAssessment> _assess(
@@ -219,6 +298,29 @@ class WorkerReadinessMonitor {
           .every(worker.localPermissions.contains)) {
         return const WorkerReadinessAssessment(
           WorkerReadinessState.testFailed,
+          reasonCode: FirstPartyWorkerProbeReasonCode.executionTestFailed,
+        );
+      }
+      final adapterPackageId = type.adapterPackageId;
+      var adapterAvailable = await adapterStore.hasVerifiedActivePackage(
+        adapterPackageId,
+        type.requiredLocalPermissions,
+        [File(located.path).parent.path],
+      );
+      if (!adapterAvailable) {
+        // Existing Worker records can outlive a removed or invalid active
+        // package. Restore the last-known-good or embedded first-party
+        // adapter before probing readiness, including after a local rebuild.
+        adapterAvailable = await adapterStore.ensureFirstPartyAdapterAvailable(
+          adapterPackageId,
+          additionalPathDirectories: [File(located.path).parent.path],
+        );
+      }
+      if (!adapterAvailable) {
+        return WorkerReadinessAssessment(
+          WorkerReadinessState.adapterUnavailable,
+          executablePath: located.path,
+          cliVersion: located.versionProbe.detectedVersion,
           reasonCode: FirstPartyWorkerProbeReasonCode.executionTestFailed,
         );
       }
@@ -266,18 +368,41 @@ class WorkerReadinessMonitor {
           workerTypeId: adapter.workerTypeId,
           adapterVersion: adapter.adapterVersion,
           healthCheckMode: 'protocol',
-          timeout: const Duration(seconds: 20),
+          // Match the opt-in live acceptance tests: provider execution may be
+          // slower than routine adapter startup/readiness probes.
+          timeout: executionTest
+              ? const Duration(minutes: 5)
+              : const Duration(seconds: 20),
           allowNotReady: true,
           executionTestPrompt: executionTest
               ? type.probeStrategy.setupExecutionTestPrompt
               : null,
         );
-      } on Object {
+      } on Object catch (error) {
+        final detail = error is TimeoutException
+            ? 'adapter health check timed out'
+            : error.toString();
+        final safeDetail =
+            detail.length <= 500 ? detail : '${detail.substring(0, 497)}…';
+        final failedAssessment = WorkerReadinessAssessment(
+          WorkerReadinessState.adapterUnavailable,
+          executablePath: located.path,
+          cliVersion: located.versionProbe.detectedVersion,
+          reasonCode: FirstPartyWorkerProbeReasonCode.executionTestFailed,
+        );
+        final diagnosticDetails = executionTest
+            ? '${_safeTestDetails(worker, failedAssessment)}\n'
+                'Local process detail: $safeDetail'
+            : safeDetail;
+        final boundedDiagnostic = diagnosticDetails.length <= 1000
+            ? diagnosticDetails
+            : '${diagnosticDetails.substring(0, 997)}…';
         return WorkerReadinessAssessment(
           WorkerReadinessState.adapterUnavailable,
           executablePath: located.path,
           cliVersion: located.versionProbe.detectedVersion,
           reasonCode: FirstPartyWorkerProbeReasonCode.executionTestFailed,
+          diagnosticDetails: boundedDiagnostic,
         );
       }
       final executablePath = adapter.executablePath ?? located.path;
@@ -290,6 +415,7 @@ class WorkerReadinessMonitor {
           executablePath: executablePath,
           cliVersion: cliVersion,
           reasonCode: FirstPartyWorkerProbeReasonCode.cliNotFound,
+          diagnosticDetails: _testDetailsFrom(bridgeProbe),
         );
       }
       if (cliVersion != null && toolVersion != cliVersion) {
@@ -298,6 +424,7 @@ class WorkerReadinessMonitor {
           executablePath: executablePath,
           cliVersion: cliVersion,
           reasonCode: FirstPartyWorkerProbeReasonCode.executionTestFailed,
+          diagnosticDetails: _testDetailsFrom(bridgeProbe),
         );
       }
       if (type.probeStrategy.setupExecutionTestPrompt != null &&
@@ -326,12 +453,18 @@ class WorkerReadinessMonitor {
             reasonCode: FirstPartyWorkerProbeReasonCode.authenticationRequired,
           );
         }
+        // New Worker or no recorded auth state. Mark as needing a manual test
+        // rather than a generic failure so the UI can show setup guidance.
         return WorkerReadinessAssessment(
-          WorkerReadinessState.testFailed,
-          credentialStatus: worker.credentialStatus,
+          WorkerReadinessState.signInRequired,
+          credentialStatus: LocalWorkerCredentialStatus.needsAuthentication,
           executablePath: executablePath,
           cliVersion: cliVersion,
-          reasonCode: FirstPartyWorkerProbeReasonCode.executionTestFailed,
+          reasonCode: FirstPartyWorkerProbeReasonCode.authenticationRequired,
+          diagnosticDetails:
+              'This Worker requires a manual test to verify authentication. '
+              'Sign in to the Antigravity CLI on this computer, then select '
+              'Test to complete setup.',
         );
       }
       if (bridgeProbe['ready'] != true) {
@@ -364,6 +497,7 @@ class WorkerReadinessMonitor {
                       ? FirstPartyWorkerProbeReasonCode
                           .permissionConfigurationRequired
                       : FirstPartyWorkerProbeReasonCode.executionTestFailed,
+          diagnosticDetails: _testDetailsFrom(bridgeProbe),
         );
       }
       return WorkerReadinessAssessment(
@@ -381,6 +515,12 @@ class WorkerReadinessMonitor {
         reasonCode: FirstPartyWorkerProbeReasonCode.executionTestFailed,
       );
     }
+  }
+
+  String? _testDetailsFrom(Map<String, Object?> probe) {
+    final details = probe['testDetails'];
+    if (details is! String || details.isEmpty) return null;
+    return details.length <= 1000 ? details : '${details.substring(0, 997)}…';
   }
 
   Future<void> dispose() async {

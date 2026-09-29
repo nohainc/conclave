@@ -1252,6 +1252,8 @@ void main() {
       updatedAt: '2026-01-01T00:00:00Z',
       lastLiveTestAt: '2026-01-02T03:04:05Z',
       lastLiveTestPassed: false,
+      lastLiveTestDetails:
+          'Test failed (execution_test_failed)\nThe local check did not complete.',
     );
 
     await pumpDashboard(
@@ -1277,6 +1279,10 @@ void main() {
     expect(find.text('Conclave integration needs attention'), findsWidgets);
     expect(find.textContaining('CLI usability:'), findsWidgets);
     expect(find.textContaining('Last live test: Failed ·'), findsOneWidget);
+    expect(find.text('Test'), findsOneWidget);
+    expect(find.textContaining('Test failed (execution_test_failed)'),
+        findsOneWidget);
+    expect(find.byTooltip('Copy test details'), findsOneWidget);
     expect(find.textContaining('Last live test: Not run'), findsOneWidget);
     expect(find.textContaining('Adapter unavailable'), findsNothing);
     expect(find.textContaining('Adapter version'), findsNothing);

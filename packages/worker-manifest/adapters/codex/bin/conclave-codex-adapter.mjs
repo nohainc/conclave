@@ -25,6 +25,17 @@ function cliEnvironment() {
     "LC_CTYPE",
     "SSL_CERT_FILE",
     "SSL_CERT_DIR",
+    // XDG base directories used by Codex and related tooling to find
+    // configuration, data, and state files (auth tokens, session data).
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_STATE_HOME",
+    "XDG_CACHE_HOME",
+    // Codex-specific configuration override.
+    "CODEX_HOME",
+    // Disable colour output and interactive prompts in headless execution.
+    "NO_COLOR",
+    "TERM",
   ]) {
     if (typeof process.env[name] === "string") env[name] = process.env[name];
   }

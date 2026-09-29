@@ -8,7 +8,7 @@ import 'package:crypto/crypto.dart';
 import 'first_party_worker_adapter_descriptor.dart';
 import 'platform_runtime.dart';
 
-const _registrySchemaVersion = 10;
+const _registrySchemaVersion = 11;
 
 enum LocalWorkerStatus { needsAttention, ready, disabled, removed }
 
@@ -69,6 +69,7 @@ class LocalConfiguredWorker {
     this.cliVersion,
     this.lastLiveTestAt,
     this.lastLiveTestPassed,
+    this.lastLiveTestDetails,
   })  : status = status,
         readinessState = readinessState ??
             (status == LocalWorkerStatus.ready
@@ -101,6 +102,9 @@ class LocalConfiguredWorker {
   final String? lastLiveTestAt;
   final bool? lastLiveTestPassed;
 
+  /// Bounded, provider-neutral local diagnostic. Raw CLI output is never kept.
+  final String? lastLiveTestDetails;
+
   LocalConfiguredWorker copyWith({
     String? name,
     String? workerTypeId,
@@ -123,7 +127,9 @@ class LocalConfiguredWorker {
     String? cliVersion,
     String? lastLiveTestAt,
     bool? lastLiveTestPassed,
+    String? lastLiveTestDetails,
     bool clearExecutable = false,
+    bool clearLastLiveTestDetails = false,
   }) =>
       LocalConfiguredWorker(
         id: id,
@@ -154,6 +160,9 @@ class LocalConfiguredWorker {
         cliVersion: clearExecutable ? null : cliVersion ?? this.cliVersion,
         lastLiveTestAt: lastLiveTestAt ?? this.lastLiveTestAt,
         lastLiveTestPassed: lastLiveTestPassed ?? this.lastLiveTestPassed,
+        lastLiveTestDetails: clearLastLiveTestDetails
+            ? null
+            : lastLiveTestDetails ?? this.lastLiveTestDetails,
       );
 
   Map<String, Object?> toJson() => {
@@ -179,6 +188,7 @@ class LocalConfiguredWorker {
         'cliVersion': cliVersion,
         'lastLiveTestAt': lastLiveTestAt,
         'lastLiveTestPassed': lastLiveTestPassed,
+        'lastLiveTestDetails': lastLiveTestDetails,
       };
 
   factory LocalConfiguredWorker.fromJson(Map<String, dynamic> json) {
@@ -205,6 +215,7 @@ class LocalConfiguredWorker {
       'cliVersion',
       'lastLiveTestAt',
       'lastLiveTestPassed',
+      'lastLiveTestDetails',
     };
     if (json.keys.any((key) => !allowedKeys.contains(key))) {
       throw const FormatException(
@@ -235,6 +246,7 @@ class LocalConfiguredWorker {
     final cliVersion = json['cliVersion'];
     final lastLiveTestAt = json['lastLiveTestAt'];
     final lastLiveTestPassed = json['lastLiveTestPassed'];
+    final lastLiveTestDetails = json['lastLiveTestDetails'];
     if (credentialRef != null && credentialRef is! String ||
         defaultModel != null && defaultModel is! String ||
         adapterVersionPolicy != null && adapterVersionPolicy is! String) {
@@ -247,6 +259,10 @@ class LocalConfiguredWorker {
         lastLiveTestPassed != null && lastLiveTestPassed is! bool) {
       throw const FormatException(
           'Worker readiness diagnostic fields are invalid');
+    }
+    if (lastLiveTestDetails != null &&
+        (lastLiveTestDetails is! String || lastLiveTestDetails.length > 1000)) {
+      throw const FormatException('Worker test details are invalid');
     }
     if (adapterConfig != null && adapterConfig is! Map) {
       throw const FormatException(
@@ -304,6 +320,7 @@ class LocalConfiguredWorker {
       cliVersion: cliVersion as String?,
       lastLiveTestAt: lastLiveTestAt as String?,
       lastLiveTestPassed: lastLiveTestPassed as bool?,
+      lastLiveTestDetails: lastLiveTestDetails as String?,
     );
   }
 }
@@ -576,6 +593,7 @@ class LocalConfiguredWorkerRegistry {
               decoded['schemaVersion'] != 7 &&
               decoded['schemaVersion'] != 8 &&
               decoded['schemaVersion'] != 9 &&
+              decoded['schemaVersion'] != 10 &&
               decoded['schemaVersion'] != _registrySchemaVersion) ||
           decoded['workers'] is! List ||
           decoded['checksum'] is! String) {

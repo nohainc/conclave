@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-/// A signed first-party adapter archive embedded in the Workspace application.
+/// A first-party adapter archive embedded in the Workspace application.
 class BundledAdapterPackage {
   const BundledAdapterPackage({
     required this.archiveBytes,

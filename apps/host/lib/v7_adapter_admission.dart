@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'adapter_prerequisite.dart';
+import 'first_party_worker_adapter_descriptor.dart';
 import 'worker_executor.dart';
 import 'worker_trust_policy.dart';
 import 'v7_adapter_protocol.dart';
@@ -40,6 +41,7 @@ class V7AdapterAdmission {
     required String platform,
     required WorkerTrustPolicy trustPolicy,
     required Set<WorkerPermission> allowedPermissions,
+    bool allowUnsignedBundledAdapter = false,
   }) async {
     final value = _object(input, 'manifest');
     const fields = {
@@ -81,8 +83,11 @@ class V7AdapterAdmission {
     final publisher = text('publisher');
     text('displayName');
     final digest = text('packageDigest').toLowerCase();
-    final signature = text('signature');
-    final signingKeyId = text('signingKeyId');
+    final signature = value['signature'];
+    final signingKeyId = value['signingKeyId'];
+    if (signature is! String || signingKeyId is! String) {
+      throw const FormatException('adapter signature fields are invalid');
+    }
     if (workerTypeId != expectedWorkerTypeId ||
         !RegExp(r'^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$')
             .hasMatch(version) ||
@@ -92,13 +97,21 @@ class V7AdapterAdmission {
       throw const FormatException(
           'adapter identity or package digest mismatch');
     }
-    if (!await trustPolicy.verifyAdapterManifest(
-      publisher: publisher,
-      signingKeyId: signingKeyId,
-      digest: digest,
-      signature: signature,
-      manifest: value,
-    )) {
+    final releaseChannel = value['releaseChannel'];
+    final unsignedBundledAdapter = allowUnsignedBundledAdapter &&
+        FirstPartyWorkerAdapterDescriptor.forAdapterPackageId(workerTypeId) !=
+            null &&
+        releaseChannel == 'stable' &&
+        signingKeyId.isEmpty &&
+        signature.isEmpty;
+    if (!unsignedBundledAdapter &&
+        !await trustPolicy.verifyAdapterManifest(
+          publisher: publisher,
+          signingKeyId: signingKeyId,
+          digest: digest,
+          signature: signature,
+          manifest: value,
+        )) {
       throw StateError('adapter publisher signature is not trusted');
     }
     final supported =
@@ -139,8 +152,7 @@ class V7AdapterAdmission {
         (health['timeoutMs'] as int) > 30000) {
       throw const FormatException('adapter health check is invalid');
     }
-    if (!const {'stable', 'beta', 'development'}
-        .contains(value['releaseChannel'])) {
+    if (!const {'stable', 'beta', 'development'}.contains(releaseChannel)) {
       throw const FormatException('adapter release channel is invalid');
     }
     final relativeExecutable = text('executable');

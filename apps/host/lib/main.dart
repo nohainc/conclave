@@ -3756,6 +3756,41 @@ class _WorkersTabState extends State<_WorkersTab> {
                                     style: theme.textTheme.bodySmall,
                                   ),
                                 ),
+                                if (worker?.readinessState ==
+                                    WorkerReadinessState.adapterUnavailable)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 3),
+                                    child: Text(
+                                      'The CLI is available, but Workspace could not communicate with its local integration. Run Test for details.',
+                                      style: theme.textTheme.bodySmall,
+                                    ),
+                                  ),
+                                if (worker?.lastLiveTestPassed == false &&
+                                    worker?.lastLiveTestDetails != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 3),
+                                    child: CopyableMessageText(
+                                      worker!.lastLiveTestDetails!,
+                                      style:
+                                          theme.textTheme.bodySmall?.copyWith(
+                                        color: theme.colorScheme.error,
+                                      ),
+                                      iconColor: theme.colorScheme.error,
+                                      tooltip: 'Copy test details',
+                                    ),
+                                  ),
+                                if (worker?.lastLiveTestPassed == false &&
+                                    worker?.lastLiveTestDetails == null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 3),
+                                    child: Text(
+                                      'Details were not recorded for this earlier test. Run Test again to see what was called, the expected reply, and the result.',
+                                      style:
+                                          theme.textTheme.bodySmall?.copyWith(
+                                        color: theme.colorScheme.error,
+                                      ),
+                                    ),
+                                  ),
                                 if (cliAttention != null)
                                   Padding(
                                     padding: const EdgeInsets.only(top: 3),
@@ -3785,10 +3820,7 @@ class _WorkersTabState extends State<_WorkersTab> {
                                                 _checkCliAgain(type, worker),
                                             child: const Text('Check again'),
                                           )
-                                        : worker != null &&
-                                                type.probeStrategy
-                                                        .setupExecutionTestPrompt !=
-                                                    null
+                                        : worker != null
                                             ? Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [

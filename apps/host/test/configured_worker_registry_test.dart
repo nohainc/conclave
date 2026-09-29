@@ -83,7 +83,7 @@ void main() {
     expect(migrated.lastLiveTestAt, isNull);
     expect(migrated.lastLiveTestPassed, isNull);
     final persisted = jsonDecode(await file.readAsString()) as Map;
-    expect(persisted['schemaVersion'], 10);
+    expect(persisted['schemaVersion'], 11);
     expect(persisted['workers'][0]['lastLiveTestAt'], isNull);
   });
 
@@ -114,7 +114,32 @@ void main() {
     expect(migrated.name, 'ChatGPT');
     expect(migrated.revision, 8);
     final persisted = jsonDecode(await file.readAsString()) as Map;
-    expect(persisted['schemaVersion'], 10);
+    expect(persisted['schemaVersion'], 11);
+  });
+
+  test('migrates schema 10 registry without losing the Worker', () async {
+    final worker = await registry.create(
+      name: 'ChatGPT',
+      workerTypeId: 'chatgpt',
+      authStrategy: 'browser_auth',
+    );
+    final workers = [worker.toJson()];
+    final body = {'schemaVersion': 10, 'workers': workers};
+    final file = File(
+      '${directory.path}${Platform.pathSeparator}configured-workers.json',
+    );
+    await file.writeAsString(jsonEncode({
+      ...body,
+      'checksum': sha256.convert(utf8.encode(jsonEncode(body))).toString(),
+    }));
+
+    final migrated = (await registry.list()).single;
+
+    expect(migrated.id, worker.id);
+    expect(migrated.lastLiveTestDetails, isNull);
+    final persisted = jsonDecode(await file.readAsString()) as Map;
+    expect(persisted['schemaVersion'], 11);
+    expect(persisted['workers'][0]['lastLiveTestDetails'], isNull);
   });
 
   test(
@@ -191,7 +216,7 @@ void main() {
     expect((await registry.list()).single.id, 'worker-old');
     final migrated =
         jsonDecode(await file.readAsString()) as Map<String, dynamic>;
-    expect(migrated['schemaVersion'], 10);
+    expect(migrated['schemaVersion'], 11);
     expect(migrated['workers'][0].containsKey('ownerUserId'), isFalse);
   });
 
@@ -285,7 +310,7 @@ void main() {
     expect(gemini.revision, 2);
     final written =
         jsonDecode(await file.readAsString()) as Map<String, dynamic>;
-    expect(written['schemaVersion'], 10);
+    expect(written['schemaVersion'], 11);
     expect((written['workers'] as List), hasLength(2));
   });
 
@@ -435,6 +460,6 @@ void main() {
     expect(migrated.allowedModels, ['gpt-test']);
     expect(migrated.executablePath, isNull);
     final written = jsonDecode(await file.readAsString()) as Map;
-    expect(written['schemaVersion'], 10);
+    expect(written['schemaVersion'], 11);
   });
 }

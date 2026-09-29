@@ -194,12 +194,15 @@ Future<AdapterPrerequisiteResult> probeAdapterExecutable(
 /// GUI-launched macOS apps often inherit a minimal PATH instead of the
 /// interactive shell's PATH. Include common per-user and package-manager CLI
 /// locations while preserving paths explicitly supplied by the environment.
-String workspaceCliSearchPath() {
+String workspaceCliSearchPath({
+  Iterable<String> additionalDirectories = const [],
+}) {
   final environment = Platform.environment;
   final paths = <String>[
     if (environment['PATH'] case final path?)
       ...path.split(Platform.isWindows ? ';' : ':'),
     ...workspaceKnownCliDirectories(environment: environment),
+    ...additionalDirectories,
   ];
   return paths
       .where((path) => path.isNotEmpty)

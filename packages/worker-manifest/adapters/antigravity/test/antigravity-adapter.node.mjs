@@ -158,7 +158,7 @@ printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"Antig
   assert.ok(args.includes(`--sandbox`));
   assert.doesNotMatch(args, /--dangerously-skip-permissions/);
   assert.doesNotMatch(args, /--yolo/);
-  assert.ok(args.includes(`--print-timeout 15m`));
+  assert.ok(args.includes(`--print-timeout 5m`));
   assert.equal(
     (await readFile(childCwdFile, "utf8")).trim(),
     await realpath(temp),
@@ -178,6 +178,60 @@ printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"Antig
   assert.equal(defaultModelResult.assignmentId, "a-default-model");
   assert.doesNotMatch(await readFile(argsFile, "utf8"), /--model/);
 });
+
+test("forwards auth config env vars to CLI but blocks raw API keys", async (t) => {
+  const temp = await mkdtemp(join(tmpdir(), "conclave-antigravity-env-"));
+  t.after(() => rm(temp, { recursive: true, force: true }));
+  const bin = join(temp, "bin");
+  await import("node:fs/promises").then(({ mkdir }) => mkdir(bin));
+  const envDumpFile = join(temp, "env-dump.txt");
+  const apiKeyFile = join(temp, "api-key.txt");
+  const fakeAgy = join(bin, "agy");
+  await writeFile(
+    fakeAgy,
+    `#!/bin/sh
+if [ "$1" = "--version" ]; then echo 'agy 4.5.6'; exit 0; fi
+env > '${envDumpFile.replaceAll("'", "'\\''")}'
+if [ -n "\${GEMINI_API_KEY:-}" ]; then echo leaked > '${apiKeyFile.replaceAll("'", "'\\''")}'; fi
+cat >/dev/null
+printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"OK"}}'
+`,
+  );
+  await chmod(fakeAgy, 0o755);
+  const adapterProcess = await startAdapter(
+    {
+      ...process.env,
+      CONCLAVE_CLI_EXECUTABLE: fakeAgy,
+      GEMINI_API_KEY: "must-not-be-forwarded",
+      XDG_CONFIG_HOME: "/test/config",
+      CLOUDSDK_CONFIG: "/test/gcloud",
+      GOOGLE_APPLICATION_CREDENTIALS: "/test/creds.json",
+    },
+    temp,
+  );
+  t.after(async () => {
+    adapterProcess.child.stdin.end();
+    if (adapterProcess.child.exitCode === null)
+      adapterProcess.child.kill("SIGKILL");
+    await once(adapterProcess.child, "close").catch(() => {});
+  });
+  adapterProcess.send({
+    type: "execute.request",
+    protocolVersion: "2.1",
+    requestId: "e-env-test",
+    assignmentId: "a-env-test",
+    prompt: "test",
+  });
+  await adapterProcess.waitFor(
+    (frame) => frame.requestId === "e-env-test",
+  );
+  const envDump = await readFile(envDumpFile, "utf8");
+  // Auth config directories must be forwarded for agy to find its tokens.
+  assert.match(envDump, /XDG_CONFIG_HOME=\/test\/config/);
+  assert.match(envDump, /CLOUDSDK_CONFIG=\/test\/gcloud/);
+  assert.match(envDump, /GOOGLE_APPLICATION_CREDENTIALS=\/test\/creds\.json/);
+  // Raw API keys must never be forwarded.
+  await assert.rejects(readFile(apiKeyFile, "utf8"));
 
 test("translates headless authentication failures to a safe reason code", async (t) => {
   const temp = await mkdtemp(join(tmpdir(), "conclave-antigravity-auth-"));

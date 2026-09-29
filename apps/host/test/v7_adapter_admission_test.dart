@@ -81,6 +81,36 @@ void main() {
     expect(spec.maxConcurrentAssignments, 2);
   });
 
+  test('admits unsigned first-party bundles only when explicitly enabled',
+      () async {
+    final unsigned = await manifest('bin/adapter');
+    unsigned['signingKeyId'] = '';
+    unsigned['signature'] = '';
+    await expectLater(
+      V7AdapterAdmission.admit(
+        input: unsigned,
+        packageRoot: root,
+        expectedWorkerTypeId: 'codex',
+        verifiedPackageDigest: digest,
+        platform: 'linux-x64',
+        trustPolicy: WorkerTrustPolicy(),
+        allowedPermissions: WorkerPermission.values.toSet(),
+      ),
+      throwsStateError,
+    );
+    final admitted = await V7AdapterAdmission.admit(
+      input: unsigned,
+      packageRoot: root,
+      expectedWorkerTypeId: 'codex',
+      verifiedPackageDigest: digest,
+      platform: 'linux-x64',
+      trustPolicy: WorkerTrustPolicy(),
+      allowedPermissions: WorkerPermission.values.toSet(),
+      allowUnsignedBundledAdapter: true,
+    );
+    expect(admitted.workerTypeId, 'codex');
+  });
+
   test('rejects manifest permission changes without a new signature', () async {
     final changed = await manifest('bin/adapter')
       ..['permissions'] = ['workspace:read'];

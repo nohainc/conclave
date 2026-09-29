@@ -70,6 +70,8 @@ class FirstPartyWorkerAdapterDescriptor {
         id: 'codex_login_status',
         versionArguments: ['--version'],
         authenticationArguments: ['login', 'status'],
+        setupExecutionTestPrompt:
+            'Reply with exactly the word OK. Do not use tools.',
       ),
       cliDisplayName: 'Codex CLI',
       description: 'Use ChatGPT through the Codex CLI on this computer.',

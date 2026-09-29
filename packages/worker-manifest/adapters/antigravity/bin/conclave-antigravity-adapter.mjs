@@ -38,6 +38,23 @@ function cliEnvironment() {
     "LC_CTYPE",
     "SSL_CERT_FILE",
     "SSL_CERT_DIR",
+    // Google Cloud and provider authentication configuration directories.
+    // Without these, agy cannot locate cached auth tokens and hangs during
+    // headless execution even though `agy --version` succeeds.
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "CLOUDSDK_CONFIG",
+    "GCLOUD_DIR",
+    // XDG base directories used by agy and related tooling to find
+    // configuration, data, and state files.
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_STATE_HOME",
+    "XDG_CACHE_HOME",
+    // Antigravity-specific configuration override.
+    "ANTIGRAVITY_HOME",
+    // Disable colour output and interactive prompts in headless execution.
+    "NO_COLOR",
+    "TERM",
   ]) {
     if (typeof process.env[name] === "string") env[name] = process.env[name];
   }
@@ -52,7 +69,7 @@ function cliArgs(model) {
     "stream-json",
     "--sandbox",
     "--print-timeout",
-    "15m",
+    "5m",
   ];
   if (model) args.push("--model", model);
   return args;
