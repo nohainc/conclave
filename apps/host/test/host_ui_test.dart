@@ -1390,6 +1390,72 @@ void main() {
     expect(find.text('Disabled'), findsOneWidget);
   });
 
+  testWidgets('activation switch never requests a live Worker test',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final worker = LocalConfiguredWorker(
+      id: 'w-chatgpt-toggle',
+      workspaceId: 'ws-test',
+      name: 'ChatGPT',
+      workerTypeId: 'chatgpt',
+      authStrategy: 'browser_auth',
+      credentialRef: null,
+      defaultModel: null,
+      adapterConfig: const {},
+      allowedModels: const [],
+      localPermissions: const ['workstream_filesystem', 'shell_execution'],
+      localConcurrencyLimit: 1,
+      adapterVersionPolicy: null,
+      status: LocalWorkerStatus.ready,
+      readinessState: WorkerReadinessState.ready,
+      credentialStatus: LocalWorkerCredentialStatus.ready,
+      revision: 1,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    );
+    final registry = _FakeWorkerRegistry([worker]);
+    final probeModes = <LocalWorkerProbeMode>[];
+
+    await pumpDashboard(
+      tester,
+      const HostUiSnapshot(
+        mode: HostUiMode.ready,
+        title: 'Workspace is ready',
+        detail: 'Ready',
+        paired: true,
+        workspaceReady: true,
+        cloudConnected: true,
+        workspaceName: 'Office Mac',
+      ),
+      localWorkerRegistry: registry,
+      onReadinessCheck: ({
+        LocalWorkerProbeMode mode = LocalWorkerProbeMode.passive,
+        String? workerTypeId,
+      }) async {
+        probeModes.add(mode);
+      },
+    );
+    await tester.tap(find.text('Workers').first);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(Switch).first); // Disable.
+    await tester.pumpAndSettle();
+    expect(registry.workers.single.activationState,
+        LocalWorkerActivationState.disabled);
+    expect(probeModes, isEmpty);
+
+    await tester.tap(find.byType(Switch).first); // Enable.
+    await tester.pumpAndSettle();
+    expect(registry.workers.single.activationState,
+        LocalWorkerActivationState.enabled);
+    expect(probeModes, [LocalWorkerProbeMode.passive]);
+    expect(registry.workers.single.lastLiveTestAt, isNull);
+  });
+
   testWidgets(
       'legacy Worker records stay stored but are absent from v1 catalog',
       (tester) async {

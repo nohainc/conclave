@@ -3716,7 +3716,10 @@ class _WorkersTabState extends State<_WorkersTab> {
       ),
     );
     if (enabled) {
-      await widget.onReadinessCheck?.call(workerTypeId: worker.workerTypeId);
+      await widget.onReadinessCheck?.call(
+        mode: LocalWorkerProbeMode.passive,
+        workerTypeId: worker.workerTypeId,
+      );
     }
     if (mounted) setState(_loadWorkers);
   }
