@@ -1221,7 +1221,7 @@ void main() {
       localPermissions: const ['workstream_filesystem', 'shell_execution'],
       localConcurrencyLimit: 1,
       adapterVersionPolicy: null,
-      status: LocalWorkerStatus.needsAttention,
+      status: LocalWorkerStatus.disabled,
       readinessState: WorkerReadinessState.adapterUnavailable,
       credentialStatus: LocalWorkerCredentialStatus.ready,
       revision: 1,
@@ -1276,6 +1276,7 @@ void main() {
 
     expect(find.text('ChatGPT'), findsOneWidget);
     expect(find.text('Gemini'), findsOneWidget);
+    expect(find.text('Disabled'), findsOneWidget);
     expect(find.text('Needs attention'), findsOneWidget);
     expect(find.text('Setup required'), findsOneWidget);
     expect(find.text('CLI version: 1.2.3'), findsOneWidget);
@@ -1434,6 +1435,38 @@ void main() {
 
       expect(deriveLocalWorkerReadiness(worker), 'Setup required');
       expect(deriveLocalWorkerHealth(worker), 'Disabled');
+    });
+
+    test('disabled Worker badges retain each readiness state', () {
+      expect(
+        deriveLocalWorkerStatusBadges(makeWorker(
+          status: LocalWorkerStatus.disabled,
+          readinessState: WorkerReadinessState.ready,
+        )),
+        ['Disabled', 'Ready'],
+      );
+      expect(
+        deriveLocalWorkerStatusBadges(makeWorker(
+          status: LocalWorkerStatus.disabled,
+          readinessState: WorkerReadinessState.adapterUnavailable,
+        )),
+        ['Disabled', 'Needs attention'],
+      );
+      expect(
+        deriveLocalWorkerStatusBadges(makeWorker(
+          status: LocalWorkerStatus.disabled,
+          readinessState: WorkerReadinessState.setupRequired,
+        )),
+        ['Disabled', 'Setup required'],
+      );
+      expect(
+        deriveLocalWorkerStatusBadges(makeWorker(
+          status: LocalWorkerStatus.disabled,
+          readinessState: WorkerReadinessState.adapterUnavailable,
+          readinessIssueCode: 'cli_not_found',
+        )),
+        ['Disabled', 'Not installed'],
+      );
     });
 
     test('maps package state into the limited Workers row vocabulary', () {

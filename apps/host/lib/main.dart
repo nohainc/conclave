@@ -3794,7 +3794,7 @@ class _WorkersTabState extends State<_WorkersTab> {
                         .firstOrNull;
                     final pending = _updatingWorkerTypes
                         .contains(entry.productWorkerTypeId);
-                    final status = pending
+                    final readinessStatus = pending
                         ? 'Checking…'
                         : snapshot.hasError
                             ? 'Needs attention'
@@ -3802,7 +3802,13 @@ class _WorkersTabState extends State<_WorkersTab> {
                                 ? 'Checking…'
                                 : worker == null
                                     ? 'Setup required'
-                                    : deriveLocalWorkerHealth(worker);
+                                    : deriveLocalWorkerReadiness(worker);
+                    final statusBadges = worker != null && !snapshot.hasError
+                        ? deriveLocalWorkerStatusBadges(
+                            worker,
+                            readinessLabel: pending ? readinessStatus : null,
+                          )
+                        : [readinessStatus];
                     return Card(
                       key: Key('worker-catalog-${entry.productWorkerTypeId}'),
                       margin: const EdgeInsets.only(bottom: 12),
@@ -3819,9 +3825,12 @@ class _WorkersTabState extends State<_WorkersTab> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Row(
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
                               children: [
-                                _CatalogStatusBadge(label: status),
+                                for (final badge in statusBadges)
+                                  _CatalogStatusBadge(label: badge),
                               ],
                             ),
                             Padding(
@@ -3957,6 +3966,16 @@ String deriveLocalWorkerHealth(LocalConfiguredWorker worker) {
   }
   return deriveLocalWorkerReadiness(worker);
 }
+
+List<String> deriveLocalWorkerStatusBadges(
+  LocalConfiguredWorker worker, {
+  String? readinessLabel,
+}) =>
+    [
+      if (worker.activationState == LocalWorkerActivationState.disabled)
+        'Disabled',
+      readinessLabel ?? deriveLocalWorkerReadiness(worker),
+    ];
 
 String deriveLocalWorkerReadiness(LocalConfiguredWorker worker) {
   final issueCode = worker.lastLiveTestPassed == false
