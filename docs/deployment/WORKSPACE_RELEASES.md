@@ -156,3 +156,43 @@ This workflow does not apply Apple Developer ID or Windows Authenticode
 signatures; add platform signing if the distribution channel or operating
 system policy requires it. Signing credentials and publication tokens are
 never written to artifacts or logs.
+
+### Local unsigned Worker development
+
+Use the repository scripts from the project root to build a debug Workspace
+and unsigned native Worker packages for the current OS/CPU. Local packages are
+tagged `local-development`, use the `development` channel, and are accepted
+only by a debug Workspace built with the explicit development flag. They do
+not use or modify Cloud release records or signing roots.
+
+```sh
+# Build both Worker binaries and the debug Workspace app.
+bash scripts/build-all-desktop-apps.sh
+
+# Build either Worker separately or build both.
+bash scripts/build-chatgpt-worker.sh
+bash scripts/build-gemini-worker.sh
+bash scripts/build-workers.sh --worker all --version 0.0.0-dev.1
+
+# Install into this user's normal Workspace Worker version store.
+bash scripts/install-development-workers.sh --worker all
+```
+
+Other entry points are `scripts/build-workspace.sh` and the pnpm aliases
+`worker:build`, `worker:build:chatgpt`, `worker:build:gemini`,
+`worker:install:dev`, `workspace:build`, and `desktop:build`. The default
+development Workspace build is debug and enables the unsigned local marker;
+`--release` never enables it. Worker artifacts are written under
+`dist/workers/<platform>/<workerTypeId>/` and remain outside the app bundle.
+
+The installer applies digest, protocol, permission, executable identity, and
+passive-probe checks before activation. Use `--no-activate` to stage without
+switching the active version. The Workspace Worker row can then run a passive
+or explicit live probe against that version. A live probe can consume provider
+allowance. Current assignment routing still uses the legacy executor, so this
+flow validates native installation and probing but does not yet route Cloud
+assignments through the Dart executable.
+
+Each version directory is immutable. Bump `--version` (or let the default dev
+version timestamp change) for each rebuild before installing over an existing
+development version.

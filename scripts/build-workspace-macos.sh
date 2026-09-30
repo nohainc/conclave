@@ -21,7 +21,7 @@ command -v ditto >/dev/null 2>&1 || {
 
 MODE="release"
 OPEN_APP="0"
-SIGN_ADAPTERS="0"
+ALLOW_UNSIGNED_DEVELOPMENT_WORKERS="0"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -41,8 +41,8 @@ while [[ $# -gt 0 ]]; do
       CONCLAVE_MACOS_SIGN_IDENTITY="$2"
       shift 2
       ;;
-    --sign-adapters)
-      SIGN_ADAPTERS="1"
+    --allow-unsigned-development-workers)
+      ALLOW_UNSIGNED_DEVELOPMENT_WORKERS="1"
       shift
       ;;
     --open|-o)
@@ -60,7 +60,8 @@ while [[ $# -gt 0 ]]; do
       echo "  --debug            Build in debug mode"
       echo "  --version, -v VER  Override workspace version"
       echo "  --sign IDENTITY    Developer ID signing identity"
-      echo "  --sign-adapters    Sign bundled adapters with the configured release key"
+      echo "  --allow-unsigned-development-workers"
+      echo "                     Enable local unsigned Workers (debug builds only)"
       echo "  --open, -o         Open the built application bundle after build"
       echo "  --help, -h         Show this help message"
       echo ""
@@ -68,9 +69,6 @@ while [[ $# -gt 0 ]]; do
       echo "  CONCLAVE_WORKSPACE_VERSION           Workspace version override"
       echo "  CONCLAVE_MACOS_SIGN_IDENTITY         Signing identity"
       echo "  CONCLAVE_MACOS_NOTARY_PROFILE        Keychain profile for notarization"
-      echo "  CONCLAVE_RELEASE_TRUST_KEYS_JSON     Public Ed25519 trust roots"
-      echo "  CONCLAVE_ADAPTER_ED25519_SEED        Adapter package signing seed"
-      echo "  CONCLAVE_ADAPTER_SIGNING_KEY_ID      Adapter package signing key ID"
       exit 0
       ;;
     *)
@@ -91,62 +89,25 @@ cd "$HOST_DIR"
 flutter clean
 flutter pub get
 
-if [[ "$SIGN_ADAPTERS" == "1" ]]; then
-  if [[ -z "${CONCLAVE_ADAPTER_ED25519_SEED:-}" || -z "${CONCLAVE_ADAPTER_SIGNING_KEY_ID:-}" ]]; then
-    echo "Signed adapter builds require CONCLAVE_ADAPTER_ED25519_SEED and CONCLAVE_ADAPTER_SIGNING_KEY_ID." >&2
-    exit 1
-  fi
-  if [[ -z "${CONCLAVE_RELEASE_TRUST_KEYS_JSON:-}" ]]; then
-    echo "Signed adapter builds require CONCLAVE_RELEASE_TRUST_KEYS_JSON." >&2
-    exit 1
-  fi
-  UNSIGNED_BUNDLED_DEFINE="false"
-else
-  echo "Building unsigned local adapter bundles (no release signing keys required)."
-  UNSIGNED_BUNDLED_DEFINE="true"
+if [[ "$ALLOW_UNSIGNED_DEVELOPMENT_WORKERS" == "1" && "$MODE" != "debug" ]]; then
+  echo "Unsigned development Workers can only be enabled in a debug Workspace build." >&2
+  exit 1
 fi
-
-ADAPTER_ASSET_DIR="$HOST_DIR/assets/adapters"
-mkdir -p "$ADAPTER_ASSET_DIR"
-rm -f "$ADAPTER_ASSET_DIR/codex.tgz" "$ADAPTER_ASSET_DIR/codex.json" \
-  "$ADAPTER_ASSET_DIR/antigravity.tgz" "$ADAPTER_ASSET_DIR/antigravity.json"
-
-for ADAPTER_ID in codex antigravity; do
-  ARCHIVE="$ADAPTER_ASSET_DIR/$ADAPTER_ID.tgz"
-  MANIFEST="$ARCHIVE.manifest.json"
-  if [[ "$SIGN_ADAPTERS" == "1" ]]; then
-    CONCLAVE_WORKER_TRUST_PUBLISHER=conclave \
-    CONCLAVE_RELEASE_SIGNING_SEED="$CONCLAVE_ADAPTER_ED25519_SEED" \
-    CONCLAVE_RELEASE_SIGNING_KEY_ID="$CONCLAVE_ADAPTER_SIGNING_KEY_ID" \
-      dart run bin/package_v7_adapter.dart \
-        --source "../../packages/worker-manifest/adapters/$ADAPTER_ID" \
-        --output "$ARCHIVE" --channel stable
-    dart run \
-      -DCONCLAVE_RELEASE_TRUST_KEYS_JSON="$CONCLAVE_RELEASE_TRUST_KEYS_JSON" \
-      bin/verify_v7_adapter_release.dart "$ARCHIVE" "$MANIFEST"
-  else
-    CONCLAVE_WORKER_TRUST_PUBLISHER=conclave \
-      dart run bin/package_v7_adapter.dart \
-        --source "../../packages/worker-manifest/adapters/$ADAPTER_ID" \
-        --output "$ARCHIVE" --channel stable --unsigned
-    dart run bin/verify_v7_adapter_release.dart \
-      "$ARCHIVE" "$MANIFEST" --allow-unsigned-bundled
-  fi
-  cp "$MANIFEST" "$ADAPTER_ASSET_DIR/$ADAPTER_ID.json"
-  rm -f "$MANIFEST"
-done
+UNSIGNED_WORKER_DEFINE="false"
+if [[ "$ALLOW_UNSIGNED_DEVELOPMENT_WORKERS" == "1" ]]; then
+  UNSIGNED_WORKER_DEFINE="true"
+fi
 
 if [[ "$MODE" == "debug" ]]; then
   flutter build macos --debug \
     --dart-define=CONCLAVE_WORKSPACE_VERSION="$VERSION" \
     --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON="${CONCLAVE_RELEASE_TRUST_KEYS_JSON:-{}}" \
-    --dart-define=CONCLAVE_ALLOW_UNSIGNED_BUNDLED_ADAPTERS="$UNSIGNED_BUNDLED_DEFINE"
+    --dart-define=CONCLAVE_ENABLE_UNSIGNED_DEVELOPMENT_WORKERS="$UNSIGNED_WORKER_DEFINE"
   APP="$HOST_DIR/build/macos/Build/Products/Debug/Conclave Workspace.app"
 else
   flutter build macos --release \
     --dart-define=CONCLAVE_WORKSPACE_VERSION="$VERSION" \
-    --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON="${CONCLAVE_RELEASE_TRUST_KEYS_JSON:-{}}" \
-    --dart-define=CONCLAVE_ALLOW_UNSIGNED_BUNDLED_ADAPTERS="$UNSIGNED_BUNDLED_DEFINE"
+    --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON="${CONCLAVE_RELEASE_TRUST_KEYS_JSON:-{}}"
   APP="$HOST_DIR/build/macos/Build/Products/Release/Conclave Workspace.app"
 fi
 

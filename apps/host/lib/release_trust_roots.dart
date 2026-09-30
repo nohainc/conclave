@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 import 'worker_trust_policy.dart';
 
 /// Build-injected public release roots. Empty or invalid configuration fails
@@ -28,4 +30,9 @@ Map<String, Map<String, String>> workspaceReleaseTrustRoots() {
 
 WorkerTrustPolicy workspaceReleaseTrustPolicy() => WorkerTrustPolicy(
       trustedPublicKeys: workspaceReleaseTrustRoots(),
+      allowUnsignedDevelopmentReleases: kDebugMode &&
+          const bool.fromEnvironment(
+            'CONCLAVE_ENABLE_UNSIGNED_DEVELOPMENT_WORKERS',
+            defaultValue: false,
+          ),
     );

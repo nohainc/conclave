@@ -120,7 +120,8 @@ open my $ready, ">", $ARGV[0] or exit 126;
 print $ready ($ok ? "group" : "fallback");
 close $ready;
 shift @ARGV;
-exec @ARGV or exit 127;
+my $executable = shift @ARGV;
+exec {$executable} $executable, @ARGV or exit 127;
 ''';
       process = await Process.start(
         '/usr/bin/perl',

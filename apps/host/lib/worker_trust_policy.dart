@@ -54,6 +54,7 @@ Set<WorkerPermission> parseConfiguredWorkerPermissions(String? configured) {
 class WorkerTrustPolicy {
   WorkerTrustPolicy({
     Map<String, Map<String, String>> trustedPublicKeys = const {},
+    this.allowUnsignedDevelopmentReleases = false,
     Set<String> revokedDigests = const {},
     Set<String> revokedPublishers = const {},
     Set<String> revokedKeyIds = const {},
@@ -68,6 +69,10 @@ class WorkerTrustPolicy {
         _revokedReleaseIds = Set.of(revokedReleaseIds);
 
   final Map<String, Map<String, String>> trustedPublicKeys;
+
+  /// Permits only the explicit local-development manifest marker. Workspace
+  /// enables this only in debug builds when its development define is set.
+  final bool allowUnsignedDevelopmentReleases;
   Set<String> _revokedDigests;
   Set<String> _revokedPublishers;
   Set<String> _revokedKeyIds;
@@ -152,6 +157,17 @@ class WorkerTrustPolicy {
         workerVersion is! String ||
         signature is! String) {
       return false;
+    }
+    if (allowUnsignedDevelopmentReleases &&
+        publisher == 'local-development' &&
+        manifest['releaseChannel'] == 'development' &&
+        signingKeyId == 'unsigned-development' &&
+        signature == 'unsigned-development' &&
+        !_revokedDigests.contains(digest) &&
+        !_revokedPublishers.contains(publisher) &&
+        !_revokedKeyIds.contains(signingKeyId) &&
+        !_revokedReleaseIds.contains('$workerTypeId@$workerVersion')) {
+      return true;
     }
     if (_revokedDigests.contains(digest) ||
         _revokedPublishers.contains(publisher) ||

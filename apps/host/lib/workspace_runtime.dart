@@ -20,6 +20,7 @@ import 'package:conclave_host/v7_adapter_catalog.dart';
 import 'package:conclave_host/workspace_enrollment.dart';
 import 'package:conclave_host/workspace_transport.dart';
 import 'package:conclave_host/worker_readiness.dart';
+import 'package:conclave_host/worker_process_supervisor.dart';
 
 Set<WorkerPermission> _configuredPermissions() {
   final configured = Platform.environment['CONCLAVE_WORKER_PERMISSIONS'];
@@ -42,6 +43,7 @@ Future<Host> buildWorkspaceRuntime(
       credentialStore ?? const PlatformSecureCredentialStore();
   final workerExecutor = WorkerProcessExecutor();
   final releaseTrustPolicy = workerTrustPolicy;
+  final nativeWorkerSupervisor = WorkerProcessSupervisor();
   final installationId = await InstallationIdentityStore(
     config.dataDirectory,
   ).getOrCreate(initialIdentity: config.installationId);
@@ -93,7 +95,9 @@ Future<Host> buildWorkspaceRuntime(
     allowedPermissions: _configuredPermissions(),
     workerStateSchemaVersion: 1,
     hasActiveAssignments: () => (connection?.activeAssignmentCount ?? 0) > 0,
-    candidateHealthCheck: WorkerCandidateValidator(),
+    candidateHealthCheck: WorkerCandidateValidator(
+      supervisor: nativeWorkerSupervisor,
+    ),
   );
   final workerReleaseCatalog = config.cloudUri == null
       ? null
@@ -346,6 +350,8 @@ Future<Host> buildWorkspaceRuntime(
   final readinessMonitor = WorkerReadinessMonitor(
     registry: localWorkerRegistry,
     adapterStore: v7AdapterPackageStore,
+    workerVersionStore: workerVersionStore,
+    workerProcessSupervisor: nativeWorkerSupervisor,
     executor: workerExecutor,
     readCredential: secureCredentialStore.read,
   );

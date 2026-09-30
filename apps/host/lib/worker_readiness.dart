@@ -1,11 +1,16 @@
 import 'dart:async';
 
+import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
+
 import 'cloud_connection.dart';
 import 'configured_worker_registry.dart';
 import 'first_party_worker_registry.dart';
 import 'v7_adapter_package_store.dart';
 import 'v7_adapter_protocol.dart';
 import 'worker_executor.dart';
+import 'worker_version_store.dart';
+import 'worker_release_verifier.dart';
+import 'worker_process_supervisor.dart';
 
 export 'v7_adapter_protocol.dart' show LocalWorkerProbeMode;
 
@@ -37,6 +42,8 @@ class WorkerReadinessMonitor {
   WorkerReadinessMonitor({
     required this.registry,
     required this.adapterStore,
+    this.workerVersionStore,
+    this.workerProcessSupervisor,
     WorkerProcessExecutor? executor,
     this.readCredential,
     this.interval = const Duration(minutes: 5),
@@ -45,6 +52,8 @@ class WorkerReadinessMonitor {
 
   final LocalConfiguredWorkerRegistry registry;
   final V7AdapterPackageStore adapterStore;
+  final WorkerVersionStore? workerVersionStore;
+  final WorkerProcessSupervisor? workerProcessSupervisor;
   final WorkerProcessExecutor executor;
   final Future<String?> Function(String credentialRef)? readCredential;
   final Duration interval;
@@ -205,6 +214,63 @@ class WorkerReadinessMonitor {
         return const WorkerReadinessAssessment(
           WorkerReadinessState.testFailed,
           issueCode: 'package_unavailable',
+        );
+      }
+      final versionStore = workerVersionStore;
+      final nativeSupervisor = workerProcessSupervisor;
+      final nativeManifest = await versionStore?.activeManifest(
+        worker.workerTypeId,
+      );
+      if (versionStore != null &&
+          nativeSupervisor != null &&
+          nativeManifest != null) {
+        final admission = await WorkerReleaseVerifier.verifyInstalled(
+          manifestInput: nativeManifest.toJson(),
+          packageRoot: versionStore.versionDirectory(
+            worker.workerTypeId,
+            nativeManifest.workerVersion,
+          ),
+          expectedWorkerTypeId: worker.workerTypeId,
+          platform: versionStore.platform,
+          trustPolicy: versionStore.trustPolicy,
+          allowedPermissions: versionStore.allowedPermissions,
+          supportedProtocolVersions: versionStore.supportedProtocolVersions,
+          readableStateSchemaVersion: versionStore.workerStateSchemaVersion,
+        );
+        final probe = await nativeSupervisor.probe(
+          admission,
+          stateDirectory: versionStore.stateDirectory(worker.workerTypeId),
+          mode: mode == LocalWorkerProbeMode.live
+              ? WorkerProbeMode.live
+              : WorkerProbeMode.passive,
+          timeout: mode == LocalWorkerProbeMode.live
+              ? const Duration(seconds: 30)
+              : const Duration(seconds: 20),
+        );
+        final issueCode = probe.issueCode;
+        final readiness = probe.ready
+            ? WorkerReadinessState.ready
+            : switch (issueCode) {
+                'authentication_required' ||
+                'sign_in_required' =>
+                  WorkerReadinessState.signInRequired,
+                'setup_required' ||
+                'cli_not_found' =>
+                  WorkerReadinessState.setupRequired,
+                'provider_tool_unavailable' =>
+                  WorkerReadinessState.runtimeUnavailable,
+                _ => WorkerReadinessState.testFailed,
+              };
+        return WorkerReadinessAssessment(
+          readiness,
+          issueCode: issueCode,
+          diagnosticDetails: probe.diagnostics,
+          toolVersion: probe.tool?.version,
+          replaceToolVersion: true,
+          toolName: probe.tool?.name,
+          replaceToolName: true,
+          toolPath: probe.tool?.path,
+          replaceToolPath: true,
         );
       }
       var packageAvailable = await adapterStore.hasVerifiedActivePackage(

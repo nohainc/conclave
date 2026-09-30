@@ -34,6 +34,73 @@ final class WorkerProcessSupervisor {
     await _terminate(process);
   }
 
+  /// Runs an explicitly requested passive or live Worker probe using the
+  /// admitted native executable. Live probes may consume provider quota.
+  Future<ProbeResult> probe(
+    WorkerReleaseAdmission admission, {
+    required Directory stateDirectory,
+    required WorkerProbeMode mode,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final timer = Stopwatch()..start();
+    Process? process;
+    _WorkerChannel? channel;
+    var stopped = false;
+    try {
+      process = await _start(
+        admission.executable,
+        stateDirectory: stateDirectory,
+        workingDirectory: stateDirectory,
+      );
+      channel = _WorkerChannel(
+        process,
+        maxFrameBytes: maxFrameBytes,
+        maxStderrBytes: maxStderrBytes,
+      );
+      final initialized = await channel.exchange(
+        InitializeRequest(
+          requestId: 'probe-init-${DateTime.now().microsecondsSinceEpoch}',
+          workerTypeId: admission.manifest.workerTypeId,
+          expectedWorkerVersion: admission.manifest.workerVersion,
+        ),
+        _remaining(timeout, timer),
+      );
+      if (initialized is! InitializeResult) {
+        throw const WorkerProcessFailure(
+          WorkerIssueCode.workerInternalFailure,
+          'Worker returned an invalid initialize response',
+        );
+      }
+      admission.validateInitializeResult(initialized);
+      final result = await channel.exchange(
+        ProbeRequest(
+          requestId: 'probe-${DateTime.now().microsecondsSinceEpoch}',
+          mode: mode,
+        ),
+        _remaining(timeout, timer),
+      );
+      if (result is! ProbeResult || result.mode != mode) {
+        throw const WorkerProcessFailure(
+          WorkerIssueCode.workerInternalFailure,
+          'Worker returned an invalid probe response',
+        );
+      }
+      await _stopProcess(process, channel, graceful: true);
+      stopped = true;
+      return result;
+    } on TimeoutException {
+      throw const WorkerProcessFailure(
+        WorkerIssueCode.deadlineExceeded,
+        'Worker probe exceeded its deadline',
+      );
+    } finally {
+      if (process != null && !stopped) {
+        await _stopProcess(process, channel, graceful: false);
+      }
+      await channel?.dispose();
+    }
+  }
+
   Future<void> validateCandidate(
     WorkerReleaseAdmission admission, {
     required Directory stateDirectory,
@@ -146,7 +213,7 @@ final class WorkerProcessSupervisor {
         durationMs: timer.elapsedMilliseconds,
       );
       rethrow;
-    } on Object {
+    } on Object catch (failure) {
       errorCode = WorkerIssueCode.workerInternalFailure;
       await _record(
         diagnostics,
@@ -158,9 +225,9 @@ final class WorkerProcessSupervisor {
         errorCode: errorCode,
         durationMs: timer.elapsedMilliseconds,
       );
-      throw const WorkerProcessFailure(
+      throw WorkerProcessFailure(
         WorkerIssueCode.workerInternalFailure,
-        'Candidate initialize or passive probe failed',
+        'Candidate failed during $stage (${failure.runtimeType})',
       );
     } finally {
       if (process != null && !processStopped) {
