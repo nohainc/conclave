@@ -1,6 +1,6 @@
 # ADR-012: Workspace-Owned Workers and Managed Adapter Processes
 
-**Status:** Accepted for the general Workspace-owned execution architecture. Its catalog, configured-Worker cardinality, naming, and local authentication UX are superseded for v1 by [ADR-015](ADR-015-first-party-worker-v1-contract.md). Production release gates remain open.
+**Status:** Accepted for the general Workspace-owned execution architecture. Its catalog/cardinality UX is superseded for v1 by [ADR-015](ADR-015-first-party-worker-v1-contract.md), and its Node/adapter implementation details are refined by [ADR-017](ADR-017-standalone-dart-worker-executables.md). Production release gates remain open.
 
 **Date:** 2026-09-26  
 **Builds on:** ADR-008, ADR-009, ADR-010, ADR-011  
@@ -410,3 +410,7 @@ A headless mode does not justify separate Worker applications.
 ## Core invariant
 
 > **Conclave Workspace is the machine runtime. A configured Worker is one local executable AI/tool identity on that Workspace. Worker Type is the adapter. Model is configuration. Adapter execution is isolated in child processes. Conclave AX orchestrates and remotely controls use, but local trust and secrets remain local.**
+
+## Worker Runtime v2 refinement
+
+ADR-017 preserves the out-of-process Worker boundary defined here but changes the first-party implementation. ChatGPT and Gemini are independently versioned standalone Dart console executables managed by Workspace. Workspace no longer treats provider integrations as Node-backed adapter scripts and never probes provider CLIs directly. Worker installation, activation, update and rollback remain Workspace responsibilities; provider discovery/execution remain Worker responsibilities.
