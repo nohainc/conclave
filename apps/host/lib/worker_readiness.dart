@@ -55,7 +55,10 @@ class WorkerReadinessMonitor {
       }
       await registry.update(
         worker.id,
-        (current) => current.copyWith(status: LocalWorkerStatus.needsAttention),
+        (current) => current.copyWith(
+          status: LocalWorkerStatus.needsAttention,
+          activationState: current.activationState,
+        ),
       );
     }
     unawaited(_checkSafely());
@@ -118,6 +121,7 @@ class WorkerReadinessMonitor {
                     : effectiveReady
                         ? LocalWorkerStatus.ready
                         : LocalWorkerStatus.needsAttention,
+            activationState: current.activationState,
             readinessState: assessment.state,
             lastPassiveProbeAt: checkedAt,
             readinessIssueCode: assessment.issueCode,
@@ -142,6 +146,7 @@ class WorkerReadinessMonitor {
               : passed
                   ? LocalWorkerStatus.ready
                   : LocalWorkerStatus.needsAttention,
+          activationState: current.activationState,
           lastLiveTestAt: checkedAt,
           lastLiveTestPassed: passed,
           lastLiveTestIssueCode: assessment.issueCode,

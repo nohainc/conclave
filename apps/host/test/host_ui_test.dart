@@ -8,6 +8,7 @@ import 'package:conclave_host/desktop_auth.dart';
 import 'package:conclave_host/main.dart';
 import 'package:conclave_host/platform_runtime.dart';
 import 'package:conclave_host/secure_credentials.dart';
+import 'package:conclave_host/worker_readiness.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -171,6 +172,8 @@ void main() {
     Future<void> Function()? onExportDiagnostics,
     Future<void> Function(String path)? onChangeWorkRoot,
     LocalConfiguredWorkerRegistry? localWorkerRegistry,
+    Future<void> Function({LocalWorkerProbeMode mode, String? workerTypeId})?
+        onReadinessCheck,
     SecureCredentialStore? credentialStore,
     bool signedIn = false,
   }) async {
@@ -192,6 +195,7 @@ void main() {
             onRetry: onRetry,
             onExportDiagnostics: onExportDiagnostics,
             onChangeWorkRoot: onChangeWorkRoot,
+            onReadinessCheck: onReadinessCheck,
             localWorkerRegistry: localWorkerRegistry,
             // Build-time widget tests must never read the developer's actual
             // Keychain. Tests covering Keychain behavior provide a mocked
@@ -1316,6 +1320,74 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Package ID'), findsOneWidget);
     expect(find.text('Signing key'), findsWidgets);
+  });
+
+  testWidgets('testing a disabled Worker preserves activation', (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final worker = LocalConfiguredWorker(
+      id: 'w-chatgpt-disabled',
+      workspaceId: 'ws-test',
+      name: 'ChatGPT',
+      workerTypeId: 'chatgpt',
+      authStrategy: 'browser_auth',
+      credentialRef: null,
+      defaultModel: null,
+      adapterConfig: const {},
+      allowedModels: const [],
+      localPermissions: const ['workstream_filesystem', 'shell_execution'],
+      localConcurrencyLimit: 1,
+      adapterVersionPolicy: null,
+      status: LocalWorkerStatus.disabled,
+      readinessState: WorkerReadinessState.setupRequired,
+      credentialStatus: LocalWorkerCredentialStatus.ready,
+      revision: 1,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    );
+    final registry = _FakeWorkerRegistry([worker]);
+    LocalWorkerActivationState? activationAtProbe;
+
+    await pumpDashboard(
+      tester,
+      const HostUiSnapshot(
+        mode: HostUiMode.ready,
+        title: 'Workspace is ready',
+        detail: 'Ready',
+        paired: true,
+        workspaceReady: true,
+        cloudConnected: true,
+        workspaceName: 'Office Mac',
+      ),
+      localWorkerRegistry: registry,
+      onReadinessCheck: ({
+        LocalWorkerProbeMode mode = LocalWorkerProbeMode.passive,
+        String? workerTypeId,
+      }) async {
+        expect(mode, LocalWorkerProbeMode.live);
+        activationAtProbe = registry.workers.single.activationState;
+        await registry.update(
+          worker.id,
+          (current) => current.copyWith(
+            lastLiveTestAt: '2026-01-02T03:04:05Z',
+            lastLiveTestPassed: true,
+          ),
+        );
+      },
+    );
+    await tester.tap(find.text('Workers').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Test').first);
+    await tester.pumpAndSettle();
+
+    expect(activationAtProbe, LocalWorkerActivationState.disabled);
+    expect(registry.workers.single.activationState,
+        LocalWorkerActivationState.disabled);
+    expect(registry.workers.single.lastLiveTestPassed, isTrue);
+    expect(find.text('Disabled'), findsOneWidget);
   });
 
   testWidgets(

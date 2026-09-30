@@ -3698,43 +3698,33 @@ class _WorkersTabState extends State<_WorkersTab> {
     _workers = widget.registry?.list();
   }
 
-  Future<void> _setDisabled(LocalConfiguredWorker worker, bool disabled) async {
+  Future<void> _setActivationState(
+    LocalConfiguredWorker worker,
+    bool enabled,
+  ) async {
     final registry = widget.registry;
     if (registry == null) return;
     await registry.update(
       worker.id,
       (current) => current.copyWith(
-        status: disabled
-            ? LocalWorkerStatus.disabled
-            : LocalWorkerStatus.needsAttention,
-        activationState: disabled
-            ? LocalWorkerActivationState.disabled
-            : LocalWorkerActivationState.enabled,
+        status: enabled
+            ? LocalWorkerStatus.needsAttention
+            : LocalWorkerStatus.disabled,
+        activationState: enabled
+            ? LocalWorkerActivationState.enabled
+            : LocalWorkerActivationState.disabled,
       ),
     );
-    if (!disabled) {
+    if (enabled) {
       await widget.onReadinessCheck?.call(workerTypeId: worker.workerTypeId);
     }
     if (mounted) setState(_loadWorkers);
   }
 
-  Future<void> _configureOrTest(
-    FirstPartyWorkerPackage entry,
-    LocalConfiguredWorker? worker,
-  ) async {
-    if (!_updatingWorkerTypes.add(entry.productWorkerTypeId)) return;
-    setState(() {});
-    try {
-      final registry = widget.registry;
-      if (registry == null) return;
-      if (worker != null) {
-        await registry.update(
-          worker.id,
-          (current) => current.copyWith(
-            status: LocalWorkerStatus.needsAttention,
-          ),
-        );
-      } else {
+  Future<void> _configure(FirstPartyWorkerPackage entry) =>
+      _runWorkerAction(entry, () async {
+        final registry = widget.registry;
+        if (registry == null) return;
         final store = widget.adapterPackageStore;
         final packageReady = await store?.hasVerifiedActivePackage(
               entry.packageId,
@@ -3748,17 +3738,45 @@ class _WorkersTabState extends State<_WorkersTab> {
           type: entry,
           permissions: firstPartyWorkerLocalPermissions,
         );
-      }
-      await widget.onReadinessCheck?.call(
-        mode: LocalWorkerProbeMode.live,
-        workerTypeId: entry.productWorkerTypeId,
+        await widget.onReadinessCheck?.call(
+          mode: LocalWorkerProbeMode.live,
+          workerTypeId: entry.productWorkerTypeId,
+        );
+      },
+          failureMessage:
+              'Could not finish setting up ${entry.productName}. Check Advanced Diagnostics for details.');
+
+  Future<void> _testWorker(
+    FirstPartyWorkerPackage entry,
+    LocalConfiguredWorker worker,
+  ) =>
+      _runWorkerAction(
+        entry,
+        () async {
+          await widget.onReadinessCheck?.call(
+            mode: LocalWorkerProbeMode.live,
+            workerTypeId: worker.workerTypeId,
+          );
+        },
+        failureMessage:
+            'Could not test ${entry.productName}. Check Advanced Diagnostics for details.',
       );
+
+  Future<void> _runWorkerAction(
+    FirstPartyWorkerPackage entry,
+    Future<void> Function() action, {
+    required String failureMessage,
+  }) async {
+    if (!_updatingWorkerTypes.add(entry.productWorkerTypeId)) return;
+    setState(() {});
+    try {
+      await action();
       if (mounted) setState(_loadWorkers);
     } on Object {
       if (!mounted) return;
       showCopyableErrorSnackBar(
         context,
-        'Could not finish setting up ${entry.productName}. Check Advanced Diagnostics for details.',
+        failureMessage,
       );
     } finally {
       _updatingWorkerTypes.remove(entry.productWorkerTypeId);
@@ -3859,7 +3877,7 @@ class _WorkersTabState extends State<_WorkersTab> {
                             : worker == null
                                 ? TextButton(
                                     onPressed: canConfigure
-                                        ? () => _configureOrTest(entry, null)
+                                        ? () => _configure(entry)
                                         : null,
                                     child: const Text('Configure'),
                                   )
@@ -3868,8 +3886,7 @@ class _WorkersTabState extends State<_WorkersTab> {
                                     children: [
                                       TextButton(
                                         onPressed: canConfigure
-                                            ? () =>
-                                                _configureOrTest(entry, worker)
+                                            ? () => _testWorker(entry, worker)
                                             : null,
                                         child: const Text('Test'),
                                       ),
@@ -3878,9 +3895,10 @@ class _WorkersTabState extends State<_WorkersTab> {
                                             LocalWorkerActivationState.enabled,
                                         onChanged: canConfigure
                                             ? (enabled) => enabled
-                                                ? _configureOrTest(
-                                                    entry, worker)
-                                                : _setDisabled(worker, true)
+                                                ? _setActivationState(
+                                                    worker, true)
+                                                : _setActivationState(
+                                                    worker, false)
                                             : null,
                                       ),
                                     ],
