@@ -1,6 +1,6 @@
 # ADR-003: Architecture v3 — Flutter/Dart Host Stack
 
-**Status:** Accepted (Normative)  
+**Status:** Accepted (Normative); reaffirmed for first-party Worker executables by [ADR-017](ADR-017-standalone-dart-worker-executables.md)  
 **Date:** 2026-09-21  
 This is the current Agent implementation decision for Architecture v3.
 
@@ -12,7 +12,7 @@ Keep the Cloud-first orchestration model, but standardize the host/client stack 
 - Agent App: Flutter/Dart;
 - Agent Engine: Dart AOT native executable;
 - Cloud: TypeScript on Cloudflare;
-- Worker Plugins: language-independent executable processes.
+- Worker Plugins/Workers: language-independent executable processes; first-party Workers standardize on standalone Dart AOT console executables under ADR-017.
 
 ## Rationale
 
@@ -46,3 +46,7 @@ Dart isolates may be used internally for concurrency but are not the primary lif
 - [Technology Stack](../architecture/TECH_STACK.md)
 - [Migration to v3](../architecture/MIGRATION_TO_V3.md)
 - [Implementation Roadmap](../roadmaps/ARCHITECTURE_V3_IMPLEMENTATION.md)
+
+## Worker Runtime v2 refinement
+
+ADR-017 applies this earlier native-process direction to the current Architecture v7 Workspace Worker model. The Workspace remains Flutter/Dart; first-party ChatGPT and Gemini Workers become independently versioned standalone Dart executables. They are not Flutter plugins and do not run inside the Workspace process. Third-party Worker implementations may remain language-independent if they satisfy the same signed package and Local Worker Protocol contracts.
