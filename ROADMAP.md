@@ -63,6 +63,42 @@ Earlier implementation history remains available in:
 - [v4 Implementation Status](docs/roadmaps/V4_IMPLEMENTATION_STATUS.md)
 
 
+## Worker Runtime v2 — standalone Dart Worker executables
+
+ADR-017 keeps Architecture v7 but replaces the first Node-backed first-party
+Worker runtime with independently versioned native Dart console executables:
+
+~~~text
+Conclave Workspace
+-> ChatGPT Worker executable -> Codex CLI
+
+Conclave Workspace
+-> Gemini Worker executable -> agy
+~~~
+
+Workspace owns Worker installation, signature verification, activation, update,
+rollback, process supervision and Local Worker Protocol. Each Worker owns
+provider CLI discovery, version/auth checks, execution, session IDs, output
+parsing and provider-specific diagnostics.
+
+This is intentionally an aggressive pre-production convergence: after both Dart
+Workers and update/rollback acceptance pass, the Node `.mjs` adapters, Node
+runtime prerequisite, adapter-centric release schema, obsolete local Worker
+fields, and unreleased D1 compatibility layers should be removed rather than
+maintained indefinitely.
+
+Implementation sequence:
+
+[Worker Runtime v2 Implementation Plan](docs/roadmaps/WORKER_RUNTIME_V2_IMPLEMENTATION.md)
+
+Architecture contract:
+
+[Worker Runtime v2](docs/architecture/WORKER_RUNTIME_V2.md)
+
+Decision:
+
+[ADR-017: Standalone Dart Worker Executables](docs/decisions/ADR-017-standalone-dart-worker-executables.md)
+
 ## Workspace desktop authentication and transport resilience
 
 ADR-013 defines the next Workspace product evolution: Conclave Workspace gains
