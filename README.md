@@ -66,7 +66,7 @@ Worker executables run as separate per-assignment child processes under Conclave
 - [ADR-017: Standalone Dart Worker executables](docs/decisions/ADR-017-standalone-dart-worker-executables.md)
 - [Worker Runtime v2 architecture](docs/architecture/WORKER_RUNTIME_V2.md)
 - [Worker Runtime v2 implementation plan](docs/roadmaps/WORKER_RUNTIME_V2_IMPLEMENTATION.md)
-- [Workspace and adapter release operations](docs/deployment/WORKSPACE_RELEASES.md)
+- [Workspace and Worker release operations](docs/deployment/WORKSPACE_RELEASES.md)
 - [Release trust and key rotation](docs/security/RELEASE_TRUST_AND_ROTATION.md)
 - [AI Development Rules](AGENTS.md)
 
