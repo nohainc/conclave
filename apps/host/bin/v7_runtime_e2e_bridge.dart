@@ -43,7 +43,7 @@ String _platform() {
 }
 
 Future<void> main(List<String> args) async {
-  if (args.isEmpty || args.length > 5) {
+  if (args.isEmpty || args.length > 6) {
     throw ArgumentError(
         'temporary Workspace data path and optional transport settings required');
   }
@@ -54,9 +54,14 @@ Future<void> main(List<String> args) async {
   final runtimeCredential = args.length > 3 ? args[3] : '';
   final firstPartyAdapter =
       args.length > 4 && args[4].isNotEmpty ? args[4] : null;
+  final realFirstParty = args.length > 5 && args[5] == 'real';
   if (firstPartyAdapter != null &&
       !const {'codex', 'antigravity'}.contains(firstPartyAdapter)) {
     throw ArgumentError('unknown first-party adapter fixture');
+  }
+  if (realFirstParty && firstPartyAdapter == null) {
+    throw ArgumentError(
+        'real provider acceptance requires a first-party package');
   }
   await root.create(recursive: true);
   const workspaceId = 'workspace-v7-e2e';
@@ -68,7 +73,7 @@ Future<void> main(List<String> args) async {
     _ => 'fixture-worker',
   };
   final adapterTypeId = firstPartyAdapter ?? typeId;
-  const modelId = 'fixture-model';
+  final modelId = realFirstParty ? null : 'fixture-model';
   const signingSeed = <int>[
     0,
     1,
@@ -123,7 +128,7 @@ Future<void> main(List<String> args) async {
     workerTypeId: typeId,
     authStrategy: firstPartyAdapter == null ? 'none' : 'browser_auth',
     defaultModel: modelId,
-    allowedModels: const [modelId],
+    allowedModels: modelId == null ? const [] : [modelId],
     localPermissions: [
       'repository:read',
       'repository:write',
@@ -135,14 +140,6 @@ Future<void> main(List<String> args) async {
     adapterVersionPolicy: 'stable',
     status: LocalWorkerStatus.ready,
     credentialStatus: LocalWorkerCredentialStatus.notRequired,
-    executablePath: firstPartyAdapter == null
-        ? null
-        : '${root.path}${Platform.pathSeparator}source${Platform.pathSeparator}bin${Platform.pathSeparator}${firstPartyAdapter == 'codex' ? 'codex' : 'agy'}',
-    cliVersion: firstPartyAdapter == 'codex'
-        ? '1.2.3'
-        : firstPartyAdapter == 'antigravity'
-            ? '4.5.6'
-            : null,
   );
   final source = Directory('${root.path}/source');
   await Directory('${source.path}/bin').create(recursive: true);
@@ -187,29 +184,16 @@ exec __DART__ "$(dirname "$0")/adapter.dart"
     );
     await adapterSource.copy('${source.path}/bin/$adapterFileName');
     adapterExecutable = 'bin/$adapterFileName';
-    final cliName = firstPartyAdapter == 'codex' ? 'codex' : 'agy';
-    final fakeCli = File('${source.path}/bin/$cliName');
-    await fakeCli.writeAsString(firstPartyAdapter == 'codex'
-        ? r'''#!/bin/sh
-if [ "$1" = "--version" ]; then echo 'codex 1.2.3'; exit 0; fi
-if [ "$1" = "login" ] && [ "$2" = "status" ]; then echo 'Logged in'; exit 0; fi
-cat >/dev/null
-printf '%s\n' 'fake Codex execution' > "$PWD/first-party-cli.txt"
-printf '%s\n' '{"type":"turn.started"}'
-printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"fake Codex execution completed"}}'
-printf '%s\n' '{"type":"turn.completed"}'
-'''
-        : r'''#!/bin/sh
-if [ "$1" = "--version" ]; then echo 'agy 4.5.6'; exit 0; fi
-cat >/dev/null
-printf '%s\n' 'fake Antigravity execution' > "$PWD/first-party-cli.txt"
-printf '%s\n' '{"event":"init","conversation_id":"fixture","init":{"cwd":"."}}'
-printf '%s\n' '{"event":"step_update","step_update":{"state":"RUNNING"}}'
-printf '%s\n' '{"event":"result","result":{"status":"SUCCESS","response":"fake Antigravity execution completed"}}'
-''');
-    final chmod = await Process.run('chmod', ['700', fakeCli.path]);
-    if (chmod.exitCode != 0) {
-      throw StateError('could not mark fake provider CLI executable');
+    final sharedRuntime = File(
+      '${repositoryRoot.path}${Platform.pathSeparator}packages${Platform.pathSeparator}worker-manifest${Platform.pathSeparator}adapters${Platform.pathSeparator}shared${Platform.pathSeparator}cli_tool_runner.mjs',
+    );
+    await Directory('${source.path}/lib').create(recursive: true);
+    await sharedRuntime.copy('${source.path}/lib/cli_tool_runner.mjs');
+    if (realFirstParty) {
+      final packageTemplate = File(
+        '${repositoryRoot.path}${Platform.pathSeparator}packages${Platform.pathSeparator}worker-manifest${Platform.pathSeparator}adapters${Platform.pathSeparator}$firstPartyAdapter${Platform.pathSeparator}manifest.template.json',
+      );
+      await packageTemplate.copy('${source.path}/manifest.json');
     }
     final chmodAdapter = await Process.run(
         'chmod', ['700', '${source.path}/$adapterExecutable']);
@@ -228,32 +212,47 @@ printf '%s\n' '{"event":"result","result":{"status":"SUCCESS","response":"fake A
   final adapterPermissions = firstPartyAdapter == null
       ? ['workspace:read', 'workspace:write']
       : ['workspace:read', 'workspace:write', 'shell:execute'];
-  final manifest = <String, Object?>{
-    'workerTypeId': adapterTypeId,
-    'adapterVersion': '1.0.0',
-    'protocolVersion': '2.1',
-    'publisher': 'Conclave Test',
-    'displayName': firstPartyAdapter == null
-        ? 'V7 deterministic E2E fixture'
-        : firstPartyAdapter == 'codex'
-            ? 'Codex fake CLI E2E fixture'
-            : 'Antigravity fake CLI E2E fixture',
-    'supportedPlatforms': [_platform()],
-    'capabilities':
-        firstPartyAdapter == null ? ['code'] : ['code', 'repository', 'shell'],
-    'permissions': adapterPermissions,
-    'authStrategies': [firstPartyAdapter == null ? 'none' : 'browser_auth'],
-    'modelSelectionMode': 'allow_list',
-    'prerequisites': <Object>[],
-    'executable': adapterExecutable,
-    'launchArgs': <String>[],
-    'secretRequirements': <Object>[],
-    'healthCheck': {'mode': 'protocol', 'timeoutMs': 5000},
-    'packageDigest': digest,
-    'signingKeyId': 'test-ed25519-v1',
-    'signature': '',
-    'releaseChannel': 'stable',
-  };
+  final manifest = realFirstParty
+      ? Map<String, Object?>.from(
+          jsonDecode(await File('${source.path}/manifest.json').readAsString())
+              as Map)
+      : <String, Object?>{
+          'workerTypeId': adapterTypeId,
+          'adapterVersion': '1.0.0',
+          'protocolVersion': '2.1',
+          'publisher': 'Conclave Test',
+          'displayName': firstPartyAdapter == null
+              ? 'V7 deterministic E2E fixture'
+              : firstPartyAdapter == 'codex'
+                  ? 'Codex fake CLI E2E fixture'
+                  : 'Antigravity fake CLI E2E fixture',
+          'supportedPlatforms': [_platform()],
+          'capabilities': firstPartyAdapter == null
+              ? ['code']
+              : ['code', 'repository', 'shell'],
+          'permissions': adapterPermissions,
+          'authStrategies': [
+            firstPartyAdapter == null ? 'none' : 'browser_auth'
+          ],
+          'modelSelectionMode': 'allow_list',
+          'prerequisites': <Object>[],
+          'executable': adapterExecutable,
+          'launchArgs': <String>[],
+          'secretRequirements': <Object>[],
+          'healthCheck': {'mode': 'protocol', 'timeoutMs': 5000},
+          'packageDigest': digest,
+          'signingKeyId': 'test-ed25519-v1',
+          'signature': '',
+          'releaseChannel': 'stable',
+        };
+  manifest['workerTypeId'] = adapterTypeId;
+  manifest['adapterVersion'] = '1.0.0';
+  manifest['protocolVersion'] = firstPartyAdapter == null ? '2.1' : '2.5';
+  manifest['publisher'] = 'Conclave Test';
+  manifest['packageDigest'] = digest;
+  manifest['signingKeyId'] = 'test-ed25519-v1';
+  manifest['signature'] = '';
+  manifest['releaseChannel'] = 'stable';
   final unsigned = Map<String, Object?>.from(manifest)..remove('signature');
   final signature = await Ed25519().sign(
     utf8.encode(

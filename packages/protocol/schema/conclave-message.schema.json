@@ -546,11 +546,13 @@
         "sessionPolicy": {
           "enum": [
             "stateless",
+            "durable_session",
             "isolated_workspace",
             "reuse_session",
             "persistent_context"
           ]
         },
+        "sessionKey": { "type": "string", "minLength": 1, "maxLength": 256 },
         "permissions": { "$ref": "#/$defs/stringList" },
         "contextRefs": {
           "type": "array",

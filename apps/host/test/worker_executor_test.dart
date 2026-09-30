@@ -26,6 +26,7 @@ Future<Directory> createProcessTreeAdapter(String mode) async {
   final grandchild = File('${directory.path}/grandchild.dart');
   final cli = File('${directory.path}/cli.dart');
   final adapter = File('${directory.path}/adapter.dart');
+  final gracefulStop = File('${directory.path}/graceful-stop');
   await grandchild.writeAsString('''
 import 'dart:async';
 import 'dart:io';
@@ -52,7 +53,9 @@ Future<void> main(List<String> args) async {
     await Future<void>.delayed(const Duration(milliseconds: 10));
   }
   if (${jsonEncode(mode)} == 'cli_crash') exit(7);
-  if (${jsonEncode(mode)} == 'cli_hang') {
+  if (${jsonEncode(mode)} == 'cli_hang' ||
+      ${jsonEncode(mode)} == 'package_crash_with_cli' ||
+      ${jsonEncode(mode)} == 'malformed_output') {
     while (true) await Future<void>.delayed(const Duration(hours: 1));
   }
   await grandchild.kill();
@@ -61,10 +64,19 @@ Future<void> main(List<String> args) async {
   await adapter.writeAsString('''
 import 'dart:async';
 import 'dart:convert';
-import 'dart:async';
 import 'dart:io';
+Process? activeCli;
 Future<void> main() async {
   if (${jsonEncode(mode)} == 'adapter_crash') exit(8);
+  ProcessSignal.sigterm.watch().listen((_) async {
+    await File(${jsonEncode(gracefulStop.path)}).writeAsString('stopping');
+    final cli = activeCli;
+    if (cli != null) {
+      cli.kill(ProcessSignal.sigterm);
+      await cli.exitCode;
+    }
+    exit(143);
+  });
   if (${jsonEncode(mode)} == 'adapter_hang') {
     while (true) await Future<void>.delayed(const Duration(hours: 1));
   }
@@ -78,13 +90,25 @@ Future<void> main() async {
     } else if (request['type'] == 'probe.request') {
       stdout.writeln(jsonEncode({...base, 'type': 'probe.result', 'ready': true, 'toolVersion': '1.0.0', 'checkKind': 'readiness', 'issues': <Object>[]}));
     } else if (request['type'] == 'execute.request') {
-      final cli = await Process.start(Platform.resolvedExecutable, ['${cli.path}',
+      activeCli = await Process.start(Platform.resolvedExecutable, ['${cli.path}',
           ${jsonEncode('${directory.path}/grandchild.pid')},
           ${jsonEncode('${directory.path}/heartbeat')},
           ${jsonEncode('${directory.path}/cli.pid')}]);
-      cli.stdout.listen((_) {});
-      cli.stderr.listen((_) {});
-      final code = await cli.exitCode;
+      activeCli!.stdout.listen((_) {});
+      activeCli!.stderr.listen((_) {});
+      if (${jsonEncode(mode)} == 'package_crash_with_cli' ||
+          ${jsonEncode(mode)} == 'malformed_output') {
+        final startupDeadline = DateTime.now().add(const Duration(seconds: 3));
+        while (!await File(${jsonEncode('${directory.path}/heartbeat')}).exists() &&
+            DateTime.now().isBefore(startupDeadline)) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+        if (${jsonEncode(mode)} == 'package_crash_with_cli') exit(9);
+        stdout.writeln('{malformed frame');
+        await stdout.flush();
+        while (true) await Future<void>.delayed(const Duration(hours: 1));
+      }
+      final code = await activeCli!.exitCode;
       if (code == 0) {
         stdout.writeln(jsonEncode({...base, 'type': 'result', 'assignmentId': request['assignmentId'], 'output': 'done', 'artifacts': <Object>[]}));
       } else {
@@ -236,21 +260,6 @@ Future<void> main() async {
           as Map)['content'],
       'prompt with [REDACTED]',
     );
-    final validation = await WorkerProcessExecutor().executeV7Adapter(
-      WorkerProcessSpec(
-        workerId: 'local-codex-validation',
-        executable: 'dart',
-        arguments: ['run', script.path],
-        workingDirectory: directory.path,
-      ),
-      workerTypeId: 'codex',
-      adapterVersion: '1.2.3',
-      prompt: '',
-      validateOnly: true,
-      config: const {'endpointUrl': 'https://provider.example.test'},
-      operationId: 'v7-validation-only',
-    );
-    expect(validation['validated'], isTrue);
   });
 
   test('preserves normalized V7 adapter execution errors', () async {
@@ -341,175 +350,6 @@ Future<void> main() async {
     await cancellation;
   });
 
-  test('runs a requested first-party headless execution check through adapter',
-      () async {
-    final directory = await Directory.systemTemp.createTemp('v7-probe-test-');
-    addTearDown(() => directory.delete(recursive: true));
-    final script = File('${directory.path}/adapter.dart');
-    await script.writeAsString(r'''
-import 'dart:convert';
-import 'dart:io';
-Future<void> main() async {
-  await for (final line in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
-    final request = jsonDecode(line) as Map<String, dynamic>;
-    final base = {'protocolVersion': '2.1', 'requestId': request['requestId']};
-    switch (request['type']) {
-      case 'initialize.request': stdout.writeln(jsonEncode({...base, 'type': 'initialize.result', 'adapterVersion': request['adapterVersion'], 'capabilities': <String>[] }));
-      case 'probe.request': stdout.writeln(jsonEncode({...base, 'type': 'probe.result', 'ready': true, 'toolVersion': '4.5.6', 'checkKind': 'readiness', 'issues': <Object>[] }));
-      case 'execute.request':
-        stdout.writeln(jsonEncode({...base, 'type': 'progress', 'assignmentId': request['assignmentId'], 'message': 'testing'}));
-        stdout.writeln(jsonEncode({...base, 'type': 'result', 'assignmentId': request['assignmentId'], 'output': 'OK\n', 'artifacts': <Object>[] }));
-    }
-  }
-}
-''');
-
-    final result = await WorkerProcessExecutor().checkV7AdapterHealth(
-      WorkerProcessSpec(
-        workerId: 'gemini-readiness-test',
-        executable: 'dart',
-        arguments: ['run', script.path],
-        workingDirectory: directory.path,
-      ),
-      workerTypeId: 'antigravity',
-      adapterVersion: '1.0.0',
-      healthCheckMode: 'protocol',
-      allowNotReady: true,
-      executionTestPrompt: 'Reply with exactly the word OK. Do not use tools.',
-    );
-
-    expect(result['ready'], isTrue);
-    expect(result['toolVersion'], '4.5.6');
-  });
-
-  test(
-      'returns only a safe auth reason when headless readiness execution fails',
-      () async {
-    final directory = await Directory.systemTemp.createTemp('v7-probe-auth-');
-    addTearDown(() => directory.delete(recursive: true));
-    final script = File('${directory.path}/adapter.dart');
-    await script.writeAsString(r'''
-import 'dart:convert';
-import 'dart:io';
-Future<void> main() async {
-  await for (final line in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
-    final request = jsonDecode(line) as Map<String, dynamic>;
-    final base = {'protocolVersion': '2.1', 'requestId': request['requestId']};
-    switch (request['type']) {
-      case 'initialize.request': stdout.writeln(jsonEncode({...base, 'type': 'initialize.result', 'adapterVersion': request['adapterVersion'], 'capabilities': <String>[] }));
-      case 'probe.request': stdout.writeln(jsonEncode({...base, 'type': 'probe.result', 'ready': true, 'toolVersion': '4.5.6', 'checkKind': 'readiness', 'issues': <Object>[] }));
-      case 'execute.request': stdout.writeln(jsonEncode({...base, 'type': 'error', 'assignmentId': request['assignmentId'], 'code': 'authentication_required', 'message': 'safe message', 'retryable': false}));
-    }
-  }
-}
-''');
-
-    final result = await WorkerProcessExecutor().checkV7AdapterHealth(
-      WorkerProcessSpec(
-        workerId: 'gemini-readiness-auth-test',
-        executable: 'dart',
-        arguments: ['run', script.path],
-        workingDirectory: directory.path,
-      ),
-      workerTypeId: 'antigravity',
-      adapterVersion: '1.0.0',
-      healthCheckMode: 'protocol',
-      allowNotReady: true,
-      executionTestPrompt: 'Reply with exactly the word OK. Do not use tools.',
-    );
-
-    expect(result['ready'], isFalse);
-    expect(result['testDetails'], contains('Expected: exactly "OK"'));
-    expect(result['testDetails'], contains('authentication_required'));
-    expect(result['testDetails'], contains('Prompt submitted to adapter: yes'));
-    expect(result['testDetails'], contains('Readiness result: passed'));
-    expect(result['testDetails'], contains('`agy --version`'));
-    expect(result['testDetails'], contains('`agy --input-format stream-json'));
-    expect(
-      (result['issues'] as List).single['code'],
-      'authentication_required',
-    );
-    expect(result.toString(), isNot(contains('provider-secret')));
-  });
-
-  test('retains the real stage when a headless execution test times out',
-      () async {
-    final directory =
-        await Directory.systemTemp.createTemp('v7-probe-execution-timeout-');
-    addTearDown(() => directory.delete(recursive: true));
-    final script = File('${directory.path}/adapter.dart');
-    await script.writeAsString(r'''
-import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
-Future<void> main() async {
-  await for (final line in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
-    final request = jsonDecode(line) as Map<String, dynamic>;
-    final base = {'protocolVersion': '2.1', 'requestId': request['requestId']};
-    switch (request['type']) {
-      case 'initialize.request': stdout.writeln(jsonEncode({...base, 'type': 'initialize.result', 'adapterVersion': request['adapterVersion'], 'capabilities': <String>[] }));
-      case 'probe.request': stdout.writeln(jsonEncode({...base, 'type': 'probe.result', 'ready': true, 'toolVersion': '4.5.6', 'checkKind': 'readiness', 'issues': <Object>[] }));
-      case 'execute.request': await Completer<void>().future;
-    }
-  }
-}
-''');
-
-    final result = await WorkerProcessExecutor().checkV7AdapterHealth(
-      WorkerProcessSpec(
-        workerId: 'gemini-readiness-timeout-test',
-        executable: 'dart',
-        arguments: ['run', script.path],
-        workingDirectory: directory.path,
-      ),
-      workerTypeId: 'antigravity',
-      adapterVersion: '1.0.0',
-      healthCheckMode: 'protocol',
-      allowNotReady: true,
-      timeout: const Duration(milliseconds: 300),
-      executionTestPrompt: 'Reply with exactly the word OK. Do not use tools.',
-    );
-
-    expect(result['ready'], isFalse);
-    expect(result['testDetails'], contains('Readiness result: passed'));
-    expect(result['testDetails'], contains('Prompt submitted to adapter: yes'));
-    expect(result['testDetails'], contains('execute.request timed out'));
-  });
-
-  test('includes bounded adapter stderr when a readiness adapter crashes',
-      () async {
-    final directory =
-        await Directory.systemTemp.createTemp('v7-probe-adapter-crash-');
-    addTearDown(() => directory.delete(recursive: true));
-    final script = File('${directory.path}/adapter.dart');
-    await script.writeAsString(r'''
-import 'dart:io';
-Future<void> main() async {
-  stderr.writeln('adapter failed while starting the local bridge');
-  exit(7);
-}
-''');
-
-    final result = await WorkerProcessExecutor().checkV7AdapterHealth(
-      WorkerProcessSpec(
-        workerId: 'gemini-readiness-crash-test',
-        executable: 'dart',
-        arguments: ['run', script.path],
-        workingDirectory: directory.path,
-      ),
-      workerTypeId: 'antigravity',
-      adapterVersion: '1.0.0',
-      healthCheckMode: 'protocol',
-      allowNotReady: true,
-      executionTestPrompt: 'Reply with exactly the word OK. Do not use tools.',
-    );
-
-    expect(result['ready'], isFalse);
-    expect(result['testDetails'], contains('Prompt submitted to adapter: no'));
-    expect(result['testDetails'], contains('adapter failed while starting'));
-    expect(result['testDetails'], contains('Adapter stderr (local, redacted)'));
-  });
-
   test('assignment resolution selects an admitted V7 adapter when available',
       () async {
     final directory = await Directory.systemTemp.createTemp('v7-assignment-');
@@ -558,6 +398,7 @@ Future<void> main() async {
         'executionClass': 'stateless_read',
         'prompt': 'explain the change',
         'model': 'codex-latest',
+        'timeoutMs': 60000,
       },
     ));
     expect(result.summary, 'explain the change');
@@ -830,13 +671,14 @@ Future<void> main() async {
     }
   });
 
-  test('adapter crashes fail the assignment without leaving a process tree',
+  test(
+      'package crash with a provider child and grandchild leaves no process tree',
       () async {
-    final directory = await createProcessTreeAdapter('adapter_crash');
+    final directory = await createProcessTreeAdapter('package_crash_with_cli');
     addTearDown(() => directory.delete(recursive: true));
     await expectLater(
       WorkerProcessExecutor().executeV7Adapter(
-        processTreeAdapterSpec(directory, 'adapter-crash'),
+        processTreeAdapterSpec(directory, 'package-crash'),
         workerTypeId: 'chatgpt',
         adapterVersion: '1.0.0',
         prompt: 'test',
@@ -848,6 +690,25 @@ Future<void> main() async {
         'execution_failed',
       )),
     );
+    await expectTreeHeartbeatStopped(directory, required: true);
+  });
+
+  test('malformed package output stops provider child and grandchild',
+      () async {
+    final directory = await createProcessTreeAdapter('malformed_output');
+    addTearDown(() => directory.delete(recursive: true));
+    await expectLater(
+      WorkerProcessExecutor().executeV7Adapter(
+        processTreeAdapterSpec(directory, 'malformed-output'),
+        workerTypeId: 'gemini',
+        adapterVersion: '1.0.0',
+        prompt: 'test',
+        timeout: const Duration(seconds: 5),
+      ),
+      throwsA(isA<FormatException>()),
+    );
+    await expectTreeHeartbeatStopped(directory, required: true);
+    expect(await File('${directory.path}/graceful-stop').exists(), isTrue);
   });
 
   test('CLI crashes map to a stable adapter failure', () async {
@@ -868,6 +729,7 @@ Future<void> main() async {
       )),
     );
     await expectTreeHeartbeatStopped(directory, required: true);
+    expect(await File('${directory.path}/graceful-stop').exists(), isTrue);
   });
 
   test('adapter hang is stopped at the assignment timeout', () async {
@@ -941,6 +803,7 @@ Future<void> main() async {
     expect(await executor.cancel('cloud-cancelled-assignment'), isTrue);
     await failed;
     await expectTreeHeartbeatStopped(directory, required: true);
+    expect(await File('${directory.path}/graceful-stop').exists(), isTrue);
   });
 
   test('Workspace shutdown terminates active assignment process trees',
@@ -972,6 +835,7 @@ Future<void> main() async {
     await executor.shutdown();
     await failed;
     await expectTreeHeartbeatStopped(directory, required: true);
+    expect(await File('${directory.path}/graceful-stop').exists(), isTrue);
   });
 
   test('adapter stdout overflow terminates the adapter process', () async {
@@ -1112,8 +976,12 @@ Future<void> main() async {
     expect(await File(childPidPath).exists(), isTrue);
     expect(await File(heartbeatPath).exists(), isTrue);
     final childPid = int.parse(await File(childPidPath).readAsString());
+    final cancelled = expectLater(
+      execution,
+      throwsA(isA<ProcessException>()),
+    );
     expect(await executor.cancel('assignment-cancel-tree'), isTrue);
-    await expectLater(execution, throwsA(isA<ProcessException>()));
+    await cancelled;
 
     final heartbeatFile = File(heartbeatPath);
     final postCancelDeadline = DateTime.now().add(const Duration(seconds: 5));

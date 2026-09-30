@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'brand.dart';
-import 'adapter_prerequisite.dart';
 import 'cloud_connection.dart';
 import 'diagnostics.dart';
 import 'desktop_auth.dart';
@@ -13,11 +12,12 @@ import 'friendly_computer_name.dart';
 import 'host.dart';
 import 'host_configuration.dart';
 import 'local_worker_setup.dart';
-import 'first_party_worker_adapter_descriptor.dart';
-import 'first_party_worker_adapter_probe.dart';
+import 'local_worker_permissions.dart';
+import 'first_party_worker_registry.dart';
 import 'secure_credentials.dart';
 import 'secure_credentials_flutter.dart';
 import 'v7_adapter_package_store.dart';
+import 'v7_adapter_protocol.dart';
 import 'v7_adapter_catalog.dart';
 import 'workspace_enrollment.dart';
 import 'workspace_runtime.dart';
@@ -139,11 +139,11 @@ class HostLifecycleController extends ChangeNotifier {
   }
 
   Future<void> checkWorkerReadiness({
-    bool executionTest = false,
+    LocalWorkerProbeMode mode = LocalWorkerProbeMode.passive,
     String? workerTypeId,
   }) async {
     await host.workerReadinessMonitor?.checkNow(
-      executionTest: executionTest,
+      mode: mode,
       workerTypeId: workerTypeId,
     );
     notifyListeners();
@@ -2576,7 +2576,6 @@ class HostDashboard extends StatefulWidget {
     this.credentialStore = const PlatformSecureCredentialStore(),
     this.adapterPackageStore,
     this.ensureAdapter,
-    this.workerCliProbe,
     this.signedIn = false,
     super.key,
   });
@@ -2600,16 +2599,12 @@ class HostDashboard extends StatefulWidget {
   final Future<void> Function()? onRetry;
   final Future<void> Function()? onExportDiagnostics;
   final Future<void> Function(String path)? onChangeWorkRoot;
-  final Future<void> Function({bool executionTest, String? workerTypeId})?
-      onReadinessCheck;
+  final Future<void> Function(
+      {LocalWorkerProbeMode mode, String? workerTypeId})? onReadinessCheck;
   final int workerRevision;
   final SecureCredentialStore credentialStore;
   final V7AdapterPackageStore? adapterPackageStore;
   final Future<bool> Function(String workerTypeId)? ensureAdapter;
-  final Future<FirstPartyWorkerCliProbeResult> Function(
-    FirstPartyWorkerAdapterDescriptor type, {
-    String? cachedExecutablePath,
-  })? workerCliProbe;
   final bool signedIn;
 
   @override
@@ -2857,6 +2852,8 @@ class _HostDashboardState extends State<HostDashboard> {
                     snapshot: snapshot,
                     signedIn: effectiveSignedIn,
                     credentialStore: widget.credentialStore,
+                    localWorkerRegistry: widget.localWorkerRegistry,
+                    adapterPackageStore: widget.adapterPackageStore,
                     onConnect: widget.onConnect,
                     onRegister: widget.onRegister,
                     onRecoverCredential: widget.onRecoverCredential,
@@ -2876,7 +2873,6 @@ class _HostDashboardState extends State<HostDashboard> {
                     registry: widget.localWorkerRegistry,
                     adapterPackageStore: widget.adapterPackageStore,
                     ensureAdapter: widget.ensureAdapter,
-                    workerCliProbe: widget.workerCliProbe,
                     onReadinessCheck: widget.onReadinessCheck,
                   ),
                 ],
@@ -2957,6 +2953,8 @@ class _WorkspaceTab extends StatefulWidget {
     this.onRecoverCredential,
     this.onChangeWorkspaceName,
     required this.credentialStore,
+    this.localWorkerRegistry,
+    this.adapterPackageStore,
     this.onRetry,
     this.onExportDiagnostics,
     this.onChangeWorkRoot,
@@ -2974,6 +2972,8 @@ class _WorkspaceTab extends StatefulWidget {
   final Future<void> Function([String? name])? onRecoverCredential;
   final Future<void> Function(String name)? onChangeWorkspaceName;
   final SecureCredentialStore credentialStore;
+  final LocalConfiguredWorkerRegistry? localWorkerRegistry;
+  final V7AdapterPackageStore? adapterPackageStore;
   final Future<void> Function()? onRetry;
   final Future<void> Function()? onExportDiagnostics;
   final Future<void> Function(String path)? onChangeWorkRoot;
@@ -3216,6 +3216,8 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
         _WorkspaceDiagnosticsSection(
           snapshot: widget.snapshot,
           onExportDiagnostics: widget.onExportDiagnostics,
+          workerRegistry: widget.localWorkerRegistry,
+          adapterPackageStore: widget.adapterPackageStore,
         ),
       ],
     );
@@ -3226,10 +3228,14 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
   const _WorkspaceDiagnosticsSection({
     required this.snapshot,
     this.onExportDiagnostics,
+    this.workerRegistry,
+    this.adapterPackageStore,
   });
 
   final HostUiSnapshot snapshot;
   final Future<void> Function()? onExportDiagnostics;
+  final LocalConfiguredWorkerRegistry? workerRegistry;
+  final V7AdapterPackageStore? adapterPackageStore;
 
   @override
   Widget build(BuildContext context) {
@@ -3347,6 +3353,12 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
                           fontFamily: 'monospace', fontSize: 11)),
                 ),
             ],
+            const SizedBox(height: 12),
+
+            _WorkerPackageDiagnostics(
+              registry: workerRegistry,
+              adapterPackageStore: adapterPackageStore,
+            ),
             const SizedBox(height: 12),
 
             // Identity
@@ -3490,12 +3502,168 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
   }
 }
 
+class _WorkerPackageDiagnostics extends StatefulWidget {
+  const _WorkerPackageDiagnostics({
+    required this.registry,
+    required this.adapterPackageStore,
+  });
+
+  final LocalConfiguredWorkerRegistry? registry;
+  final V7AdapterPackageStore? adapterPackageStore;
+
+  @override
+  State<_WorkerPackageDiagnostics> createState() =>
+      _WorkerPackageDiagnosticsState();
+}
+
+class _WorkerPackageDiagnosticsState extends State<_WorkerPackageDiagnostics> {
+  Future<List<({LocalConfiguredWorker worker, Map<String, Object?>? package})>>?
+      _details;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _WorkerPackageDiagnostics oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.registry != widget.registry ||
+        oldWidget.adapterPackageStore != widget.adapterPackageStore) {
+      _load();
+    }
+  }
+
+  void _load() {
+    _details = _readDetails();
+  }
+
+  Future<List<({LocalConfiguredWorker worker, Map<String, Object?>? package})>>
+      _readDetails() async {
+    final registry = widget.registry;
+    if (registry == null) return const [];
+    final workers = await registry.list(includeRemoved: true);
+    return Future.wait(workers.map((worker) async {
+      Map<String, Object?>? package;
+      try {
+        package =
+            await widget.adapterPackageStore?.activeManifestSummary(worker);
+      } on Object {
+        // Package admission failures are useful here and remain local.
+      }
+      return (worker: worker, package: package);
+    }));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Worker Packages',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        FutureBuilder<
+            List<
+                ({
+                  LocalConfiguredWorker worker,
+                  Map<String, Object?>? package
+                })>>(
+          future: _details,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: LinearProgressIndicator(),
+              );
+            }
+            final records = snapshot.data ?? const [];
+            if (records.isEmpty) {
+              return Text(
+                widget.registry == null
+                    ? 'Local Worker diagnostics are unavailable.'
+                    : 'No local Workers are configured.',
+                style: theme.textTheme.bodySmall,
+              );
+            }
+            return Column(
+              children: [
+                for (final record in records)
+                  ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    title: Text(record.worker.name),
+                    subtitle: Text(
+                      '${FirstPartyWorkerPackage.forProductWorkerTypeId(record.worker.workerTypeId)?.packageId ?? record.worker.workerTypeId} · ${record.package?['adapterVersion'] ?? 'Package unavailable'}',
+                    ),
+                    children: [
+                      _DetailRow(
+                        label: 'Package ID',
+                        value: FirstPartyWorkerPackage.forProductWorkerTypeId(
+                              record.worker.workerTypeId,
+                            )?.packageId ??
+                            record.worker.workerTypeId,
+                      ),
+                      _DetailRow(
+                        label: 'CLI version',
+                        value: record.worker.toolVersion ?? 'Not detected',
+                      ),
+                      _DetailRow(
+                        label: 'Readiness',
+                        value:
+                            '${record.worker.readinessState.wireValue}${record.worker.readinessIssueCode == null ? '' : ' · ${record.worker.readinessIssueCode}'}',
+                      ),
+                      _DetailRow(
+                        label: 'Publisher',
+                        value:
+                            '${record.package?['publisher'] ?? 'Unavailable'}',
+                      ),
+                      _DetailRow(
+                        label: 'Signing key',
+                        value:
+                            '${record.package?['signingKeyId'] ?? 'Unavailable'}',
+                      ),
+                      _DetailRow(
+                        label: 'Signature verified',
+                        value:
+                            '${record.package?['signatureVerified'] ?? false}',
+                      ),
+                      _DetailRow(
+                        label: 'Release channel',
+                        value:
+                            '${record.package?['releaseChannel'] ?? 'Unavailable'}',
+                      ),
+                      _DetailRow(
+                        label: 'Last Test',
+                        value: _lastLiveTestLabel(record.worker),
+                      ),
+                      if (record.worker.lastLiveTestDetails != null)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 138, bottom: 8),
+                          child: CopyableMessageText(
+                            record.worker.lastLiveTestDetails!,
+                            style: theme.textTheme.bodySmall,
+                            tooltip: 'Copy Worker diagnostic',
+                          ),
+                        ),
+                    ],
+                  ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
 class _WorkersTab extends StatefulWidget {
   const _WorkersTab({
     required this.registry,
     required this.adapterPackageStore,
     this.ensureAdapter,
-    this.workerCliProbe,
     this.onReadinessCheck,
     super.key,
   });
@@ -3503,12 +3671,8 @@ class _WorkersTab extends StatefulWidget {
   final LocalConfiguredWorkerRegistry? registry;
   final V7AdapterPackageStore? adapterPackageStore;
   final Future<bool> Function(String workerTypeId)? ensureAdapter;
-  final Future<FirstPartyWorkerCliProbeResult> Function(
-    FirstPartyWorkerAdapterDescriptor type, {
-    String? cachedExecutablePath,
-  })? workerCliProbe;
-  final Future<void> Function({bool executionTest, String? workerTypeId})?
-      onReadinessCheck;
+  final Future<void> Function(
+      {LocalWorkerProbeMode mode, String? workerTypeId})? onReadinessCheck;
 
   @override
   State<_WorkersTab> createState() => _WorkersTabState();
@@ -3516,16 +3680,12 @@ class _WorkersTab extends StatefulWidget {
 
 class _WorkersTabState extends State<_WorkersTab> {
   Future<List<LocalConfiguredWorker>>? _workers;
-  final Map<String, Future<FirstPartyWorkerCliProbeResult>> _cliProbes = {};
   final Set<String> _updatingWorkerTypes = {};
 
   @override
   void initState() {
     super.initState();
     _loadWorkers();
-    for (final type in FirstPartyWorkerAdapterDescriptor.all) {
-      _cliProbes[type.productWorkerTypeId] = _probeCli(type);
-    }
   }
 
   @override
@@ -3538,27 +3698,6 @@ class _WorkersTabState extends State<_WorkersTab> {
     _workers = widget.registry?.list();
   }
 
-  Future<FirstPartyWorkerCliProbeResult> _probeCli(
-      FirstPartyWorkerAdapterDescriptor type,
-      {String? cachedExecutablePath}) {
-    final probe = widget.workerCliProbe;
-    if (probe != null) {
-      return probe(type, cachedExecutablePath: cachedExecutablePath);
-    }
-    return const FirstPartyWorkerAdapterProbe()
-        .probe(type, cachedExecutablePath: cachedExecutablePath);
-  }
-
-  void _checkCliAgain(
-    FirstPartyWorkerAdapterDescriptor type,
-    LocalConfiguredWorker? worker,
-  ) {
-    setState(() => _cliProbes[type.productWorkerTypeId] = _probeCli(
-          type,
-          cachedExecutablePath: worker?.executablePath,
-        ));
-  }
-
   Future<void> _setDisabled(LocalConfiguredWorker worker, bool disabled) async {
     final registry = widget.registry;
     if (registry == null) return;
@@ -3568,9 +3707,6 @@ class _WorkersTabState extends State<_WorkersTab> {
         status: disabled
             ? LocalWorkerStatus.disabled
             : LocalWorkerStatus.needsAttention,
-        readinessState: disabled
-            ? WorkerReadinessState.disabled
-            : WorkerReadinessState.testFailed,
       ),
     );
     if (!disabled) {
@@ -3579,79 +3715,50 @@ class _WorkersTabState extends State<_WorkersTab> {
     if (mounted) setState(_loadWorkers);
   }
 
-  Future<void> _setEnabled(
-    FirstPartyWorkerAdapterDescriptor type,
+  Future<void> _configureOrTest(
+    FirstPartyWorkerPackage entry,
     LocalConfiguredWorker? worker,
-    bool enabled,
   ) async {
-    if (!_updatingWorkerTypes.add(type.productWorkerTypeId)) return;
+    if (!_updatingWorkerTypes.add(entry.productWorkerTypeId)) return;
     setState(() {});
     try {
       final registry = widget.registry;
-      if (!enabled || registry == null) {
-        if (worker != null) await _setDisabled(worker, !enabled);
-        return;
-      }
-      final cli =
-          await _probeCli(type, cachedExecutablePath: worker?.executablePath);
-      if (!cli.versionProbe.satisfied ||
-          cli.executablePath == null ||
-          cli.versionProbe.detectedVersion == null) {
-        throw StateError(cli.versionProbe.message);
-      }
+      if (registry == null) return;
       if (worker != null) {
         await registry.update(
           worker.id,
           (current) => current.copyWith(
             status: LocalWorkerStatus.needsAttention,
-            readinessState: WorkerReadinessState.testFailed,
-            executablePath: cli.executablePath,
-            cliVersion: cli.versionProbe.detectedVersion,
           ),
         );
-        await widget.onReadinessCheck?.call(
-          executionTest: true,
-          workerTypeId: type.productWorkerTypeId,
+      } else {
+        final store = widget.adapterPackageStore;
+        final packageReady = await store?.hasVerifiedActivePackage(
+              entry.packageId,
+              firstPartyWorkerLocalPermissions,
+            ) ??
+            false;
+        if (!packageReady && widget.ensureAdapter != null) {
+          await widget.ensureAdapter!(entry.packageId);
+        }
+        await LocalWorkerSetupService(registry: registry).create(
+          type: entry,
+          permissions: firstPartyWorkerLocalPermissions,
         );
-        if (mounted) setState(_loadWorkers);
-        return;
       }
-      var adapterReady =
-          await widget.adapterPackageStore?.hasVerifiedActivePackage(
-                type.adapterPackageId,
-                type.requiredLocalPermissions,
-              ) ??
-              false;
-      if (!adapterReady && widget.ensureAdapter != null) {
-        await widget.ensureAdapter!(type.adapterPackageId);
-        adapterReady =
-            await widget.adapterPackageStore?.hasVerifiedActivePackage(
-                  type.adapterPackageId,
-                  type.requiredLocalPermissions,
-                ) ??
-                false;
-      }
-      await LocalWorkerSetupService(registry: registry).create(
-        type: type,
-        permissions: type.requiredLocalPermissions,
-        adapterReady: adapterReady,
-        prerequisiteReady: true,
-        executablePath: cli.executablePath,
-        cliVersion: cli.versionProbe.detectedVersion,
-      );
       await widget.onReadinessCheck?.call(
-        executionTest: true,
-        workerTypeId: type.productWorkerTypeId,
+        mode: LocalWorkerProbeMode.live,
+        workerTypeId: entry.productWorkerTypeId,
       );
       if (mounted) setState(_loadWorkers);
     } on Object {
       if (!mounted) return;
       showCopyableErrorSnackBar(
         context,
-        'Could not finish setting up ${type.productName}. Check Advanced Diagnostics for details.',
+        'Could not finish setting up ${entry.productName}. Check Advanced Diagnostics for details.',
       );
     } finally {
-      _updatingWorkerTypes.remove(type.productWorkerTypeId);
+      _updatingWorkerTypes.remove(entry.productWorkerTypeId);
       if (mounted) setState(() {});
     }
   }
@@ -3663,7 +3770,7 @@ class _WorkersTabState extends State<_WorkersTab> {
       padding: const EdgeInsets.all(24),
       children: [
         Text(
-          'Configure the local AI tools available to this Workspace.',
+          'Worker Packages check their provider tools and report readiness to Workspace.',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
@@ -3673,197 +3780,100 @@ class _WorkersTabState extends State<_WorkersTab> {
           future: _workers,
           builder: (context, snapshot) {
             final records = snapshot.data ?? const <LocalConfiguredWorker>[];
-            final canToggle = widget.registry != null && snapshot.hasData;
+            final canConfigure = widget.registry != null && snapshot.hasData;
             return Column(
               children: [
-                for (final type in FirstPartyWorkerAdapterDescriptor.all)
+                for (final entry in FirstPartyWorkerPackage.all)
                   Builder(builder: (context) {
-                    final matches = records
-                        .where((worker) =>
-                            worker.workerTypeId == type.productWorkerTypeId)
-                        .toList();
-                    final worker = matches.isEmpty ? null : matches.first;
-                    final probe = _cliProbes[type.productWorkerTypeId];
-                    return FutureBuilder<FirstPartyWorkerCliProbeResult>(
-                      future: probe,
-                      builder: (context, cliSnapshot) {
-                        final cli = cliSnapshot.data;
-                        final versionProbe = cli?.versionProbe;
-                        final cliAvailable = versionProbe?.satisfied == true;
-                        final pending =
-                            cliSnapshot.connectionState != ConnectionState.done;
-                        final status = pending
-                            ? 'Checking…'
-                            : !cliAvailable
-                                ? 'Not configured'
-                                : widget.registry == null
-                                    ? 'Setup unavailable'
-                                    : snapshot.hasError
-                                        ? 'Status unavailable'
-                                        : !snapshot.hasData
-                                            ? 'Checking…'
-                                            : worker == null
-                                                ? 'Not configured'
-                                                : deriveLocalWorkerHealth(
-                                                    worker);
-                        final cliLabel = cliAvailable &&
-                                versionProbe?.detectedVersion != null
-                            ? '${type.cliDisplayName} · ${versionProbe!.detectedVersion}'
-                            : type.cliDisplayName;
-                        final cliAttention = !pending && !cliAvailable
-                            ? _cliAttentionMessage(type, versionProbe)
-                            : null;
-                        return Card(
-                          key:
-                              Key('worker-catalog-${type.productWorkerTypeId}'),
-                          margin: const EdgeInsets.only(bottom: 12),
-                          color: theme.colorScheme.surfaceContainerLow,
-                          child: ListTile(
-                            leading: Icon(
-                              _workerTypeIcon(type.productWorkerTypeId),
-                              color: theme.colorScheme.primary,
-                            ),
-                            title: Text(type.productName,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w600)),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
+                    final worker = records
+                        .where((record) =>
+                            record.workerTypeId == entry.productWorkerTypeId)
+                        .firstOrNull;
+                    final pending = _updatingWorkerTypes
+                        .contains(entry.productWorkerTypeId);
+                    final status = pending
+                        ? 'Checking…'
+                        : snapshot.hasError
+                            ? 'Needs attention'
+                            : !snapshot.hasData
+                                ? 'Checking…'
+                                : worker == null
+                                    ? 'Setup required'
+                                    : deriveLocalWorkerHealth(worker);
+                    return Card(
+                      key: Key('worker-catalog-${entry.productWorkerTypeId}'),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      color: theme.colorScheme.surfaceContainerLow,
+                      child: ListTile(
+                        leading: Icon(
+                          _workerTypeIcon(entry.productWorkerTypeId),
+                          color: theme.colorScheme.primary,
+                        ),
+                        title: Text(entry.productName,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
                               children: [
-                                Row(
-                                  children: [
-                                    Flexible(
-                                      child: Text(
-                                        cliLabel,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    _CatalogStatusBadge(label: status),
-                                  ],
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 3),
-                                  child: Text(
-                                    'CLI usability: ${_cliUsabilityLabel(worker, cliAvailable, pending)}',
-                                    style: theme.textTheme.bodySmall,
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 3),
-                                  child: Text(
-                                    'Last live test: ${_lastLiveTestLabel(worker)}',
-                                    style: theme.textTheme.bodySmall,
-                                  ),
-                                ),
-                                if (worker?.readinessState ==
-                                    WorkerReadinessState.adapterUnavailable)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 3),
-                                    child: Text(
-                                      'The CLI is available, but Workspace could not communicate with its local integration. Run Test for details.',
-                                      style: theme.textTheme.bodySmall,
-                                    ),
-                                  ),
-                                if (worker?.lastLiveTestPassed == false &&
-                                    worker?.lastLiveTestDetails != null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 3),
-                                    child: CopyableMessageText(
-                                      worker!.lastLiveTestDetails!,
-                                      style:
-                                          theme.textTheme.bodySmall?.copyWith(
-                                        color: theme.colorScheme.error,
-                                      ),
-                                      iconColor: theme.colorScheme.error,
-                                      tooltip: 'Copy test details',
-                                    ),
-                                  ),
-                                if (worker?.lastLiveTestPassed == false &&
-                                    worker?.lastLiveTestDetails == null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 3),
-                                    child: Text(
-                                      'Details were not recorded for this earlier test. Run Test again to see what was called, the expected reply, and the result.',
-                                      style:
-                                          theme.textTheme.bodySmall?.copyWith(
-                                        color: theme.colorScheme.error,
-                                      ),
-                                    ),
-                                  ),
-                                if (cliAttention != null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 3),
-                                    child: Text(
-                                      cliAttention,
-                                      style:
-                                          theme.textTheme.bodySmall?.copyWith(
-                                        color: theme.colorScheme.error,
-                                      ),
-                                    ),
-                                  ),
+                                _CatalogStatusBadge(label: status),
                               ],
                             ),
-                            trailing: pending
-                                ? const Text('Checking…')
-                                : _updatingWorkerTypes
-                                        .contains(type.productWorkerTypeId)
-                                    ? const SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2),
-                                      )
-                                    : !cliAvailable
-                                        ? TextButton(
-                                            onPressed: () =>
-                                                _checkCliAgain(type, worker),
-                                            child: const Text('Check again'),
-                                          )
-                                        : worker != null
-                                            ? Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  TextButton(
-                                                    onPressed: () async {
-                                                      await widget
-                                                          .onReadinessCheck
-                                                          ?.call(
-                                                        executionTest: true,
-                                                        workerTypeId: type
-                                                            .productWorkerTypeId,
-                                                      );
-                                                      if (mounted) {
-                                                        setState(_loadWorkers);
-                                                      }
-                                                    },
-                                                    child: const Text('Test'),
-                                                  ),
-                                                  Switch(
-                                                    value: worker.status !=
-                                                        LocalWorkerStatus
-                                                            .disabled,
-                                                    onChanged: canToggle
-                                                        ? (enabled) =>
-                                                            _setEnabled(type,
-                                                                worker, enabled)
-                                                        : null,
-                                                  ),
-                                                ],
-                                              )
-                                            : Switch(
-                                                value: worker != null &&
-                                                    worker.status !=
-                                                        LocalWorkerStatus
-                                                            .disabled,
-                                                onChanged: canToggle
-                                                    ? (enabled) => _setEnabled(
-                                                        type, worker, enabled)
-                                                    : null,
-                                              ),
-                          ),
-                        );
-                      },
+                            Padding(
+                              padding: const EdgeInsets.only(top: 3),
+                              child: Text(
+                                'CLI version: ${worker?.toolVersion ?? 'Not detected'}',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 3),
+                              child: Text(
+                                'Last Test: ${_lastLiveTestLabel(worker)}',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ),
+                          ],
+                        ),
+                        trailing: pending
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : worker == null
+                                ? TextButton(
+                                    onPressed: canConfigure
+                                        ? () => _configureOrTest(entry, null)
+                                        : null,
+                                    child: const Text('Configure'),
+                                  )
+                                : Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      TextButton(
+                                        onPressed: canConfigure
+                                            ? () =>
+                                                _configureOrTest(entry, worker)
+                                            : null,
+                                        child: const Text('Test'),
+                                      ),
+                                      Switch(
+                                        value: worker.status !=
+                                            LocalWorkerStatus.disabled,
+                                        onChanged: canConfigure
+                                            ? (enabled) => enabled
+                                                ? _configureOrTest(
+                                                    entry, worker)
+                                                : _setDisabled(worker, true)
+                                            : null,
+                                      ),
+                                    ],
+                                  ),
+                      ),
                     );
                   }),
                 if (snapshot.hasError)
@@ -3896,42 +3906,6 @@ class _WorkersTabState extends State<_WorkersTab> {
         _ => Icons.smart_toy_outlined,
       };
 
-  String _cliAttentionMessage(
-    FirstPartyWorkerAdapterDescriptor type,
-    AdapterPrerequisiteResult? result,
-  ) {
-    if (result == null) {
-      return '${type.cliDisplayName} could not be checked. Select Check again to retry.';
-    }
-    if (result.detectedVersion != null) {
-      return '${type.cliDisplayName} ${result.detectedVersion} is not supported: ${result.message}';
-    }
-    if (result.message.contains('not available')) {
-      return '${type.executableCandidates.join(' or ')} is missing or not available to Conclave Workspace.';
-    }
-    return '${type.cliDisplayName} could not be verified: ${result.message}';
-  }
-
-  String _cliUsabilityLabel(
-    LocalConfiguredWorker? worker,
-    bool cliAvailable,
-    bool pending,
-  ) {
-    if (pending) return 'Checking';
-    if (!cliAvailable) return 'Unavailable';
-    if (worker == null) return 'Version verified; setup not tested';
-    return switch (worker.readinessState) {
-      WorkerReadinessState.ready => 'Ready to use',
-      WorkerReadinessState.signInRequired => 'Sign-in required',
-      WorkerReadinessState.unsupportedCliVersion => 'Version unsupported',
-      WorkerReadinessState.notInstalled => 'Unavailable',
-      WorkerReadinessState.adapterUnavailable =>
-        'Conclave integration needs attention',
-      WorkerReadinessState.disabled => 'Version verified',
-      WorkerReadinessState.testFailed => 'Needs attention',
-    };
-  }
-
   String _lastLiveTestLabel(LocalConfiguredWorker? worker) {
     final testedAt = worker?.lastLiveTestAt;
     if (testedAt == null) return 'Not run';
@@ -3949,13 +3923,12 @@ class _CatalogStatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = label == 'Ready'
-        ? ConclaveBrand.success
-        : label == 'Disabled' || label == 'Not configured'
-            ? Colors.grey
-            : label == 'Sign in required' || label == 'Permission required'
-                ? ConclaveBrand.warning
-                : ConclaveBrand.error;
+    final color = switch (label) {
+      'Ready' => ConclaveBrand.success,
+      'Disabled' => Colors.grey,
+      'Setup required' || 'Not installed' => ConclaveBrand.warning,
+      _ => ConclaveBrand.error,
+    };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
@@ -3976,7 +3949,33 @@ class _CatalogStatusBadge extends StatelessWidget {
 }
 
 String deriveLocalWorkerHealth(LocalConfiguredWorker worker) {
-  return worker.readinessState.label;
+  if (worker.status == LocalWorkerStatus.disabled) return 'Disabled';
+  final issueCode = worker.lastLiveTestPassed == false
+      ? worker.lastLiveTestIssueCode ?? worker.readinessIssueCode
+      : worker.readinessIssueCode;
+  if (issueCode == 'cli_not_found') return 'Not installed';
+  if (worker.status == LocalWorkerStatus.ready) {
+    if (worker.workerTypeId == 'gemini' && worker.lastLiveTestPassed != true) {
+      return 'Setup required';
+    }
+    return 'Ready';
+  }
+  if (issueCode == 'setup_required' ||
+      issueCode == 'authentication_required' ||
+      worker.readinessState == WorkerReadinessState.setupRequired ||
+      worker.readinessState == WorkerReadinessState.signInRequired) {
+    return 'Setup required';
+  }
+  return 'Needs attention';
+}
+
+String _lastLiveTestLabel(LocalConfiguredWorker? worker) {
+  final testedAt = worker?.lastLiveTestAt;
+  if (testedAt == null) return 'Not run';
+  final date = DateTime.tryParse(testedAt)?.toLocal();
+  final when = date == null ? testedAt : date.toString().split('.').first;
+  final result = worker?.lastLiveTestPassed == true ? 'Passed' : 'Failed';
+  return '$result · $when';
 }
 
 class _DetailRow extends StatelessWidget {

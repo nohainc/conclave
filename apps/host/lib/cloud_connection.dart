@@ -100,11 +100,17 @@ class V7AdapterExecutionFailure implements Exception {
     required this.code,
     required this.message,
     this.retryable = false,
+    this.localDiagnostic,
   });
 
   final String code;
   final String message;
   final bool retryable;
+
+  /// Redacted, bounded local details for Workspace diagnostics only. Runtime
+  /// Cloud reporting deliberately serializes only [code], [message] and
+  /// [retryable].
+  final String? localDiagnostic;
 
   @override
   String toString() => message;
@@ -1384,6 +1390,17 @@ class HostCloudConnection {
     if (rawPayload is! Map<String, dynamic>) {
       return 'Assignment payload must be an object';
     }
+    final sessionPolicy = rawPayload['sessionPolicy'] ?? 'stateless';
+    final sessionKey = rawPayload['sessionKey'];
+    if (!const {'stateless', 'durable_session'}.contains(sessionPolicy) ||
+        (sessionKey != null &&
+            (sessionKey is! String ||
+                sessionKey.trim().isEmpty ||
+                sessionKey.length > 256)) ||
+        (sessionPolicy == 'stateless' && sessionKey != null) ||
+        (sessionPolicy == 'durable_session' && sessionKey == null)) {
+      return 'Assignment session policy is invalid';
+    }
     if (rawPayload['snapshot'] == null &&
         rawPayload['objective'] == null &&
         rawPayload['role'] == null) {
@@ -1413,7 +1430,8 @@ class HostCloudConnection {
           rawPayload['permissions'] is! List ||
           rawPayload['contextRefs'] is! List ||
           rawPayload['timeoutMs'] is! int ||
-          (rawPayload['timeoutMs'] as int) < 1000) {
+          (rawPayload['timeoutMs'] as int) < 1000 ||
+          (rawPayload['timeoutMs'] as int) > 2147483647) {
         return 'Assignment snapshot fields are invalid';
       }
       return null;
@@ -1437,8 +1455,8 @@ class HostCloudConnection {
       return 'Assignment contextArtifactIds must be a string array';
     }
     final timeoutMs = rawPayload['timeoutMs'];
-    if (timeoutMs is! int || timeoutMs < 1000) {
-      return 'Assignment timeoutMs must be at least 1000 milliseconds';
+    if (timeoutMs is! int || timeoutMs < 1000 || timeoutMs > 2147483647) {
+      return 'Assignment timeoutMs must be between 1000 and 2147483647 milliseconds';
     }
     final repository = rawPayload['repository'];
     if (repository != null) {

@@ -1,7 +1,7 @@
 {
   "workerTypeId": "antigravity",
   "adapterVersion": "1.0.0",
-  "protocolVersion": "2.1",
+  "protocolVersion": "2.5",
   "publisher": "conclave",
   "displayName": "Antigravity",
   "supportedPlatforms": [
@@ -12,12 +12,50 @@
   ],
   "capabilities": ["code", "repository", "shell"],
   "permissions": ["workspace:read", "workspace:write", "shell:execute"],
-  "authStrategies": ["browser_auth"],
+  "authStrategies": ["browser_auth", "api_key"],
   "modelSelectionMode": "allow_list",
-  "prerequisites": [
-    { "kind": "executable", "executable": "node" },
-    { "kind": "executable", "executable": "agy" }
-  ],
+  "prerequisites": [{ "kind": "executable", "executable": "node" }],
+  "environmentPolicy": {
+    "environmentPassthrough": [
+      "GEMINI_API_KEY",
+      "GOOGLE_GEMINI_BASE_URL",
+      "AGY_ADC_AUTH",
+      "CLOUDSDK_CONFIG",
+      "GOOGLE_APPLICATION_CREDENTIALS",
+      "GOOGLE_GENAI_USE_VERTEXAI",
+      "GOOGLE_CLOUD_PROJECT",
+      "GOOGLE_CLOUD_LOCATION",
+      "GOOGLE_CLOUD_QUOTA_PROJECT",
+      "DBUS_SESSION_BUS_ADDRESS",
+      "XDG_RUNTIME_DIR",
+      "XDG_CONFIG_HOME",
+      "XDG_DATA_HOME",
+      "XDG_STATE_HOME",
+      "XDG_CACHE_HOME"
+    ],
+    "providerCliPassthrough": [
+      "GEMINI_API_KEY",
+      "GOOGLE_GEMINI_BASE_URL",
+      "AGY_ADC_AUTH",
+      "CLOUDSDK_CONFIG",
+      "GOOGLE_APPLICATION_CREDENTIALS",
+      "GOOGLE_GENAI_USE_VERTEXAI",
+      "GOOGLE_CLOUD_PROJECT",
+      "GOOGLE_CLOUD_LOCATION",
+      "GOOGLE_CLOUD_QUOTA_PROJECT",
+      "DBUS_SESSION_BUS_ADDRESS",
+      "XDG_RUNTIME_DIR",
+      "XDG_CONFIG_HOME",
+      "XDG_DATA_HOME",
+      "XDG_STATE_HOME",
+      "XDG_CACHE_HOME"
+    ],
+    "sensitivePassthrough": [
+      "GEMINI_API_KEY",
+      "GOOGLE_GEMINI_BASE_URL",
+      "GOOGLE_APPLICATION_CREDENTIALS"
+    ]
+  },
   "executable": "bin/conclave-antigravity-adapter.mjs",
   "launchArgs": [],
   "secretRequirements": [],

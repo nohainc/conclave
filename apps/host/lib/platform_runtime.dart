@@ -167,44 +167,38 @@ exec @ARGV or exit 127;
   @override
   Future<void> terminateProcessTree(Process process,
       {required bool force}) async {
-    final signal = force ? '-KILL' : '-TERM';
-    final dartSignal = force ? ProcessSignal.sigkill : ProcessSignal.sigterm;
+    final descendants = _knownDescendants.putIfAbsent(process.pid, () => {});
+    // Remember descendants before asking the Worker Package to stop. A package
+    // crash can make provider processes outlive their original parent.
+    descendants.addAll(await _processDescendants(process.pid));
+    if (!force) {
+      // Give the Worker Package time to handle the signal and clean up its
+      // provider child. Escalation below kills the Workspace-owned tree.
+      process.kill(ProcessSignal.sigterm);
+      return;
+    }
+
     if (_isolatedProcessGroups.contains(process.pid)) {
-      var groupSignalSucceeded = false;
       try {
-        final result =
-            await Process.run('kill', [signal, '--', '-${process.pid}'])
-                .timeout(const Duration(seconds: 2));
-        groupSignalSucceeded = result.exitCode == 0;
+        await Process.run('kill', ['-KILL', '--', '-${process.pid}'])
+            .timeout(const Duration(seconds: 2));
       } on Object {
-        // The process may have left the group; try descendant discovery below.
-      }
-      if (groupSignalSucceeded) {
-        process.kill(dartSignal);
-        if (force) _isolatedProcessGroups.remove(process.pid);
-        return;
+        // Descendant PID cleanup below also handles a vanished group leader.
       }
     }
-    final descendants = _knownDescendants.putIfAbsent(process.pid, () => {});
-    descendants.addAll(await _processDescendants(process.pid));
     final orderedPids = descendants.toList().reversed.toList();
     for (var offset = 0; offset < orderedPids.length; offset += 256) {
       final pids = orderedPids.skip(offset).take(256).map((pid) => '$pid');
       try {
-        await Process.run('kill', [signal, ...pids])
+        await Process.run('kill', ['-KILL', ...pids])
             .timeout(const Duration(seconds: 5));
       } on Object {
         // Continue terminating the rest of the tree if one process raced exit.
       }
     }
-    try {
-      await Process.run('kill', [signal, '${process.pid}'])
-          .timeout(const Duration(seconds: 2));
-    } on Object {
-      // Fall through to Dart's direct-process signal as a final fallback.
-    }
-    process.kill(dartSignal);
-    if (force) _knownDescendants.remove(process.pid);
+    process.kill(ProcessSignal.sigkill);
+    _knownDescendants.remove(process.pid);
+    _isolatedProcessGroups.remove(process.pid);
   }
 
   Future<Set<int>> _processDescendants(int rootPid) async {
@@ -263,10 +257,14 @@ final class WindowsRuntime implements PlatformRuntime {
   @override
   Future<void> terminateProcessTree(Process process,
       {required bool force}) async {
+    if (!force) {
+      process.kill(ProcessSignal.sigterm);
+      return;
+    }
     try {
-      final result = await Process.run(
-              'taskkill', ['/PID', '${process.pid}', '/T', if (force) '/F'])
-          .timeout(const Duration(seconds: 5));
+      final result =
+          await Process.run('taskkill', ['/PID', '${process.pid}', '/T', '/F'])
+              .timeout(const Duration(seconds: 5));
       if (result.exitCode == 0) {
         await process.exitCode.timeout(const Duration(seconds: 5));
         return;

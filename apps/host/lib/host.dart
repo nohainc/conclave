@@ -248,6 +248,9 @@ class Host {
         adapterPackageStore = adapterPackageStore ??
             V7AdapterPackageStore(
               root: WorkspacePaths(config.dataDirectory).adaptersDirectory,
+              workerStateRoot:
+                  WorkspacePaths(config.dataDirectory).workersDirectory,
+              statePlatform: WorkspacePaths(config.dataDirectory).platform,
               trustPolicy: _configuredAdapterTrustPolicy(),
               allowedPermissions: parseConfiguredWorkerPermissions(
                   Platform.environment['CONCLAVE_WORKER_PERMISSIONS']),

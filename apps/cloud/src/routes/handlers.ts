@@ -7992,7 +7992,8 @@ export async function handleListWorkspaceWorkerInventory(
   const workspaceId = new URL(request.url).searchParams.get("workspaceId");
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT i.worker_id, i.workspace_id,
-            i.worker_type_id, i.status, i.readiness_state, i.capabilities_json,
+            i.worker_type_id, i.status, i.readiness_state,
+            i.readiness_issue_code, i.capabilities_json,
             i.local_concurrency_limit, i.adapter_version,
             i.last_seen_at, i.removed_at
        FROM workspace_worker_inventory i
@@ -8018,9 +8019,11 @@ export async function handleListWorkspaceWorkerInventory(
       status: String(row.status),
       readinessState: String(row.readiness_state),
       attentionReasonCode:
-        row.readiness_state === "ready" || row.readiness_state === "disabled"
+        row.status === "ready" || row.readiness_state === "disabled"
           ? null
-          : String(row.readiness_state),
+          : row.readiness_issue_code == null
+            ? String(row.readiness_state)
+            : String(row.readiness_issue_code),
       capabilities: parseArray(row.capabilities_json),
       localConcurrencyLimit: Number(row.local_concurrency_limit),
       adapterVersion:
@@ -9358,6 +9361,8 @@ async function handleDispatchTaskAssignment(
         typeof body.input === "object" && body.input !== null
           ? (body.input as Record<string, unknown>)
           : undefined,
+      sessionPolicy: body.sessionPolicy,
+      sessionKey: body.sessionKey,
       contextArtifactIds: Array.isArray(body.contextArtifactIds)
         ? body.contextArtifactIds.filter(
             (value): value is string => typeof value === "string",
@@ -9428,6 +9433,8 @@ async function handleDispatchTaskAssignment(
       typeof body.input === "object" && body.input !== null
         ? (body.input as Record<string, unknown>)
         : undefined,
+    sessionPolicy: body.sessionPolicy,
+    sessionKey: body.sessionKey,
     contextArtifactIds: Array.isArray(body.contextArtifactIds)
       ? (body.contextArtifactIds as string[])
       : undefined,
@@ -9584,6 +9591,8 @@ async function handleDispatchEnsembleTaskAssignment(
       typeof body.input === "object" && body.input !== null
         ? (body.input as Record<string, unknown>)
         : undefined,
+    sessionPolicy: body.sessionPolicy,
+    sessionKey: body.sessionKey,
     contextArtifactIds: Array.isArray(body.contextArtifactIds)
       ? (body.contextArtifactIds as string[])
       : undefined,

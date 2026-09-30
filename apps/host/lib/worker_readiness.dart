@@ -1,55 +1,28 @@
 import 'dart:async';
-import 'dart:io';
 
+import 'cloud_connection.dart';
 import 'configured_worker_registry.dart';
-import 'first_party_worker_adapter_descriptor.dart';
-import 'first_party_worker_cli_locator.dart';
+import 'first_party_worker_registry.dart';
 import 'v7_adapter_package_store.dart';
+import 'v7_adapter_protocol.dart';
 import 'worker_executor.dart';
 
-enum FirstPartyWorkerProbeReasonCode {
-  cliNotFound('cli_not_found'),
-  unsupportedCliVersion('unsupported_cli_version'),
-  authenticationRequired('authentication_required'),
-  permissionConfigurationRequired('permission_configuration_required'),
-  executionTestFailed('execution_test_failed'),
-  ready('ready');
-
-  const FirstPartyWorkerProbeReasonCode(this.wireValue);
-  final String wireValue;
-}
-
-FirstPartyWorkerProbeReasonCode firstPartyWorkerProbeReasonCodeForState(
-  WorkerReadinessState state,
-) =>
-    switch (state) {
-      WorkerReadinessState.ready => FirstPartyWorkerProbeReasonCode.ready,
-      WorkerReadinessState.notInstalled =>
-        FirstPartyWorkerProbeReasonCode.cliNotFound,
-      WorkerReadinessState.unsupportedCliVersion =>
-        FirstPartyWorkerProbeReasonCode.unsupportedCliVersion,
-      WorkerReadinessState.signInRequired =>
-        FirstPartyWorkerProbeReasonCode.authenticationRequired,
-      _ => FirstPartyWorkerProbeReasonCode.executionTestFailed,
-    };
+export 'v7_adapter_protocol.dart' show LocalWorkerProbeMode;
 
 class WorkerReadinessAssessment {
   const WorkerReadinessAssessment(
     this.state, {
-    this.credentialStatus,
-    this.executablePath,
-    this.cliVersion,
+    this.issueCode,
     this.diagnosticDetails,
-    FirstPartyWorkerProbeReasonCode? reasonCode,
-  }) : _reasonCode = reasonCode;
+    this.toolVersion,
+    this.replaceToolVersion = false,
+  });
+
   final WorkerReadinessState state;
-  final LocalWorkerCredentialStatus? credentialStatus;
-  final String? executablePath;
-  final String? cliVersion;
+  final String? issueCode;
   final String? diagnosticDetails;
-  final FirstPartyWorkerProbeReasonCode? _reasonCode;
-  FirstPartyWorkerProbeReasonCode get reasonCode =>
-      _reasonCode ?? firstPartyWorkerProbeReasonCodeForState(state);
+  final String? toolVersion;
+  final bool replaceToolVersion;
 }
 
 class WorkerReadinessMonitor {
@@ -75,452 +48,233 @@ class WorkerReadinessMonitor {
   Future<void> start() async {
     if (_timer != null) return;
     _timer = Timer.periodic(interval, (_) => unawaited(_checkSafely()));
-    // Stored Ready state is only a cache. Quarantine it until live prerequisites
-    // are checked so Cloud cannot dispatch during startup validation.
     for (final worker in await registry.list()) {
       if (worker.status != LocalWorkerStatus.ready) continue;
       await registry.update(
         worker.id,
-        (current) => current.copyWith(
-          status: LocalWorkerStatus.needsAttention,
-        ),
+        (current) => current.copyWith(status: LocalWorkerStatus.needsAttention),
       );
     }
     unawaited(_checkSafely());
   }
 
-  Future<void> _checkSafely({bool executionTest = false}) async {
+  Future<void> _checkSafely({
+    LocalWorkerProbeMode mode = LocalWorkerProbeMode.passive,
+  }) async {
     try {
-      await checkNow(executionTest: executionTest);
+      await checkNow(mode: mode);
     } on Object {
-      // Keep the last persisted state and retry on the next lifecycle event.
+      // Preserve the last safe state and retry on the next lifecycle event.
     }
   }
 
   Future<void> checkNow({
-    bool executionTest = false,
+    LocalWorkerProbeMode mode = LocalWorkerProbeMode.passive,
     String? workerTypeId,
   }) {
     final active = _activeCheck;
     if (active != null) {
-      if (!executionTest) return active;
+      if (mode == LocalWorkerProbeMode.passive) return active;
       return active.catchError((_) {}).then((_) => checkNow(
-            executionTest: true,
+            mode: mode,
             workerTypeId: workerTypeId,
           ));
     }
-    final check = _checkAll(
-      executionTest: executionTest,
-      workerTypeId: workerTypeId,
-    );
+    final check = _checkAll(mode: mode, workerTypeId: workerTypeId);
     _activeCheck = check;
     return check.whenComplete(() => _activeCheck = null);
   }
 
   Future<void> _checkAll({
-    required bool executionTest,
+    required LocalWorkerProbeMode mode,
     String? workerTypeId,
   }) async {
-    final workers = await registry.list();
-    for (final worker in workers) {
-      if (workerTypeId != null && worker.workerTypeId != workerTypeId) {
+    for (final worker in await registry.list()) {
+      if ((workerTypeId != null && worker.workerTypeId != workerTypeId) ||
+          worker.status == LocalWorkerStatus.removed) {
         continue;
       }
-      if (worker.status == LocalWorkerStatus.removed) continue;
-      if (worker.status == LocalWorkerStatus.disabled && !executionTest) {
-        if (worker.readinessState != WorkerReadinessState.disabled) {
-          await registry.update(
-            worker.id,
-            (current) => current.copyWith(
-              readinessState: WorkerReadinessState.disabled,
-            ),
-          );
-        }
+      if (worker.status == LocalWorkerStatus.disabled &&
+          mode == LocalWorkerProbeMode.passive) {
         continue;
       }
       final assessment = assessWorker != null
           ? await assessWorker!(worker)
-          : await _assess(worker, executionTest: executionTest);
-      final state = assessment.state;
-      final credentialStatus =
-          assessment.credentialStatus ?? worker.credentialStatus;
-      final liveTestAt = executionTest
-          ? DateTime.now().toUtc().toIso8601String()
-          : worker.lastLiveTestAt;
-      final liveTestPassed = executionTest
-          ? state == WorkerReadinessState.ready
-          : worker.lastLiveTestPassed;
-      final liveTestDetails = executionTest &&
-              state != WorkerReadinessState.ready
-          ? assessment.diagnosticDetails ?? _safeTestDetails(worker, assessment)
-          : worker.lastLiveTestDetails;
-      if (worker.readinessState == state &&
-          worker.credentialStatus == credentialStatus &&
-          worker.executablePath == assessment.executablePath &&
-          worker.cliVersion == assessment.cliVersion &&
-          worker.lastLiveTestAt == liveTestAt &&
-          worker.lastLiveTestPassed == liveTestPassed &&
-          worker.lastLiveTestDetails == liveTestDetails &&
-          ((state == WorkerReadinessState.ready) ==
-              (worker.status == LocalWorkerStatus.ready)) &&
-          !executionTest) {
+          : await _assess(worker, mode: mode);
+      final checkedAt = DateTime.now().toUtc().toIso8601String();
+      if (mode == LocalWorkerProbeMode.passive) {
+        final effectiveReady = assessment.state == WorkerReadinessState.ready ||
+            (assessment.state == WorkerReadinessState.setupRequired &&
+                worker.lastLiveTestPassed == true);
+        await registry.update(
+          worker.id,
+          (current) => current.copyWith(
+            status: current.status == LocalWorkerStatus.disabled
+                ? LocalWorkerStatus.disabled
+                : effectiveReady
+                    ? LocalWorkerStatus.ready
+                    : LocalWorkerStatus.needsAttention,
+            readinessState: current.status == LocalWorkerStatus.disabled
+                ? WorkerReadinessState.disabled
+                : assessment.state,
+            lastPassiveProbeAt: checkedAt,
+            readinessIssueCode: assessment.issueCode,
+            clearReadinessIssueCode: assessment.issueCode == null,
+            toolVersion: assessment.toolVersion,
+            clearToolVersion:
+                assessment.replaceToolVersion && assessment.toolVersion == null,
+          ),
+        );
         continue;
       }
+
+      final passed = assessment.state == WorkerReadinessState.ready;
+      final details = passed
+          ? null
+          : assessment.diagnosticDetails ?? _safeTestDetails(assessment);
       await registry.update(
         worker.id,
         (current) => current.copyWith(
           status: current.status == LocalWorkerStatus.disabled
               ? LocalWorkerStatus.disabled
-              : state == WorkerReadinessState.ready
+              : passed
                   ? LocalWorkerStatus.ready
                   : LocalWorkerStatus.needsAttention,
-          readinessState: current.status == LocalWorkerStatus.disabled
-              ? WorkerReadinessState.disabled
-              : state,
-          credentialStatus: credentialStatus,
-          executablePath: assessment.executablePath,
-          cliVersion: assessment.cliVersion,
-          lastLiveTestAt: liveTestAt,
-          lastLiveTestPassed: liveTestPassed,
-          lastLiveTestDetails: liveTestDetails,
-          clearLastLiveTestDetails:
-              executionTest && state == WorkerReadinessState.ready,
-          clearExecutable: assessment.executablePath == null ||
-              assessment.cliVersion == null,
+          lastLiveTestAt: checkedAt,
+          lastLiveTestPassed: passed,
+          lastLiveTestIssueCode: assessment.issueCode,
+          clearLastLiveTestIssueCode: assessment.issueCode == null,
+          lastLiveTestDetails: details,
+          clearLastLiveTestDetails: passed,
+          toolVersion: assessment.toolVersion,
+          clearToolVersion:
+              assessment.replaceToolVersion && assessment.toolVersion == null,
         ),
       );
     }
-    // The registry's onChanged hook sends a fresh full inventory snapshot.
   }
 
-  String _safeTestDetails(
-    LocalConfiguredWorker worker,
-    WorkerReadinessAssessment assessment,
-  ) {
-    final code = assessment.reasonCode.wireValue;
-    final guidance = switch (assessment.reasonCode) {
-      FirstPartyWorkerProbeReasonCode.cliNotFound =>
-        'The required CLI could not be found. Install it or make it available to Workspace, then select Check again.',
-      FirstPartyWorkerProbeReasonCode.unsupportedCliVersion =>
-        'The installed CLI version is not supported by this Workspace build.',
-      FirstPartyWorkerProbeReasonCode.authenticationRequired =>
-        'Sign in to the provider CLI on this computer, then run Test again.',
-      FirstPartyWorkerProbeReasonCode.permissionConfigurationRequired =>
-        'Update the CLI permission settings on this computer, then run Test again.',
-      FirstPartyWorkerProbeReasonCode.executionTestFailed => assessment.state ==
-              WorkerReadinessState.adapterUnavailable
-          ? 'Workspace could not start or communicate with its local integration. Try Test again, then open Advanced Diagnostics if it continues.'
-          : 'The local readiness or execution check did not complete. Open Advanced Diagnostics for more information.',
-      FirstPartyWorkerProbeReasonCode.ready =>
-        'No failure details are available. Run Test again if the issue continues.',
-    };
-    final descriptor = FirstPartyWorkerAdapterDescriptor.forProductWorkerTypeId(
-      worker.workerTypeId,
-    );
-    final cli = descriptor?.executableCandidates.firstOrNull ?? 'CLI';
-    final readinessCalls = switch (worker.workerTypeId) {
-      'chatgpt' => '`$cli --version`; `$cli login status`',
-      _ => '`$cli --version`',
-    };
-    final executionCall = switch (worker.workerTypeId) {
-      'chatgpt' => '`codex --ask-for-approval never --sandbox workspace-write '
-          'exec --json --ephemeral --color never --skip-git-repo-check '
-          '--cd <Workspace test directory> -`',
-      'gemini' => '`agy --input-format stream-json --output-format stream-json '
-          '--sandbox --print-timeout 5m`',
-      _ => 'local adapter execution test',
-    };
-    final prompt = descriptor?.probeStrategy.setupExecutionTestPrompt;
-    final promptStatus =
-        assessment.state == WorkerReadinessState.adapterUnavailable ||
-                assessment.state == WorkerReadinessState.signInRequired ||
-                assessment.state == WorkerReadinessState.notInstalled ||
-                assessment.state == WorkerReadinessState.unsupportedCliVersion
-            ? 'Not sent; intended prompt: "$prompt".'
-            : prompt == null
-                ? 'No execution prompt is configured.'
-                : '"$prompt" (submission could not be confirmed)';
-    final readinessResult = switch (assessment.state) {
-      WorkerReadinessState.adapterUnavailable =>
-        'failed: Workspace could not complete the local adapter readiness probe',
-      WorkerReadinessState.notInstalled => 'failed: CLI not found',
-      WorkerReadinessState.unsupportedCliVersion =>
-        'failed: installed CLI version is unsupported',
-      WorkerReadinessState.signInRequired =>
-        'failed: provider CLI authentication is required',
-      _ => 'failed: ${assessment.reasonCode.wireValue}',
-    };
-    return [
-      'Test failed ($code)',
-      'Readiness calls: $readinessCalls',
-      'Readiness result: $readinessResult',
-      'Execution call: $executionCall',
-      'Prompt: $promptStatus',
-      'Expected: exactly "OK"',
-      'Result: $guidance',
+  String _safeTestDetails(WorkerReadinessAssessment assessment) {
+    final issueCode = assessment.issueCode ?? 'execution_test_failed';
+    final details = [
+      'Worker Package test failed ($issueCode).',
+      assessment.diagnosticDetails ??
+          'The package did not return safe diagnostic details.',
     ].join('\n');
+    return details.length <= 1000 ? details : details.substring(0, 1000);
   }
 
   Future<WorkerReadinessAssessment> _assess(
     LocalConfiguredWorker worker, {
-    bool executionTest = false,
+    LocalWorkerProbeMode mode = LocalWorkerProbeMode.passive,
   }) async {
-    String? resolvedPath;
-    String? resolvedVersion;
     try {
-      final type = FirstPartyWorkerAdapterDescriptor.forProductWorkerTypeId(
+      final entry = FirstPartyWorkerPackage.forProductWorkerTypeId(
         worker.workerTypeId,
       );
-      if (type == null) {
-        return const WorkerReadinessAssessment(WorkerReadinessState.testFailed);
-      }
-      final located = await adapterStore.cliLocator.locate(
-        type,
-        cachedPath: worker.executablePath,
-      );
-      if (located == null) {
-        return const WorkerReadinessAssessment(
-          WorkerReadinessState.notInstalled,
-          reasonCode: FirstPartyWorkerProbeReasonCode.cliNotFound,
-        );
-      }
-      resolvedPath = located.path;
-      resolvedVersion = located.versionProbe.detectedVersion;
-      if (!located.versionProbe.satisfied) {
-        return WorkerReadinessAssessment(
-          WorkerReadinessState.unsupportedCliVersion,
-          executablePath: located.path,
-          cliVersion: located.versionProbe.detectedVersion,
-          reasonCode: FirstPartyWorkerProbeReasonCode.unsupportedCliVersion,
-        );
-      }
-      if (!type.requiredLocalPermissions
-          .every(worker.localPermissions.contains)) {
+      if (entry == null) {
         return const WorkerReadinessAssessment(
           WorkerReadinessState.testFailed,
-          reasonCode: FirstPartyWorkerProbeReasonCode.executionTestFailed,
+          issueCode: 'package_unavailable',
         );
       }
-      final adapterPackageId = type.adapterPackageId;
-      var adapterAvailable = await adapterStore.hasVerifiedActivePackage(
-        adapterPackageId,
-        type.requiredLocalPermissions,
-        [File(located.path).parent.path],
+      var packageAvailable = await adapterStore.hasVerifiedActivePackage(
+        entry.packageId,
+        worker.localPermissions,
       );
-      if (!adapterAvailable) {
-        // Existing Worker records can outlive a removed or invalid active
-        // package. Restore the last-known-good or embedded first-party
-        // adapter before probing readiness, including after a local rebuild.
-        adapterAvailable = await adapterStore.ensureFirstPartyAdapterAvailable(
-          adapterPackageId,
-          additionalPathDirectories: [File(located.path).parent.path],
+      if (!packageAvailable) {
+        packageAvailable = await adapterStore.ensureFirstPartyAdapterAvailable(
+          entry.packageId,
         );
       }
-      if (!adapterAvailable) {
-        return WorkerReadinessAssessment(
+      if (!packageAvailable) {
+        return const WorkerReadinessAssessment(
           WorkerReadinessState.adapterUnavailable,
-          executablePath: located.path,
-          cliVersion: located.versionProbe.detectedVersion,
-          reasonCode: FirstPartyWorkerProbeReasonCode.executionTestFailed,
+          issueCode: 'package_unavailable',
         );
       }
-      V7AdapterLaunch? adapter;
-      try {
-        adapter = await adapterStore.resolve(
-          worker: worker.copyWith(
-            executablePath: located.path,
-            cliVersion: located.versionProbe.detectedVersion,
-          ),
-          readCredential: readCredential ?? (_) async => null,
-        );
-      } on FirstPartyCliResolutionException catch (error) {
-        final unsupported = error.reasonCode == 'unsupported_cli_version';
-        return WorkerReadinessAssessment(
-          unsupported
-              ? WorkerReadinessState.unsupportedCliVersion
-              : WorkerReadinessState.notInstalled,
-          executablePath: error.executablePath,
-          cliVersion: error.detectedVersion,
-          reasonCode: unsupported
-              ? FirstPartyWorkerProbeReasonCode.unsupportedCliVersion
-              : FirstPartyWorkerProbeReasonCode.cliNotFound,
-        );
-      } on Object {
-        return WorkerReadinessAssessment(
-          WorkerReadinessState.adapterUnavailable,
-          executablePath: located.path,
-          cliVersion: located.versionProbe.detectedVersion,
-          reasonCode: FirstPartyWorkerProbeReasonCode.executionTestFailed,
-        );
-      }
-      if (adapter == null) {
-        return WorkerReadinessAssessment(
-          WorkerReadinessState.adapterUnavailable,
-          executablePath: located.path,
-          cliVersion: located.versionProbe.detectedVersion,
-          reasonCode: FirstPartyWorkerProbeReasonCode.executionTestFailed,
-        );
-      }
-      late final Map<String, Object?> bridgeProbe;
-      try {
-        bridgeProbe = await executor.checkV7AdapterHealth(
-          adapter.processSpec,
-          workerTypeId: adapter.workerTypeId,
-          adapterVersion: adapter.adapterVersion,
-          healthCheckMode: 'protocol',
-          // Match the opt-in live acceptance tests: provider execution may be
-          // slower than routine adapter startup/readiness probes.
-          timeout: executionTest
-              ? const Duration(minutes: 5)
-              : const Duration(seconds: 20),
-          allowNotReady: true,
-          executionTestPrompt: executionTest
-              ? type.probeStrategy.setupExecutionTestPrompt
-              : null,
-        );
-      } on Object catch (error) {
-        final detail = error is TimeoutException
-            ? 'adapter health check timed out'
-            : error.toString();
-        final safeDetail =
-            detail.length <= 500 ? detail : '${detail.substring(0, 497)}…';
-        final failedAssessment = WorkerReadinessAssessment(
-          WorkerReadinessState.adapterUnavailable,
-          executablePath: located.path,
-          cliVersion: located.versionProbe.detectedVersion,
-          reasonCode: FirstPartyWorkerProbeReasonCode.executionTestFailed,
-        );
-        final diagnosticDetails = executionTest
-            ? '${_safeTestDetails(worker, failedAssessment)}\n'
-                'Local process detail: $safeDetail'
-            : safeDetail;
-        final boundedDiagnostic = diagnosticDetails.length <= 1000
-            ? diagnosticDetails
-            : '${diagnosticDetails.substring(0, 997)}…';
-        return WorkerReadinessAssessment(
-          WorkerReadinessState.adapterUnavailable,
-          executablePath: located.path,
-          cliVersion: located.versionProbe.detectedVersion,
-          reasonCode: FirstPartyWorkerProbeReasonCode.executionTestFailed,
-          diagnosticDetails: boundedDiagnostic,
-        );
-      }
-      final executablePath = adapter.executablePath ?? located.path;
-      final cliVersion =
-          adapter.cliVersion ?? located.versionProbe.detectedVersion;
-      final toolVersion = bridgeProbe['toolVersion'];
-      if (toolVersion == null) {
-        return WorkerReadinessAssessment(
-          WorkerReadinessState.notInstalled,
-          executablePath: executablePath,
-          cliVersion: cliVersion,
-          reasonCode: FirstPartyWorkerProbeReasonCode.cliNotFound,
-          diagnosticDetails: _testDetailsFrom(bridgeProbe),
-        );
-      }
-      if (cliVersion != null && toolVersion != cliVersion) {
-        return WorkerReadinessAssessment(
-          WorkerReadinessState.testFailed,
-          executablePath: executablePath,
-          cliVersion: cliVersion,
-          reasonCode: FirstPartyWorkerProbeReasonCode.executionTestFailed,
-          diagnosticDetails: _testDetailsFrom(bridgeProbe),
-        );
-      }
-      if (type.probeStrategy.setupExecutionTestPrompt != null &&
-          !executionTest) {
-        // Antigravity has no documented cheap auth-status command. Keep the
-        // last explicit headless-test result and avoid spending quota during
-        // periodic polling. A new/unverified slot remains blocked until Test.
-        if (worker.credentialStatus == LocalWorkerCredentialStatus.ready &&
-            worker.readinessState == WorkerReadinessState.ready) {
-          return WorkerReadinessAssessment(
-            WorkerReadinessState.ready,
-            credentialStatus: worker.credentialStatus,
-            executablePath: executablePath,
-            cliVersion: cliVersion,
-            reasonCode: FirstPartyWorkerProbeReasonCode.ready,
-          );
-        }
-        if (worker.credentialStatus ==
-                LocalWorkerCredentialStatus.needsAuthentication ||
-            worker.credentialStatus == LocalWorkerCredentialStatus.expired) {
-          return WorkerReadinessAssessment(
-            WorkerReadinessState.signInRequired,
-            credentialStatus: LocalWorkerCredentialStatus.needsAuthentication,
-            executablePath: executablePath,
-            cliVersion: cliVersion,
-            reasonCode: FirstPartyWorkerProbeReasonCode.authenticationRequired,
-          );
-        }
-        // New Worker or no recorded auth state. Mark as needing a manual test
-        // rather than a generic failure so the UI can show setup guidance.
-        return WorkerReadinessAssessment(
-          WorkerReadinessState.signInRequired,
-          credentialStatus: LocalWorkerCredentialStatus.needsAuthentication,
-          executablePath: executablePath,
-          cliVersion: cliVersion,
-          reasonCode: FirstPartyWorkerProbeReasonCode.authenticationRequired,
-          diagnosticDetails:
-              'This Worker requires a manual test to verify authentication. '
-              'Sign in to the Antigravity CLI on this computer, then select '
-              'Test to complete setup.',
-        );
-      }
-      if (bridgeProbe['ready'] != true) {
-        final issues = bridgeProbe['issues'] as List<Object?>? ?? const [];
-        final authenticationRequired = issues.any((issue) =>
-            issue is Map && issue['code'] == 'authentication_required');
-        final permissionConfigurationRequired = issues.any((issue) =>
-            issue is Map &&
-            issue['code'] == 'permission_configuration_required');
-        final cliNotFound = issues
-            .any((issue) => issue is Map && issue['code'] == 'cli_not_found');
-        return WorkerReadinessAssessment(
-          authenticationRequired
-              ? WorkerReadinessState.signInRequired
-              : cliNotFound
-                  ? WorkerReadinessState.notInstalled
-                  : WorkerReadinessState.testFailed,
-          credentialStatus: authenticationRequired
-              ? LocalWorkerCredentialStatus.needsAuthentication
-              : permissionConfigurationRequired
-                  ? LocalWorkerCredentialStatus.error
-                  : worker.credentialStatus,
-          executablePath: executablePath,
-          cliVersion: cliVersion,
-          reasonCode: authenticationRequired
-              ? FirstPartyWorkerProbeReasonCode.authenticationRequired
-              : cliNotFound
-                  ? FirstPartyWorkerProbeReasonCode.cliNotFound
-                  : permissionConfigurationRequired
-                      ? FirstPartyWorkerProbeReasonCode
-                          .permissionConfigurationRequired
-                      : FirstPartyWorkerProbeReasonCode.executionTestFailed,
-          diagnosticDetails: _testDetailsFrom(bridgeProbe),
-        );
-      }
-      return WorkerReadinessAssessment(
-        WorkerReadinessState.ready,
-        credentialStatus: LocalWorkerCredentialStatus.ready,
-        executablePath: executablePath,
-        cliVersion: cliVersion,
-        reasonCode: FirstPartyWorkerProbeReasonCode.ready,
+      final launch = await adapterStore.resolve(
+        worker: worker,
+        readCredential: readCredential ?? (_) async => null,
       );
-    } on Object {
+      if (launch == null) {
+        return const WorkerReadinessAssessment(
+          WorkerReadinessState.adapterUnavailable,
+          issueCode: 'package_unavailable',
+        );
+      }
+      final result = await executor.checkV7AdapterHealth(
+        launch.processSpec,
+        workerTypeId: launch.workerTypeId,
+        adapterVersion: launch.adapterVersion,
+        healthCheckMode: 'protocol',
+        timeout: mode == LocalWorkerProbeMode.live
+            ? const Duration(seconds: 30)
+            : const Duration(seconds: 20),
+        allowNotReady: true,
+        mode: mode,
+      );
+      final checks = (result['checks'] as List? ?? const [])
+          .whereType<Map>()
+          .toList(growable: false);
+      final failedCheck =
+          checks.where((check) => check['status'] == 'failed').firstOrNull;
+      final setupCheck = checks
+          .where((check) =>
+              check['status'] == 'skipped' &&
+              check['issueCode'] == 'setup_required')
+          .firstOrNull;
+      final legacyIssue =
+          (result['issues'] as List? ?? const []).whereType<Map>().firstOrNull;
+      final code = (failedCheck?['issueCode'] ??
+          setupCheck?['issueCode'] ??
+          legacyIssue?['code']) as String?;
+      final message = (failedCheck?['diagnostic'] ??
+          setupCheck?['diagnostic'] ??
+          legacyIssue?['message']) as String?;
+      if (result['ready'] == true) {
+        return WorkerReadinessAssessment(
+          setupCheck == null
+              ? WorkerReadinessState.ready
+              : WorkerReadinessState.setupRequired,
+          issueCode: code,
+          diagnosticDetails: message,
+          toolVersion: result['toolVersion'] as String?,
+          replaceToolVersion: true,
+        );
+      }
+      final state = switch (code) {
+        'cli_not_found' ||
+        'package_unavailable' =>
+          WorkerReadinessState.adapterUnavailable,
+        'setup_required' ||
+        'authentication_required' =>
+          WorkerReadinessState.setupRequired,
+        'permission_configuration_required' =>
+          WorkerReadinessState.setupRequired,
+        _ => WorkerReadinessState.testFailed,
+      };
       return WorkerReadinessAssessment(
-        WorkerReadinessState.testFailed,
-        executablePath: resolvedPath ?? worker.executablePath,
-        cliVersion: resolvedVersion ?? worker.cliVersion,
-        reasonCode: FirstPartyWorkerProbeReasonCode.executionTestFailed,
+        state,
+        issueCode: code ?? 'probe_failed',
+        diagnosticDetails: message,
+        toolVersion: result['toolVersion'] as String?,
+        replaceToolVersion: true,
+      );
+    } on Object catch (error) {
+      final timeout = error is TimeoutException;
+      return WorkerReadinessAssessment(
+        WorkerReadinessState.adapterUnavailable,
+        issueCode: timeout ? 'probe_timeout' : 'package_unavailable',
+        diagnosticDetails: timeout
+            ? 'The Worker Package probe timed out.'
+            : error is V7AdapterExecutionFailure &&
+                    error.localDiagnostic != null &&
+                    error.localDiagnostic!.isNotEmpty
+                ? error.localDiagnostic
+                : 'The Worker Package could not complete its probe.',
       );
     }
-  }
-
-  String? _testDetailsFrom(Map<String, Object?> probe) {
-    final details = probe['testDetails'];
-    if (details is! String || details.isEmpty) return null;
-    return details.length <= 1000 ? details : '${details.substring(0, 997)}…';
   }
 
   Future<void> dispose() async {

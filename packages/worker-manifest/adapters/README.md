@@ -34,9 +34,33 @@ The packager includes the shared runtime from `adapters/shared`, signs the
 complete package digest and manifest using the release Ed25519 key, and emits
 a release manifest next to the archive. Keep the signing seed in release
 infrastructure only. Publishing still requires the configured release path.
+The Codex and Antigravity CLI packages include the same shared CLI process
+runtime from that directory in their signed archives. It also provides a
+package-scoped local session store for providers that opt into durable session
+reuse; provider session identifiers stay in that local package store.
+
+Workspace gives each configured Worker Package a private state directory at
+`Workspace/Workers/<worker-id>/state`, passed as `CONCLAVE_WORKER_STATE_DIR`.
+Packages may keep local session mappings and non-secret tool metadata there.
+The path is generic runtime metadata, not a provider-specific environment
+setting. Workspace does not read or interpret files written inside it. The
+shared CLI runtime stores package-local session mappings beneath this directory.
+
+Execution is process-per-assignment: a resident Workspace starts one fresh
+Worker Package process, which starts one fresh provider CLI process. Durable
+session IDs let the next assignment resume provider context across those fresh
+processes. Long-running Worker or provider daemons are deferred until the
+first-party Codex and Gemini Workers are proven stable.
 
 Run isolated adapter tests without provider credentials or billable requests:
 
 ```sh
 pnpm worker-adapters:test
 ```
+
+The shared Local Worker Protocol contract suite launches the same fake-CLI
+scenarios against both the ChatGPT/Codex and Gemini/Antigravity packages. It
+covers initialization, passive and live probes, execution frames, progress and
+results, safe error mapping, deadlines, package cancellation and process-tree
+cleanup, durable session resumption across fresh package processes, malformed
+provider output, and manifest-scoped environment forwarding.

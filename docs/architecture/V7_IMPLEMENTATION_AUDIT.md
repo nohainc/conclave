@@ -105,11 +105,15 @@ result
 error
 ```
 
-Every exchange uses a request ID. Probe returns readiness, nullable safe tool
-version, check kind, and bounded issues. Strict field validation and a 1 MB
-frame cap reject unknown or oversized content; provider tokens and account
-secrets are not protocol fields. Version 1.0's overlapping validate, health,
-and version exchanges are superseded.
+Every exchange uses a request ID. Protocol 2.3 and 2.4 probes select passive or
+live mode and return readiness, nullable safe tool version, structured checks,
+stable issue codes, and bounded local diagnostics. Protocol 2.1 and 2.2 retain
+their legacy readiness-result shape during migration. Strict field validation
+and a 1 MB frame cap reject unknown or oversized content; provider tokens and
+account secrets are not protocol fields. Protocol 2.4 execute requests include
+the remaining assignment timeout for package-owned CLI deadline calculation.
+Version 1.0's overlapping validate,
+health, and version exchanges are superseded.
 
 ## Historical architecture notes
 

@@ -5,7 +5,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:conclave_host/configured_worker_registry.dart';
-import 'package:conclave_host/first_party_worker_adapter_descriptor.dart';
+import 'package:conclave_host/first_party_worker_registry.dart';
+import 'package:conclave_host/local_worker_permissions.dart';
 import 'package:conclave_host/local_worker_setup.dart';
 import 'package:conclave_host/platform_runtime.dart';
 
@@ -57,128 +58,85 @@ void main() {
     if (await directory.exists()) await directory.delete(recursive: true);
   });
 
-  test('v1 local catalog contains only ChatGPT and Gemini CLI integrations',
-      () {
+  test('v1 registry contains only the product to package mapping', () {
     expect(
-      FirstPartyWorkerAdapterDescriptor.all
+      FirstPartyWorkerPackage.all
           .map((type) => type.productWorkerTypeId)
           .toList(),
       ['chatgpt', 'gemini'],
     );
     expect(
-      FirstPartyWorkerAdapterDescriptor.all
-          .map((type) => type.productName)
-          .toList(),
+      FirstPartyWorkerPackage.all.map((type) => type.productName).toList(),
       ['ChatGPT', 'Gemini'],
     );
     expect(
-      FirstPartyWorkerAdapterDescriptor.all
-          .map((type) => type.executableCandidates.single)
-          .toList(),
-      ['codex', 'agy'],
+      FirstPartyWorkerPackage.all.map((type) => type.packageId).toList(),
+      ['codex', 'antigravity'],
     );
-    final chatgpt = FirstPartyWorkerAdapterDescriptor.all.first;
+    final chatgpt = FirstPartyWorkerPackage.all.first;
     expect(chatgpt.productWorkerTypeId, 'chatgpt');
     expect(chatgpt.productName, 'ChatGPT');
-    expect(chatgpt.adapterPackageId, 'codex');
-    expect(chatgpt.probeStrategy.id, 'codex_login_status');
-    expect(chatgpt.probeStrategy.setupExecutionTestPrompt,
-        'Reply with exactly the word OK. Do not use tools.');
-    expect(chatgpt.probeStrategy.authenticationArguments, ['login', 'status']);
-    expect(chatgpt.supportedCliVersionRange.minimum, isNull);
-    expect(chatgpt.supportedCliVersionRange.maximum, isNull);
-    expect(chatgpt.defaultLocalConcurrency, 1);
-    expect(chatgpt.requiredLocalPermissions,
-        ['workstream_filesystem', 'shell_execution']);
-    final gemini = FirstPartyWorkerAdapterDescriptor.all.last;
+    expect(chatgpt.packageId, 'codex');
+    final gemini = FirstPartyWorkerPackage.all.last;
     expect(gemini.productWorkerTypeId, 'gemini');
     expect(gemini.productName, 'Gemini');
-    expect(gemini.supportedCliVersionRange.minimum, isNull);
-    expect(gemini.supportedCliVersionRange.maximum, isNull);
-    expect(gemini.adapterPackageId, 'antigravity');
-    expect(gemini.defaultLocalConcurrency, 1);
-    expect(gemini.requiredLocalPermissions,
-        ['workstream_filesystem', 'shell_execution']);
-    expect(gemini.probeStrategy.id, 'antigravity_headless_execution');
-    expect(gemini.probeStrategy.authenticationArguments, isEmpty);
-    expect(gemini.probeStrategy.setupExecutionTestPrompt,
-        'Reply with exactly the word OK. Do not use tools.');
+    expect(gemini.packageId, 'antigravity');
     expect(
-      FirstPartyWorkerAdapterDescriptor.canonicalProductWorkerTypeId('codex'),
+      FirstPartyWorkerPackage.canonicalProductWorkerTypeId('codex'),
       'chatgpt',
     );
     expect(
-      FirstPartyWorkerAdapterDescriptor.canonicalProductWorkerTypeId(
-          'antigravity'),
+      FirstPartyWorkerPackage.canonicalProductWorkerTypeId('antigravity'),
       'gemini',
     );
     expect(
-      FirstPartyWorkerAdapterDescriptor.adapterPackageIdFor('chatgpt'),
+      FirstPartyWorkerPackage.packageIdFor('chatgpt'),
       'codex',
     );
     expect(
-      FirstPartyWorkerAdapterDescriptor.adapterPackageIdFor('gemini'),
+      FirstPartyWorkerPackage.packageIdFor('gemini'),
       'antigravity',
     );
   });
 
-  test('CLI authentication is reflected without storing provider credentials',
+  test('setup creates a pending package worker without provider metadata',
       () async {
-    final type = FirstPartyWorkerAdapterDescriptor.all.first;
+    final type = FirstPartyWorkerPackage.all.first;
     final worker = await LocalWorkerSetupService(registry: registry).create(
       type: type,
-      permissions: type.requiredLocalPermissions,
-      adapterReady: true,
-      prerequisiteReady: true,
-      authenticationReady: false,
+      permissions: firstPartyWorkerLocalPermissions,
     );
     expect(worker.workerTypeId, 'chatgpt');
-    expect(worker.localConcurrencyLimit, type.defaultLocalConcurrency);
+    expect(worker.localConcurrencyLimit, defaultLocalWorkerConcurrency);
     expect(worker.status, LocalWorkerStatus.needsAttention);
-    expect(worker.credentialStatus,
-        LocalWorkerCredentialStatus.needsAuthentication);
+    expect(worker.credentialStatus, LocalWorkerCredentialStatus.notRequired);
     expect(worker.credentialRef, isNull);
     final file = File(
         '${directory.path}${Platform.pathSeparator}configured-workers.json');
     expect(jsonDecode(await file.readAsString())['workers'], hasLength(1));
   });
 
-  test('ready CLI worker can be updated and local permissions require step-up',
-      () async {
-    final type = FirstPartyWorkerAdapterDescriptor.all.first;
-    final service = LocalWorkerSetupService(
-      registry: registry,
-      requireStepUp: (_) async => true,
+  test('never-tested Gemini starts in setup-required state', () async {
+    final gemini = FirstPartyWorkerPackage.forProductWorkerTypeId('gemini')!;
+    final worker = await LocalWorkerSetupService(registry: registry).create(
+      type: gemini,
+      permissions: firstPartyWorkerLocalPermissions,
     );
-    final created = await service.create(
-      type: type,
-      permissions: type.requiredLocalPermissions,
-      adapterReady: true,
-      prerequisiteReady: true,
-      authenticationReady: true,
-    );
-    expect(created.status, LocalWorkerStatus.ready);
-    final updated = await service.update(
-      current: created,
-      type: type,
-      permissions: const ['workstream_filesystem'],
-      adapterReady: true,
-      prerequisiteReady: true,
-      authenticationReady: true,
-    );
-    expect(updated.name, 'ChatGPT');
-    expect(updated.defaultModel, isNull);
-    expect(updated.allowedModels, isEmpty);
-    expect(updated.status, LocalWorkerStatus.needsAttention);
+
+    expect(worker.status, LocalWorkerStatus.needsAttention);
+    expect(worker.readinessState, WorkerReadinessState.setupRequired);
+    expect(worker.readinessIssueCode, 'setup_required');
+    expect(worker.lastPassiveProbeAt, isNull);
+    expect(worker.lastLiveTestAt, isNull);
   });
 
-  test('descriptor registry excludes non-v1 product Worker Types', () {
+  test('registry excludes non-v1 product Worker Types', () {
     expect(
-      FirstPartyWorkerAdapterDescriptor.forProductWorkerTypeId('claude-code'),
+      FirstPartyWorkerPackage.forProductWorkerTypeId('claude-code'),
       isNull,
     );
     expect(
-      FirstPartyWorkerAdapterDescriptor.forAdapterPackageId('claude-code'),
+      FirstPartyWorkerPackage.forPackageId('claude-code'),
       isNull,
     );
   });

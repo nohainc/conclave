@@ -67,11 +67,12 @@ The persistent runtime process owns:
 
 Adapter execution remains in separate per-assignment OS child processes, retaining crash/cancellation/security isolation while keeping the Cloud connection/runtime stable.
 Workspace owns each adapter's full descendant tree. Assignment cancellation,
-timeout, output overflow, Worker removal, and runtime shutdown signal that
-tree, escalate from graceful termination to force termination, and wait for
-the executor cleanup path before shutdown completes. POSIX process groups are
-used where supported, with recursive process discovery as fallback; Windows
-uses process-tree termination.
+timeout, output overflow, Worker removal, and runtime shutdown first give the
+package a brief graceful-stop window to clean up its provider CLI. Workspace
+then force-terminates the full tree and waits for executor cleanup before
+shutdown completes. Provider CLIs remain in the Workspace-owned process group.
+POSIX process groups are used for force termination, with recursive process
+discovery as fallback; Windows uses process-tree termination.
 
 ## Worker adapters
 
@@ -168,11 +169,14 @@ are implemented. V7 is not yet the declared implemented baseline: production
 Worker live acceptance, full failure/security acceptance, and native macOS
 `.app` update/recovery remain release gates.
 
-The Local Adapter Protocol version 2.1 defines correlated
+The Local Worker Protocol supports versions 2.1 through 2.5 and defines correlated
 `initialize.request/result`, `probe.request/result`, `execute.request`,
-`progress`, `result`, and `error` frames. Probe results expose readiness,
-safe tool version, check kind, and bounded issues. Provider tokens and account
-secrets are not protocol fields.
+`progress`, `result`, and `error` frames. Versions 2.3 and 2.4 probe results expose the
+requested passive/live mode, readiness, safe tool version, structured checks,
+stable issue codes, and bounded local diagnostics. Protocol 2.4 execute
+requests carry the remaining assignment timeout so packages can derive CLI
+deadlines and reserve cleanup grace. Provider tokens and account secrets are
+not protocol fields.
 
 See the [Architecture v7 Completion Plan](../roadmaps/ARCHITECTURE_V7_COMPLETION.md),
 [release operations](../deployment/WORKSPACE_RELEASES.md), and

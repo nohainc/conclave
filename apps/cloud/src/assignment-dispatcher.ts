@@ -19,6 +19,10 @@ export interface TaskToDispatch {
   readonly input?: Record<string, unknown>;
   readonly contextArtifactIds?: readonly string[];
   readonly timeoutMs?: number;
+  /** Conclave logical execution-session policy; never provider-specific. */
+  readonly sessionPolicy?: unknown;
+  /** Opaque Conclave key used only for package-local session mapping. */
+  readonly sessionKey?: unknown;
   readonly projectId?: string;
   readonly requestedByUserId?: string;
   readonly model?: string;
@@ -130,6 +134,11 @@ async function dispatchWorkspaceWorkerAssignment(
   const assignmentId = `asg-${taskId}-${attemptNumber}-${Date.now()}-${randomPart}`;
   const idempotencyKey = `idem-${assignmentId}`;
   const timeoutMs = task.timeoutMs || 15 * 60_000;
+  const sessionPolicy = task.sessionPolicy as string;
+  const sessionKey = task.sessionKey;
+  const assignmentInput = { ...(task.input ?? {}) };
+  delete assignmentInput.sessionPolicy;
+  delete assignmentInput.sessionKey;
   const snapshot = {
     ...target.permissionSnapshot,
     selectionExplanation: target.selectionExplanation,
@@ -140,10 +149,10 @@ async function dispatchWorkspaceWorkerAssignment(
         run_id, task_id, attempt_id, requested_by_user_id, runtime_identity_id,
         worker_id, workspace_worker_id, worker_version,
         account_id, model, config_json, effective_permissions_json,
-        permission_snapshot_json, timeout_ms, idempotency_key, status,
+        permission_snapshot_json, timeout_ms, session_policy, idempotency_key, status,
         input_json, created_at, updated_at)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
-             ?13, ?14, ?15, ?16, ?17, ?18, ?19, 'created', ?20, ?21, ?21)`,
+             ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, 'created', ?21, ?22, ?22)`,
   )
     .bind(
       assignmentId,
@@ -160,12 +169,13 @@ async function dispatchWorkspaceWorkerAssignment(
       target.workerVersion,
       null,
       target.model,
-      JSON.stringify(task.input ?? {}),
+      JSON.stringify(assignmentInput),
       JSON.stringify(target.effectivePermissions),
       JSON.stringify(snapshot),
       timeoutMs,
+      sessionPolicy,
       idempotencyKey,
-      JSON.stringify(task.input ?? {}),
+      JSON.stringify(assignmentInput),
       now,
     )
     .run();
@@ -219,16 +229,18 @@ async function dispatchWorkspaceWorkerAssignment(
       workerTypeId: target.workerTypeId,
       resolvedWorkerVersion: target.workerVersion,
       model: target.model,
-      config: task.input ?? {},
+      config: assignmentInput,
       permissions: target.effectivePermissions,
       permissionSnapshot: snapshot,
       contextRefs: (task.contextArtifactIds ?? []).map((artifactId) => ({
         artifactId,
       })),
       timeoutMs,
+      sessionPolicy,
+      ...(sessionKey !== undefined ? { sessionKey } : {}),
       idempotencyKey,
     },
-    input: task.input ?? {},
+    input: assignmentInput,
   };
   if (!env.CONCLAVE_WORKSPACE_GATEWAY) {
     const code = "provider_unavailable";
@@ -319,9 +331,36 @@ export async function dispatchTaskAssignment(
   params: DispatchAssignmentParams,
 ): Promise<DispatchAssignmentResult> {
   const { task } = params;
+  const sessionPolicy =
+    task.sessionPolicy ?? task.input?.sessionPolicy ?? "stateless";
+  const sessionKey = task.sessionKey ?? task.input?.sessionKey;
+  if (
+    !["stateless", "durable_session"].includes(String(sessionPolicy)) ||
+    (sessionPolicy === "stateless" && sessionKey !== undefined) ||
+    (sessionPolicy === "durable_session" &&
+      (typeof sessionKey !== "string" ||
+        !sessionKey.trim() ||
+        sessionKey.length > 256))
+  ) {
+    return {
+      assignmentId: "",
+      attemptId: "",
+      workerId: "",
+      agentId: "",
+      workerCatalogId: "",
+      status: "failed",
+      accepted: false,
+      error: "Assignment session policy or logical session key is invalid",
+    };
+  }
+  const normalizedTask: TaskToDispatch = {
+    ...task,
+    sessionPolicy,
+    ...(sessionKey !== undefined ? { sessionKey } : {}),
+  };
   // Every assignment carries the authenticated Project requester so V7
   // selection, grants, and the immutable target snapshot are evaluated.
-  if (!task.projectId || !task.requestedByUserId) {
+  if (!normalizedTask.projectId || !normalizedTask.requestedByUserId) {
     return {
       assignmentId: "",
       attemptId: "",
@@ -333,7 +372,10 @@ export async function dispatchTaskAssignment(
       error: "Project execution context is required for assignment dispatch",
     };
   }
-  return dispatchWorkspaceWorkerAssignment(env, params);
+  return dispatchWorkspaceWorkerAssignment(env, {
+    ...params,
+    task: normalizedTask,
+  });
 }
 
 /**

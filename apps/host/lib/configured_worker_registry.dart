@@ -5,18 +5,17 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 
-import 'first_party_worker_adapter_descriptor.dart';
+import 'first_party_worker_registry.dart';
 import 'platform_runtime.dart';
 
-const _registrySchemaVersion = 11;
+const _registrySchemaVersion = 14;
 
 enum LocalWorkerStatus { needsAttention, ready, disabled, removed }
 
 enum WorkerReadinessState {
   ready('ready', 'Ready'),
-  notInstalled('not_installed', 'Not installed'),
+  setupRequired('setup_required', 'Setup required'),
   signInRequired('sign_in_required', 'Sign in required'),
-  unsupportedCliVersion('unsupported_cli_version', 'Unsupported CLI version'),
   adapterUnavailable(
       'adapter_unavailable', 'Conclave integration needs attention'),
   disabled('disabled', 'Disabled'),
@@ -26,10 +25,17 @@ enum WorkerReadinessState {
   final String wireValue;
   final String label;
 
-  static WorkerReadinessState? parse(Object? value) =>
-      WorkerReadinessState.values
-          .where((state) => state.wireValue == value)
-          .firstOrNull;
+  static WorkerReadinessState? parse(Object? value) {
+    if (value == 'not_installed') {
+      return WorkerReadinessState.adapterUnavailable;
+    }
+    if (value == 'unsupported_cli_version') {
+      return WorkerReadinessState.testFailed;
+    }
+    return WorkerReadinessState.values
+        .where((state) => state.wireValue == value)
+        .firstOrNull;
+  }
 }
 
 enum LocalWorkerCredentialStatus {
@@ -40,11 +46,9 @@ enum LocalWorkerCredentialStatus {
   error
 }
 
-/// Workspace-owned configuration for a single executable Worker identity.
+/// Workspace-owned configuration for a Worker package identity.
 /// Credential material is never represented here. credentialRef is only an
 /// opaque key into the platform secure store for locally supplied credentials.
-/// Provider-owned CLI sessions (such as Codex) are checked in that provider's
-/// local auth store and do not use a Conclave credential reference.
 class LocalConfiguredWorker {
   const LocalConfiguredWorker({
     required this.id,
@@ -65,19 +69,23 @@ class LocalConfiguredWorker {
     required this.revision,
     required this.createdAt,
     required this.updatedAt,
-    this.executablePath,
-    this.cliVersion,
     this.lastLiveTestAt,
     this.lastLiveTestPassed,
     this.lastLiveTestDetails,
+    this.lastPassiveProbeAt,
+    this.readinessIssueCode,
+    this.lastLiveTestIssueCode,
+    this.toolVersion,
   })  : status = status,
         readinessState = readinessState ??
-            (status == LocalWorkerStatus.ready
-                ? WorkerReadinessState.ready
-                : status == LocalWorkerStatus.disabled ||
-                        status == LocalWorkerStatus.removed
-                    ? WorkerReadinessState.disabled
-                    : WorkerReadinessState.testFailed);
+            (workerTypeId == 'gemini' && lastLiveTestAt == null
+                ? WorkerReadinessState.setupRequired
+                : status == LocalWorkerStatus.ready
+                    ? WorkerReadinessState.ready
+                    : status == LocalWorkerStatus.disabled ||
+                            status == LocalWorkerStatus.removed
+                        ? WorkerReadinessState.disabled
+                        : WorkerReadinessState.testFailed);
 
   final String id;
   final String workspaceId;
@@ -97,10 +105,12 @@ class LocalConfiguredWorker {
   final int revision;
   final String createdAt;
   final String updatedAt;
-  final String? executablePath;
-  final String? cliVersion;
   final String? lastLiveTestAt;
   final bool? lastLiveTestPassed;
+  final String? lastPassiveProbeAt;
+  final String? readinessIssueCode;
+  final String? lastLiveTestIssueCode;
+  final String? toolVersion;
 
   /// Bounded, provider-neutral local diagnostic. Raw CLI output is never kept.
   final String? lastLiveTestDetails;
@@ -123,13 +133,17 @@ class LocalConfiguredWorker {
     String? updatedAt,
     bool clearCredentialRef = false,
     bool clearModelConfiguration = false,
-    String? executablePath,
-    String? cliVersion,
     String? lastLiveTestAt,
     bool? lastLiveTestPassed,
     String? lastLiveTestDetails,
-    bool clearExecutable = false,
+    String? lastPassiveProbeAt,
+    String? readinessIssueCode,
+    String? lastLiveTestIssueCode,
+    String? toolVersion,
+    bool clearToolVersion = false,
     bool clearLastLiveTestDetails = false,
+    bool clearReadinessIssueCode = false,
+    bool clearLastLiveTestIssueCode = false,
   }) =>
       LocalConfiguredWorker(
         id: id,
@@ -155,11 +169,16 @@ class LocalConfiguredWorker {
         revision: revision ?? this.revision,
         createdAt: createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
-        executablePath:
-            clearExecutable ? null : executablePath ?? this.executablePath,
-        cliVersion: clearExecutable ? null : cliVersion ?? this.cliVersion,
         lastLiveTestAt: lastLiveTestAt ?? this.lastLiveTestAt,
         lastLiveTestPassed: lastLiveTestPassed ?? this.lastLiveTestPassed,
+        lastPassiveProbeAt: lastPassiveProbeAt ?? this.lastPassiveProbeAt,
+        readinessIssueCode: clearReadinessIssueCode
+            ? null
+            : readinessIssueCode ?? this.readinessIssueCode,
+        lastLiveTestIssueCode: clearLastLiveTestIssueCode
+            ? null
+            : lastLiveTestIssueCode ?? this.lastLiveTestIssueCode,
+        toolVersion: clearToolVersion ? null : toolVersion ?? this.toolVersion,
         lastLiveTestDetails: clearLastLiveTestDetails
             ? null
             : lastLiveTestDetails ?? this.lastLiveTestDetails,
@@ -184,11 +203,13 @@ class LocalConfiguredWorker {
         'revision': revision,
         'createdAt': createdAt,
         'updatedAt': updatedAt,
-        'executablePath': executablePath,
-        'cliVersion': cliVersion,
         'lastLiveTestAt': lastLiveTestAt,
         'lastLiveTestPassed': lastLiveTestPassed,
         'lastLiveTestDetails': lastLiveTestDetails,
+        'lastPassiveProbeAt': lastPassiveProbeAt,
+        'readinessIssueCode': readinessIssueCode,
+        'lastLiveTestIssueCode': lastLiveTestIssueCode,
+        'toolVersion': toolVersion,
       };
 
   factory LocalConfiguredWorker.fromJson(Map<String, dynamic> json) {
@@ -211,11 +232,16 @@ class LocalConfiguredWorker {
       'revision',
       'createdAt',
       'updatedAt',
+      // Read and discard legacy CLI metadata written by earlier versions.
       'executablePath',
       'cliVersion',
       'lastLiveTestAt',
       'lastLiveTestPassed',
       'lastLiveTestDetails',
+      'lastPassiveProbeAt',
+      'readinessIssueCode',
+      'lastLiveTestIssueCode',
+      'toolVersion',
     };
     if (json.keys.any((key) => !allowedKeys.contains(key))) {
       throw const FormatException(
@@ -242,27 +268,43 @@ class LocalConfiguredWorker {
     final defaultModel = json['defaultModel'];
     final adapterConfig = json['adapterConfig'];
     final adapterVersionPolicy = json['adapterVersionPolicy'];
-    final executablePath = json['executablePath'];
-    final cliVersion = json['cliVersion'];
     final lastLiveTestAt = json['lastLiveTestAt'];
     final lastLiveTestPassed = json['lastLiveTestPassed'];
     final lastLiveTestDetails = json['lastLiveTestDetails'];
+    final lastPassiveProbeAt = json['lastPassiveProbeAt'];
+    final readinessIssueCode = json['readinessIssueCode'];
+    final lastLiveTestIssueCode = json['lastLiveTestIssueCode'];
+    final toolVersion = json['toolVersion'];
     if (credentialRef != null && credentialRef is! String ||
         defaultModel != null && defaultModel is! String ||
         adapterVersionPolicy != null && adapterVersionPolicy is! String) {
       throw const FormatException(
           'Worker registry optional text fields are invalid');
     }
-    if (executablePath != null && executablePath is! String ||
-        cliVersion != null && cliVersion is! String ||
-        lastLiveTestAt != null && lastLiveTestAt is! String ||
-        lastLiveTestPassed != null && lastLiveTestPassed is! bool) {
+    if (lastLiveTestAt != null && lastLiveTestAt is! String ||
+        lastLiveTestPassed != null && lastLiveTestPassed is! bool ||
+        lastPassiveProbeAt != null && lastPassiveProbeAt is! String ||
+        readinessIssueCode != null && readinessIssueCode is! String ||
+        lastLiveTestIssueCode != null && lastLiveTestIssueCode is! String) {
       throw const FormatException(
           'Worker readiness diagnostic fields are invalid');
+    }
+    if (toolVersion != null &&
+        (toolVersion is! String ||
+            toolVersion.isEmpty ||
+            toolVersion.length > 128)) {
+      throw const FormatException('Worker CLI version is invalid');
     }
     if (lastLiveTestDetails != null &&
         (lastLiveTestDetails is! String || lastLiveTestDetails.length > 1000)) {
       throw const FormatException('Worker test details are invalid');
+    }
+    for (final issueCode in [readinessIssueCode, lastLiveTestIssueCode]) {
+      if (issueCode != null &&
+          (issueCode is! String ||
+              !RegExp(r'^[a-z][a-z0-9_]{0,127}$').hasMatch(issueCode))) {
+        throw const FormatException('Worker readiness issue code is invalid');
+      }
     }
     if (adapterConfig != null && adapterConfig is! Map) {
       throw const FormatException(
@@ -316,11 +358,13 @@ class LocalConfiguredWorker {
       revision: revision,
       createdAt: required('createdAt'),
       updatedAt: required('updatedAt'),
-      executablePath: executablePath as String?,
-      cliVersion: cliVersion as String?,
       lastLiveTestAt: lastLiveTestAt as String?,
       lastLiveTestPassed: lastLiveTestPassed as bool?,
       lastLiveTestDetails: lastLiveTestDetails as String?,
+      lastPassiveProbeAt: lastPassiveProbeAt as String?,
+      readinessIssueCode: readinessIssueCode as String?,
+      lastLiveTestIssueCode: lastLiveTestIssueCode as String?,
+      toolVersion: toolVersion as String?,
     );
   }
 }
@@ -404,8 +448,6 @@ class LocalConfiguredWorkerRegistry {
     WorkerReadinessState? readinessState,
     LocalWorkerCredentialStatus credentialStatus =
         LocalWorkerCredentialStatus.needsAuthentication,
-    String? executablePath,
-    String? cliVersion,
   }) =>
       _locked(() async {
         final workers = await _read();
@@ -416,11 +458,10 @@ class LocalConfiguredWorkerRegistry {
           throw StateError('A Workspace can sync at most 500 Workers.');
         }
         final normalizedTypeId =
-            FirstPartyWorkerAdapterDescriptor.canonicalProductWorkerTypeId(
+            FirstPartyWorkerPackage.canonicalProductWorkerTypeId(
           workerTypeId.trim(),
         );
-        final descriptor =
-            FirstPartyWorkerAdapterDescriptor.forProductWorkerTypeId(
+        final descriptor = FirstPartyWorkerPackage.forProductWorkerTypeId(
           normalizedTypeId,
         );
         final existingSlot = workers
@@ -443,22 +484,26 @@ class LocalConfiguredWorkerRegistry {
           adapterConfig: Map.unmodifiable(adapterConfig),
           allowedModels: List.unmodifiable(allowedModels),
           localPermissions: List.unmodifiable(localPermissions),
-          localConcurrencyLimit:
-              localConcurrencyLimit ?? descriptor?.defaultLocalConcurrency ?? 1,
+          localConcurrencyLimit: localConcurrencyLimit ?? 1,
           adapterVersionPolicy: adapterVersionPolicy,
           status: status,
           readinessState: status == LocalWorkerStatus.disabled
               ? WorkerReadinessState.disabled
               : readinessState ??
-                  (status == LocalWorkerStatus.ready
-                      ? WorkerReadinessState.ready
-                      : WorkerReadinessState.testFailed),
+                  (normalizedTypeId == 'gemini'
+                      ? WorkerReadinessState.setupRequired
+                      : status == LocalWorkerStatus.ready
+                          ? WorkerReadinessState.ready
+                          : WorkerReadinessState.testFailed),
           credentialStatus: credentialStatus,
           revision: (previous?.revision ?? 0) + 1,
           createdAt: previous?.createdAt ?? now,
           updatedAt: now,
-          executablePath: executablePath ?? previous?.executablePath,
-          cliVersion: cliVersion ?? previous?.cliVersion,
+          readinessIssueCode: normalizedTypeId == 'gemini' &&
+                  readinessState == null &&
+                  status != LocalWorkerStatus.disabled
+              ? 'setup_required'
+              : null,
         );
         if (previous == null &&
             workers.any((existing) => existing.id == worker.id)) {
@@ -488,8 +533,7 @@ class LocalConfiguredWorkerRegistry {
           throw StateError('Removed Worker records cannot be edited');
         }
         final proposed = change(current);
-        final descriptor =
-            FirstPartyWorkerAdapterDescriptor.forProductWorkerTypeId(
+        final descriptor = FirstPartyWorkerPackage.forProductWorkerTypeId(
           current.workerTypeId,
         );
         final updated = proposed.copyWith(
@@ -505,7 +549,7 @@ class LocalConfiguredWorkerRegistry {
         }
         _validateWorker(updated);
         if (updated.workerTypeId !=
-            FirstPartyWorkerAdapterDescriptor.canonicalProductWorkerTypeId(
+            FirstPartyWorkerPackage.canonicalProductWorkerTypeId(
               updated.workerTypeId,
             )) {
           throw ArgumentError('Worker Type ID is not canonical');
@@ -530,9 +574,6 @@ class LocalConfiguredWorkerRegistry {
         workerId,
         (current) => current.copyWith(
               credentialStatus: status,
-              status: status == LocalWorkerCredentialStatus.ready
-                  ? LocalWorkerStatus.ready
-                  : LocalWorkerStatus.needsAttention,
               credentialRef: credentialRef,
             ));
   }
@@ -594,6 +635,9 @@ class LocalConfiguredWorkerRegistry {
               decoded['schemaVersion'] != 8 &&
               decoded['schemaVersion'] != 9 &&
               decoded['schemaVersion'] != 10 &&
+              decoded['schemaVersion'] != 11 &&
+              decoded['schemaVersion'] != 12 &&
+              decoded['schemaVersion'] != 13 &&
               decoded['schemaVersion'] != _registrySchemaVersion) ||
           decoded['workers'] is! List ||
           decoded['checksum'] is! String) {
@@ -699,18 +743,6 @@ class LocalConfiguredWorkerRegistry {
       throw ArgumentError(
           'Worker registry record violates identity or configuration invariants');
     }
-    if (worker.executablePath != null &&
-        !_isAbsoluteExecutablePath(worker.executablePath!)) {
-      throw ArgumentError('executablePath must be an absolute path');
-    }
-    if (worker.cliVersion != null &&
-        !RegExp(r'^\d+\.\d+\.\d+$').hasMatch(worker.cliVersion!)) {
-      throw ArgumentError('cliVersion must be a detected semantic version');
-    }
-    if ((worker.executablePath == null) != (worker.cliVersion == null)) {
-      throw ArgumentError(
-          'executablePath and cliVersion must be stored together');
-    }
     if (worker.credentialRef != null &&
         worker.credentialRef != 'worker-credential/${worker.id}') {
       throw ArgumentError(
@@ -758,10 +790,6 @@ class LocalConfiguredWorkerRegistry {
     }
   }
 
-  bool _isAbsoluteExecutablePath(String path) => Platform.isWindows
-      ? RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path) || path.startsWith(r'\\')
-      : path.startsWith('/');
-
   void _validateTypeUnique(
       List<LocalConfiguredWorker> workers, LocalConfiguredWorker candidate,
       {String? excludingId}) {
@@ -779,12 +807,23 @@ class LocalConfiguredWorkerRegistry {
   }) {
     final normalized = records.map((worker) {
       final canonicalType =
-          FirstPartyWorkerAdapterDescriptor.canonicalProductWorkerTypeId(
+          FirstPartyWorkerPackage.canonicalProductWorkerTypeId(
         worker.workerTypeId,
       );
+      final needsGeminiSetup = canonicalType == 'gemini' &&
+          worker.lastLiveTestAt == null &&
+          worker.status != LocalWorkerStatus.disabled &&
+          worker.status != LocalWorkerStatus.removed;
       return worker.copyWith(
         workerTypeId: canonicalType,
-        name: FirstPartyWorkerAdapterDescriptor.productNameFor(canonicalType),
+        name: FirstPartyWorkerPackage.productNameFor(canonicalType),
+        status:
+            needsGeminiSetup ? LocalWorkerStatus.needsAttention : worker.status,
+        readinessState: needsGeminiSetup
+            ? WorkerReadinessState.setupRequired
+            : worker.readinessState,
+        readinessIssueCode:
+            needsGeminiSetup ? 'setup_required' : worker.readinessIssueCode,
         // Cloud rejects stale adapter package IDs. Advancing the revision
         // ensures its inventory upsert accepts the canonical product ID.
         revision: canonicalType == worker.workerTypeId
@@ -818,9 +857,6 @@ class LocalConfiguredWorkerRegistry {
         LocalWorkerStatus.needsAttention => 20,
         LocalWorkerStatus.removed => 0,
       };
-      if (worker.credentialStatus == LocalWorkerCredentialStatus.ready) {
-        value += 8;
-      }
       if (worker.credentialRef != null) value += 4;
       if (worker.defaultModel != null) value += 2;
       if (worker.adapterConfig.isNotEmpty ||

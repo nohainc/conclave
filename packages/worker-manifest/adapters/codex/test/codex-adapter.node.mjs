@@ -14,6 +14,7 @@ import { once } from "node:events";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
+import { runLiveCliAcceptance } from "../../shared/test/live-cli-acceptance.mjs";
 
 const adapter = fileURLToPath(
   new URL("../bin/conclave-codex-adapter.mjs", import.meta.url),
@@ -95,7 +96,9 @@ printf '%s\\n' '{"type":"turn.completed"}'
   const adapterProcess = await startAdapter(
     {
       ...process.env,
-      CONCLAVE_CLI_EXECUTABLE: fakeCodex,
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      HOME: temp,
+      USERPROFILE: temp,
       OPENAI_API_KEY: "must-not-be-forwarded",
     },
     temp,
@@ -108,7 +111,7 @@ printf '%s\\n' '{"type":"turn.completed"}'
   });
   adapterProcess.send({
     type: "initialize.request",
-    protocolVersion: "2.1",
+    protocolVersion: "2.3",
     requestId: "i1",
     workerTypeId: "codex",
     adapterVersion: "1.0.0",
@@ -119,7 +122,8 @@ printf '%s\\n' '{"type":"turn.completed"}'
   );
   adapterProcess.send({
     type: "probe.request",
-    protocolVersion: "2.1",
+    protocolVersion: "2.3",
+    mode: "passive",
     requestId: "v1",
   });
   assert.equal(
@@ -130,17 +134,21 @@ printf '%s\\n' '{"type":"turn.completed"}'
     adapterProcess.frames.find((frame) => frame.requestId === "v1"),
     {
       type: "probe.result",
-      protocolVersion: "2.1",
+      protocolVersion: "2.5",
       requestId: "v1",
       ready: true,
       toolVersion: "1.2.3",
-      checkKind: "readiness",
-      issues: [],
+      mode: "passive",
+      checks: [
+        { id: "cli_discovery", status: "passed" },
+        { id: "tool_version", status: "passed" },
+        { id: "authentication", status: "passed" },
+      ],
     },
   );
   adapterProcess.send({
     type: "execute.request",
-    protocolVersion: "2.1",
+    protocolVersion: "2.3",
     requestId: "e1",
     assignmentId: "a1",
     prompt: "Make the change.",
@@ -166,7 +174,7 @@ printf '%s\\n' '{"type":"turn.completed"}'
 
   adapterProcess.send({
     type: "execute.request",
-    protocolVersion: "2.1",
+    protocolVersion: "2.3",
     requestId: "e2",
     assignmentId: "a2",
     prompt: "Use the Codex default model.",
@@ -193,7 +201,6 @@ test("reports a stable authentication reason without exposing CLI output", async
   const adapterProcess = await startAdapter({
     ...process.env,
     PATH: `${bin}:${process.env.PATH}`,
-    CONCLAVE_CLI_EXECUTABLE: fakeCodex,
   });
   t.after(async () => {
     adapterProcess.child.stdin.end();
@@ -203,7 +210,8 @@ test("reports a stable authentication reason without exposing CLI output", async
   });
   adapterProcess.send({
     type: "probe.request",
-    protocolVersion: "2.1",
+    protocolVersion: "2.3",
+    mode: "passive",
     requestId: "v2",
   });
   const response = await adapterProcess.waitFor(
@@ -211,7 +219,10 @@ test("reports a stable authentication reason without exposing CLI output", async
   );
   assert.equal(response.type, "probe.result");
   assert.equal(response.ready, false);
-  assert.equal(response.issues[0].code, "authentication_required");
+  assert.equal(
+    response.checks.find((check) => check.status === "failed").issueCode,
+    "authentication_required",
+  );
   assert.doesNotMatch(JSON.stringify(response), /private account diagnostic/);
 });
 
@@ -220,7 +231,9 @@ test("reports a stable missing CLI reason", async (t) => {
   t.after(() => rm(temp, { recursive: true, force: true }));
   const adapterProcess = await startAdapter({
     ...process.env,
-    CONCLAVE_CLI_EXECUTABLE: join(temp, "missing-codex"),
+    PATH: "",
+    HOME: temp,
+    USERPROFILE: temp,
   });
   t.after(async () => {
     adapterProcess.child.stdin.end();
@@ -230,7 +243,8 @@ test("reports a stable missing CLI reason", async (t) => {
   });
   adapterProcess.send({
     type: "probe.request",
-    protocolVersion: "2.1",
+    protocolVersion: "2.3",
+    mode: "passive",
     requestId: "v3",
   });
   const response = await adapterProcess.waitFor(
@@ -238,7 +252,10 @@ test("reports a stable missing CLI reason", async (t) => {
   );
   assert.equal(response.type, "probe.result");
   assert.equal(response.ready, false);
-  assert.equal(response.issues[0].code, "cli_not_found");
+  assert.equal(
+    response.checks.find((check) => check.status === "failed").issueCode,
+    "cli_not_found",
+  );
 });
 
 test("normalizes provider diagnostics to stable, non-sensitive error codes", async (t) => {
@@ -263,10 +280,9 @@ test("normalizes provider diagnostics to stable, non-sensitive error codes", asy
     );
     await chmod(fakeCodex, 0o755);
     const adapterProcess = await startAdapter({
-      PATH: process.env.PATH,
-      HOME: process.env.HOME,
+      PATH: `${join(temp)}:${process.env.PATH ?? ""}`,
+      HOME: temp,
       TMPDIR: process.env.TMPDIR,
-      CONCLAVE_CLI_EXECUTABLE: fakeCodex,
     });
     t.after(async () => {
       adapterProcess.child.stdin.end();
@@ -276,7 +292,7 @@ test("normalizes provider diagnostics to stable, non-sensitive error codes", asy
     });
     adapterProcess.send({
       type: "execute.request",
-      protocolVersion: "2.1",
+      protocolVersion: "2.3",
       requestId: `e-${expectedCode}`,
       assignmentId: "a1",
       prompt: "test",
@@ -291,37 +307,17 @@ test("normalizes provider diagnostics to stable, non-sensitive error codes", asy
 });
 
 test(
-  "runs a real Codex assignment only when explicitly opted in",
+  "runs opt-in real Codex stateless and durable-session acceptance",
   {
     skip: process.env.CONCLAVE_TEST_REAL_CODEX !== "1",
   },
   async (t) => {
-    const executable = process.env.CONCLAVE_TEST_CODEX_PATH || "codex";
-    const adapterProcess = await startAdapter({
-      PATH: process.env.PATH,
-      HOME: process.env.HOME,
-      TMPDIR: process.env.TMPDIR,
-      LANG: process.env.LANG,
-      CONCLAVE_CLI_EXECUTABLE: executable,
+    await runLiveCliAcceptance({
+      t,
+      startAdapter,
+      adapterManifestUrl: new URL("../manifest.template.json", import.meta.url),
+      workerTypeId: "codex",
+      productName: "ChatGPT",
     });
-    t.after(async () => {
-      adapterProcess.child.stdin.end();
-      if (adapterProcess.child.exitCode === null)
-        adapterProcess.child.kill("SIGKILL");
-      await once(adapterProcess.child, "close").catch(() => {});
-    });
-    adapterProcess.send({
-      type: "execute.request",
-      protocolVersion: "2.1",
-      requestId: "real-codex-execution",
-      assignmentId: "real-codex-assignment",
-      prompt: "Reply with exactly OK. Do not use tools.",
-    });
-    const response = await adapterProcess.waitFor(
-      (frame) => frame.requestId === "real-codex-execution",
-      300_000,
-    );
-    assert.equal(response.type, "result");
-    assert.match(response.output, /OK/);
   },
 );

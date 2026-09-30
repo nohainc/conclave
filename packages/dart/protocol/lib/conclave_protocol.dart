@@ -143,6 +143,25 @@ class AssignmentSnapshot {
     if (map['timeoutMs'] is! int || (map['timeoutMs'] as int) < 1000) {
       throw const ProtocolException('assignment snapshot timeoutMs is invalid');
     }
+    const supportedPolicies = {
+      'stateless',
+      'durable_session',
+      'isolated_workspace',
+      'reuse_session',
+      'persistent_context',
+    };
+    final sessionPolicy = map['sessionPolicy'];
+    final sessionKey = map['sessionKey'];
+    if (!supportedPolicies.contains(sessionPolicy) ||
+        (sessionKey != null &&
+            (sessionKey is! String ||
+                sessionKey.trim().isEmpty ||
+                sessionKey.length > 256)) ||
+        (sessionPolicy == 'stateless' && sessionKey != null) ||
+        (sessionPolicy == 'durable_session' && sessionKey == null)) {
+      throw const ProtocolException(
+          'assignment snapshot session policy is invalid');
+    }
     if (map.containsKey('credentials') ||
         map.containsKey('rawApiKey') ||
         map.containsKey('secretToken') ||

@@ -1,7 +1,7 @@
 # Conclave Protocol Boundaries
 
 **Status:** Current V7 architecture contract  
-**Applies to:** Conclave AX, Conclave Cloud, Conclave Workspace, and Worker adapters
+**Applies to:** Conclave AX, Conclave Cloud, Conclave Workspace, and Worker Packages
 
 Conclave has three protocol boundaries. They share domain vocabulary, but each
 boundary has its own endpoints, authentication, transport, versioning, and wire
@@ -14,8 +14,8 @@ Conclave AX  <->  Conclave Cloud
 Conclave Workspace  <->  Conclave Cloud
                        Workspace Runtime Protocol
 
-Conclave Workspace  <->  Worker adapter process
-                       Local Adapter Protocol
+Conclave Workspace  <->  Worker Package process
+                       Local Worker Protocol
 ```
 
 The arrows show the three product/runtime boundaries. The Human Product
@@ -41,7 +41,7 @@ actions and display Cloud-authoritative state.
 
 AX MUST NOT open a Workspace Runtime Protocol connection, construct runtime
 messages, or authenticate as a Workspace machine. AX cannot dispatch an
-assignment directly to a Workspace or adapter. Cloud authorizes and schedules
+assignment directly to a Workspace or Worker Package. Cloud authorizes and schedules
 work, then dispatches it through the Workspace Runtime Protocol.
 
 The Workspace desktop's owner-authenticated account and registration requests
@@ -68,17 +68,17 @@ transport choice does not change assignment semantics.
 
 Cloud-facing Worker Type IDs are product concepts. Project and Workstream
 policy, Workspace inventory, and assignment snapshots use IDs such as
-`chatgpt` and `gemini`; adapter package IDs are not accepted in this protocol.
+`chatgpt` and `gemini`; Worker Package IDs are not accepted in this protocol.
 Cloud forwards the selected product Worker Type ID unchanged. Workspace
 validates it against the selected local Worker slot, then resolves the local
-adapter package through its first-party descriptor registry. AX therefore
-does not need to know which adapter package implements a product Worker.
+Worker Package through its product-to-package registry. AX therefore does
+not need to know which package implements a product Worker.
 
 Only Conclave Workspace speaks this protocol as a client. Cloud's Workspace
-Gateway is its server. Conclave AX is not a runtime client. Worker adapters are
+Gateway is its server. Conclave AX is not a runtime client. Worker Packages are
 not runtime clients and MUST NOT connect to Cloud, invoke Workspace Gateway
 routes, or receive the Workspace runtime credential. Workspace translates
-between runtime messages and local adapter frames.
+between runtime messages and Local Worker Protocol frames.
 
 The current implementation is named
 `conclave.workspace-runtime-protocol` and is defined in
@@ -86,44 +86,62 @@ The current implementation is named
 authentication, transport negotiation, and assignment envelopes inside this
 boundary.
 
-## 3. Workspace ↔ Adapter — Local Adapter Protocol
+## 3. Workspace ↔ Worker Package — Local Worker Protocol
 
-**Endpoints:** Conclave Workspace's per-assignment process supervisor and one
-local adapter child process.  
+**Endpoints:** Conclave Workspace's process supervisor and one Worker Package
+child process.
 **Authentication:** local process admission; no Cloud or human session
 credential is part of this protocol.  
 **Transport:** versioned NDJSON over the child's stdin/stdout.  
-**Contract ownership:** Workspace defines the local adapter protocol;
-first-party and third-party adapters implement it.
+**Contract ownership:** Workspace defines the Local Worker Protocol;
+first-party and third-party Worker Packages implement it.
 
-This protocol is limited to adapter initialization, readiness probes,
-execution, and normalized progress, results, and errors. Workspace owns
-process lifetime, filesystem CWD, permissions, cancellation, and Cloud synchronization. The
-adapter may invoke its configured provider CLI or provider API, but MUST NOT
+This protocol carries package initialization, package-reported readiness,
+execution, progress, results, errors, and cancellation. Workspace owns package
+admission, process lifetime, filesystem CWD, local permissions, cancellation,
+and Cloud synchronization. Workspace MUST NOT discover, version, authenticate
+with, or execute a provider CLI or other provider tool directly. The Worker
+Package owns all provider-specific discovery, version/authentication checks,
+command construction, environment interpretation, output parsing, and
+diagnostics. It may invoke its configured provider CLI or API, but MUST NOT
 speak either Cloud-facing protocol or communicate directly with Conclave
 Cloud. In particular, it must not receive Cloud URLs, runtime credentials,
 Workspace Gateway envelopes, Cloud assignment authority, provider tokens, or
 account secrets as protocol fields. Any explicitly approved local tool input
 must use a bounded allowlisted non-secret field.
 
-The current V7 Local Adapter Protocol is version 2.0 and uses
+The current V7 Local Worker Protocol is implemented by the versioned adapter-v7
+schema (versions 2.1 through 2.5) and uses
 `initialize.request/result`, `probe.request/result`, `execute.request`,
 `progress`, `result`, and `error`. Every exchange carries a `requestId`.
-`probe.result` contains `ready`, nullable `toolVersion`, `checkKind`, and
-bounded `issues[]`. Optional probe settings are restricted to a safe endpoint
-URL, organization ID, and project ID; provider tokens and account secrets are
-not represented. Frames reject unknown fields, bound strings and arrays, and
-must fit within 1 MiB. The same contract test runs against fake ChatGPT/Codex
-and Gemini/Antigravity adapters. First-party issue codes are normalized by
-Workspace to the stable readiness reasons `cli_not_found`,
-`unsupported_cli_version`, `authentication_required`,
-`execution_test_failed`, and `ready`; provider stderr is never a UI message.
-Antigravity may return `permission_configuration_required` as an additional
-safe local diagnostic for a requested setup/manual execution test.
+Versions 2.3 through 2.5 `probe.request` explicitly select `passive` or `live`; `probe.result`
+contains that mode, package-reported `ready`, nullable safe `toolVersion`, and
+structured `checks[]` with stable issue codes and bounded local diagnostics.
+Versions 2.1 and 2.2 retain their legacy readiness-result shape during
+migration. Optional probe settings are restricted to bounded non-secret fields.
+Provider tokens and account secrets are not protocol fields. Frames reject
+unknown fields, bound strings and arrays, and must fit within 1 MiB. Workspace
+validates the package's bounded safe result without interpreting
+provider-specific codes or raw provider output. Packages return stable readiness
+codes and safe display diagnostics. Packages capture provider CLI stdout/stderr
+and map it into bounded provider-neutral diagnostics. If a package exits before
+returning a protocol frame, Workspace may retain a bounded, redacted tail of
+the package process stderr for local diagnostics; this fallback is never sent
+to Cloud. Protocols 2.4 and 2.5 `execute.request` include the remaining assignment
+`timeoutMs`; the package subtracts a small cleanup grace when choosing its CLI
+deadline. Readiness live tests retain their separate explicit short deadline.
+Protocol 2.5 adds the Conclave `sessionPolicy` values `stateless` and
+`durable_session`. Durable requests carry an opaque `sessionKey`; stateless
+requests do not. Cloud and Workspace route these generic fields without
+interpreting provider session IDs. Each Worker Package maps the key to its own
+provider session ID in package-local storage. Provider session IDs are never
+persisted by Cloud. Persistent provider processes are outside this contract;
+each assignment still starts a fresh package and CLI process.
+Raw provider stderr and output never become a Cloud message.
 The schema is specified by
 `packages/worker-manifest/src/adapter-v7.ts` and implemented by the Workspace
-process supervisor. Changes require a versioned Local Adapter Protocol change
-and do not change either Cloud-facing protocol.
+process supervisor and Worker Package process. Changes require a versioned
+Local Worker Protocol change and do not change either Cloud-facing protocol.
 
 ## Shared canonical domain vocabulary
 
@@ -148,7 +166,7 @@ These are canonical domain concepts, not a shared message envelope. At the
 wire boundary, each protocol owns its own versioned schemas, required fields,
 field names, validation, and authentication context. A value such as
 `AssignmentId` may appear in multiple protocol payloads, but a Human Product
-Protocol request, Workspace Runtime Protocol frame, and Local Adapter Protocol
+Protocol request, Workspace Runtime Protocol frame, and Local Worker Protocol
 frame are never interchangeable. Do not import one protocol's envelope or
 transport into another boundary to reuse these names.
 
@@ -164,11 +182,11 @@ wire contracts.
 | Product and collaboration actions/read models | Conclave AX | Cloud human API/realtime | Human Product Protocol | Human session |
 | Desktop owner/account management | Workspace management UI | Cloud management routes | Human Product Protocol, HTTPS management surface | Human session |
 | Inventory, assignments, progress, cancellation | Workspace runtime | Cloud Workspace Gateway | Workspace Runtime Protocol | Workspace runtime credential |
-| Local setup, execution, progress, result | Workspace supervisor | Adapter child process | Local Adapter Protocol | Bounded non-secret tool settings; no provider tokens or account secrets |
+| Local setup, readiness, execution, progress, result | Workspace supervisor | Worker Package process | Local Worker Protocol | Bounded non-secret settings; no provider tokens or account secrets |
 
 Cloud may translate and persist domain state between its product API and
 Workspace Gateway. Workspace may translate between its Cloud runtime client
-and adapter child process. Neither translation forwards a wire envelope
+and Worker Package process. Neither translation forwards a wire envelope
 unchanged across a boundary.
 
 ## Current schema locations
@@ -180,8 +198,8 @@ unchanged across a boundary.
   `apps/host/lib/cloud_connection.dart`; schema
   `packages/host-protocol/src/workspace-runtime.ts`; Cloud
   `apps/cloud/src/workspace-gateway.ts`.
-- Local Adapter Protocol: Workspace `apps/host/lib/worker_executor.dart` and
-  `apps/host/lib/v7_adapter_protocol.dart`; adapter schema
+- Local Worker Protocol: Workspace `apps/host/lib/worker_executor.dart` and
+  `apps/host/lib/v7_adapter_protocol.dart`; Worker Package schema
   `packages/worker-manifest/src/adapter-v7.ts`.
 - Canonical domain model: domain entities in `packages/core/src` and the
   canonical vocabulary in this document; wire validators remain protocol-owned.

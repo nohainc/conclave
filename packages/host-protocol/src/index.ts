@@ -369,15 +369,29 @@ export const AssignmentSnapshotSchema = z
     sessionPolicy: z
       .enum([
         "stateless",
+        "durable_session",
         "isolated_workspace",
         "reuse_session",
         "persistent_context",
       ])
       .default("stateless"),
+    sessionKey: z.string().trim().min(1).max(256).optional(),
     permissions: z.array(nonEmptyStr).default([]),
     contextRefs: z.array(z.record(z.string(), z.unknown())).default([]),
     timeoutMs: z.number().int().min(1000).default(60000),
     idempotencyKey: nonEmptyStr,
+  })
+  .superRefine((snapshot, ctx) => {
+    if (
+      (snapshot.sessionPolicy === "stateless" && snapshot.sessionKey) ||
+      (snapshot.sessionPolicy === "durable_session" && !snapshot.sessionKey)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["sessionKey"],
+        message: "Session policy and logical session key are inconsistent",
+      });
+    }
   })
   .strict();
 export type AssignmentSnapshot = z.infer<typeof AssignmentSnapshotSchema>;

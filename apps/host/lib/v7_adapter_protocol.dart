@@ -2,8 +2,41 @@ import 'dart:convert';
 
 import 'package:conclave_protocol/conclave_protocol.dart';
 
-const v7AdapterProtocolVersion = '2.1';
+const v7AdapterProtocolVersion = '2.5';
+const supportedV7AdapterProtocolVersions = {
+  '2.1',
+  '2.2',
+  '2.3',
+  '2.4',
+  '2.5',
+};
 const v7AdapterMaxFrameBytes = 1024 * 1024;
+
+enum LocalWorkerProbeMode {
+  passive('passive'),
+  live('live');
+
+  const LocalWorkerProbeMode(this.wireValue);
+  final String wireValue;
+}
+
+const _probeIssueCodes = {
+  'setup_required',
+  'cli_not_found',
+  'worker_not_ready',
+  'authentication_required',
+  'unsupported_cli_version',
+  'permission_configuration_required',
+  'permission_denied',
+  'execution_test_failed',
+  'model_not_supported',
+  'quota_exhausted',
+  'provider_unavailable',
+  'timeout',
+  'cancelled',
+  'internal_adapter_error',
+  'execution_failed',
+};
 
 /// Parses one newline-delimited V7 adapter response and rejects unknown fields.
 Map<String, Object?> parseV7AdapterFrame(String frame) {
@@ -16,7 +49,8 @@ Map<String, Object?> parseV7AdapterFrame(String frame) {
   }
   final value = Map<String, Object?>.from(decoded);
   final type = value['type'];
-  if (value['protocolVersion'] != v7AdapterProtocolVersion || type is! String) {
+  if (!supportedV7AdapterProtocolVersions.contains(value['protocolVersion']) ||
+      type is! String) {
     throw const FormatException('adapter protocol version or type is invalid');
   }
   final (allowed, optional) = switch (type) {
@@ -37,11 +71,13 @@ Map<String, Object?> parseV7AdapterFrame(String frame) {
           'requestId',
           'ready',
           'toolVersion',
+          'mode',
+          'checks',
           'checkKind',
           'issues',
           'models'
         },
-        {'models'},
+        {'models', 'mode', 'checks', 'checkKind', 'issues'},
       ),
     'progress' => (
         {
@@ -97,18 +133,23 @@ Map<String, Object?> parseV7AdapterFrame(String frame) {
   }
   if (type == 'probe.result') {
     final issues = value['issues'];
+    final protocolVersion = value['protocolVersion'];
     if (value['ready'] is! bool ||
-        value['checkKind'] != 'readiness' ||
         (value['toolVersion'] != null &&
             !_nonEmpty(value['toolVersion'], max: 128)) ||
-        issues is! List ||
-        issues.length > 128 ||
-        issues.any((issue) =>
-            issue is! Map ||
-            issue.keys.toSet().difference({'code', 'message'}).isNotEmpty ||
-            issue.keys.toSet().length != 2 ||
-            !_nonEmpty(issue['code'], max: 128) ||
-            !_nonEmpty(issue['message'], max: 16384)) ||
+        (const {'2.3', '2.4', '2.5'}.contains(protocolVersion)
+            ? !_validProbeChecks(value)
+            : value['checkKind'] != 'readiness' ||
+                issues is! List ||
+                issues.length > 128 ||
+                issues.any((issue) =>
+                    issue is! Map ||
+                    issue.keys
+                        .toSet()
+                        .difference({'code', 'message'}).isNotEmpty ||
+                    issue.keys.toSet().length != 2 ||
+                    !_nonEmpty(issue['code'], max: 128) ||
+                    !_nonEmpty(issue['message'], max: 16384))) ||
         (value['models'] != null && !_stringList(value['models'], 500, 256))) {
       throw const FormatException('adapter probe result is invalid');
     }
@@ -155,7 +196,7 @@ Map<String, Object?> parseV7AdapterFrame(String frame) {
 
 String serializeV7AdapterFrame(Map<String, Object?> value) {
   final type = value['type'];
-  if (value['protocolVersion'] != v7AdapterProtocolVersion ||
+  if (!supportedV7AdapterProtocolVersions.contains(value['protocolVersion']) ||
       !_nonEmpty(value['requestId'], max: 128) ||
       type is! String) {
     throw const FormatException('adapter request envelope is invalid');
@@ -168,14 +209,23 @@ String serializeV7AdapterFrame(Map<String, Object?> value) {
         'workerTypeId',
         'adapterVersion'
       },
-    'probe.request' => {'type', 'protocolVersion', 'requestId', 'config'},
+    'probe.request' => {
+        'type',
+        'protocolVersion',
+        'requestId',
+        'mode',
+        'config',
+      },
     'execute.request' => {
         'type',
         'protocolVersion',
         'requestId',
         'assignmentId',
         'prompt',
-        'model'
+        'model',
+        'timeoutMs',
+        'sessionPolicy',
+        'sessionKey',
       },
     _ => throw FormatException('unexpected adapter request type: $type'),
   };
@@ -187,12 +237,33 @@ String serializeV7AdapterFrame(Map<String, Object?> value) {
           !_nonEmpty(value['adapterVersion'], max: 128))) {
     throw const FormatException('adapter initialization request is invalid');
   }
+  if (type == 'probe.request' &&
+      const {'2.3', '2.4', '2.5'}.contains(value['protocolVersion']) &&
+      !const {'passive', 'live'}.contains(value['mode'])) {
+    throw const FormatException(
+        'protocol 2.3+ probes require an explicit mode');
+  }
+  if (type == 'probe.request' &&
+      value['mode'] != null &&
+      !const {'passive', 'live'}.contains(value['mode'])) {
+    throw const FormatException('adapter probe mode is invalid');
+  }
   if (type == 'probe.request' && value['config'] != null) {
     final config = value['config'];
-    const configKeys = {'endpointUrl', 'organizationId', 'projectId'};
+    const configKeys = {
+      'mode',
+      'endpointUrl',
+      'organizationId',
+      'projectId',
+    };
     if (config is! Map ||
         config.keys.any((key) => key is! String || !configKeys.contains(key)) ||
-        config.values.any((item) => item is! String) ||
+        (config['mode'] != null &&
+            !const {'passive', 'live'}.contains(config['mode'])) ||
+        (const {'2.3', '2.4', '2.5'}.contains(value['protocolVersion']) &&
+            config['mode'] != null) ||
+        config.entries
+            .any((entry) => entry.key != 'mode' && entry.value is! String) ||
         (config['endpointUrl'] != null &&
             !_safeProbeEndpoint(config['endpointUrl'])) ||
         (config['organizationId'] is String &&
@@ -205,7 +276,24 @@ String serializeV7AdapterFrame(Map<String, Object?> value) {
   if (type == 'execute.request' &&
       (!_nonEmpty(value['assignmentId'], max: 128) ||
           !_boundedString(value['prompt'], 512000) ||
-          (value['model'] != null && !_nonEmpty(value['model'], max: 256)))) {
+          (value['model'] != null && !_nonEmpty(value['model'], max: 256)) ||
+          (value['timeoutMs'] != null &&
+              (value['timeoutMs'] is! int ||
+                  (value['timeoutMs'] as int) < 1 ||
+                  (value['timeoutMs'] as int) > 2147483647)) ||
+          (value['sessionKey'] != null &&
+              (!_nonEmpty(value['sessionKey'], max: 256) ||
+                  !const {'2.4', '2.5'}.contains(value['protocolVersion']))) ||
+          (value['protocolVersion'] == '2.5' &&
+              (!_nonEmpty(value['sessionPolicy'], max: 32) ||
+                  !const {'stateless', 'durable_session'}
+                      .contains(value['sessionPolicy']) ||
+                  (value['sessionPolicy'] == 'stateless' &&
+                      value['sessionKey'] != null) ||
+                  (value['sessionPolicy'] == 'durable_session' &&
+                      value['sessionKey'] == null))) ||
+          (const {'2.4', '2.5'}.contains(value['protocolVersion']) &&
+              value['timeoutMs'] == null))) {
     throw const FormatException('adapter execution request is invalid');
   }
   final frame = jsonEncode(value);
@@ -213,6 +301,41 @@ String serializeV7AdapterFrame(Map<String, Object?> value) {
     throw const FormatException('adapter frame exceeds the 1 MB limit');
   }
   return frame;
+}
+
+bool _validProbeChecks(Map<String, Object?> value) {
+  final mode = value['mode'];
+  final checks = value['checks'];
+  if (!const {'passive', 'live'}.contains(mode) ||
+      value.containsKey('checkKind') ||
+      value.containsKey('issues') ||
+      checks is! List ||
+      checks.isEmpty ||
+      checks.length > 16) {
+    return false;
+  }
+  final ids = <String>{};
+  var hasFailure = false;
+  for (final check in checks) {
+    if (check is! Map ||
+        check.keys.toSet().difference(
+            {'id', 'status', 'issueCode', 'diagnostic'}).isNotEmpty ||
+        !const {'id', 'status'}.every(check.containsKey) ||
+        !_nonEmpty(check['id'], max: 64) ||
+        !const {'passed', 'failed', 'skipped'}.contains(check['status']) ||
+        !ids.add(check['id'] as String) ||
+        (check['issueCode'] != null &&
+            !_probeIssueCodes.contains(check['issueCode'])) ||
+        (check['diagnostic'] != null &&
+            !_boundedString(check['diagnostic'], 2048)) ||
+        (check['status'] == 'failed' &&
+            !_probeIssueCodes.contains(check['issueCode']))) {
+      return false;
+    }
+    if (check['status'] == 'failed') hasFailure = true;
+  }
+  if (mode == 'live' && !ids.contains('execution')) return false;
+  return value['ready'] == !hasFailure;
 }
 
 bool _nonEmpty(Object? value, {int max = 4096}) =>

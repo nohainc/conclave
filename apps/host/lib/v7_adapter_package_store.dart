@@ -8,10 +8,11 @@ import 'package:crypto/crypto.dart';
 
 import 'bundled_adapter_package.dart';
 import 'configured_worker_registry.dart';
-import 'first_party_worker_adapter_descriptor.dart';
-import 'first_party_worker_cli_locator.dart';
-import 'adapter_prerequisite.dart';
+import 'first_party_worker_registry.dart';
+import 'local_worker_permissions.dart';
+import 'platform_runtime.dart';
 import 'v7_adapter_admission.dart';
+import 'workspace_paths.dart';
 import 'worker_executor.dart';
 import 'worker_trust_policy.dart';
 
@@ -28,22 +29,27 @@ class V7AdapterPackageStore {
     required this.root,
     required this.trustPolicy,
     required this.allowedPermissions,
+    Directory? workerStateRoot,
     WorkerProcessExecutor? executor,
     String? platform,
+    PlatformRuntime? statePlatform,
     this.maxPackageBytes = 512 * 1024 * 1024,
-    this.cliLocator = const FirstPartyWorkerCliExecutableLocator(),
     this.loadBundledPackage,
     this.allowUnsignedBundledAdapters = _defaultAllowUnsignedBundledAdapters,
-  })  : platform = platform ?? _currentPlatform(),
+  })  : workerStateRoot =
+            workerStateRoot ?? Directory('${root.parent.path}/Workers'),
+        statePlatform = statePlatform ?? currentPlatformRuntime,
+        platform = platform ?? _currentPlatform(),
         executor = executor ?? WorkerProcessExecutor();
 
   final Directory root;
+  final Directory workerStateRoot;
+  final PlatformRuntime statePlatform;
   final WorkerTrustPolicy trustPolicy;
   final Set<WorkerPermission> allowedPermissions;
   final WorkerProcessExecutor executor;
   final String platform;
   final int maxPackageBytes;
-  final FirstPartyWorkerCliExecutableLocator cliLocator;
   final Future<BundledAdapterPackage?> Function(String workerTypeId)?
       loadBundledPackage;
   final bool allowUnsignedBundledAdapters;
@@ -54,27 +60,22 @@ class V7AdapterPackageStore {
   /// explicitly enable unsigned admission for those embedded first-party
   /// packages; Cloud-delivered archives always use strict signed admission.
   Future<bool> ensureFirstPartyAdapterAvailable(
-    String workerTypeId, {
-    List<String> additionalPathDirectories = const [],
-  }) async {
-    final descriptor =
-        FirstPartyWorkerAdapterDescriptor.forAdapterPackageId(workerTypeId);
+    String workerTypeId,
+  ) async {
+    final descriptor = FirstPartyWorkerPackage.forPackageId(workerTypeId);
     if (descriptor == null) return false;
     if (await hasVerifiedActivePackage(
       workerTypeId,
-      descriptor.requiredLocalPermissions,
-      additionalPathDirectories,
+      firstPartyWorkerLocalPermissions,
     )) {
       return true;
     }
     if (await restoreLastHealthyVersion(
           workerTypeId,
-          additionalPathDirectories: additionalPathDirectories,
         ) &&
         await hasVerifiedActivePackage(
           workerTypeId,
-          descriptor.requiredLocalPermissions,
-          additionalPathDirectories,
+          firstPartyWorkerLocalPermissions,
         )) {
       return true;
     }
@@ -91,15 +92,13 @@ class V7AdapterPackageStore {
         archiveBytes: bundled.archiveBytes,
         expectedManifest: bundled.manifest,
         allowUnsignedBundledAdapter: _allowUnsignedFor(workerTypeId),
-        additionalPathDirectories: additionalPathDirectories,
       );
     } on Object {
       return false;
     }
     return hasVerifiedActivePackage(
       workerTypeId,
-      descriptor.requiredLocalPermissions,
-      additionalPathDirectories,
+      firstPartyWorkerLocalPermissions,
     );
   }
 
@@ -123,7 +122,6 @@ class V7AdapterPackageStore {
     required List<int> archiveBytes,
     Map<String, Object?>? expectedManifest,
     bool allowUnsignedBundledAdapter = false,
-    List<String> additionalPathDirectories = const [],
   }) async {
     if (archiveBytes.isEmpty || archiveBytes.length > maxPackageBytes) {
       throw StateError('adapter archive is empty or exceeds size limit');
@@ -206,7 +204,6 @@ class V7AdapterPackageStore {
       return await _install(
         sourceDirectory: staging,
         allowUnsignedBundledAdapter: allowUnsigned,
-        additionalPathDirectories: additionalPathDirectories,
       );
     } finally {
       if (await staging.exists()) await staging.delete(recursive: true);
@@ -241,7 +238,6 @@ class V7AdapterPackageStore {
   Future<Directory> _install({
     required Directory sourceDirectory,
     bool allowUnsignedBundledAdapter = false,
-    List<String> additionalPathDirectories = const [],
   }) async {
     final sourceRoot = await sourceDirectory.resolveSymbolicLinks();
     final manifestFile =
@@ -296,7 +292,6 @@ class V7AdapterPackageStore {
       await _healthCheck(
         target,
         existingAdmission,
-        additionalPathDirectories: additionalPathDirectories,
       );
       await _activate(typeRoot, adapterVersion);
       return target;
@@ -322,7 +317,6 @@ class V7AdapterPackageStore {
       await _healthCheck(
         staging,
         stagedAdmission,
-        additionalPathDirectories: additionalPathDirectories,
       );
       await staging.rename(target.path);
     } catch (_) {
@@ -376,9 +370,8 @@ class V7AdapterPackageStore {
   /// Restores the last previously active adapter only after independently
   /// rechecking its current signature, digest, permissions, platform and health.
   Future<bool> restoreLastHealthyVersion(
-    String workerTypeId, {
-    List<String> additionalPathDirectories = const [],
-  }) async {
+    String workerTypeId,
+  ) async {
     _safeTypeId(workerTypeId);
     final typeRoot =
         Directory('${root.path}${Platform.pathSeparator}$workerTypeId');
@@ -407,11 +400,7 @@ class V7AdapterPackageStore {
         allowedPermissions: allowedPermissions,
         allowUnsignedBundledAdapter: _allowUnsignedFor(workerTypeId),
       );
-      await _healthCheck(
-        packageRoot,
-        admitted,
-        additionalPathDirectories: additionalPathDirectories,
-      );
+      await _healthCheck(packageRoot, admitted);
       await _activate(typeRoot, version, rememberPrevious: false);
       return true;
     } on Object {
@@ -423,7 +412,7 @@ class V7AdapterPackageStore {
     required LocalConfiguredWorker worker,
     required SecureCredentialReader readCredential,
   }) async {
-    final adapterTypeId = FirstPartyWorkerAdapterDescriptor.adapterPackageIdFor(
+    final adapterTypeId = FirstPartyWorkerPackage.packageIdFor(
       worker.workerTypeId,
     );
     final activeFile = File(
@@ -491,52 +480,16 @@ class V7AdapterPackageStore {
       workingDirectory: packageRoot.path,
       localConcurrencyLimit: worker.localConcurrencyLimit,
       availableSecrets: secrets,
+      workerStateDirectory:
+          (await _prepareWorkerStateDirectory(worker.id)).path,
     );
-    String? cliPath;
-    String? cliVersion;
-    final descriptor = FirstPartyWorkerAdapterDescriptor.forProductWorkerTypeId(
-        worker.workerTypeId);
-    var processSpec = spec;
-    if (descriptor != null && worker.executablePath != null) {
-      final located = await cliLocator.locate(
-        descriptor,
-        cachedPath: worker.executablePath,
-      );
-      if (located == null) {
-        throw const FirstPartyCliResolutionException.cliNotFound();
-      }
-      cliPath = located.path;
-      cliVersion = located.versionProbe.detectedVersion;
-      if (!located.versionProbe.satisfied) {
-        throw FirstPartyCliResolutionException.unsupportedVersion(
-          located.path,
-          located.versionProbe.detectedVersion,
-        );
-      }
-      processSpec = spec.copyWith(
-        environment: {
-          ...spec.environment,
-          'PATH': workspaceCliSearchPath(
-            additionalDirectories: [File(located.path).parent.path],
-          ),
-          'CONCLAVE_CLI_EXECUTABLE': cliPath,
-        },
-        allowedEnvironmentVariables: {
-          ...spec.allowedEnvironmentVariables,
-          'PATH',
-          'CONCLAVE_CLI_EXECUTABLE',
-        },
-      );
-    }
     return V7AdapterLaunch(
-      processSpec: processSpec,
+      processSpec: spec,
       workerTypeId: adapterTypeId,
       adapterVersion: admitted.adapterVersion,
       config: Map.unmodifiable(worker.adapterConfig),
       defaultModel: worker.defaultModel,
       allowedModels: worker.allowedModels.toSet(),
-      executablePath: cliPath,
-      cliVersion: cliVersion,
     );
   }
 
@@ -545,7 +498,7 @@ class V7AdapterPackageStore {
   /// a version or capabilities to the Cloud projection.
   Future<Map<String, Object?>?> activeManifestSummary(
       LocalConfiguredWorker worker) async {
-    final adapterTypeId = FirstPartyWorkerAdapterDescriptor.adapterPackageIdFor(
+    final adapterTypeId = FirstPartyWorkerPackage.packageIdFor(
       worker.workerTypeId,
     );
     final activeFile = File(
@@ -598,86 +551,11 @@ class V7AdapterPackageStore {
     };
   }
 
-  /// Uses the admitted provider adapter to check an API credential without
-  /// generating model output. The key is passed only through the adapter's
-  /// declared scoped process environment.
-  Future<List<String>> validateApiCredential({
-    required String workerTypeId,
-    required String apiKey,
-    required String endpointUrl,
-    required List<String> localPermissions,
-  }) async {
-    if (!const {'openai-api', 'gemini-api', 'anthropic-api', 'ollama'}
-            .contains(workerTypeId) ||
-        (workerTypeId != 'ollama' && apiKey.isEmpty)) {
-      throw ArgumentError('API Worker credential validation input is invalid.');
-    }
-    final activeFile = File(
-        '${root.path}${Platform.pathSeparator}$workerTypeId${Platform.pathSeparator}active.json');
-    if (!await activeFile.exists()) {
-      throw StateError('A trusted API adapter must be installed first.');
-    }
-    final pointer = jsonDecode(await activeFile.readAsString());
-    if (pointer is! Map || pointer['version'] is! String) {
-      throw const FormatException('active V7 adapter pointer is invalid');
-    }
-    final version = _safeVersion(pointer['version']);
-    final packageRoot = Directory(
-        '${root.path}${Platform.pathSeparator}$workerTypeId${Platform.pathSeparator}$version');
-    final manifestFile =
-        File('${packageRoot.path}${Platform.pathSeparator}manifest.json');
-    final rawManifest = jsonDecode(await manifestFile.readAsString());
-    if (rawManifest is! Map) {
-      throw const FormatException('active V7 adapter manifest is invalid');
-    }
-    final manifest = Map<String, Object?>.from(rawManifest);
-    final digest = await digestDirectory(packageRoot);
-    final admitted = await V7AdapterAdmission.admit(
-      input: manifest,
-      packageRoot: packageRoot,
-      expectedWorkerTypeId: workerTypeId,
-      verifiedPackageDigest: digest,
-      platform: platform,
-      trustPolicy: trustPolicy,
-      allowedPermissions: allowedPermissions,
-      allowUnsignedBundledAdapter: _allowUnsignedFor(workerTypeId),
-    );
-    trustPolicy.requirePermissions(
-        admitted.permissions, _workerPermissions(localPermissions));
-    final secrets = <String, String>{};
-    for (final requirement in admitted.secretRequirements) {
-      if (requirement.authStrategy == 'api_key') {
-        secrets[requirement.name] = apiKey;
-      }
-    }
-    final spec = admitted.createProcessSpec(
-      workerId: 'setup-validation:$workerTypeId',
-      workingDirectory: packageRoot.path,
-      localConcurrencyLimit: 1,
-      availableSecrets: secrets,
-    );
-    final result = await executor.executeV7Adapter(
-      spec,
-      workerTypeId: workerTypeId,
-      adapterVersion: admitted.adapterVersion,
-      prompt: '',
-      config: {
-        if (endpointUrl.trim().isNotEmpty) 'endpointUrl': endpointUrl.trim(),
-      },
-      validateOnly: true,
-      operationId:
-          'setup-validation:$workerTypeId:${DateTime.now().microsecondsSinceEpoch}',
-      timeout: const Duration(seconds: 20),
-    );
-    return List<String>.from(result['models'] as List? ?? const []);
-  }
-
   /// Returns true only when the active package still passes digest, signature,
   /// platform, permission, and protocol health admission checks.
   Future<bool> hasVerifiedActivePackage(
     String workerTypeId, [
     List<String>? localPermissions,
-    List<String> additionalPathDirectories = const [],
   ]) async {
     try {
       _safeTypeId(workerTypeId);
@@ -711,11 +589,7 @@ class V7AdapterPackageStore {
           _workerPermissions(localPermissions),
         );
       }
-      await _healthCheck(
-        packageRoot,
-        admitted,
-        additionalPathDirectories: additionalPathDirectories,
-      );
+      await _healthCheck(packageRoot, admitted);
       return admitted.adapterVersion == version;
     } on Object {
       return false;
@@ -788,22 +662,33 @@ class V7AdapterPackageStore {
 
   Future<void> _healthCheck(
     Directory packageRoot,
-    V7AdapterAdmission admitted, {
-    List<String> additionalPathDirectories = const [],
-  }) async {
-    final descriptor = FirstPartyWorkerAdapterDescriptor.forAdapterPackageId(
-        admitted.workerTypeId);
+    V7AdapterAdmission admitted,
+  ) async {
+    final descriptor =
+        FirstPartyWorkerPackage.forPackageId(admitted.workerTypeId);
+    final healthWorkerId = 'adapter-health-${admitted.workerTypeId}';
+    final workerStateDirectory =
+        await _prepareWorkerStateDirectory(healthWorkerId);
     var spec = WorkerProcessSpec(
-      workerId: 'adapter-health:${admitted.workerTypeId}',
+      workerId: healthWorkerId,
       executable: admitted.executable.path,
+      protocolVersion: admitted.protocolVersion,
       arguments: admitted.launchArgs,
       workingDirectory: packageRoot.path,
       environment: {
-        'PATH': workspaceCliSearchPath(
-          additionalDirectories: additionalPathDirectories,
-        ),
+        ...admitted.createPackageEnvironment(),
+        'CONCLAVE_WORKER_STATE_DIR': workerStateDirectory.path,
       },
-      allowedEnvironmentVariables: const {'PATH'},
+      allowedEnvironmentVariables: {
+        'PATH',
+        'CONCLAVE_WORKER_STATE_DIR',
+        ...admitted.environmentPassthrough,
+      },
+      secretValues: {
+        for (final name in admitted.sensitiveEnvironmentPassthrough)
+          if (Platform.environment[name] case final value?) value,
+      },
+      includeParentEnvironment: false,
     );
     final probe = await executor.checkV7AdapterHealth(
       spec,
@@ -814,17 +699,33 @@ class V7AdapterPackageStore {
       allowNotReady: descriptor != null,
     );
     final issues = probe['issues'];
-    final localReadinessIssue = issues is List &&
-        issues.any((issue) =>
-            issue is Map &&
-            const {
-              'authentication_required',
-              'cli_not_found',
-              'tool_unavailable',
-            }.contains(issue['code']));
+    final checks = probe['checks'];
+    final localReadinessIssue = (issues is List && issues.isNotEmpty) ||
+        (checks is List &&
+            checks.any((check) => check is Map && check['status'] == 'failed'));
     if (descriptor != null && probe['ready'] != true && !localReadinessIssue) {
       throw StateError('first-party adapter readiness probe failed');
     }
+  }
+
+  Future<Directory> _prepareWorkerStateDirectory(String workerId) async {
+    final stateDirectory = WorkspacePaths(
+      workerStateRoot.parent,
+      platform: statePlatform,
+    ).workerStateDirectory(workerId);
+    await workerStateRoot.create(recursive: true);
+    await statePlatform.restrictPermissions(
+      workerStateRoot.path,
+      directory: true,
+    );
+    final workerDirectory = stateDirectory.parent;
+    await workerDirectory.create(recursive: true);
+    await statePlatform.restrictPermissions(workerDirectory.path,
+        directory: true);
+    await stateDirectory.create(recursive: true);
+    await statePlatform.restrictPermissions(stateDirectory.path,
+        directory: true);
+    return stateDirectory;
   }
 
   Future<void> _activate(Directory typeRoot, String version,
@@ -879,8 +780,7 @@ class V7AdapterPackageStore {
 
   bool _allowUnsignedFor(String workerTypeId) =>
       allowUnsignedBundledAdapters &&
-      FirstPartyWorkerAdapterDescriptor.forAdapterPackageId(workerTypeId) !=
-          null;
+      FirstPartyWorkerPackage.forPackageId(workerTypeId) != null;
 
   String _safeTypeId(Object? value) {
     if (value is! String ||

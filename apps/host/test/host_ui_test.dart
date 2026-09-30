@@ -5,9 +5,6 @@ import 'dart:io';
 import 'package:conclave_host/configured_worker_registry.dart';
 import 'package:conclave_host/cloud_connection.dart';
 import 'package:conclave_host/desktop_auth.dart';
-import 'package:conclave_host/adapter_prerequisite.dart';
-import 'package:conclave_host/first_party_worker_adapter_descriptor.dart';
-import 'package:conclave_host/first_party_worker_adapter_probe.dart';
 import 'package:conclave_host/main.dart';
 import 'package:conclave_host/platform_runtime.dart';
 import 'package:conclave_host/secure_credentials.dart';
@@ -89,21 +86,6 @@ class _FakeWorkerRegistry extends LocalConfiguredWorkerRegistry {
     throw StateError('Worker not found');
   }
 }
-
-Future<FirstPartyWorkerCliProbeResult> _fakeWorkerCliProbe(
-  FirstPartyWorkerAdapterDescriptor type, {
-  String? cachedExecutablePath,
-}) async =>
-    FirstPartyWorkerCliProbeResult(
-      executable: type.executableCandidates.first,
-      executablePath: cachedExecutablePath ??
-          '/test/bin/${type.executableCandidates.first}',
-      versionProbe: const AdapterPrerequisiteResult(
-        satisfied: true,
-        message: 'Version verified.',
-        detectedVersion: '1.2.3',
-      ),
-    );
 
 void main() {
   testWidgets('pairing error notification has a working copy action',
@@ -215,7 +197,6 @@ void main() {
             // Keychain. Tests covering Keychain behavior provide a mocked
             // native bridge explicitly.
             credentialStore: credentialStore ?? _MemoryCredentialStore(),
-            workerCliProbe: _fakeWorkerCliProbe,
             signedIn: signedIn,
           ),
         ),
@@ -448,7 +429,6 @@ void main() {
             onSignOut: () async {},
             onRecoverCredential: ([name]) async {},
             onRelease: () async => released = true,
-            workerCliProbe: _fakeWorkerCliProbe,
           ),
         ),
       ),
@@ -517,7 +497,6 @@ void main() {
           body: HostDashboard(
             snapshot: snapshot,
             credentialStore: credentials,
-            workerCliProbe: _fakeWorkerCliProbe,
           ),
         ),
       ),
@@ -1207,8 +1186,9 @@ void main() {
 
     expect(find.text('ChatGPT'), findsOneWidget);
     expect(find.text('Gemini'), findsOneWidget);
-    expect(find.textContaining('Codex CLI'), findsOneWidget);
-    expect(find.textContaining('Antigravity CLI'), findsOneWidget);
+    expect(find.text('Setup required'), findsNWidgets(2));
+    expect(find.textContaining('CLI version: Not detected'), findsNWidgets(2));
+    expect(find.textContaining('Last Test: Not run'), findsNWidgets(2));
     expect(find.byType(ExpansionTile), findsNothing);
     expect(find.text('Set up ChatGPT'), findsNothing);
     expect(find.text('Set up Gemini'), findsNothing);
@@ -1218,10 +1198,7 @@ void main() {
     expect(find.text('Add Worker'), findsNothing);
     expect(find.text('No local Workers configured'), findsNothing);
     expect(find.byKey(const Key('worker-type-selector')), findsNothing);
-    expect(
-        find.text('Check again').evaluate().length +
-            find.byType(Switch).evaluate().length,
-        2);
+    expect(find.text('Configure'), findsNWidgets(2));
   });
 
   testWidgets('fixed catalog rows merge configured Worker status by type',
@@ -1252,8 +1229,31 @@ void main() {
       updatedAt: '2026-01-01T00:00:00Z',
       lastLiveTestAt: '2026-01-02T03:04:05Z',
       lastLiveTestPassed: false,
+      lastLiveTestIssueCode: 'package_unavailable',
+      toolVersion: '1.2.3',
       lastLiveTestDetails:
           'Test failed (execution_test_failed)\nThe local check did not complete.',
+    );
+    final geminiWorker = LocalConfiguredWorker(
+      id: 'w-gemini',
+      workspaceId: 'ws-test',
+      name: 'Gemini',
+      workerTypeId: 'gemini',
+      authStrategy: 'browser_auth',
+      credentialRef: null,
+      defaultModel: null,
+      adapterConfig: const {},
+      allowedModels: const [],
+      localPermissions: const ['workstream_filesystem', 'shell_execution'],
+      localConcurrencyLimit: 1,
+      adapterVersionPolicy: null,
+      status: LocalWorkerStatus.needsAttention,
+      readinessState: WorkerReadinessState.setupRequired,
+      credentialStatus: LocalWorkerCredentialStatus.ready,
+      revision: 1,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+      readinessIssueCode: 'setup_required',
     );
 
     await pumpDashboard(
@@ -1267,7 +1267,7 @@ void main() {
         cloudConnected: true,
         workspaceName: 'Office Mac',
       ),
-      localWorkerRegistry: _FakeWorkerRegistry([chatGptWorker]),
+      localWorkerRegistry: _FakeWorkerRegistry([chatGptWorker, geminiWorker]),
     );
     await tester.tap(find.text('Workers').first);
     await tester.pumpAndSettle();
@@ -1276,14 +1276,18 @@ void main() {
 
     expect(find.text('ChatGPT'), findsOneWidget);
     expect(find.text('Gemini'), findsOneWidget);
-    expect(find.text('Conclave integration needs attention'), findsWidgets);
-    expect(find.textContaining('CLI usability:'), findsWidgets);
-    expect(find.textContaining('Last live test: Failed ·'), findsOneWidget);
-    expect(find.text('Test'), findsOneWidget);
+    expect(find.text('Needs attention'), findsOneWidget);
+    expect(find.text('Setup required'), findsOneWidget);
+    expect(find.text('CLI version: 1.2.3'), findsOneWidget);
+    expect(find.text('CLI version: Not detected'), findsOneWidget);
+    expect(find.textContaining('Last Test: Failed ·'), findsOneWidget);
+    expect(find.text('Test'), findsNWidgets(2));
+    expect(find.textContaining('Last Test: Not run'), findsOneWidget);
     expect(find.textContaining('Test failed (execution_test_failed)'),
-        findsOneWidget);
-    expect(find.byTooltip('Copy test details'), findsOneWidget);
-    expect(find.textContaining('Last live test: Not run'), findsOneWidget);
+        findsNothing);
+    expect(find.byTooltip('Copy test details'), findsNothing);
+    expect(find.textContaining('Issue code:'), findsNothing);
+    expect(find.textContaining('Worker Package ·'), findsNothing);
     expect(find.textContaining('Adapter unavailable'), findsNothing);
     expect(find.textContaining('Adapter version'), findsNothing);
     expect(find.textContaining('Signature'), findsNothing);
@@ -1300,6 +1304,17 @@ void main() {
     expect(find.text('Default Model'), findsNothing);
     expect(find.text('Allowed Models'), findsNothing);
     expect(find.text('Permissions'), findsNothing);
+
+    await tester.tap(find.text('Workspace').first);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Advanced Diagnostics'));
+    await tester.tap(find.text('Advanced Diagnostics'));
+    await tester.pumpAndSettle();
+    expect(find.text('Worker Packages'), findsOneWidget);
+    await tester.tap(find.text('ChatGPT local'));
+    await tester.pumpAndSettle();
+    expect(find.text('Package ID'), findsOneWidget);
+    expect(find.text('Signing key'), findsWidgets);
   });
 
   testWidgets(
@@ -1363,6 +1378,7 @@ void main() {
       String authStrategy = 'browser_auth',
       List<String> permissions = const ['workstream_filesystem'],
       Map<String, Object?> adapterConfig = const {},
+      String? readinessIssueCode,
     }) {
       return LocalConfiguredWorker(
         id: 'worker-1',
@@ -1380,6 +1396,7 @@ void main() {
         status: status,
         readinessState: readinessState,
         credentialStatus: credentialStatus,
+        readinessIssueCode: readinessIssueCode,
         revision: 42,
         createdAt: '2026-01-01T00:00:00Z',
         updatedAt: '2026-01-01T00:00:00Z',
@@ -1399,12 +1416,43 @@ void main() {
       expect(deriveLocalWorkerHealth(worker), 'Disabled');
     });
 
-    test('exposes the exact readiness state without guessing from credentials',
-        () {
-      for (final state in WorkerReadinessState.values) {
-        expect(deriveLocalWorkerHealth(makeWorker(readinessState: state)),
-            state.label);
-      }
+    test('maps package state into the limited Workers row vocabulary', () {
+      expect(
+        deriveLocalWorkerHealth(makeWorker(
+          status: LocalWorkerStatus.ready,
+          readinessState: WorkerReadinessState.ready,
+        )),
+        'Ready',
+      );
+      expect(
+        deriveLocalWorkerHealth(makeWorker(
+          status: LocalWorkerStatus.needsAttention,
+          readinessState: WorkerReadinessState.setupRequired,
+        )),
+        'Setup required',
+      );
+      expect(
+        deriveLocalWorkerHealth(makeWorker(
+          status: LocalWorkerStatus.needsAttention,
+          readinessState: WorkerReadinessState.adapterUnavailable,
+        )),
+        'Needs attention',
+      );
+      expect(
+        deriveLocalWorkerHealth(makeWorker(
+          status: LocalWorkerStatus.needsAttention,
+          readinessState: WorkerReadinessState.adapterUnavailable,
+          readinessIssueCode: 'cli_not_found',
+        )),
+        'Not installed',
+      );
+      expect(
+        deriveLocalWorkerHealth(makeWorker(
+          status: LocalWorkerStatus.disabled,
+          readinessState: WorkerReadinessState.disabled,
+        )),
+        'Disabled',
+      );
     });
   });
 

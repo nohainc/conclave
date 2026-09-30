@@ -45,6 +45,7 @@ describe("V7 Workspace inventory recovery acceptance", () => {
         worker_id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, owner_user_id TEXT NOT NULL,
         worker_type_id TEXT NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL,
         readiness_state TEXT NOT NULL DEFAULT 'test_failed',
+        readiness_issue_code TEXT,
         auth_strategy TEXT NOT NULL, default_model TEXT, allowed_models_json TEXT NOT NULL,
         capabilities_json TEXT NOT NULL, local_permissions_summary_json TEXT NOT NULL,
         local_concurrency_limit INTEGER NOT NULL, adapter_version TEXT, credential_status TEXT NOT NULL,
@@ -162,19 +163,21 @@ describe("V7 Workspace inventory recovery acceptance", () => {
           ...report,
           workerId: "worker-unready",
           name: "Unready Worker",
-          readinessState: "unsupported_cli_version",
+          readinessState: "setup_required",
+          readinessIssueCode: "setup_required",
         },
       ],
     });
     expect(
       sqlite
         .prepare(
-          "SELECT status, readiness_state FROM workspace_worker_inventory WHERE worker_id = ?",
+          "SELECT status, readiness_state, readiness_issue_code FROM workspace_worker_inventory WHERE worker_id = ?",
         )
         .get("worker-unready"),
     ).toMatchObject({
       status: "needs_attention",
-      readiness_state: "unsupported_cli_version",
+      readiness_state: "setup_required",
+      readiness_issue_code: "setup_required",
     });
 
     await internal.recordWorkerInventory({ fullSnapshot: true, workers: [] });

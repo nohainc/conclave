@@ -3,18 +3,18 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 
 import 'bundled_adapter_package.dart';
-import 'first_party_worker_adapter_descriptor.dart';
+import 'first_party_worker_registry.dart';
 
 /// Loads a package generated and verified as part of the Workspace build.
 Future<BundledAdapterPackage?> loadBundledFirstPartyAdapter(
   String workerTypeId, {
   AssetBundle? bundle,
 }) async {
-  final descriptor = FirstPartyWorkerAdapterDescriptor.forProductOrAdapterId(
+  final descriptor = FirstPartyWorkerPackage.forProductOrPackageId(
     workerTypeId,
   );
   if (descriptor == null) return null;
-  final adapterPackageId = descriptor.adapterPackageId;
+  final adapterPackageId = descriptor.packageId;
   final assets = bundle ?? rootBundle;
   try {
     final archive = await assets.load('assets/adapters/$adapterPackageId.tgz');

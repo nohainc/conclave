@@ -8,13 +8,15 @@ open before v7 becomes the declared implemented baseline.
 Current execution direction:
 
 ```text
-Conclave AX -> Conclave Cloud -> Conclave Workspace -> local Worker -> adapter process
+Conclave AX -> Conclave Cloud -> Conclave Workspace -> Worker Package process -> provider tool
 ```
 
 Projects are the collaboration boundary. Workspaces provide machine execution.
-Configured Workers are created/authenticated locally in Conclave Workspace,
-belong to exactly one Workspace, and synchronize only safe inventory/readiness
-to Cloud. Workers never connect directly to Conclave Cloud.
+Worker slots are created and managed in Conclave Workspace, belong to exactly
+one Workspace, and synchronize only safe inventory/readiness to Cloud. Provider
+authentication and tool interaction are mediated by the Worker Package and
+remain owned by the provider CLI. Workspace never executes provider tools
+directly. Worker Packages never connect directly to Conclave Cloud.
 
 The first-party v1 product catalog is frozen by
 [ADR-015](docs/decisions/ADR-015-first-party-worker-v1-contract.md): exactly

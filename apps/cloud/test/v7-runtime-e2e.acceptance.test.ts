@@ -2,9 +2,17 @@ import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { createServer, type Server } from "node:http";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface } from "node:readline";
-import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { dispatchTaskAssignment } from "../src/assignment-dispatcher.js";
@@ -39,9 +47,11 @@ const migrationFiles = [
   "0029_workspace_sessions.sql",
   "0024_v7_worker_scheduling.sql",
   "0025_v7_assignment_runtime.sql",
+  "0033_durable_worker_sessions.sql",
   "0031_worker_readiness_state.sql",
   "0032_worker_inventory_safe_projection.sql",
   "0033_workstream_worker_usage_policy.sql",
+  "0034_worker_setup_readiness.sql",
 ];
 
 class LocalD1Statement {
@@ -136,28 +146,53 @@ describe("V7 runtime assignment acceptance", () => {
       label: `${transportMode} fixture adapter`,
       transportMode,
       firstPartyAdapter: null,
+      realProvider: false,
     })),
     {
       label: "Codex adapter with a fake CLI",
       transportMode: "websocket" as const,
       firstPartyAdapter: "codex",
+      realProvider: false,
     },
     {
       label: "Antigravity adapter with a fake CLI",
       transportMode: "websocket" as const,
       firstPartyAdapter: "antigravity",
+      realProvider: false,
     },
+    ...(process.env.CONCLAVE_TEST_REAL_CLOUD_CODEX === "1"
+      ? [
+          {
+            label: "Codex Worker Package with the real Codex CLI (opt-in)",
+            transportMode: "websocket" as const,
+            firstPartyAdapter: "codex" as const,
+            realProvider: true,
+          },
+        ]
+      : []),
+    ...(process.env.CONCLAVE_TEST_REAL_CLOUD_AGY === "1"
+      ? [
+          {
+            label: "Antigravity Worker Package with the real agy CLI (opt-in)",
+            transportMode: "websocket" as const,
+            firstPartyAdapter: "antigravity" as const,
+            realProvider: true,
+          },
+        ]
+      : []),
   ] as const;
 
   it.each(scenarios)(
     "executes Cloud assignment through Workspace for $label and persists the result",
-    async ({ transportMode, firstPartyAdapter }) => {
+    async ({ transportMode, firstPartyAdapter, realProvider = false }) => {
       const workerTypeId =
         firstPartyAdapter === "codex"
           ? "chatgpt"
           : firstPartyAdapter === "antigravity"
             ? "gemini"
             : "fixture-worker";
+      const modelId = realProvider ? null : "fixture-model";
+      const assignmentTimeoutMs = realProvider ? 180_000 : 30_000;
       const sqlite = new DatabaseSync(":memory:");
       const gatewayLogs: string[] = [];
       vi.spyOn(console, "log").mockImplementation((record) => {
@@ -188,9 +223,9 @@ describe("V7 runtime assignment acceptance", () => {
         VALUES ('grant-e2e', 'project-e2e', 'workspace-v7-e2e', 'owner', 'active', 'project_repository', '["repository:read","repository:write"]', '["code"]', '{"maxConcurrentAssignments":1}', '${now}', '${now}');
       INSERT INTO workstreams VALUES ('workstream-e2e', 'project-e2e', 'Display Workstream Name', 'active', '{}', 'owner', '${now}', '${now}');
       INSERT INTO workstream_worker_usage_policies (workstream_id, policy_json, updated_by_user_id, updated_at)
-        VALUES ('workstream-e2e', '{"version":1,"fallbackPolicy":"configured_only","roles":{"implementer":{"workerId":"worker-local-v7-e2e","model":"fixture-model"}}}', 'owner', '${now}');
+        VALUES ('workstream-e2e', '${JSON.stringify({ version: 1, fallbackPolicy: "configured_only", roles: { implementer: { workerId: "worker-local-v7-e2e", ...(modelId ? { model: modelId } : {}) } } })}', 'owner', '${now}');
       INSERT INTO workstream_execution_policies (workstream_id, mode, primary_workspace_id, require_checkout, max_concurrent_work_requests, allowed_configured_worker_ids_json, allowed_worker_type_ids_json, allowed_providers_json, allowed_models_json)
-        VALUES ('workstream-e2e', 'stateless', NULL, 0, 1, '[]', '["${workerTypeId}"]', '[]', '["fixture-model"]');
+        VALUES ('workstream-e2e', 'stateless', NULL, 0, 1, '[]', '["${workerTypeId}"]', '[]', '${JSON.stringify(modelId ? [modelId] : [])}');
       INSERT INTO runs (id, project_id, workstream_id, status, created_at, updated_at)
         VALUES ('run-e2e', 'project-e2e', 'workstream-e2e', 'created', '${now}', '${now}');
       INSERT INTO workflow_definitions (id, project_id, name, description, current_version_id, created_by_user_id, created_at, updated_at)
@@ -200,9 +235,9 @@ describe("V7 runtime assignment acceptance", () => {
       INSERT INTO work_requests (id, workstream_id, requested_by_user_id, mode, workflow_definition_id, workflow_version_id, workflow_snapshot_json, status, input_json, created_at, updated_at)
         VALUES ('request-e2e', 'workstream-e2e', 'owner', 'stateless', 'workflow-e2e', 'workflow-version-e2e', '{}', 'running', '{}', '${now}', '${now}');
       INSERT INTO workflow_steps (id, workflow_version_id, name, role, required_capabilities_json, execution_class, step_order, independent_from_json, approval, timeout_ms, output_contract_json)
-        VALUES ('step-e2e', 'workflow-version-e2e', 'Fixture execution', 'implementer', '["code"]', 'stateless_read', 0, '[]', 'none', 30000, '{}');
+        VALUES ('step-e2e', 'workflow-version-e2e', 'Fixture execution', 'implementer', '["code"]', 'stateless_read', 0, '[]', 'none', ${assignmentTimeoutMs}, '{}');
       INSERT INTO workflow_tasks (id, work_request_id, workflow_version_id, workflow_step_id, execution_class, role, required_capabilities_json, approval, timeout_ms, output_contract_json, status, attempt, created_at, updated_at)
-        VALUES ('task-e2e', 'request-e2e', 'workflow-version-e2e', 'step-e2e', 'stateless_read', 'implementer', '["code"]', 'none', 30000, '{}', 'queued', 0, '${now}', '${now}');
+        VALUES ('task-e2e', 'request-e2e', 'workflow-version-e2e', 'step-e2e', 'stateless_read', 'implementer', '["code"]', 'none', ${assignmentTimeoutMs}, '{}', 'queued', 0, '${now}', '${now}');
     `);
 
       const env = {
@@ -363,6 +398,40 @@ describe("V7 runtime assignment acceptance", () => {
       }
 
       scratch = mkdtempSync(join(tmpdir(), "conclave-v7-e2e-"));
+      let workspaceEnvironment = process.env;
+      if (firstPartyAdapter && !realProvider) {
+        const providerBin = join(scratch, "provider-bin");
+        mkdirSync(providerBin, { recursive: true });
+        const cliName = firstPartyAdapter === "codex" ? "codex" : "agy";
+        const fakeCli = join(providerBin, cliName);
+        writeFileSync(
+          fakeCli,
+          firstPartyAdapter === "codex"
+            ? `#!/bin/sh
+if [ "$1" = "--version" ]; then echo 'codex 1.2.3'; exit 0; fi
+if [ "$1" = "login" ] && [ "$2" = "status" ]; then echo 'Logged in'; exit 0; fi
+cat >/dev/null
+printf '%s\\n' 'fake Codex execution' > "$PWD/first-party-cli.txt"
+printf '%s\\n' '{"type":"turn.started"}'
+printf '%s\\n' '{"type":"item.completed","item":{"type":"agent_message","text":"fake Codex execution completed"}}'
+printf '%s\\n' '{"type":"turn.completed"}'
+`
+            : `#!/bin/sh
+if [ "$1" = "--version" ]; then echo 'agy 4.5.6'; exit 0; fi
+cat >/dev/null
+printf '%s\\n' 'fake Antigravity execution' > "$PWD/first-party-cli.txt"
+printf '%s\\n' '{"event":"init","conversation_id":"fixture","init":{"cwd":"."}}'
+printf '%s\\n' '{"event":"step_update","step_update":{"state":"RUNNING"}}'
+printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"fake Antigravity execution completed"}}'
+`,
+          { mode: 0o700 },
+        );
+        chmodSync(fakeCli, 0o700);
+        workspaceEnvironment = {
+          ...process.env,
+          PATH: `${providerBin}${delimiter}${process.env.PATH ?? ""}`,
+        };
+      }
       child = spawn(
         process.env.DART_EXECUTABLE ?? "dart",
         [
@@ -377,11 +446,12 @@ describe("V7 runtime assignment acceptance", () => {
             : "",
           transportMode !== "websocket" ? runtimeCredential : "",
           firstPartyAdapter ?? "",
+          realProvider ? "real" : "fake",
         ],
         {
           cwd: fileURLToPath(new URL("../../host/", import.meta.url)),
           stdio: ["pipe", "pipe", "pipe"],
-          env: process.env,
+          env: workspaceEnvironment,
         },
       );
       hostBridge.current = new BridgeSocket(child);
@@ -420,6 +490,17 @@ describe("V7 runtime assignment acceptance", () => {
             await privateGateway.handleMessage(message, gatewaySession);
             if (message.type === "worker.inventory") resolveInventory();
             if (message.type === "assignment.result") resolveResult(message);
+            if (message.type === "assignment.error") {
+              const payload = message.payload as
+                { error?: { code?: unknown; message?: unknown } } | undefined;
+              const error = payload?.error as
+                { code?: unknown; message?: unknown } | undefined;
+              rejectHarness(
+                new Error(
+                  `Workspace reported assignment.error: ${String(error?.code ?? "unknown")}: ${String(error?.message ?? "no message")}`,
+                ),
+              );
+            }
           })
           .catch((error: unknown) => {
             rejectHarness(
@@ -449,7 +530,7 @@ describe("V7 runtime assignment acceptance", () => {
                     `Acceptance stalled; host messages: ${hostMessages.map((message) => message.type).join(",")}; fallback requests: ${fallbackRequests.join(",")}`,
                   ),
                 ),
-              45000,
+              realProvider ? 240000 : 45000,
             ),
           ),
         ]);
@@ -544,15 +625,17 @@ describe("V7 runtime assignment acceptance", () => {
           task: {
             id: "task-e2e",
             role: "implementer",
-            objective: "execute fixture",
+            objective: realProvider
+              ? "Reply with exactly OK. Do not use tools."
+              : "execute fixture",
             capabilities: ["code"],
             projectId: "project-e2e",
             requestedByUserId: "owner",
-            model: "fixture-model",
+            ...(modelId ? { model: modelId } : {}),
             workstreamId: "workstream-e2e",
             executionClass: "stateless_read",
-            input: { objective: "acceptance" },
-            timeoutMs: 30000,
+            input: realProvider ? {} : { objective: "acceptance" },
+            timeoutMs: assignmentTimeoutMs,
           },
         },
       );
@@ -668,6 +751,9 @@ describe("V7 runtime assignment acceptance", () => {
         expect(
           readFileSync(join(output.cwd, "v7-e2e-output.txt"), "utf8"),
         ).toBe(output.file);
+      } else if (realProvider) {
+        expect(persisted.output?.text).toMatch(/\bOK\b/i);
+        expect(persisted.output?.text?.trim().length).toBeGreaterThan(0);
       } else {
         const expectedOutput =
           firstPartyAdapter === "codex"
@@ -712,9 +798,26 @@ describe("V7 runtime assignment acceptance", () => {
       expect(String(task?.output_json)).toContain(
         firstPartyAdapter === null
           ? "written-by-real-adapter-process"
-          : `fake ${firstPartyAdapter === "codex" ? "Codex" : "Antigravity"} execution completed`,
+          : realProvider
+            ? "OK"
+            : `fake ${firstPartyAdapter === "codex" ? "Codex" : "Antigravity"} execution completed`,
       );
+      if (realProvider) {
+        for (const name of [
+          "OPENAI_API_KEY",
+          "CODEX_API_KEY",
+          "GEMINI_API_KEY",
+          "GOOGLE_API_KEY",
+          "GOOGLE_APPLICATION_CREDENTIALS",
+        ]) {
+          const value = process.env[name];
+          if (value) {
+            expect(String(assignment?.output_json)).not.toContain(value);
+            expect(JSON.stringify(gatewayOutbound)).not.toContain(value);
+          }
+        }
+      }
     },
-    60000,
+    300000,
   );
 });

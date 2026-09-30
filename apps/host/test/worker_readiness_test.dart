@@ -2,10 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_host/adapter_prerequisite.dart';
 import 'package:conclave_host/configured_worker_registry.dart';
-import 'package:conclave_host/first_party_worker_adapter_descriptor.dart';
-import 'package:conclave_host/first_party_worker_cli_locator.dart';
 import 'package:conclave_host/platform_runtime.dart';
 import 'package:conclave_host/v7_adapter_package_store.dart';
 import 'package:conclave_host/worker_trust_policy.dart';
@@ -40,76 +37,40 @@ class _ReadinessPlatform implements PlatformRuntime {
 class _MissingFirstPartyAdapterStore extends V7AdapterPackageStore {
   _MissingFirstPartyAdapterStore({
     required super.root,
-    required super.cliLocator,
   }) : super(
           trustPolicy: WorkerTrustPolicy(),
           allowedPermissions: WorkerPermission.values.toSet(),
         );
 
   final ensuredPackageIds = <String>[];
-  final ensuredSearchDirectories = <List<String>>[];
 
   @override
   Future<bool> hasVerifiedActivePackage(String workerTypeId,
-          [List<String>? localPermissions,
-          List<String> additionalPathDirectories = const []]) async =>
+          [List<String>? localPermissions]) async =>
       false;
 
   @override
   Future<bool> ensureFirstPartyAdapterAvailable(
-    String workerTypeId, {
-    List<String> additionalPathDirectories = const [],
-  }) async {
+    String workerTypeId,
+  ) async {
     ensuredPackageIds.add(workerTypeId);
-    ensuredSearchDirectories.add(additionalPathDirectories);
     return false;
   }
 }
 
 void main() {
-  var workerId = 0;
-
-  test('readiness assessments expose stable reason codes', () {
-    expect(
-      const WorkerReadinessAssessment(WorkerReadinessState.notInstalled)
-          .reasonCode
-          .wireValue,
-      'cli_not_found',
+  test('readiness assessments retain package issue codes directly', () {
+    const assessment = WorkerReadinessAssessment(
+      WorkerReadinessState.setupRequired,
+      issueCode: 'setup_required',
     );
-    expect(
-      const WorkerReadinessAssessment(
-        WorkerReadinessState.unsupportedCliVersion,
-      ).reasonCode.wireValue,
-      'unsupported_cli_version',
-    );
-    expect(
-      const WorkerReadinessAssessment(WorkerReadinessState.signInRequired)
-          .reasonCode
-          .wireValue,
-      'authentication_required',
-    );
-    expect(
-      const WorkerReadinessAssessment(WorkerReadinessState.testFailed)
-          .reasonCode
-          .wireValue,
-      'execution_test_failed',
-    );
-    expect(
-      const WorkerReadinessAssessment(WorkerReadinessState.ready)
-          .reasonCode
-          .wireValue,
-      'ready',
-    );
+    expect(assessment.state, WorkerReadinessState.setupRequired);
+    expect(assessment.issueCode, 'setup_required');
   });
 
-  test('readiness restores the first-party fallback before adapter probing',
-      () async {
+  test('readiness ensures the mapped package before probing', () async {
     final directory = await Directory.systemTemp.createTemp('worker-fallback-');
     addTearDown(() => directory.delete(recursive: true));
-    final cliDirectory = Directory('${directory.path}/bin');
-    await cliDirectory.create(recursive: true);
-    final cli = File('${cliDirectory.path}/codex');
-    await cli.writeAsString('fake codex CLI');
     final registry = LocalConfiguredWorkerRegistry(
       dataDirectory: directory,
       workspaceId: 'workspace-fallback',
@@ -121,21 +82,9 @@ void main() {
       workerTypeId: 'chatgpt',
       authStrategy: 'browser_auth',
       localPermissions: const ['workstream_filesystem', 'shell_execution'],
-      executablePath: cli.path,
-      cliVersion: '0.158.0',
     );
     final adapterStore = _MissingFirstPartyAdapterStore(
       root: Directory('${directory.path}/adapters'),
-      cliLocator: FirstPartyWorkerCliExecutableLocator(
-        environment: const {'PATH': ''},
-        knownDirectories: const [],
-        probeExecutable: (_, {searchPath}) async =>
-            const AdapterPrerequisiteResult(
-          satisfied: true,
-          detectedVersion: '0.158.0',
-          message: 'CLI is available.',
-        ),
-      ),
     );
     final monitor = WorkerReadinessMonitor(
       registry: registry,
@@ -145,13 +94,10 @@ void main() {
     await monitor.checkNow();
 
     expect(adapterStore.ensuredPackageIds, ['codex']);
-    expect(adapterStore.ensuredSearchDirectories, [
-      [cliDirectory.path],
-    ]);
     final worker = (await registry.list()).single;
     expect(worker.readinessState, WorkerReadinessState.adapterUnavailable);
-    expect(worker.executablePath, cli.path);
-    expect(worker.cliVersion, '0.158.0');
+    expect(worker.readinessIssueCode, 'package_unavailable');
+    expect(worker.lastPassiveProbeAt, isNotNull);
     await monitor.dispose();
   });
 
@@ -190,19 +136,18 @@ void main() {
       assessWorker: (_) async {
         checks++;
         return const WorkerReadinessAssessment(
-          WorkerReadinessState.unsupportedCliVersion,
-          executablePath: '/opt/homebrew/bin/codex',
-          cliVersion: '1.2.3',
+          WorkerReadinessState.testFailed,
+          issueCode: 'unsupported_cli_version',
         );
       },
     );
     await monitor.checkNow();
     final updated = await registry.find(worker.id);
     expect(checks, 1);
-    expect(updated!.readinessState, WorkerReadinessState.unsupportedCliVersion);
+    expect(updated!.readinessState, WorkerReadinessState.testFailed);
+    expect(updated.readinessIssueCode, 'unsupported_cli_version');
+    expect(updated.lastPassiveProbeAt, isNotNull);
     expect(updated.status, LocalWorkerStatus.needsAttention);
-    expect(updated.executablePath, '/opt/homebrew/bin/codex');
-    expect(updated.cliVersion, '1.2.3');
     await Future<void>.delayed(Duration.zero);
     expect(syncs, 1);
     final restoredRegistry = LocalConfiguredWorkerRegistry(
@@ -212,7 +157,7 @@ void main() {
       idGenerator: () => 'unused',
     );
     expect((await restoredRegistry.find(worker.id))!.readinessState,
-        WorkerReadinessState.unsupportedCliVersion);
+        WorkerReadinessState.testFailed);
     await monitor.start();
     await Future<void>.delayed(const Duration(milliseconds: 60));
     await monitor.dispose();
@@ -254,7 +199,7 @@ void main() {
     expect(checks, 0);
     expect((await registry.find(worker.id))!.readinessState,
         WorkerReadinessState.disabled);
-    await monitor.checkNow(executionTest: true);
+    await monitor.checkNow(mode: LocalWorkerProbeMode.live);
     final tested = (await registry.find(worker.id))!;
     expect(tested.status, LocalWorkerStatus.disabled);
     expect(tested.readinessState, WorkerReadinessState.disabled);
@@ -294,11 +239,16 @@ void main() {
       ),
       assessWorker: (worker) async {
         testedTypes.add(worker.workerTypeId);
-        return const WorkerReadinessAssessment(WorkerReadinessState.ready);
+        return const WorkerReadinessAssessment(
+          WorkerReadinessState.ready,
+          toolVersion: '1.2.3',
+          replaceToolVersion: true,
+        );
       },
     );
 
-    await monitor.checkNow(executionTest: true, workerTypeId: 'gemini');
+    await monitor.checkNow(
+        mode: LocalWorkerProbeMode.live, workerTypeId: 'gemini');
 
     expect(testedTypes, ['gemini']);
     final gemini = (await registry.list())
@@ -307,7 +257,66 @@ void main() {
         .singleWhere((worker) => worker.workerTypeId == 'chatgpt');
     expect(gemini.lastLiveTestPassed, isTrue);
     expect(gemini.lastLiveTestAt, isNotNull);
+    expect(gemini.toolVersion, '1.2.3');
     expect(chatgpt.lastLiveTestAt, isNull);
+    await monitor.dispose();
+  });
+
+  test('Gemini passive setup state is preserved separately from live result',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('gemini-probe-');
+    addTearDown(() => directory.delete(recursive: true));
+    final registry = LocalConfiguredWorkerRegistry(
+      dataDirectory: directory,
+      workspaceId: 'workspace-gemini-probe',
+      platform: _ReadinessPlatform(),
+      idGenerator: () => 'worker-gemini',
+    );
+    final worker = await registry.create(
+      name: 'Gemini',
+      workerTypeId: 'gemini',
+      authStrategy: 'browser_auth',
+      credentialStatus: LocalWorkerCredentialStatus.ready,
+    );
+    var livePasses = false;
+    final monitor = WorkerReadinessMonitor(
+      registry: registry,
+      adapterStore: V7AdapterPackageStore(
+        root: Directory('${directory.path}/adapters'),
+        trustPolicy: WorkerTrustPolicy(),
+        allowedPermissions: WorkerPermission.values.toSet(),
+      ),
+      assessWorker: (current) async =>
+          livePasses && current.lastLiveTestAt == null
+              ? const WorkerReadinessAssessment(WorkerReadinessState.ready)
+              : const WorkerReadinessAssessment(
+                  WorkerReadinessState.setupRequired,
+                  issueCode: 'setup_required',
+                ),
+    );
+
+    await monitor.checkNow();
+    final passive = (await registry.find(worker.id))!;
+    expect(passive.status, LocalWorkerStatus.needsAttention);
+    expect(passive.readinessState, WorkerReadinessState.setupRequired);
+    expect(passive.readinessIssueCode, 'setup_required');
+    expect(passive.lastPassiveProbeAt, isNotNull);
+    expect(passive.lastLiveTestAt, isNull);
+
+    livePasses = true;
+    await monitor.checkNow(mode: LocalWorkerProbeMode.live);
+    final live = (await registry.find(worker.id))!;
+    expect(live.status, LocalWorkerStatus.ready);
+    expect(live.readinessState, WorkerReadinessState.setupRequired);
+    expect(live.readinessIssueCode, 'setup_required');
+    expect(live.lastLiveTestPassed, isTrue);
+    expect(live.lastLiveTestAt, isNotNull);
+
+    await monitor.checkNow();
+    final rechecked = (await registry.find(worker.id))!;
+    expect(rechecked.status, LocalWorkerStatus.ready);
+    expect(rechecked.readinessState, WorkerReadinessState.setupRequired);
+    expect(rechecked.lastLiveTestPassed, isTrue);
     await monitor.dispose();
   });
 
@@ -343,80 +352,20 @@ void main() {
           : const WorkerReadinessAssessment(WorkerReadinessState.ready),
     );
 
-    await monitor.checkNow(executionTest: true, workerTypeId: 'chatgpt');
+    await monitor.checkNow(
+        mode: LocalWorkerProbeMode.live, workerTypeId: 'chatgpt');
     final failed = (await registry.find(worker.id))!;
     expect(failed.lastLiveTestPassed, isFalse);
     expect(failed.lastLiveTestDetails, contains('execution_test_failed'));
-    expect(failed.lastLiveTestDetails, contains('local integration'));
+    expect(failed.lastLiveTestDetails, contains('Worker Package test failed'));
 
     shouldFail = false;
-    await monitor.checkNow(executionTest: true, workerTypeId: 'chatgpt');
+    await monitor.checkNow(
+        mode: LocalWorkerProbeMode.live, workerTypeId: 'chatgpt');
     final passed = (await registry.find(worker.id))!;
     expect(passed.lastLiveTestPassed, isTrue);
     expect(passed.lastLiveTestDetails, isNull);
     await monitor.dispose();
-  });
-
-  test('login-item startup locates and persists both CLIs with minimal PATH',
-      () async {
-    if (Platform.isWindows) return;
-    final directory = await Directory.systemTemp.createTemp('worker-login-');
-    addTearDown(() => directory.delete(recursive: true));
-    final cliDirectory = Directory('${directory.path}/home/.local/bin');
-    await cliDirectory.create(recursive: true);
-    for (final descriptor in FirstPartyWorkerAdapterDescriptor.all) {
-      final name = descriptor.executableCandidates.single;
-      final executable = File('${cliDirectory.path}/$name');
-      await executable.writeAsString(
-        '#!/bin/sh\nif [ "\$1" = "--version" ]; then '
-        'echo "$name 1.2.3"; fi\nexit 0\n',
-      );
-      final chmod = await Process.run('chmod', ['755', executable.path]);
-      expect(chmod.exitCode, 0);
-    }
-    final registry = LocalConfiguredWorkerRegistry(
-      dataDirectory: directory,
-      workspaceId: 'workspace-login',
-      platform: _ReadinessPlatform(),
-      idGenerator: () => 'worker-${++workerId}',
-    );
-    for (final descriptor in FirstPartyWorkerAdapterDescriptor.all) {
-      await registry.create(
-        name: descriptor.productName,
-        workerTypeId: descriptor.productWorkerTypeId,
-        authStrategy: descriptor.authStrategy,
-        localPermissions: descriptor.requiredLocalPermissions,
-      );
-    }
-    final monitor = WorkerReadinessMonitor(
-      registry: registry,
-      adapterStore: V7AdapterPackageStore(
-        root: Directory('${directory.path}/adapters'),
-        trustPolicy: WorkerTrustPolicy(),
-        allowedPermissions: WorkerPermission.values.toSet(),
-        cliLocator: FirstPartyWorkerCliExecutableLocator(
-          environment: {
-            'PATH': '/usr/bin:/bin',
-            'HOME': '${directory.path}/home',
-          },
-        ),
-      ),
-      interval: const Duration(hours: 1),
-    );
-    await monitor.start();
-    await monitor.checkNow();
-    await monitor.dispose();
-    final saved = await registry.list();
-    for (final descriptor in FirstPartyWorkerAdapterDescriptor.all) {
-      final worker = saved.singleWhere(
-        (item) => item.workerTypeId == descriptor.productWorkerTypeId,
-      );
-      expect(
-        worker.executablePath,
-        '${cliDirectory.path}/${descriptor.executableCandidates.single}',
-      );
-      expect(worker.cliVersion, '1.2.3');
-    }
   });
 
   test('startup quarantines cached Ready until live checks pass', () async {

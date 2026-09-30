@@ -1,6 +1,6 @@
 # Conclave AX Architecture
 
-**Current architecture:** v7 — Workspace-owned Workers and managed adapter
+**Current architecture:** v7 — Workspace-owned Workers and managed Worker Package
 execution. V7 is the sole current Worker ownership model and remains an active
 implementation target until its production release gates pass.
 
@@ -10,7 +10,7 @@ implementation target until its production release gates pass.
 > whether their local ChatGPT and Gemini Workers are ready and execute work.**
 
 ```text
-Conclave AX -> Conclave Cloud -> Conclave Workspace -> Worker adapter process
+Conclave AX -> Conclave Cloud -> Conclave Workspace -> Worker Package process
 ```
 
 - **Conclave AX** is the human-facing web application for Projects, Workstreams,
@@ -20,11 +20,16 @@ Conclave AX -> Conclave Cloud -> Conclave Workspace -> Worker adapter process
   plane. It stores safe Workspace inventory and never receives provider
   credentials.
 - **Conclave Workspace** is the persistent desktop runtime and machine security
-  boundary. It owns local Workers, credentials, permissions, prerequisites,
-  Work Root, adapter admission, process execution and local diagnostics.
+  boundary. It owns local Workers, Conclave runtime credentials, permissions,
+  Work Root, Worker Package admission, process execution and local diagnostics.
 - **Worker Type** identifies a managed integration. The frozen first-party v1
-  catalog is ChatGPT via Codex CLI and Gemini via Antigravity CLI; broader
-  adapters remain implementation/migration scope. Models are not Worker Types.
+  catalog is ChatGPT via its Codex-backed Worker Package and Gemini via its
+  Antigravity-backed Worker Package; broader integrations remain
+  implementation/migration scope. Models are not Worker Types.
+
+Conclave Workspace never discovers, versions, authenticates with, or executes
+provider tools directly. It launches an admitted Worker Package through the
+Local Worker Protocol; the package owns all provider-specific tool interaction.
 
 Each configured Worker belongs to exactly one Workspace. AX Workstream policy
 chooses the Workspace/Worker for each task role, model, fallback behavior, and
@@ -36,10 +41,10 @@ execution safety boundary. See [ADR-016](docs/decisions/ADR-016-ax-owned-worker-
 
 Conclave has three distinct protocol boundaries: the Human Product Protocol
 between AX and Cloud, the Workspace Runtime Protocol between the Workspace
-runtime and Cloud's Workspace Gateway, and the Local Adapter Protocol between
-the Workspace process supervisor and a local adapter child process. They share
+runtime and Cloud's Workspace Gateway, and the Local Worker Protocol between
+the Workspace process supervisor and a Worker Package process. They share
 canonical domain IDs/types but never share or forward wire envelopes. AX does
-not speak the Workspace Runtime Protocol, and adapters never connect directly
+not speak the Workspace Runtime Protocol, and Worker Packages never connect directly
 to Cloud. See the [Protocol Boundaries contract](docs/architecture/PROTOCOL_BOUNDARIES.md)
 for endpoint, credential, transport, and schema ownership.
 
@@ -48,10 +53,14 @@ Root. Stateful execution is fenced and restricted to the Workstream Primary
 Workspace. Stateless work may use another eligible Workspace only when grants
 and policy allow it.
 
-The V7 Local Adapter Protocol version 2.1 consists of
+The V7 Local Worker Protocol supports adapter schema versions 2.1 through
+2.5; first-party packages use 2.5 for explicit passive/live probes, structured
+checks, assignment deadlines, and Conclave session policies. It consists of
 `initialize.request/result`, `probe.request/result`, `execute.request`,
 `progress`, `result`, and `error`. Each exchange carries a request ID. Probe
-results contain readiness, a safe tool version, check kind, and bounded issues;
+results contain package-reported readiness, the requested mode, a safe
+provider-tool version, structured checks, stable issue codes, and bounded local
+diagnostics;
 the wire schema has no provider token or account-secret fields.
 
 ## Implementation status

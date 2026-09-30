@@ -3,7 +3,6 @@ import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:conclave_protocol/conclave_protocol.dart'
     hide workerProtocolVersion;
@@ -50,107 +49,87 @@ Object? _redactValue(Object? value, Iterable<String> secrets) {
   return value;
 }
 
-String _readinessTestDiagnostic({
-  required String workerTypeId,
-  required String prompt,
-  required bool promptSent,
-  required String readinessResult,
-  required String result,
-}) {
-  final workerName = switch (workerTypeId) {
-    'chatgpt' || 'codex' => 'ChatGPT / Codex',
-    'gemini' || 'antigravity' => 'Gemini / Antigravity',
-    _ => 'Worker',
-  };
-  final readinessCalls = switch (workerTypeId) {
-    'chatgpt' || 'codex' => '`codex --version`; `codex login status`',
-    'gemini' || 'antigravity' => '`agy --version`',
-    _ => 'local CLI version and readiness checks',
-  };
-  final executionCall = switch (workerTypeId) {
-    'chatgpt' ||
-    'codex' =>
-      '`codex --ask-for-approval never --sandbox workspace-write exec '
-          '--json --ephemeral --color never --skip-git-repo-check '
-          '--cd <Workspace test directory> -`',
-    'gemini' ||
-    'antigravity' =>
-      '`agy --input-format stream-json --output-format stream-json '
-          '--sandbox --print-timeout 5m`',
-    _ => 'local adapter execution test',
-  };
-  return [
-    'Worker: $workerName',
-    'Readiness calls: $readinessCalls',
-    'Readiness result: $readinessResult',
-    'Execution call: $executionCall',
-    'Prompt submitted to adapter: ${promptSent ? 'yes' : 'no'}',
-    'Prompt: "$prompt"',
-    'Expected: exactly "OK"',
-    'Received: $result',
-  ].join('\n');
-}
+/// Keeps only a small stderr tail for local package-crash diagnostics.
+/// Provider output belongs to the package; this is a fallback for a package
+/// that exits before it can return a Local Worker Protocol frame.
+class _PackageStderrTail {
+  _PackageStderrTail();
 
-String _boundedTestResult(Object? value) {
-  final text =
-      value is String && value.trim().isNotEmpty ? value : 'no result returned';
-  final visible = text.replaceAll(RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F]'), '');
-  if (visible.length <= 320) return visible;
-  return '${visible.substring(0, 317)}…';
-}
+  static const maxBytes = 768;
+  final List<int> _bytes = [];
 
-String _readinessCheckSummary(
-  String workerTypeId,
-  Map<String, Object?> probe,
-) {
-  final tool = switch (workerTypeId) {
-    'chatgpt' || 'codex' => 'Codex',
-    'gemini' || 'antigravity' => 'Antigravity',
-    _ => 'CLI',
-  };
-  final version = probe['toolVersion'];
-  if (probe['ready'] == true) {
-    return workerTypeId == 'chatgpt' || workerTypeId == 'codex'
-        ? 'passed: $tool ${version ?? 'version detected'}; login status passed'
-        : 'passed: $tool ${version ?? 'version detected'}; authentication is checked by the execution test';
+  void add(List<int> chunk) {
+    _bytes.addAll(chunk);
+    if (_bytes.length > maxBytes) {
+      _bytes.removeRange(0, _bytes.length - maxBytes);
+    }
   }
-  final issues = probe['issues'] as List? ?? const [];
-  final issue = issues.whereType<Map>().firstOrNull;
-  if (issue == null) return 'failed: no successful readiness result returned';
-  return 'failed: ${issue['code'] ?? 'readiness_failed'} — '
-      '${_boundedTestResult(issue['message'])}';
+
+  String readRedacted(Iterable<String> secrets) {
+    var value = utf8.decode(_bytes, allowMalformed: true).trim();
+    value = redactSecrets(value, secrets);
+    // Scrub common credential forms even when they were not supplied as
+    // explicit process secrets (for example, package-owned environment data).
+    value = value
+        .replaceAll(
+          RegExp(
+            r'(authorization\s*[:=]\s*(?:bearer\s+)?)[^\s,;]+',
+            caseSensitive: false,
+          ),
+          r'$1[REDACTED]',
+        )
+        .replaceAll(
+          RegExp(
+            r'''((?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|credential)\s*[:=]\s*)["']?[^\s,;"']+''',
+            caseSensitive: false,
+          ),
+          r'$1[REDACTED]',
+        )
+        .replaceAll(RegExp(r'\bAIza[0-9A-Za-z_-]{20,}\b'), '[REDACTED]')
+        .replaceAll(RegExp(r'\bsk-[A-Za-z0-9_-]{16,}\b'), '[REDACTED]');
+    return value.length <= maxBytes
+        ? value
+        : value.substring(value.length - maxBytes);
+  }
 }
 
 class WorkerProcessSpec {
   const WorkerProcessSpec({
     required this.workerId,
     required this.executable,
+    this.protocolVersion = v7AdapterProtocolVersion,
     this.arguments = const [],
     this.workingDirectory,
     this.environment = const {},
     this.allowedEnvironmentVariables = const {},
     this.secretValues = const {},
     this.maxConcurrentAssignments = 1,
+    this.includeParentEnvironment = true,
   });
 
   final String workerId;
   final String executable;
+  final String protocolVersion;
   final List<String> arguments;
   final String? workingDirectory;
   final Map<String, String> environment;
   final Set<String> allowedEnvironmentVariables;
   final Set<String> secretValues;
   final int maxConcurrentAssignments;
+  final bool includeParentEnvironment;
 
   WorkerProcessSpec copyWith({
     String? workingDirectory,
     int? maxConcurrentAssignments,
+    String? protocolVersion,
     Map<String, String>? environment,
     Set<String>? allowedEnvironmentVariables,
+    bool? includeParentEnvironment,
   }) =>
       WorkerProcessSpec(
         workerId: workerId,
         executable: executable,
+        protocolVersion: protocolVersion ?? this.protocolVersion,
         arguments: arguments,
         workingDirectory: workingDirectory ?? this.workingDirectory,
         environment: environment ?? this.environment,
@@ -159,6 +138,8 @@ class WorkerProcessSpec {
         secretValues: secretValues,
         maxConcurrentAssignments:
             maxConcurrentAssignments ?? this.maxConcurrentAssignments,
+        includeParentEnvironment:
+            includeParentEnvironment ?? this.includeParentEnvironment,
       );
 }
 
@@ -173,6 +154,11 @@ class _WorkerExecutionGate {
   int limit;
   int active = 0;
   final Queue<_QueuedWorkerExecution> waiting = Queue();
+}
+
+class _SessionExecutionGate {
+  bool active = false;
+  final Queue<Completer<void>> waiting = Queue<Completer<void>>();
 }
 
 typedef WorkerProcessLauncher = Future<Process> Function(
@@ -208,10 +194,12 @@ class WorkerProcessExecutor {
   int _requestSequence = 0;
   int _operationSequence = 0;
   final _activeProcesses = <String, Process>{};
+  final _v7ProcessCleanups = <String, Future<void>>{};
   final _activeResponses = <String, Completer<Map<String, Object?>>>{};
   final _cancelledOperations = <String>{};
   final _activeCancellations = <String, void Function()>{};
   final _workerGates = <String, _WorkerExecutionGate>{};
+  final _sessionGates = <String, _SessionExecutionGate>{};
   final _queuedOperations = <String, _QueuedWorkerExecution>{};
   final _reservedOperations = <String>{};
   final _cancelledBeforeLaunch = <String>{};
@@ -232,6 +220,7 @@ class WorkerProcessExecutor {
         spec.environment,
         allowedNames: spec.allowedEnvironmentVariables,
       ),
+      includeParentEnvironment: spec.includeParentEnvironment,
     );
   }
 
@@ -293,7 +282,8 @@ class WorkerProcessExecutor {
     required String prompt,
     Map<String, Object?> config = const {},
     String? model,
-    bool validateOnly = false,
+    String sessionPolicy = 'stateless',
+    String? sessionKey,
     Duration timeout = const Duration(minutes: 5),
     int maxStdoutBytes = 4 * 1024 * 1024,
     int maxStderrBytes = 1024 * 1024,
@@ -309,27 +299,62 @@ class WorkerProcessExecutor {
     if (maxStdoutBytes <= 0 || maxStderrBytes <= 0) {
       throw ArgumentError('adapter output limits must be positive');
     }
+    if (!const {'stateless', 'durable_session'}.contains(sessionPolicy) ||
+        (spec.protocolVersion == '2.5' &&
+            ((sessionPolicy == 'durable_session') != (sessionKey != null) ||
+                (sessionKey != null &&
+                    (sessionKey.trim().isEmpty || sessionKey.length > 256)))) ||
+        (sessionPolicy == 'durable_session' && spec.protocolVersion != '2.5') ||
+        (sessionKey != null &&
+            !const {'2.4', '2.5'}.contains(spec.protocolVersion))) {
+      throw V7AdapterExecutionFailure(
+        code: 'execution_failed',
+        message: executionErrorMessage('execution_failed'),
+      );
+    }
     final processId = operationId ??
         'host-adapter-${DateTime.now().microsecondsSinceEpoch}-${++_operationSequence}';
     final elapsed = Stopwatch()..start();
+    final sessionGateId = sessionPolicy == 'durable_session'
+        ? '${spec.workerId}\u0000$sessionKey'
+        : null;
+    var sessionGateAcquired = false;
+    var workerSlotAcquired = false;
     try {
+      if (sessionGateId != null) {
+        await _acquireSessionGate(sessionGateId, timeout);
+        sessionGateAcquired = true;
+      }
+      final capacityWait = timeout - elapsed.elapsed;
+      if (capacityWait <= Duration.zero) {
+        throw TimeoutException(
+          'Worker assignment timed out waiting for local capacity.',
+          timeout,
+        );
+      }
       await _acquireWorkerSlot(
         spec.workerId,
         spec.maxConcurrentAssignments,
         processId,
-        timeout,
+        capacityWait,
       );
+      workerSlotAcquired = true;
     } on TimeoutException {
       throw const V7AdapterExecutionFailure(
         code: 'timeout',
         message:
-            'The assignment exceeded its time limit while waiting for a local slot.',
+            'The assignment exceeded its time limit while waiting for local capacity.',
         retryable: true,
       );
+    } finally {
+      if (sessionGateAcquired && !workerSlotAcquired) {
+        _releaseSessionGate(sessionGateId!);
+      }
     }
     final remaining = timeout - elapsed.elapsed;
     if (remaining <= Duration.zero) {
       _releaseWorkerSlot(spec.workerId, processId);
+      if (sessionGateId != null) _releaseSessionGate(sessionGateId);
       throw const V7AdapterExecutionFailure(
         code: 'timeout',
         message:
@@ -345,7 +370,8 @@ class WorkerProcessExecutor {
         prompt: prompt,
         config: config,
         model: model,
-        validateOnly: validateOnly,
+        sessionPolicy: sessionPolicy,
+        sessionKey: sessionKey,
         timeout: remaining,
         maxStdoutBytes: maxStdoutBytes,
         maxStderrBytes: maxStderrBytes,
@@ -360,6 +386,7 @@ class WorkerProcessExecutor {
       );
     } finally {
       _releaseWorkerSlot(spec.workerId, processId);
+      if (sessionGateId != null) _releaseSessionGate(sessionGateId);
     }
   }
 
@@ -370,15 +397,16 @@ class WorkerProcessExecutor {
     required String prompt,
     required Map<String, Object?> config,
     required String? model,
-    required bool validateOnly,
+    required String sessionPolicy,
+    required String? sessionKey,
     required Duration timeout,
     required int maxStdoutBytes,
     required int maxStderrBytes,
     required String operationId,
     V7AdapterProgressHandler? onProgress,
   }) async {
-    final process = await _launcher(spec);
     final elapsed = Stopwatch()..start();
+    final process = await _launcher(spec);
     if (_cancelledBeforeLaunch.remove(operationId)) {
       await _terminateGracefully(process);
       throw const V7AdapterExecutionFailure(
@@ -389,6 +417,8 @@ class WorkerProcessExecutor {
     _activeProcesses[operationId] = process;
     var stdoutBytes = 0;
     var stderrBytes = 0;
+    final stderrTail = _PackageStderrTail();
+    final stderrDone = Completer<void>();
     final pending = <String, Completer<Map<String, Object?>>>{};
     var expectedAssignmentId = '';
     var expectedProgressRequestId = '';
@@ -399,7 +429,6 @@ class WorkerProcessExecutor {
       for (final completer in pending.values) {
         if (!completer.isCompleted) completer.completeError(error);
       }
-      unawaited(_terminator(process, force: true));
     }
 
     _activeCancellations[operationId] = () {
@@ -456,15 +485,24 @@ class WorkerProcessExecutor {
         });
     final stderrSubscription = process.stderr.listen((chunk) {
       stderrBytes += chunk.length;
+      stderrTail.add(chunk);
       if (stderrBytes > maxStderrBytes) {
-        fail(StateError('adapter stderr exceeded $maxStderrBytes bytes'));
+        fail(V7AdapterExecutionFailure(
+          code: 'execution_failed',
+          message: 'The local adapter exceeded its diagnostic output limit.',
+          localDiagnostic: stderrTail.readRedacted(spec.secretValues),
+        ));
       }
+    }, onDone: () {
+      if (!stderrDone.isCompleted) stderrDone.complete();
     });
-    unawaited(process.exitCode.then((code) {
+    unawaited(process.exitCode.then((code) async {
+      await stderrDone.future;
       if (!failed && pending.values.any((item) => !item.isCompleted)) {
-        fail(const V7AdapterExecutionFailure(
+        fail(V7AdapterExecutionFailure(
           code: 'execution_failed',
           message: 'The local adapter stopped before completing the request.',
+          localDiagnostic: stderrTail.readRedacted(spec.secretValues),
         ));
       }
     }));
@@ -480,7 +518,7 @@ class WorkerProcessExecutor {
       pending[requestId] = completer;
       process.stdin.writeln(serializeV7AdapterFrame({
         'type': type,
-        'protocolVersion': v7AdapterProtocolVersion,
+        'protocolVersion': spec.protocolVersion,
         'requestId': requestId,
         ...fields,
       }));
@@ -519,20 +557,25 @@ class WorkerProcessExecutor {
         throw StateError('adapter initialize version mismatch');
       }
       final probe = await request('probe.request', 'probe.result', {
+        if (const {'2.3', '2.4', '2.5'}.contains(spec.protocolVersion))
+          'mode': 'passive',
         'config': _safeAdapterProbeConfig(config),
       });
       if (probe['ready'] != true) {
+        final checks = probe['checks'] as List? ?? const [];
         final issues = probe['issues'] as List? ?? const [];
-        final issueCode = issues
-            .whereType<Map>()
-            .map((issue) => issue['code'])
+        final issueCode = [
+          ...checks
+              .whereType<Map>()
+              .where((check) => check['status'] == 'failed'),
+          ...issues.whereType<Map>(),
+        ]
+            .map((issue) => issue['issueCode'] ?? issue['code'])
             .whereType<String>()
             .firstWhere(
               (value) => const {
                 'worker_not_ready',
-                'cli_not_found',
                 'authentication_required',
-                'unsupported_cli_version',
                 'permission_denied',
                 'permission_configuration_required',
                 'execution_test_failed',
@@ -556,36 +599,6 @@ class WorkerProcessExecutor {
           message: executionErrorMessage(code),
         );
       }
-      if (validateOnly) {
-        final remaining = timeout - elapsed.elapsed;
-        if (remaining <= Duration.zero) {
-          throw TimeoutException('adapter readiness probe timed out', timeout);
-        }
-        await process.stdin.close();
-        final exitCode = await process.exitCode.timeout(remaining);
-        if (exitCode != 0) {
-          throw StateError('adapter exited after credential validation');
-        }
-        return {
-          'validated': true,
-          'models': List<String>.from(probe['models'] as List? ?? const []),
-        };
-      }
-      expectedAssignmentId = operationId;
-      final executeId =
-          'host-${DateTime.now().microsecondsSinceEpoch}-${++_requestSequence}';
-      expectedProgressRequestId = executeId;
-      final executeResponse = Completer<Map<String, Object?>>();
-      pending[executeId] = executeResponse;
-      process.stdin.writeln(serializeV7AdapterFrame({
-        'type': 'execute.request',
-        'protocolVersion': v7AdapterProtocolVersion,
-        'requestId': executeId,
-        'assignmentId': operationId,
-        'prompt': prompt,
-        if (model != null && model.isNotEmpty) 'model': model,
-      }));
-      await process.stdin.flush();
       final remaining = timeout - elapsed.elapsed;
       if (remaining <= Duration.zero) {
         const failure = V7AdapterExecutionFailure(
@@ -596,8 +609,37 @@ class WorkerProcessExecutor {
         fail(failure);
         throw failure;
       }
-      final result =
-          await executeResponse.future.timeout(remaining, onTimeout: () {
+      expectedAssignmentId = operationId;
+      final executeId =
+          'host-${DateTime.now().microsecondsSinceEpoch}-${++_requestSequence}';
+      expectedProgressRequestId = executeId;
+      final executeResponse = Completer<Map<String, Object?>>();
+      pending[executeId] = executeResponse;
+      process.stdin.writeln(serializeV7AdapterFrame({
+        'type': 'execute.request',
+        'protocolVersion': spec.protocolVersion,
+        'requestId': executeId,
+        'assignmentId': operationId,
+        'prompt': prompt,
+        if (model != null && model.isNotEmpty) 'model': model,
+        if (spec.protocolVersion == '2.5') 'sessionPolicy': sessionPolicy,
+        if (sessionKey != null) 'sessionKey': sessionKey,
+        if (const {'2.4', '2.5'}.contains(spec.protocolVersion))
+          'timeoutMs': max(1, remaining.inMilliseconds),
+      }));
+      await process.stdin.flush();
+      final responseRemaining = timeout - elapsed.elapsed;
+      if (responseRemaining <= Duration.zero) {
+        const failure = V7AdapterExecutionFailure(
+          code: 'timeout',
+          message: 'The assignment exceeded its time limit.',
+          retryable: true,
+        );
+        fail(failure);
+        throw failure;
+      }
+      final result = await executeResponse.future.timeout(responseRemaining,
+          onTimeout: () {
         const failure = V7AdapterExecutionFailure(
           code: 'timeout',
           message: 'The assignment exceeded its time limit.',
@@ -634,15 +676,18 @@ class WorkerProcessExecutor {
       await process.stdin.close();
       await stdoutSubscription.cancel();
       await stderrSubscription.cancel();
-      await _terminateGracefully(process);
+      await _terminateV7Process(operationId, process);
+      _v7ProcessCleanups.remove(operationId);
       _activeProcesses.remove(operationId);
       _activeCancellations.remove(operationId);
       _cancelledOperations.remove(operationId);
     }
   }
 
-  /// Runs an installed adapter's startup and declared health check. A caller
-  /// may request a tiny explicit execution test; routine probes omit it.
+  /// Starts one Worker Package, initializes it, and requests its readiness
+  /// probe. A caller may request the package's live test; Workspace sends only
+  /// the generic mode while commands, prompts, and interpretation remain in
+  /// the package.
   Future<Map<String, Object?>> checkV7AdapterHealth(
     WorkerProcessSpec spec, {
     required String workerTypeId,
@@ -652,110 +697,91 @@ class WorkerProcessExecutor {
     int maxStdoutBytes = 1024 * 1024,
     int maxStderrBytes = 256 * 1024,
     bool allowNotReady = false,
-    String? executionTestPrompt,
+    LocalWorkerProbeMode mode = LocalWorkerProbeMode.passive,
   }) async {
     if (healthCheckMode != 'protocol' ||
         timeout <= Duration.zero ||
         maxStdoutBytes <= 0 ||
         maxStderrBytes <= 0) {
-      throw ArgumentError('adapter health-check policy is invalid');
+      throw ArgumentError('Worker Package health-check policy is invalid');
     }
     final process = await _launcher(spec);
     final elapsed = Stopwatch()..start();
     var stdoutBytes = 0;
     var stderrBytes = 0;
-    const maxDiagnosticStderrBytes = 4096;
-    final adapterStderr = BytesBuilder(copy: false);
-    var adapterStderrTruncated = false;
+    final stderrTail = _PackageStderrTail();
+    final stderrDone = Completer<void>();
     var failed = false;
     Completer<Map<String, Object?>>? pending;
     String? expectedRequestId;
     String? expectedResponseType;
-    String? activeRequestType;
-    Map<String, Object?>? lastProbeResult;
-    String adapterStderrDetails() {
-      final captured =
-          utf8.decode(adapterStderr.toBytes(), allowMalformed: true);
-      // Keep diagnostics local and redact any known secrets before they are
-      // persisted with the user's manual test transcript.
-      final redacted = redactSecrets(captured, spec.secretValues).trim();
-      if (redacted.isEmpty) return '';
-      final bounded = redacted.length <= 1200
-          ? redacted
-          : '${redacted.substring(0, 1197)}…';
-      return 'Adapter stderr (local, redacted):\n$bounded'
-          '${adapterStderrTruncated ? '\n[stderr truncated]' : ''}';
-    }
-
-    Object withAdapterStderr(Object error) {
-      final details = adapterStderrDetails();
-      return details.isEmpty ? error : StateError('$error\n$details');
-    }
 
     void fail(Object error) {
       if (failed) return;
       failed = true;
       if (pending != null && !pending!.isCompleted) {
-        pending!.completeError(withAdapterStderr(error));
+        pending!.completeError(error);
       }
       unawaited(_terminator(process, force: true));
     }
 
-    final stdoutSubscription = process.stdout
-        .transform(StreamTransformer<List<int>, List<int>>.fromHandlers(
-          handleData: (chunk, sink) {
-            stdoutBytes += chunk.length;
-            if (stdoutBytes > maxStdoutBytes) {
-              fail(StateError('adapter health stdout exceeded its limit'));
-              sink.close();
-            } else {
-              sink.add(chunk);
-            }
-          },
-        ))
+    final stderrSubscription = process.stderr.listen((chunk) {
+      stderrBytes += chunk.length;
+      stderrTail.add(chunk);
+      if (stderrBytes > maxStderrBytes) {
+        fail(V7AdapterExecutionFailure(
+          code: 'execution_failed',
+          message: 'The Worker Package exceeded its diagnostic output limit.',
+          localDiagnostic: stderrTail.readRedacted(spec.secretValues),
+        ));
+      }
+    }, onDone: () {
+      if (!stderrDone.isCompleted) stderrDone.complete();
+    });
+    final lineSubscription = process.stdout
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen((line) {
-          if (line.trim().isEmpty || failed) return;
-          try {
-            final frame = parseV7AdapterFrame(line);
-            if (frame['requestId'] == expectedRequestId &&
-                (frame['type'] == expectedResponseType ||
-                    frame['type'] == 'error') &&
-                pending != null &&
-                !pending!.isCompleted) {
-              pending!.complete(frame);
-            }
-          } on Object catch (error) {
-            fail(error);
-          }
-        });
-    final stderrSubscription = process.stderr.listen((chunk) {
-      stderrBytes += chunk.length;
-      final remaining = maxDiagnosticStderrBytes - adapterStderr.length;
-      if (remaining > 0) {
-        adapterStderr.add(
-            chunk.length <= remaining ? chunk : chunk.sublist(0, remaining));
+      if (failed || line.trim().isEmpty) return;
+      stdoutBytes += utf8.encode(line).length + 1;
+      if (stdoutBytes > maxStdoutBytes) {
+        fail(StateError('Worker Package health output exceeded its limit'));
+        return;
       }
-      if (adapterStderr.length < stderrBytes) adapterStderrTruncated = true;
-      if (stderrBytes > maxStderrBytes) {
-        fail(StateError('adapter health stderr exceeded its limit'));
+      try {
+        final frame = parseV7AdapterFrame(line);
+        if (frame['requestId'] != expectedRequestId ||
+            (frame['type'] != expectedResponseType &&
+                frame['type'] != 'error')) {
+          throw StateError('Worker Package returned an unexpected response');
+        }
+        if (pending != null && !pending!.isCompleted) {
+          pending!.complete(frame);
+        }
+      } on Object catch (error) {
+        fail(error);
       }
-    });
-    unawaited(process.exitCode.then((code) {
+    }, onError: fail);
+    unawaited(process.exitCode.then((code) async {
+      await stderrDone.future;
       if (!failed && pending != null && !pending!.isCompleted) {
-        fail(StateError('adapter exited with code $code during health check'));
+        fail(V7AdapterExecutionFailure(
+          code: 'execution_failed',
+          message: 'The Worker Package exited before returning its probe.',
+          localDiagnostic: stderrTail.readRedacted(spec.secretValues),
+        ));
       }
     }));
+
     Future<Map<String, Object?>> request(
       String type,
       String responseType,
       Map<String, Object?> fields,
     ) async {
-      activeRequestType = type;
       final remaining = timeout - elapsed.elapsed;
       if (remaining <= Duration.zero) {
-        throw TimeoutException('adapter health check timed out', timeout);
+        throw TimeoutException(
+            'Worker Package health check timed out', timeout);
       }
       final requestId =
           'health-${DateTime.now().microsecondsSinceEpoch}-${++_requestSequence}';
@@ -765,18 +791,18 @@ class WorkerProcessExecutor {
       pending = response;
       process.stdin.writeln(serializeV7AdapterFrame({
         'type': type,
-        'protocolVersion': v7AdapterProtocolVersion,
+        'protocolVersion': spec.protocolVersion,
         'requestId': requestId,
         ...fields,
       }));
       await process.stdin.flush();
       final frame = await response.future.timeout(remaining, onTimeout: () {
-        fail(TimeoutException('adapter $type timed out', remaining));
-        throw TimeoutException('adapter $type timed out', remaining);
+        fail(TimeoutException('Worker Package $type timed out', remaining));
+        throw TimeoutException('Worker Package $type timed out', remaining);
       });
       pending = null;
-      if (frame['type'] != responseType && frame['type'] != 'error') {
-        throw StateError('adapter returned an unexpected health response');
+      if (frame['type'] == 'error') {
+        throw StateError('Worker Package rejected $type');
       }
       return frame;
     }
@@ -787,158 +813,34 @@ class WorkerProcessExecutor {
         'workerTypeId': workerTypeId,
         'adapterVersion': adapterVersion,
       });
-      if (initialized['type'] == 'error' ||
-          initialized['adapterVersion'] != adapterVersion) {
-        throw StateError('adapter initialize version mismatch');
+      if (initialized['adapterVersion'] != adapterVersion) {
+        throw StateError('Worker Package initialize version mismatch');
       }
-      final probe = await request('probe.request', 'probe.result', {});
-      lastProbeResult = probe;
-      if (probe['type'] == 'error' ||
-          probe['checkKind'] != 'readiness' ||
-          (probe['ready'] != true && !allowNotReady)) {
-        throw StateError('adapter readiness probe failed');
+      final supportsProbeMode =
+          const {'2.2', '2.3', '2.4', '2.5'}.contains(spec.protocolVersion);
+      if (!supportsProbeMode && mode == LocalWorkerProbeMode.live) {
+        throw StateError(
+            'This Worker Package protocol does not support live probes');
       }
-      if (probe['ready'] == true && executionTestPrompt != null) {
-        final execution = await request('execute.request', 'result', {
-          'assignmentId':
-              'readiness-test-${DateTime.now().microsecondsSinceEpoch}',
-          'prompt': executionTestPrompt,
-        });
-        final resultText = execution['output'];
-        final successful = execution['type'] == 'result' &&
-            resultText is String &&
-            resultText.trim() == 'OK';
-        if (!successful) {
-          final errorCode = execution['code'];
-          final reasonCode = switch (errorCode) {
-            'cli_not_found' => 'cli_not_found',
-            'authentication_required' => 'authentication_required',
-            'permission_configuration_required' =>
-              'permission_configuration_required',
-            _ => 'execution_test_failed',
-          };
-          return {
-            ...probe,
-            'ready': false,
-            'testDetails': _readinessTestDiagnostic(
-              workerTypeId: workerTypeId,
-              prompt: executionTestPrompt,
-              promptSent: true,
-              readinessResult: _readinessCheckSummary(workerTypeId, probe),
-              result: [
-                execution['type'] == 'result'
-                    ? _boundedTestResult(resultText)
-                    : '${execution['code'] ?? 'execution_failed'}: '
-                        '${_boundedTestResult(execution['message'])}',
-                adapterStderrDetails(),
-              ].where((part) => part.isNotEmpty).join('\n'),
-            ),
-            'issues': [
-              {
-                'code': reasonCode,
-                'message': switch (reasonCode) {
-                  'authentication_required' =>
-                    'Sign in to Antigravity on this computer, then test again.',
-                  'permission_configuration_required' =>
-                    'Update Antigravity permission settings, then test again.',
-                  _ => 'The Antigravity execution test did not complete.',
-                },
-              }
-            ],
-          };
-        }
-      }
-      if (executionTestPrompt != null && probe['ready'] != true) {
-        final issues = probe['issues'] as List? ?? const [];
-        final issue = issues.whereType<Map>().firstOrNull;
-        final result = issue == null
-            ? 'The readiness check did not pass; execution prompt was not sent.'
-            : '${issue['code'] ?? 'readiness_failed'}: '
-                '${_boundedTestResult(issue['message'])}; execution prompt was not sent.';
-        return {
-          ...probe,
-          'testDetails': _readinessTestDiagnostic(
-            workerTypeId: workerTypeId,
-            prompt: executionTestPrompt,
-            promptSent: false,
-            readinessResult: _readinessCheckSummary(workerTypeId, probe),
-            result: result,
-          ),
-        };
+      final config = spec.protocolVersion == '2.2'
+          ? {'mode': mode.wireValue}
+          : const <String, Object?>{};
+      final probe = await request('probe.request', 'probe.result', {
+        if (const {'2.3', '2.4', '2.5'}.contains(spec.protocolVersion))
+          'mode': mode.wireValue,
+        if (config.isNotEmpty) 'config': config,
+      });
+      final probeContractValid =
+          const {'2.3', '2.4', '2.5'}.contains(spec.protocolVersion)
+              ? probe['mode'] == mode.wireValue && probe['checks'] is List
+              : probe['checkKind'] == 'readiness';
+      if (!probeContractValid || (probe['ready'] != true && !allowNotReady)) {
+        throw StateError('Worker Package ${mode.wireValue} probe failed');
       }
       return probe;
-    } on TimeoutException {
-      if (!failed) fail(StateError('adapter health check timed out'));
-      if (executionTestPrompt != null) {
-        final promptWasSubmitted = activeRequestType == 'execute.request';
-        final probe = lastProbeResult ?? const <String, Object?>{};
-        final readinessResult = lastProbeResult == null
-            ? 'no response returned from the adapter readiness probe'
-            : _readinessCheckSummary(workerTypeId, probe);
-        return {
-          ...probe,
-          'ready': false,
-          'testDetails': _readinessTestDiagnostic(
-            workerTypeId: workerTypeId,
-            prompt: executionTestPrompt,
-            promptSent: promptWasSubmitted,
-            readinessResult: readinessResult,
-            result: [
-              '${activeRequestType ?? 'adapter startup'} timed out',
-              adapterStderrDetails(),
-            ].where((part) => part.isNotEmpty).join('\n'),
-          ),
-          'issues': [
-            {
-              'code': 'execution_test_failed',
-              'message': promptWasSubmitted
-                  ? 'The local execution test timed out.'
-                  : 'The local adapter readiness check timed out.',
-            }
-          ],
-        };
-      }
-      rethrow;
-    } catch (error) {
-      if (!failed) fail(StateError('adapter health check failed'));
-      final details = adapterStderrDetails();
-      if (executionTestPrompt != null) {
-        final promptWasSubmitted = activeRequestType == 'execute.request';
-        final probe = lastProbeResult ?? const <String, Object?>{};
-        final readinessResult = lastProbeResult == null
-            ? 'no response returned from the adapter readiness probe'
-            : _readinessCheckSummary(workerTypeId, probe);
-        final errorText = error.toString();
-        return {
-          ...probe,
-          'ready': false,
-          'testDetails': _readinessTestDiagnostic(
-            workerTypeId: workerTypeId,
-            prompt: executionTestPrompt,
-            promptSent: promptWasSubmitted,
-            readinessResult: readinessResult,
-            result: [
-              errorText,
-              if (details.isNotEmpty && !errorText.contains(details)) details,
-            ].join('\n'),
-          ),
-          'issues': [
-            {
-              'code': 'execution_test_failed',
-              'message': promptWasSubmitted
-                  ? 'The local execution test failed.'
-                  : 'The local adapter readiness check failed.',
-            }
-          ],
-        };
-      }
-      if (details.isNotEmpty && !error.toString().contains(details)) {
-        throw withAdapterStderr(error);
-      }
-      rethrow;
     } finally {
       await process.stdin.close();
-      await stdoutSubscription.cancel();
+      await lineSubscription.cancel();
       await stderrSubscription.cancel();
       await _terminateGracefully(process);
     }
@@ -1152,7 +1054,7 @@ class WorkerProcessExecutor {
     _activeProcesses.remove(operationId);
     _cancelledOperations.add(operationId);
     _activeCancellations.remove(operationId)?.call();
-    await _terminateGracefully(process);
+    await _terminateV7Process(operationId, process);
     return true;
   }
 
@@ -1250,6 +1152,49 @@ class WorkerProcessExecutor {
     }
   }
 
+  Future<void> _acquireSessionGate(String sessionId, Duration timeout) async {
+    if (_shuttingDown) {
+      throw StateError('Workspace is shutting down');
+    }
+    final gate = _sessionGates.putIfAbsent(
+      sessionId,
+      _SessionExecutionGate.new,
+    );
+    if (!gate.active) {
+      gate.active = true;
+      return;
+    }
+    final queued = Completer<void>();
+    gate.waiting.addLast(queued);
+    await queued.future.timeout(
+      timeout,
+      onTimeout: () {
+        gate.waiting.remove(queued);
+        throw TimeoutException(
+          'Worker assignment timed out waiting for its durable session.',
+          timeout,
+        );
+      },
+    );
+    if (_shuttingDown) {
+      _releaseSessionGate(sessionId);
+      throw StateError('Workspace is shutting down');
+    }
+  }
+
+  void _releaseSessionGate(String sessionId) {
+    final gate = _sessionGates[sessionId];
+    if (gate == null) return;
+    while (gate.waiting.isNotEmpty) {
+      final next = gate.waiting.removeFirst();
+      if (next.isCompleted) continue;
+      next.complete();
+      return;
+    }
+    gate.active = false;
+    _sessionGates.remove(sessionId);
+  }
+
   void _releaseWorkerSlot(String workerId, String operationId) {
     _operationWorkers.remove(operationId);
     _reservedOperations.remove(operationId);
@@ -1279,6 +1224,12 @@ class WorkerProcessExecutor {
     }
     await _terminator(process, force: true);
   }
+
+  Future<void> _terminateV7Process(String operationId, Process process) =>
+      _v7ProcessCleanups.putIfAbsent(
+        operationId,
+        () => _terminateGracefully(process),
+      );
 }
 
 class V7AdapterLaunch {
@@ -1289,8 +1240,6 @@ class V7AdapterLaunch {
     this.config = const {},
     this.defaultModel,
     this.allowedModels = const {},
-    this.executablePath,
-    this.cliVersion,
   });
 
   final WorkerProcessSpec processSpec;
@@ -1299,8 +1248,6 @@ class V7AdapterLaunch {
   final Map<String, Object?> config;
   final String? defaultModel;
   final Set<String> allowedModels;
-  final String? executablePath;
-  final String? cliVersion;
 
   V7AdapterLaunch copyWith({WorkerProcessSpec? processSpec}) => V7AdapterLaunch(
         processSpec: processSpec ?? this.processSpec,
@@ -1309,8 +1256,6 @@ class V7AdapterLaunch {
         config: config,
         defaultModel: defaultModel,
         allowedModels: allowedModels,
-        executablePath: executablePath,
-        cliVersion: cliVersion,
       );
 }
 
@@ -1319,6 +1264,25 @@ Map<String, String> safeWorkerEnvironment(
   Set<String> allowedNames = const {},
 }) {
   final environment = <String, String>{};
+  const maxEntries = 128;
+  const maxValueBytes = 64 * 1024;
+  const maxTotalBytes = 256 * 1024;
+  var totalBytes = 0;
+  void add(String name, String value) {
+    if (value.isEmpty) return;
+    final valueBytes = utf8.encode(value).length;
+    if (valueBytes > maxValueBytes ||
+        (!environment.containsKey(name) && environment.length >= maxEntries) ||
+        totalBytes + name.length + valueBytes > maxTotalBytes) {
+      throw StateError('Worker environment exceeds its configured bounds');
+    }
+    if (environment.containsKey(name)) {
+      totalBytes -= name.length + utf8.encode(environment[name]!).length;
+    }
+    environment[name] = value;
+    totalBytes += name.length + valueBytes;
+  }
+
   for (final name in const [
     'PATH',
     'HOME',
@@ -1333,30 +1297,22 @@ Map<String, String> safeWorkerEnvironment(
     // TLS certificate configuration for provider connections.
     'SSL_CERT_FILE',
     'SSL_CERT_DIR',
-    // XDG base directories used by CLI tools to locate configuration,
-    // data, and state files (including auth tokens and session data).
-    'XDG_CONFIG_HOME',
-    'XDG_DATA_HOME',
-    'XDG_STATE_HOME',
-    'XDG_CACHE_HOME',
-    // Google Cloud authentication configuration directories. Without
-    // these, the Antigravity CLI cannot locate cached auth tokens and
-    // hangs during headless execution.
-    'GOOGLE_APPLICATION_CREDENTIALS',
-    'CLOUDSDK_CONFIG',
-    'GCLOUD_DIR',
     // Disable colour output and interactive prompts in headless workers.
     'NO_COLOR',
     'TERM',
   ]) {
     final value = Platform.environment[name];
-    if (value != null && value.isNotEmpty) environment[name] = value;
+    if (value != null) add(name, value);
+  }
+  for (final name in allowedNames) {
+    final value = Platform.environment[name];
+    if (value != null) add(name, value);
   }
   // Worker processes are non-interactive. Prevent language runtimes from
   // blocking on first-run telemetry prompts while the Host is executing.
-  environment['DART_SUPPRESS_ANALYTICS'] = '1';
+  add('DART_SUPPRESS_ANALYTICS', '1');
   for (final entry in requested.entries) {
-    if (allowedNames.contains(entry.key)) environment[entry.key] = entry.value;
+    if (allowedNames.contains(entry.key)) add(entry.key, entry.value);
   }
   return environment;
 }
@@ -1491,6 +1447,11 @@ class WorkerAssignmentHandler {
               prompt: _v7Prompt(workerPayload),
               config: v7Adapter.config,
               model: _resolveV7Model(workerPayload, v7Adapter),
+              sessionPolicy: _v7SessionPolicy(workerPayload),
+              timeout: Duration(
+                milliseconds: context.payload['timeoutMs'] as int,
+              ),
+              sessionKey: _v7SessionKey(workerPayload),
               operationId: context.assignmentId,
               onProgress: onNotification == null
                   ? null
@@ -1554,7 +1515,44 @@ class WorkerAssignmentHandler {
       return input['prompt'] as String;
     }
     if (payload['prompt'] is String) return payload['prompt'] as String;
-    return jsonEncode(payload);
+    final promptPayload = Map<String, Object?>.from(payload)
+      ..remove('sessionKey');
+    promptPayload.remove('sessionPolicy');
+    final promptInput = promptPayload['input'];
+    if (promptInput is Map) {
+      promptPayload['input'] = Map<String, Object?>.from(promptInput)
+        ..remove('sessionKey')
+        ..remove('sessionPolicy');
+    }
+    return jsonEncode(promptPayload);
+  }
+
+  String? _v7SessionKey(Map<String, Object?> payload) {
+    final input = payload['input'];
+    final value =
+        payload['sessionKey'] ?? (input is Map ? input['sessionKey'] : null);
+    if (value == null) return null;
+    if (value is! String || value.trim().isEmpty || value.length > 256) {
+      throw V7AdapterExecutionFailure(
+        code: 'execution_failed',
+        message: executionErrorMessage('execution_failed'),
+      );
+    }
+    return value.trim();
+  }
+
+  String _v7SessionPolicy(Map<String, Object?> payload) {
+    final input = payload['input'];
+    final value = payload['sessionPolicy'] ??
+        (input is Map ? input['sessionPolicy'] : null) ??
+        'stateless';
+    if (!const {'stateless', 'durable_session'}.contains(value)) {
+      throw V7AdapterExecutionFailure(
+        code: 'execution_failed',
+        message: executionErrorMessage('execution_failed'),
+      );
+    }
+    return value as String;
   }
 
   String? _v7Model(Map<String, Object?> payload) {

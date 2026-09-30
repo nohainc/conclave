@@ -14,6 +14,7 @@ import { once } from "node:events";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
+import { runLiveCliAcceptance } from "../../shared/test/live-cli-acceptance.mjs";
 
 const adapter = fileURLToPath(
   new URL("../bin/conclave-antigravity-adapter.mjs", import.meta.url),
@@ -90,8 +91,9 @@ printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"Antig
   const adapterProcess = await startAdapter(
     {
       ...process.env,
-      CONCLAVE_CLI_EXECUTABLE: fakeAgy,
-      GEMINI_API_KEY: "must-not-be-forwarded",
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      HOME: temp,
+      USERPROFILE: temp,
     },
     temp,
   );
@@ -103,7 +105,7 @@ printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"Antig
   });
   adapterProcess.send({
     type: "initialize.request",
-    protocolVersion: "2.1",
+    protocolVersion: "2.3",
     requestId: "i1",
     workerTypeId: "antigravity",
     adapterVersion: "1.0.0",
@@ -114,7 +116,8 @@ printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"Antig
   );
   adapterProcess.send({
     type: "probe.request",
-    protocolVersion: "2.1",
+    protocolVersion: "2.3",
+    mode: "passive",
     requestId: "v1",
   });
   assert.equal(
@@ -125,21 +128,31 @@ printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"Antig
     adapterProcess.frames.find((frame) => frame.requestId === "v1"),
     {
       type: "probe.result",
-      protocolVersion: "2.1",
+      protocolVersion: "2.5",
       requestId: "v1",
       ready: true,
       toolVersion: "4.5.6",
-      checkKind: "readiness",
-      issues: [],
+      mode: "passive",
+      checks: [
+        { id: "cli_discovery", status: "passed" },
+        { id: "tool_version", status: "passed" },
+        {
+          id: "authentication",
+          status: "skipped",
+          issueCode: "setup_required",
+          diagnostic: "Authentication is checked by a live probe.",
+        },
+      ],
     },
   );
   adapterProcess.send({
     type: "execute.request",
-    protocolVersion: "2.1",
+    protocolVersion: "2.3",
     requestId: "e1",
     assignmentId: "a1",
     prompt: "Make the change.",
     model: "gemini-3.7-flash",
+    timeoutMs: 300_000,
   });
   const progress = await adapterProcess.waitFor(
     (frame) => frame.type === "progress",
@@ -158,7 +171,7 @@ printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"Antig
   assert.ok(args.includes(`--sandbox`));
   assert.doesNotMatch(args, /--dangerously-skip-permissions/);
   assert.doesNotMatch(args, /--yolo/);
-  assert.ok(args.includes(`--print-timeout 5m`));
+  assert.match(args, /--print-timeout \d+s/);
   assert.equal(
     (await readFile(childCwdFile, "utf8")).trim(),
     await realpath(temp),
@@ -167,7 +180,7 @@ printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"Antig
 
   adapterProcess.send({
     type: "execute.request",
-    protocolVersion: "2.1",
+    protocolVersion: "2.3",
     requestId: "e-default-model",
     assignmentId: "a-default-model",
     prompt: "Use the configured default model.",
@@ -179,20 +192,18 @@ printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"Antig
   assert.doesNotMatch(await readFile(argsFile, "utf8"), /--model/);
 });
 
-test("forwards auth config env vars to CLI but blocks raw API keys", async (t) => {
+test("forwards only manifest-declared Gemini auth and endpoint variables", async (t) => {
   const temp = await mkdtemp(join(tmpdir(), "conclave-antigravity-env-"));
   t.after(() => rm(temp, { recursive: true, force: true }));
   const bin = join(temp, "bin");
   await import("node:fs/promises").then(({ mkdir }) => mkdir(bin));
   const envDumpFile = join(temp, "env-dump.txt");
-  const apiKeyFile = join(temp, "api-key.txt");
   const fakeAgy = join(bin, "agy");
   await writeFile(
     fakeAgy,
     `#!/bin/sh
 if [ "$1" = "--version" ]; then echo 'agy 4.5.6'; exit 0; fi
 env > '${envDumpFile.replaceAll("'", "'\\''")}'
-if [ -n "\${GEMINI_API_KEY:-}" ]; then echo leaked > '${apiKeyFile.replaceAll("'", "'\\''")}'; fi
 cat >/dev/null
 printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"OK"}}'
 `,
@@ -201,11 +212,17 @@ printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"OK"}}
   const adapterProcess = await startAdapter(
     {
       ...process.env,
-      CONCLAVE_CLI_EXECUTABLE: fakeAgy,
-      GEMINI_API_KEY: "must-not-be-forwarded",
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      HOME: temp,
+      USERPROFILE: temp,
+      GEMINI_API_KEY: "test-gemini-key",
+      GOOGLE_GEMINI_BASE_URL: "https://gemini.example.test/v1beta",
+      GOOGLE_GENAI_USE_VERTEXAI: "true",
       XDG_CONFIG_HOME: "/test/config",
       CLOUDSDK_CONFIG: "/test/gcloud",
       GOOGLE_APPLICATION_CREDENTIALS: "/test/creds.json",
+      GOOGLE_CLOUD_PROJECT: "test-project",
+      GOOGLE_CLOUD_LOCATION: "us-central1",
     },
     temp,
   );
@@ -217,21 +234,28 @@ printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"OK"}}
   });
   adapterProcess.send({
     type: "execute.request",
-    protocolVersion: "2.1",
+    protocolVersion: "2.3",
     requestId: "e-env-test",
     assignmentId: "a-env-test",
     prompt: "test",
   });
-  await adapterProcess.waitFor(
-    (frame) => frame.requestId === "e-env-test",
-  );
+  await adapterProcess.waitFor((frame) => frame.requestId === "e-env-test");
   const envDump = await readFile(envDumpFile, "utf8");
   // Auth config directories must be forwarded for agy to find its tokens.
   assert.match(envDump, /XDG_CONFIG_HOME=\/test\/config/);
   assert.match(envDump, /CLOUDSDK_CONFIG=\/test\/gcloud/);
   assert.match(envDump, /GOOGLE_APPLICATION_CREDENTIALS=\/test\/creds\.json/);
-  // Raw API keys must never be forwarded.
-  await assert.rejects(readFile(apiKeyFile, "utf8"));
+  assert.match(envDump, /GEMINI_API_KEY=test-gemini-key/);
+  assert.match(
+    envDump,
+    /GOOGLE_GEMINI_BASE_URL=https:\/\/gemini\.example\.test\/v1beta/,
+  );
+  assert.match(envDump, /GOOGLE_GENAI_USE_VERTEXAI=true/);
+  assert.match(envDump, /GOOGLE_CLOUD_PROJECT=test-project/);
+  assert.match(envDump, /GOOGLE_CLOUD_LOCATION=us-central1/);
+  // The raw key may reach the provider CLI but never the Local Worker Protocol.
+  assert.doesNotMatch(JSON.stringify(adapterProcess.frames), /test-gemini-key/);
+});
 
 test("translates headless authentication failures to a safe reason code", async (t) => {
   const temp = await mkdtemp(join(tmpdir(), "conclave-antigravity-auth-"));
@@ -247,6 +271,8 @@ test("translates headless authentication failures to a safe reason code", async 
   const adapterProcess = await startAdapter({
     ...process.env,
     PATH: `${bin}:${process.env.PATH}`,
+    HOME: temp,
+    USERPROFILE: temp,
   });
   t.after(async () => {
     adapterProcess.child.stdin.end();
@@ -256,7 +282,8 @@ test("translates headless authentication failures to a safe reason code", async 
   });
   adapterProcess.send({
     type: "probe.request",
-    protocolVersion: "2.1",
+    protocolVersion: "2.3",
+    mode: "passive",
     requestId: "v2",
   });
   const response = await adapterProcess.waitFor(
@@ -266,7 +293,7 @@ test("translates headless authentication failures to a safe reason code", async 
   assert.equal(response.ready, true);
   adapterProcess.send({
     type: "execute.request",
-    protocolVersion: "2.1",
+    protocolVersion: "2.3",
     requestId: "e2",
     assignmentId: "readiness-test",
     prompt: "Reply with exactly the word OK. Do not use tools.",
@@ -294,7 +321,9 @@ test("translates permission configuration diagnostics to a safe reason code", as
   await chmod(fakeAgy, 0o755);
   const adapterProcess = await startAdapter({
     ...process.env,
-    CONCLAVE_CLI_EXECUTABLE: fakeAgy,
+    PATH: `${bin}:${process.env.PATH ?? ""}`,
+    HOME: temp,
+    USERPROFILE: temp,
   });
   t.after(async () => {
     adapterProcess.child.stdin.end();
@@ -304,7 +333,7 @@ test("translates permission configuration diagnostics to a safe reason code", as
   });
   adapterProcess.send({
     type: "execute.request",
-    protocolVersion: "2.1",
+    protocolVersion: "2.3",
     requestId: "e3",
     assignmentId: "readiness-test",
     prompt: "Reply with exactly the word OK. Do not use tools.",
@@ -335,10 +364,10 @@ test("maps provider failures to stable common execution codes", async (t) => {
     );
     await chmod(fakeAgy, 0o755);
     const adapterProcess = await startAdapter({
-      PATH: process.env.PATH,
-      HOME: process.env.HOME,
+      HOME: temp,
+      USERPROFILE: temp,
       TMPDIR: process.env.TMPDIR,
-      CONCLAVE_CLI_EXECUTABLE: fakeAgy,
+      PATH: `${join(temp)}:${process.env.PATH ?? ""}`,
     });
     t.after(async () => {
       adapterProcess.child.stdin.end();
@@ -348,7 +377,7 @@ test("maps provider failures to stable common execution codes", async (t) => {
     });
     adapterProcess.send({
       type: "execute.request",
-      protocolVersion: "2.1",
+      protocolVersion: "2.3",
       requestId: `e-${expectedCode}`,
       assignmentId: "a1",
       prompt: "test",
@@ -366,10 +395,10 @@ test("reports an unavailable agy executable with a stable code", async (t) => {
   const temp = await mkdtemp(join(tmpdir(), "conclave-antigravity-missing-"));
   t.after(() => rm(temp, { recursive: true, force: true }));
   const adapterProcess = await startAdapter({
-    PATH: process.env.PATH,
-    HOME: process.env.HOME,
+    HOME: temp,
+    USERPROFILE: temp,
     TMPDIR: process.env.TMPDIR,
-    CONCLAVE_CLI_EXECUTABLE: join(temp, "missing-agy"),
+    PATH: "",
   });
   t.after(async () => {
     adapterProcess.child.stdin.end();
@@ -379,7 +408,7 @@ test("reports an unavailable agy executable with a stable code", async (t) => {
   });
   adapterProcess.send({
     type: "execute.request",
-    protocolVersion: "2.1",
+    protocolVersion: "2.3",
     requestId: "e-missing",
     assignmentId: "a-missing",
     prompt: "test",
@@ -393,38 +422,17 @@ test("reports an unavailable agy executable with a stable code", async (t) => {
 });
 
 test(
-  "runs a real agy assignment only when explicitly opted in",
+  "runs opt-in real Gemini stateless and durable-session acceptance",
   {
     skip: process.env.CONCLAVE_TEST_REAL_AGY !== "1",
   },
   async (t) => {
-    const adapterProcess = await startAdapter({
-      PATH: process.env.PATH,
-      HOME: process.env.HOME,
-      TMPDIR: process.env.TMPDIR,
-      LANG: process.env.LANG,
-      CONCLAVE_CLI_EXECUTABLE: process.env.CONCLAVE_TEST_AGY_PATH || "agy",
+    await runLiveCliAcceptance({
+      t,
+      startAdapter,
+      adapterManifestUrl: new URL("../manifest.template.json", import.meta.url),
+      workerTypeId: "antigravity",
+      productName: "Gemini",
     });
-    t.after(async () => {
-      adapterProcess.child.stdin.end();
-      if (adapterProcess.child.exitCode === null)
-        adapterProcess.child.kill("SIGKILL");
-      await once(adapterProcess.child, "close").catch(() => {});
-    });
-    adapterProcess.send({
-      type: "execute.request",
-      protocolVersion: "2.1",
-      requestId: "real-agy-execution",
-      assignmentId: "real-agy-assignment",
-      prompt: "Reply with exactly OK. Do not use tools.",
-    });
-    const result = await adapterProcess.waitFor(
-      (frame) =>
-        frame.requestId === "real-agy-execution" && frame.type === "result",
-      300_000,
-    );
-    assert.equal(result.assignmentId, "real-agy-assignment");
-    assert.match(result.output, /OK/);
-    assert.deepEqual(result.artifacts, []);
   },
 );

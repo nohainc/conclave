@@ -290,8 +290,11 @@ Future<void> main() async {
       launch.processSpec.executable,
       endsWith('${Platform.pathSeparator}bin${Platform.pathSeparator}adapter'),
     );
-    expect(launch.processSpec.environment,
-        {'PROVIDER_API_KEY': 'private-api-key'});
+    expect(launch.processSpec.environment, {
+      'PROVIDER_API_KEY': 'private-api-key',
+      'CONCLAVE_WORKER_STATE_DIR':
+          '${temp.path}${Platform.pathSeparator}Workers${Platform.pathSeparator}local-worker-1${Platform.pathSeparator}state',
+    });
     expect(launch.processSpec.secretValues, {'private-api-key'});
     expect(launch.allowedModels, {'gpt-5.5'});
   });

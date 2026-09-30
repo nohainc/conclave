@@ -59,6 +59,44 @@ void main() {
     );
   });
 
+  test('credential status changes do not determine package readiness',
+      () async {
+    final worker = await registry.create(
+      name: 'Gemini',
+      workerTypeId: 'gemini',
+      authStrategy: 'browser_auth',
+    );
+
+    await registry.setCredentialState(
+      worker.id,
+      LocalWorkerCredentialStatus.ready,
+    );
+
+    final updated = (await registry.find(worker.id))!;
+    expect(updated.credentialStatus, LocalWorkerCredentialStatus.ready);
+    expect(updated.status, LocalWorkerStatus.needsAttention);
+    expect(updated.readinessState, WorkerReadinessState.setupRequired);
+  });
+
+  test('credential status changes do not determine package readiness',
+      () async {
+    final worker = await registry.create(
+      name: 'Gemini',
+      workerTypeId: 'gemini',
+      authStrategy: 'browser_auth',
+    );
+
+    await registry.setCredentialState(
+      worker.id,
+      LocalWorkerCredentialStatus.ready,
+    );
+
+    final updated = (await registry.find(worker.id))!;
+    expect(updated.credentialStatus, LocalWorkerCredentialStatus.ready);
+    expect(updated.status, LocalWorkerStatus.needsAttention);
+    expect(updated.readinessState, WorkerReadinessState.setupRequired);
+  });
+
   test('migrates schema 8 Workers without last live-test fields', () async {
     final worker = await registry.create(
       name: 'ChatGPT',
@@ -83,7 +121,7 @@ void main() {
     expect(migrated.lastLiveTestAt, isNull);
     expect(migrated.lastLiveTestPassed, isNull);
     final persisted = jsonDecode(await file.readAsString()) as Map;
-    expect(persisted['schemaVersion'], 11);
+    expect(persisted['schemaVersion'], 14);
     expect(persisted['workers'][0]['lastLiveTestAt'], isNull);
   });
 
@@ -114,7 +152,7 @@ void main() {
     expect(migrated.name, 'ChatGPT');
     expect(migrated.revision, 8);
     final persisted = jsonDecode(await file.readAsString()) as Map;
-    expect(persisted['schemaVersion'], 11);
+    expect(persisted['schemaVersion'], 14);
   });
 
   test('migrates schema 10 registry without losing the Worker', () async {
@@ -138,8 +176,37 @@ void main() {
     expect(migrated.id, worker.id);
     expect(migrated.lastLiveTestDetails, isNull);
     final persisted = jsonDecode(await file.readAsString()) as Map;
-    expect(persisted['schemaVersion'], 11);
+    expect(persisted['schemaVersion'], 14);
     expect(persisted['workers'][0]['lastLiveTestDetails'], isNull);
+  });
+
+  test('migrates an untested Gemini to setup-required readiness', () async {
+    final worker = await registry.create(
+      name: 'Gemini',
+      workerTypeId: 'gemini',
+      authStrategy: 'browser_auth',
+      status: LocalWorkerStatus.ready,
+      readinessState: WorkerReadinessState.ready,
+      credentialStatus: LocalWorkerCredentialStatus.ready,
+    );
+    final workers = [worker.toJson()];
+    final body = {'schemaVersion': 12, 'workers': workers};
+    final file = File(
+      '${directory.path}${Platform.pathSeparator}configured-workers.json',
+    );
+    await file.writeAsString(jsonEncode({
+      ...body,
+      'checksum': sha256.convert(utf8.encode(jsonEncode(body))).toString(),
+    }));
+
+    final migrated = (await registry.list()).single;
+
+    expect(migrated.status, LocalWorkerStatus.needsAttention);
+    expect(migrated.readinessState, WorkerReadinessState.setupRequired);
+    expect(migrated.readinessIssueCode, 'setup_required');
+    expect(migrated.lastLiveTestAt, isNull);
+    final persisted = jsonDecode(await file.readAsString()) as Map;
+    expect(persisted['schemaVersion'], 14);
   });
 
   test(
@@ -216,7 +283,7 @@ void main() {
     expect((await registry.list()).single.id, 'worker-old');
     final migrated =
         jsonDecode(await file.readAsString()) as Map<String, dynamic>;
-    expect(migrated['schemaVersion'], 11);
+    expect(migrated['schemaVersion'], 14);
     expect(migrated['workers'][0].containsKey('ownerUserId'), isFalse);
   });
 
@@ -310,7 +377,7 @@ void main() {
     expect(gemini.revision, 2);
     final written =
         jsonDecode(await file.readAsString()) as Map<String, dynamic>;
-    expect(written['schemaVersion'], 11);
+    expect(written['schemaVersion'], 14);
     expect((written['workers'] as List), hasLength(2));
   });
 
@@ -392,33 +459,20 @@ void main() {
         LocalWorkerStatus.removed);
   });
 
-  test('persists only the absolute CLI path and detected version', () async {
+  test('does not persist provider executable or version metadata', () async {
     final worker = await registry.create(
       name: 'ChatGPT',
       workerTypeId: 'chatgpt',
       authStrategy: 'browser_auth',
-      executablePath: '/opt/homebrew/bin/codex',
-      cliVersion: '0.42.0',
     );
-    expect(worker.executablePath, '/opt/homebrew/bin/codex');
-    expect(worker.cliVersion, '0.42.0');
+    expect(worker.workerTypeId, 'chatgpt');
     final saved = await File(
       '${directory.path}${Platform.pathSeparator}configured-workers.json',
     ).readAsString();
-    expect(saved, contains('"executablePath":"/opt/homebrew/bin/codex"'));
-    expect(saved, contains('"cliVersion":"0.42.0"'));
+    expect(saved, isNot(contains('executablePath')));
+    expect(saved, isNot(contains('cliVersion')));
     expect(saved, isNot(contains('PATH')));
     expect(saved, isNot(contains('token')));
-    await expectLater(
-      registry.create(
-        name: 'Gemini',
-        workerTypeId: 'gemini',
-        authStrategy: 'browser_auth',
-        executablePath: 'agy',
-        cliVersion: '1.0.0',
-      ),
-      throwsArgumentError,
-    );
   });
 
   test('migrates schema 7 without clearing existing local configuration',
@@ -458,8 +512,7 @@ void main() {
     final migrated = (await registry.list()).single;
     expect(migrated.defaultModel, 'gpt-test');
     expect(migrated.allowedModels, ['gpt-test']);
-    expect(migrated.executablePath, isNull);
     final written = jsonDecode(await file.readAsString()) as Map;
-    expect(written['schemaVersion'], 11);
+    expect(written['schemaVersion'], 14);
   });
 }

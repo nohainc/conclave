@@ -1,7 +1,6 @@
 import 'dart:io';
 
-import 'adapter_prerequisite.dart';
-import 'first_party_worker_adapter_descriptor.dart';
+import 'first_party_worker_registry.dart';
 import 'worker_executor.dart';
 import 'worker_trust_policy.dart';
 import 'v7_adapter_protocol.dart';
@@ -18,6 +17,9 @@ class V7AdapterAdmission {
     required this.launchArgs,
     required this.permissions,
     required this.secretRequirements,
+    required this.environmentPassthrough,
+    required this.providerCliPassthrough,
+    required this.sensitiveEnvironmentPassthrough,
     required this.healthCheckMode,
     required this.healthCheckTimeoutMs,
   });
@@ -30,6 +32,14 @@ class V7AdapterAdmission {
   final List<String> launchArgs;
   final Set<WorkerPermission> permissions;
   final List<V7AdapterSecretRequirement> secretRequirements;
+
+  /// Parent environment names the Workspace may copy into this package.
+  final Set<String> environmentPassthrough;
+
+  /// Package-owned provider child environment policy, validated as signed
+  /// metadata but interpreted only by the package itself.
+  final Set<String> providerCliPassthrough;
+  final Set<String> sensitiveEnvironmentPassthrough;
   final String healthCheckMode;
   final int healthCheckTimeoutMs;
 
@@ -56,6 +66,9 @@ class V7AdapterAdmission {
       'authStrategies',
       'modelSelectionMode',
       'prerequisites',
+      'environmentPolicy',
+      // Accepted only for already-published packages during migration.
+      'environmentRequirements',
       'executable',
       'launchArgs',
       'secretRequirements',
@@ -65,8 +78,12 @@ class V7AdapterAdmission {
       'signature',
       'releaseChannel',
     };
+    final requiredFields = fields.difference({
+      'environmentPolicy',
+      'environmentRequirements',
+    });
     if (value.keys.any((key) => !fields.contains(key)) ||
-        fields.any((key) => !value.containsKey(key))) {
+        requiredFields.any((key) => !value.containsKey(key))) {
       throw const FormatException('adapter manifest fields are invalid');
     }
     String text(String key) {
@@ -91,7 +108,7 @@ class V7AdapterAdmission {
     if (workerTypeId != expectedWorkerTypeId ||
         !RegExp(r'^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$')
             .hasMatch(version) ||
-        protocolVersion != v7AdapterProtocolVersion ||
+        !supportedV7AdapterProtocolVersions.contains(protocolVersion) ||
         !RegExp(r'^[a-f0-9]{64}$').hasMatch(digest) ||
         digest != verifiedPackageDigest.toLowerCase()) {
       throw const FormatException(
@@ -99,8 +116,7 @@ class V7AdapterAdmission {
     }
     final releaseChannel = value['releaseChannel'];
     final unsignedBundledAdapter = allowUnsignedBundledAdapter &&
-        FirstPartyWorkerAdapterDescriptor.forAdapterPackageId(workerTypeId) !=
-            null &&
+        FirstPartyWorkerPackage.forPackageId(workerTypeId) != null &&
         releaseChannel == 'stable' &&
         signingKeyId.isEmpty &&
         signature.isEmpty;
@@ -142,9 +158,63 @@ class V7AdapterAdmission {
     if (prerequisites.length > 32) {
       throw const FormatException('adapter has too many prerequisites');
     }
-    for (final prerequisite in prerequisites) {
-      AdapterExecutablePrerequisite.fromJson(prerequisite);
+    final legacyEnvironmentRequirements = value['environmentRequirements'] ==
+            null
+        ? const <String>[]
+        : _strings(value['environmentRequirements'], 'environmentRequirements');
+    final rawEnvironmentPolicy = value['environmentPolicy'];
+    final environmentPolicy = rawEnvironmentPolicy == null
+        ? <String, Object?>{}
+        : _object(rawEnvironmentPolicy, 'environmentPolicy');
+    const environmentPolicyFields = {
+      'environmentPassthrough',
+      'providerCliPassthrough',
+      'sensitivePassthrough',
+    };
+    if (environmentPolicy.keys
+        .any((key) => !environmentPolicyFields.contains(key))) {
+      throw const FormatException(
+          'adapter environment policy fields are invalid');
     }
+    List<String> policyNames(String key) {
+      final raw = environmentPolicy[key];
+      return raw == null
+          ? const <String>[]
+          : _strings(raw, 'environmentPolicy.$key');
+    }
+
+    final rawEnvironmentPassthrough = policyNames('environmentPassthrough');
+    final rawProviderCliPassthrough = policyNames('providerCliPassthrough');
+    final rawSensitivePassthrough = policyNames('sensitivePassthrough');
+    final environmentPassthrough = rawEnvironmentPassthrough.toSet();
+    final providerCliPassthrough = rawProviderCliPassthrough.toSet();
+    final sensitivePassthrough = rawSensitivePassthrough.toSet();
+    if (legacyEnvironmentRequirements.length > 64 ||
+        rawEnvironmentPassthrough.length > 64 ||
+        rawProviderCliPassthrough.length > 64 ||
+        rawSensitivePassthrough.length > 64 ||
+        environmentPassthrough.length > 64 ||
+        providerCliPassthrough.length > 64 ||
+        sensitivePassthrough.length > 64 ||
+        {
+          ...legacyEnvironmentRequirements,
+          ...environmentPassthrough,
+          ...providerCliPassthrough,
+          ...sensitivePassthrough,
+        }.any((name) => !RegExp(r'^[A-Z_][A-Z0-9_]*$').hasMatch(name)) ||
+        legacyEnvironmentRequirements.toSet().length !=
+            legacyEnvironmentRequirements.length ||
+        environmentPassthrough.length != rawEnvironmentPassthrough.length ||
+        providerCliPassthrough.length != rawProviderCliPassthrough.length ||
+        sensitivePassthrough.length != rawSensitivePassthrough.length ||
+        !environmentPassthrough.containsAll(sensitivePassthrough) ||
+        !environmentPassthrough.containsAll(providerCliPassthrough)) {
+      throw const FormatException('adapter environment policy is invalid');
+    }
+    final effectiveEnvironmentPassthrough = {
+      ...legacyEnvironmentRequirements,
+      ...environmentPassthrough,
+    };
     final health = _object(value['healthCheck'], 'healthCheck');
     if (health['mode'] != 'protocol' ||
         health['timeoutMs'] is! int ||
@@ -226,6 +296,9 @@ class V7AdapterAdmission {
       launchArgs: List.unmodifiable(launchArgs),
       permissions: declaredPermissions,
       secretRequirements: List.unmodifiable(secrets),
+      environmentPassthrough: effectiveEnvironmentPassthrough,
+      providerCliPassthrough: providerCliPassthrough,
+      sensitiveEnvironmentPassthrough: sensitivePassthrough,
       healthCheckMode: health['mode'] as String,
       healthCheckTimeoutMs: health['timeoutMs'] as int,
     );
@@ -236,9 +309,13 @@ class V7AdapterAdmission {
     required String workingDirectory,
     required int localConcurrencyLimit,
     required Map<String, String> availableSecrets,
+    String? workerStateDirectory,
   }) {
-    final environment = <String, String>{};
-    final secretValues = <String>{};
+    final environment = createPackageEnvironment();
+    final secretValues = <String>{
+      for (final name in sensitiveEnvironmentPassthrough)
+        if (environment[name] case final value?) value,
+    };
     for (final requirement in secretRequirements) {
       final secret = availableSecrets[requirement.name];
       if (secret == null || secret.isEmpty) {
@@ -253,13 +330,33 @@ class V7AdapterAdmission {
     return WorkerProcessSpec(
       workerId: workerId,
       executable: executable.path,
+      protocolVersion: protocolVersion,
       arguments: launchArgs,
       workingDirectory: workingDirectory,
-      environment: environment,
-      allowedEnvironmentVariables: environment.keys.toSet(),
+      environment: {
+        ...environment,
+        if (workerStateDirectory != null)
+          'CONCLAVE_WORKER_STATE_DIR': workerStateDirectory,
+      },
+      allowedEnvironmentVariables: {
+        ...environmentPassthrough,
+        ...environment.keys,
+      },
       secretValues: secretValues,
       maxConcurrentAssignments: localConcurrencyLimit,
+      includeParentEnvironment: false,
     );
+  }
+
+  /// Builds the package's bounded environment from the signed passthrough
+  /// policy. Host variables not named by the package never enter this map.
+  Map<String, String> createPackageEnvironment() {
+    final environment = <String, String>{};
+    for (final name in environmentPassthrough) {
+      final value = Platform.environment[name];
+      if (value != null && value.isNotEmpty) environment[name] = value;
+    }
+    return environment;
   }
 }
 

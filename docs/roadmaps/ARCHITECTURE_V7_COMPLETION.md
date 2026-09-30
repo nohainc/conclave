@@ -617,8 +617,9 @@ first-party release publication is repeatable.
 
 **Status:** Adapter packages for Codex, Antigravity, Claude Code, Ollama, and
 OpenAI/Gemini/Anthropic APIs are present with protocol/provider-mock coverage.
-Opt-in live acceptance and proof for each production-supported catalog entry
-remain required before closing this phase.
+Opt-in live acceptance through the full Cloud → Workspace Gateway → Workspace
+→ signed Worker Package → real CLI → Cloud result path remains required for
+ChatGPT and Gemini before closing this phase.
 
 ## Goal
 
@@ -651,9 +652,16 @@ Complete:
 
 ## 5.3 Codex and Antigravity
 
-Run opt-in live acceptance against:
-- real Codex/ChatGPT local session;
-- real Google/Antigravity `agy` session.
+Run the opt-in full-path acceptance test independently against:
+- a real, configured Codex/ChatGPT CLI;
+- a real, configured Google/Antigravity `agy` CLI.
+
+Each run must dispatch a bounded assignment through Cloud and Workspace,
+execute the shipped signed package with the real CLI, and verify the successful
+result in Cloud persistence. Do not mark either Worker production-supported
+until its own run passes and its release evidence is recorded. Local package
+tests and fake-CLI Cloud acceptance are supporting coverage, not a substitute
+for this gate.
 
 Verify authentication expiry/remediation, model selection, cancellation and
 stateful Workstream execution.

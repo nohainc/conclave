@@ -1,4 +1,4 @@
-# Conclave AX Architecture v7 — Local Worker Runtime and Adapter Execution
+# Conclave AX Architecture v7 — Workspace Runtime and Worker Packages
 
 **Status:** Current architecture and active implementation target. V7 ownership, scheduler, E2E path, V6 compatibility retirement, and public-key release trust are implemented; production runtime gates remain open.
 **Date:** 2026-09-26  
@@ -38,8 +38,9 @@ The user installs one machine-side product:
 
 There are no separately installed Worker applications.
 
-Conclave Workspace manages signed Worker adapter packages and launches them as
-isolated child processes for assignments. First-party Workspace builds embed
+Conclave Workspace manages signed Worker Packages and launches them as
+isolated child processes for readiness and assignments. First-party Workspace
+builds embed
 the stable Codex and Antigravity releases as offline baselines; signed Cloud
 releases upgrade them without removing the last-known-good or bundled fallback.
 
@@ -53,16 +54,17 @@ The complete mental model should fit in four lines:
 > **Worker** = locally configured AI/tool identity on that machine.
 
 For the first-party v1 product, each Workspace has exactly one stable ChatGPT
-slot backed by Codex CLI and one stable Gemini slot backed by Antigravity CLI.
-Provider authentication and billing mode belong to those local CLIs; this
-catalog does not include direct provider API Workers or other adapters. The
-broader V7 adapter list below documents implementation and compatibility scope,
-not the supported v1 product catalog.
+slot backed by a Codex Worker Package and one stable Gemini slot backed by an
+Antigravity Worker Package. Provider authentication and billing mode belong to
+the local CLI and all interaction with it belongs to its Worker Package. This
+catalog does not include direct provider API Workers or other integrations.
+The broader V7 integration list below documents implementation and
+compatibility scope, not the supported v1 product catalog.
 
 The user does not need to understand:
 
-- Worker packages;
-- adapter protocol;
+- Worker Packages;
+- Local Worker Protocol;
 - credential profiles;
 - AI Accounts;
 - package desired state;
@@ -125,10 +127,10 @@ Each configured Worker exists on one Workspace only.
 The three protocol boundaries are frozen by the
 [Protocol Boundaries contract](PROTOCOL_BOUNDARIES.md): AX ↔ Cloud Human
 Product Protocol, Workspace ↔ Cloud Workspace Runtime Protocol, and Workspace
-↔ adapter Local Adapter Protocol. The protocols share canonical domain IDs
-and types only; their wire schemas and credentials remain separate. AX MUST
-NOT speak the Workspace Runtime Protocol, and adapters MUST NOT communicate
-directly with Cloud.
+↔ Worker Package Local Worker Protocol. The protocols share canonical domain
+IDs and types only; their wire schemas and credentials remain separate. AX
+MUST NOT speak the Workspace Runtime Protocol, and Worker Packages MUST NOT
+communicate directly with Cloud.
 
 ### 4.1 Conclave AX
 
@@ -179,7 +181,7 @@ Cloud does not execute an external AI/tool directly.
 
 ### 4.3 Conclave Workspace
 
-Conclave Workspace is the **desktop application/runtime** installed on the execution computer. It is the persistent local execution/security boundary. All configured Workers are created/authenticated here.
+Conclave Workspace is the **desktop application/runtime** installed on the execution computer. It is the persistent local execution/security boundary. Worker slots are created and managed here; provider authentication flows are mediated by their Worker Packages and remain owned by their provider CLIs.
 
 It owns:
 
@@ -188,28 +190,38 @@ It owns:
 - local Work Root;
 - Workstream directory resolution;
 - configured Worker local registry;
-- local credentials;
-- Worker adapter package lifecycle;
-- adapter/tool prerequisite checks;
+- Conclave desktop-session and Workspace-runtime credentials;
+- Worker Package lifecycle, signature and integrity admission;
+- package-reported local readiness;
 - local permissions;
 - child-process execution/supervision;
 - cancellation/process-tree termination;
 - local logs/diagnostics;
-- runtime and adapter updates;
+- runtime and Worker Package updates;
 - sync of safe Worker metadata/readiness to Cloud.
 
-### 4.4 Worker adapter
+Workspace MUST NOT discover, version, authenticate with, or execute a provider
+CLI or other provider tool directly. Provider-specific executable discovery,
+version checks, authentication/readiness interpretation, environment needs,
+command construction, output parsing, and diagnostics belong to the Worker
+Package. Workspace validates and admits the package, grants only permitted
+local resources, launches it through the Local Worker Protocol, supervises its
+process tree, and applies its safe readiness result to local dispatch policy.
 
-A Worker adapter is signed integration code managed by Conclave Workspace.
+### 4.4 Worker Package
 
-It owns translation between the Conclave assignment protocol and one external execution technology.
+A Worker Package is signed integration code managed and admitted by Conclave
+Workspace. It is the complete provider/tool integration boundary.
+
+It owns translation between the Local Worker Protocol and one external
+execution technology, including all provider-specific CLI/API interaction.
 
 For the first-party v1 catalog, the supported mappings are ChatGPT to the
-Codex adapter/CLI and Gemini to the Antigravity adapter/CLI (`agy`). Other
-adapter implementations remain outside the supported v1 catalog during
-migration.
+Codex-backed Worker Package and Gemini to the Antigravity-backed Worker
+Package. Other package implementations remain outside the supported v1 catalog
+during migration.
 
-Adapters are infrastructure, not separately installed product apps.
+Worker Packages are infrastructure, not separately installed product apps.
 
 ## 5. Workspace lifecycle
 
@@ -334,7 +346,7 @@ The script:
 - optionally notarizes with Apple;
 - produces a ZIP under `dist/conclave-workspace/macos`.
 
-Conclave Workspace is distributed directly rather than through Mac App Store sandboxing because it must execute local CLI/tool child processes and operate in persistent Workstream directories.
+Conclave Workspace is distributed directly rather than through Mac App Store sandboxing because it must launch and supervise Worker Packages and operate in persistent Workstream directories.
 
 A real Cloud smoke procedure is available through:
 
@@ -369,7 +381,7 @@ MacBook Pro
 
 Workers
 ChatGPT               Ready
-Gemini                Needs attention
+Gemini                Setup required
 
 Current work
 Authentication · ChatGPT · Running
@@ -378,6 +390,11 @@ Machine
 Work Root   ...
 Version     ...
 ```
+
+The Workers list uses only `Ready`, `Setup required`, `Not installed`, `Needs
+attention`, and `Disabled` as row states. Rows also show the package-reported
+CLI version and last Test result. Package identity, admission, signature, and
+provider-neutral diagnostic details stay in Advanced Diagnostics.
 
 ### 6.3 Local-only areas
 
@@ -451,81 +468,52 @@ Recommended uniqueness:
 
 Cloud always uses immutable Worker ID.
 
-## 8. Worker Type / adapter model
+## 8. Worker Type / Worker Package model
 
-The general adapter machinery below is retained as architecture/implementation
-context. The supported first-party v1 catalog is narrowed by ADR-015 to
-ChatGPT via Codex CLI and Gemini via Antigravity CLI; the other examples in
-this section are not v1 product offerings.
+The Worker Type is the stable product integration identity; the Worker Package
+is its admitted local implementation. The supported first-party v1 catalog is
+narrowed by ADR-015 to ChatGPT via the Codex-backed Worker Package and Gemini
+via the Antigravity-backed Worker Package. Package IDs remain separate from
+product Worker Type IDs.
 
-Worker Type describes an integration.
+The Workspace-visible package manifest contains only generic admission and
+compatibility metadata, such as:
 
 Suggested metadata:
 
 ```text
-id
-displayName
-adapterProtocolVersion
+packageId
+workerTypeIds
+localWorkerProtocolVersion
 releaseVersion
 supportedPlatforms
-capabilities
-authStrategies
-modelSelectionMode
-permissions
-prerequisites
+requestedPermissions
 publisher
 packageDigest
 signature
 releaseChannel
 ```
 
-### 8.1 Tool-backed types
+Provider-specific executable candidates, version rules, authentication
+semantics, environment variables, command lines, output formats, and provider
+error mappings are package implementation details. They MUST NOT be interpreted
+or duplicated by Workspace. Package-declared environment access and local
+resource permissions are admitted by Workspace as generic policy inputs.
 
-Examples:
+The signed manifest's `environmentPolicy.environmentPassthrough` lists parent
+variables Workspace may copy into that package. Package launches use
+`includeParentEnvironment: false` and a bounded generic base environment.
+Workspace treats the passthrough names as opaque keys. The package consumes its
+signed `providerCliPassthrough` list when constructing the provider CLI's
+environment; names and values marked sensitive are redacted from package output.
 
-- Codex;
-- Antigravity;
-- Claude Code.
+### 8.1 Worker Type naming rule
 
-Adapter may invoke a locally installed provider tool.
-
-Manifest declares:
-
-- executable prerequisite;
-- supported versions;
-- detection command;
-- auth/setup support;
-- execution/cancellation behavior.
-
-### 8.2 API-backed types
-
-Examples:
-
-- OpenAI API;
-- Gemini API;
-- Anthropic API.
-
-Adapter directly communicates with provider API.
-
-API credentials remain in local secure storage.
-
-### 8.3 Local-model types
-
-Examples:
-
-- Ollama;
-- LM Studio;
-- vLLM endpoint.
-
-Same Worker protocol; no Cloud architecture change.
-
-### 8.4 Worker Type naming rule
-
-The product-facing v1 names are **ChatGPT** and **Gemini**. ChatGPT is
-implemented locally through Codex CLI (`codex`); Gemini is implemented through
-Google Antigravity CLI (`agy`). These names denote supported product slots,
-not direct provider API adapters. Provider login and billing mode are owned by
-the corresponding CLI; Conclave does not ask the user to select subscription
+The product-facing v1 names are **ChatGPT** and **Gemini**. Their Worker
+Packages use Codex CLI and Google Antigravity CLI (`agy`) respectively. These
+names denote supported product slots, not direct provider API integrations.
+Provider login and billing mode are owned by the corresponding CLI and handled
+by its Worker Package; Conclave does not ask the user to select subscription
 versus API-key use. See [ADR-015](../decisions/ADR-015-first-party-worker-v1-contract.md).
 
 ## 9. Model selection
@@ -535,8 +523,8 @@ Model is not Worker Type.
 For the first-party v1 catalog, model selection belongs to the Work or
 Assignment. Workspace does not collect a Worker Name, local default model, or
 allowed-model list. Schema 6 clears previously stored local model defaults and
-allow-lists during migration. The adapter/tool validates whether it can run the
-requested model; local permissions and concurrency remain Workspace policy.
+allow-lists during migration. The Worker Package validates whether it can run
+the requested model; local permissions and concurrency remain Workspace policy.
 
 Older generic Worker contracts supported local model defaults and allow-lists;
 that behavior is retained only for historical compatibility and is not part of
@@ -547,9 +535,10 @@ the v1 first-party catalog.
 ### 10.1 First-party v1 Workspace configuration
 
 The current v1 UI presents fixed ChatGPT and Gemini catalog slots rather than
-the earlier generic Add Worker flow. Configuration covers CLI/authentication/
-adapter readiness, local permissions, local concurrency, and diagnostics. It
-does not collect a Worker Name or local model defaults/allow-lists. See
+the earlier generic Add Worker flow. Configuration covers Worker
+Package-reported readiness, local permissions, local concurrency, and safe
+diagnostics. It does not collect a Worker Name or local model defaults/allow-lists.
+See
 [ADR-015](../decisions/ADR-015-first-party-worker-v1-contract.md).
 
 Current flow:
@@ -557,19 +546,24 @@ Current flow:
 ```text
 Workers
 -> choose Configure on ChatGPT or Gemini slot
--> prerequisite check
--> authenticate/connect
--> local permissions
--> validate
--> save fixed catalog slot
+-> ensure mapped Worker Package is installed and admitted
+-> save fixed catalog slot with Workspace policy defaults
+-> ask package for readiness
+-> run the package's live test only on explicit user action
 -> sync safe projection
 ```
 
 ### 10.2 Authentication
 
-Auth is adapter-defined but local.
+Provider authentication is CLI-defined and Worker Package-mediated. Workspace
+does not inspect provider credentials or execute authentication-status CLI
+commands directly.
 
-Possible strategies:
+Provider-specific setup remains inside the package. Its Local Worker Protocol
+result exposes only safe readiness states and bounded diagnostics;
+authentication mode is not a Cloud inventory field.
+
+Examples of provider-owned strategies include:
 
 - provider browser login;
 - cached subscription session;
@@ -577,11 +571,9 @@ Possible strategies:
 - local session token;
 - no credential/local endpoint.
 
-Cloud receives only:
-
-- strategy label;
-- readiness;
-- safe provider/account hint if permitted.
+Cloud receives only the provider-neutral readiness projection and safe
+attention reason required for scheduling; it does not receive auth strategy,
+provider/account hints, or credential references.
 
 ### 10.3 Permission approval
 
@@ -611,10 +603,11 @@ Workspace sends idempotent upsert/tombstone events.
 
 The synchronized and AX-facing projection excludes Worker names, auth strategy,
 credential status or references, local permission names, model defaults and
-allow-lists, tokens, API keys, auth files, and local paths. Readiness details
-are stable reason codes; raw CLI/authentication output stays local. Discovered
-model or capability metadata may be added only when it is non-sensitive and
-does not reveal local credentials or paths.
+allow-lists, tokens, API keys, auth files, and local paths. Workspace forwards
+only the package's validated, bounded, provider-neutral readiness result; raw
+provider output remains inside the Worker Package. Discovered model or
+capability metadata may be added only when it is non-sensitive and does not
+reveal local credentials or paths.
 
 Cloud rejects inventory updates from any runtime other than the Worker's owning Workspace.
 
@@ -622,27 +615,39 @@ Cloud rejects inventory updates from any runtime other than the Worker's owning 
 
 ### 12.1 Local -> Cloud inventory
 
-Workspace is authoritative for existence/local configuration/readiness.
+Workspace is authoritative for Worker slot existence, package admission,
+local permissions, and dispatch eligibility. The Worker Package is
+authoritative for provider/tool-specific readiness and reports it through the
+Local Worker Protocol.
 
 Sync triggers:
 
 - Worker created;
 - Worker edited;
-- readiness changed after local authentication or execution prerequisites changed;
-- adapter updated;
+- package-reported readiness changed;
+- Worker Package updated;
 - permissions changed;
 - Worker removed;
-- readiness recheck at runtime startup, every five minutes, after app resume,
-  and on explicit setup recheck;
+- package readiness probe at runtime startup, after app resume, and on explicit
+  setup recheck (any periodic probe is package-defined and must not run a
+  quota-consuming live execution test);
 - reconnect.
 
-Workspace persists an exact local readiness state (`ready`, `not_installed`,
-`sign_in_required`, `unsupported_cli_version`, `adapter_unavailable`,
-`disabled`, or `test_failed`) and publishes it as safe inventory metadata.
-Cloud keeps this detail separate from its existing coarse scheduling status;
-only local `ready` status is eligible for dispatch. Readiness probes validate
-CLI version/presence, provider-owned CLI authentication, adapter signature and
-integrity, and execution prerequisites without copying provider secrets.
+Workspace persists package-reported readiness using the versioned local
+readiness contract plus Workspace-owned states such as `disabled` and
+`package_unavailable`, then publishes only the safe projection. Cloud keeps
+this detail separate from its existing coarse scheduling status; only local
+`ready` status is eligible for dispatch. The Worker Package performs provider
+CLI presence/version/authentication checks and execution prerequisites.
+The local record retains the latest passive probe state and time, the latest
+live-test result and time, and a stable actionable issue code. Workspace does
+not infer provider authentication from historical `credentialStatus`. Gemini
+passive probes may report `setup_required` when the CLI has no cheap supported
+authentication check; the untested Worker is presented as setup-required, not
+as a broken integration. A successful live test establishes local eligibility
+until a later package result reports a blocking issue.
+Workspace independently validates package signature/integrity and enforces
+local permissions. No provider credential is copied into the package protocol.
 
 ### 12.2 Cloud -> local operational policy
 
@@ -739,23 +744,53 @@ Cloud assignment
 -> Workspace validates
 -> resolve Workstream CWD
 -> resolve configured Worker
--> verify adapter package/version
--> load only required local credential
--> launch adapter child process
--> adapter invokes API/tool/local model
+-> verify Worker Package signature, integrity, and protocol compatibility
+-> apply package permissions and signed environment policy
+-> launch Worker Package child process through Local Worker Protocol
+-> package discovers/probes and invokes its provider tool or API
 -> stream progress
 -> capture result
 -> terminate/cleanup
 -> report completion
 ```
 
-One assignment child process is default.
+Default process topology: the Workspace runtime stays resident; each
+assignment starts one fresh Worker Package child process; that package starts
+one fresh provider CLI process for the assignment. Workspace supervises and
+cleans up the package process, and the package's shared runner supervises and
+cleans up the CLI process. Durable sessions carry provider resume IDs between
+these fresh CLI processes; they do not keep either child process alive.
 
-## 16. Adapter process protocol
+## 16. Local Worker Protocol
 
-Prefer structured stdin/stdout protocol.
+Use the versioned Workspace-to-Worker-Package protocol, with structured
+stdin/stdout transport for the local child process.
 
-Protocol version 2.1 messages:
+The current implementation supports adapter-v7 schema versions 2.1 through
+2.5; first-party packages use 2.5. A `probe.request` explicitly selects
+`passive` or `live`. Passive probes perform package-owned executable discovery,
+version checks, and cheap authentication checks when the provider supports
+them. Live probes run the small `OK` request. The response contains `mode`,
+`ready`, `toolVersion`, and structured `checks[]` entries with a stable check
+ID, status, optional stable issue code, and optional diagnostic bounded to
+2,048 characters. Diagnostics remain local and are not synchronized to Cloud.
+An `execute.request` in protocol 2.4 and later carries the remaining assignment
+`timeoutMs`. The package derives the provider CLI deadline from that budget and
+leaves a 1.5-second cleanup grace before the Workspace deadline. Live readiness
+tests use a separate explicit 30-second test deadline. Protocol 2.5 adds
+`sessionPolicy` (`stateless` or `durable_session`) and an opaque `sessionKey`
+for durable turns. Packages keep provider session identifiers in package-local
+storage; neither Cloud nor Workspace stores or interprets those identifiers.
+Workspace provides each configured Worker Package a private
+`Workspace/Workers/<worker-id>/state` directory through the generic
+`CONCLAVE_WORKER_STATE_DIR` environment value. Packages may keep session
+mappings and non-secret tool metadata there; Workspace treats its contents as
+opaque.
+Persistent provider processes and long-running Worker daemons are deferred
+until the first-party Codex and Gemini Workers are proven stable. Protocol
+versions 2.1 through 2.4 remain readable during package migration; packages
+older than 2.4 do not receive the assignment deadline field. The protocol uses
+these messages:
 
 - `initialize.request` / `initialize.result`;
 - `probe.request` / `probe.result`;
@@ -765,10 +800,12 @@ Protocol version 2.1 messages:
 Every request and response is correlated by `requestId`; progress and terminal
 execution frames carry the originating execute request ID. The strict schema
 rejects unknown fields, applies per-field and 1 MB frame limits, and contains no
-provider token or account-secret fields. A readiness probe performs only
-low-cost local checks; an execution test that consumes provider quota is a
-separate future operation. Cancellation is enforced by the Workspace process
-supervisor.
+provider token or account-secret fields. Workspace requests a passive package
+probe during routine readiness checks and validates its bounded,
+provider-neutral result; only the package decides which provider-specific
+checks are needed. A live probe that may consume provider
+quota is explicitly requested and is never implied by routine Workspace
+supervision. Cancellation is enforced by the Workspace process supervisor.
 
 Protocol must include:
 
@@ -781,7 +818,8 @@ Do not scrape interactive terminal UI when a supported machine-readable/headless
 
 ## 17. Process isolation
 
-Workspace runtime supervises adapter/tool process trees.
+Workspace runtime supervises Worker Package and descendant process trees. Only
+the Worker Package may discover or launch its provider tool.
 
 Requirements:
 
@@ -790,24 +828,29 @@ Requirements:
 - scoped secret injection;
 - no inherited secret environment by default;
 - stdout/stderr limits;
+- package-owned provider CLI diagnostic capture and provider-neutral mapping;
+- a bounded, redacted local package-stderr tail only when a package crashes
+  before returning a protocol frame (never synchronized to Cloud);
 - timeout;
 - graceful cancel then forced kill;
 - process-group/tree termination;
 - temp-file cleanup;
 - exit status normalization.
 
-Each assignment owns one Workspace-launched adapter process and its complete
-descendant tree. On POSIX, the supervisor isolates the tree in a process group
-and signals the group; it retains recursive descendant discovery as a
-fallback. On Windows, termination targets the process tree. Cloud assignment
-cancellation, assignment timeout, output-limit failure, Worker removal, and
-Workspace shutdown all terminate the assignment tree. Shutdown rejects
-new assignments and cancels operations that are active, starting, or queued.
-The supervisor waits briefly after graceful termination and then force-kills
-the remaining tree. Adapter/CLI exit or protocol failures stay scoped to that
+Each assignment owns one Workspace-launched Worker Package process and its complete
+descendant tree, including provider CLI processes launched by the package. On
+cancellation, timeout, output-limit failure, Worker removal, or Workspace
+shutdown, Workspace first sends a graceful stop to the package and gives it a
+brief cleanup window. The shared CLI runner uses that window to stop its
+provider process and descendants. Workspace then force-kills the complete
+assignment tree: a POSIX process group plus recursive descendant discovery as
+a fallback, or the Windows process tree. Provider CLI processes stay in the
+Workspace-owned process group so a package crash cannot orphan them. Shutdown
+rejects new assignments and cancels operations that are active, starting, or
+queued. Package/provider-tool exit or protocol failures stay scoped to that
 assignment and do not stop the Workspace runtime.
 
-A crashed adapter must not disconnect the Workspace runtime.
+A crashed Worker Package must not disconnect the Workspace runtime.
 
 ## 18. Workstream working directory
 
@@ -863,15 +906,15 @@ AX owners/collaborators can:
 - set a Cloud-side concurrency limit.
 
 Workstream scheduling fails closed until a role mapping exists. The Workspace
-app reports readiness and handles local authentication, permissions, and
-execution setup.
+app reports package readiness and offers provider setup through package-defined
+flows, while Workspace owns local permissions and execution setup.
 
 ### Not allowed initially
 
 - enter/change provider secret;
 - approve new local permissions;
 - silently remove local credential;
-- silently change prerequisite tool installation.
+- silently change Worker Package installation.
 
 Worker removal is local-first; Cloud may support a remote removal request later with explicit local confirmation.
 
@@ -924,7 +967,8 @@ Cloud can request execution but local runtime verifies:
 - permissions;
 - CWD containment;
 - Workstream lease/fencing;
-- credential availability.
+- Conclave desktop/runtime credential state (provider credentials remain owned
+  by the provider CLI and are not read by Workspace).
 
 No Cloud instruction can override local trust boundaries.
 
@@ -936,7 +980,7 @@ Three update layers:
 
 Normal signed application update.
 
-### Worker adapter package
+### Worker Package
 
 Managed inside Conclave Workspace with signature/digest verification and rollback.
 
@@ -968,11 +1012,13 @@ Assignment fails/retries according to Workflow; Workspace remains online.
 
 ### Credential expiry
 
-Worker becomes Needs authentication; other Workers remain eligible.
+The Worker Package reports authentication unavailable; that Worker becomes
+Needs authentication while other Workers remain eligible.
 
 ### Tool missing/outdated
 
-Worker becomes Needs attention.
+The Worker Package reports a missing or unsupported tool; that Worker becomes
+Needs attention.
 
 ### Adapter update failure
 
@@ -987,9 +1033,9 @@ Keep previously verified active version where safe.
 | Work Root/files                                       | local Workspace              |
 | configured Worker existence/config                    | local Workspace              |
 | Worker safe inventory projection                      | Cloud replica                |
-| provider secret                                       | local Workspace secure store |
-| adapter catalog/release metadata                      | Cloud                        |
-| adapter installed state                               | local Workspace              |
+| provider credentials                                  | provider CLI secure store    |
+| Worker Package catalog/release metadata               | Cloud                        |
+| Worker Package installed state                        | local Workspace              |
 | scheduling enable/drain (target; controls incomplete) | Cloud                        |
 | Project/Workstream Worker authorization               | Cloud                        |
 | local permission ceiling                              | local Workspace              |

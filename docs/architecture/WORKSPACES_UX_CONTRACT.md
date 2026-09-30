@@ -120,7 +120,7 @@ Raw command output is never an attention reason; use stable reason codes.
 Worker configuration and authentication remain in Conclave Workspace.
 
 The Workspaces page stays operational and read-only. AX may not create/remove
-a local Worker, set credentials, approve local permissions, install a CLI,
+a local Worker, set credentials, approve local permissions, install a provider tool,
 change an endpoint, or repair the runtime connection. Worker usage controls
 belong to Workstream Execution settings and cannot change the Workspace's local
 readiness or permissions.

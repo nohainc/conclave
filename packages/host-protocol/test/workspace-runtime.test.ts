@@ -75,6 +75,8 @@ describe("Workspace Runtime protocol", () => {
       workerTypeId: "chatgpt",
       name: "ChatGPT Personal",
       status: "needs_attention",
+      readinessState: "setup_required",
+      readinessIssueCode: "setup_required",
       authStrategy: "browser_auth",
       defaultModel: null,
       allowedModels: [],
@@ -95,6 +97,16 @@ describe("Workspace Runtime protocol", () => {
         payload: { workers: [worker], fullSnapshot: true },
       }).type,
     ).toBe("worker.inventory");
+    expect(() =>
+      parseWorkspaceRuntimeMessage({
+        ...base,
+        type: "worker.inventory",
+        payload: {
+          workers: [{ ...worker, readinessIssueCode: "api_key=secret" }],
+          fullSnapshot: true,
+        },
+      }),
+    ).toThrow();
     for (const adapterPackageId of ["codex", "antigravity"]) {
       expect(() =>
         parseWorkspaceRuntimeMessage({

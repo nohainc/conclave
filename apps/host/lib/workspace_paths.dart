@@ -51,6 +51,22 @@ class WorkspacePaths {
       ? Directory('${applicationSupportDirectory.path}/Adapters')
       : Directory('${stateDirectory.path}/v7-adapters');
 
+  /// Private opaque state owned by installed Worker Packages.
+  Directory get workersDirectory =>
+      Directory('${applicationSupportDirectory.path}/Workers');
+
+  Directory workerStateDirectory(String workerId) {
+    if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$').hasMatch(workerId) ||
+        workerId == '.' ||
+        workerId == '..') {
+      throw ArgumentError.value(workerId, 'workerId', 'invalid Worker ID');
+    }
+    return Directory(
+      '${workersDirectory.path}${Platform.pathSeparator}$workerId'
+      '${Platform.pathSeparator}state',
+    );
+  }
+
   Directory get updatesDirectory => _usesManagedMacLayout
       ? Directory('${applicationSupportDirectory.path}/Updates')
       : Directory('${stateDirectory.path}/updates');
@@ -80,6 +96,7 @@ class WorkspacePaths {
     for (final directory in [
       stateDirectory,
       adaptersDirectory,
+      workersDirectory,
       updatesDirectory,
       logsDirectory,
     ]) {

@@ -57,10 +57,12 @@ two first-party adapter cases use WebSocket transport.
 
 ## 4. Opt-in live CLI acceptance
 
-These local tests use the user's already configured provider CLI account and
-send one small prompt. They may consume provider usage. They are not part of
-ordinary CI and are skipped unless the corresponding explicit environment
-switch is set.
+These local tests use the already configured provider CLI account and are
+skipped unless the provider-specific opt-in switch is set. Each run performs a
+passive probe, one stateless real assignment, then starts a durable session and
+continues it from a fresh Worker Package process. This is three small live
+requests and may consume provider usage. The session state is stored in a
+temporary test directory and removed afterward.
 
 ```sh
 CONCLAVE_TEST_REAL_CODEX=1 node --test \
@@ -70,15 +72,52 @@ CONCLAVE_TEST_REAL_AGY=1 node --test \
   packages/worker-manifest/adapters/antigravity/test/antigravity-adapter.node.mjs
 ```
 
-If the CLI is not on the current shell's `PATH`, the tests accept
-`CONCLAVE_TEST_CODEX_PATH` or `CONCLAVE_TEST_AGY_PATH`. Do not put provider
+If a CLI is installed outside the current shell's `PATH`, add its install
+directory to `PATH` before launching the adapter test. Worker Packages own CLI
+discovery and do not accept executable-path overrides. Do not put provider
 credentials in test variables, fixtures, CI secrets, or acceptance evidence.
+The package receives only the runtime base environment and variables listed in
+its signed manifest policy, so configured Codex home, Gemini API key, endpoint,
+or ADC settings are exercised through the same package boundary used by
+Workspace. Do not set either opt-in switch in routine CI.
 
-## 5. Manually approved production assignment
+## 5. Opt-in Cloud-to-CLI production-path acceptance
+
+The final local release-gate test exercises the production Cloud dispatcher and
+Workspace Gateway, a real Workspace runtime process, signed Worker Package
+admission, the installed provider CLI, and result persistence back in Cloud. It
+uses an in-memory Cloud database and local Gateway/Workspace processes; it does
+not deploy to production. The real CLI scenarios are excluded unless their
+provider-specific opt-in switch is set. They may consume provider quota.
+
+Run one provider at a time after confirming its CLI is installed, configured,
+and available in the invoking shell's `PATH`:
+
+```sh
+CONCLAVE_TEST_REAL_CLOUD_CODEX=1 DART_EXECUTABLE="$(command -v dart)" \
+  pnpm exec vitest run apps/cloud/test/v7-runtime-e2e.acceptance.test.ts
+
+CONCLAVE_TEST_REAL_CLOUD_AGY=1 DART_EXECUTABLE="$(command -v dart)" \
+  pnpm exec vitest run apps/cloud/test/v7-runtime-e2e.acceptance.test.ts
+```
+
+Each real scenario submits one bounded prompt using the CLI's configured
+default model, verifies progress and successful result frames, and confirms
+that the Cloud assignment and workflow task are completed with the response.
+The test does not include provider CLI stderr or credentials in Cloud records.
+The Workspace process receives only the variables authorized by the signed
+package environment policy. Routine CI must not set these opt-in switches.
+
+Do not mark ChatGPT or Gemini production-supported until its own full-path
+scenario passes on the intended machine and the release record below is
+completed. The separate local durable-session tests do not substitute for this
+Cloud-to-Workspace result-persistence gate.
+
+## 6. Manually approved production assignment
 
 Do not declare either first-party Worker production-supported until its own
-production acceptance record shows a successful real assignment across the
-complete path:
+opt-in Cloud-to-CLI acceptance scenario passes and its production acceptance
+record shows a successful real assignment across the complete path:
 
 ```text
 Cloud → Workspace Gateway → Workspace → first-party adapter → real CLI → Cloud result
@@ -119,6 +158,8 @@ with evidence.
 ## CI boundary
 
 Routine CI runs protocol, fake process, and Cloud-to-Workspace fake-CLI tests.
-It does not set `CONCLAVE_TEST_REAL_CODEX`, `CONCLAVE_TEST_REAL_AGY`, or make
-real provider assignments. Production acceptance is a manual release gate and
-must be completed independently for both providers before support is claimed.
+It does not set `CONCLAVE_TEST_REAL_CODEX`, `CONCLAVE_TEST_REAL_AGY`,
+`CONCLAVE_TEST_REAL_CLOUD_CODEX`, or `CONCLAVE_TEST_REAL_CLOUD_AGY`, and makes
+no real provider assignments. Production acceptance is a manual release gate
+and must be completed independently for both providers before support is
+claimed.

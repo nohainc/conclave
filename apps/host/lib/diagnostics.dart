@@ -7,9 +7,7 @@ import 'host.dart';
 import 'platform_runtime.dart';
 import 'workspace_enrollment.dart';
 import 'v7_adapter_package_store.dart';
-import 'first_party_worker_adapter_descriptor.dart';
-import 'first_party_worker_adapter_probe.dart';
-import 'worker_readiness.dart';
+import 'first_party_worker_registry.dart';
 
 const _diagnosticSecretPattern =
     r'(secret|token|password|api[_-]?key|authorization|cookie|raw[_-]?credential|private[_-]?key)';
@@ -69,43 +67,26 @@ Future<Map<String, Object?>> buildHostDiagnostics({
     } on Object {
       // Keep diagnostics safe when the package is invalid or revoked.
     }
-    final descriptor = FirstPartyWorkerAdapterDescriptor.forProductWorkerTypeId(
+    final descriptor = FirstPartyWorkerPackage.forProductWorkerTypeId(
       worker.workerTypeId,
     );
-    final prerequisites = <Map<String, Object?>>[];
-    if (descriptor != null) {
-      try {
-        final result =
-            await const FirstPartyWorkerAdapterProbe().probe(descriptor);
-        prerequisites.add({
-          'executable': result.executable,
-          'satisfied': result.versionProbe.satisfied,
-          'version': result.versionProbe.detectedVersion,
-        });
-      } on Object {
-        prerequisites.add({
-          'executable': descriptor.executableCandidates.join(' or '),
-          'satisfied': false,
-        });
-      }
-    }
     workers.add({
       'workerId': worker.id,
       'workerTypeId': worker.workerTypeId,
       'status': worker.status.name,
       'readinessState': worker.readinessState.wireValue,
-      if (descriptor != null)
-        'probeReasonCode':
-            firstPartyWorkerProbeReasonCodeForState(worker.readinessState)
-                .wireValue,
-      'credentialStatus': worker.credentialStatus.name,
+      'lastPassiveProbeAt': worker.lastPassiveProbeAt,
+      'readinessIssueCode': worker.readinessIssueCode,
+      'toolVersion': worker.toolVersion,
+      if (descriptor != null) 'packageId': descriptor.packageId,
       'adapterVersion': adapter?['adapterVersion'],
       'adapter': adapter,
       'lastLiveTest': {
         'at': worker.lastLiveTestAt,
         'passed': worker.lastLiveTestPassed,
+        'issueCode': worker.lastLiveTestIssueCode,
+        'details': worker.lastLiveTestDetails,
       },
-      'prerequisites': prerequisites,
     });
   }
   if (journal != null) {

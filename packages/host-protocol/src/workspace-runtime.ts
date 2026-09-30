@@ -65,6 +65,22 @@ export const WorkspaceWorkerInventoryEntrySchema = z
     workerTypeId: WorkspaceProductWorkerTypeIdSchema,
     name: nonEmptyString.max(200),
     status: z.enum(["ready", "needs_attention", "disabled", "removed"]),
+    readinessState: z
+      .enum([
+        "ready",
+        "setup_required",
+        "not_installed",
+        "sign_in_required",
+        "unsupported_cli_version",
+        "adapter_unavailable",
+        "disabled",
+        "test_failed",
+      ])
+      .optional(),
+    readinessIssueCode: z
+      .string()
+      .regex(/^[a-z][a-z0-9_]{0,127}$/)
+      .optional(),
     authStrategy: z.enum(["none", "browser_auth", "api_key", "local_endpoint"]),
     defaultModel: z.string().max(256).nullable(),
     allowedModels: z.array(nonEmptyString.max(256)).max(128),
@@ -139,6 +155,25 @@ export const workspaceRuntimeEnvelopeSchema = z
           snapshot: z
             .object({
               workerTypeId: WorkspaceProductWorkerTypeIdSchema,
+              sessionPolicy: z
+                .enum(["stateless", "durable_session"])
+                .optional(),
+              sessionKey: nonEmptyString.max(256).optional(),
+            })
+            .superRefine((snapshot, ctx) => {
+              if (
+                (snapshot.sessionPolicy === "stateless" &&
+                  snapshot.sessionKey !== undefined) ||
+                (snapshot.sessionPolicy === "durable_session" &&
+                  snapshot.sessionKey === undefined)
+              ) {
+                ctx.addIssue({
+                  code: z.ZodIssueCode.custom,
+                  path: ["sessionKey"],
+                  message:
+                    "Session policy and logical session key are inconsistent",
+                });
+              }
             })
             .passthrough(),
           input: z.record(z.string(), z.unknown()).optional(),

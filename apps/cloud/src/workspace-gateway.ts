@@ -1282,6 +1282,7 @@ export class WorkspaceGateway implements DurableObject {
           : null;
       const readinessState = [
         "ready",
+        "setup_required",
         "not_installed",
         "sign_in_required",
         "unsupported_cli_version",
@@ -1294,7 +1295,12 @@ export class WorkspaceGateway implements DurableObject {
           ? "ready"
           : status === "disabled" || status === "removed"
             ? "disabled"
-            : "test_failed";
+          : "test_failed";
+      const readinessIssueCode =
+        typeof item.readinessIssueCode === "string" &&
+        /^[a-z][a-z0-9_]{0,127}$/.test(item.readinessIssueCode)
+          ? item.readinessIssueCode
+          : null;
       const workerStatus = [
         "ready",
         "needs_attention",
@@ -1308,16 +1314,17 @@ export class WorkspaceGateway implements DurableObject {
       await this.env.CONCLAVE_DB.prepare(
         `INSERT INTO workspace_worker_inventory
           (worker_id, workspace_id, owner_user_id, worker_type_id, name,
-           status, readiness_state, auth_strategy, default_model, allowed_models_json,
+           status, readiness_state, readiness_issue_code, auth_strategy, default_model, allowed_models_json,
            capabilities_json, local_permissions_summary_json,
            local_concurrency_limit, adapter_version, credential_status,
            revision, created_at, updated_at, last_seen_at, removed_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
          ON CONFLICT(worker_id) DO UPDATE SET
            worker_type_id = excluded.worker_type_id,
            name = excluded.name,
            status = excluded.status,
            readiness_state = excluded.readiness_state,
+           readiness_issue_code = excluded.readiness_issue_code,
           auth_strategy = 'none',
           default_model = NULL,
           allowed_models_json = '[]',
@@ -1343,6 +1350,7 @@ export class WorkspaceGateway implements DurableObject {
           workerTypeId.slice(0, 200),
           workerStatus,
           readinessState,
+          readinessIssueCode,
           "none",
           null,
           "[]",

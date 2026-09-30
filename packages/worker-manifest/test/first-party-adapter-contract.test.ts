@@ -155,6 +155,7 @@ describe.each(cases)("$name Local Adapter Protocol contract", (adapterCase) => {
       type: "probe.request",
       protocolVersion: V7_ADAPTER_PROTOCOL_VERSION,
       requestId: "contract-probe",
+      mode: "passive",
     });
     const probed = await waitFor(
       (frame) => frame.requestId === "contract-probe",
@@ -165,8 +166,21 @@ describe.each(cases)("$name Local Adapter Protocol contract", (adapterCase) => {
       requestId: "contract-probe",
       ready: true,
       toolVersion: adapterCase.version,
-      checkKind: "readiness",
-      issues: [],
+      mode: "passive",
+      checks: [
+        { id: "cli_discovery", status: "passed" },
+        { id: "tool_version", status: "passed" },
+        ...(adapterCase.workerTypeId === "codex"
+          ? [{ id: "authentication", status: "passed" }]
+          : [
+              {
+                id: "authentication",
+                status: "skipped",
+                issueCode: "setup_required",
+                diagnostic: "Authentication is checked by a live probe.",
+              },
+            ]),
+      ],
     });
 
     send({
@@ -175,6 +189,8 @@ describe.each(cases)("$name Local Adapter Protocol contract", (adapterCase) => {
       requestId: "contract-execute",
       assignmentId: "contract-assignment",
       prompt: "Return a short result.",
+      timeoutMs: 300_000,
+      sessionPolicy: "stateless",
     });
     await waitFor(
       (frame) =>

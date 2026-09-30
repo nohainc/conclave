@@ -1,7 +1,7 @@
 {
   "workerTypeId": "codex",
   "adapterVersion": "1.0.0",
-  "protocolVersion": "2.1",
+  "protocolVersion": "2.5",
   "publisher": "conclave",
   "displayName": "Codex",
   "supportedPlatforms": [
@@ -14,10 +14,24 @@
   "permissions": ["workspace:read", "workspace:write", "shell:execute"],
   "authStrategies": ["browser_auth"],
   "modelSelectionMode": "allow_list",
-  "prerequisites": [
-    { "kind": "executable", "executable": "node" },
-    { "kind": "executable", "executable": "codex" }
-  ],
+  "prerequisites": [{ "kind": "executable", "executable": "node" }],
+  "environmentPolicy": {
+    "environmentPassthrough": [
+      "CODEX_HOME",
+      "XDG_CONFIG_HOME",
+      "XDG_DATA_HOME",
+      "XDG_STATE_HOME",
+      "XDG_CACHE_HOME"
+    ],
+    "providerCliPassthrough": [
+      "CODEX_HOME",
+      "XDG_CONFIG_HOME",
+      "XDG_DATA_HOME",
+      "XDG_STATE_HOME",
+      "XDG_CACHE_HOME"
+    ],
+    "sensitivePassthrough": []
+  },
   "executable": "bin/conclave-codex-adapter.mjs",
   "launchArgs": [],
   "secretRequirements": [],

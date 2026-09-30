@@ -59,7 +59,13 @@ Future<void> main(List<String> args) async {
       await _copyPackage(source, staging);
       final sharedRuntime =
           Directory('${source.parent.path}${Platform.pathSeparator}shared');
-      if (const {'openai-api', 'gemini-api', 'anthropic-api'}
+      if (const {
+            'openai-api',
+            'gemini-api',
+            'anthropic-api',
+            'codex',
+            'antigravity',
+          }
               .contains(source.path.split(Platform.pathSeparator).last) &&
           await sharedRuntime.exists()) {
         await _copySharedRuntime(sharedRuntime, staging);

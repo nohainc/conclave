@@ -7,7 +7,7 @@ import 'package:conclave_host/bundled_adapter_asset_loader.dart';
 import 'package:conclave_host/host_configuration.dart';
 import 'package:conclave_host/assignment_journal.dart';
 import 'package:conclave_host/cloud_connection.dart';
-import 'package:conclave_host/first_party_worker_adapter_descriptor.dart';
+import 'package:conclave_host/first_party_worker_registry.dart';
 import 'package:conclave_host/worker_executor.dart';
 import 'package:conclave_host/workstream_directory.dart';
 import 'package:conclave_host/workstream_path.dart';
@@ -73,6 +73,8 @@ Future<Host> buildWorkspaceRuntime(
   );
   final v7AdapterPackageStore = V7AdapterPackageStore(
     root: WorkspacePaths(config.dataDirectory).adaptersDirectory,
+    workerStateRoot: WorkspacePaths(config.dataDirectory).workersDirectory,
+    statePlatform: WorkspacePaths(config.dataDirectory).platform,
     trustPolicy: workerTrustPolicy,
     allowedPermissions: _configuredPermissions(),
     loadBundledPackage: loadBundledFirstPartyAdapter,
@@ -110,44 +112,18 @@ Future<Host> buildWorkspaceRuntime(
           message: executionErrorMessage('worker_not_ready'),
         );
       }
-      if (worker.status != LocalWorkerStatus.ready ||
-          (worker.authStrategy == 'api_key' &&
-              worker.credentialStatus != LocalWorkerCredentialStatus.ready)) {
-        final readinessCode = worker.credentialStatus ==
-                LocalWorkerCredentialStatus.needsAuthentication
-            ? 'authentication_required'
-            : switch (worker.readinessState) {
-                WorkerReadinessState.notInstalled => 'cli_not_found',
-                WorkerReadinessState.signInRequired =>
-                  'authentication_required',
-                WorkerReadinessState.unsupportedCliVersion =>
-                  'unsupported_cli_version',
-                WorkerReadinessState.adapterUnavailable =>
-                  'internal_adapter_error',
-                _ => 'worker_not_ready',
-              };
-        throw V7AdapterExecutionFailure(
-          code: readinessCode,
-          message: executionErrorMessage(readinessCode),
-        );
-      }
-      final descriptor =
-          FirstPartyWorkerAdapterDescriptor.forProductWorkerTypeId(
-              worker.workerTypeId);
-      if (descriptor != null && expectedWorkerTypeId == null) {
+      if (worker.status != LocalWorkerStatus.ready) {
         throw V7AdapterExecutionFailure(
           code: 'worker_not_ready',
           message: executionErrorMessage('worker_not_ready'),
         );
       }
-      if (descriptor != null &&
-          (worker.executablePath == null || worker.cliVersion == null)) {
-        final errorCode = worker.executablePath == null
-            ? 'cli_not_found'
-            : 'unsupported_cli_version';
+      final descriptor =
+          FirstPartyWorkerPackage.forProductWorkerTypeId(worker.workerTypeId);
+      if (descriptor != null && expectedWorkerTypeId == null) {
         throw V7AdapterExecutionFailure(
-          code: errorCode,
-          message: executionErrorMessage(errorCode),
+          code: 'worker_not_ready',
+          message: executionErrorMessage('worker_not_ready'),
         );
       }
       final adapter = await v7AdapterPackageStore.resolve(
@@ -158,19 +134,6 @@ Future<Host> buildWorkspaceRuntime(
         throw V7AdapterExecutionFailure(
           code: 'internal_adapter_error',
           message: executionErrorMessage('internal_adapter_error'),
-        );
-      }
-      final executablePath = adapter.executablePath;
-      final cliVersion = adapter.cliVersion;
-      if (executablePath == null || cliVersion == null) return adapter;
-      if (worker.executablePath != executablePath ||
-          worker.cliVersion != cliVersion) {
-        await localWorkerRegistry.update(
-          worker.id,
-          (current) => current.copyWith(
-            executablePath: executablePath,
-            cliVersion: cliVersion,
-          ),
         );
       }
       return adapter;
@@ -261,7 +224,9 @@ Future<Host> buildWorkspaceRuntime(
                       ? WorkerReadinessState.disabled
                       : adapterSummary == null
                           ? WorkerReadinessState.adapterUnavailable
-                          : worker.readinessState;
+                          : worker.status == LocalWorkerStatus.ready
+                              ? WorkerReadinessState.ready
+                              : worker.readinessState;
               return <String, Object?>{
                 'workerId': worker.id,
                 'workerTypeId': worker.workerTypeId,
@@ -275,6 +240,16 @@ Future<Host> buildWorkspaceRuntime(
                         LocalWorkerStatus.removed => 'removed',
                       },
                 'readinessState': readinessState.wireValue,
+                if (worker.status != LocalWorkerStatus.ready &&
+                    (worker.lastLiveTestPassed == false
+                            ? worker.lastLiveTestIssueCode ??
+                                worker.readinessIssueCode
+                            : worker.readinessIssueCode) !=
+                        null)
+                  'readinessIssueCode': worker.lastLiveTestPassed == false
+                      ? worker.lastLiveTestIssueCode ??
+                          worker.readinessIssueCode
+                      : worker.readinessIssueCode,
                 'capabilities':
                     adapterSummary?['capabilities'] ?? const <String>[],
                 'localConcurrencyLimit': worker.localConcurrencyLimit,
@@ -332,7 +307,7 @@ Future<Host> buildWorkspaceRuntime(
               item.status == LocalWorkerStatus.ready &&
               item.adapterVersionPolicy != null)) {
             await adapterCatalog.reconcileWorker(
-              FirstPartyWorkerAdapterDescriptor.adapterPackageIdFor(
+              FirstPartyWorkerPackage.packageIdFor(
                 worker.workerTypeId,
               ),
               channel:

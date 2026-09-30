@@ -100,8 +100,8 @@ describe("Architecture v7 adapter manifest and protocol", () => {
       requestId: "probe-1",
       ready: true,
       toolVersion: "1.2.3",
-      checkKind: "readiness",
-      issues: [],
+      mode: "passive",
+      checks: [{ id: "tool_version", status: "passed" }],
     } as const;
     expect(parseV7AdapterFrame(JSON.stringify(probe))).toEqual(probe);
     expect(() =>
@@ -121,7 +121,13 @@ describe("Architecture v7 adapter manifest and protocol", () => {
       parseV7AdapterFrame(
         JSON.stringify({
           ...probe,
-          issues: [{ code: "x", message: "y", secret: "z" }],
+          checks: [
+            {
+              id: "tool_version",
+              status: "failed",
+              issueCode: "unknown_code",
+            },
+          ],
         }),
       ),
     ).toThrow();
