@@ -613,77 +613,41 @@ first-party release publication is repeatable.
 
 ---
 
-# Phase 5 — Complete production Worker Type coverage
+# Phase 5 — Converge first-party Workers on Worker Runtime v2
 
-**Status:** Adapter packages for Codex, Antigravity, Claude Code, Ollama, and
-OpenAI/Gemini/Anthropic APIs are present with protocol/provider-mock coverage.
-Opt-in live acceptance through the full Cloud → Workspace Gateway → Workspace
-→ signed Worker Package → real CLI → Cloud result path remains required for
-ChatGPT and Gemini before closing this phase.
+**Status:** Superseded execution path. ADR-015 now exposes only ChatGPT and Gemini,
+and ADR-017 requires both to be reimplemented as independently versioned
+standalone Dart Worker executables before production acceptance.
 
 ## Goal
 
-Every Worker Type shown as production-supported in Conclave Workspace can
-actually become Ready and execute through V7.
+Complete the Worker Runtime v2 plan rather than productionizing the temporary
+Node adapter implementation.
 
-## 5.1 Claude Code
+Required gates:
 
-Complete:
-- V7 adapter package;
-- CLI prerequisite/version validation;
-- local authentication validation/launch/remediation;
-- headless execution;
-- model/default handling;
-- cancellation;
-- Workstream CWD;
-- normalized progress/result/error;
-- signed published release.
+- Local Worker Protocol 3.0 and shared Dart Worker SDK;
+- native ChatGPT Worker -> Codex CLI;
+- native Gemini Worker -> agy;
+- independently signed/versioned platform Worker releases;
+- Workspace install/update/pin/rollback transaction;
+- cleaned local Worker registry and Cloud inventory/release schemas;
+- real opt-in ChatGPT full-path acceptance;
+- real opt-in Gemini full-path acceptance;
+- Node first-party Worker runtime removed after both native Workers pass;
+- no production-supported Worker Type outside ADR-015's ChatGPT/Gemini catalog.
 
-## 5.2 Ollama
+Detailed sequence:
 
-Complete:
-- V7 adapter package;
-- endpoint reachability;
-- version/health check;
-- model discovery;
-- model selection validation;
-- execution/cancellation;
-- signed published release.
-
-## 5.3 Codex and Antigravity
-
-Run the opt-in full-path acceptance test independently against:
-- a real, configured Codex/ChatGPT CLI;
-- a real, configured Google/Antigravity `agy` CLI.
-
-Each run must dispatch a bounded assignment through Cloud and Workspace,
-execute the shipped signed package with the real CLI, and verify the successful
-result in Cloud persistence. Do not mark either Worker production-supported
-until its own run passes and its release evidence is recorded. Local package
-tests and fake-CLI Cloud acceptance are supporting coverage, not a substitute
-for this gate.
-
-Verify authentication expiry/remediation, model selection, cancellation and
-stateful Workstream execution.
-
-## 5.4 API Workers
-
-For OpenAI API, Gemini API and Anthropic API:
-- publish production-signed releases;
-- run opt-in credential acceptance;
-- normalize provider failures;
-- add model discovery where reliable;
-- add streaming where product value justifies it.
-
-Advanced tool/function calling is not automatically a V7 architecture blocker.
+[Worker Runtime v2 Implementation Plan](WORKER_RUNTIME_V2_IMPLEMENTATION.md)
 
 ## Phase 5 exit gate
 
-Every Worker Type exposed as production-supported can be installed/admitted,
-validated and executed through V7.
+ChatGPT and Gemini execute through signed standalone Dart Worker executables,
+can update/rollback independently from Workspace, and pass real
+Cloud -> Gateway -> Workspace -> Worker -> provider CLI -> Cloud acceptance.
 
 ---
-
 # Phase 6 — Failure, recovery and security hardening
 
 **Status:** Deterministic recovery/security coverage is mapped in
@@ -700,11 +664,11 @@ acceptance.
 Add:
 - repeated Cloud disconnect/reconnect;
 - duplicate hello/snapshot;
-- adapter crash;
+- Worker executable crash;
 - provider/tool crash;
 - credential expiry;
 - missing/outdated CLI after previously being Ready;
-- adapter update failure + rollback;
+- Worker update failure + rollback;
 - Workspace re-pair;
 - Cloud cancel during reconnect;
 - stateful lease/fencing conflict;
@@ -718,7 +682,7 @@ Verify:
 - Cloud cannot broaden local permissions;
 - Cloud cannot choose arbitrary executable/CWD;
 - path traversal is rejected;
-- malicious/tampered adapter packages fail;
+- malicious/tampered Worker releases fail;
 - revoked keys/releases fail;
 - secret redaction holds in logs/progress/errors;
 - cross-user scheduling requires explicit authorization;
@@ -790,7 +754,7 @@ Finish the macOS `.app` update flow:
 Provide local actions for:
 - expired account/session;
 - missing/outdated prerequisite;
-- revoked adapter;
+- revoked Worker release;
 - missing local endpoint;
 - denied permission;
 - required update.
@@ -801,7 +765,7 @@ Expose safe:
 - Cloud connection state;
 - runtime/Workspace identity;
 - app version;
-- adapter versions;
+- Worker runtime versions;
 - Worker readiness;
 - prerequisite versions;
 - active assignments;
@@ -836,7 +800,7 @@ Make the repository describe one current implemented architecture.
 - root roadmap/README;
 - deployment/release guidance;
 - key rotation/revocation procedures;
-- adapter release instructions.
+- Worker release instructions.
 
 Keep historical ADRs/roadmaps, but clearly mark superseded ownership rules.
 
@@ -909,16 +873,14 @@ V7 is implemented when all of the following are true:
 | 2 — Real V7 E2E migration-safety gate | ✅ Implemented | Regression gate passes unchanged |
 | 3 — Remove V6 compatibility | ✅ Implemented | V7 scheduler/runtime/API and forward migration complete |
 | 4 — Production release trust | Implemented | Ed25519 verification, revocation, and release workflows; retain operational key procedures |
-| 5 — Production Worker coverage | In progress | Adapter packages/mocks exist; live provider and catalog acceptance remain |
+| 5 — Worker Runtime v2 convergence | In progress | Native Dart ChatGPT/Gemini Workers, independent update/rollback, cleanup, and real provider acceptance remain |
 | 6 — Failure/security hardening | In progress | Broad deterministic coverage mapped; operational-boundary acceptance remains |
 | 7 — Desktop runtime maturity | In progress | Menu bar/version/diagnostics implemented; native `.app` updater remains open |
 | 8 — Baseline/docs declaration | Documentation converged; declaration deferred | Phase 5–7 gates must pass before V7 becomes the implemented baseline |
 
 ## Recommended PR sequence from current main
 
-The remaining execution order is: (1) opt-in live Worker acceptance and
-catalog readiness, (2) close operational failure/security cases, (3) complete
-the native macOS `.app` update transaction, and (4) re-audit every checkbox
+The remaining execution order is: (1) implement Worker Runtime v2 and native ChatGPT/Gemini acceptance, (2) close operational failure/security cases, (3) complete the native macOS `.app` update transaction, and (4) re-audit every checkbox
 before declaring V7 the implemented baseline. Phases 1–4 and V6 compatibility
 retirement are already implemented; the historical PR ordering above has been
 retired.
@@ -931,21 +893,15 @@ Conclave AX
     v
 Conclave Cloud
     |
-    | Project/Workstream authorization
-    | Worker scheduling state
-    | immutable Assignment
     v
 Conclave Workspace
     |
-    | local Worker registry
-    | local credentials + permissions
-    | verified adapter package
+    | Local Worker Protocol 3.0
     v
-Worker adapter child process
+Standalone Dart Worker executable
     |
     v
-Codex / Antigravity / Claude Code / provider API / local model
+Codex CLI / agy
 ~~~
-
 There is one configured Worker model, one machine authority, one scheduling
 contract, and one execution path.
