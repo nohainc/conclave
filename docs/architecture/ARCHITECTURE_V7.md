@@ -5,7 +5,8 @@
 **Builds on:** Architecture v6 Workstreams + ADR-011 filesystem model  
 **Primary decision:** [ADR-012](../decisions/ADR-012-workspace-owned-local-workers.md)
 
-**Current first-party product catalog:** [ADR-015](../decisions/ADR-015-first-party-worker-v1-contract.md)
+**Current first-party product catalog:** [ADR-015](../decisions/ADR-015-first-party-worker-v1-contract.md)  
+**Accepted local runtime target:** [ADR-017](../decisions/ADR-017-standalone-dart-worker-executables.md) / [Worker Runtime v2](WORKER_RUNTIME_V2.md)
 
 ## 1. Executive decision
 
@@ -38,11 +39,7 @@ The user installs one machine-side product:
 
 There are no separately installed Worker applications.
 
-Conclave Workspace manages signed Worker Packages and launches them as
-isolated child processes for readiness and assignments. First-party Workspace
-builds embed
-the stable Codex and Antigravity releases as offline baselines; signed Cloud
-releases upgrade them without removing the last-known-good or bundled fallback.
+Conclave Workspace manages signed Worker releases and launches them as isolated child processes for readiness and assignments. Worker Runtime v2 keeps Architecture v7 but replaces the first Node-backed package implementation with independently versioned standalone Dart console executables for ChatGPT and Gemini. Workspace manages installation, activation, update and rollback; each Worker owns its provider CLI.
 
 ## 2. Product mental model
 
@@ -191,13 +188,13 @@ It owns:
 - Workstream directory resolution;
 - configured Worker local registry;
 - Conclave desktop-session and Workspace-runtime credentials;
-- Worker Package lifecycle, signature and integrity admission;
+- Worker executable release lifecycle, signature and integrity admission;
 - package-reported local readiness;
 - local permissions;
 - child-process execution/supervision;
 - cancellation/process-tree termination;
 - local logs/diagnostics;
-- runtime and Worker Package updates;
+- runtime and Worker executable updates/rollback;
 - sync of safe Worker metadata/readiness to Cloud.
 
 Workspace MUST NOT discover, version, authenticate with, or execute a provider
@@ -730,7 +727,7 @@ runId
 configuredWorkerId
 workspaceId
 workerTypeId
-adapterVersion
+workerRuntimeVersion
 requested/resolvedModel
 capabilities/permissions snapshot
 executionClass
@@ -752,10 +749,10 @@ Cloud assignment
 -> Workspace validates
 -> resolve Workstream CWD
 -> resolve configured Worker
--> verify Worker Package signature, integrity, and protocol compatibility
--> apply package permissions and signed environment policy
--> launch Worker Package child process through Local Worker Protocol
--> package discovers/probes and invokes its provider tool or API
+-> verify Worker release signature, integrity, platform and protocol compatibility
+-> apply Worker permissions/environment boundary
+-> launch standalone Worker executable through Local Worker Protocol
+-> Worker discovers/probes and invokes its provider tool or API
 -> stream progress
 -> capture result
 -> terminate/cleanup
@@ -774,8 +771,7 @@ these fresh CLI processes; they do not keep either child process alive.
 Use the versioned Workspace-to-Worker-Package protocol, with structured
 stdin/stdout transport for the local child process.
 
-The current implementation supports adapter-v7 schema versions 2.1 through
-2.6; first-party packages use 2.6. A `probe.request` explicitly selects
+The current Node-backed implementation supports Local Worker Protocol 2.1 through 2.6. Worker Runtime v2 introduces Local Worker Protocol 3.0 for native Worker executables; 2.x remains migration-only until both first-party Dart Workers pass real acceptance. A `probe.request` explicitly selects
 `passive` or `live`. Passive probes perform package-owned executable discovery,
 version checks, and cheap authentication checks when the provider supports
 them. Live probes run the small `OK` request. The response contains `mode`,
@@ -989,9 +985,9 @@ Three update layers:
 
 Normal signed application update.
 
-### Worker Package
+### Worker executable release
 
-Managed inside Conclave Workspace with signature/digest verification and rollback.
+Managed inside Conclave Workspace with signature/digest verification, immutable version installation, independent update policy, and rollback.
 
 The signature covers both the file-tree digest and the canonical manifest
 without its signature field. Workspace checks downloaded catalog metadata
@@ -1015,9 +1011,9 @@ Workspace does not accept new Cloud work; running assignment follows explicit co
 
 Cloud stops scheduling it.
 
-### Adapter crash
+### Worker executable crash
 
-Assignment fails/retries according to Workflow; Workspace remains online.
+Assignment fails/retries according to Workflow; Workspace remains online. Repeated Worker-internal failures may mark that Worker release unhealthy and offer rollback without changing the Workspace app.
 
 ### Credential expiry
 
@@ -1029,9 +1025,9 @@ Needs authentication while other Workers remain eligible.
 The Worker Package reports a missing or unsupported tool; that Worker becomes
 Needs attention.
 
-### Adapter update failure
+### Worker update failure
 
-Keep previously verified active version where safe.
+Keep the previously verified active/last-known-good Worker version. Provider authentication/quota/outage failures do not by themselves trigger rollback.
 
 ## 26. Data ownership summary
 
@@ -1120,3 +1116,8 @@ Do not declare v7 production-complete until:
 ## Completion plan
 
 See [Architecture v7 Completion Plan](../roadmaps/ARCHITECTURE_V7_COMPLETION.md) for the remaining convergence and release gates.
+
+
+## Worker Runtime v2 convergence
+
+ADR-017 is an implementation refinement inside Architecture v7. The target first-party topology is `Workspace -> standalone Dart Worker executable -> provider CLI`. Worker versions are independent from Workspace and provider CLI versions, and Workspace may install multiple immutable Worker versions for update/rollback. The implementation/migration order is defined by [Worker Runtime v2 Implementation](../roadmaps/WORKER_RUNTIME_V2_IMPLEMENTATION.md). Until its acceptance gates pass, the Node-backed Local Worker Protocol 2.x implementation remains the current source implementation rather than the desired release baseline.
