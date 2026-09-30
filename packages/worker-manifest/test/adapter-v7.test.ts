@@ -100,6 +100,8 @@ describe("Architecture v7 adapter manifest and protocol", () => {
       requestId: "probe-1",
       ready: true,
       toolVersion: "1.2.3",
+      toolName: "Codex CLI",
+      toolPath: "/Users/test/.local/bin/codex",
       mode: "passive",
       checks: [{ id: "tool_version", status: "passed" }],
     } as const;
@@ -116,6 +118,12 @@ describe("Architecture v7 adapter manifest and protocol", () => {
       parseV7AdapterFrame(
         JSON.stringify({ ...probe, toolVersion: "v".repeat(129) }),
       ),
+    ).toThrow();
+    expect(() =>
+      parseV7AdapterFrame(JSON.stringify({ ...probe, toolPath: "codex" })),
+    ).toThrow();
+    expect(() =>
+      parseV7AdapterFrame(JSON.stringify({ ...probe, toolPath: undefined })),
     ).toThrow();
     expect(() =>
       parseV7AdapterFrame(

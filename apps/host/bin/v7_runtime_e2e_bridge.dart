@@ -247,7 +247,7 @@ exec __DART__ "$(dirname "$0")/adapter.dart"
         };
   manifest['workerTypeId'] = adapterTypeId;
   manifest['adapterVersion'] = '1.0.0';
-  manifest['protocolVersion'] = firstPartyAdapter == null ? '2.1' : '2.5';
+  manifest['protocolVersion'] = firstPartyAdapter == null ? '2.1' : '2.6';
   manifest['publisher'] = 'Conclave Test';
   manifest['packageDigest'] = digest;
   manifest['signingKeyId'] = 'test-ed25519-v1';

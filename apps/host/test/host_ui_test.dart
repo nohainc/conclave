@@ -1259,6 +1259,8 @@ void main() {
       lastLiveTestPassed: false,
       lastLiveTestIssueCode: 'package_unavailable',
       toolVersion: '1.2.3',
+      toolName: 'Codex CLI',
+      toolPath: '/Users/test/.local/bin/codex',
       lastLiveTestDetails:
           'Test failed (execution_test_failed)\nThe local check did not complete.',
     );
@@ -1356,6 +1358,12 @@ void main() {
     await tester.tap(find.text('ChatGPT local'));
     await tester.pumpAndSettle();
     expect(find.text('Package ID'), findsOneWidget);
+    expect(find.text('Tool'), findsOneWidget);
+    expect(find.text('Codex CLI'), findsOneWidget);
+    expect(find.text('Path'), findsOneWidget);
+    expect(find.text('/Users/test/.local/bin/codex'), findsOneWidget);
+    expect(find.text('Version'), findsOneWidget);
+    expect(find.text('1.2.3'), findsOneWidget);
     expect(find.text('Signing key'), findsWidgets);
   });
 

@@ -134,10 +134,12 @@ printf '%s\\n' '{"type":"turn.completed"}'
     adapterProcess.frames.find((frame) => frame.requestId === "v1"),
     {
       type: "probe.result",
-      protocolVersion: "2.5",
+      protocolVersion: "2.6",
       requestId: "v1",
       ready: true,
       toolVersion: "1.2.3",
+      toolName: "Codex CLI",
+      toolPath: fakeCodex,
       mode: "passive",
       checks: [
         { id: "cli_discovery", status: "passed" },

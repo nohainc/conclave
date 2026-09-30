@@ -17,7 +17,7 @@ void main() {
     });
     expect(jsonDecode(frame), {
       'type': 'probe.request',
-      'protocolVersion': '2.3',
+      'protocolVersion': '2.6',
       'requestId': 'probe-1',
       'mode': 'passive',
       'config': {
@@ -58,12 +58,22 @@ void main() {
       'requestId': 'probe-1',
       'ready': true,
       'toolVersion': '1.2.3',
+      'toolName': 'Codex CLI',
+      'toolPath': '/Users/test/.local/bin/codex',
       'mode': 'passive',
       'checks': <Object>[
         {'id': 'tool_version', 'status': 'passed'},
       ],
     };
     expect(parseV7AdapterFrame(jsonEncode(response)), response);
+    expect(
+      () => parseV7AdapterFrame(jsonEncode({...response, 'toolPath': 'codex'})),
+      throwsFormatException,
+    );
+    expect(
+      () => parseV7AdapterFrame(jsonEncode({...response}..remove('toolPath'))),
+      throwsFormatException,
+    );
     expect(
       () => parseV7AdapterFrame(
         jsonEncode({...response, 'accountSecret': 'must-not-cross-protocol'}),

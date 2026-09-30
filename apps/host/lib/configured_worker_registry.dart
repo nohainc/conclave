@@ -8,7 +8,7 @@ import 'package:crypto/crypto.dart';
 import 'first_party_worker_registry.dart';
 import 'platform_runtime.dart';
 
-const _registrySchemaVersion = 15;
+const _registrySchemaVersion = 16;
 
 enum LocalWorkerStatus { needsAttention, ready, disabled, removed }
 
@@ -81,6 +81,8 @@ class LocalConfiguredWorker {
     this.readinessIssueCode,
     this.lastLiveTestIssueCode,
     this.toolVersion,
+    this.toolName,
+    this.toolPath,
   })  : status = status,
         activationState = activationState ??
             (status == LocalWorkerStatus.disabled ||
@@ -125,6 +127,8 @@ class LocalConfiguredWorker {
   final String? readinessIssueCode;
   final String? lastLiveTestIssueCode;
   final String? toolVersion;
+  final String? toolName;
+  final String? toolPath;
 
   /// Bounded, provider-neutral local diagnostic. Raw CLI output is never kept.
   final String? lastLiveTestDetails;
@@ -155,6 +159,10 @@ class LocalConfiguredWorker {
     String? readinessIssueCode,
     String? lastLiveTestIssueCode,
     String? toolVersion,
+    String? toolName,
+    bool clearToolName = false,
+    String? toolPath,
+    bool clearToolPath = false,
     bool clearToolVersion = false,
     bool clearLastLiveTestDetails = false,
     bool clearReadinessIssueCode = false,
@@ -201,6 +209,8 @@ class LocalConfiguredWorker {
             ? null
             : lastLiveTestIssueCode ?? this.lastLiveTestIssueCode,
         toolVersion: clearToolVersion ? null : toolVersion ?? this.toolVersion,
+        toolName: clearToolName ? null : toolName ?? this.toolName,
+        toolPath: clearToolPath ? null : toolPath ?? this.toolPath,
         lastLiveTestDetails: clearLastLiveTestDetails
             ? null
             : lastLiveTestDetails ?? this.lastLiveTestDetails,
@@ -233,6 +243,8 @@ class LocalConfiguredWorker {
         'readinessIssueCode': readinessIssueCode,
         'lastLiveTestIssueCode': lastLiveTestIssueCode,
         'toolVersion': toolVersion,
+        'toolName': toolName,
+        'toolPath': toolPath,
       };
 
   factory LocalConfiguredWorker.fromJson(Map<String, dynamic> json) {
@@ -266,6 +278,8 @@ class LocalConfiguredWorker {
       'readinessIssueCode',
       'lastLiveTestIssueCode',
       'toolVersion',
+      'toolName',
+      'toolPath',
     };
     if (json.keys.any((key) => !allowedKeys.contains(key))) {
       throw const FormatException(
@@ -299,6 +313,8 @@ class LocalConfiguredWorker {
     final readinessIssueCode = json['readinessIssueCode'];
     final lastLiveTestIssueCode = json['lastLiveTestIssueCode'];
     final toolVersion = json['toolVersion'];
+    final toolName = json['toolName'];
+    final toolPath = json['toolPath'];
     if (credentialRef != null && credentialRef is! String ||
         defaultModel != null && defaultModel is! String ||
         adapterVersionPolicy != null && adapterVersionPolicy is! String) {
@@ -318,6 +334,19 @@ class LocalConfiguredWorker {
             toolVersion.isEmpty ||
             toolVersion.length > 128)) {
       throw const FormatException('Worker CLI version is invalid');
+    }
+    if (toolName != null &&
+        (toolName is! String ||
+            toolName.trim().isEmpty ||
+            toolName.length > 128)) {
+      throw const FormatException('Worker CLI name is invalid');
+    }
+    if (toolPath != null &&
+        (toolPath is! String ||
+            toolPath.length > 4096 ||
+            RegExp(r'[\x00-\x1f\x7f]').hasMatch(toolPath) ||
+            !RegExp(r'^(?:/|[A-Za-z]:[\\/]|\\\\)').hasMatch(toolPath))) {
+      throw const FormatException('Worker CLI path is invalid');
     }
     if (lastLiveTestDetails != null &&
         (lastLiveTestDetails is! String || lastLiveTestDetails.length > 1000)) {
@@ -389,6 +418,8 @@ class LocalConfiguredWorker {
       readinessIssueCode: readinessIssueCode as String?,
       lastLiveTestIssueCode: lastLiveTestIssueCode as String?,
       toolVersion: toolVersion as String?,
+      toolName: toolName as String?,
+      toolPath: toolPath as String?,
     );
   }
 }
@@ -693,6 +724,7 @@ class LocalConfiguredWorkerRegistry {
               decoded['schemaVersion'] != 12 &&
               decoded['schemaVersion'] != 13 &&
               decoded['schemaVersion'] != 14 &&
+              decoded['schemaVersion'] != 15 &&
               decoded['schemaVersion'] != _registrySchemaVersion) ||
           decoded['workers'] is! List ||
           decoded['checksum'] is! String) {

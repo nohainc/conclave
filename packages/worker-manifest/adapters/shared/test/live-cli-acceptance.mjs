@@ -90,7 +90,7 @@ export async function runLiveCliAcceptance({
     const initializeId = `live-init-${suffix}`;
     adapter.send({
       type: "initialize.request",
-      protocolVersion: "2.5",
+      protocolVersion: "2.6",
       requestId: initializeId,
       workerTypeId,
       adapterVersion: "1.0.0",
@@ -103,7 +103,7 @@ export async function runLiveCliAcceptance({
     const probeId = `live-passive-${suffix}`;
     adapter.send({
       type: "probe.request",
-      protocolVersion: "2.5",
+      protocolVersion: "2.6",
       requestId: probeId,
       mode: "passive",
     });
@@ -121,7 +121,7 @@ export async function runLiveCliAcceptance({
     const assignmentId = `live-assignment-${suffix}`;
     adapter.send({
       type: "execute.request",
-      protocolVersion: "2.5",
+      protocolVersion: "2.6",
       requestId,
       assignmentId,
       prompt,

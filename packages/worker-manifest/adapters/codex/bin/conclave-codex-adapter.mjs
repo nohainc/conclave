@@ -14,7 +14,7 @@ const {
   readPackageEnvironmentPolicy,
 } = await import(sharedRuntime.href);
 
-const protocolVersion = "2.5";
+const protocolVersion = "2.6";
 const maxPromptBytes = 512 * 1024;
 let adapterVersion = "1.0.0";
 let currentAssignment = null;
@@ -335,8 +335,9 @@ async function handle(frame) {
       const mode = frame.mode ?? frame.config?.mode ?? "passive";
       const checks = [];
       let available = false;
+      let resolvedToolPath = null;
       try {
-        await cliTool.resolveExecutable();
+        resolvedToolPath = await cliTool.resolveExecutable();
         available = true;
         checks.push({ id: "cli_discovery", status: "passed" });
       } catch {
@@ -418,6 +419,8 @@ async function handle(frame) {
         requestId,
         ready,
         toolVersion: detectedVersion,
+        toolName: "Codex CLI",
+        toolPath: resolvedToolPath,
         mode,
         checks,
       });
@@ -430,7 +433,7 @@ async function handle(frame) {
       if (
         !["stateless", "durable_session"].includes(sessionPolicy) ||
         (sessionPolicy === "durable_session" &&
-          (frame.protocolVersion !== "2.5" ||
+          (!["2.5", "2.6"].includes(frame.protocolVersion) ||
             typeof frame.sessionKey !== "string" ||
             !frame.sessionKey.trim() ||
             frame.sessionKey.length > 256)) ||

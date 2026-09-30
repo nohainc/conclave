@@ -111,12 +111,16 @@ account secrets as protocol fields. Any explicitly approved local tool input
 must use a bounded allowlisted non-secret field.
 
 The current V7 Local Worker Protocol is implemented by the versioned adapter-v7
-schema (versions 2.1 through 2.5) and uses
+schema (versions 2.1 through 2.6) and uses
 `initialize.request/result`, `probe.request/result`, `execute.request`,
 `progress`, `result`, and `error`. Every exchange carries a `requestId`.
-Versions 2.3 through 2.5 `probe.request` explicitly select `passive` or `live`; `probe.result`
+Versions 2.3 through 2.6 `probe.request` explicitly select `passive` or `live`; `probe.result`
 contains that mode, package-reported `ready`, nullable safe `toolVersion`, and
 structured `checks[]` with stable issue codes and bounded local diagnostics.
+Protocol 2.6 also reports package-resolved `toolName` and nullable absolute
+`toolPath`. Workspace stores these only in the local Worker registry and
+diagnostics; it never resolves the provider executable, and these fields are
+not synchronized to Cloud.
 Versions 2.1 and 2.2 retain their legacy readiness-result shape during
 migration. Optional probe settings are restricted to bounded non-secret fields.
 Provider tokens and account secrets are not protocol fields. Frames reject
@@ -127,7 +131,7 @@ codes and safe display diagnostics. Packages capture provider CLI stdout/stderr
 and map it into bounded provider-neutral diagnostics. If a package exits before
 returning a protocol frame, Workspace may retain a bounded, redacted tail of
 the package process stderr for local diagnostics; this fallback is never sent
-to Cloud. Protocols 2.4 and 2.5 `execute.request` include the remaining assignment
+to Cloud. Protocols 2.4 through 2.6 `execute.request` include the remaining assignment
 `timeoutMs`; the package subtracts a small cleanup grace when choosing its CLI
 deadline. Readiness live tests retain their separate explicit short deadline.
 Protocol 2.5 adds the Conclave `sessionPolicy` values `stateless` and

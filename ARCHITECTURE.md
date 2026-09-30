@@ -54,13 +54,14 @@ Workspace. Stateless work may use another eligible Workspace only when grants
 and policy allow it.
 
 The V7 Local Worker Protocol supports adapter schema versions 2.1 through
-2.5; first-party packages use 2.5 for explicit passive/live probes, structured
-checks, assignment deadlines, and Conclave session policies. It consists of
+2.6; first-party packages use 2.6 for explicit passive/live probes, structured
+checks, assignment deadlines, Conclave session policies, and package-reported
+CLI name/path/version diagnostics. It consists of
 `initialize.request/result`, `probe.request/result`, `execute.request`,
 `progress`, `result`, and `error`. Each exchange carries a request ID. Probe
 results contain package-reported readiness, the requested mode, a safe
-provider-tool version, structured checks, stable issue codes, and bounded local
-diagnostics;
+provider-tool name, resolved executable path and version, structured checks,
+stable issue codes, and bounded local diagnostics;
 the wire schema has no provider token or account-secret fields.
 
 ## Implementation status

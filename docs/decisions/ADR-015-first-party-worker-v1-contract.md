@@ -122,12 +122,14 @@ receive package-declared ambient environment values through Workspace's generic
 bounded passthrough; provider credential resolution and semantics stay outside
 Workspace.
 
-First-party Local Worker Protocol 2.5 defines `probe.request` modes `passive`
+First-party Local Worker Protocol 2.6 defines `probe.request` modes `passive`
 and `live`. Passive probes perform executable discovery, version checks, and
 cheap provider-supported authentication checks without a model request. Live
 probes perform a small `OK` request. `probe.result` returns structured checks
 with stable issue codes and bounded local diagnostics; diagnostics are never
-included in Cloud inventory. Protocol 2.1 and 2.2 packages retain their legacy
+included in Cloud inventory. Protocol 2.6 also reports the package-resolved CLI
+name, absolute path, and version. Workspace stores them locally and performs
+no executable discovery. Protocol 2.1 and 2.2 packages retain their legacy
 probe-result shape; protocol 2.3 packages remain admitted during migration.
 Workspace persists the latest passive probe state and timestamp, the latest
 live-test outcome and timestamp, and the package's stable actionable issue

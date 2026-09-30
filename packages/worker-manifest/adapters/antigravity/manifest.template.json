@@ -1,7 +1,7 @@
 {
   "workerTypeId": "antigravity",
   "adapterVersion": "1.0.0",
-  "protocolVersion": "2.5",
+  "protocolVersion": "2.6",
   "publisher": "conclave",
   "displayName": "Antigravity",
   "supportedPlatforms": [

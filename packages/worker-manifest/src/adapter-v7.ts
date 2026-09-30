@@ -125,7 +125,7 @@ export const V7AdapterManifestSchema = z
   .object({
     workerTypeId: nonEmpty.regex(slug),
     adapterVersion: nonEmpty.regex(semver),
-    protocolVersion: z.enum(["2.1", "2.2", "2.3", "2.4", "2.5"]),
+    protocolVersion: z.enum(["2.1", "2.2", "2.3", "2.4", "2.5", "2.6"]),
     publisher: nonEmpty,
     displayName: nonEmpty,
     supportedPlatforms: z.array(V7AdapterPlatformSchema).min(1).max(6),
@@ -215,7 +215,7 @@ export function parseV7AdapterManifest(input: unknown): V7AdapterManifest {
   return V7AdapterManifestSchema.parse(input);
 }
 
-export const V7_ADAPTER_PROTOCOL_VERSION = "2.5" as const;
+export const V7_ADAPTER_PROTOCOL_VERSION = "2.6" as const;
 export const V7_ADAPTER_MAX_FRAME_BYTES = 1_048_576;
 
 const requestId = nonEmpty.max(128);
@@ -250,13 +250,26 @@ const probeConfig = z
   .strict();
 const adapterCapabilities = z.array(nonEmpty.max(128)).max(128);
 const toolVersion = nonEmpty.max(128).nullable();
+const toolName = nonEmpty.max(128).optional();
+const toolPath = z
+  .string()
+  .min(1)
+  .max(4096)
+  .refine(
+    (value) =>
+      /^(?:\/|[A-Za-z]:[\\/]|\\\\)/.test(value) &&
+      !/[\u0000-\u001f\u007f]/.test(value),
+    "Tool path must be an absolute local path",
+  )
+  .nullable()
+  .optional();
 const issues = z
   .array(z.object({ code: nonEmpty.max(128), message }).strict())
   .max(128);
 
 const requestBase = z.object({
   type: z.string(),
-  protocolVersion: z.enum(["2.1", "2.2", "2.3", "2.4", "2.5"]),
+  protocolVersion: z.enum(["2.1", "2.2", "2.3", "2.4", "2.5", "2.6"]),
 });
 
 export const V7AdapterMessageSchema = z
@@ -291,6 +304,8 @@ export const V7AdapterMessageSchema = z
         requestId,
         ready: z.boolean(),
         toolVersion,
+        toolName,
+        toolPath,
         mode: z.enum(["passive", "live"]).optional(),
         checks: z.array(probeCheck).min(1).max(16).optional(),
         checkKind: z.literal("readiness").optional(),
@@ -353,7 +368,7 @@ export const V7AdapterMessageSchema = z
   .superRefine((message, ctx) => {
     if (
       message.type === "probe.request" &&
-      ["2.3", "2.4", "2.5"].includes(message.protocolVersion)
+      ["2.3", "2.4", "2.5", "2.6"].includes(message.protocolVersion)
     ) {
       if (!message.mode || message.config?.mode !== undefined) {
         ctx.addIssue({
@@ -365,7 +380,7 @@ export const V7AdapterMessageSchema = z
     }
     if (
       message.type === "execute.request" &&
-      ["2.4", "2.5"].includes(message.protocolVersion)
+      ["2.4", "2.5", "2.6"].includes(message.protocolVersion)
     ) {
       if (message.timeoutMs === undefined) {
         ctx.addIssue({
@@ -378,7 +393,7 @@ export const V7AdapterMessageSchema = z
     if (
       message.type === "execute.request" &&
       message.sessionKey !== undefined &&
-      !["2.4", "2.5"].includes(message.protocolVersion)
+      !["2.4", "2.5", "2.6"].includes(message.protocolVersion)
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -388,7 +403,7 @@ export const V7AdapterMessageSchema = z
     }
     if (
       message.type === "execute.request" &&
-      message.protocolVersion === "2.5"
+      ["2.5", "2.6"].includes(message.protocolVersion)
     ) {
       if (
         !message.sessionPolicy ||
@@ -400,12 +415,22 @@ export const V7AdapterMessageSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["sessionPolicy"],
-          message: "Protocol 2.5 session policy and key are inconsistent",
+          message: "Protocol 2.5+ session policy and key are inconsistent",
         });
       }
     }
     if (message.type !== "probe.result") return;
-    if (["2.3", "2.4", "2.5"].includes(message.protocolVersion)) {
+    if (
+      message.protocolVersion === "2.6" &&
+      (message.toolName === undefined || message.toolPath === undefined)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["toolPath"],
+        message: "Protocol 2.6 probe results require package tool metadata",
+      });
+    }
+    if (["2.3", "2.4", "2.5", "2.6"].includes(message.protocolVersion)) {
       if (
         !message.mode ||
         !message.checks ||

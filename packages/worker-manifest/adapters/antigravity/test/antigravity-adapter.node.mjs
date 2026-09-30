@@ -128,10 +128,12 @@ printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"Antig
     adapterProcess.frames.find((frame) => frame.requestId === "v1"),
     {
       type: "probe.result",
-      protocolVersion: "2.5",
+      protocolVersion: "2.6",
       requestId: "v1",
       ready: true,
       toolVersion: "4.5.6",
+      toolName: "Antigravity CLI",
+      toolPath: fakeAgy,
       mode: "passive",
       checks: [
         { id: "cli_discovery", status: "passed" },

@@ -79,6 +79,8 @@ Future<Map<String, Object?>> buildHostDiagnostics({
       'lastPassiveProbeAt': worker.lastPassiveProbeAt,
       'readinessIssueCode': worker.readinessIssueCode,
       'toolVersion': worker.toolVersion,
+      'toolName': worker.toolName,
+      'toolPath': worker.toolPath,
       if (descriptor != null) 'packageId': descriptor.packageId,
       'adapterVersion': adapter?['adapterVersion'],
       'adapter': adapter,

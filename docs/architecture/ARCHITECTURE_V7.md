@@ -775,11 +775,12 @@ Use the versioned Workspace-to-Worker-Package protocol, with structured
 stdin/stdout transport for the local child process.
 
 The current implementation supports adapter-v7 schema versions 2.1 through
-2.5; first-party packages use 2.5. A `probe.request` explicitly selects
+2.6; first-party packages use 2.6. A `probe.request` explicitly selects
 `passive` or `live`. Passive probes perform package-owned executable discovery,
 version checks, and cheap authentication checks when the provider supports
 them. Live probes run the small `OK` request. The response contains `mode`,
-`ready`, `toolVersion`, and structured `checks[]` entries with a stable check
+`ready`, package-reported `toolName`, nullable absolute `toolPath`, `toolVersion`,
+and structured `checks[]` entries with a stable check
 ID, status, optional stable issue code, and optional diagnostic bounded to
 2,048 characters. Diagnostics remain local and are not synchronized to Cloud.
 An `execute.request` in protocol 2.4 and later carries the remaining assignment

@@ -313,13 +313,14 @@ class WorkerProcessExecutor {
       throw ArgumentError('adapter output limits must be positive');
     }
     if (!const {'stateless', 'durable_session'}.contains(sessionPolicy) ||
-        (spec.protocolVersion == '2.5' &&
+        (const {'2.5', '2.6'}.contains(spec.protocolVersion) &&
             ((sessionPolicy == 'durable_session') != (sessionKey != null) ||
                 (sessionKey != null &&
                     (sessionKey.trim().isEmpty || sessionKey.length > 256)))) ||
-        (sessionPolicy == 'durable_session' && spec.protocolVersion != '2.5') ||
+        (sessionPolicy == 'durable_session' &&
+            !const {'2.5', '2.6'}.contains(spec.protocolVersion)) ||
         (sessionKey != null &&
-            !const {'2.4', '2.5'}.contains(spec.protocolVersion))) {
+            !const {'2.4', '2.5', '2.6'}.contains(spec.protocolVersion))) {
       throw V7AdapterExecutionFailure(
         code: 'execution_failed',
         message: executionErrorMessage('execution_failed'),
@@ -570,7 +571,7 @@ class WorkerProcessExecutor {
         throw StateError('adapter initialize version mismatch');
       }
       final probe = await request('probe.request', 'probe.result', {
-        if (const {'2.3', '2.4', '2.5'}.contains(spec.protocolVersion))
+        if (const {'2.3', '2.4', '2.5', '2.6'}.contains(spec.protocolVersion))
           'mode': 'passive',
         'config': _safeAdapterProbeConfig(config),
       });
@@ -635,9 +636,10 @@ class WorkerProcessExecutor {
         'assignmentId': operationId,
         'prompt': prompt,
         if (model != null && model.isNotEmpty) 'model': model,
-        if (spec.protocolVersion == '2.5') 'sessionPolicy': sessionPolicy,
+        if (const {'2.5', '2.6'}.contains(spec.protocolVersion))
+          'sessionPolicy': sessionPolicy,
         if (sessionKey != null) 'sessionKey': sessionKey,
-        if (const {'2.4', '2.5'}.contains(spec.protocolVersion))
+        if (const {'2.4', '2.5', '2.6'}.contains(spec.protocolVersion))
           'timeoutMs': max(1, remaining.inMilliseconds),
       }));
       await process.stdin.flush();
@@ -829,8 +831,8 @@ class WorkerProcessExecutor {
       if (initialized['adapterVersion'] != adapterVersion) {
         throw StateError('Worker Package initialize version mismatch');
       }
-      final supportsProbeMode =
-          const {'2.2', '2.3', '2.4', '2.5'}.contains(spec.protocolVersion);
+      final supportsProbeMode = const {'2.2', '2.3', '2.4', '2.5', '2.6'}
+          .contains(spec.protocolVersion);
       if (!supportsProbeMode && mode == LocalWorkerProbeMode.live) {
         throw StateError(
             'This Worker Package protocol does not support live probes');
@@ -839,12 +841,12 @@ class WorkerProcessExecutor {
           ? {'mode': mode.wireValue}
           : const <String, Object?>{};
       final probe = await request('probe.request', 'probe.result', {
-        if (const {'2.3', '2.4', '2.5'}.contains(spec.protocolVersion))
+        if (const {'2.3', '2.4', '2.5', '2.6'}.contains(spec.protocolVersion))
           'mode': mode.wireValue,
         if (config.isNotEmpty) 'config': config,
       });
       final probeContractValid =
-          const {'2.3', '2.4', '2.5'}.contains(spec.protocolVersion)
+          const {'2.3', '2.4', '2.5', '2.6'}.contains(spec.protocolVersion)
               ? probe['mode'] == mode.wireValue && probe['checks'] is List
               : probe['checkKind'] == 'readiness';
       if (!probeContractValid || (probe['ready'] != true && !allowNotReady)) {

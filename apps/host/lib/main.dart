@@ -3607,7 +3607,15 @@ class _WorkerPackageDiagnosticsState extends State<_WorkerPackageDiagnostics> {
                             record.worker.workerTypeId,
                       ),
                       _DetailRow(
-                        label: 'CLI version',
+                        label: 'Tool',
+                        value: record.worker.toolName ?? 'Not reported',
+                      ),
+                      _DetailRow(
+                        label: 'Path',
+                        value: record.worker.toolPath ?? 'Not resolved',
+                      ),
+                      _DetailRow(
+                        label: 'Version',
                         value: record.worker.toolVersion ?? 'Not detected',
                       ),
                       _DetailRow(

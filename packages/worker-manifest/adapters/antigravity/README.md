@@ -30,8 +30,10 @@ for the CLI's documented custom Gemini endpoint. ADC is enabled only when
 such as `GOOGLE_API_KEY` are not forwarded as auth configuration.
 
 The package resolves `agy` from its package-scoped cached path, PATH, and known
-install locations, then reports its version through `probe.result`. Sensitive
-values are redacted from Worker output.
+install locations, then reports its version and resolved executable path
+through `probe.result`. Workspace displays this package-reported metadata only
+in local Advanced Diagnostics. Sensitive values are redacted from Worker
+output.
 
 Execution is stateless by default. With Local Worker Protocol 2.5,
 `sessionPolicy: "durable_session"` plus an opaque `sessionKey` opts into

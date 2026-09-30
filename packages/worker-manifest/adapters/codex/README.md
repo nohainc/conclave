@@ -39,7 +39,9 @@ execution deadline and cleans up the process tree on cancellation or failure.
 
 The adapter requires Node.js and resolves `codex` from its package-scoped
 cached path, PATH, and known user install directories. Its readiness probe
-reports the detected version through `probe.result`.
+reports the detected version and resolved executable path through
+`probe.result`; Workspace displays this package-reported metadata only in local
+Advanced Diagnostics.
 The package manifest template intentionally leaves digest and signature for the
 release publisher to fill after packaging. macOS and Linux packages are
 supported by this launcher; Windows packaging still needs a native launcher.

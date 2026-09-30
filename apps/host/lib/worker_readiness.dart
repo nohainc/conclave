@@ -16,6 +16,10 @@ class WorkerReadinessAssessment {
     this.diagnosticDetails,
     this.toolVersion,
     this.replaceToolVersion = false,
+    this.toolName,
+    this.replaceToolName = false,
+    this.toolPath,
+    this.replaceToolPath = false,
   });
 
   final WorkerReadinessState state;
@@ -23,6 +27,10 @@ class WorkerReadinessAssessment {
   final String? diagnosticDetails;
   final String? toolVersion;
   final bool replaceToolVersion;
+  final String? toolName;
+  final bool replaceToolName;
+  final String? toolPath;
+  final bool replaceToolPath;
 }
 
 class WorkerReadinessMonitor {
@@ -129,6 +137,12 @@ class WorkerReadinessMonitor {
             toolVersion: assessment.toolVersion,
             clearToolVersion:
                 assessment.replaceToolVersion && assessment.toolVersion == null,
+            toolName: assessment.toolName,
+            clearToolName:
+                assessment.replaceToolName && assessment.toolName == null,
+            toolPath: assessment.toolPath,
+            clearToolPath:
+                assessment.replaceToolPath && assessment.toolPath == null,
           ),
         );
         continue;
@@ -156,6 +170,12 @@ class WorkerReadinessMonitor {
           toolVersion: assessment.toolVersion,
           clearToolVersion:
               assessment.replaceToolVersion && assessment.toolVersion == null,
+          toolName: assessment.toolName,
+          clearToolName:
+              assessment.replaceToolName && assessment.toolName == null,
+          toolPath: assessment.toolPath,
+          clearToolPath:
+              assessment.replaceToolPath && assessment.toolPath == null,
         ),
       );
     }
@@ -248,6 +268,10 @@ class WorkerReadinessMonitor {
           diagnosticDetails: message,
           toolVersion: result['toolVersion'] as String?,
           replaceToolVersion: true,
+          toolName: result['toolName'] as String?,
+          replaceToolName: true,
+          toolPath: result['toolPath'] as String?,
+          replaceToolPath: true,
         );
       }
       final state = switch (code) {
@@ -267,6 +291,10 @@ class WorkerReadinessMonitor {
         diagnosticDetails: message,
         toolVersion: result['toolVersion'] as String?,
         replaceToolVersion: true,
+        toolName: result['toolName'] as String?,
+        replaceToolName: true,
+        toolPath: result['toolPath'] as String?,
+        replaceToolPath: true,
       );
     } on Object catch (error) {
       final timeout = error is TimeoutException;

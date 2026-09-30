@@ -169,7 +169,7 @@ are implemented. V7 is not yet the declared implemented baseline: production
 Worker live acceptance, full failure/security acceptance, and native macOS
 `.app` update/recovery remain release gates.
 
-The Local Worker Protocol supports versions 2.1 through 2.5 and defines correlated
+The Local Worker Protocol supports versions 2.1 through 2.6 and defines correlated
 `initialize.request/result`, `probe.request/result`, `execute.request`,
 `progress`, `result`, and `error` frames. Versions 2.3 and 2.4 probe results expose the
 requested passive/live mode, readiness, safe tool version, structured checks,

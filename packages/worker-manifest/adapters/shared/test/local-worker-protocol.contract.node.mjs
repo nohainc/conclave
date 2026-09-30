@@ -23,6 +23,7 @@ const packages = [
     executable: "codex",
     versionOutput: "codex 1.2.3",
     toolVersion: "1.2.3",
+    toolName: "Codex CLI",
     allowlistedEnvironmentName: "CODEX_HOME",
     allowlistedEnvironmentValue: "/contract/codex-home",
     resumeArgument: `resume ${providerSessionId}`,
@@ -40,6 +41,7 @@ const packages = [
     executable: "agy",
     versionOutput: "agy 4.5.6",
     toolVersion: "4.5.6",
+    toolName: "Antigravity CLI",
     allowlistedEnvironmentName: "GEMINI_API_KEY",
     allowlistedEnvironmentValue: "contract-gemini-key",
     resumeArgument: `--conversation ${providerSessionId}`,
@@ -223,7 +225,7 @@ function waitForClose(child, timeoutMs = 5000) {
 function initialize(harness, config, requestId = "init-1") {
   harness.send({
     type: "initialize.request",
-    protocolVersion: "2.5",
+    protocolVersion: "2.6",
     requestId,
     workerTypeId: config.workerTypeId,
     adapterVersion: "1.0.0",
@@ -234,7 +236,7 @@ function initialize(harness, config, requestId = "init-1") {
 function probe(harness, requestId, mode) {
   harness.send({
     type: "probe.request",
-    protocolVersion: "2.5",
+    protocolVersion: "2.6",
     requestId,
     mode,
   });
@@ -245,7 +247,7 @@ function execute(harness, requestId, assignmentId, prompt, options = {}) {
   const { waitTimeoutMs = 5000, ...protocolOptions } = options;
   harness.send({
     type: "execute.request",
-    protocolVersion: "2.5",
+    protocolVersion: "2.6",
     requestId,
     assignmentId,
     prompt,
@@ -288,6 +290,11 @@ for (const config of packages) {
         assert.equal(passive.ready, true);
         assert.equal(passive.mode, "passive");
         assert.equal(passive.toolVersion, config.toolVersion);
+        assert.equal(passive.toolName, config.toolName);
+        assert.equal(
+          passive.toolPath,
+          join(harness.root, "bin", config.executable),
+        );
         assert.ok(
           passive.checks.some(
             (check) =>

@@ -2,13 +2,14 @@ import 'dart:convert';
 
 import 'package:conclave_protocol/conclave_protocol.dart';
 
-const v7AdapterProtocolVersion = '2.5';
+const v7AdapterProtocolVersion = '2.6';
 const supportedV7AdapterProtocolVersions = {
   '2.1',
   '2.2',
   '2.3',
   '2.4',
   '2.5',
+  '2.6',
 };
 const v7AdapterMaxFrameBytes = 1024 * 1024;
 
@@ -71,13 +72,23 @@ Map<String, Object?> parseV7AdapterFrame(String frame) {
           'requestId',
           'ready',
           'toolVersion',
+          'toolName',
+          'toolPath',
           'mode',
           'checks',
           'checkKind',
           'issues',
           'models'
         },
-        {'models', 'mode', 'checks', 'checkKind', 'issues'},
+        {
+          'models',
+          'mode',
+          'checks',
+          'checkKind',
+          'issues',
+          'toolName',
+          'toolPath'
+        },
       ),
     'progress' => (
         {
@@ -135,9 +146,15 @@ Map<String, Object?> parseV7AdapterFrame(String frame) {
     final issues = value['issues'];
     final protocolVersion = value['protocolVersion'];
     if (value['ready'] is! bool ||
+        (protocolVersion == '2.6' &&
+            (!value.containsKey('toolName') ||
+                !value.containsKey('toolPath'))) ||
         (value['toolVersion'] != null &&
             !_nonEmpty(value['toolVersion'], max: 128)) ||
-        (const {'2.3', '2.4', '2.5'}.contains(protocolVersion)
+        (value['toolName'] != null &&
+            !_nonEmpty(value['toolName'], max: 128)) ||
+        (value['toolPath'] != null && !_absoluteLocalPath(value['toolPath'])) ||
+        (const {'2.3', '2.4', '2.5', '2.6'}.contains(protocolVersion)
             ? !_validProbeChecks(value)
             : value['checkKind'] != 'readiness' ||
                 issues is! List ||
@@ -238,7 +255,7 @@ String serializeV7AdapterFrame(Map<String, Object?> value) {
     throw const FormatException('adapter initialization request is invalid');
   }
   if (type == 'probe.request' &&
-      const {'2.3', '2.4', '2.5'}.contains(value['protocolVersion']) &&
+      const {'2.3', '2.4', '2.5', '2.6'}.contains(value['protocolVersion']) &&
       !const {'passive', 'live'}.contains(value['mode'])) {
     throw const FormatException(
         'protocol 2.3+ probes require an explicit mode');
@@ -260,7 +277,8 @@ String serializeV7AdapterFrame(Map<String, Object?> value) {
         config.keys.any((key) => key is! String || !configKeys.contains(key)) ||
         (config['mode'] != null &&
             !const {'passive', 'live'}.contains(config['mode'])) ||
-        (const {'2.3', '2.4', '2.5'}.contains(value['protocolVersion']) &&
+        (const {'2.3', '2.4', '2.5', '2.6'}
+                .contains(value['protocolVersion']) &&
             config['mode'] != null) ||
         config.entries
             .any((entry) => entry.key != 'mode' && entry.value is! String) ||
@@ -283,8 +301,9 @@ String serializeV7AdapterFrame(Map<String, Object?> value) {
                   (value['timeoutMs'] as int) > 2147483647)) ||
           (value['sessionKey'] != null &&
               (!_nonEmpty(value['sessionKey'], max: 256) ||
-                  !const {'2.4', '2.5'}.contains(value['protocolVersion']))) ||
-          (value['protocolVersion'] == '2.5' &&
+                  !const {'2.4', '2.5', '2.6'}
+                      .contains(value['protocolVersion']))) ||
+          (const {'2.5', '2.6'}.contains(value['protocolVersion']) &&
               (!_nonEmpty(value['sessionPolicy'], max: 32) ||
                   !const {'stateless', 'durable_session'}
                       .contains(value['sessionPolicy']) ||
@@ -292,7 +311,7 @@ String serializeV7AdapterFrame(Map<String, Object?> value) {
                       value['sessionKey'] != null) ||
                   (value['sessionPolicy'] == 'durable_session' &&
                       value['sessionKey'] == null))) ||
-          (const {'2.4', '2.5'}.contains(value['protocolVersion']) &&
+          (const {'2.4', '2.5', '2.6'}.contains(value['protocolVersion']) &&
               value['timeoutMs'] == null))) {
     throw const FormatException('adapter execution request is invalid');
   }
@@ -356,6 +375,12 @@ bool _safeProbeEndpoint(Object? value) {
 
 bool _boundedString(Object? value, int max) =>
     value is String && value.length <= max;
+
+bool _absoluteLocalPath(Object? value) =>
+    value is String &&
+    value.length <= 4096 &&
+    !RegExp(r'[\x00-\x1f\x7f]').hasMatch(value) &&
+    RegExp(r'^(?:/|[A-Za-z]:[\\/]|\\\\)').hasMatch(value);
 bool _stringList(Object? value, int maxItems, int maxLength) =>
     value is List &&
     value.length <= maxItems &&

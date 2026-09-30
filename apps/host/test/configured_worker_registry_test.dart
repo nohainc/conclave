@@ -78,6 +78,61 @@ void main() {
     expect(updated.readinessState, WorkerReadinessState.setupRequired);
   });
 
+  test('persists bounded package-reported CLI identity locally', () async {
+    final worker = await registry.create(
+      name: 'ChatGPT',
+      workerTypeId: 'chatgpt',
+      authStrategy: 'browser_auth',
+    );
+    await registry.update(
+      worker.id,
+      (current) => current.copyWith(
+        toolName: 'Codex CLI',
+        toolPath: '/Users/test/.local/bin/codex',
+        toolVersion: '0.123.0',
+      ),
+    );
+
+    final restored = (await registry.list()).single;
+    expect(restored.toolName, 'Codex CLI');
+    expect(restored.toolPath, '/Users/test/.local/bin/codex');
+    expect(restored.toolVersion, '0.123.0');
+    expect(
+      () => LocalConfiguredWorker.fromJson({
+        ...restored.toJson(),
+        'toolPath': 'codex',
+      }),
+      throwsFormatException,
+    );
+  });
+
+  test('migrates schema 15 Workers without package path metadata', () async {
+    final worker = await registry.create(
+      name: 'ChatGPT',
+      workerTypeId: 'chatgpt',
+      authStrategy: 'browser_auth',
+    );
+    final record = worker.toJson()
+      ..remove('toolName')
+      ..remove('toolPath');
+    final workers = [record];
+    final body = {'schemaVersion': 15, 'workers': workers};
+    final file = File(
+      '${directory.path}${Platform.pathSeparator}configured-workers.json',
+    );
+    await file.writeAsString(jsonEncode({
+      ...body,
+      'checksum': sha256.convert(utf8.encode(jsonEncode(body))).toString(),
+    }));
+
+    final restored = (await registry.list()).single;
+
+    expect(restored.toolName, isNull);
+    expect(restored.toolPath, isNull);
+    final persisted = jsonDecode(await file.readAsString()) as Map;
+    expect(persisted['schemaVersion'], 16);
+  });
+
   test('credential status changes do not determine package readiness',
       () async {
     final worker = await registry.create(
@@ -121,7 +176,7 @@ void main() {
     expect(migrated.lastLiveTestAt, isNull);
     expect(migrated.lastLiveTestPassed, isNull);
     final persisted = jsonDecode(await file.readAsString()) as Map;
-    expect(persisted['schemaVersion'], 15);
+    expect(persisted['schemaVersion'], 16);
     expect(persisted['workers'][0]['lastLiveTestAt'], isNull);
   });
 
@@ -152,7 +207,7 @@ void main() {
     expect(migrated.name, 'ChatGPT');
     expect(migrated.revision, 8);
     final persisted = jsonDecode(await file.readAsString()) as Map;
-    expect(persisted['schemaVersion'], 15);
+    expect(persisted['schemaVersion'], 16);
   });
 
   test('migrates schema 10 registry without losing the Worker', () async {
@@ -176,7 +231,7 @@ void main() {
     expect(migrated.id, worker.id);
     expect(migrated.lastLiveTestDetails, isNull);
     final persisted = jsonDecode(await file.readAsString()) as Map;
-    expect(persisted['schemaVersion'], 15);
+    expect(persisted['schemaVersion'], 16);
     expect(persisted['workers'][0]['lastLiveTestDetails'], isNull);
   });
 
@@ -206,7 +261,7 @@ void main() {
     expect(migrated.readinessIssueCode, 'setup_required');
     expect(migrated.lastLiveTestAt, isNull);
     final persisted = jsonDecode(await file.readAsString()) as Map;
-    expect(persisted['schemaVersion'], 15);
+    expect(persisted['schemaVersion'], 16);
   });
 
   test(
@@ -283,7 +338,7 @@ void main() {
     expect((await registry.list()).single.id, 'worker-old');
     final migrated =
         jsonDecode(await file.readAsString()) as Map<String, dynamic>;
-    expect(migrated['schemaVersion'], 15);
+    expect(migrated['schemaVersion'], 16);
     expect(migrated['workers'][0].containsKey('ownerUserId'), isFalse);
   });
 
@@ -377,7 +432,7 @@ void main() {
     expect(gemini.revision, 2);
     final written =
         jsonDecode(await file.readAsString()) as Map<String, dynamic>;
-    expect(written['schemaVersion'], 15);
+    expect(written['schemaVersion'], 16);
     expect((written['workers'] as List), hasLength(2));
   });
 
@@ -466,7 +521,7 @@ void main() {
     expect(migrated.readinessState, WorkerReadinessState.adapterUnavailable);
     expect(migrated.readinessIssueCode, 'cli_not_found');
     final persisted = jsonDecode(await file.readAsString()) as Map;
-    expect(persisted['schemaVersion'], 15);
+    expect(persisted['schemaVersion'], 16);
     expect(persisted['workers'][0]['readinessState'], 'adapter_unavailable');
   });
 
@@ -556,6 +611,6 @@ void main() {
     expect(migrated.defaultModel, 'gpt-test');
     expect(migrated.allowedModels, ['gpt-test']);
     final written = jsonDecode(await file.readAsString()) as Map;
-    expect(written['schemaVersion'], 15);
+    expect(written['schemaVersion'], 16);
   });
 }

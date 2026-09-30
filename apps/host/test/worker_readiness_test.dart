@@ -245,6 +245,10 @@ void main() {
           WorkerReadinessState.ready,
           toolVersion: '1.2.3',
           replaceToolVersion: true,
+          toolName: 'Antigravity CLI',
+          replaceToolName: true,
+          toolPath: '/Users/test/.local/bin/agy',
+          replaceToolPath: true,
         );
       },
     );
@@ -260,6 +264,8 @@ void main() {
     expect(gemini.lastLiveTestPassed, isTrue);
     expect(gemini.lastLiveTestAt, isNotNull);
     expect(gemini.toolVersion, '1.2.3');
+    expect(gemini.toolName, 'Antigravity CLI');
+    expect(gemini.toolPath, '/Users/test/.local/bin/agy');
     expect(chatgpt.lastLiveTestAt, isNull);
     await monitor.dispose();
   });
