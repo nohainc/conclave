@@ -83,7 +83,7 @@ not describe V7 as the implemented baseline until all release gates pass.
 - [V7 completion plan and release gates](docs/roadmaps/ARCHITECTURE_V7_COMPLETION.md)
 - [V7 failure and security acceptance](docs/architecture/V7_FAILURE_RECOVERY_ACCEPTANCE.md)
 - [Deployment guidance](docs/deployment/CLOUDFLARE.md)
-- [Workspace and adapter release operations](docs/deployment/WORKSPACE_RELEASES.md)
+- [Workspace and Worker release operations](docs/deployment/WORKSPACE_RELEASES.md)
 - [Release trust and key rotation](docs/security/RELEASE_TRUST_AND_ROTATION.md)
 
 ## Historical documents
