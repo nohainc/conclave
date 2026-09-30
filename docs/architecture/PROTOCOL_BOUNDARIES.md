@@ -1,6 +1,6 @@
 # Conclave Protocol Boundaries
 
-**Status:** Current V7 architecture contract  
+**Status:** Current V7 boundary contract; Worker Runtime v2 / Local Worker Protocol 3.0 is the accepted next local-runtime target  
 **Applies to:** Conclave AX, Conclave Cloud, Conclave Workspace, and Worker Packages
 
 Conclave has three protocol boundaries. They share domain vocabulary, but each
@@ -88,16 +88,26 @@ boundary.
 
 ## 3. Workspace ↔ Worker Package — Local Worker Protocol
 
-**Endpoints:** Conclave Workspace's process supervisor and one Worker Package
-child process.
+**Endpoints:** Conclave Workspace's process supervisor and one standalone Worker executable child process.
 **Authentication:** local process admission; no Cloud or human session
 credential is part of this protocol.  
 **Transport:** versioned NDJSON over the child's stdin/stdout.  
 **Contract ownership:** Workspace defines the Local Worker Protocol;
 first-party and third-party Worker Packages implement it.
 
-This protocol carries package initialization, package-reported readiness,
-execution, progress, results, errors, and cancellation. Workspace owns package
+This protocol carries Worker initialization, Worker-reported readiness,
+execution, progress, results, errors, and cancellation.
+
+Under [ADR-017](../decisions/ADR-017-standalone-dart-worker-executables.md),
+Worker Runtime v2 standardizes first-party ChatGPT and Gemini integrations as
+independently versioned standalone Dart console executables. Workspace starts
+the absolute admitted Worker executable directly; it does not require Node.js,
+the Dart SDK, or a Flutter plugin. Local Worker Protocol 3.0 adds explicit
+Worker executable identity/version, protocol-range negotiation, and Worker
+state-schema compatibility while retaining provider-neutral probe/execute
+semantics.
+
+ Workspace owns package
 admission, process lifetime, filesystem CWD, local permissions, cancellation,
 and Cloud synchronization. Workspace MUST NOT discover, version, authenticate
 with, or execute a provider CLI or other provider tool directly. The Worker
@@ -110,8 +120,7 @@ Workspace Gateway envelopes, Cloud assignment authority, provider tokens, or
 account secrets as protocol fields. Any explicitly approved local tool input
 must use a bounded allowlisted non-secret field.
 
-The current V7 Local Worker Protocol is implemented by the versioned adapter-v7
-schema (versions 2.1 through 2.6) and uses
+**Current migration implementation:** the existing V7 Local Worker Protocol is implemented by the Node-backed `adapter-v7` schema (versions 2.1 through 2.6) and uses
 `initialize.request/result`, `probe.request/result`, `execute.request`,
 `progress`, `result`, and `error`. Every exchange carries a `requestId`.
 Versions 2.3 through 2.6 `probe.request` explicitly select `passive` or `live`; `probe.result`
@@ -142,10 +151,7 @@ provider session ID in package-local storage. Provider session IDs are never
 persisted by Cloud. Persistent provider processes are outside this contract;
 each assignment still starts a fresh package and CLI process.
 Raw provider stderr and output never become a Cloud message.
-The schema is specified by
-`packages/worker-manifest/src/adapter-v7.ts` and implemented by the Workspace
-process supervisor and Worker Package process. Changes require a versioned
-Local Worker Protocol change and do not change either Cloud-facing protocol.
+The current schema is specified by `packages/worker-manifest/src/adapter-v7.ts`. Worker Runtime v2 replaces this first-party implementation with the Dart `conclave_worker_protocol` package and Local Worker Protocol 3.0. During migration, both implementations may exist on development branches, but the release convergence gate requires deleting the Node first-party runtime after both Dart Workers pass real acceptance. Changes to this local protocol do not change either Cloud-facing protocol.
 
 ## Shared canonical domain vocabulary
 
@@ -202,8 +208,7 @@ unchanged across a boundary.
   `apps/host/lib/cloud_connection.dart`; schema
   `packages/host-protocol/src/workspace-runtime.ts`; Cloud
   `apps/cloud/src/workspace-gateway.ts`.
-- Local Worker Protocol: Workspace `apps/host/lib/worker_executor.dart` and
-  `apps/host/lib/v7_adapter_protocol.dart`; Worker Package schema
-  `packages/worker-manifest/src/adapter-v7.ts`.
+- Local Worker Protocol current implementation: Workspace `apps/host/lib/worker_executor.dart` / `apps/host/lib/v7_adapter_protocol.dart` and `packages/worker-manifest/src/adapter-v7.ts`.
+- Local Worker Protocol 3.0 target: shared Dart `conclave_worker_protocol` package consumed by Workspace and standalone Worker executables; see `WORKER_RUNTIME_V2.md`.
 - Canonical domain model: domain entities in `packages/core/src` and the
   canonical vocabulary in this document; wire validators remain protocol-owned.
