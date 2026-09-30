@@ -9,15 +9,15 @@
 | Conclave AX | Flutter + Dart, Web |
 | Cloud | TypeScript + Cloudflare |
 | Conclave Workspace | Flutter + Dart desktop/background runtime |
-| Worker adapter protocol | language-independent structured protocol |
-| First-party adapters | Dart where practical |
+| Local Worker Protocol | versioned provider-neutral NDJSON protocol |
+| First-party Workers | standalone Dart AOT console executables |
 | Cloud database | Cloudflare D1 |
 | Artifacts/packages | Cloudflare R2 |
 | Durable orchestration | Cloudflare Workflows |
 | Workspace connectivity | Durable Objects + WebSocket |
 | AX-to-Cloud product boundary | HTTPS APIs + browser realtime, human session |
 | Workspace-to-Cloud runtime boundary | Workspace Runtime Protocol over WSS, HTTPS long-poll fallback |
-| Workspace-to-adapter boundary | Local Adapter Protocol over NDJSON stdin/stdout |
+| Workspace-to-Worker boundary | Local Worker Protocol over NDJSON stdin/stdout |
 | Web hosting | Cloudflare static assets / Worker deployment |
 | TypeScript tests | Vitest |
 | Dart/Flutter tests | dart test / flutter_test |
@@ -65,7 +65,7 @@ The persistent runtime process owns:
 - update lifecycle;
 - minimal local UI/tray behavior.
 
-Adapter execution remains in separate per-assignment OS child processes, retaining crash/cancellation/security isolation while keeping the Cloud connection/runtime stable.
+Worker execution remains in separate per-assignment OS child processes, retaining crash/cancellation/security isolation while keeping the Cloud connection/runtime stable. Under Worker Runtime v2, first-party ChatGPT and Gemini integrations are standalone independently versioned Dart console executables; the user does not install Node.js or the Dart SDK.
 Workspace owns each adapter's full descendant tree. Assignment cancellation,
 timeout, output overflow, Worker removal, and runtime shutdown first give the
 package a brief graceful-stop window to clean up its provider CLI. Workspace
@@ -74,26 +74,39 @@ shutdown completes. Provider CLIs remain in the Workspace-owned process group.
 POSIX process groups are used for force termination, with recursive process
 discovery as fallback; Windows uses process-tree termination.
 
-## Worker adapters
+## Worker Runtime v2
 
-Worker Types are implemented by signed adapter packages managed by Conclave Workspace.
+First-party Worker Types are implemented as signed standalone Dart native
+executables managed by Conclave Workspace.
 
-Preferred local transport:
-- structured JSON/JSON-RPC over stdin/stdout for ordinary per-assignment adapter processes.
+Preferred first-party structure:
 
-An adapter may use:
-- Dart;
-- TypeScript/Node;
-- Rust;
-- Python;
-- Go;
-- another runtime,
+~~~text
+Conclave Workspace (Flutter/Dart)
+-> Local Worker Protocol 3.0
+-> Dart Worker executable
+-> provider CLI/tool
+~~~
 
-when that runtime materially improves integration quality.
+Workspace installs, verifies, activates, supervises, updates and rolls back
+Worker executables. A Worker owns provider CLI discovery, version/auth checks,
+environment interpretation, execution, output parsing, provider session IDs
+and provider-specific diagnostics.
 
-Protocol compatibility, package signing, prerequisite detection and process isolation matter more than implementation language.
+The first-party Workers are console applications, not Flutter plugins. They
+compile with `dart compile exe` into self-contained platform/architecture
+artifacts. No Node.js or Dart SDK is required on the user machine.
 
-A configured Worker is local configuration/state that references one adapter type; it is not itself a separately installed binary.
+Third-party Workers may use another implementation language only when they
+still satisfy the same signed Worker release, process isolation, protocol,
+permission and update contracts.
+
+Worker versions are independent from both Workspace and provider CLI versions.
+Workspace may keep multiple verified Worker versions installed and atomically
+switch/rollback the active version.
+
+See [ADR-017](../decisions/ADR-017-standalone-dart-worker-executables.md) and
+[Worker Runtime v2](WORKER_RUNTIME_V2.md).
 
 ## Cross-language contracts
 
@@ -181,3 +194,8 @@ not protocol fields.
 See the [Architecture v7 Completion Plan](../roadmaps/ARCHITECTURE_V7_COMPLETION.md),
 [release operations](../deployment/WORKSPACE_RELEASES.md), and
 [release trust/key rotation](../security/RELEASE_TRUST_AND_ROTATION.md).
+
+
+## Worker Runtime v2 implementation status
+
+Worker Runtime v2 is an accepted target, not yet the implemented baseline. The current main branch still contains the Node-backed first-party Worker implementation until the ChatGPT and Gemini Dart Workers, native release/update/rollback transaction, real provider acceptance, and cleanup gates in the Worker Runtime v2 roadmap pass.
