@@ -1,8 +1,8 @@
-# Workspace and Adapter Release Operations
+# Workspace and Worker Release Operations
 
-## Adapter releases
+## Current adapter releases (migration-only)
 
-The manually dispatched [V7 adapter release workflow](../../.github/workflows/release-v7-adapter.yml)
+The current manually dispatched [V7 adapter release workflow](../../.github/workflows/release-v7-adapter.yml)
 supports `development`, `beta`, and `stable` channels and immutable release
 revocation. A publish run installs locked dependencies, runs adapter
 protocol/provider-mock tests and Workspace admission tests, packages
@@ -86,3 +86,24 @@ Use [Release Trust and Rotation](../security/RELEASE_TRUST_AND_ROTATION.md) for
 key separation, overlap rotation, revocation, and recovery constraints. Do not
 store release seeds or publication tokens in the repository, package archive,
 desktop artifact, or workflow output.
+
+## Worker Runtime v2 release target
+
+ADR-017 replaces the first-party adapter release path with independently versioned platform-specific native Worker releases. The current Node adapter workflow remains migration tooling only until the Dart ChatGPT/Gemini Workers pass real acceptance.
+
+Target Worker release flow:
+
+~~~text
+compile native Dart Worker per platform/architecture
+-> test executable/protocol
+-> package immutable release
+-> digest + Ed25519 sign
+-> publish R2 + worker_releases catalog
+-> Workspace downloads into staging
+-> verify signature/digest/platform/protocol/state compatibility
+-> self-check + passive provider probe
+-> atomically activate
+-> retain previous last-known-good version
+~~~
+
+Worker release identity includes `(worker_type_id, version, platform)`. Workspace and Worker versions remain independent. The user can stay on, update, pin, or roll back one Worker without changing the Workspace application or the other Worker. See [Worker Runtime v2](../architecture/WORKER_RUNTIME_V2.md) and its [implementation plan](../roadmaps/WORKER_RUNTIME_V2_IMPLEMENTATION.md).

@@ -1,6 +1,6 @@
 # ADR-015: First-Party Worker v1 Contract
 
-**Status:** Accepted; contract frozen for the first supported Workspace Worker release. Implementation and migration are subsequent phases.
+**Status:** Accepted; product contract frozen for the first supported Workspace Worker release. First-party runtime implementation is refined by [ADR-017](ADR-017-standalone-dart-worker-executables.md).
 **Date:** 2026-09-28  
 **Builds on:** ADR-012, Architecture v7  
 **Supersedes:** ADR-012 Worker Type catalog, identity/cardinality, naming, and local authentication UX where they conflict with this decision. Other ADR-012 decisions remain in force.
@@ -23,8 +23,8 @@ It contains exactly these two product-facing Worker types:
 
 | Stable product type ID | Product name | Local execution integration |
 | --- | --- | --- |
-| `chatgpt` | ChatGPT | Codex-backed Worker Package |
-| `gemini` | Gemini | Antigravity-backed Worker Package |
+| `chatgpt` | ChatGPT | standalone ChatGPT Worker executable -> Codex CLI |
+| `gemini` | Gemini | standalone Gemini Worker executable -> Antigravity CLI |
 
 The user-facing names are **ChatGPT** and **Gemini**. Provider executable names,
 version checks, and authentication details are package implementation details.
@@ -230,3 +230,7 @@ handling for those changes remains separate.
 - [Architecture v7](../architecture/ARCHITECTURE_V7.md)
 - [Application boundaries](../architecture/APPLICATIONS.md)
 - [Worker v1 catalog contract](../specifications/FIRST_PARTY_WORKER_CATALOG_V1.md)
+
+## Worker Runtime v2 implementation note
+
+ADR-017 does not change this product catalog, cardinality, provider-authentication boundary, or AX-owned model/usage rules. It replaces the first Node-backed package implementation with independently versioned signed Dart console executables. Product IDs remain `chatgpt` and `gemini`; Codex and Antigravity remain provider-tool implementation details owned by those Workers.

@@ -1,4 +1,4 @@
-# Workspace and Adapter Release Trust
+# Workspace and Worker Release Trust
 
 ## Trust model
 
@@ -9,8 +9,7 @@ version, channel, platform/architecture, and archive digest. Adapter signatures
 also bind the canonical manifest (excluding its signature field) and the
 package file-tree digest.
 
-Workspace application releases and Worker adapter releases use independent
-signing seeds and key IDs. They share the public-key trust-root configuration
+Workspace application releases and Worker releases use independent signing seeds and key IDs. During Worker Runtime v2 migration, the existing adapter signing key may be retained as the Worker-release trust class or replaced through the normal overlap rotation process; do not reuse the Workspace application signing seed. They share the public-key trust-root configuration
 format, but a key for one release class must not be reused for the other.
 Apple Developer ID signing and notarization verify macOS origin/platform
 requirements; Conclave release metadata verification remains required.
@@ -81,3 +80,11 @@ The release workflows read published metadata and package bytes back from
 Cloud, compare digests, and verify the signature/admission before reporting
 success. A workflow dispatch is not production evidence until its run succeeds
 against the intended Cloud environment. See [Workspace release operations](../deployment/WORKSPACE_RELEASES.md).
+
+## Worker Runtime v2 trust refinement
+
+ADR-017 makes first-party Worker artifacts native platform executables. Trust verification therefore binds the Worker Type, Worker version, platform/architecture, protocol range, Worker-state schema compatibility, permissions, executable path, package digest and archive hash in addition to normal publisher/key metadata.
+
+Workspace may keep multiple trusted Worker versions installed for rollback. A previous version is eligible only while both its release and signing key remain trusted and its protocol/state schema remain compatible. Rollback does not bypass revocation.
+
+Native Worker executable code signing on macOS/Windows complements Conclave Ed25519 package trust; it does not replace the Conclave manifest/package verification.
