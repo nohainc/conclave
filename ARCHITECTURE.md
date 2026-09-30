@@ -1,8 +1,11 @@
 # Conclave AX Architecture
 
-**Current architecture:** v7 — Workspace-owned Workers and managed Worker Package
-execution. V7 is the sole current Worker ownership model and remains an active
-implementation target until its production release gates pass.
+**Current architecture:** v7 — Workspace-owned Workers and managed Worker
+executable lifecycle. Worker Runtime v2 / ADR-017 is the normative first-party
+runtime: signed, independently versioned Dart console executables using Local
+Worker Protocol 3.0. Full Workspace assignment-path convergence and production
+acceptance remain open; current source still routes assignments through the
+legacy V7 Node adapter store/executor.
 
 ## Product model
 
@@ -21,10 +24,10 @@ Conclave AX -> Conclave Cloud -> Conclave Workspace -> Worker executable -> prov
   credentials.
 - **Conclave Workspace** is the persistent desktop runtime and machine security
   boundary. It owns local Workers, Conclave runtime credentials, permissions,
-  Work Root, Worker Package admission, process execution and local diagnostics.
+  Work Root, Worker release admission, process execution and local diagnostics.
 - **Worker Type** identifies a managed integration. The frozen first-party v1
-  catalog is ChatGPT via its Codex-backed Worker Package and Gemini via its
-  Antigravity-backed Worker Package; broader integrations remain
+  catalog is ChatGPT via its Codex-backed Worker executable and Gemini via its
+  agy-backed Worker executable; broader integrations remain
   implementation/migration scope. Models are not Worker Types.
 
 Conclave Workspace never discovers, versions, authenticates with, or executes provider tools directly. Worker Runtime v2 launches an admitted standalone Worker executable through Local Worker Protocol 3.0; that Worker owns all provider-specific tool interaction. First-party ChatGPT and Gemini Workers are independently versioned Dart console executables.
@@ -40,10 +43,10 @@ execution safety boundary. See [ADR-016](docs/decisions/ADR-016-ax-owned-worker-
 Conclave has three distinct protocol boundaries: the Human Product Protocol
 between AX and Cloud, the Workspace Runtime Protocol between the Workspace
 runtime and Cloud's Workspace Gateway, and the Local Worker Protocol between
-the Workspace process supervisor and a Worker Package process. They share
+the Workspace process supervisor and a Worker process. They share
 canonical domain IDs/types but never share or forward wire envelopes. AX does
-not speak the Workspace Runtime Protocol, and Worker Packages never connect directly
-to Cloud. See the [Protocol Boundaries contract](docs/architecture/PROTOCOL_BOUNDARIES.md)
+not speak the Workspace Runtime Protocol, and Workers never connect directly to
+Cloud. See the [Protocol Boundaries contract](docs/architecture/PROTOCOL_BOUNDARIES.md)
 for endpoint, credential, transport, and schema ownership.
 
 Each Workstream has an ID-derived local directory under the Workspace Work
@@ -51,7 +54,14 @@ Root. Stateful execution is fenced and restricted to the Workstream Primary
 Workspace. Stateless work may use another eligible Workspace only when grants
 and policy allow it.
 
-The current Node-backed V7 Local Worker Protocol supports versions 2.1 through 2.6. ADR-017 accepts Worker Runtime v2 / Local Worker Protocol 3.0 as the target for standalone native Dart Worker executables, including explicit Worker version/state compatibility in addition to passive/live probes, assignment deadlines, Conclave session policies, and Worker-reported provider tool diagnostics. It consists of
+The normative first-party Local Worker Protocol is version 3.0. The Node-backed
+V7 Protocol 2.1–2.6 describes the historical migration implementation only.
+Protocol 3.0 uses standalone native Dart Worker executables and validates exact
+Worker identity/version, protocol negotiation, state compatibility, and
+capabilities. Probes explicitly select passive/live modes; execute carries
+assignment deadlines and Conclave session policy. Provider tool diagnostics
+are Worker-reported and provider secrets never enter the protocol. The required
+frames are
 `initialize.request/result`, `probe.request/result`, `execute.request`,
 `progress`, `result`, and `error`. Each exchange carries a request ID. Probe
 results contain package-reported readiness, the requested mode, a safe

@@ -1,0 +1,1 @@
+{"type":"execute.request","protocolVersion":"3.0","requestId":"execute-1","assignmentId":"assignment-1","prompt":"Summarize the changed files.","model":null,"timeoutMs":600000,"sessionPolicy":"stateless"}

@@ -1,4 +1,10 @@
-# First-party Worker testing and acceptance
+# Historical: Node adapter testing and acceptance
+
+> **Superseded for current first-party runtime verification.** The procedures
+> below describe the Node-backed V7 adapter and Protocol 2.x migration path.
+> Use the Dart Worker protocol/package tests and the Worker Runtime v2
+> implementation plan for current status. Retain this document as historical
+> evidence until the legacy runtime is removed.
 
 This document defines the verification pyramid for the first-party ChatGPT and
 Gemini Workers. Deterministic tests use fake CLIs and never need provider

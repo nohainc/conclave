@@ -39,20 +39,20 @@ class LocalD1 {
 describe("V7 Workspace inventory recovery acceptance", () => {
   it("reconciles duplicate snapshots, omissions, reconnects, and foreign Worker IDs idempotently", async () => {
     const sqlite = new DatabaseSync(":memory:");
+    sqlite.exec("PRAGMA foreign_keys = ON");
     sqlite.exec(`
       CREATE TABLE execution_workspaces (id TEXT PRIMARY KEY, owner_user_id TEXT NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL);
       CREATE TABLE workspace_worker_inventory (
         worker_id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, owner_user_id TEXT NOT NULL,
-        worker_type_id TEXT NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL,
-        readiness_state TEXT NOT NULL DEFAULT 'test_failed',
-        readiness_issue_code TEXT,
-        auth_strategy TEXT NOT NULL, default_model TEXT, allowed_models_json TEXT NOT NULL,
-        capabilities_json TEXT NOT NULL, local_permissions_summary_json TEXT NOT NULL,
-        local_concurrency_limit INTEGER NOT NULL, adapter_version TEXT, credential_status TEXT NOT NULL,
+        worker_type_id TEXT NOT NULL, activation_state TEXT NOT NULL,
+        readiness_state TEXT NOT NULL, readiness_issue_code TEXT,
+        worker_runtime_version TEXT, provider_tool_name TEXT, provider_tool_version TEXT,
+        capabilities_json TEXT NOT NULL, local_concurrency_limit INTEGER NOT NULL,
         revision INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-        last_seen_at TEXT NOT NULL, removed_at TEXT, removed_by_snapshot INTEGER NOT NULL DEFAULT 0
+        last_seen_at TEXT NOT NULL
       );
-      CREATE TABLE v7_worker_scheduling (worker_id TEXT PRIMARY KEY, state TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE TABLE v7_worker_scheduling (worker_id TEXT PRIMARY KEY REFERENCES workspace_worker_inventory(worker_id) ON DELETE CASCADE, state TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE TABLE v7_worker_scheduling_audit (id TEXT PRIMARY KEY, worker_id TEXT NOT NULL REFERENCES workspace_worker_inventory(worker_id) ON DELETE CASCADE);
       CREATE TABLE workspace_runtime_facts (
         workspace_id TEXT PRIMARY KEY, platform TEXT, architecture TEXT,
         hostname TEXT, app_version TEXT, runtime_capabilities_json TEXT,
@@ -113,15 +113,14 @@ describe("V7 Workspace inventory recovery acceptance", () => {
     const report = {
       workerId: "worker-shared-id",
       workerTypeId: "fixture-worker",
-      name: "Private Worker Name",
-      status: "ready",
+      activationState: "enabled",
       readinessState: "ready",
       revision: 1,
       localConcurrencyLimit: 1,
-      authStrategy: "api_key",
-      credentialStatus: "ready",
-      defaultModel: "private-model-choice",
-      allowedModels: ["private-allow-list"],
+      workerRuntimeVersion: "2.0.0",
+      providerToolName: "codex",
+      providerToolVersion: "1.0.0",
+      providerToolPath: "/Users/local/.local/bin/codex",
       capabilities: ["code"],
       localPermissionsSummary: ["workspace:read"],
       createdAt: "2026-09-26T00:00:00.000Z",
@@ -139,22 +138,25 @@ describe("V7 Workspace inventory recovery acceptance", () => {
     });
     let row = sqlite
       .prepare(
-        "SELECT workspace_id, name, status, readiness_state, auth_strategy, default_model, allowed_models_json, local_permissions_summary_json, credential_status, revision, removed_by_snapshot FROM workspace_worker_inventory WHERE worker_id = ?",
+        "SELECT workspace_id, activation_state, readiness_state, readiness_issue_code, worker_runtime_version, provider_tool_name, provider_tool_version, capabilities_json, revision FROM workspace_worker_inventory WHERE worker_id = ?",
       )
       .get("worker-shared-id") as Record<string, unknown>;
     expect(row).toMatchObject({
       workspace_id: "workspace-a",
-      name: "fixture-worker",
-      status: "ready",
+      activation_state: "enabled",
       readiness_state: "ready",
-      auth_strategy: "none",
-      default_model: null,
-      allowed_models_json: "[]",
-      local_permissions_summary_json: "[]",
-      credential_status: "not_required",
+      worker_runtime_version: "2.0.0",
+      provider_tool_name: "codex",
+      provider_tool_version: "1.0.0",
+      capabilities_json: '["code"]',
       revision: 1,
-      removed_by_snapshot: 0,
     });
+    expect(
+      sqlite
+        .prepare("PRAGMA table_info(workspace_worker_inventory)")
+        .all()
+        .map((column) => String(column.name)),
+    ).not.toContain("provider_tool_path");
 
     await internal.recordWorkerInventory({
       fullSnapshot: false,
@@ -162,7 +164,7 @@ describe("V7 Workspace inventory recovery acceptance", () => {
         {
           ...report,
           workerId: "worker-unready",
-          name: "Unready Worker",
+          activationState: "enabled",
           readinessState: "setup_required",
           readinessIssueCode: "setup_required",
         },
@@ -171,44 +173,51 @@ describe("V7 Workspace inventory recovery acceptance", () => {
     expect(
       sqlite
         .prepare(
-          "SELECT status, readiness_state, readiness_issue_code FROM workspace_worker_inventory WHERE worker_id = ?",
+          "SELECT activation_state, readiness_state, readiness_issue_code FROM workspace_worker_inventory WHERE worker_id = ?",
         )
         .get("worker-unready"),
     ).toMatchObject({
-      status: "needs_attention",
+      activation_state: "enabled",
       readiness_state: "setup_required",
       readiness_issue_code: "setup_required",
     });
-
-    await internal.recordWorkerInventory({ fullSnapshot: true, workers: [] });
-    await internal.recordWorkerInventory({ fullSnapshot: true, workers: [] });
-    row = sqlite
+    sqlite
       .prepare(
-        "SELECT workspace_id, status, revision, removed_by_snapshot FROM workspace_worker_inventory WHERE worker_id = ?",
+        "INSERT INTO v7_worker_scheduling_audit (id, worker_id) VALUES ('audit-unready', 'worker-unready')",
       )
-      .get("worker-shared-id") as Record<string, unknown>;
-    expect(row).toMatchObject({
-      workspace_id: "workspace-a",
-      status: "removed",
-      revision: 1,
-      removed_by_snapshot: 1,
-    });
+      .run();
 
-    // A reconnect's equal-revision authoritative snapshot restores the local
-    // projection without silently re-enabling Cloud scheduling.
+    await internal.recordWorkerInventory({ fullSnapshot: true, workers: [] });
+    await internal.recordWorkerInventory({ fullSnapshot: true, workers: [] });
+    expect(
+      sqlite
+        .prepare("SELECT COUNT(*) AS count FROM workspace_worker_inventory")
+        .get(),
+    ).toMatchObject({ count: 0 });
+    expect(
+      sqlite
+        .prepare("SELECT COUNT(*) AS count FROM v7_worker_scheduling")
+        .get(),
+    ).toMatchObject({ count: 0 });
+    expect(
+      sqlite
+        .prepare("SELECT COUNT(*) AS count FROM v7_worker_scheduling_audit")
+        .get(),
+    ).toMatchObject({ count: 0 });
+
+    // A reconnect recreates the slot with Cloud scheduling disabled.
     await internal.recordWorkerInventory({
       fullSnapshot: true,
       workers: [report],
     });
     row = sqlite
       .prepare(
-        "SELECT status, revision, removed_by_snapshot FROM workspace_worker_inventory WHERE worker_id = ?",
+        "SELECT activation_state, revision FROM workspace_worker_inventory WHERE worker_id = ?",
       )
       .get("worker-shared-id") as Record<string, unknown>;
     expect(row).toMatchObject({
-      status: "ready",
+      activation_state: "enabled",
       revision: 1,
-      removed_by_snapshot: 0,
     });
     expect(
       sqlite
@@ -219,30 +228,29 @@ describe("V7 Workspace inventory recovery acceptance", () => {
     internal.executionWorkspaceId = "workspace-b";
     await internal.recordWorkerInventory({
       fullSnapshot: true,
-      workers: [{ ...report, revision: 99, name: "Foreign replacement" }],
+      workers: [{ ...report, revision: 99 }],
     });
     row = sqlite
       .prepare(
-        "SELECT workspace_id, name, revision FROM workspace_worker_inventory WHERE worker_id = ?",
+        "SELECT workspace_id, revision FROM workspace_worker_inventory WHERE worker_id = ?",
       )
       .get("worker-shared-id") as Record<string, unknown>;
     expect(row).toMatchObject({
       workspace_id: "workspace-a",
-      name: "fixture-worker",
       revision: 1,
     });
 
     internal.executionWorkspaceId = "workspace-a";
     await internal.recordWorkerInventory({
       fullSnapshot: true,
-      workers: [{ ...report, revision: Number.NaN, name: "Malformed" }],
+      workers: [{ ...report, revision: Number.NaN }],
     });
     row = sqlite
       .prepare(
-        "SELECT status, revision FROM workspace_worker_inventory WHERE worker_id = ?",
+        "SELECT activation_state, revision FROM workspace_worker_inventory WHERE worker_id = ?",
       )
       .get("worker-shared-id") as Record<string, unknown>;
-    expect(row).toMatchObject({ status: "removed", revision: 1 });
+    expect(row).toBeUndefined();
     sqlite.close();
   });
 });

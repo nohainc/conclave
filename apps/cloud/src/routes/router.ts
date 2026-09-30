@@ -294,14 +294,17 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
-    if (request.method === "GET" && url.pathname === "/api/v7/adapters") {
-      return await handlers.handleListV7Adapters!(request, env, ctx);
+    if (request.method === "GET" && url.pathname === "/api/worker-releases") {
+      return await handlers.handleListWorkerReleases!(request, env, ctx);
     }
-    if (request.method === "GET" && url.pathname === "/api/v7/release-trust") {
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/worker-releases/trust"
+    ) {
       return await handlers.handleGetReleaseTrustState!(request, env, ctx);
     }
     const releaseKeyRevocation = url.pathname.match(
-      /^\/api\/v7\/release-trust\/keys\/([^/]+)\/revoke$/,
+      /^\/api\/worker-releases\/trust\/keys\/([^/]+)\/revoke$/,
     );
     if (request.method === "POST" && releaseKeyRevocation?.[1]) {
       return await handlers.handleRevokeReleaseSigningKey!(
@@ -313,39 +316,43 @@ export async function routeWorkerRequest(
     }
     if (
       request.method === "POST" &&
-      url.pathname === "/api/v7/adapters/publish"
+      url.pathname === "/api/worker-releases/publish"
     ) {
-      return await handlers.handlePublishV7Adapter!(request, env, ctx);
+      return await handlers.handlePublishWorkerRelease!(request, env, ctx);
     }
-    const v7AdapterDownloadMatch = url.pathname.match(
-      /^\/api\/v7\/adapters\/([^/]+)\/versions\/([^/]+)\/download$/,
+    const workerReleaseDownloadMatch = url.pathname.match(
+      /^\/api\/worker-releases\/([^/]+)\/([^/]+)\/([^/]+)\/download$/,
     );
     if (
       request.method === "GET" &&
-      v7AdapterDownloadMatch?.[1] &&
-      v7AdapterDownloadMatch?.[2]
+      workerReleaseDownloadMatch?.[1] &&
+      workerReleaseDownloadMatch?.[2] &&
+      workerReleaseDownloadMatch?.[3]
     ) {
-      return await handlers.handleDownloadV7Adapter!(
+      return await handlers.handleDownloadWorkerRelease!(
         request,
         env,
-        v7AdapterDownloadMatch[1],
-        v7AdapterDownloadMatch[2],
+        workerReleaseDownloadMatch[1],
+        workerReleaseDownloadMatch[2],
+        workerReleaseDownloadMatch[3],
         ctx,
       );
     }
-    const v7AdapterRevokeMatch = url.pathname.match(
-      /^\/api\/v7\/adapters\/([^/]+)\/versions\/([^/]+)\/revoke$/,
+    const workerReleaseRevokeMatch = url.pathname.match(
+      /^\/api\/worker-releases\/([^/]+)\/([^/]+)\/([^/]+)\/revoke$/,
     );
     if (
       request.method === "POST" &&
-      v7AdapterRevokeMatch?.[1] &&
-      v7AdapterRevokeMatch?.[2]
+      workerReleaseRevokeMatch?.[1] &&
+      workerReleaseRevokeMatch?.[2] &&
+      workerReleaseRevokeMatch?.[3]
     ) {
-      return await handlers.handleRevokeV7Adapter!(
+      return await handlers.handleRevokeWorkerRelease!(
         request,
         env,
-        v7AdapterRevokeMatch[1],
-        v7AdapterRevokeMatch[2],
+        workerReleaseRevokeMatch[1],
+        workerReleaseRevokeMatch[2],
+        workerReleaseRevokeMatch[3],
         ctx,
       );
     }

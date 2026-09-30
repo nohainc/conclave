@@ -1,15 +1,20 @@
 # Workspace and Worker Release Trust
 
+Worker Runtime v2 is the first-party Worker trust contract. Node adapter
+signatures and API routes mentioned below are migration history; native Worker
+releases are verified by Worker type, version, platform, protocol/state
+compatibility, manifest signature, package digest, and archive hash.
+
 ## Trust model
 
 Conclave Workspace verifies release metadata with Ed25519 public keys. Signing
 seeds remain in GitHub/production release infrastructure and are never shipped
-in Workspace or adapter packages. Release metadata binds the publisher, key ID,
-version, channel, platform/architecture, and archive digest. Adapter signatures
-also bind the canonical manifest (excluding its signature field) and the
-package file-tree digest.
+in Workspace or Worker releases. Release metadata binds the publisher, key ID,
+version, channel, platform/architecture, and archive digest. Worker release
+signatures also bind the canonical manifest (excluding its signature field)
+and the package file-tree digest.
 
-Workspace application releases and Worker releases use independent signing seeds and key IDs. During Worker Runtime v2 migration, the existing adapter signing key may be retained as the Worker-release trust class or replaced through the normal overlap rotation process; do not reuse the Workspace application signing seed. They share the public-key trust-root configuration
+Workspace application releases and Worker releases use independent signing seeds and key IDs. Worker releases must use the dedicated Worker signing trust class; do not reuse the Workspace application signing seed or treat a legacy adapter key as interchangeable. They share the public-key trust-root configuration
 format, but a key for one release class must not be reused for the other.
 Apple Developer ID signing and notarization verify macOS origin/platform
 requirements; Conclave release metadata verification remains required.
@@ -24,7 +29,7 @@ The release workflows use GitHub Environments and repository variables:
 
 | Purpose | Secret | Variable |
 | --- | --- | --- |
-| Adapter metadata/package signing | `CONCLAVE_ADAPTER_ED25519_SEED` | `CONCLAVE_ADAPTER_SIGNING_KEY_ID` |
+| Native Worker manifest/package signing | `CONCLAVE_WORKER_SIGNING_SEED` | `CONCLAVE_WORKER_SIGNING_KEY_ID` |
 | Workspace app release metadata | `CONCLAVE_WORKSPACE_ED25519_SEED` | `CONCLAVE_WORKSPACE_SIGNING_KEY_ID` |
 | Release publication authorization | `CONCLAVE_RELEASE_PUBLISH_TOKEN` | `CLOUD_API_URL` |
 | macOS Developer ID/notarization | `CONCLAVE_MACOS_CERTIFICATE_P12`, password and Apple credentials | — |
@@ -66,8 +71,8 @@ installed clients until a recovery distribution path is available.
 - Revoke a compromised key ID or publisher immediately in Cloud trust state;
   clients refresh revocation state before release checks/admission.
 - Revoke an individual Workspace app release through the host-release revoke
-  endpoint and an adapter release through the V7 adapter version revoke
-  endpoint. Include an actionable reason.
+  endpoint and a Worker release through the Worker release revoke endpoint.
+  Include an actionable reason. The V7 adapter-version revoke route is legacy.
 - Release revocation prevents future install/update admission. It does not
   terminate an already-running process; follow the incident response plan for
   active work and publish a replacement immutable release when safe.

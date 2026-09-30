@@ -1,4 +1,4 @@
-# Conclave AX Architecture v7 — Workspace Runtime and Worker Packages
+# Conclave AX Architecture v7 — Workspace Runtime and Worker Executables
 
 **Status:** Current architecture and active implementation target. V7 ownership, scheduler, E2E path, V6 compatibility retirement, and public-key release trust are implemented; production runtime gates remain open.
 **Date:** 2026-09-26  
@@ -7,6 +7,14 @@
 
 **Current first-party product catalog:** [ADR-015](../decisions/ADR-015-first-party-worker-v1-contract.md)  
 **Accepted local runtime target:** [ADR-017](../decisions/ADR-017-standalone-dart-worker-executables.md) / [Worker Runtime v2](WORKER_RUNTIME_V2.md)
+
+> **Runtime convergence status:** Worker Runtime v2 is the normative first-party
+> architecture: signed standalone Dart console executables, Local Worker
+> Protocol 3.0, and provider CLI ownership inside each Worker. All Worker
+> Package/adapter-specific implementation detail and Protocol 2.x flows below
+> describe historical Node migration machinery, not instructions for new
+> runtime work. The assignment path still uses legacy V7 adapter machinery;
+> end-to-end acceptance remains open. Workspace does not probe provider CLIs.
 
 ## 1. Executive decision
 
@@ -39,7 +47,7 @@ The user installs one machine-side product:
 
 There are no separately installed Worker applications.
 
-Conclave Workspace manages signed Worker releases and launches them as isolated child processes for readiness and assignments. Worker Runtime v2 keeps Architecture v7 but replaces the first Node-backed package implementation with independently versioned standalone Dart console executables for ChatGPT and Gemini. Workspace manages installation, activation, update and rollback; each Worker owns its provider CLI.
+Conclave Workspace manages signed Worker releases and launches them as isolated child processes for readiness and assignments. Worker Runtime v2 keeps Architecture v7 and defines independently versioned standalone Dart console executables for ChatGPT and Gemini. Workspace manages installation, activation, update and rollback; each Worker owns provider CLI discovery, probing, and execution.
 
 ## 2. Product mental model
 
@@ -51,9 +59,9 @@ The complete mental model should fit in four lines:
 > **Worker** = locally configured AI/tool identity on that machine.
 
 For the first-party v1 product, each Workspace has exactly one stable ChatGPT
-slot backed by a Codex Worker Package and one stable Gemini slot backed by an
-Antigravity Worker Package. Provider authentication and billing mode belong to
-the local CLI and all interaction with it belongs to its Worker Package. This
+slot implemented by a Codex-backed ChatGPT Worker and one stable Gemini slot
+implemented by an agy-backed Gemini Worker. Provider authentication and
+billing mode belong to the local CLI and all interaction with it belongs to its Worker. This
 catalog does not include direct provider API Workers or other integrations.
 The broader V7 integration list below documents implementation and
 compatibility scope, not the supported v1 product catalog.
@@ -634,16 +642,19 @@ Sync triggers:
   quota-consuming live execution test);
 - reconnect.
 
-Workspace persists package-reported readiness independently from local
+Workspace persists Worker-reported readiness independently from local
 activation. The local registry has an `activationState` (`enabled` or
 `disabled`) and a separate package-reported `readinessState`; disabling a
 Worker never overwrites its readiness. The wire `status` remains a compatibility
 projection for dispatch (`disabled` when activation is off), while Cloud keeps
 readiness separate from its coarse scheduling status. Only enabled Workers
 whose effective local status is `ready` are eligible for dispatch; that status
-also gates assignments while a startup probe is pending. The Worker Package
-performs provider CLI presence/version/authentication checks and execution
-prerequisites.
+also gates assignments while a startup probe is pending. The Worker performs
+provider CLI presence/version/authentication checks and execution
+prerequisites. Workspace never performs these provider-specific checks itself;
+it validates and records the Worker response. This is the normative Worker
+Runtime v2 boundary, although the current source assignment route has not yet
+converged to it.
 The local record retains the latest passive probe state and time, the latest
 live-test result and time, and a stable actionable issue code. Workspace does
 not infer provider authentication from historical `credentialStatus`. Gemini
@@ -766,12 +777,13 @@ cleans up the package process, and the package's shared runner supervises and
 cleans up the CLI process. Durable sessions carry provider resume IDs between
 these fresh CLI processes; they do not keep either child process alive.
 
-## 16. Local Worker Protocol
+## 16. Historical V7 Local Worker Protocol implementation (superseded)
 
-Use the versioned Workspace-to-Worker-Package protocol, with structured
-stdin/stdout transport for the local child process.
+The following Protocol 2.x details record the legacy Workspace-to-Node-adapter
+implementation only. New first-party work uses Local Worker Protocol 3.0 as
+defined in [Worker Runtime v2](WORKER_RUNTIME_V2.md).
 
-The current Node-backed implementation supports Local Worker Protocol 2.1 through 2.6. Worker Runtime v2 introduces Local Worker Protocol 3.0 for native Worker executables; 2.x remains migration-only until both first-party Dart Workers pass real acceptance. A `probe.request` explicitly selects
+The Node-backed migration implementation supports Local Worker Protocol 2.1 through 2.6. Protocol 2.x is not the target contract. In the legacy implementation, a `probe.request` explicitly selects
 `passive` or `live`. Passive probes perform package-owned executable discovery,
 version checks, and cheap authentication checks when the provider supports
 them. Live probes run the small `OK` request. The response contains `mode`,
@@ -1111,7 +1123,7 @@ Do not declare v7 production-complete until:
 - at least one real ChatGPT (Codex CLI) and one real Gemini (Antigravity CLI)
   execution succeed from locally configured Workspace slots;
 - legacy Cloud-created/multi-Workspace Worker execution is no longer required;
-- adapter package verification no longer requires shipping the signing secret and uses asymmetric public-key trust.
+- Worker release verification does not ship signing secrets and uses asymmetric public-key trust.
 
 ## Completion plan
 
@@ -1120,4 +1132,4 @@ See [Architecture v7 Completion Plan](../roadmaps/ARCHITECTURE_V7_COMPLETION.md)
 
 ## Worker Runtime v2 convergence
 
-ADR-017 is an implementation refinement inside Architecture v7. The target first-party topology is `Workspace -> standalone Dart Worker executable -> provider CLI`. Worker versions are independent from Workspace and provider CLI versions, and Workspace may install multiple immutable Worker versions for update/rollback. The implementation/migration order is defined by [Worker Runtime v2 Implementation](../roadmaps/WORKER_RUNTIME_V2_IMPLEMENTATION.md). Until its acceptance gates pass, the Node-backed Local Worker Protocol 2.x implementation remains the current source implementation rather than the desired release baseline.
+ADR-017 is the normative first-party runtime refinement inside Architecture v7. The first-party topology is `Workspace -> standalone Dart Worker executable -> provider CLI`. Worker versions are independent from Workspace and provider CLI versions, and Workspace may install multiple immutable Worker versions for update/rollback. Local Dart Worker acceptance has progressed, but the current Workspace assignment source still uses the legacy Node-backed V7 store/executor; the end-to-end Dart route and production acceptance are open. The implementation/migration order and phase evidence are defined by [Worker Runtime v2 Implementation](../roadmaps/WORKER_RUNTIME_V2_IMPLEMENTATION.md). The Node-backed Protocol 2.x implementation is migration-only, not the desired release baseline.

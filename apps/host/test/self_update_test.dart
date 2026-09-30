@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:conclave_host/self_update.dart';
@@ -513,5 +514,38 @@ void main() {
     );
     expect(await root.list().toList(), isEmpty);
     await root.delete(recursive: true);
+  });
+
+  test('refreshes Worker release revocations from the Worker trust API',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final requestPath = Completer<String>();
+    final subscription = server.listen((request) async {
+      requestPath.complete(request.uri.path);
+      request.response
+        ..headers.contentType = ContentType.json
+        ..write(jsonEncode({
+          'revokedKeyIds': ['key-1'],
+          'revokedWorkers': [
+            {'workerTypeId': 'chatgpt', 'version': '2.0.0'}
+          ],
+          'revokedWorkspaceReleases': [],
+        }));
+      await request.response.close();
+    });
+    try {
+      final policy = WorkerTrustPolicy();
+      await const HostReleaseClient().refreshRevocations(
+        cloudUri: Uri.http('127.0.0.1:${server.port}', '/'),
+        authToken: null,
+        policy: policy,
+      );
+      expect(await requestPath.future, '/api/worker-releases/trust');
+      expect(policy.revokedKeyIds, {'key-1'});
+      expect(policy.revokedReleaseIds, {'chatgpt@2.0.0'});
+    } finally {
+      await subscription.cancel();
+      await server.close(force: true);
+    }
   });
 }

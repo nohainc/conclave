@@ -1,4 +1,10 @@
-# First-party Codex adapter
+# Historical: Node-backed Codex adapter
+
+> **Superseded implementation documentation.** This Node adapter implements
+> the legacy V7 Protocol 2.x migration path. First-party ChatGPT runtime work
+> belongs in the standalone Dart Worker under `workers/chatgpt`; Workspace
+> must not probe Codex CLI directly. Keep this document only for migration and
+> historical test context. See [Worker Runtime v2](../../../../docs/architecture/WORKER_RUNTIME_V2.md).
 
 This adapter speaks the V7 newline-delimited JSON protocol and delegates each
 assignment to the locally installed Codex CLI. Stateless assignments use

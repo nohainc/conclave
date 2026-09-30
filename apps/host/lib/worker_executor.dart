@@ -14,6 +14,9 @@ import 'runtime_capabilities.dart';
 import 'workstream_directory.dart';
 import 'worker_trust_policy.dart';
 import 'v7_adapter_protocol.dart';
+import 'worker_launch_environment.dart';
+
+export 'worker_launch_environment.dart' show safeWorkerEnvironment;
 
 Map<String, Object?> _safeAdapterProbeConfig(Map<String, Object?> config) => {
       for (final key in const ['endpointUrl', 'organizationId', 'projectId'])
@@ -1273,143 +1276,6 @@ class V7AdapterLaunch {
         allowedModels: allowedModels,
       );
 }
-
-Map<String, String> safeWorkerEnvironment(
-  Map<String, String> requested, {
-  Set<String> allowedNames = const {},
-  Map<String, String>? parentEnvironment,
-  String? operatingSystem,
-}) {
-  final environment = <String, String>{};
-  final parent = parentEnvironment ?? Platform.environment;
-  final os = operatingSystem ?? Platform.operatingSystem;
-  const maxEntries = 128;
-  const maxValueBytes = 64 * 1024;
-  const maxTotalBytes = 256 * 1024;
-  var totalBytes = 0;
-  void add(String name, String value) {
-    if (value.isEmpty) return;
-    final valueBytes = utf8.encode(value).length;
-    if (valueBytes > maxValueBytes ||
-        (!environment.containsKey(name) && environment.length >= maxEntries) ||
-        totalBytes + name.length + valueBytes > maxTotalBytes) {
-      throw StateError('Worker environment exceeds its configured bounds');
-    }
-    if (environment.containsKey(name)) {
-      totalBytes -= name.length + utf8.encode(environment[name]!).length;
-    }
-    environment[name] = value;
-    totalBytes += name.length + valueBytes;
-  }
-
-  for (final name in const [
-    'HOME',
-    'USERPROFILE',
-    'TMPDIR',
-    'TMP',
-    'TEMP',
-    'SystemRoot',
-    'LANG',
-    'LC_ALL',
-    'LC_CTYPE',
-    // TLS certificate configuration for provider connections.
-    'SSL_CERT_FILE',
-    'SSL_CERT_DIR',
-    // Disable colour output and interactive prompts in headless workers.
-    'NO_COLOR',
-    'TERM',
-  ]) {
-    final value = parent[name];
-    if (value != null) add(name, value);
-  }
-  final path = _workerLaunchPath(
-    parentPath: parent['PATH'],
-    homeDirectory: parent['HOME'] ?? parent['USERPROFILE'],
-    systemRoot: parent['SystemRoot'],
-    operatingSystem: os,
-  );
-  if (path.isNotEmpty) add('PATH', path);
-  for (final name in allowedNames) {
-    // PATH is a centrally constructed runtime baseline, never a package
-    // passthrough value. In particular, admission must not replace the
-    // GUI-safe path with the unfiltered parent value.
-    if (name == 'PATH') continue;
-    final value = parent[name];
-    if (value != null) add(name, value);
-  }
-  // Worker processes are non-interactive. Prevent language runtimes from
-  // blocking on first-run telemetry prompts while the Host is executing.
-  add('DART_SUPPRESS_ANALYTICS', '1');
-  for (final entry in requested.entries) {
-    if (allowedNames.contains(entry.key)) add(entry.key, entry.value);
-  }
-  return environment;
-}
-
-String _workerLaunchPath({
-  required String? parentPath,
-  required String? homeDirectory,
-  required String? systemRoot,
-  required String operatingSystem,
-}) {
-  final isWindows = operatingSystem == 'windows';
-  final separator = isWindows ? ';' : ':';
-  final defaults = <String>[];
-  if (isWindows) {
-    final root = systemRoot;
-    if (root != null && root.isNotEmpty) {
-      defaults.addAll([
-        '$root\\System32',
-        root,
-        '$root\\System32\\Wbem',
-        '$root\\System32\\WindowsPowerShell\\v1.0',
-      ]);
-    }
-  } else if (operatingSystem == 'macos') {
-    defaults.addAll(const [
-      '/opt/homebrew/bin',
-      '/opt/homebrew/sbin',
-      '/usr/local/bin',
-      '/usr/local/sbin',
-      '/usr/bin',
-      '/bin',
-      '/usr/sbin',
-      '/sbin',
-    ]);
-  } else {
-    defaults.addAll(const [
-      '/usr/local/bin',
-      '/usr/local/sbin',
-      '/usr/bin',
-      '/usr/sbin',
-      '/bin',
-      '/sbin',
-    ]);
-  }
-  if (!isWindows && homeDirectory != null && homeDirectory.isNotEmpty) {
-    defaults.addAll([
-      '$homeDirectory/.local/bin',
-      '$homeDirectory/bin',
-    ]);
-  }
-
-  final paths = <String>[];
-  final seen = <String>{};
-  for (final candidate in [
-    ...(parentPath ?? '').split(separator),
-    ...defaults,
-  ]) {
-    final path = candidate.trim();
-    if (path.isEmpty || !_isAbsoluteWorkerPath(path, isWindows)) continue;
-    final key = isWindows ? path.toLowerCase() : path;
-    if (seen.add(key)) paths.add(path);
-  }
-  return paths.join(separator);
-}
-
-bool _isAbsoluteWorkerPath(String path, bool isWindows) => isWindows
-    ? RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path) || path.startsWith(r'\\')
-    : path.startsWith('/');
 
 class WorkerAssignmentHandler {
   const WorkerAssignmentHandler({

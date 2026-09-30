@@ -135,6 +135,41 @@ class WorkerTrustPolicy {
     );
   }
 
+  /// Verifies signed, provider-neutral Worker release manifest v2 metadata.
+  Future<bool> verifyWorkerReleaseManifest(
+    Map<String, Object?> manifest,
+  ) async {
+    final publisher = manifest['publisher'];
+    final signingKeyId = manifest['signingKeyId'];
+    final digest = manifest['packageDigest'];
+    final workerTypeId = manifest['workerTypeId'];
+    final workerVersion = manifest['workerVersion'];
+    final signature = manifest['signature'];
+    if (publisher is! String ||
+        signingKeyId is! String ||
+        digest is! String ||
+        workerTypeId is! String ||
+        workerVersion is! String ||
+        signature is! String) {
+      return false;
+    }
+    if (_revokedDigests.contains(digest) ||
+        _revokedPublishers.contains(publisher) ||
+        _revokedKeyIds.contains(signingKeyId) ||
+        _revokedReleaseIds.contains('$workerTypeId@$workerVersion')) {
+      return false;
+    }
+    final unsigned = Map<String, Object?>.from(manifest)..remove('signature');
+    return _verifySignature(
+      publisher: publisher,
+      signingKeyId: signingKeyId,
+      signature: signature,
+      message: utf8.encode(
+        'conclave-worker-release-manifest-v2\n${canonicalJson(unsigned)}',
+      ),
+    );
+  }
+
   Future<bool> verifyHostRelease({
     required String publisher,
     required String signingKeyId,

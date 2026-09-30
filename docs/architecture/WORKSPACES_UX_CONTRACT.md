@@ -6,6 +6,11 @@
 
 **Architecture:** v7, Workspace-owned Workers.
 
+**Runtime contract:** First-party Worker version is `workerRuntimeVersion`.
+Provider tool name/version are Worker-reported safe diagnostics; provider tool
+paths are local-only. Workspace does not probe provider CLIs directly. Legacy
+`adapterVersion` fields describe the superseded Node migration implementation.
+
 ## Product contract
 
 The top-level AX execution-capacity page is **Workspaces**.
@@ -24,7 +29,10 @@ Workspaces
   one owning Workspace.
 - Workers are visible in AX, but have no independent top-level page or global
   inventory destination. Normal AX Workspace UI is read-only for runtime and
-  local Worker lifecycle state.
+  local Worker lifecycle state. Worker installation, update, rollback, pinning,
+  and explicit Test actions stay in Conclave Workspace. AX may show the safe
+  Worker runtime version and provider tool name/version reported by Workspace,
+  but it does not request provider probes itself.
 - Workers are created, authenticated, permissioned, and removed locally in
   Conclave Workspace. AX never configures their local execution environment.
 - Project access is managed as a Workspace Grant in AX. A Workspace can be
@@ -96,9 +104,11 @@ id
 workerTypeId
 workspaceId
 status               // ready | needs_attention | disabled | removed
-readinessState       // independent package health; never replaced by disabled
+readinessState       // independent Worker-reported health; never replaced by disabled
 attentionReasonCode? // set for actionable non-ready states
-adapterVersion?
+workerRuntimeVersion?
+providerToolName?
+providerToolVersion?
 capabilities
 localConcurrencyLimit
 lastSeenAt?
@@ -106,15 +116,15 @@ lastSeenAt?
 
 The safe inventory fields originate in Conclave Workspace. `status` is the
 compatibility activation/dispatch projection; `readinessState` remains the
-independent package health result, including while the Worker is disabled.
+independent Worker-reported health result, including while the Worker is disabled.
 Both are local observations; Cloud cannot change them. Cloud
 scheduling state and limits are separate Cloud-owned controls and do not appear
 in the Workspace readiness inventory.
 
-The projection may also include a supported CLI version and discovered
-non-sensitive model/capability metadata. The current implementation reports
-adapter version and adapter-declared capabilities; CLI version and discovered
-models are omitted until Workspace has a safe, validated source for them. AX
+The projection may include Worker runtime version, provider tool name/version,
+and Worker-declared capabilities. The Worker resolves and reports provider
+tool diagnostics; Workspace only validates and forwards the safe fields. A
+provider tool path is local-only and is never synchronized to Cloud. AX
 derives the fixed product label from `workerTypeId`. Keep auth strategy,
 credential status/references, local permission names, local paths, model
 defaults/allow-lists, tokens, API keys, and auth files out of Cloud inventory.
@@ -218,7 +228,7 @@ returned to AX.
 | OS, architecture, app version | Workspace reports; Cloud stores safe facts | Show concise machine identity; diagnostics retain detail |
 | Worker existence/configuration and Worker ID | Conclave Workspace | Show safe synchronized Worker projection |
 | Provider credentials and authentication | Conclave Workspace secure storage | Never read or write from AX |
-| Local permissions, CLI/prerequisite state, adapter health | Conclave Workspace | Show only safe readiness/attention summary |
+| Local permissions and Worker-reported provider readiness | Conclave Workspace | Show only safe readiness/attention summary |
 | Local concurrency ceiling | Conclave Workspace | Display only when useful; Cloud cannot increase it |
 | Cloud scheduling state and concurrency limits | Cloud | AX selects them in Workstream Execution settings |
 | Workspace-to-Project grants and Workstream usage policy | Cloud | AX owns authorization, Worker role/model/fallback choices, and limits |

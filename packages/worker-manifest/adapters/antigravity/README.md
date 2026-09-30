@@ -1,4 +1,10 @@
-# First-party Antigravity adapter
+# Historical: Node-backed Antigravity adapter
+
+> **Superseded implementation documentation.** This Node adapter implements
+> the legacy V7 Protocol 2.x migration path. First-party Gemini runtime work
+> belongs in the standalone Dart Worker under `workers/gemini`; Workspace must
+> not probe `agy` directly. Keep this document only for migration and
+> historical test context. See [Worker Runtime v2](../../../../docs/architecture/WORKER_RUNTIME_V2.md).
 
 This Worker Package implements V7 Local Worker Protocol. For each assignment
 it starts a fresh `agy` process in the Workstream CWD and uses the CLI's

@@ -24,7 +24,9 @@ export interface V7ExecutionTarget {
   readonly workerId: string;
   /** Product Worker Type ID reported by Workspace and selected by policy. */
   readonly workerTypeId: string;
-  readonly workerVersion: string;
+  readonly workerRuntimeVersion: string;
+  readonly providerToolName: string | null;
+  readonly providerToolVersion: string | null;
   readonly model: string | null;
   readonly effectivePermissions: readonly string[];
   readonly permissionSnapshot: Record<string, unknown>;
@@ -217,9 +219,12 @@ export async function selectProjectExecutionTarget(
             ew.name AS workspace_name, ew.owner_user_id, ew.status AS workspace_status,
             wri.id AS runtime_identity_id,
             i.worker_id, i.worker_type_id,
-            COALESCE(i.adapter_version, '1.0.0') AS worker_version,
+            i.worker_runtime_version AS worker_runtime_version,
+            i.provider_tool_name,
+            i.provider_tool_version,
             i.capabilities_json,
-            i.status AS local_worker_status,
+            i.activation_state AS local_worker_activation_state,
+            i.readiness_state AS local_worker_readiness_state,
             vs.state AS cloud_scheduling_state,
             vs.cloud_concurrency_limit,
             i.worker_type_id AS provider,
@@ -233,7 +238,7 @@ export async function selectProjectExecutionTarget(
      JOIN execution_workspaces ew ON ew.id = g.workspace_id
      LEFT JOIN workstream_worker_usage_policies usage ON usage.workstream_id = ?4
      JOIN workspace_runtime_identities wri ON wri.workspace_id = ew.id AND wri.revoked_at IS NULL
-     JOIN workspace_worker_inventory i ON i.workspace_id = ew.id AND i.status != 'removed'
+     JOIN workspace_worker_inventory i ON i.workspace_id = ew.id
      JOIN v7_worker_scheduling vs ON vs.worker_id = i.worker_id
      WHERE g.project_id = ?1 AND g.status = 'active'
        AND (g.expires_at IS NULL OR g.expires_at > ?3)
@@ -257,16 +262,20 @@ export async function selectProjectExecutionTarget(
   const candidates = [...(v7Rows.results ?? [])].sort((left, right) => {
     const preference = (row: Row): number => {
       const policy = object(row.worker_usage_policy_json);
-      const roles = policy.roles && typeof policy.roles === "object"
-        ? policy.roles as Record<string, unknown>
-        : {};
+      const roles =
+        policy.roles && typeof policy.roles === "object"
+          ? (policy.roles as Record<string, unknown>)
+          : {};
       const binding = roles[request.role.trim().toLowerCase()];
-      if (!binding || typeof binding !== "object") return Number.MAX_SAFE_INTEGER;
+      if (!binding || typeof binding !== "object")
+        return Number.MAX_SAFE_INTEGER;
       const value = binding as Record<string, unknown>;
       const preferred = [
         ...(typeof value.workerId === "string" ? [value.workerId] : []),
         ...(Array.isArray(value.fallbackWorkerIds)
-          ? value.fallbackWorkerIds.filter((id): id is string => typeof id === "string")
+          ? value.fallbackWorkerIds.filter(
+              (id): id is string => typeof id === "string",
+            )
           : []),
       ];
       const index = preferred.indexOf(String(row.worker_id));
@@ -286,18 +295,24 @@ export async function selectProjectExecutionTarget(
     const workerId = String(row.worker_id);
     const workerTypeId = String(row.worker_type_id);
     const usagePolicy = object(row.worker_usage_policy_json);
-    const roleBindings = usagePolicy.roles && typeof usagePolicy.roles === "object"
-      ? usagePolicy.roles as Record<string, unknown>
-      : {};
+    const roleBindings =
+      usagePolicy.roles && typeof usagePolicy.roles === "object"
+        ? (usagePolicy.roles as Record<string, unknown>)
+        : {};
     const rawRoleBinding = roleBindings[request.role.trim().toLowerCase()];
-    const roleBinding = rawRoleBinding && typeof rawRoleBinding === "object"
-      ? rawRoleBinding as Record<string, unknown>
-      : {};
+    const roleBinding =
+      rawRoleBinding && typeof rawRoleBinding === "object"
+        ? (rawRoleBinding as Record<string, unknown>)
+        : {};
     const hasRoleBinding = Object.keys(roleBinding).length > 0;
     const preferredWorkerIds = [
-      ...(typeof roleBinding.workerId === "string" ? [roleBinding.workerId] : []),
+      ...(typeof roleBinding.workerId === "string"
+        ? [roleBinding.workerId]
+        : []),
       ...(Array.isArray(roleBinding.fallbackWorkerIds)
-        ? roleBinding.fallbackWorkerIds.filter((id): id is string => typeof id === "string")
+        ? roleBinding.fallbackWorkerIds.filter(
+            (id): id is string => typeof id === "string",
+          )
         : []),
     ];
     const capabilities = strings(row.capabilities_json).map((value) =>
@@ -310,11 +325,15 @@ export async function selectProjectExecutionTarget(
       (value) => value.toLowerCase(),
     );
     const provider = String(row.provider ?? "unknown");
-    const selectedModel = request.workstreamId &&
-      typeof roleBinding.model === "string" && roleBinding.model.trim().length > 0
-      ? roleBinding.model
-      : request.model ??
-        (typeof roleBinding.model === "string" ? roleBinding.model : undefined);
+    const selectedModel =
+      request.workstreamId &&
+      typeof roleBinding.model === "string" &&
+      roleBinding.model.trim().length > 0
+        ? roleBinding.model
+        : (request.model ??
+          (typeof roleBinding.model === "string"
+            ? roleBinding.model
+            : undefined));
     const independenceKey = `${provider}:${workerTypeId}`;
     const concurrency = object(row.concurrency_json);
     const maxConcurrent = Math.min(
@@ -350,8 +369,19 @@ export async function selectProjectExecutionTarget(
       reject("cloud_scheduling_disabled");
       continue;
     }
-    if (String(row.local_worker_status) !== "ready") {
+    if (String(row.local_worker_activation_state) !== "enabled") {
+      reject("local_worker_disabled");
+      continue;
+    }
+    if (String(row.local_worker_readiness_state) !== "ready") {
       reject("local_worker_not_ready");
+      continue;
+    }
+    if (
+      typeof row.worker_runtime_version !== "string" ||
+      !row.worker_runtime_version
+    ) {
+      reject("worker_runtime_unavailable");
       continue;
     }
     if (request.workstreamId && !hasRoleBinding) {
@@ -362,13 +392,24 @@ export async function selectProjectExecutionTarget(
       reject("explicit_workspace_mismatch");
       continue;
     }
-    if (typeof roleBinding.workspaceId === "string" && roleBinding.workspaceId !== workspaceId) {
+    if (
+      typeof roleBinding.workspaceId === "string" &&
+      roleBinding.workspaceId !== workspaceId
+    ) {
       reject("workstream_role_workspace_mismatch");
       continue;
     }
-    if (request.workstreamId && usagePolicy.fallbackPolicy === "configured_only" &&
-        (preferredWorkerIds.length === 0 || !preferredWorkerIds.includes(workerId))) {
-      reject(preferredWorkerIds.length === 0 ? "no_worker_selected_for_role" : "worker_not_selected_for_role");
+    if (
+      request.workstreamId &&
+      usagePolicy.fallbackPolicy === "configured_only" &&
+      (preferredWorkerIds.length === 0 ||
+        !preferredWorkerIds.includes(workerId))
+    ) {
+      reject(
+        preferredWorkerIds.length === 0
+          ? "no_worker_selected_for_role"
+          : "worker_not_selected_for_role",
+      );
       continue;
     }
     if (request.workerId && request.workerId !== workerId) {
@@ -466,6 +507,15 @@ export async function selectProjectExecutionTarget(
       workerId,
       workerTypeId,
       grantId: String(row.grant_id),
+      workerRuntimeVersion: String(row.worker_runtime_version),
+      providerToolName:
+        typeof row.provider_tool_name === "string"
+          ? row.provider_tool_name
+          : null,
+      providerToolVersion:
+        typeof row.provider_tool_version === "string"
+          ? row.provider_tool_version
+          : null,
       requesterUserId: request.requesterUserId,
       scope: String(row.scope),
       permissions,
@@ -491,7 +541,15 @@ export async function selectProjectExecutionTarget(
       workspaceProjectGrantId: String(row.grant_id),
       workerId,
       workerTypeId,
-      workerVersion: String(row.worker_version),
+      workerRuntimeVersion: String(row.worker_runtime_version),
+      providerToolName:
+        typeof row.provider_tool_name === "string"
+          ? row.provider_tool_name
+          : null,
+      providerToolVersion:
+        typeof row.provider_tool_version === "string"
+          ? row.provider_tool_version
+          : null,
       model: selectedModel ?? null,
       effectivePermissions: permissions,
       permissionSnapshot,
@@ -506,8 +564,17 @@ export async function selectProjectExecutionTarget(
         worker: {
           id: workerId,
           workerTypeId,
-          version: row.worker_version,
-          status: row.local_worker_status,
+          workerRuntimeVersion: row.worker_runtime_version,
+          providerToolName:
+            typeof row.provider_tool_name === "string"
+              ? row.provider_tool_name
+              : null,
+          providerToolVersion:
+            typeof row.provider_tool_version === "string"
+              ? row.provider_tool_version
+              : null,
+          activationState: row.local_worker_activation_state,
+          readinessState: row.local_worker_readiness_state,
           role: request.role,
           selection: preferredWorkerIds.includes(workerId)
             ? "configured_preference"

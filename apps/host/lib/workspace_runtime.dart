@@ -70,6 +70,7 @@ Future<Host> buildWorkspaceRuntime(
     onWorkerRemoving: (workerId) async {
       await workerExecutor.cancelWorker(workerId);
     },
+    onLegacyCredentialReference: secureCredentialStore.delete,
   );
   final v7AdapterPackageStore = V7AdapterPackageStore(
     root: WorkspacePaths(config.dataDirectory).adaptersDirectory,
@@ -85,6 +86,23 @@ Future<Host> buildWorkspaceRuntime(
           cloudUri: config.cloudUri!,
           packageStore: v7AdapterPackageStore,
           authToken: config.authToken,
+        );
+  final workerVersionStore = WorkerVersionStore(
+    workersRoot: WorkspacePaths(config.dataDirectory).workersDirectory,
+    trustPolicy: workerTrustPolicy,
+    allowedPermissions: _configuredPermissions(),
+    workerStateSchemaVersion: 1,
+    hasActiveAssignments: () => (connection?.activeAssignmentCount ?? 0) > 0,
+    candidateHealthCheck: WorkerCandidateValidator(),
+  );
+  final workerReleaseCatalog = config.cloudUri == null
+      ? null
+      : WorkerReleaseCatalog(
+          cloudUri: config.cloudUri!,
+          store: workerVersionStore,
+          authToken: config.authToken,
+          hasActiveAssignments: () =>
+              (connection?.activeAssignmentCount ?? 0) > 0,
         );
   final activeWorkerIds = (await localWorkerRegistry.list())
       .where((worker) => worker.status == LocalWorkerStatus.ready)
@@ -206,54 +224,34 @@ Future<Host> buildWorkspaceRuntime(
           assignmentHandler: workerHandler.call,
           assignmentCancellationHandler: workerHandler.cancel,
           workerInventoryProvider: () async {
-            final localWorkers =
-                await localWorkerRegistry.list(includeRemoved: true);
+            final localWorkers = await localWorkerRegistry.list();
             final lastSeenAt = DateTime.now().toUtc().toIso8601String();
             return Future.wait(localWorkers.map((worker) async {
-              Map<String, Object?>? adapterSummary;
+              String? runtimeVersion;
+              List<String> capabilities = const <String>[];
               try {
-                adapterSummary =
-                    await v7AdapterPackageStore.activeManifestSummary(worker);
+                final manifest = await workerVersionStore
+                    .activeManifest(worker.workerTypeId);
+                runtimeVersion = manifest?.workerVersion;
+                capabilities = manifest?.capabilities ?? capabilities;
               } on Object {
-                // Invalid, revoked, or permission-incompatible packages must
-                // not be advertised as active in the safe inventory.
+                // The release remains unavailable until local admission passes.
               }
-              final readinessState = adapterSummary == null
-                  ? WorkerReadinessState.adapterUnavailable
-                  : worker.readinessState;
-              final workerStatus = switch (worker.status) {
-                LocalWorkerStatus.removed => 'removed',
-                _
-                    when worker.activationState ==
-                        LocalWorkerActivationState.disabled =>
-                  'disabled',
-                _
-                    when adapterSummary != null &&
-                        worker.status == LocalWorkerStatus.ready =>
-                  'ready',
-                _ => 'needs_attention',
-              };
               return <String, Object?>{
                 'workerId': worker.id,
                 'workerTypeId': worker.workerTypeId,
-                'status': workerStatus,
-                'readinessState': readinessState.wireValue,
-                if (worker.status != LocalWorkerStatus.ready &&
-                    (worker.lastLiveTestPassed == false
-                            ? worker.lastLiveTestIssueCode ??
-                                worker.readinessIssueCode
-                            : worker.readinessIssueCode) !=
-                        null)
-                  'readinessIssueCode': worker.lastLiveTestPassed == false
-                      ? worker.lastLiveTestIssueCode ??
-                          worker.readinessIssueCode
-                      : worker.readinessIssueCode,
-                'capabilities':
-                    adapterSummary?['capabilities'] ?? const <String>[],
+                'activationState': worker.activationState ==
+                        LocalWorkerActivationState.disabled
+                    ? 'disabled'
+                    : 'enabled',
+                'readinessState': worker.readinessState.wireValue,
+                if (worker.readinessIssueCode != null)
+                  'readinessIssueCode': worker.readinessIssueCode,
+                'workerRuntimeVersion': runtimeVersion,
+                'providerToolName': worker.toolName,
+                'providerToolVersion': worker.toolVersion,
+                'capabilities': capabilities,
                 'localConcurrencyLimit': worker.localConcurrencyLimit,
-                // This records configured policy only when a concrete
-                // adapter build has been admitted and activated.
-                'adapterVersion': adapterSummary?['adapterVersion'],
                 'revision': worker.revision,
                 'createdAt': worker.createdAt,
                 'updatedAt': worker.updatedAt,
@@ -322,6 +320,29 @@ Future<Host> buildWorkspaceRuntime(
       }());
     });
   }
+  if (workerReleaseCatalog != null) {
+    var refreshingWorkerReleases = false;
+    Timer.periodic(const Duration(minutes: 10), (_) {
+      unawaited(() async {
+        if (refreshingWorkerReleases ||
+            (connection?.activeAssignmentCount ?? 0) > 0) {
+          return;
+        }
+        refreshingWorkerReleases = true;
+        try {
+          for (final descriptor in FirstPartyWorkerPackage.all) {
+            await workerReleaseCatalog.refreshAutomaticUpdate(
+              descriptor.productWorkerTypeId,
+            );
+          }
+        } on Object {
+          // Keep the installed Worker and retry at the next interval.
+        } finally {
+          refreshingWorkerReleases = false;
+        }
+      }());
+    });
+  }
   final readinessMonitor = WorkerReadinessMonitor(
     registry: localWorkerRegistry,
     adapterStore: v7AdapterPackageStore,
@@ -336,6 +357,8 @@ Future<Host> buildWorkspaceRuntime(
     workerShutdownHandler: workerExecutor.shutdown,
     cloudConnection: connection,
     adapterPackageStore: v7AdapterPackageStore,
+    workerVersionStore: workerVersionStore,
+    workerReleaseCatalog: workerReleaseCatalog,
     statusProvider: () async {
       await refreshUpdateAvailability();
       final workers = await localWorkerRegistry.list();

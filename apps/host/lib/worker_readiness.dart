@@ -66,6 +66,8 @@ class WorkerReadinessMonitor {
         (current) => current.copyWith(
           status: LocalWorkerStatus.needsAttention,
           activationState: current.activationState,
+          readinessState: WorkerReadinessState.notProbed,
+          readinessIssueCode: 'probe_required',
         ),
       );
     }
@@ -216,7 +218,7 @@ class WorkerReadinessMonitor {
       }
       if (!packageAvailable) {
         return const WorkerReadinessAssessment(
-          WorkerReadinessState.adapterUnavailable,
+          WorkerReadinessState.runtimeUnavailable,
           issueCode: 'package_unavailable',
         );
       }
@@ -226,7 +228,7 @@ class WorkerReadinessMonitor {
       );
       if (launch == null) {
         return const WorkerReadinessAssessment(
-          WorkerReadinessState.adapterUnavailable,
+          WorkerReadinessState.runtimeUnavailable,
           issueCode: 'package_unavailable',
         );
       }
@@ -277,7 +279,7 @@ class WorkerReadinessMonitor {
       final state = switch (code) {
         'cli_not_found' ||
         'package_unavailable' =>
-          WorkerReadinessState.adapterUnavailable,
+          WorkerReadinessState.runtimeUnavailable,
         'setup_required' ||
         'authentication_required' =>
           WorkerReadinessState.setupRequired,
@@ -299,7 +301,7 @@ class WorkerReadinessMonitor {
     } on Object catch (error) {
       final timeout = error is TimeoutException;
       return WorkerReadinessAssessment(
-        WorkerReadinessState.adapterUnavailable,
+        WorkerReadinessState.runtimeUnavailable,
         issueCode: timeout ? 'probe_timeout' : 'package_unavailable',
         diagnosticDetails: timeout
             ? 'The Worker Package probe timed out.'

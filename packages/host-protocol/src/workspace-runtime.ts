@@ -52,49 +52,35 @@ const nonEmptyString = z.string().trim().min(1);
 const timestamp = z.string().datetime();
 const executionErrorCode = z.enum(EXECUTION_ERROR_CODES);
 
-/** Product-facing Worker Type IDs. Adapter package IDs are never valid here. */
+/** Product-facing Worker Type IDs; legacy provider package IDs are not valid. */
 export const WorkspaceProductWorkerTypeIdSchema = nonEmptyString
   .max(128)
   .refine((id) => id !== "codex" && id !== "antigravity", {
-    message: "adapter package IDs are not Workspace product Worker Types",
+    message: "legacy package IDs are not Workspace product Worker Types",
   });
 
 export const WorkspaceWorkerInventoryEntrySchema = z
   .object({
     workerId: nonEmptyString.max(128),
     workerTypeId: WorkspaceProductWorkerTypeIdSchema,
-    name: nonEmptyString.max(200),
-    status: z.enum(["ready", "needs_attention", "disabled", "removed"]),
-    readinessState: z
-      .enum([
-        "ready",
-        "setup_required",
-        "not_installed",
-        "sign_in_required",
-        "unsupported_cli_version",
-        "adapter_unavailable",
-        "disabled",
-        "test_failed",
-      ])
-      .optional(),
+    activationState: z.enum(["enabled", "disabled"]),
+    readinessState: z.enum([
+      "not_probed",
+      "ready",
+      "setup_required",
+      "sign_in_required",
+      "worker_runtime_unavailable",
+      "test_failed",
+    ]),
     readinessIssueCode: z
       .string()
       .regex(/^[a-z][a-z0-9_]{0,127}$/)
       .optional(),
-    authStrategy: z.enum(["none", "browser_auth", "api_key", "local_endpoint"]),
-    defaultModel: z.string().max(256).nullable(),
-    allowedModels: z.array(nonEmptyString.max(256)).max(128),
+    workerRuntimeVersion: z.string().max(128).nullable(),
+    providerToolName: z.string().max(128).nullable(),
+    providerToolVersion: z.string().max(128).nullable(),
     capabilities: z.array(nonEmptyString.max(128)).max(128),
-    localPermissionsSummary: z.array(nonEmptyString.max(128)).max(64),
     localConcurrencyLimit: z.number().int().min(1).max(1024),
-    adapterVersion: z.string().max(128).nullable(),
-    credentialStatus: z.enum([
-      "not_required",
-      "ready",
-      "needs_authentication",
-      "expired",
-      "error",
-    ]),
     revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
     createdAt: timestamp,
     updatedAt: timestamp,

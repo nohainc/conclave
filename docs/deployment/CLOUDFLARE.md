@@ -1,7 +1,7 @@
 # Conclave AX Cloudflare Deployment
 
 Architecture and Worker ownership are documented in [Architecture v7](../architecture/ARCHITECTURE_V7.md).
-Operational guidance for signed Workspace/adapter releases and public-key
+Operational guidance for signed Workspace/Worker releases and public-key
 rotation is in [Workspace release operations](WORKSPACE_RELEASES.md) and
 [Release Trust and Rotation](../security/RELEASE_TRUST_AND_ROTATION.md).
 

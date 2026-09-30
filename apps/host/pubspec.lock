@@ -88,6 +88,13 @@ packages:
       relative: true
     source: path
     version: "0.1.0"
+  conclave_worker_protocol:
+    dependency: "direct main"
+    description:
+      path: "../../packages/conclave_worker_protocol"
+      relative: true
+    source: path
+    version: "0.1.0"
   convert:
     dependency: transitive
     description:

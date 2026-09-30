@@ -73,18 +73,14 @@ describe("Workspace Runtime protocol", () => {
     const worker = {
       workerId: "worker-a",
       workerTypeId: "chatgpt",
-      name: "ChatGPT Personal",
-      status: "needs_attention",
+      activationState: "enabled",
       readinessState: "setup_required",
       readinessIssueCode: "setup_required",
-      authStrategy: "browser_auth",
-      defaultModel: null,
-      allowedModels: [],
+      workerRuntimeVersion: null,
+      providerToolName: "codex",
+      providerToolVersion: null,
       capabilities: ["code"],
-      localPermissionsSummary: ["workstream_filesystem"],
       localConcurrencyLimit: 1,
-      adapterVersion: null,
-      credentialStatus: "needs_authentication",
       revision: 1,
       createdAt: "2026-09-24T12:00:00.000Z",
       updatedAt: "2026-09-24T12:00:00.000Z",
@@ -102,11 +98,54 @@ describe("Workspace Runtime protocol", () => {
         ...base,
         type: "worker.inventory",
         payload: {
+          workers: [{ ...worker, providerToolPath: "/local/only/codex" }],
+          fullSnapshot: true,
+        },
+      }),
+    ).toThrow();
+    expect(
+      parseWorkspaceRuntimeMessage({
+        ...base,
+        type: "worker.inventory",
+        payload: {
+          workers: [
+            {
+              ...worker,
+              readinessState: "not_probed",
+              readinessIssueCode: "probe_required",
+            },
+          ],
+          fullSnapshot: true,
+        },
+      }).type,
+    ).toBe("worker.inventory");
+    expect(() =>
+      parseWorkspaceRuntimeMessage({
+        ...base,
+        type: "worker.inventory",
+        payload: {
           workers: [{ ...worker, readinessIssueCode: "api_key=secret" }],
           fullSnapshot: true,
         },
       }),
     ).toThrow();
+    for (const obsoleteField of [
+      "authStrategy",
+      "defaultModel",
+      "adapterVersion",
+      "providerToolPath",
+    ]) {
+      expect(() =>
+        parseWorkspaceRuntimeMessage({
+          ...base,
+          type: "worker.inventory",
+          payload: {
+            workers: [{ ...worker, [obsoleteField]: "must-not-sync" }],
+            fullSnapshot: true,
+          },
+        }),
+      ).toThrow();
+    }
     for (const adapterPackageId of ["codex", "antigravity"]) {
       expect(() =>
         parseWorkspaceRuntimeMessage({
@@ -117,7 +156,7 @@ describe("Workspace Runtime protocol", () => {
             fullSnapshot: true,
           },
         }),
-      ).toThrow(/adapter package IDs/);
+      ).toThrow(/legacy package IDs/);
     }
     expect(() =>
       parseWorkspaceRuntimeMessage({
@@ -162,7 +201,7 @@ describe("Workspace Runtime protocol", () => {
           ...assignment,
           payload: { snapshot: { workerTypeId: adapterPackageId }, input: {} },
         }),
-      ).toThrow(/adapter package IDs/);
+      ).toThrow(/legacy package IDs/);
     }
   });
 

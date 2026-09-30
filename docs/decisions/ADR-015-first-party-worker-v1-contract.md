@@ -5,12 +5,22 @@
 **Builds on:** ADR-012, Architecture v7  
 **Supersedes:** ADR-012 Worker Type catalog, identity/cardinality, naming, and local authentication UX where they conflict with this decision. Other ADR-012 decisions remain in force.
 
+> **Runtime status and terminology:** The fixed `chatgpt` / `gemini` catalog,
+> slot cardinality, provider-authentication boundary, and AX-owned model/usage
+> rules below remain normative. References below to adapter packages, package
+> IDs, or Local Worker Protocol 2.x record the legacy Node implementation and
+> are superseded by ADR-017 / Local Worker Protocol 3.0. First-party Workers
+> are signed native Dart console executables; Workspace must not probe provider
+> CLIs. The full Workspace assignment path has not yet converged; see the
+> [implementation plan](../roadmaps/WORKER_RUNTIME_V2_IMPLEMENTATION.md).
+
 ## Context
 
-The current Workspace implementation supports a broad adapter catalog and
-multiple configured Worker instances per type. The first product release should
-focus on two first-party Worker Packages backed by local CLIs and leave provider
-sign-in, credential storage, and billing mode to those CLIs. Conclave needs a
+The legacy Workspace implementation supports a broad adapter catalog and
+multiple configured Worker instances per type. The first product release
+focuses on two first-party standalone Worker executables backed by local CLIs
+and leaves provider sign-in, credential storage, and billing mode to those
+CLIs. Conclave needs a
 stable product, package, and inventory contract before the setup UI and
 registry are simplified.
 
@@ -183,6 +193,14 @@ path, or billing-mode assertion is part of the v1 synchronized inventory
 contract. Readiness is reported through the Local Worker Protocol and remains
 provider-neutral at Cloud-facing boundaries.
 
+The Cloud inventory projection is a fixed-catalog record: Worker and Workspace
+IDs, product Worker Type ID, local activation/readiness and issue code, native
+Worker runtime version, provider tool name/version, capabilities, local
+concurrency limit, revision, and timestamps. It does not store a display name,
+provider tool path, auth strategy, credential status, model preference, local
+permission summary, or adapter version. Workspace authoritative snapshots
+remove omitted slots and their Cloud scheduling records.
+
 Model choice, Project/Workstream role, and remote scheduling policy are not
 local Worker slot identity or provider authentication concerns. Their ownership
 continues to follow the current AX/Cloud execution contracts.
@@ -234,3 +252,10 @@ handling for those changes remains separate.
 ## Worker Runtime v2 implementation note
 
 ADR-017 does not change this product catalog, cardinality, provider-authentication boundary, or AX-owned model/usage rules. It replaces the first Node-backed package implementation with independently versioned signed Dart console executables. Product IDs remain `chatgpt` and `gemini`; Codex and Antigravity remain provider-tool implementation details owned by those Workers.
+
+The Workspace's schema 17 local registry now stores the fixed product slot
+identity and local activation, permission, concurrency, readiness, probe, and
+provider-tool diagnostic state. It does not persist user-defined names,
+provider credential references/status, model defaults, adapter configuration,
+or a legacy status as primary readiness. Worker release policy and active
+version remain in the Worker's version-independent release-state file.

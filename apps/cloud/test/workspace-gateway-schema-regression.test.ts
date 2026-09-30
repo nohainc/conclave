@@ -93,9 +93,37 @@ describe("Workspace Gateway active-schema regression", () => {
         .map((row) => String((row as { name: string }).name)),
     );
     expect(migrationFiles).toContain("0029_workspace_sessions.sql");
+    expect(migrationFiles).toContain("0036_worker_inventory_v2.sql");
     expect(expectedTables.filter((table) => !actualTables.has(table))).toEqual(
       [],
     );
+    const inventoryColumns = new Set(
+      database
+        .prepare("PRAGMA table_info(workspace_worker_inventory)")
+        .all()
+        .map((row) => String((row as { name: string }).name)),
+    );
+    expect(
+      [
+        "activation_state",
+        "readiness_state",
+        "worker_runtime_version",
+        "provider_tool_name",
+        "provider_tool_version",
+      ].every((column) => inventoryColumns.has(column)),
+    ).toBe(true);
+    expect(
+      [
+        "name",
+        "status",
+        "auth_strategy",
+        "credential_status",
+        "default_model",
+        "allowed_models_json",
+        "adapter_version",
+        "provider_tool_path",
+      ].some((column) => inventoryColumns.has(column)),
+    ).toBe(false);
 
     const workspaceId = "workspace-schema-regression";
     const runtimeId = "runtime-schema-regression";
@@ -162,9 +190,18 @@ describe("Workspace Gateway active-schema regression", () => {
     });
 
     let acceptedSocket: TestSocket | undefined;
+    const runtimeStorage = new Map<string, unknown>();
     const gateway = new WorkspaceGateway(
       {
         id: { name: workspaceId },
+        storage: {
+          get: async <T>(key: string) =>
+            runtimeStorage.get(key) as T | undefined,
+          put: async (key: string, value: unknown) => {
+            runtimeStorage.set(key, value);
+          },
+          delete: async (key: string) => runtimeStorage.delete(key),
+        },
         acceptWebSocket(socket: unknown) {
           acceptedSocket = socket as TestSocket;
         },
@@ -287,8 +324,16 @@ describe("Workspace Gateway active-schema regression", () => {
       BEGIN SELECT RAISE(FAIL, 'simulated session history write failure'); END;
     `);
     let failureSocket: TestSocket | undefined;
+    const failureStorage = new Map<string, unknown>();
     const failureState = {
       id: { name: failedWorkspaceId },
+      storage: {
+        get: async <T>(key: string) => failureStorage.get(key) as T | undefined,
+        put: async (key: string, value: unknown) => {
+          failureStorage.set(key, value);
+        },
+        delete: async (key: string) => failureStorage.delete(key),
+      },
       acceptWebSocket(socket: unknown) {
         failureSocket = socket as TestSocket;
       },

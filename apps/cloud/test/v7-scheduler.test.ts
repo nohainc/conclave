@@ -29,7 +29,9 @@ function candidate(overrides: Record<string, unknown> = {}) {
     worker_id: "worker-a",
     worker_type_id: "chatgpt",
     publisher: "chatgpt",
-    worker_version: "1.0.0",
+    worker_runtime_version: "1.0.0",
+    provider_tool_name: "Codex CLI",
+    provider_tool_version: "0.44.0",
     capabilities_json: JSON.stringify(["repository"]),
     local_permissions_json: JSON.stringify([
       "repository:read",
@@ -37,7 +39,8 @@ function candidate(overrides: Record<string, unknown> = {}) {
     ]),
     worker_allowed_models_json: "[]",
     worker_default_model: null,
-    local_worker_status: "ready",
+    local_worker_activation_state: "enabled",
+    local_worker_readiness_state: "ready",
     cloud_scheduling_state: "enabled",
     credential_status: "ready",
     provider: "chatgpt",
@@ -89,22 +92,33 @@ describe("V7 Project execution scheduler", () => {
         },
       }),
     });
-    const result = await selectProjectExecutionTarget(
-      db([configured]),
-      {
-        projectId: "project-a",
-        requesterUserId: "user-a",
-        role: "Implementer",
-        capabilities: ["repository"],
-        workstreamId: "workstream-a",
-      },
-    );
+    const result = await selectProjectExecutionTarget(db([configured]), {
+      projectId: "project-a",
+      requesterUserId: "user-a",
+      role: "Implementer",
+      capabilities: ["repository"],
+      workstreamId: "workstream-a",
+    });
     expect(result).toMatchObject({
       workerId: "worker-a",
       workerTypeId: "chatgpt",
+      workerRuntimeVersion: "1.0.0",
+      providerToolName: "Codex CLI",
+      providerToolVersion: "0.44.0",
+      permissionSnapshot: {
+        workerRuntimeVersion: "1.0.0",
+        providerToolName: "Codex CLI",
+        providerToolVersion: "0.44.0",
+      },
       model: "gpt-5.6-codex",
       selectionExplanation: {
-        worker: { role: "Implementer", selection: "configured_preference" },
+        worker: {
+          role: "Implementer",
+          workerRuntimeVersion: "1.0.0",
+          providerToolName: "Codex CLI",
+          providerToolVersion: "0.44.0",
+          selection: "configured_preference",
+        },
       },
     });
 
@@ -122,16 +136,13 @@ describe("V7 Project execution scheduler", () => {
   });
 
   it("requires AX to configure a Workstream role before dispatch", async () => {
-    const result = await selectProjectExecutionTarget(
-      db([candidate()]),
-      {
-        projectId: "project-a",
-        requesterUserId: "user-a",
-        role: "reviewer",
-        capabilities: ["repository"],
-        workstreamId: "workstream-a",
-      },
-    );
+    const result = await selectProjectExecutionTarget(db([candidate()]), {
+      projectId: "project-a",
+      requesterUserId: "user-a",
+      role: "reviewer",
+      capabilities: ["repository"],
+      workstreamId: "workstream-a",
+    });
     expect(result).toBeNull();
   });
 
@@ -149,11 +160,11 @@ describe("V7 Project execution scheduler", () => {
       capabilities: ["repository"],
       workstreamId: "workstream-a",
     };
-    const adapterIdPolicy = await selectProjectExecutionTarget(
+    const legacyPackageIdPolicy = await selectProjectExecutionTarget(
       db([{ ...configured, allowed_worker_type_ids_json: '["codex"]' }]),
       request,
     );
-    expect(adapterIdPolicy).toBeNull();
+    expect(legacyPackageIdPolicy).toBeNull();
 
     const productIdPolicy = await selectProjectExecutionTarget(
       db([{ ...configured, allowed_worker_type_ids_json: '["chatgpt"]' }]),
@@ -193,13 +204,14 @@ describe("V7 Project execution scheduler", () => {
       worker_id: "worker-antigravity-1",
       worker_type_id: "gemini",
       publisher: "gemini",
-      worker_version: "1.0.0",
+      worker_runtime_version: "1.0.0",
       capabilities_json: JSON.stringify(["code", "shell"]),
       local_permissions_json: JSON.stringify([
         "repository:read",
         "repository:write",
       ]),
-      local_worker_status: "ready",
+      local_worker_activation_state: "enabled",
+      local_worker_readiness_state: "ready",
       cloud_scheduling_state: "enabled",
       credential_status: "ready",
       provider: "gemini",
@@ -252,10 +264,11 @@ describe("V7 Project execution scheduler", () => {
       worker_id: "worker-openai-1",
       worker_type_id: "openai-api",
       publisher: "openai-api",
-      worker_version: "1.0.0",
+      worker_runtime_version: "1.0.0",
       capabilities_json: JSON.stringify(["code"]),
       local_permissions_json: JSON.stringify(["repository:read"]),
-      local_worker_status: "ready",
+      local_worker_activation_state: "enabled",
+      local_worker_readiness_state: "ready",
       cloud_scheduling_state: "enabled",
       credential_status: "ready",
       provider: "openai-api",
@@ -385,11 +398,12 @@ describe("V7 Project execution scheduler", () => {
       worker_id: "worker-sandboxed",
       worker_type_id: "chatgpt",
       publisher: "chatgpt",
-      worker_version: "1.0.0",
+      worker_runtime_version: "1.0.0",
       capabilities_json: JSON.stringify(["code"]),
       // Local worker manifest / local permissions ONLY permit repository:read
       local_permissions_json: JSON.stringify(["repository:read"]),
-      local_worker_status: "ready",
+      local_worker_activation_state: "enabled",
+      local_worker_readiness_state: "ready",
       cloud_scheduling_state: "enabled",
       credential_status: "ready",
       provider: "chatgpt",
@@ -423,7 +437,8 @@ describe("V7 Project execution scheduler", () => {
       capabilities_json: '["repository"]',
       local_permissions_json: '["repository:read"]',
       credential_status: "ready",
-      local_worker_status: "ready",
+      local_worker_activation_state: "enabled",
+      local_worker_readiness_state: "ready",
       cloud_scheduling_state: "disabled",
       cloud_concurrency_limit: null,
       local_concurrency_limit: 2,
@@ -450,7 +465,8 @@ describe("V7 Project execution scheduler", () => {
           {
             ...base,
             cloud_scheduling_state: "enabled",
-            local_worker_status: "disabled",
+            local_worker_activation_state: "disabled",
+            local_worker_readiness_state: "ready",
           },
         ]),
         request,
@@ -462,7 +478,8 @@ describe("V7 Project execution scheduler", () => {
           {
             ...base,
             cloud_scheduling_state: "enabled",
-            local_worker_status: "needs_attention",
+            local_worker_activation_state: "enabled",
+            local_worker_readiness_state: "setup_required",
           },
         ]),
         request,
@@ -504,7 +521,8 @@ describe("V7 Project execution scheduler", () => {
       runtime_identity_id: "runtime-live",
       workspace_status: "offline",
       cloud_scheduling_state: "enabled",
-      local_worker_status: "ready",
+      local_worker_activation_state: "enabled",
+      local_worker_readiness_state: "ready",
       credential_status: "ready",
       active_assignments: 0,
     };
@@ -539,7 +557,8 @@ describe("V7 Project execution scheduler", () => {
       ...candidate(),
       worker_id: "workspace-worker",
       worker_type_id: "chatgpt",
-      local_worker_status: "ready",
+      local_worker_activation_state: "enabled",
+      local_worker_readiness_state: "ready",
       cloud_scheduling_state: "enabled",
       local_concurrency_limit: 1,
       local_permissions_json: '["repository:read"]',

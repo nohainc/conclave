@@ -1215,8 +1215,8 @@ void main() {
     expect(find.text('ChatGPT'), findsOneWidget);
     expect(find.text('Gemini'), findsOneWidget);
     expect(find.text('Setup required'), findsNWidgets(2));
-    expect(find.textContaining('CLI version: Not detected'), findsNWidgets(2));
-    expect(find.textContaining('Last Test: Not run'), findsNWidgets(2));
+    expect(find.text('Codex CLI version not detected'), findsOneWidget);
+    expect(find.text('agy version not detected'), findsOneWidget);
     expect(find.byType(ExpansionTile), findsNothing);
     expect(find.text('Set up ChatGPT'), findsNothing);
     expect(find.text('Set up Gemini'), findsNothing);
@@ -1250,7 +1250,7 @@ void main() {
       localConcurrencyLimit: 1,
       adapterVersionPolicy: null,
       status: LocalWorkerStatus.disabled,
-      readinessState: WorkerReadinessState.adapterUnavailable,
+      readinessState: WorkerReadinessState.runtimeUnavailable,
       credentialStatus: LocalWorkerCredentialStatus.ready,
       revision: 1,
       createdAt: '2026-01-01T00:00:00Z',
@@ -1322,11 +1322,9 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Setup required'), findsOneWidget);
-    expect(find.text('CLI version: 1.2.3'), findsOneWidget);
-    expect(find.text('CLI version: Not detected'), findsOneWidget);
-    expect(find.textContaining('Last Test: Failed ·'), findsOneWidget);
+    expect(find.text('Codex CLI 1.2.3'), findsOneWidget);
+    expect(find.text('agy version not detected'), findsOneWidget);
     expect(find.text('Test'), findsNWidgets(2));
-    expect(find.textContaining('Last Test: Not run'), findsOneWidget);
     expect(find.textContaining('Test failed (execution_test_failed)'),
         findsNothing);
     expect(find.byTooltip('Copy test details'), findsNothing);
@@ -1703,7 +1701,7 @@ void main() {
       expect(
         deriveLocalWorkerStatusBadges(makeWorker(
           status: LocalWorkerStatus.disabled,
-          readinessState: WorkerReadinessState.adapterUnavailable,
+          readinessState: WorkerReadinessState.runtimeUnavailable,
         )),
         ['Disabled', 'Needs attention'],
       );
@@ -1717,7 +1715,7 @@ void main() {
       expect(
         deriveLocalWorkerStatusBadges(makeWorker(
           status: LocalWorkerStatus.disabled,
-          readinessState: WorkerReadinessState.adapterUnavailable,
+          readinessState: WorkerReadinessState.runtimeUnavailable,
           readinessIssueCode: 'cli_not_found',
         )),
         ['Disabled', 'Not installed'],
@@ -1742,14 +1740,14 @@ void main() {
       expect(
         deriveLocalWorkerHealth(makeWorker(
           status: LocalWorkerStatus.needsAttention,
-          readinessState: WorkerReadinessState.adapterUnavailable,
+          readinessState: WorkerReadinessState.runtimeUnavailable,
         )),
         'Needs attention',
       );
       expect(
         deriveLocalWorkerHealth(makeWorker(
           status: LocalWorkerStatus.needsAttention,
-          readinessState: WorkerReadinessState.adapterUnavailable,
+          readinessState: WorkerReadinessState.runtimeUnavailable,
           readinessIssueCode: 'cli_not_found',
         )),
         'Not installed',
@@ -1757,7 +1755,7 @@ void main() {
       expect(
         deriveLocalWorkerHealth(makeWorker(
           status: LocalWorkerStatus.disabled,
-          readinessState: WorkerReadinessState.adapterUnavailable,
+          readinessState: WorkerReadinessState.runtimeUnavailable,
         )),
         'Disabled',
       );

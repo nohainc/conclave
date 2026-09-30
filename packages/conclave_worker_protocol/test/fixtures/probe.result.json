@@ -1,0 +1,1 @@
+{"type":"probe.result","requestId":"probe-1","mode":"passive","ready":true,"tool":{"name":"Codex CLI","version":"0.42.0","path":"/opt/homebrew/bin/codex"},"checks":[{"code":"provider_tool_found","status":"passed","message":"Codex CLI is available."},{"code":"local_auth_configured","status":"passed","message":"Local sign-in is configured."}],"issueCode":null,"diagnostics":null}

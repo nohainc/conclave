@@ -32,6 +32,8 @@ const migrationFiles = [
   "0031_worker_readiness_state.sql",
   "0032_worker_inventory_safe_projection.sql",
   "0033_workstream_worker_usage_policy.sql",
+  "0035_worker_releases.sql",
+  "0036_worker_inventory_v2.sql",
 ];
 
 const schema = migrationFiles
@@ -71,6 +73,42 @@ function apply(sql: string): unknown[] {
 }
 
 describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
+  it("stores native Worker releases by Worker, version, and platform", () => {
+    const columns = apply("PRAGMA table_info(worker_releases);") as {
+      name: string;
+      pk: number;
+    }[];
+    expect(columns.map((column) => column.name)).toEqual(
+      expect.arrayContaining([
+        "worker_type_id",
+        "version",
+        "platform",
+        "release_channel",
+        "protocol_min",
+        "protocol_max",
+        "state_read_min",
+        "state_read_max",
+        "state_write",
+        "manifest_json",
+        "package_digest",
+        "archive_sha256",
+        "package_r2_key",
+        "is_revoked",
+      ]),
+    );
+    expect(
+      columns
+        .filter((column) => column.pk > 0)
+        .sort((left, right) => left.pk - right.pk)
+        .map((column) => column.name),
+    ).toEqual(["worker_type_id", "version", "platform"]);
+    expect(
+      apply(
+        "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = 'v7_adapter_releases';",
+      ),
+    ).toEqual([{ count: 0 }]);
+  });
+
   it("creates the Workspace release table on the clean v6 baseline", () => {
     const columns = apply("PRAGMA table_info(host_releases);") as {
       name: string;
@@ -157,13 +195,14 @@ describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
                 '2026-09-26T12:29:00.000Z');
       INSERT INTO workers VALUES ('codex', 'Codex', 'active', '2026-01-01', '2026-01-01');
       INSERT INTO workspace_worker_inventory (
-        workspace_id, worker_id, owner_user_id, name, worker_type_id, auth_strategy,
-        local_concurrency_limit, credential_status, status, revision, created_at,
+        workspace_id, worker_id, owner_user_id, worker_type_id, activation_state,
+        readiness_state, worker_runtime_version, capabilities_json,
+        local_concurrency_limit, revision, created_at,
         updated_at, last_seen_at
       ) VALUES
-        ('ws1', 'worker-1', 'u1', 'Worker 1', 'codex', 'none', 1, 'not_required', 'ready', 1, 'now', 'now', 'now'),
-        ('ws1', 'worker-2', 'u1', 'Worker 2', 'codex', 'none', 1, 'not_required', 'ready', 1, 'now', 'now', 'now'),
-        ('ws1', 'worker-3', 'u1', 'Worker 3', 'codex', 'none', 1, 'not_required', 'ready', 1, 'now', 'now', 'now');
+        ('ws1', 'worker-1', 'u1', 'chatgpt', 'enabled', 'ready', '2.0.0', '[]', 1, 1, 'now', 'now', 'now'),
+        ('ws1', 'worker-2', 'u1', 'chatgpt', 'enabled', 'ready', '2.0.0', '[]', 1, 1, 'now', 'now', 'now'),
+        ('ws1', 'worker-3', 'u1', 'chatgpt', 'enabled', 'ready', '2.0.0', '[]', 1, 1, 'now', 'now', 'now');
       INSERT INTO projects (id, owner_user_id, name, created_at, updated_at)
         VALUES ('p1', 'u1', 'Project', 'now', 'now');
       INSERT INTO worker_assignments
@@ -174,7 +213,7 @@ describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
       SELECT ew.name, f.hostname, f.platform, f.architecture, f.app_version,
              f.runtime_capabilities_json,
              (SELECT COUNT(*) FROM workspace_worker_inventory worker
-               WHERE worker.workspace_id = ew.id AND worker.status <> 'removed') AS workerCount,
+               WHERE worker.workspace_id = ew.id) AS workerCount,
              (SELECT COUNT(*) FROM worker_assignments assignment
                WHERE assignment.execution_workspace_id = ew.id
                  AND assignment.status IN ('created', 'dispatched', 'acknowledged', 'running')) AS activeTaskCount,
@@ -244,15 +283,13 @@ describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
 
       -- V7 Workspace-owned worker inventory synced from local Conclave Workspace
       INSERT INTO workspace_worker_inventory (
-        workspace_id, worker_id, owner_user_id, name, worker_type_id,
-        auth_strategy, default_model, allowed_models_json, capabilities_json,
-        local_permissions_summary_json, local_concurrency_limit, adapter_version,
-        credential_status, status, revision, created_at, updated_at, last_seen_at
+        workspace_id, worker_id, owner_user_id, worker_type_id, activation_state,
+        readiness_state, worker_runtime_version, capabilities_json,
+        local_concurrency_limit, revision, created_at, updated_at, last_seen_at
       ) VALUES (
-        'ws1', 'v7-codex-1', 'u1', 'Codex Local', 'codex',
-        'browser_auth', 'gpt-5.5', '["gpt-5.5"]', '["code","repository"]',
-        '["repository:read","repository:write"]', 2, '1.0.0',
-        'ready', 'ready', 1, '2026-01-01', '2026-01-01', '2026-01-01'
+        'ws1', 'v7-codex-1', 'u1', 'chatgpt', 'enabled',
+        'ready', '2.0.0', '["code","repository"]',
+        2, 1, '2026-01-01', '2026-01-01', '2026-01-01'
       );
 
 
@@ -292,8 +329,8 @@ describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
       );
 
       SELECT
-        (SELECT status FROM workspace_worker_inventory WHERE worker_id = 'v7-codex-1') AS inventory_status,
-        (SELECT credential_status FROM workspace_worker_inventory WHERE worker_id = 'v7-codex-1') AS credential_status,
+        (SELECT activation_state FROM workspace_worker_inventory WHERE worker_id = 'v7-codex-1') AS activation_state,
+        (SELECT readiness_state FROM workspace_worker_inventory WHERE worker_id = 'v7-codex-1') AS readiness_state,
         (SELECT worker_id FROM worker_assignments WHERE id = 'assignment1') AS assigned_worker,
         (SELECT workspace_worker_id FROM worker_assignments WHERE id = 'assignment1') AS workspace_worker,
         (SELECT status FROM worker_assignments WHERE id = 'assignment1') AS assignment_status,
@@ -302,8 +339,8 @@ describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
 
     expect(result).toEqual([
       {
-        inventory_status: "ready",
-        credential_status: "ready",
+        activation_state: "enabled",
+        readiness_state: "ready",
         assigned_worker: "codex",
         workspace_worker: "v7-codex-1",
         assignment_status: "completed",

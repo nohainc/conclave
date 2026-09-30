@@ -14,6 +14,8 @@ dependencies:
   archive: ^4.3.0
   conclave_protocol:
     path: ../../packages/dart/protocol
+  conclave_worker_protocol:
+    path: ../../packages/conclave_worker_protocol
   cryptography: ^2.9.0
 
 dev_dependencies:

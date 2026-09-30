@@ -1,15 +1,15 @@
 # Worker Runtime v2 Implementation Plan
 
-**Status:** Ready for implementation  
+**Status:** Implementation in progress — Phases 1–17 have initial implementation; first-party assignment routing remains
 **Architecture:** [Worker Runtime v2](../architecture/WORKER_RUNTIME_V2.md)  
 **Decision:** [ADR-017](../decisions/ADR-017-standalone-dart-worker-executables.md)  
 **Product baseline:** Architecture v7 / ADR-015 ChatGPT + Gemini first-party catalog
 
 ## Goal
 
-Replace the current Node-backed first-party Worker Package implementation with
+Replace the legacy Node-backed first-party Worker Package implementation with
 independently versioned, signed, native Dart console executables while
-aggressively removing unreleased adapter-era compatibility.
+aggressively removing unreleased compatibility from the legacy implementation.
 
 Target runtime:
 
@@ -47,10 +47,13 @@ Gemini Worker  -> agy
 
 ## Objective
 
-Prevent another partial migration where Node/adapter terminology remains mixed
+Prevent another partial migration where legacy Node terminology remains mixed
 with the new Worker executable model.
 
 ## Rename conceptually
+
+The terms on the left identify legacy names for this migration only. They are
+not alternate names for Runtime v2 concepts.
 
 ~~~text
 adapter package
@@ -66,8 +69,10 @@ Local Adapter Protocol
 -> Local Worker Protocol
 ~~~
 
-Internal filenames may remain temporarily during implementation, but no new
-code should add adapter terminology unless referring to migration/history.
+Internal filenames and symbols may remain temporarily during implementation,
+but new Runtime v2 code, tests, APIs, and documentation use Worker terminology.
+Legacy adapter names may appear only when identifying those existing symbols or
+describing migration/history. Provider tools retain provider-tool terminology.
 
 ## Keep unchanged
 
@@ -216,13 +221,22 @@ Must not carry:
 - arbitrary executable path;
 - arbitrary CWD from Cloud.
 
+All frames use strict field allowlists and bounded fields. Diagnostics and
+provider-tool paths are local-only; the path is never copied into Cloud
+inventory. Passive probe mode must never issue a provider model request. Golden
+JSON fixtures live beside the Dart contract tests, and malformed or forbidden
+fields must fail validation.
+
 ## Exit
 
-Golden protocol fixtures and malformed-frame tests pass in Dart.
+Golden protocol fixtures and malformed-frame tests pass in Dart. The current
+contract package is `packages/conclave_worker_protocol`.
 
 ---
 
 # Phase 3 — Build a Worker SDK reference executable
+
+**Status:** Implemented
 
 ## Objective
 
@@ -250,9 +264,21 @@ agy simultaneously.
 
 Workspace -> native Dart Worker -> result works with no Node dependency.
 
+## Phase 3 implementation
+
+The shared Dart runtime now serves Local Worker Protocol 3.0 initialize,
+probe, and execute frames. The development-only `workers/test_worker` supplies
+fake probes, deterministic execution, progress, timeout behavior, and durable
+session state. The Workspace acceptance test compiles it to a native executable
+and launches it through Workspace process isolation; cancellation and deadline
+coverage terminates the process tree. The executable does not invoke Node, Dart
+at runtime, or an external provider.
+
 ---
 
 # Phase 4 — Introduce Worker release manifest v2
+
+**Status:** Implemented
 
 ## Objective
 
@@ -293,9 +319,16 @@ Provider specifics stay inside executable.
 
 Workspace can verify a native test Worker artifact with no provider knowledge.
 
+The strict v2 manifest schema exists in the TypeScript contract package and
+Workspace verifier. The Workspace acceptance test signs a native Test Worker
+artifact, validates its platform, protocol, state schema, permissions, archive
+hash, package digest, executable path, and Ed25519 signature, then launches the
+admitted executable. The sidecar manifest contains no provider executable,
+version-command, auth-command, or provider-environment metadata.
+
 ---
 
-# Phase 5 — Replace adapter release storage with Worker release storage
+# Phase 5 — Replace adapter release storage with Worker release storage (complete)
 
 ## Objective
 
@@ -347,7 +380,7 @@ Cloud release API/catalog returns platform-specific native Worker releases.
 
 ---
 
-# Phase 6 — Implement immutable local Worker version store
+# Phase 6 — Implement immutable local Worker version store (complete)
 
 ## Objective
 
@@ -381,7 +414,7 @@ Two versions of the test Worker can coexist and Workspace can switch atomically.
 
 ---
 
-# Phase 7 — Implement protocol/state compatibility admission
+# Phase 7 — Implement protocol/state compatibility admission (complete)
 
 ## Objective
 
@@ -406,7 +439,7 @@ Tests prove:
 
 ---
 
-# Phase 8 — Implement per-Worker update policy
+# Phase 8 — Implement per-Worker update policy (complete)
 
 ## Objective
 
@@ -441,9 +474,19 @@ Worker update must not update provider CLI.
 
 ChatGPT and Gemini can independently use different Worker release policies.
 
+## Phase 8 implementation
+
+Workspace stores `automatic`, `notify` (the default), or `pinned` policy in
+each Worker Type's local release state. The Workers surface shows current and
+available versions, installs/updates signed native Worker releases, lists
+installed versions, supports rollback, and exposes policy and pin controls
+under Advanced. Automatic policy checks the native Worker release catalog
+while Workspace is idle. Worker release installation does not invoke provider
+CLI installation or update logic.
+
 ---
 
-# Phase 9 — Implement Worker candidate validation transaction
+# Phase 9 — Implement Worker candidate validation transaction (complete)
 
 ## Objective
 
@@ -474,6 +517,18 @@ Do not automatically run a quota-consuming live probe during normal update.
 ## Exit
 
 A broken candidate cannot replace a working active Worker.
+
+## Phase 9 implementation
+
+Native Worker catalog installs remain immutable candidates until Workspace
+starts the exact executable and validates its initialize identity and an
+explicit passive probe. The candidate process receives only its local state
+directory and basic executable-discovery environment; Workspace terminates its
+process tree after validation. One atomic release-state write records the
+healthy version, activates it, and moves the previous active version to
+last-known-good. Failure stores a bounded local diagnostic and leaves active
+version and Worker readiness unchanged. Automatic updates do not retry the same
+failed catalog version and never run a live probe.
 
 ---
 
@@ -510,6 +565,17 @@ Aggressive rename is preferred because the code is unreleased.
 
 The test Worker runs through classes with no adapter/provider naming.
 
+## Implementation status
+
+`WorkerProcessSupervisor` now starts an absolute immutable Worker executable
+with no arguments, a locally selected Workstream CWD, an allowlisted generic
+environment, and the Worker's independent state directory. It owns protocol
+exchange, bounded stdout frames and stderr capture, assignment deadlines,
+explicit assignment cancellation, and process-tree termination. Candidate
+initialize and passive-probe validation uses the same supervisor. The Dart
+reference Worker E2E test exercises this path without adapter or provider
+execution classes.
+
 ---
 
 # Phase 11 — Implement generic Worker launch environment
@@ -543,6 +609,16 @@ semantics.
 
 Native Worker executable starts from Finder/login-item launch without shell
 configuration.
+
+## Implementation status
+
+The native Worker supervisor builds an explicit environment with parent
+inheritance disabled. It forwards only generic home, temp, locale, TLS,
+terminal, and Dart runtime settings; constructs a deduplicated PATH from
+absolute parent entries plus stable platform locations; and sets the Worker
+state directory. The Workstream CWD is passed as the process working
+directory. Provider-specific environment names and values are not interpreted
+by Workspace.
 
 ---
 
@@ -591,6 +667,19 @@ Never log:
 A crashed Worker can produce a copyable local diagnostic report without exposing
 secrets.
 
+## Implementation status
+
+Worker stdout remains protocol-only. The Dart Worker logger emits JSONL event
+codes with a narrow context allowlist; free-form messages, stack traces,
+prompts, file contents, and credential environment values are omitted. The
+Workspace stores sanitized Worker events alongside lifecycle records under
+each Worker's local log directory, with three 256 KiB files by default. Log
+records include release identity, protocol stage, run identity, duration,
+stable issue code, process exit, and provider tool version when available.
+Incomplete crash-tail records are ignored and rotated before later appends.
+The Workers page can copy a bounded local diagnostic report; report contents
+are projected through the same safe-field allowlist.
+
 ---
 
 # Phase 13 — Port ChatGPT Worker to Dart
@@ -637,9 +726,31 @@ For durable sessions:
 
 Real local Codex live acceptance succeeds through the Dart executable.
 
+## Implementation status
+
+The Dart ChatGPT Worker now owns provider-tool discovery and a cached absolute
+path, version and passive login checks, explicitly requested live probes,
+workspace-write execution policy, JSONL event parsing, safe progress, final
+answer extraction, stable protocol failures, and version-independent durable
+session state. Durable resume is accepted only when the provider reports the
+expected session ID. The executable remains a plain Dart console app and emits
+only protocol frames on stdout.
+
+The fake-provider end-to-end test covers initialization, passive readiness,
+stateless execution, durable session persistence, and rejection of a mismatched
+resumed session. Real local acceptance was run through the compiled Dart
+executable using the installed signed-in Codex CLI; initialization, passive
+checks, and the minimal live request all succeeded. The legacy Workspace
+release catalog still carries its historical package identifier; removal of
+that Node-backed release path belongs to the release-store/supervisor
+convergence already specified in earlier phases. No provider command arguments
+or provider event parsing were added to Workspace.
+
 ---
 
 # Phase 14 — Port Gemini Worker to Dart
+
+**Status:** Implemented
 
 ## Objective
 
@@ -670,9 +781,31 @@ subscription login.
 
 Real local `agy` live acceptance succeeds through the Dart executable.
 
+## Implementation status
+
+The Gemini Worker owns bounded `agy` discovery, verified version and path
+caching, passive settings inspection, explicitly requested live probes,
+streaming headless execution with the provider sandbox enabled, progress and
+result parsing, stable protocol failures, and version-independent durable
+conversation state. The CLI has no passive account-status command, so passive
+readiness checks local configuration where available and reports account
+availability as a warning; a live request verifies actual authentication.
+Normal subscription login uses the provider's local credentials and needs no
+Conclave-specific setting.
+
+The fake-provider end-to-end test covers initialization, passive readiness,
+stale cache fallback, streamed progress/result, durable conversation storage,
+and rejection of a mismatched resumed conversation. Real local acceptance was
+run through the compiled Dart executable using the installed local CLI; version
+detection, configuration inspection, and the minimal live request all
+succeeded. Workspace contains no `agy` invocation or provider event parser;
+the existing release catalog retains its historical product-package mapping.
+
 ---
 
 # Phase 15 — Move session storage fully behind Worker executables
+
+**Status:** Implemented
 
 ## Objective
 
@@ -698,9 +831,27 @@ Session storage remains under version-independent Worker state.
 
 Worker executable can be upgraded and continue compatible durable sessions.
 
+## Implementation status
+
+The Workspace supplies the same per-Worker state directory to every installed
+version; session files live under `Workers/<type>/state`, alongside but outside
+the immutable `versions/<version>` directories. ChatGPT and Gemini Workers use
+the shared local session store to map an opaque Conclave key to a provider
+conversation ID. Execute frames contain only `sessionPolicy` and `sessionKey`;
+strict frame decoding rejects `providerSessionId`. Provider IDs are not part of
+Worker release state, Workspace inventory, or Cloud assignment results.
+
+The Workspace E2E test now executes a durable session with Worker 0.1.0,
+installs and activates compatible Worker 0.1.1, then confirms a fresh Worker
+process resumes the same local session. It also verifies session data remains
+outside both immutable release directories and that release state contains no
+provider session ID.
+
 ---
 
 # Phase 16 — Clean local Worker registry schema
+
+**Status:** Implemented
 
 ## Objective
 
@@ -754,6 +905,30 @@ Preserve fixed ChatGPT/Gemini slot identity where practical.
 
 Local registry represents ADR-015 directly.
 
+## Implementation status
+
+The Workspace registry now writes schema 17 using product slot IDs and only
+activation, local concurrency/permissions, readiness/probe diagnostics,
+provider-tool identity/path, and revision/timestamps. Provider-tool paths stay
+local. User labels, credential references/status, model defaults/allow-lists,
+adapter config/policy, and legacy status are absent from registry records and
+backups. Release policy and active Worker version remain in the per-Worker
+release-state file, which is the single source of truth for version management.
+
+Opening a valid schema 1–16 registry deterministically retains at most one
+ChatGPT and one Gemini record, preserves their selected Worker IDs and safe
+permissions/concurrency/activation values, clears the old readiness and
+provider-tool diagnostics for a fresh probe, and drops obsolete product types
+and duplicate records. Legacy Worker credential references are deleted from
+the Workspace secure store, and discarded Worker IDs are passed to local
+cleanup. This intentionally does not migrate provider credentials, model
+settings, adapter configuration, or obsolete readiness values.
+
+The historical scheduling `status` is now computed from activation and
+readiness instead of stored. Startup marks cached Ready slots `not_probed`
+until the next passive check; the runtime inventory contract accepts that
+explicit readiness state.
+
 ---
 
 # Phase 17 — Rebuild Cloud Worker inventory schema cleanly
@@ -802,9 +977,19 @@ Because the project is not production:
 
 Cloud schema no longer exposes obsolete adapter/auth/model fields.
 
+**Implementation:** Migration `0036_worker_inventory_v2.sql` drops and
+recreates Cloud inventory and its scheduling/audit foreign-key tables. It
+discards development inventory and scheduling rows for reseeding. The new
+projection omits provider paths and adapter/auth/model/name/status fields.
+Workspace sends authoritative fixed-catalog snapshots; Cloud deletes omitted
+slots and cascades their scheduling records. Scheduling requires an enabled,
+ready slot with an installed Worker runtime version.
+
 ---
 
 # Phase 18 — Rename Cloud/release APIs and domain types
+
+**Status:** Implemented for the native Worker release and inventory surface.
 
 ## Objective
 
@@ -822,7 +1007,7 @@ adapterVersion
 ensureAdapter
 -> ensureWorkerRelease
 
-adapterUnavailable
+runtimeUnavailable
 -> workerRuntimeUnavailable
 ~~~
 
@@ -833,9 +1018,20 @@ implementation/tests.
 
 New API/domain code has no adapter terminology except migration comments.
 
+**Implementation:** Cloud publishes, lists, downloads, revokes, and reports
+revocations for Worker releases using Worker terminology. Workspace setup now
+ensures native releases through `WorkerReleaseCatalog.ensureWorkerRelease`.
+The obsolete core Worker projection was replaced with a typed
+`WorkspaceWorkerInventory` contract matching the Cloud safe projection. The
+legacy provider-package execution and readiness code remains scheduled for the
+provider ports and cleanup phases.
+
 ---
 
 # Phase 19 — Integrate Worker runtime version into safe inventory
+
+**Status:** Implemented for Workspace inventory sync, Cloud assignment snapshots,
+and Advanced Diagnostics.
 
 ## Objective
 
@@ -867,9 +1063,19 @@ Provider tool path: local-only
 Every failed assignment can be attributed to a concrete Worker release and
 provider tool version.
 
+**Implementation:** Workspace inventory reports the admitted Worker runtime
+version, provider tool name/version, and readiness to Cloud. The provider path
+stays in the local registry and Advanced Diagnostics. Cloud snapshots the
+Worker and provider versions into each assignment's existing permission
+snapshot and sends the same attribution to Workspace with the assignment.
+The native Worker supervisor records both versions with the assignment ID in
+its local diagnostic JSONL.
+
 ---
 
 # Phase 20 — Update Workers UI for independent Worker versions
+
+**Status:** Implemented in the Workspace Workers screen.
 
 ## Objective
 
@@ -904,6 +1110,13 @@ Test remains available while Disabled.
 ## Exit
 
 User can update/downgrade a Worker without updating Workspace.
+
+**Implementation:** Worker rows show independent readiness and Disabled
+badges, provider CLI version, Worker runtime version, and an Update action only
+when a newer compatible release is available and the Worker is not pinned.
+Test remains available for disabled Workers. Version activation/rollback,
+update policy, pinning, release channel, and bounded last candidate failure
+details are under Advanced.
 
 ---
 
@@ -943,9 +1156,19 @@ need it.
 
 One release command/workflow publishes matching ChatGPT/Gemini native artifacts.
 
+Implementation: `.github/workflows/release-worker-v2.yml` is the single
+manual release workflow. It uses Dart 3.12.2, tests and compiles both Workers
+on five native platform runners, verifies each compiled executable with the
+Local Worker Protocol initialize harness, then the publisher packages,
+hashes, signs, and publishes all ten artifacts. See
+`docs/deployment/WORKSPACE_RELEASES.md` for dispatch inputs and required
+GitHub secrets/variables.
+
 ---
 
 # Phase 22 — Add upgrade/downgrade acceptance suite
+
+**Status:** Implemented
 
 ## Objective
 
@@ -987,9 +1210,36 @@ Also test:
 
 Rollback is a normal tested workflow.
 
+**Implementation:** The Workspace acceptance test installs and executes Worker
+1.0.0, validates and activates 1.1.0, executes it, rolls back and executes
+1.0.0, pins 1.0.0 while 1.2.0 is available, then unpins, installs/validates
+1.2.0, and executes it. Separate acceptance cases reject a bad signature,
+unlaunchable executable, unsupported protocol, incompatible state schema,
+failed passive probe, and candidate process crash without changing the active
+release. A running assignment defers activation until Workspace terminates the
+process and the candidate is validated. The suite exercises compiled native
+test Worker processes and the signed local release store.
+
 ---
 
 # Phase 23 — Add failure/crash-loop policy
+
+**Status: Implemented (local policy and diagnostics).** Workspace classifies
+Worker process crashes, protocol violations, and internal Worker errors
+separately from provider/user outcomes. It permits one automatic retry only
+when the failed attempt is safe to repeat before execute begins. Three
+consecutive Worker-release failures quarantine that version as `Needs
+attention`; locally persisted state includes the issue code and a suggested
+last-known-good version when one exists. A successful assignment clears the
+streak. Provider authentication/tool failures, provider failures (including
+quota and outage reports), local permission denial, deadlines, and
+cancellation do not increment the streak. The Workspace Worker details view
+shows the failure count and rollback suggestion.
+
+This phase supplies the policy boundary and UI state; it applies once the
+native Worker assignment route invokes `WorkerFailurePolicy.run`. The current
+first-party assignment path is still being migrated to the native Worker
+supervisor, so live assignments do not yet consume this policy.
 
 ## Objective
 
@@ -1019,6 +1269,21 @@ Worker-release failures are distinguished from provider/user failures.
 ---
 
 # Phase 24 — Real ChatGPT production-path acceptance
+
+**Status: Partial local acceptance passed; production path not accepted.** On
+2026-09-30, the compiled Dart ChatGPT Worker was run against the locally signed-in
+Codex CLI 0.158.0. Initialize, passive probe, live probe, stateless execution,
+and durable session continuation all succeeded. The disabled Worker UI test
+(`testing a disabled Worker preserves activation`) also passed. These live
+requests may have consumed provider allowance.
+
+The required Cloud -> Workspace Gateway -> Workspace -> Dart Worker route is
+not available yet. `workspace_runtime.dart` still dispatches assignments via
+`WorkerAssignmentHandler` and `V7AdapterPackageStore`; it does not launch
+`WorkerProcessSupervisor` for ChatGPT assignments. Consequently, this run did
+not verify production-path timeout/cancellation or ChatGPT Worker update and
+rollback with Codex installed. Phase 24 remains incomplete and ChatGPT is not
+yet a production candidate.
 
 Run:
 
@@ -1052,6 +1317,25 @@ ChatGPT Worker is production-candidate.
 
 # Phase 25 — Real Gemini production-path acceptance
 
+**Status: Partial local acceptance passed; production path not accepted.** On
+2026-09-30, the compiled Gemini Dart Worker was run against the local `agy`
+1.2.14 CLI. Initialize, passive configuration checks, live probe, headless
+stateless execution, and two turns of durable conversation continuation all
+succeeded. Passive authentication was reported as a warning, as designed; the
+live request verified provider access. The Gemini fake-provider test passed
+(1/1), the disabled Worker UI test passed (1/1), and the generic native Worker
+runtime suite passed (19/19), including timeout, cancellation, update, and
+rollback coverage for the test Worker. Live requests may have consumed
+provider allowance.
+
+The required Cloud -> Workspace Gateway -> Workspace -> Dart Worker route is
+not available yet. `workspace_runtime.dart` still dispatches assignments via
+`WorkerAssignmentHandler` and `V7AdapterPackageStore`; it does not launch
+`WorkerProcessSupervisor` for Gemini assignments. The generic release tests do
+not verify update/rollback of an actual Gemini Worker release with `agy`
+installed. Phase 25 remains incomplete and Gemini is not yet a production
+candidate.
+
 Run:
 
 ~~~text
@@ -1073,6 +1357,47 @@ Gemini Worker is production-candidate.
 ---
 
 # Phase 26 — Aggressive Node/adapter cleanup
+
+**Status: Deferred; acceptance gate not met.** Phases 24 and 25 passed local
+provider checks but did not pass the Cloud -> Workspace -> native Dart Worker
+production path. The current `workspace_runtime.dart` assignment route still
+uses `WorkerAssignmentHandler` and `V7AdapterPackageStore`. Do not delete that
+route, the first-party Node executables, or their release tooling until native
+Workspace assignment and release/update/rollback paths replace them and both
+production-path acceptance suites pass.
+
+**Repository audit classification (2026-09-30):**
+
+- **Historical docs:** adapter-era passages in architecture snapshots and
+  earlier decisions, including old V6/V7 implementation descriptions,
+  ADR-012's original adapter model, and historical storage/release
+  descriptions. Keep their historical meaning clear; do not treat those
+  passages as current Worker Runtime v2 contracts. The applied migration
+  `0022_v7_adapter_releases.sql` is also historical and must remain in the
+  migration chain; the later Worker-release migration drops its table.
+- **Migration notes:** ADR-017's explanation of the Node implementation being
+  replaced, the Worker Runtime v2 roadmap's rename/search instructions and
+  acceptance status, and the legacy-consumer section of the Worker manifest
+  README. Retain these until convergence is complete, then consolidate them.
+- **Bugs to remove after the gate:** Workspace's active V7 adapter executor,
+  admission, protocol, catalog and package-store path; adapter version fields
+  in the local registry, Studio/host protocol and UI; the old V7 runtime test
+  bridge; first-party Codex/Antigravity `.mjs` executables, manifests, tests and
+  shared `cli_tool_runner.mjs`; the V7 adapter release workflow and package /
+  verification scripts; first-party Node prerequisite metadata; and legacy
+  V7 adapter manifest/protocol schemas and exports after their consumers are
+  removed. Cloud source no longer has the V7 adapter release API, but its old
+  SQL migration remains historical. Codex CLI / `agy` names in product labels
+  and local diagnostics are provider-tool metadata, not Workspace command
+  execution, and remain valid under Phase 19.
+
+Other `.mjs` files for website tooling, Cloud/build infrastructure and the
+native Worker release publisher are not Worker runtime dependencies and are
+outside this deletion. The Claude Code and Ollama adapter packages still have
+Node implementations and prerequisite metadata; they are not the fixed
+ChatGPT/Gemini first-party catalog, so migrate or retire them separately if
+they remain supported. Their existence must not reintroduce Node into normal
+ChatGPT/Gemini execution.
 
 Only after both Dart Workers pass real acceptance:
 
@@ -1112,6 +1437,32 @@ Normal first-party execution has zero Node runtime dependency.
 ---
 
 # Phase 27 — Database/migration cleanup
+
+**Status: Audit complete; destructive cleanup deferred.** The Phase 24/25
+production-path acceptance gates remain open, so Worker Runtime v2 is not yet
+ready for a destructive migration rebase. The current target schema is already
+partly represented by `0035_worker_releases.sql` and
+`0036_worker_inventory_v2.sql`; the latter drops and rebuilds inventory and
+scheduling tables. The two schema acceptance suites passed (8/8 tests) against
+the current migration chain, but this does not prove a new clean baseline or
+production-path compatibility.
+
+The local `apps/cloud/wrangler.jsonc` uses a local D1 database. The production
+Wrangler config points to `conclave-production`, and `.github/workflows/deploy-app.yml`
+applies the `apps/cloud/migrations-v6` chain remotely during deployment.
+`scripts/migrate-production-d1.sh` also targets remote D1 and requires explicit
+confirmation. Repository configuration cannot establish whether that remote
+database contains shared/staging data or whether it is safe to reset. No remote
+database was queried, exported, snapshotted, or changed. Preserve the existing
+migration chain until the environment owner confirms the target and a
+snapshot/export is available before any destructive reset. Production tooling
+must also be gated against applying unreleased schemas before deployment is
+allowed to resume.
+
+The clean-room schema tests currently apply the ordered migration history, and
+the development seed directory only has V4/V5 seeds. Baseline consolidation,
+seed updates, schema-test rewrites, clean-room bootstrap changes, and production
+migration-tool changes are still outstanding.
 
 ## Objective
 

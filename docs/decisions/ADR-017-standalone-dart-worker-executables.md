@@ -3,7 +3,7 @@
 **Status:** Accepted for implementation  
 **Date:** 2026-09-30  
 **Builds on:** ADR-003, ADR-012, ADR-015, ADR-016, Architecture v7  
-**Refines:** ADR-012 adapter-package implementation details and ADR-015 first-party Worker runtime implementation
+**Refines:** ADR-012's legacy package implementation details and ADR-015 first-party Worker runtime implementation
 
 ## Context
 
@@ -38,8 +38,8 @@ as an interactive Terminal. A Node-backed Worker therefore depends on both:
 That is avoidable complexity for a native desktop product.
 
 The project is still under active development and has no production migration
-constraint that justifies preserving the current Node adapter implementation,
-legacy adapter naming, or obsolete database compatibility fields.
+constraint that justifies preserving the legacy Node implementation, obsolete
+adapter-named symbols, or obsolete database compatibility fields.
 
 Dart can compile command-line programs to standalone architecture-specific
 native executables that contain a small Dart runtime. Dart also provides
@@ -434,14 +434,14 @@ The implementation plan may:
 - delete Node `.mjs` first-party Worker runtime code;
 - delete Node prerequisite handling;
 - delete legacy adapter-only package fields;
-- rename adapter release concepts to Worker release concepts;
+- rename legacy release concepts to Worker release concepts;
 - rebuild development D1 Worker/release tables;
 - reset local Worker registry/package caches;
 - remove obsolete Worker fields that are no longer part of ADR-015;
 - delete compatibility migrations/tests that only exist for unreleased designs.
 
 Stable ChatGPT/Gemini product slot identity should be preserved where useful,
-but preserving unreleased adapter implementation state is not a requirement.
+but preserving unreleased legacy implementation state is not a requirement.
 
 ## Consequences
 

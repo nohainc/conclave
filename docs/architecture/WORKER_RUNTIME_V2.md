@@ -4,9 +4,26 @@
 **Architecture baseline:** Conclave Architecture v7  
 **Decision:** [ADR-017](../decisions/ADR-017-standalone-dart-worker-executables.md)
 
+## Canonical terminology
+
+Runtime v2 documentation, code, tests, APIs, and user-facing text use these
+terms consistently:
+
+| Concept | Runtime v2 term |
+| --- | --- |
+| Installable, signed unit | Worker release/package |
+| Version of that unit | Worker runtime version |
+| Running executable instance | Worker process |
+| Workspace-to-executable contract | Local Worker Protocol |
+
+Use *adapter* only when naming a pre-existing legacy symbol or describing
+migration history. New Runtime v2 work uses Worker terminology even when an
+older implementation still has adapter-named files or classes. Provider tools
+remain provider tools; they are not Worker releases or Workers.
+
 ## Purpose
 
-Worker Runtime v2 replaces the first Node-backed Worker Package implementation
+Worker Runtime v2 replaces the legacy Node-backed Worker Package implementation
 with independently versioned, signed, standalone Dart console executables.
 
 The product model does not change:
@@ -266,6 +283,18 @@ WorkerError
 
 The package must be provider-neutral.
 
+`WorkerRuntime` is the provider-neutral NDJSON server used by executable
+packages. It dispatches initialize, probe, and execute requests, emits bounded
+progress/result/error frames, enforces request deadlines, and writes structured
+logs to stderr. Workspace process-tree termination remains the cancellation
+authority even when an implementation is running work that cannot be
+interrupted cooperatively.
+
+`workers/test_worker` is a development-only reference executable. It provides
+fake passive/live checks, deterministic echo output, a local fake durable
+session, and delay controls for process-supervision acceptance tests. It is
+excluded from the first-party Worker catalog and makes no provider requests.
+
 ## 5. Worker executable contract
 
 ### 5.1 Startup
@@ -409,6 +438,39 @@ Provider session identifiers never cross this protocol.
 The Workstream directory is the artifact/work product boundary. Worker stdout
 should not serialize modified repository contents.
 
+### 5.7 Protocol 3.0 frame validation
+
+The Local Worker Protocol uses one JSON object per NDJSON line. Every request
+and response has a bounded `requestId`; each frame has an exact allowlist of
+fields, and unknown fields are rejected. The required frame set is:
+
+| Frame | Required data |
+| --- | --- |
+| `initialize.request` | negotiated protocol, product Worker Type, expected Worker version |
+| `initialize.result` | protocol, Worker Type/version, state schema version, capabilities |
+| `probe.request` | protocol, request ID, explicit `passive` or `live` mode |
+| `probe.result` | mode, readiness, optional tool details, structured checks, issue code, bounded diagnostics |
+| `execute.request` | protocol, request/assignment IDs, prompt, optional model, timeout, session policy, optional logical session key |
+| `progress` | request/assignment IDs, percentage, optional bounded message |
+| `result` | request/assignment IDs, output, bounded artifact references |
+| `error` | request ID, stable issue code, safe message, retryability, optional assignment ID/diagnostics |
+
+Initialize admission compares the returned identity and exact version with the
+signed release, checks the negotiated protocol and readable state-schema range,
+and verifies all required capabilities. Protocol bounds limit frame and text
+sizes, tool/check collections, and timeouts. Safe error, progress, and probe
+text is redacted before serialization.
+
+Passive probe mode is a promise that the Worker will not issue a provider model
+request. Live mode must be selected explicitly because it may consume provider
+quota. A probe result's provider tool path is local diagnostics only and must
+not enter Cloud inventory.
+
+Execute requests use a strict field allowlist. They carry only Conclave-owned
+assignment inputs; provider credentials, provider session IDs, executable
+paths, and working directories are rejected. Durable sessions carry an opaque
+Conclave `sessionKey`; provider session IDs remain inside Worker state.
+
 ## 6. Worker package/release format
 
 A release is a signed immutable platform artifact.
@@ -417,6 +479,7 @@ Conceptual manifest:
 
 ~~~json
 {
+  "manifestVersion": 2,
   "workerTypeId": "chatgpt",
   "workerVersion": "1.4.2",
   "publisher": "conclave",
@@ -449,6 +512,13 @@ Conceptual manifest:
   "releaseChannel": "stable"
 }
 ~~~
+
+The manifest is a signed sidecar to the native artifact archive. Keeping it
+detached avoids a hash/signature cycle: `archiveSha256` covers the exact
+compressed archive bytes, `packageDigest` covers the sorted extracted file
+paths, modes, and contents, and the Ed25519 signature covers the canonical
+manifest with only `signature` omitted. Workspace checks both digests and the
+signature before admitting the package.
 
 No provider command strings are required in the manifest.
 
@@ -499,8 +569,8 @@ Recommended:
         sessions/
         metadata/
 
-      release-state.json
       logs/
+      release-state.json
 
     gemini/
       versions/
@@ -513,14 +583,61 @@ Recommended:
 
 ~~~json
 {
+  "schemaVersion": 1,
+  "updatePolicy": "notify",
+  "pinnedVersion": null,
   "activeVersion": "1.4.2",
   "lastKnownGoodVersion": "1.4.0",
-  "updatePolicy": "notify",
-  "pinnedVersion": null
+  "healthyVersions": ["1.4.0", "1.4.2"],
+  "updatedAt": "2026-09-30T12:00:00Z"
 }
 ~~~
 
-Never store provider credentials there.
+Worker versions are extracted into a staging directory, verified against the
+signed manifest, archive hash, package digest, platform, protocol, state range,
+and local permissions, then moved into `versions/<version>`. An installed
+version is never overwritten. `release-state.json` is replaced atomically so
+Workspace sees either the previous active version or the new active version;
+the same record tracks the last-known-good version. Worker `state/` and `logs/`
+remain outside version directories and survive activation, rollback, and
+retention cleanup. Staging directories left by a process interruption are
+removed after they are at least one hour old. Retention keeps at least the
+active and last-known-good versions.
+
+Update policy is local and independent for each Worker Type. New releases
+default to `notify`; `automatic` checks the stable Worker release catalog and
+activates a newer compatible release when no assignment is running. `pinned`
+records an installed version and blocks activation of another version until
+the pin is changed or removed. Workspace presents the active and available
+versions, install/update action, installed versions, rollback action, and
+advanced policy controls. Worker release installation only downloads and
+verifies the native Worker artifact; it does not install or update provider CLI
+tools.
+
+Every downloaded release remains a candidate until its immutable executable
+starts, returns an initialize identity matching the signed manifest, and passes
+an explicit passive provider probe. Workspace terminates the candidate process
+tree after validation. A failed candidate writes a bounded local diagnostic
+without changing the active/last-known-good pointers or Worker scheduling
+readiness. A successful health record and version-pointer change are committed
+atomically. Automatic updates never run a live/quota-consuming probe and skip a
+version already recorded as failed.
+
+Candidate failure details are stored separately at
+`Workers/<workerTypeId>/candidate-failure.json`; the record contains only the
+release version, stable issue code, bounded safe diagnostic, and failure time.
+An installed version may be selected for rollback only when its version is
+currently active, last-known-good, or recorded in `healthyVersions`.
+
+Workspace admission requires its current platform and state schema version,
+and at least one Workspace-supported protocol version inside the Worker
+release's protocol range. The Worker manifest's requested permissions must be
+allowed locally. Before assignment execution, the `initialize.result` identity
+must match the admitted manifest's Worker Type, exact version, negotiated
+protocol, and declared state-write schema; required capabilities must also be
+present.
+
+Never store provider credentials in release state.
 
 ## 9. Release state machine
 
@@ -739,6 +856,13 @@ Capture bounded:
 - protocol stage;
 - session mode.
 
+Cloud's safe Worker inventory stores the current Worker runtime version,
+provider tool name/version, and readiness. Assignment creation copies the
+selected Worker runtime and provider tool versions into the persisted
+assignment permission snapshot, so a later CLI or Worker update does not
+rewrite the versions associated with an earlier failure. Provider tool paths
+remain local to Workspace diagnostics.
+
 Do not log prompts or file contents by default.
 
 ### Workspace log
@@ -758,7 +882,7 @@ This allows failures to be attributed to:
 
 ## 19. Cloud release catalog
 
-Replace adapter-centric release semantics with Worker release semantics.
+Replace legacy release semantics with Worker release semantics.
 
 Conceptually:
 
@@ -788,7 +912,7 @@ Release uniqueness should include platform:
 (worker_type_id, version, platform)
 ~~~
 
-This differs from the current adapter table whose primary key does not model
+This differs from the legacy release table whose primary key does not model
 platform-specific native binaries cleanly.
 
 ## 20. Cloud Worker inventory v2
@@ -828,7 +952,7 @@ Remove obsolete unreleased fields such as:
 - default model;
 - allowed models;
 - local permissions summary;
-- adapter version terminology.
+- legacy release-version terminology.
 
 Local provider tool path stays local.
 

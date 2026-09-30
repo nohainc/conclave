@@ -122,7 +122,7 @@ class HostReleaseClient {
     final owned = await _request(
       cloudUri.replace(
         scheme: _httpScheme(cloudUri),
-        pathSegments: ['api', 'v7', 'release-trust'],
+        pathSegments: ['api', 'worker-releases', 'trust'],
       ),
       authToken: authToken,
     );
@@ -134,14 +134,14 @@ class HostReleaseClient {
       final decoded = jsonDecode(await _readBody(owned, 1024 * 1024));
       if (decoded is! Map ||
           decoded['revokedKeyIds'] is! List ||
-          decoded['revokedAdapters'] is! List ||
+          decoded['revokedWorkers'] is! List ||
           decoded['revokedWorkspaceReleases'] is! List) {
         throw const FormatException('release trust response is invalid');
       }
       final digests = <String>{};
       final releases = <String>{};
       for (final row in [
-        ...decoded['revokedAdapters'] as List,
+        ...decoded['revokedWorkers'] as List,
         ...decoded['revokedWorkspaceReleases'] as List
       ].whereType<Map>()) {
         if (row['packageDigest'] is String) {

@@ -214,6 +214,7 @@ async function findWorkspaceRuntimeIdentity(
 
 export class WorkspaceGateway implements DurableObject {
   private socket: WebSocket | null = null;
+  private socketConnectedAt: string | null = null;
   private executionWorkspaceId: string | null = null;
   private workspaceRuntimeId: string | null = null;
   private sessionId: string | null = null;
@@ -344,6 +345,7 @@ export class WorkspaceGateway implements DurableObject {
         } catch {}
       }
       this.socket = null;
+      this.socketConnectedAt = null;
       this.executionWorkspaceId = identity.executionWorkspaceId;
       this.workspaceRuntimeId = runtimeId;
       this.sessionId = `session-${crypto.randomUUID()}`;
@@ -561,7 +563,7 @@ export class WorkspaceGateway implements DurableObject {
       )
         .bind(this.sessionId)
         .first<{ lastActivityAt: string }>();
-      return session?.lastActivityAt ?? null;
+      return session?.lastActivityAt ?? this.socketConnectedAt;
     }
     return this.sessionId ? this.httpLastActivityAt : null;
   }
@@ -603,6 +605,7 @@ export class WorkspaceGateway implements DurableObject {
         executionWorkspaceId?: string;
         workspaceRuntimeId?: string;
         correlationId?: string;
+        connectedAt?: string;
       } | null;
       if (
         !attachment?.sessionId ||
@@ -617,6 +620,7 @@ export class WorkspaceGateway implements DurableObject {
       this.executionWorkspaceId = attachment.executionWorkspaceId;
       this.workspaceRuntimeId = attachment.workspaceRuntimeId;
       this.correlationId = attachment.correlationId ?? null;
+      this.socketConnectedAt = attachment.connectedAt ?? null;
       return;
     }
   }
@@ -776,6 +780,7 @@ export class WorkspaceGateway implements DurableObject {
       executionWorkspaceId: runtimeIdentity.executionWorkspaceId,
       workspaceRuntimeId,
       correlationId,
+      connectedAt: now,
     });
     logStructured("info", "GW-07 websocket_accepting", {
       requestId: correlationId,
@@ -789,6 +794,7 @@ export class WorkspaceGateway implements DurableObject {
       workspaceId: runtimeIdentity.executionWorkspaceId,
     });
     this.socket = server;
+    this.socketConnectedAt = now;
     this.executionWorkspaceId = runtimeIdentity.executionWorkspaceId;
     this.workspaceRuntimeId = workspaceRuntimeId;
     this.sessionId = sessionId;
@@ -875,6 +881,7 @@ export class WorkspaceGateway implements DurableObject {
       return;
     }
     this.socket = null;
+    this.socketConnectedAt = null;
     const now = new Date().toISOString();
     if (this.executionWorkspaceId) {
       this.queueProjectionWrite(
@@ -1226,13 +1233,22 @@ export class WorkspaceGateway implements DurableObject {
       const item = raw as Record<string, unknown>;
       const workerId = item.workerId;
       const workerTypeId = item.workerTypeId;
-      const status = item.status;
+      const activationState = item.activationState;
+      const readinessState = item.readinessState;
       const revision = item.revision;
       const concurrency = item.localConcurrencyLimit;
       if (
         typeof workerId !== "string" ||
         typeof workerTypeId !== "string" ||
-        typeof status !== "string" ||
+        !["enabled", "disabled"].includes(String(activationState)) ||
+        ![
+          "not_probed",
+          "ready",
+          "setup_required",
+          "sign_in_required",
+          "worker_runtime_unavailable",
+          "test_failed",
+        ].includes(String(readinessState)) ||
         !Number.isSafeInteger(revision) ||
         (revision as number) < 1 ||
         !Number.isInteger(concurrency) ||
@@ -1240,30 +1256,28 @@ export class WorkspaceGateway implements DurableObject {
       ) {
         continue;
       }
-      // Only structurally valid entries count as reported by an authoritative
-      // snapshot. Malformed items must not keep omitted Workers alive.
-      reportedWorkerIds.add(workerId);
       const previous = await this.env.CONCLAVE_DB.prepare(
-        "SELECT workspace_id, revision, removed_by_snapshot FROM workspace_worker_inventory WHERE worker_id = ?1",
+        "SELECT workspace_id, revision FROM workspace_worker_inventory WHERE worker_id = ?1",
       )
         .bind(workerId)
-        .first<{
-          workspace_id: string;
-          revision: number;
-          removed_by_snapshot: number;
-        }>();
+        .first<{ workspace_id: string; revision: number }>();
       // A Worker ID is permanently owned by the Workspace that first synced
-      // it. Revisions only move forward, including removal tombstones.
-      if (
-        (previous && previous.workspace_id !== workspaceId) ||
-        (previous &&
-          Number(previous.revision) >= (revision as number) &&
-          !(
-            Number(previous.removed_by_snapshot) === 1 &&
-            status !== "removed" &&
-            Number(previous.revision) === revision
-          ))
-      ) {
+      // it, and its local revision only moves forward.
+      if (previous && previous.workspace_id !== workspaceId) {
+        continue;
+      }
+      // Structurally valid entries count as reported even when their revision
+      // is unchanged. Malformed entries cannot keep omitted Workers alive.
+      reportedWorkerIds.add(workerId);
+      if (previous && Number(previous.revision) >= (revision as number)) {
+        if (Number(previous.revision) === revision) {
+          await this.env.CONCLAVE_DB.prepare(
+            `UPDATE workspace_worker_inventory SET last_seen_at = ?3
+              WHERE worker_id = ?1 AND workspace_id = ?2 AND revision = ?4`,
+          )
+            .bind(workerId, workspaceId, now, revision)
+            .run();
+        }
         continue;
       }
       const arrayJson = (value: unknown, max: number): string =>
@@ -1280,90 +1294,52 @@ export class WorkspaceGateway implements DurableObject {
         typeof value === "string" && value.trim().length <= max
           ? value.trim() || null
           : null;
-      const readinessState = [
-        "ready",
-        "setup_required",
-        "not_installed",
-        "sign_in_required",
-        "unsupported_cli_version",
-        "adapter_unavailable",
-        "disabled",
-        "test_failed",
-      ].includes(String(item.readinessState))
-        ? String(item.readinessState)
-        : status === "ready"
-          ? "ready"
-          : status === "disabled" || status === "removed"
-            ? "disabled"
-          : "test_failed";
       const readinessIssueCode =
         typeof item.readinessIssueCode === "string" &&
         /^[a-z][a-z0-9_]{0,127}$/.test(item.readinessIssueCode)
           ? item.readinessIssueCode
           : null;
-      const workerStatus = [
-        "ready",
-        "needs_attention",
-        "disabled",
-        "removed",
-      ].includes(status)
-        ? status === "ready" && readinessState !== "ready"
-          ? "needs_attention"
-          : status
-        : "needs_attention";
       await this.env.CONCLAVE_DB.prepare(
         `INSERT INTO workspace_worker_inventory
-          (worker_id, workspace_id, owner_user_id, worker_type_id, name,
-           status, readiness_state, readiness_issue_code, auth_strategy, default_model, allowed_models_json,
-           capabilities_json, local_permissions_summary_json,
-           local_concurrency_limit, adapter_version, credential_status,
-           revision, created_at, updated_at, last_seen_at, removed_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
+          (worker_id, workspace_id, owner_user_id, worker_type_id,
+           activation_state, readiness_state, readiness_issue_code,
+           worker_runtime_version, provider_tool_name, provider_tool_version,
+           capabilities_json, local_concurrency_limit, revision,
+           created_at, updated_at, last_seen_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
          ON CONFLICT(worker_id) DO UPDATE SET
            worker_type_id = excluded.worker_type_id,
-           name = excluded.name,
-           status = excluded.status,
+           activation_state = excluded.activation_state,
            readiness_state = excluded.readiness_state,
            readiness_issue_code = excluded.readiness_issue_code,
-          auth_strategy = 'none',
-          default_model = NULL,
-          allowed_models_json = '[]',
+           worker_runtime_version = excluded.worker_runtime_version,
+           provider_tool_name = excluded.provider_tool_name,
+           provider_tool_version = excluded.provider_tool_version,
            capabilities_json = excluded.capabilities_json,
-          local_permissions_summary_json = '[]',
            local_concurrency_limit = excluded.local_concurrency_limit,
-           adapter_version = excluded.adapter_version,
-          credential_status = 'not_required',
            revision = excluded.revision,
            updated_at = excluded.updated_at,
-           last_seen_at = excluded.last_seen_at,
-           removed_at = excluded.removed_at,
-           removed_by_snapshot = 0
+           last_seen_at = excluded.last_seen_at
          WHERE workspace_worker_inventory.workspace_id = excluded.workspace_id
-           AND (workspace_worker_inventory.revision < excluded.revision OR
-             (workspace_worker_inventory.removed_by_snapshot = 1 AND excluded.status != 'removed' AND workspace_worker_inventory.revision = excluded.revision))`,
+           AND workspace_worker_inventory.revision < excluded.revision`,
       )
         .bind(
           workerId,
           workspaceId,
           owner.owner_user_id,
           workerTypeId,
-          workerTypeId.slice(0, 200),
-          workerStatus,
+          activationState,
           readinessState,
           readinessIssueCode,
-          "none",
-          null,
-          "[]",
+          nullableText(item.workerRuntimeVersion, 128),
+          nullableText(item.providerToolName, 128),
+          nullableText(item.providerToolVersion, 128),
           arrayJson(item.capabilities, 128),
-          "[]",
           Math.min(1024, concurrency as number),
-          nullableText(item.adapterVersion, 128),
-          "not_required",
           revision,
           nullableText(item.createdAt, 40) ?? now,
           now,
           nullableText(item.lastSeenAt, 40) ?? now,
-          status === "removed" ? now : null,
         )
         .run();
       await this.env.CONCLAVE_DB.prepare(
@@ -1373,28 +1349,22 @@ export class WorkspaceGateway implements DurableObject {
         .bind(workerId, now)
         .run();
     }
-    // Full snapshots are authoritative. Omission marks a tombstone without
-    // inventing a source revision; replaying the same snapshot is idempotent.
+    // Full snapshots are authoritative. Removed local slots disappear from
+    // inventory; scheduling and audit rows cascade with the inventory row.
     if (fullSnapshot) {
       const existing = await this.env.CONCLAVE_DB.prepare(
         `SELECT worker_id FROM workspace_worker_inventory
-          WHERE workspace_id = ?1 AND status != 'removed'`,
+          WHERE workspace_id = ?1`,
       )
         .bind(workspaceId)
         .all<{ worker_id: string }>();
       for (const row of existing.results ?? []) {
         if (reportedWorkerIds.has(row.worker_id)) continue;
         await this.env.CONCLAVE_DB.prepare(
-          `UPDATE workspace_worker_inventory SET status = 'removed', removed_at = ?2, removed_by_snapshot = 1,
-             updated_at = ?2 WHERE worker_id = ?1 AND workspace_id = ?3 AND status != 'removed'`,
+          `DELETE FROM workspace_worker_inventory
+            WHERE worker_id = ?1 AND workspace_id = ?2`,
         )
-          .bind(row.worker_id, now, workspaceId)
-          .run();
-        await this.env.CONCLAVE_DB.prepare(
-          `UPDATE v7_worker_scheduling SET state = 'disabled', updated_at = ?2
-            WHERE worker_id = ?1 AND state != 'disabled'`,
-        )
-          .bind(row.worker_id, now)
+          .bind(row.worker_id, workspaceId)
           .run();
       }
     }

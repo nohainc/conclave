@@ -5,26 +5,35 @@ v7 is the active Worker/runtime architecture. Its desktop vertical slice and
 V6 compatibility retirement are implemented; production release gates remain
 open before v7 becomes the declared implemented baseline.
 
-Current execution direction:
+Current product execution architecture (Worker Runtime v2):
 
 ```text
-Conclave AX -> Conclave Cloud -> Conclave Workspace -> Worker Package process -> provider tool
+Conclave AX -> Conclave Cloud -> Conclave Workspace -> Worker process -> provider tool
 ```
 
 Projects are the collaboration boundary. Workspaces provide machine execution.
 Worker slots are created and managed in Conclave Workspace, belong to exactly
 one Workspace, and synchronize only safe inventory/readiness to Cloud. Provider
-authentication and tool interaction are mediated by the Worker Package and
+authentication and tool interaction are mediated by the Worker executable and
 remain owned by the provider CLI. Workspace never executes provider tools
-directly. Worker Packages never connect directly to Conclave Cloud.
+directly. Workers never connect directly to Conclave Cloud.
+
+**Implementation status:** standalone Dart Workers, protocol, and native release
+components exist, and local real-provider acceptance has progressed. The
+Workspace assignment route is not yet converged: current source still routes
+through the legacy V7 Node adapter store/executor. Full Cloud → Workspace → Dart
+Worker production-path acceptance, update/rollback acceptance, and Node cleanup
+remain open. Treat Node implementation docs as migration history, not the
+architecture to extend. See the [Runtime v2 implementation plan](docs/roadmaps/WORKER_RUNTIME_V2_IMPLEMENTATION.md)
+for phase-level evidence.
 
 The first-party v1 product catalog is frozen by
 [ADR-015](docs/decisions/ADR-015-first-party-worker-v1-contract.md): exactly
 one ChatGPT slot backed by Codex CLI and one Gemini slot backed by Antigravity
 CLI per Workspace. Provider login, credential storage, and subscription/API
 billing mode remain owned by the corresponding local CLI. Existing broader
-adapters and multi-instance records require a later migration phase and are not
-part of the v1 product catalog.
+integration packages and multi-instance records require a later migration phase
+and are not part of the v1 product catalog.
 
 ## Active work
 
@@ -65,7 +74,7 @@ Earlier implementation history remains available in:
 
 ## Worker Runtime v2 — standalone Dart Worker executables
 
-ADR-017 keeps Architecture v7 but replaces the first Node-backed first-party
+ADR-017 keeps Architecture v7 but replaces the legacy Node-backed first-party
 Worker runtime with independently versioned native Dart console executables:
 
 ~~~text
@@ -82,8 +91,8 @@ provider CLI discovery, version/auth checks, execution, session IDs, output
 parsing and provider-specific diagnostics.
 
 This is intentionally an aggressive pre-production convergence: after both Dart
-Workers and update/rollback acceptance pass, the Node `.mjs` adapters, Node
-runtime prerequisite, adapter-centric release schema, obsolete local Worker
+Workers and update/rollback acceptance pass, the legacy Node `.mjs` adapters, Node
+runtime prerequisite, legacy release schema, obsolete local Worker
 fields, and unreleased D1 compatibility layers should be removed rather than
 maintained indefinitely.
 
@@ -136,8 +145,8 @@ Phase 3 now requires owner reauthentication for Disconnect and Reset, confirms
 Disconnect, preserves the installation ID and owner binding on Disconnect and
 Reset, persists disconnected runtime intent, and makes connected Sign out an
 explicit Disconnect and sign out choice. Reset's warning enumerates the local
-registration, runtime identity, Worker/provider credential, adapter, and human
-session data it removes while preserving Work Root files and installation
+registration, runtime identity, Worker/provider credential, Worker installation,
+and human session data it removes while preserving Work Root files and installation
 ownership; a Cloud revocation failure stops the reset. Disconnect drains active
 assignments before Cloud revocation. The advanced Release action now has a
 separate fresh-owner-authenticated Cloud endpoint, active-assignment gate, audit

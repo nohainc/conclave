@@ -95,7 +95,7 @@ void main() {
 
     expect(adapterStore.ensuredPackageIds, ['codex']);
     final worker = (await registry.list()).single;
-    expect(worker.readinessState, WorkerReadinessState.adapterUnavailable);
+    expect(worker.readinessState, WorkerReadinessState.runtimeUnavailable);
     expect(worker.readinessIssueCode, 'package_unavailable');
     expect(worker.lastPassiveProbeAt, isNotNull);
     await monitor.dispose();
@@ -356,7 +356,7 @@ void main() {
       ),
       assessWorker: (_) async => shouldFail
           ? const WorkerReadinessAssessment(
-              WorkerReadinessState.adapterUnavailable)
+              WorkerReadinessState.runtimeUnavailable)
           : const WorkerReadinessAssessment(WorkerReadinessState.ready),
     );
 
@@ -407,7 +407,8 @@ void main() {
     await monitor.start();
     final quarantined = await registry.find(worker.id);
     expect(quarantined!.status, LocalWorkerStatus.needsAttention);
-    expect(quarantined.readinessState, WorkerReadinessState.ready);
+    expect(quarantined.readinessState, WorkerReadinessState.notProbed);
+    expect(quarantined.readinessIssueCode, 'probe_required');
     result
         .complete(const WorkerReadinessAssessment(WorkerReadinessState.ready));
     await monitor.checkNow();

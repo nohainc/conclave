@@ -1,0 +1,10 @@
+name: conclave_worker_protocol
+description: Local Worker Protocol 3.0 models and validation shared by Workspace and Worker executables.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+
+dev_dependencies:
+  test: ^1.25.0

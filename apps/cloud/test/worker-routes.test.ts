@@ -82,4 +82,73 @@ describe("Worker API routes", () => {
     expect(handlers.handleV7WorkerScheduling).toHaveBeenCalledTimes(2);
     expect(calls).toHaveLength(3);
   });
+
+  it("routes native Worker catalog and artifact paths by platform", async () => {
+    const handlers = {
+      handleListWorkerReleases: vi.fn(async () => new Response("catalog")),
+      handleDownloadWorkerRelease: vi.fn(async () => new Response("artifact")),
+      handleRevokeWorkerRelease: vi.fn(async () => new Response("revoked")),
+      handlePublishWorkerRelease: vi.fn(async () => new Response("published")),
+    } as unknown as WorkerRouteHandlers;
+
+    const catalog = await routeWorkerRequest(
+      request("/api/worker-releases?platform=linux-arm64"),
+      {} as Parameters<typeof routeWorkerRequest>[1],
+      undefined,
+      handlers,
+      dependencies,
+    );
+    const download = await routeWorkerRequest(
+      request("/api/worker-releases/chatgpt/1.2.3/linux-arm64/download"),
+      {} as Parameters<typeof routeWorkerRequest>[1],
+      undefined,
+      handlers,
+      dependencies,
+    );
+    const revoke = await routeWorkerRequest(
+      request("/api/worker-releases/chatgpt/1.2.3/linux-arm64/revoke", "POST"),
+      {} as Parameters<typeof routeWorkerRequest>[1],
+      undefined,
+      handlers,
+      dependencies,
+    );
+    const publish = await routeWorkerRequest(
+      request("/api/worker-releases/publish", "POST"),
+      {} as Parameters<typeof routeWorkerRequest>[1],
+      undefined,
+      handlers,
+      dependencies,
+    );
+    const legacy = await routeWorkerRequest(
+      request("/api/v7/adapters"),
+      {} as Parameters<typeof routeWorkerRequest>[1],
+      undefined,
+      {} as WorkerRouteHandlers,
+      dependencies,
+    );
+
+    expect(catalog.status).toBe(200);
+    expect(download.status).toBe(200);
+    expect(revoke.status).toBe(200);
+    expect(publish.status).toBe(200);
+    expect(legacy.status).toBe(404);
+    expect(handlers.handleListWorkerReleases).toHaveBeenCalledOnce();
+    expect(handlers.handleDownloadWorkerRelease).toHaveBeenCalledWith(
+      expect.any(Request),
+      expect.anything(),
+      "chatgpt",
+      "1.2.3",
+      "linux-arm64",
+      undefined,
+    );
+    expect(handlers.handleRevokeWorkerRelease).toHaveBeenCalledWith(
+      expect.any(Request),
+      expect.anything(),
+      "chatgpt",
+      "1.2.3",
+      "linux-arm64",
+      undefined,
+    );
+    expect(handlers.handlePublishWorkerRelease).toHaveBeenCalledOnce();
+  });
 });

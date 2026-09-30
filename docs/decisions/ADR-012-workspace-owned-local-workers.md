@@ -1,10 +1,18 @@
-# ADR-012: Workspace-Owned Workers and Managed Adapter Processes
+# ADR-012: Workspace-Owned Workers and Managed Worker Processes
 
 **Status:** Accepted for the general Workspace-owned execution architecture. Its catalog/cardinality UX is superseded for v1 by [ADR-015](ADR-015-first-party-worker-v1-contract.md), and its Node/adapter implementation details are refined by [ADR-017](ADR-017-standalone-dart-worker-executables.md). Production release gates remain open.
 
 **Date:** 2026-09-26  
 **Builds on:** ADR-008, ADR-009, ADR-010, ADR-011  
 **Partially supersedes:** ADR-010 configured-Worker ownership/cardinality and creation flow
+
+> **Implementation history:** The decision's original Node/adapter package and
+> Local Adapter Protocol 2.x details below describe the unreleased V7 migration
+> implementation. They are superseded for first-party runtime implementation
+> by ADR-017 and Local Worker Protocol 3.0. The ownership boundary remains
+> normative: Workspace admits and supervises Worker executables; provider CLI
+> discovery, probing, and execution stay inside the Worker. The current source
+> assignment route has not yet completed this migration.
 
 ## Context
 
@@ -56,7 +64,7 @@ It:
 - creates/resolves Workstream working directories;
 - manages local configured Workers;
 - manages local credentials;
-- manages Worker adapter packages;
+- manages signed Worker releases;
 - launches and supervises Worker child processes;
 - enforces local permissions;
 - streams execution status/results;
@@ -121,7 +129,7 @@ Conclave Cloud stores a safe synchronized projection used for:
 
 Cloud never receives provider secrets.
 
-### 4. Worker Type means integration adapter, not AI model
+### 4. Worker Type means integration, not AI model
 
 Worker Types represent how Conclave executes an AI/tool system.
 
@@ -152,9 +160,10 @@ Codex Worker Type
 └── Codex Company
 ~~~
 
-### 5. Worker adapter packages are managed by Conclave Workspace
+### 5. Historical V7 adapter package implementation (superseded by ADR-017)
 
-A Worker Type is implemented by a signed adapter package.
+A Worker Type is implemented by a signed Worker release. The package-specific
+mechanics in this subsection describe the former Node adapter implementation.
 
 The adapter translates between the Conclave Worker protocol and the external execution system.
 
@@ -184,7 +193,7 @@ manifest binding, signature, permissions, and health before activation.
 
 The user installs only Conclave Workspace.
 
-### 6. Adapter processes are separate child processes
+### 6. Historical V7 adapter process lifecycle (superseded by ADR-017)
 
 Conclave Workspace remains the long-lived process.
 
@@ -212,11 +221,13 @@ Per-assignment child processes are the default because they provide:
 
 Persistent adapter daemons/pools are a later optimization only if measured startup cost justifies them.
 
-### 7. External AI tools are not automatically bundled
+### 7. Historical V7 provider prerequisite model (superseded by ADR-017)
 
 For tool-backed Worker Types, the adapter may depend on a provider-supported local CLI/tool.
 
-The adapter manifest declares prerequisites and detection/setup behavior.
+The legacy adapter manifest declared prerequisites and detection/setup
+behavior. Under ADR-017, the Worker owns provider CLI discovery, version/auth
+checks, and execution prerequisites; Workspace does not probe provider CLIs.
 
 Conclave Workspace may:
 - detect an installed tool;

@@ -1,11 +1,40 @@
-# Worker adapter contracts
+# Worker release manifest contracts
 
-The package exports the v6 package contract and the additive Architecture v7
-adapter contract. V7 consumers should use `V7AdapterManifestSchema` and the
-`V7AdapterMessageSchema` framed protocol; v6 callers remain on
-`WorkerManifestSchema` during the migration.
+> **Current contract:** use Worker Release Manifest v2 for first-party
+> releases. The V6/V7 adapter sections below document historical Node-era
+> migration schemas only and are superseded; do not use them for new Workers.
 
-## V7 adapter manifest
+New standalone Dart Worker releases use `WorkerReleaseManifestV2Schema` and
+`WorkerReleaseManifestV2` from `src/worker-release-v2.ts`. The native release
+manifest is provider-neutral and declares Worker identity/version, platform,
+Local Worker Protocol range, state schema range, capabilities, Workspace
+permissions, executable-relative path, release channel, package and archive
+digests, and publisher signature metadata.
+
+The manifest is a signed sidecar to the `.tar.gz` artifact. The archive hash
+covers the exact compressed bytes. The package digest covers sorted extracted
+file paths, permission modes, and file contents. The signature covers the
+canonical JSON of every manifest field except `signature`, with the domain
+prefix `conclave-worker-release-manifest-v2`. Detached metadata avoids a
+signature/hash cycle.
+
+The v2 schema rejects unknown fields, including provider executable
+prerequisites, provider version/auth commands, and provider CLI environment
+policy. Those details belong inside the native Worker executable.
+
+## Legacy V6/V7 adapter manifests (migration history)
+
+The following schemas and package assets describe the unreleased Node-era
+migration path. They remain available while Workspace release storage and
+first-party package wiring move to native Worker releases; do not use them for
+new Worker Runtime v2 releases.
+
+The package still exports the v6 package contract and the V7 adapter contract.
+Legacy V7 consumers use `V7AdapterManifestSchema` and
+`V7AdapterMessageSchema`; v6 callers remain on `WorkerManifestSchema` during
+that migration.
+
+### V7 adapter manifest
 
 `workerTypeId` identifies an integration. Models belong in Worker or
 Assignment configuration. Manifests declare adapter version, protocol version,

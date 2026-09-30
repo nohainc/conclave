@@ -52,6 +52,8 @@ const migrationFiles = [
   "0032_worker_inventory_safe_projection.sql",
   "0033_workstream_worker_usage_policy.sql",
   "0034_worker_setup_readiness.sql",
+  "0035_worker_releases.sql",
+  "0036_worker_inventory_v2.sql",
 ];
 
 class LocalD1Statement {
@@ -561,8 +563,8 @@ printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"fake 
       expect(inventory).toMatchObject({
         workspace_id: "workspace-v7-e2e",
         worker_type_id: workerTypeId,
-        status: "ready",
-        credential_status: "not_required",
+        activation_state: "enabled",
+        readiness_state: "ready",
       });
       const liveStatus = await gateway.fetch(
         new Request("https://gateway.internal/status"),

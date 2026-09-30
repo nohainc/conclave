@@ -8,7 +8,7 @@ Primary domain: **conclaveax.com**
 
 ## Architecture
 
-Architecture v7 is the current Worker ownership and execution architecture. V7 ownership, Cloud scheduling, end-to-end assignment execution, V6 compatibility retirement, and asymmetric release trust are implemented. V7 remains an active implementation target until production Worker, adversarial security/recovery, and native app-update release gates pass.
+Architecture v7 is the current Worker ownership and execution architecture. Worker Runtime v2 / ADR-017 defines the first-party runtime: signed, independently versioned native Dart console executables using Local Worker Protocol 3.0. Local Dart Worker acceptance has progressed, but the complete Cloud-to-Workspace assignment path and production update/rollback gates remain open. The current Workspace assignment source path still contains the legacy V7 Node adapter executor; it is migration-only and does not define the product architecture.
 
 ```text
 Conclave AX -> Conclave Cloud -> Conclave Workspace -> Worker executable -> provider CLI
@@ -21,7 +21,7 @@ Conclave AX -> Conclave Cloud -> Conclave Workspace -> Worker executable -> prov
 - **Conclave AX** — the primary Flutter Web application.
 - **Conclave Cloud** — TypeScript control plane on Cloudflare.
 - **Conclave Workspace** — the native desktop execution/security application installed once per normal machine/OS-user installation; macOS is the first release target.
-- **Workers** — fixed local execution slots such as ChatGPT and Gemini. Worker Runtime v2 implements each first-party Worker as an independently versioned standalone Dart console executable that owns its provider CLI integration.
+- **Workers** — fixed local execution slots such as ChatGPT and Gemini. Each first-party Worker is an independently versioned standalone Dart console executable that owns its provider CLI integration.
 - **Conclave AX Forge** — AI-assisted software-development workflow built on the platform.
 
 ## Technology stack
@@ -32,7 +32,7 @@ Conclave AX -> Conclave Cloud -> Conclave Workspace -> Worker executable -> prov
 - Cloudflare D1 for structured state.
 - Cloudflare R2 for artifacts, Worker packages, and releases.
 - Better Auth for human authentication.
-- Versioned Local Worker Protocol between Workspace and standalone Worker processes. The current Node-backed implementation is 2.x; Worker Runtime v2 introduces Local Worker Protocol 3.0 for native Worker executables with Worker version/state compatibility, probe, execute, progress/result/error, and no provider tokens/account secrets on the wire.
+- Local Worker Protocol 3.0 between Workspace and standalone Worker processes. It negotiates Worker identity/version, protocol and state compatibility, probe/execute operations, and progress/results/errors without provider credentials on the wire. Protocol 2.x Node adapters are historical migration implementation only.
 - GitHub Actions for CI/CD.
 - Wrangler for Cloudflare deployment.
 
@@ -47,7 +47,7 @@ Conclave AX -> Conclave Cloud -> Conclave Workspace -> Worker executable -> prov
 - **Workstream working directory** — one persistent local directory resolved as `<work-root>/<project-id>/<workstream-id>`; names and Workspace ID never participate in path identity.
 - **Assignment** — one immutable execution snapshot resolving Project + Workstream + Workspace + configured Worker + Worker Type + model/config and authorized credential state.
 
-Worker executables run as separate per-assignment child processes under Conclave Workspace supervision and start provider CLI children as needed. Workers do not authenticate directly to Conclave Cloud.
+The target Workspace launches an admitted Worker executable for each assignment by default and supervises its process tree. The Worker starts provider CLI children as needed. Workspace never discovers, probes, or invokes provider CLIs directly. Workers do not authenticate directly to Conclave Cloud.
 
 ## Read first
 

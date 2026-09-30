@@ -13,9 +13,16 @@ import 'worker_trust_policy.dart';
 import 'release_trust_roots.dart';
 import 'workspace_paths.dart';
 import 'worker_readiness.dart';
+import 'worker_version_store.dart';
+import 'worker_release_catalog.dart';
 
 export 'configured_worker_registry.dart';
 export 'release_trust_roots.dart';
+export 'worker_release_manifest.dart';
+export 'worker_release_verifier.dart';
+export 'worker_version_store.dart';
+export 'worker_release_catalog.dart';
+export 'worker_candidate_validator.dart';
 export 'workspace_paths.dart';
 
 WorkerTrustPolicy _configuredAdapterTrustPolicy() =>
@@ -237,6 +244,8 @@ class Host {
     this.updateHandler,
     SecureCredentialStore? credentialStore,
     V7AdapterPackageStore? adapterPackageStore,
+    this.workerVersionStore,
+    this.workerReleaseCatalog,
     LocalConfiguredWorkerRegistry? localWorkerRegistry,
     this.workerReadinessMonitor,
     this.workerShutdownHandler,
@@ -273,6 +282,8 @@ class Host {
   final HostConfig config;
   final SecureCredentialStore credentialStore;
   final V7AdapterPackageStore adapterPackageStore;
+  final WorkerVersionStore? workerVersionStore;
+  final WorkerReleaseCatalog? workerReleaseCatalog;
   final LocalConfiguredWorkerRegistry? localWorkerRegistry;
   final WorkerReadinessMonitor? workerReadinessMonitor;
   final Future<void> Function()? workerShutdownHandler;
@@ -341,6 +352,7 @@ class Host {
     if (!_running) return;
     _running = false;
     await workerReadinessMonitor?.dispose();
+    workerReleaseCatalog?.close();
     for (final subscription in _signalSubscriptions) {
       await subscription.cancel();
     }

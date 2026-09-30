@@ -48,6 +48,24 @@ class Ed25519ReleaseFixture {
     manifest['signature'] = base64.encode(signature.bytes);
   }
 
+  Future<void> signWorkerReleaseManifest(
+    Map<String, Object?> manifest, {
+    String publisher = fixturePublisher,
+    String keyId = fixtureKeyId,
+  }) async {
+    manifest['publisher'] = publisher;
+    manifest['signingKeyId'] = keyId;
+    manifest['signature'] = '';
+    final unsigned = Map<String, Object?>.from(manifest)..remove('signature');
+    final signature = await Ed25519().sign(
+      utf8.encode(
+        'conclave-worker-release-manifest-v2\n${canonicalJson(unsigned)}',
+      ),
+      keyPair: pair,
+    );
+    manifest['signature'] = base64.encode(signature.bytes);
+  }
+
   Future<String> signHostRelease({
     required String publisher,
     required String keyId,

@@ -58,17 +58,17 @@ The persistent runtime process owns:
 - Workspace enrollment/reconciliation;
 - local configured Worker registry;
 - secure credential integration;
-- Worker Type adapter manager;
+- Worker release and slot manager;
 - Work Root/Workstream directory lifecycle;
 - child process supervision;
 - local permissions and diagnostics;
 - update lifecycle;
 - minimal local UI/tray behavior.
 
-Worker execution remains in separate per-assignment OS child processes, retaining crash/cancellation/security isolation while keeping the Cloud connection/runtime stable. Under Worker Runtime v2, first-party ChatGPT and Gemini integrations are standalone independently versioned Dart console executables; the user does not install Node.js or the Dart SDK.
-Workspace owns each adapter's full descendant tree. Assignment cancellation,
+Worker execution uses separate per-assignment OS child processes by default, retaining crash/cancellation/security isolation while keeping the Cloud connection/runtime stable. First-party ChatGPT and Gemini integrations are standalone independently versioned Dart console executables; the user does not install Node.js or the Dart SDK.
+Workspace owns each Worker's full descendant tree. Assignment cancellation,
 timeout, output overflow, Worker removal, and runtime shutdown first give the
-package a brief graceful-stop window to clean up its provider CLI. Workspace
+Worker a brief graceful-stop window to clean up its provider CLI. Workspace
 then force-terminates the full tree and waits for executor cleanup before
 shutdown completes. Provider CLIs remain in the Workspace-owned process group.
 POSIX process groups are used for force termination, with recursive process
@@ -111,7 +111,7 @@ See [ADR-017](../decisions/ADR-017-standalone-dart-worker-executables.md) and
 ## Cross-language contracts
 
 Keep one canonical schema source per protocol boundary. The Human Product,
-Workspace Runtime, and Local Adapter contracts have separate endpoint owners,
+Workspace Runtime, and Local Worker Protocol contracts have separate endpoint owners,
 authentication, versions, and wire schemas. Their shared domain IDs/types do
 not justify sharing an envelope or importing another boundary's transport.
 
@@ -144,7 +144,7 @@ Prefer:
 - explicit state machines;
 - immutable Assignment snapshots;
 - idempotent commands;
-- desired-state reconciliation for approved adapter releases and remote scheduling state;
+- desired-state reconciliation for approved Worker releases and remote scheduling state;
 - capability-based scheduling/security;
 - bounded context assembly;
 - durable audit events without full event sourcing.
@@ -152,10 +152,10 @@ Prefer:
 ## Workspace runtime architecture patterns
 
 Prefer:
-- supervisor pattern for adapter/tool child processes;
-- state machine for adapter install/update;
+- supervisor pattern for Worker/provider-tool child processes;
+- state machine for Worker install/update;
 - local-first configured Worker registry with safe Cloud inventory sync;
-- platform adapters only for genuinely OS-specific behavior;
+- platform-specific implementations only for genuinely OS-specific behavior;
 - secure-store abstraction;
 - bounded logs/output;
 - explicit cancellation and process-tree termination;
@@ -182,14 +182,17 @@ are implemented. V7 is not yet the declared implemented baseline: production
 Worker live acceptance, full failure/security acceptance, and native macOS
 `.app` update/recovery remain release gates.
 
-The Local Worker Protocol supports versions 2.1 through 2.6 and defines correlated
+**Historical migration implementation:** the Node-backed Local Worker Protocol
+supports versions 2.1 through 2.6 and defines correlated
 `initialize.request/result`, `probe.request/result`, `execute.request`,
 `progress`, `result`, and `error` frames. Versions 2.3 and 2.4 probe results expose the
 requested passive/live mode, readiness, safe tool version, structured checks,
 stable issue codes, and bounded local diagnostics. Protocol 2.4 execute
 requests carry the remaining assignment timeout so packages can derive CLI
 deadlines and reserve cleanup grace. Provider tokens and account secrets are
-not protocol fields.
+not protocol fields. This describes the legacy source route, not the target
+first-party contract. Local Worker Protocol 3.0 is normative for new first-party
+Worker work; Workspace must not probe provider CLIs directly.
 
 See the [Architecture v7 Completion Plan](../roadmaps/ARCHITECTURE_V7_COMPLETION.md),
 [release operations](../deployment/WORKSPACE_RELEASES.md), and
@@ -198,4 +201,4 @@ See the [Architecture v7 Completion Plan](../roadmaps/ARCHITECTURE_V7_COMPLETION
 
 ## Worker Runtime v2 implementation status
 
-Worker Runtime v2 is an accepted target, not yet the implemented baseline. The current main branch still contains the Node-backed first-party Worker implementation until the ChatGPT and Gemini Dart Workers, native release/update/rollback transaction, real provider acceptance, and cleanup gates in the Worker Runtime v2 roadmap pass.
+Worker Runtime v2 is the accepted first-party architecture. Protocol 3.0, Dart Worker packages, native release publication, and local real-provider acceptance components exist. The current Workspace assignment route still uses the legacy V7 Node adapter store/executor, so full Cloud-to-Workspace assignment execution through the Dart Workers is not yet accepted. Candidate activation/update/rollback, real production-path acceptance, and Node cleanup gates remain open. The Node path is migration implementation, not a provider-probing pattern for new Workspace code.

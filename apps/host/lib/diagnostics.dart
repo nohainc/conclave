@@ -6,7 +6,6 @@ import 'cloud_connection.dart';
 import 'host.dart';
 import 'platform_runtime.dart';
 import 'workspace_enrollment.dart';
-import 'v7_adapter_package_store.dart';
 import 'first_party_worker_registry.dart';
 
 const _diagnosticSecretPattern =
@@ -44,7 +43,7 @@ Future<Map<String, Object?>> buildHostDiagnostics({
   HostCloudConnection? connection,
   AssignmentJournal? journal,
   LocalConfiguredWorkerRegistry? workerRegistry,
-  V7AdapterPackageStore? adapterPackageStore,
+  WorkerVersionStore? workerVersionStore,
   String? lastUpdateCheckStatus,
   DateTime? lastUpdateCheckAt,
   String? updateStatus,
@@ -61,11 +60,13 @@ Future<Map<String, Object?>> buildHostDiagnostics({
   final workers = <Map<String, Object?>>[];
   for (final worker
       in await workerRegistry?.list(includeRemoved: true) ?? const []) {
-    Map<String, Object?>? adapter;
+    Map<String, Object?>? workerRelease;
     try {
-      adapter = await adapterPackageStore?.activeManifestSummary(worker);
+      workerRelease =
+          (await workerVersionStore?.activeManifest(worker.workerTypeId))
+              ?.toJson();
     } on Object {
-      // Keep diagnostics safe when the package is invalid or revoked.
+      // Keep diagnostics safe when the native Worker release is invalid.
     }
     final descriptor = FirstPartyWorkerPackage.forProductWorkerTypeId(
       worker.workerTypeId,
@@ -78,12 +79,12 @@ Future<Map<String, Object?>> buildHostDiagnostics({
       'readinessState': worker.readinessState.wireValue,
       'lastPassiveProbeAt': worker.lastPassiveProbeAt,
       'readinessIssueCode': worker.readinessIssueCode,
-      'toolVersion': worker.toolVersion,
-      'toolName': worker.toolName,
-      'toolPath': worker.toolPath,
+      'providerToolVersion': worker.toolVersion,
+      'providerToolName': worker.toolName,
+      'providerToolPath': worker.toolPath,
       if (descriptor != null) 'packageId': descriptor.packageId,
-      'adapterVersion': adapter?['adapterVersion'],
-      'adapter': adapter,
+      'workerRuntimeVersion': workerRelease?['workerVersion'],
+      'workerRelease': workerRelease,
       'lastLiveTest': {
         'at': worker.lastLiveTestAt,
         'passed': worker.lastLiveTestPassed,
@@ -202,7 +203,7 @@ Future<File> writeHostDiagnostics({
   HostCloudConnection? connection,
   AssignmentJournal? journal,
   LocalConfiguredWorkerRegistry? workerRegistry,
-  V7AdapterPackageStore? adapterPackageStore,
+  WorkerVersionStore? workerVersionStore,
   String? lastUpdateCheckStatus,
   DateTime? lastUpdateCheckAt,
   String? updateStatus,
@@ -213,7 +214,7 @@ Future<File> writeHostDiagnostics({
     connection: connection,
     journal: journal,
     workerRegistry: workerRegistry,
-    adapterPackageStore: adapterPackageStore,
+    workerVersionStore: workerVersionStore,
     lastUpdateCheckStatus: lastUpdateCheckStatus,
     lastUpdateCheckAt: lastUpdateCheckAt,
     updateStatus: updateStatus,

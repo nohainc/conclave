@@ -1,0 +1,1 @@
+{"type":"initialize.result","protocolVersion":"3.0","requestId":"init-1","workerTypeId":"chatgpt","workerVersion":"1.4.2","stateSchemaVersion":1,"capabilities":["execute","passive_probe","live_probe","durable_session"]}
