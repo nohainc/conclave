@@ -49,7 +49,10 @@ class WorkerReadinessMonitor {
     if (_timer != null) return;
     _timer = Timer.periodic(interval, (_) => unawaited(_checkSafely()));
     for (final worker in await registry.list()) {
-      if (worker.status != LocalWorkerStatus.ready) continue;
+      if (worker.activationState != LocalWorkerActivationState.enabled ||
+          worker.status != LocalWorkerStatus.ready) {
+        continue;
+      }
       await registry.update(
         worker.id,
         (current) => current.copyWith(status: LocalWorkerStatus.needsAttention),
@@ -94,7 +97,7 @@ class WorkerReadinessMonitor {
           worker.status == LocalWorkerStatus.removed) {
         continue;
       }
-      if (worker.status == LocalWorkerStatus.disabled &&
+      if (worker.activationState == LocalWorkerActivationState.disabled &&
           mode == LocalWorkerProbeMode.passive) {
         continue;
       }
@@ -109,14 +112,13 @@ class WorkerReadinessMonitor {
         await registry.update(
           worker.id,
           (current) => current.copyWith(
-            status: current.status == LocalWorkerStatus.disabled
-                ? LocalWorkerStatus.disabled
-                : effectiveReady
-                    ? LocalWorkerStatus.ready
-                    : LocalWorkerStatus.needsAttention,
-            readinessState: current.status == LocalWorkerStatus.disabled
-                ? WorkerReadinessState.disabled
-                : assessment.state,
+            status:
+                current.activationState == LocalWorkerActivationState.disabled
+                    ? LocalWorkerStatus.disabled
+                    : effectiveReady
+                        ? LocalWorkerStatus.ready
+                        : LocalWorkerStatus.needsAttention,
+            readinessState: assessment.state,
             lastPassiveProbeAt: checkedAt,
             readinessIssueCode: assessment.issueCode,
             clearReadinessIssueCode: assessment.issueCode == null,
@@ -135,7 +137,7 @@ class WorkerReadinessMonitor {
       await registry.update(
         worker.id,
         (current) => current.copyWith(
-          status: current.status == LocalWorkerStatus.disabled
+          status: current.activationState == LocalWorkerActivationState.disabled
               ? LocalWorkerStatus.disabled
               : passed
                   ? LocalWorkerStatus.ready

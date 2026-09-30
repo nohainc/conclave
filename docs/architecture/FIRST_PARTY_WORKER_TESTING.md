@@ -30,6 +30,13 @@ using fake adapters and fake CLIs. They cover adapter/CLI crashes and hangs,
 timeouts, cancellation, Workspace shutdown, child-spawned grandchildren,
 stdout and stderr overflow, and cleanup of the full process tree.
 
+The package-store suite also installs the shipped Antigravity package through
+`V7AdapterAdmission`, resolves its production `WorkerProcessSpec`, and executes
+it through the Workspace process launcher. It uses a minimal macOS-style GUI
+environment and places fake `agy` under `$HOME/.local/bin`, verifying the
+central PATH baseline and signed provider-variable filtering across the full
+Workspace → package → CLI boundary.
+
 ```sh
 cd apps/host
 flutter test test/worker_executor_test.dart test/process_tree_test.dart test/worker_executor_limits_test.dart

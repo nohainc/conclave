@@ -96,7 +96,7 @@ id
 workerTypeId
 workspaceId
 status               // ready | needs_attention | disabled | removed
-readinessState       // stable safe readiness reason code
+readinessState       // independent package health; never replaced by disabled
 attentionReasonCode? // set for actionable non-ready states
 adapterVersion?
 capabilities
@@ -104,8 +104,10 @@ localConcurrencyLimit
 lastSeenAt?
 ```
 
-The safe inventory fields originate in Conclave Workspace. `status` and
-readiness reason are local observations; Cloud cannot change them. Cloud
+The safe inventory fields originate in Conclave Workspace. `status` is the
+compatibility activation/dispatch projection; `readinessState` remains the
+independent package health result, including while the Worker is disabled.
+Both are local observations; Cloud cannot change them. Cloud
 scheduling state and limits are separate Cloud-owned controls and do not appear
 in the Workspace readiness inventory.
 

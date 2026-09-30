@@ -8,9 +8,11 @@ import 'package:crypto/crypto.dart';
 import 'first_party_worker_registry.dart';
 import 'platform_runtime.dart';
 
-const _registrySchemaVersion = 14;
+const _registrySchemaVersion = 15;
 
 enum LocalWorkerStatus { needsAttention, ready, disabled, removed }
+
+enum LocalWorkerActivationState { enabled, disabled }
 
 enum WorkerReadinessState {
   ready('ready', 'Ready'),
@@ -18,6 +20,8 @@ enum WorkerReadinessState {
   signInRequired('sign_in_required', 'Sign in required'),
   adapterUnavailable(
       'adapter_unavailable', 'Conclave integration needs attention'),
+
+  /// Accepted only to migrate older records where activation replaced health.
   disabled('disabled', 'Disabled'),
   testFailed('test_failed', 'Test failed');
 
@@ -50,7 +54,7 @@ enum LocalWorkerCredentialStatus {
 /// Credential material is never represented here. credentialRef is only an
 /// opaque key into the platform secure store for locally supplied credentials.
 class LocalConfiguredWorker {
-  const LocalConfiguredWorker({
+  LocalConfiguredWorker({
     required this.id,
     required this.workspaceId,
     required this.name,
@@ -64,6 +68,7 @@ class LocalConfiguredWorker {
     required this.localConcurrencyLimit,
     required this.adapterVersionPolicy,
     required LocalWorkerStatus status,
+    LocalWorkerActivationState? activationState,
     WorkerReadinessState? readinessState,
     required this.credentialStatus,
     required this.revision,
@@ -77,15 +82,19 @@ class LocalConfiguredWorker {
     this.lastLiveTestIssueCode,
     this.toolVersion,
   })  : status = status,
-        readinessState = readinessState ??
-            (workerTypeId == 'gemini' && lastLiveTestAt == null
-                ? WorkerReadinessState.setupRequired
-                : status == LocalWorkerStatus.ready
-                    ? WorkerReadinessState.ready
-                    : status == LocalWorkerStatus.disabled ||
-                            status == LocalWorkerStatus.removed
-                        ? WorkerReadinessState.disabled
-                        : WorkerReadinessState.testFailed);
+        activationState = activationState ??
+            (status == LocalWorkerStatus.disabled ||
+                    status == LocalWorkerStatus.removed
+                ? LocalWorkerActivationState.disabled
+                : LocalWorkerActivationState.enabled),
+        readinessState = _independentReadiness(
+          readinessState,
+          workerTypeId: workerTypeId,
+          status: status,
+          lastLiveTestAt: lastLiveTestAt,
+          lastLiveTestPassed: lastLiveTestPassed,
+          issueCode: readinessIssueCode ?? lastLiveTestIssueCode,
+        );
 
   final String id;
   final String workspaceId;
@@ -99,6 +108,11 @@ class LocalConfiguredWorker {
   final List<String> localPermissions;
   final int localConcurrencyLimit;
   final String? adapterVersionPolicy;
+
+  /// Local activation is independent from the package-reported health state.
+  final LocalWorkerActivationState activationState;
+
+  /// Compatibility projection retained for Cloud scheduling and old clients.
   final LocalWorkerStatus status;
   final WorkerReadinessState readinessState;
   final LocalWorkerCredentialStatus credentialStatus;
@@ -127,6 +141,7 @@ class LocalConfiguredWorker {
     int? localConcurrencyLimit,
     String? adapterVersionPolicy,
     LocalWorkerStatus? status,
+    LocalWorkerActivationState? activationState,
     WorkerReadinessState? readinessState,
     LocalWorkerCredentialStatus? credentialStatus,
     int? revision,
@@ -164,6 +179,13 @@ class LocalConfiguredWorker {
             localConcurrencyLimit ?? this.localConcurrencyLimit,
         adapterVersionPolicy: adapterVersionPolicy ?? this.adapterVersionPolicy,
         status: status ?? this.status,
+        activationState: activationState ??
+            (status == null
+                ? this.activationState
+                : status == LocalWorkerStatus.disabled ||
+                        status == LocalWorkerStatus.removed
+                    ? LocalWorkerActivationState.disabled
+                    : LocalWorkerActivationState.enabled),
         readinessState: readinessState ?? this.readinessState,
         credentialStatus: credentialStatus ?? this.credentialStatus,
         revision: revision ?? this.revision,
@@ -197,6 +219,7 @@ class LocalConfiguredWorker {
         'localPermissions': localPermissions,
         'localConcurrencyLimit': localConcurrencyLimit,
         'adapterVersionPolicy': adapterVersionPolicy,
+        'activationState': activationState.name,
         'status': status.name,
         'readinessState': readinessState.wireValue,
         'credentialStatus': credentialStatus.name,
@@ -226,6 +249,7 @@ class LocalConfiguredWorker {
       'localPermissions',
       'localConcurrencyLimit',
       'adapterVersionPolicy',
+      'activationState',
       'status',
       'readinessState',
       'credentialStatus',
@@ -312,6 +336,12 @@ class LocalConfiguredWorker {
     }
     final status =
         LocalWorkerStatus.values.where((item) => item.name == json['status']);
+    final activationValue = json['activationState'];
+    final activation = LocalWorkerActivationState.values
+        .where((item) => item.name == activationValue);
+    if (activationValue != null && activation.isEmpty) {
+      throw const FormatException('Worker activation state is invalid');
+    }
     final credentialStatus = LocalWorkerCredentialStatus.values
         .where((item) => item.name == json['credentialStatus']);
     final parsedReadinessState =
@@ -319,13 +349,6 @@ class LocalConfiguredWorker {
     if (json['readinessState'] != null && parsedReadinessState == null) {
       throw const FormatException('Worker readiness state is invalid');
     }
-    final readinessState = parsedReadinessState ??
-        (json['status'] == LocalWorkerStatus.ready.name
-            ? WorkerReadinessState.ready
-            : json['status'] == LocalWorkerStatus.disabled.name ||
-                    json['status'] == LocalWorkerStatus.removed.name
-                ? WorkerReadinessState.disabled
-                : WorkerReadinessState.testFailed);
     final concurrency = json['localConcurrencyLimit'];
     final revision = json['revision'];
     if (status.isEmpty ||
@@ -353,7 +376,8 @@ class LocalConfiguredWorker {
       localConcurrencyLimit: concurrency,
       adapterVersionPolicy: adapterVersionPolicy as String?,
       status: status.first,
-      readinessState: readinessState,
+      activationState: activation.isEmpty ? null : activation.first,
+      readinessState: parsedReadinessState,
       credentialStatus: credentialStatus.first,
       revision: revision,
       createdAt: required('createdAt'),
@@ -367,6 +391,39 @@ class LocalConfiguredWorker {
       toolVersion: toolVersion as String?,
     );
   }
+}
+
+WorkerReadinessState _independentReadiness(
+  WorkerReadinessState? persisted, {
+  required String workerTypeId,
+  required LocalWorkerStatus status,
+  required String? lastLiveTestAt,
+  required bool? lastLiveTestPassed,
+  required String? issueCode,
+}) {
+  // `disabled` was historically written into the readiness field to mirror
+  // activation. Recover the best independent readiness state available while
+  // migrating those records; future writes never use it for activation.
+  if (persisted != null && persisted != WorkerReadinessState.disabled) {
+    return persisted;
+  }
+  if (lastLiveTestPassed == true) return WorkerReadinessState.ready;
+  if (issueCode == 'cli_not_found') {
+    return WorkerReadinessState.adapterUnavailable;
+  }
+  if (issueCode == 'setup_required') {
+    return WorkerReadinessState.setupRequired;
+  }
+  if (issueCode == 'authentication_required') {
+    return WorkerReadinessState.signInRequired;
+  }
+  if (workerTypeId == 'gemini' && lastLiveTestAt == null) {
+    return WorkerReadinessState.setupRequired;
+  }
+  if (lastLiveTestPassed == false) return WorkerReadinessState.testFailed;
+  return status == LocalWorkerStatus.ready
+      ? WorkerReadinessState.ready
+      : WorkerReadinessState.testFailed;
 }
 
 class LocalWorkerRegistryCorrupt implements Exception {
@@ -487,23 +544,15 @@ class LocalConfiguredWorkerRegistry {
           localConcurrencyLimit: localConcurrencyLimit ?? 1,
           adapterVersionPolicy: adapterVersionPolicy,
           status: status,
-          readinessState: status == LocalWorkerStatus.disabled
-              ? WorkerReadinessState.disabled
-              : readinessState ??
-                  (normalizedTypeId == 'gemini'
-                      ? WorkerReadinessState.setupRequired
-                      : status == LocalWorkerStatus.ready
-                          ? WorkerReadinessState.ready
-                          : WorkerReadinessState.testFailed),
+          readinessState: readinessState,
           credentialStatus: credentialStatus,
           revision: (previous?.revision ?? 0) + 1,
           createdAt: previous?.createdAt ?? now,
           updatedAt: now,
-          readinessIssueCode: normalizedTypeId == 'gemini' &&
-                  readinessState == null &&
-                  status != LocalWorkerStatus.disabled
-              ? 'setup_required'
-              : null,
+          readinessIssueCode:
+              normalizedTypeId == 'gemini' && readinessState == null
+                  ? 'setup_required'
+                  : null,
         );
         if (previous == null &&
             workers.any((existing) => existing.id == worker.id)) {
@@ -561,8 +610,13 @@ class LocalConfiguredWorkerRegistry {
       });
 
   Future<void> disable(String workerId) async {
-    await update(workerId,
-        (current) => current.copyWith(status: LocalWorkerStatus.disabled));
+    await update(
+      workerId,
+      (current) => current.copyWith(
+        status: LocalWorkerStatus.disabled,
+        activationState: LocalWorkerActivationState.disabled,
+      ),
+    );
   }
 
   Future<void> setCredentialState(
@@ -638,6 +692,7 @@ class LocalConfiguredWorkerRegistry {
               decoded['schemaVersion'] != 11 &&
               decoded['schemaVersion'] != 12 &&
               decoded['schemaVersion'] != 13 &&
+              decoded['schemaVersion'] != 14 &&
               decoded['schemaVersion'] != _registrySchemaVersion) ||
           decoded['workers'] is! List ||
           decoded['checksum'] is! String) {
@@ -812,13 +867,14 @@ class LocalConfiguredWorkerRegistry {
       );
       final needsGeminiSetup = canonicalType == 'gemini' &&
           worker.lastLiveTestAt == null &&
-          worker.status != LocalWorkerStatus.disabled &&
-          worker.status != LocalWorkerStatus.removed;
+          worker.readinessState != WorkerReadinessState.adapterUnavailable;
       return worker.copyWith(
         workerTypeId: canonicalType,
         name: FirstPartyWorkerPackage.productNameFor(canonicalType),
-        status:
-            needsGeminiSetup ? LocalWorkerStatus.needsAttention : worker.status,
+        status: needsGeminiSetup &&
+                worker.activationState == LocalWorkerActivationState.enabled
+            ? LocalWorkerStatus.needsAttention
+            : worker.status,
         readinessState: needsGeminiSetup
             ? WorkerReadinessState.setupRequired
             : worker.readinessState,

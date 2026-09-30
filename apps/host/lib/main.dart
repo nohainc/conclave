@@ -3707,6 +3707,9 @@ class _WorkersTabState extends State<_WorkersTab> {
         status: disabled
             ? LocalWorkerStatus.disabled
             : LocalWorkerStatus.needsAttention,
+        activationState: disabled
+            ? LocalWorkerActivationState.disabled
+            : LocalWorkerActivationState.enabled,
       ),
     );
     if (!disabled) {
@@ -3862,8 +3865,8 @@ class _WorkersTabState extends State<_WorkersTab> {
                                         child: const Text('Test'),
                                       ),
                                       Switch(
-                                        value: worker.status !=
-                                            LocalWorkerStatus.disabled,
+                                        value: worker.activationState ==
+                                            LocalWorkerActivationState.enabled,
                                         onChanged: canConfigure
                                             ? (enabled) => enabled
                                                 ? _configureOrTest(
@@ -3949,17 +3952,18 @@ class _CatalogStatusBadge extends StatelessWidget {
 }
 
 String deriveLocalWorkerHealth(LocalConfiguredWorker worker) {
-  if (worker.status == LocalWorkerStatus.disabled) return 'Disabled';
+  if (worker.activationState == LocalWorkerActivationState.disabled) {
+    return 'Disabled';
+  }
+  return deriveLocalWorkerReadiness(worker);
+}
+
+String deriveLocalWorkerReadiness(LocalConfiguredWorker worker) {
   final issueCode = worker.lastLiveTestPassed == false
       ? worker.lastLiveTestIssueCode ?? worker.readinessIssueCode
       : worker.readinessIssueCode;
   if (issueCode == 'cli_not_found') return 'Not installed';
-  if (worker.status == LocalWorkerStatus.ready) {
-    if (worker.workerTypeId == 'gemini' && worker.lastLiveTestPassed != true) {
-      return 'Setup required';
-    }
-    return 'Ready';
-  }
+  if (worker.readinessState == WorkerReadinessState.ready) return 'Ready';
   if (issueCode == 'setup_required' ||
       issueCode == 'authentication_required' ||
       worker.readinessState == WorkerReadinessState.setupRequired ||

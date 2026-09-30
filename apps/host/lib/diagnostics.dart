@@ -73,6 +73,7 @@ Future<Map<String, Object?>> buildHostDiagnostics({
     workers.add({
       'workerId': worker.id,
       'workerTypeId': worker.workerTypeId,
+      'activationState': worker.activationState.name,
       'status': worker.status.name,
       'readinessState': worker.readinessState.wireValue,
       'lastPassiveProbeAt': worker.lastPassiveProbeAt,

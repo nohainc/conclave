@@ -180,7 +180,7 @@ void main() {
       localPermissions: const ['workstream_filesystem', 'shell_execution'],
       credentialStatus: LocalWorkerCredentialStatus.ready,
       status: LocalWorkerStatus.disabled,
-      readinessState: WorkerReadinessState.disabled,
+      readinessState: WorkerReadinessState.setupRequired,
     );
     var checks = 0;
     final monitor = WorkerReadinessMonitor(
@@ -197,12 +197,14 @@ void main() {
     );
     await monitor.checkNow();
     expect(checks, 0);
+    expect((await registry.find(worker.id))!.activationState,
+        LocalWorkerActivationState.disabled);
     expect((await registry.find(worker.id))!.readinessState,
-        WorkerReadinessState.disabled);
+        WorkerReadinessState.setupRequired);
     await monitor.checkNow(mode: LocalWorkerProbeMode.live);
     final tested = (await registry.find(worker.id))!;
     expect(tested.status, LocalWorkerStatus.disabled);
-    expect(tested.readinessState, WorkerReadinessState.disabled);
+    expect(tested.readinessState, WorkerReadinessState.setupRequired);
     expect(tested.lastLiveTestAt, isNotNull);
     expect(tested.lastLiveTestPassed, isTrue);
     await monitor.dispose();

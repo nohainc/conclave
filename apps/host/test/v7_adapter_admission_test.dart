@@ -78,6 +78,7 @@ void main() {
     expect(spec.environment, {'PROVIDER_TOKEN': 'private-token'});
     expect(spec.allowedEnvironmentVariables, {'PROVIDER_TOKEN'});
     expect(spec.secretValues, {'private-token'});
+    expect(spec.includeParentEnvironment, isFalse);
     expect(spec.maxConcurrentAssignments, 2);
   });
 

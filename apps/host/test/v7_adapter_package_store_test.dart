@@ -8,6 +8,7 @@ import 'package:conclave_host/bundled_adapter_package.dart';
 import 'package:conclave_host/configured_worker_registry.dart';
 import 'package:conclave_host/v7_adapter_package_store.dart';
 import 'package:conclave_host/worker_trust_policy.dart';
+import 'package:conclave_host/worker_executor.dart';
 import 'package:test/test.dart';
 import 'support/ed25519_release_fixture.dart';
 import 'support/compile_dart_executable.dart';
@@ -115,20 +116,22 @@ Future<void> main() async {
   LocalConfiguredWorker localWorker({
     String id = 'local-worker-1',
     String name = 'Codex Work',
+    String workerTypeId = 'chatgpt',
     String? credentialRef,
     String version = 'stable',
+    List<String> localPermissions = const ['workspace:read', 'shell:execute'],
   }) =>
       LocalConfiguredWorker(
         id: id,
         workspaceId: 'workspace-1',
         name: name,
-        workerTypeId: 'chatgpt',
+        workerTypeId: workerTypeId,
         authStrategy: 'api_key',
         credentialRef: credentialRef ?? 'worker-credential/$id',
         defaultModel: 'gpt-5.5',
         adapterConfig: const {'temperature': 0.2},
         allowedModels: const ['gpt-5.5'],
-        localPermissions: const ['workspace:read', 'shell:execute'],
+        localPermissions: localPermissions,
         localConcurrencyLimit: 2,
         adapterVersionPolicy: version,
         status: LocalWorkerStatus.ready,
@@ -137,6 +140,131 @@ Future<void> main() async {
         createdAt: '2026-09-26T00:00:00.000Z',
         updatedAt: '2026-09-26T00:00:00.000Z',
       );
+
+  test('launches Antigravity with the admitted GUI-safe package environment',
+      () async {
+    final packageFixture = await Ed25519ReleaseFixture.create(
+      publisher: 'Conclave Test',
+    );
+    final repository = Directory.current.parent.parent;
+    final antigravitySource = Directory(
+      '${repository.path}${Platform.pathSeparator}packages${Platform.pathSeparator}'
+      'worker-manifest${Platform.pathSeparator}adapters${Platform.pathSeparator}antigravity',
+    );
+    final package = Directory('${temp.path}/antigravity-package');
+    final home = Directory('${temp.path}/gui-home');
+    final cliDirectory = Directory('${home.path}/.local/bin');
+    await Directory('${package.path}/bin').create(recursive: true);
+    await Directory('${package.path}/lib').create(recursive: true);
+    await cliDirectory.create(recursive: true);
+    final nodeLookup = await Process.run('which', ['node']);
+    expect(nodeLookup.exitCode, 0, reason: 'Node.js is needed by the package');
+    final nodeExecutable = (nodeLookup.stdout as String).trim();
+
+    await File(
+      '${antigravitySource.path}/bin/conclave-antigravity-adapter.mjs',
+    ).copy('${package.path}/bin/conclave-antigravity-adapter.mjs');
+    await File(
+      '${repository.path}${Platform.pathSeparator}packages${Platform.pathSeparator}'
+      'worker-manifest${Platform.pathSeparator}adapters${Platform.pathSeparator}'
+      'shared${Platform.pathSeparator}cli_tool_runner.mjs',
+    ).copy('${package.path}/lib/cli_tool_runner.mjs');
+    final entrypoint =
+        File('${package.path}/bin/conclave-antigravity-adapter.mjs');
+    await Process.run('chmod', ['700', entrypoint.path]);
+
+    final cli = File('${cliDirectory.path}/agy');
+    await Link('${cliDirectory.path}/node-runtime').create(nodeExecutable);
+    final nodeShim = File('${cliDirectory.path}/node');
+    await nodeShim.writeAsString('''#!/bin/sh
+printf '%s\\n%s\\n' "\$PATH" "\$HOME" > "\$HOME/package-environment.txt"
+exec "\$HOME/.local/bin/node-runtime" "\$@"
+''');
+    await Process.run('chmod', ['700', nodeShim.path]);
+    await cli.writeAsString('''#!/bin/sh
+printf '%s\\n%s\\n%s\\n' "\$PATH" "\${GEMINI_API_KEY-}" "\${UNRELATED_HOST_SECRET-}" > "\$HOME/observed-cli-environment.txt"
+if [ "\$1" = "--version" ]; then
+  printf '%s\\n' 'agy 1.2.3'
+  exit 0
+fi
+cat >/dev/null
+printf '%s\\n' '{"event":"init","conversation_id":"fake-conversation"}'
+printf '%s\\n' '{"event":"step_update"}'
+printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"fake CLI completed"}}'
+''');
+    await Process.run('chmod', ['700', cli.path]);
+
+    final manifest = Map<String, Object?>.from(jsonDecode(
+      await File('${antigravitySource.path}/manifest.template.json')
+          .readAsString(),
+    ) as Map)
+      ..['publisher'] = 'Conclave Test'
+      ..['adapterVersion'] = '1.2.3';
+    final digest = await store.digestDirectory(package);
+    await packageFixture.signAdapterManifest(
+      manifest,
+      digest,
+      publisher: 'Conclave Test',
+    );
+    await File('${package.path}/manifest.json')
+        .writeAsString(jsonEncode(manifest));
+
+    final guiEnvironment = {
+      'HOME': home.path,
+      'PATH': 'relative-entry:/usr/bin:/bin',
+      'GEMINI_API_KEY': 'test-gemini-key',
+      'UNRELATED_HOST_SECRET': 'must-not-cross-the-boundary',
+    };
+    final runtime = WorkerProcessExecutor(
+      parentEnvironment: guiEnvironment,
+      operatingSystem: 'macos',
+    );
+    final packageStore = V7AdapterPackageStore(
+      root: Directory('${temp.path}/gui-installed'),
+      workerStateRoot: Directory('${temp.path}/gui-worker-state'),
+      trustPolicy: packageFixture.trustPolicy,
+      allowedPermissions: permissions,
+      executor: runtime,
+      platform: 'macos-arm64',
+    );
+
+    await packageStore.install(sourceDirectory: package);
+    final packageEnvironment =
+        await File('${home.path}/package-environment.txt').readAsLines();
+    expect(
+        packageEnvironment[0].split(':'), contains('${home.path}/.local/bin'));
+    expect(packageEnvironment[0].split(':'), isNot(contains('relative-entry')));
+    expect(packageEnvironment[1], home.path);
+    final launch = await packageStore.resolve(
+      worker: localWorker(
+        workerTypeId: 'gemini',
+        localPermissions: const [
+          'workspace:read',
+          'workspace:write',
+          'shell:execute',
+        ],
+      ),
+      readCredential: (_) async => null,
+    );
+    expect(launch, isNotNull);
+    expect(launch!.processSpec.includeParentEnvironment, isFalse);
+
+    final result = await runtime.executeV7Adapter(
+      launch.processSpec,
+      workerTypeId: launch.workerTypeId,
+      adapterVersion: launch.adapterVersion,
+      prompt: 'Say hello',
+      timeout: const Duration(seconds: 10),
+    );
+    expect((result['output'] as Map)['text'], 'fake CLI completed');
+
+    final observed =
+        (await File('${home.path}/observed-cli-environment.txt').readAsLines());
+    expect(observed[0].split(':'), contains('${home.path}/.local/bin'));
+    expect(observed[0].split(':'), isNot(contains('relative-entry')));
+    expect(observed[1], 'test-gemini-key');
+    expect(observed[2], isEmpty);
+  }, skip: Platform.isWindows);
 
   Future<List<int>> packSource({String? extraPath}) async {
     final archive = Archive();

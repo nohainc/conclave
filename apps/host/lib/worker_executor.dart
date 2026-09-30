@@ -186,7 +186,14 @@ class WorkerProcessExecutor {
   WorkerProcessExecutor({
     WorkerProcessLauncher? launcher,
     WorkerProcessTerminator? terminator,
-  })  : _launcher = launcher ?? _launch,
+    Map<String, String>? parentEnvironment,
+    String? operatingSystem,
+  })  : _launcher = launcher ??
+            ((spec) => _launch(
+                  spec,
+                  parentEnvironment: parentEnvironment,
+                  operatingSystem: operatingSystem,
+                )),
         _terminator = terminator ?? terminateProcessTree;
 
   final WorkerProcessLauncher _launcher;
@@ -207,7 +214,11 @@ class WorkerProcessExecutor {
   bool _shuttingDown = false;
   Future<void>? _shutdownFuture;
 
-  static Future<Process> _launch(WorkerProcessSpec spec) {
+  static Future<Process> _launch(
+    WorkerProcessSpec spec, {
+    Map<String, String>? parentEnvironment,
+    String? operatingSystem,
+  }) {
     final executableName = spec.executable.split(Platform.pathSeparator).last;
     final arguments = executableName == 'dart' || executableName == 'dart.exe'
         ? ['--disable-analytics', ...spec.arguments]
@@ -219,6 +230,8 @@ class WorkerProcessExecutor {
       environment: safeWorkerEnvironment(
         spec.environment,
         allowedNames: spec.allowedEnvironmentVariables,
+        parentEnvironment: parentEnvironment,
+        operatingSystem: operatingSystem,
       ),
       includeParentEnvironment: spec.includeParentEnvironment,
     );
@@ -1262,8 +1275,12 @@ class V7AdapterLaunch {
 Map<String, String> safeWorkerEnvironment(
   Map<String, String> requested, {
   Set<String> allowedNames = const {},
+  Map<String, String>? parentEnvironment,
+  String? operatingSystem,
 }) {
   final environment = <String, String>{};
+  final parent = parentEnvironment ?? Platform.environment;
+  final os = operatingSystem ?? Platform.operatingSystem;
   const maxEntries = 128;
   const maxValueBytes = 64 * 1024;
   const maxTotalBytes = 256 * 1024;
@@ -1284,7 +1301,6 @@ Map<String, String> safeWorkerEnvironment(
   }
 
   for (final name in const [
-    'PATH',
     'HOME',
     'USERPROFILE',
     'TMPDIR',
@@ -1301,11 +1317,22 @@ Map<String, String> safeWorkerEnvironment(
     'NO_COLOR',
     'TERM',
   ]) {
-    final value = Platform.environment[name];
+    final value = parent[name];
     if (value != null) add(name, value);
   }
+  final path = _workerLaunchPath(
+    parentPath: parent['PATH'],
+    homeDirectory: parent['HOME'] ?? parent['USERPROFILE'],
+    systemRoot: parent['SystemRoot'],
+    operatingSystem: os,
+  );
+  if (path.isNotEmpty) add('PATH', path);
   for (final name in allowedNames) {
-    final value = Platform.environment[name];
+    // PATH is a centrally constructed runtime baseline, never a package
+    // passthrough value. In particular, admission must not replace the
+    // GUI-safe path with the unfiltered parent value.
+    if (name == 'PATH') continue;
+    final value = parent[name];
     if (value != null) add(name, value);
   }
   // Worker processes are non-interactive. Prevent language runtimes from
@@ -1316,6 +1343,71 @@ Map<String, String> safeWorkerEnvironment(
   }
   return environment;
 }
+
+String _workerLaunchPath({
+  required String? parentPath,
+  required String? homeDirectory,
+  required String? systemRoot,
+  required String operatingSystem,
+}) {
+  final isWindows = operatingSystem == 'windows';
+  final separator = isWindows ? ';' : ':';
+  final defaults = <String>[];
+  if (isWindows) {
+    final root = systemRoot;
+    if (root != null && root.isNotEmpty) {
+      defaults.addAll([
+        '$root\\System32',
+        root,
+        '$root\\System32\\Wbem',
+        '$root\\System32\\WindowsPowerShell\\v1.0',
+      ]);
+    }
+  } else if (operatingSystem == 'macos') {
+    defaults.addAll(const [
+      '/opt/homebrew/bin',
+      '/opt/homebrew/sbin',
+      '/usr/local/bin',
+      '/usr/local/sbin',
+      '/usr/bin',
+      '/bin',
+      '/usr/sbin',
+      '/sbin',
+    ]);
+  } else {
+    defaults.addAll(const [
+      '/usr/local/bin',
+      '/usr/local/sbin',
+      '/usr/bin',
+      '/usr/sbin',
+      '/bin',
+      '/sbin',
+    ]);
+  }
+  if (!isWindows && homeDirectory != null && homeDirectory.isNotEmpty) {
+    defaults.addAll([
+      '$homeDirectory/.local/bin',
+      '$homeDirectory/bin',
+    ]);
+  }
+
+  final paths = <String>[];
+  final seen = <String>{};
+  for (final candidate in [
+    ...(parentPath ?? '').split(separator),
+    ...defaults,
+  ]) {
+    final path = candidate.trim();
+    if (path.isEmpty || !_isAbsoluteWorkerPath(path, isWindows)) continue;
+    final key = isWindows ? path.toLowerCase() : path;
+    if (seen.add(key)) paths.add(path);
+  }
+  return paths.join(separator);
+}
+
+bool _isAbsoluteWorkerPath(String path, bool isWindows) => isWindows
+    ? RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path) || path.startsWith(r'\\')
+    : path.startsWith('/');
 
 class WorkerAssignmentHandler {
   const WorkerAssignmentHandler({

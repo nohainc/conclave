@@ -185,6 +185,55 @@ void main() {
         'allowed');
   });
 
+  test('builds a GUI-safe macOS PATH without inheriting relative entries', () {
+    final environment = safeWorkerEnvironment(
+      const {},
+      allowedNames: {'PATH'},
+      parentEnvironment: const {
+        'HOME': '/Users/conclave',
+        'PATH': 'relative:.:/custom/bin:/usr/bin:/custom/bin',
+        'PROVIDER_TOKEN': 'not-allowlisted',
+      },
+      operatingSystem: 'macos',
+    );
+
+    expect(
+      environment['PATH']!.split(':'),
+      containsAll([
+        '/custom/bin',
+        '/opt/homebrew/bin',
+        '/opt/homebrew/sbin',
+        '/usr/local/bin',
+        '/usr/bin',
+        '/bin',
+        '/Users/conclave/.local/bin',
+        '/Users/conclave/bin',
+      ]),
+    );
+    expect(environment['PATH']!.split(':'), isNot(contains('relative')));
+    expect(environment['PATH']!.split(':'), isNot(contains('.')));
+    expect(environment['PATH']!.split(':').toSet().length,
+        environment['PATH']!.split(':').length);
+    expect(environment['PROVIDER_TOKEN'], isNull);
+  });
+
+  test('adds generic Windows executable locations to a sparse GUI PATH', () {
+    final environment = safeWorkerEnvironment(
+      const {},
+      parentEnvironment: const {'SystemRoot': r'C:\Windows'},
+      operatingSystem: 'windows',
+    );
+
+    expect(
+        environment['PATH']!.split(';'),
+        containsAll([
+          r'C:\Windows\System32',
+          r'C:\Windows',
+          r'C:\Windows\System32\Wbem',
+          r'C:\Windows\System32\WindowsPowerShell\v1.0',
+        ]));
+  });
+
   test('executes a real Worker Worker through JSON-RPC', () async {
     final repository = Directory.current.parent.parent;
     final workerDirectory = Directory(

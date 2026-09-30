@@ -58,8 +58,12 @@ The slots exist regardless of package readiness, authentication status, or
 enabled state. Each slot can resolve to at most one local Worker
 configuration and one Cloud inventory entry at a time. A configured Worker is
 identified by `(workspaceId, productWorkerTypeId)` for v1; duplicate
-configurations for the same pair are invalid. A slot's readiness and enabled
-state are mutable properties, not additional Worker instances. Catalog slot
+configurations for the same pair are invalid. A slot's activation and readiness
+are independent mutable properties, not additional Worker instances. Workspace
+persists activation as `enabled` or `disabled` and preserves package-reported
+readiness when activation changes. The legacy `status=disabled` value remains
+only as a compatibility projection for scheduling; it must not replace
+readiness. Catalog slot
 identity must remain stable across package upgrades, authentication changes, and
 readiness changes.
 

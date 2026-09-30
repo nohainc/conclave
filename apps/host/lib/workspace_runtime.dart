@@ -218,27 +218,25 @@ Future<Host> buildWorkspaceRuntime(
                 // Invalid, revoked, or permission-incompatible packages must
                 // not be advertised as active in the safe inventory.
               }
-              final readinessState =
-                  worker.status == LocalWorkerStatus.disabled ||
-                          worker.status == LocalWorkerStatus.removed
-                      ? WorkerReadinessState.disabled
-                      : adapterSummary == null
-                          ? WorkerReadinessState.adapterUnavailable
-                          : worker.status == LocalWorkerStatus.ready
-                              ? WorkerReadinessState.ready
-                              : worker.readinessState;
+              final readinessState = adapterSummary == null
+                  ? WorkerReadinessState.adapterUnavailable
+                  : worker.readinessState;
+              final workerStatus = switch (worker.status) {
+                LocalWorkerStatus.removed => 'removed',
+                _
+                    when worker.activationState ==
+                        LocalWorkerActivationState.disabled =>
+                  'disabled',
+                _
+                    when adapterSummary != null &&
+                        worker.status == LocalWorkerStatus.ready =>
+                  'ready',
+                _ => 'needs_attention',
+              };
               return <String, Object?>{
                 'workerId': worker.id,
                 'workerTypeId': worker.workerTypeId,
-                'status': worker.status == LocalWorkerStatus.ready &&
-                        adapterSummary == null
-                    ? 'needs_attention'
-                    : switch (worker.status) {
-                        LocalWorkerStatus.ready => 'ready',
-                        LocalWorkerStatus.needsAttention => 'needs_attention',
-                        LocalWorkerStatus.disabled => 'disabled',
-                        LocalWorkerStatus.removed => 'removed',
-                      },
+                'status': workerStatus,
                 'readinessState': readinessState.wireValue,
                 if (worker.status != LocalWorkerStatus.ready &&
                     (worker.lastLiveTestPassed == false

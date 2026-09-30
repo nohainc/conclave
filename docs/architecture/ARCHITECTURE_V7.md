@@ -503,9 +503,13 @@ resource permissions are admitted by Workspace as generic policy inputs.
 The signed manifest's `environmentPolicy.environmentPassthrough` lists parent
 variables Workspace may copy into that package. Package launches use
 `includeParentEnvironment: false` and a bounded generic base environment.
-Workspace treats the passthrough names as opaque keys. The package consumes its
-signed `providerCliPassthrough` list when constructing the provider CLI's
-environment; names and values marked sensitive are redacted from package output.
+The Workspace builds a GUI-safe `PATH` centrally from absolute entries in the
+launching environment plus standard OS and generic per-user executable
+locations. This baseline is runtime behavior and is not repeated in package
+manifests. Workspace treats signed passthrough names as opaque keys. The
+package consumes its signed `providerCliPassthrough` list when constructing the
+provider CLI's environment; names and values marked sensitive are redacted from
+package output.
 
 ### 8.1 Worker Type naming rule
 
@@ -633,12 +637,16 @@ Sync triggers:
   quota-consuming live execution test);
 - reconnect.
 
-Workspace persists package-reported readiness using the versioned local
-readiness contract plus Workspace-owned states such as `disabled` and
-`package_unavailable`, then publishes only the safe projection. Cloud keeps
-this detail separate from its existing coarse scheduling status; only local
-`ready` status is eligible for dispatch. The Worker Package performs provider
-CLI presence/version/authentication checks and execution prerequisites.
+Workspace persists package-reported readiness independently from local
+activation. The local registry has an `activationState` (`enabled` or
+`disabled`) and a separate package-reported `readinessState`; disabling a
+Worker never overwrites its readiness. The wire `status` remains a compatibility
+projection for dispatch (`disabled` when activation is off), while Cloud keeps
+readiness separate from its coarse scheduling status. Only enabled Workers
+whose effective local status is `ready` are eligible for dispatch; that status
+also gates assignments while a startup probe is pending. The Worker Package
+performs provider CLI presence/version/authentication checks and execution
+prerequisites.
 The local record retains the latest passive probe state and time, the latest
 live-test result and time, and a stable actionable issue code. Workspace does
 not infer provider authentication from historical `credentialStatus`. Gemini

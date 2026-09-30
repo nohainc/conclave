@@ -1411,8 +1411,28 @@ void main() {
     test('derives Disabled for disabled worker', () {
       final worker = makeWorker(
         status: LocalWorkerStatus.disabled,
-        readinessState: WorkerReadinessState.disabled,
+        readinessState: WorkerReadinessState.ready,
       );
+      expect(deriveLocalWorkerHealth(worker), 'Disabled');
+      expect(worker.readinessState, WorkerReadinessState.ready);
+    });
+
+    test('readiness calculation does not use compatibility status', () {
+      final worker = makeWorker(
+        status: LocalWorkerStatus.disabled,
+        readinessState: WorkerReadinessState.ready,
+      ).copyWith(activationState: LocalWorkerActivationState.enabled);
+
+      expect(deriveLocalWorkerHealth(worker), 'Ready');
+    });
+
+    test('readiness remains visible as its own dimension while disabled', () {
+      final worker = makeWorker(
+        status: LocalWorkerStatus.disabled,
+        readinessState: WorkerReadinessState.setupRequired,
+      );
+
+      expect(deriveLocalWorkerReadiness(worker), 'Setup required');
       expect(deriveLocalWorkerHealth(worker), 'Disabled');
     });
 
@@ -1449,7 +1469,7 @@ void main() {
       expect(
         deriveLocalWorkerHealth(makeWorker(
           status: LocalWorkerStatus.disabled,
-          readinessState: WorkerReadinessState.disabled,
+          readinessState: WorkerReadinessState.adapterUnavailable,
         )),
         'Disabled',
       );

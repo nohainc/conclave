@@ -95,8 +95,11 @@ PATH lookup, and known per-user/platform locations. Its signed
 `environmentPolicy.environmentPassthrough` lists the parent variables Workspace
 may copy into the package process. Workspace uses `includeParentEnvironment:
 false`, adds only its bounded generic base environment, and copies only those
-declared names without interpreting provider-specific semantics. The package
-consumes `providerCliPassthrough` to construct the provider CLI environment.
+declared names without interpreting provider-specific semantics. The baseline
+builds a GUI-safe `PATH` from absolute entries in the launching environment,
+standard OS executable locations, and generic per-user executable locations;
+package manifests do not duplicate this runtime baseline. The package consumes
+`providerCliPassthrough` to construct the provider CLI environment.
 Sensitive passthrough values are redacted from package output. Any selected
 executable path and detected provider-tool version remain package-local and are
 not stored in the Workspace Worker registry or passed as provider semantics
