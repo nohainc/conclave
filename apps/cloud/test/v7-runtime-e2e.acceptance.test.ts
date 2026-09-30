@@ -145,7 +145,7 @@ describe("V7 runtime assignment acceptance", () => {
     ...(
       ["websocket", "http_long_poll", "http_long_poll_handover"] as const
     ).map((transportMode) => ({
-      label: `${transportMode} fixture adapter`,
+      label: `${transportMode} ChatGPT slot fixture`,
       transportMode,
       firstPartyAdapter: null,
       realProvider: false,
@@ -192,7 +192,7 @@ describe("V7 runtime assignment acceptance", () => {
           ? "chatgpt"
           : firstPartyAdapter === "antigravity"
             ? "gemini"
-            : "fixture-worker";
+            : "chatgpt";
       const modelId = realProvider ? null : "fixture-model";
       const assignmentTimeoutMs = realProvider ? 180_000 : 30_000;
       const sqlite = new DatabaseSync(":memory:");
@@ -403,7 +403,9 @@ describe("V7 runtime assignment acceptance", () => {
       let workspaceEnvironment = process.env;
       if (firstPartyAdapter && !realProvider) {
         const providerBin = join(scratch, "provider-bin");
+        const providerHome = join(scratch, "provider-home");
         mkdirSync(providerBin, { recursive: true });
+        mkdirSync(providerHome, { recursive: true });
         const cliName = firstPartyAdapter === "codex" ? "codex" : "agy";
         const fakeCli = join(providerBin, cliName);
         writeFileSync(
@@ -431,6 +433,8 @@ printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"fake 
         chmodSync(fakeCli, 0o700);
         workspaceEnvironment = {
           ...process.env,
+          HOME: providerHome,
+          USERPROFILE: providerHome,
           PATH: `${providerBin}${delimiter}${process.env.PATH ?? ""}`,
         };
       }

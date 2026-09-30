@@ -70,9 +70,14 @@ Future<void> main(List<String> args) async {
   final typeId = switch (firstPartyAdapter) {
     'codex' => 'chatgpt',
     'antigravity' => 'gemini',
-    _ => 'fixture-worker',
+    // The product catalog has fixed ChatGPT/Gemini slots. Keep the generic
+    // transport fixture on a supported slot instead of inventing a third one.
+    _ => 'chatgpt',
   };
-  final adapterTypeId = firstPartyAdapter ?? typeId;
+  // Legacy protocol fixtures are installed under the ChatGPT package slot so
+  // package admission, Workspace inventory, and Cloud selection all use the
+  // fixed first-party catalog identity.
+  final adapterTypeId = firstPartyAdapter ?? 'codex';
   final modelId = realFirstParty ? null : 'fixture-model';
   const signingSeed = <int>[
     0,
@@ -139,6 +144,7 @@ Future<void> main(List<String> args) async {
     localConcurrencyLimit: 1,
     adapterVersionPolicy: 'stable',
     status: LocalWorkerStatus.ready,
+    readinessState: WorkerReadinessState.ready,
     credentialStatus: LocalWorkerCredentialStatus.notRequired,
   );
   final source = Directory('${root.path}/source');
@@ -151,10 +157,24 @@ import 'dart:io';
 Future<void> main() async {
   await for (final line in stdin.transform(utf8.decoder).transform(const LineSplitter())) {
     final request = jsonDecode(line) as Map<String, dynamic>;
-    final base = {'protocolVersion': '2.1', 'requestId': request['requestId']};
+    final base = {'protocolVersion': '2.6', 'requestId': request['requestId']};
     switch (request['type']) {
       case 'initialize.request': stdout.writeln(jsonEncode({...base, 'type': 'initialize.result', 'adapterVersion': '1.0.0', 'capabilities': <String>[]}));
-      case 'probe.request': stdout.writeln(jsonEncode({...base, 'type': 'probe.result', 'ready': true, 'toolVersion': null, 'checkKind': 'readiness', 'issues': <Object>[]}));
+      case 'probe.request':
+        stdout.writeln(jsonEncode({
+          ...base,
+          'type': 'probe.result',
+          'ready': true,
+          'toolVersion': null,
+          'toolName': null,
+          'toolPath': null,
+          'mode': request['mode'],
+          'checks': [
+            {'id': 'provider_tool', 'status': 'passed'},
+            if (request['mode'] == 'live')
+              {'id': 'execution', 'status': 'passed'},
+          ],
+        }));
       case 'execute.request':
         final cwd = Directory.current.path;
         await File('$cwd/v7-e2e-output.txt').writeAsString('written-by-real-adapter-process');
@@ -247,7 +267,7 @@ exec __DART__ "$(dirname "$0")/adapter.dart"
         };
   manifest['workerTypeId'] = adapterTypeId;
   manifest['adapterVersion'] = '1.0.0';
-  manifest['protocolVersion'] = firstPartyAdapter == null ? '2.1' : '2.6';
+  manifest['protocolVersion'] = '2.6';
   manifest['publisher'] = 'Conclave Test';
   manifest['packageDigest'] = digest;
   manifest['signingKeyId'] = 'test-ed25519-v1';
@@ -334,16 +354,20 @@ exec __DART__ "$(dirname "$0")/adapter.dart"
         {
           'workerId': worker.id,
           'workerTypeId': worker.workerTypeId,
-          'name': worker.name,
-          'status': 'ready',
-          'authStrategy': worker.authStrategy,
-          'defaultModel': worker.defaultModel,
-          'allowedModels': worker.allowedModels,
+          'activationState':
+              worker.activationState == LocalWorkerActivationState.disabled
+                  ? 'disabled'
+                  : 'enabled',
+          'readinessState': worker.readinessState.wireValue,
+          if (worker.readinessIssueCode != null)
+            'readinessIssueCode': worker.readinessIssueCode,
+          // The bridge executes a test Worker implementation, so report a
+          // stable test runtime version for Cloud admission/scheduling.
+          'workerRuntimeVersion': '0.0.0-test',
+          'providerToolName': null,
+          'providerToolVersion': null,
           'capabilities': active?['capabilities'] ?? const <String>[],
-          'localPermissionsSummary': worker.localPermissions,
           'localConcurrencyLimit': worker.localConcurrencyLimit,
-          'adapterVersion': active?['adapterVersion'],
-          'credentialStatus': 'not_required',
           'revision': worker.revision,
           'createdAt': worker.createdAt,
           'updatedAt': worker.updatedAt,
