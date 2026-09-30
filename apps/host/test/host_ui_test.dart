@@ -88,6 +88,30 @@ class _FakeWorkerRegistry extends LocalConfiguredWorkerRegistry {
   }
 }
 
+LocalConfiguredWorker _disabledChatGptWorker({
+  required WorkerReadinessState readinessState,
+}) =>
+    LocalConfiguredWorker(
+      id: 'w-chatgpt-disabled',
+      workspaceId: 'ws-test',
+      name: 'ChatGPT',
+      workerTypeId: 'chatgpt',
+      authStrategy: 'browser_auth',
+      credentialRef: null,
+      defaultModel: null,
+      adapterConfig: const {},
+      allowedModels: const [],
+      localPermissions: const ['workstream_filesystem', 'shell_execution'],
+      localConcurrencyLimit: 1,
+      adapterVersionPolicy: null,
+      status: LocalWorkerStatus.disabled,
+      readinessState: readinessState,
+      credentialStatus: LocalWorkerCredentialStatus.ready,
+      revision: 1,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    );
+
 void main() {
   testWidgets('pairing error notification has a working copy action',
       (tester) async {
@@ -1280,8 +1304,21 @@ void main() {
 
     expect(find.text('ChatGPT'), findsOneWidget);
     expect(find.text('Gemini'), findsOneWidget);
-    expect(find.text('Disabled'), findsOneWidget);
-    expect(find.text('Needs attention'), findsOneWidget);
+    final disabledChatGptCard = find.byKey(const Key('worker-catalog-chatgpt'));
+    expect(
+      find.descendant(
+        of: disabledChatGptCard,
+        matching: find.text('Disabled'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: disabledChatGptCard,
+        matching: find.text('Needs attention'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Setup required'), findsOneWidget);
     expect(find.text('CLI version: 1.2.3'), findsOneWidget);
     expect(find.text('CLI version: Not detected'), findsOneWidget);
@@ -1328,25 +1365,8 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    final worker = LocalConfiguredWorker(
-      id: 'w-chatgpt-disabled',
-      workspaceId: 'ws-test',
-      name: 'ChatGPT',
-      workerTypeId: 'chatgpt',
-      authStrategy: 'browser_auth',
-      credentialRef: null,
-      defaultModel: null,
-      adapterConfig: const {},
-      allowedModels: const [],
-      localPermissions: const ['workstream_filesystem', 'shell_execution'],
-      localConcurrencyLimit: 1,
-      adapterVersionPolicy: null,
-      status: LocalWorkerStatus.disabled,
+    final worker = _disabledChatGptWorker(
       readinessState: WorkerReadinessState.setupRequired,
-      credentialStatus: LocalWorkerCredentialStatus.ready,
-      revision: 1,
-      createdAt: '2026-01-01T00:00:00Z',
-      updatedAt: '2026-01-01T00:00:00Z',
     );
     final registry = _FakeWorkerRegistry([worker]);
     LocalWorkerActivationState? activationAtProbe;
@@ -1380,6 +1400,15 @@ void main() {
     );
     await tester.tap(find.text('Workers').first);
     await tester.pumpAndSettle();
+    final chatGptCard = find.byKey(const Key('worker-catalog-chatgpt'));
+    expect(
+      find.descendant(of: chatGptCard, matching: find.text('Disabled')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: chatGptCard, matching: find.text('Setup required')),
+      findsOneWidget,
+    );
     await tester.tap(find.text('Test').first);
     await tester.pumpAndSettle();
 
@@ -1387,7 +1416,87 @@ void main() {
     expect(registry.workers.single.activationState,
         LocalWorkerActivationState.disabled);
     expect(registry.workers.single.lastLiveTestPassed, isTrue);
-    expect(find.text('Disabled'), findsOneWidget);
+    expect(
+      find.descendant(of: chatGptCard, matching: find.text('Disabled')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: chatGptCard, matching: find.text('Ready')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: chatGptCard, matching: find.text('Setup required')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a failed live Test keeps Disabled and shows Needs attention',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final worker = _disabledChatGptWorker(
+      readinessState: WorkerReadinessState.ready,
+    );
+    final registry = _FakeWorkerRegistry([worker]);
+    LocalWorkerActivationState? activationAtProbe;
+
+    await pumpDashboard(
+      tester,
+      const HostUiSnapshot(
+        mode: HostUiMode.ready,
+        title: 'Workspace is ready',
+        detail: 'Ready',
+        paired: true,
+        workspaceReady: true,
+        cloudConnected: true,
+        workspaceName: 'Office Mac',
+      ),
+      localWorkerRegistry: registry,
+      onReadinessCheck: ({
+        LocalWorkerProbeMode mode = LocalWorkerProbeMode.passive,
+        String? workerTypeId,
+      }) async {
+        expect(mode, LocalWorkerProbeMode.live);
+        activationAtProbe = registry.workers.single.activationState;
+        await registry.update(
+          worker.id,
+          (current) => current.copyWith(
+            lastLiveTestAt: '2026-01-02T03:04:05Z',
+            lastLiveTestPassed: false,
+            lastLiveTestIssueCode: 'execution_test_failed',
+          ),
+        );
+      },
+    );
+    await tester.tap(find.text('Workers').first);
+    await tester.pumpAndSettle();
+    final chatGptCard = find.byKey(const Key('worker-catalog-chatgpt'));
+    expect(
+      find.descendant(of: chatGptCard, matching: find.text('Disabled')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: chatGptCard, matching: find.text('Ready')),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Test').first);
+    await tester.pumpAndSettle();
+
+    expect(activationAtProbe, LocalWorkerActivationState.disabled);
+    expect(registry.workers.single.activationState,
+        LocalWorkerActivationState.disabled);
+    expect(registry.workers.single.lastLiveTestPassed, isFalse);
+    expect(
+      find.descendant(of: chatGptCard, matching: find.text('Disabled')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: chatGptCard, matching: find.text('Needs attention')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('activation switch never requests a live Worker test',

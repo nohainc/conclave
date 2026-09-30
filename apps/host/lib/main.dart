@@ -3999,9 +3999,20 @@ List<String> deriveLocalWorkerStatusBadges(
     ];
 
 String deriveLocalWorkerReadiness(LocalConfiguredWorker worker) {
-  final issueCode = worker.lastLiveTestPassed == false
-      ? worker.lastLiveTestIssueCode ?? worker.readinessIssueCode
-      : worker.readinessIssueCode;
+  if (worker.lastLiveTestPassed == false) {
+    final liveIssue = worker.lastLiveTestIssueCode ?? worker.readinessIssueCode;
+    if (liveIssue == 'cli_not_found') return 'Not installed';
+    if (liveIssue == 'setup_required' ||
+        liveIssue == 'authentication_required') {
+      return 'Setup required';
+    }
+    return 'Needs attention';
+  }
+  if (worker.readinessState == WorkerReadinessState.setupRequired &&
+      worker.lastLiveTestPassed == true) {
+    return 'Ready';
+  }
+  final issueCode = worker.readinessIssueCode;
   if (issueCode == 'cli_not_found') return 'Not installed';
   if (worker.readinessState == WorkerReadinessState.ready) return 'Ready';
   if (issueCode == 'setup_required' ||
