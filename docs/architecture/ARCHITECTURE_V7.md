@@ -1,16 +1,15 @@
 # Conclave AX Architecture v7 — Workspace Runtime and Worker Executables
 
-**Status:** Current architecture and active implementation target. V7 ownership, scheduler, E2E path, V6 compatibility retirement, and public-key release trust are implemented; production runtime gates remain open.
+**Status:** Historical predecessor. Architecture v8 is the active implementation target; v7 remains the source of Workspace ownership, scheduler, and Workstream execution decisions retained by v8.
 **Date:** 2026-09-26  
 **Builds on:** Architecture v6 Workstreams + ADR-011 filesystem model  
 **Primary decision:** [ADR-012](../decisions/ADR-012-workspace-owned-local-workers.md)
 
 **Current first-party product catalog:** [ADR-015](../decisions/ADR-015-first-party-worker-v1-contract.md)  
-**Accepted local runtime target:** [ADR-017](../decisions/ADR-017-standalone-dart-worker-executables.md) / [Worker Runtime v2](WORKER_RUNTIME_V2.md)
+**Superseded local runtime target:** [ADR-017](../decisions/ADR-017-standalone-dart-worker-executables.md) / [Worker Runtime v2](WORKER_RUNTIME_V2.md)  
+**Current target:** [Architecture v8](ARCHITECTURE_V8.md) / [ADR-018](../decisions/ADR-018-generic-cli-worker-engine-and-tool-profiles.md)
 
-> **Runtime convergence status:** Worker Runtime v2 is the normative first-party
-> architecture: signed standalone Dart console executables, Local Worker
-> Protocol 3.0, and provider CLI ownership inside each Worker. All Worker
+> **v8 supersession:** Architecture v8 keeps v7 Workspace ownership and the out-of-process execution boundary, but replaces separate provider Worker executables with one generic CLI Worker Engine plus signed Tool Profiles. Local Worker Protocol 4.0 carries Engine/Profile identity. All Worker
 > Package/adapter-specific implementation detail and Protocol 2.x flows below
 > describe historical Node migration machinery, not instructions for new
 > runtime work. The assignment path still uses legacy V7 adapter machinery;
@@ -1151,3 +1150,8 @@ See [Architecture v7 Completion Plan](../roadmaps/ARCHITECTURE_V7_COMPLETION.md)
 ## Worker Runtime v2 convergence
 
 ADR-017 is the normative first-party runtime refinement inside Architecture v7. The first-party topology is `Workspace -> standalone Dart Worker executable -> provider CLI`. Worker versions are independent from Workspace and provider CLI versions, and Workspace may install multiple immutable Worker versions for update/rollback. Local Dart Worker acceptance has progressed, but the current Workspace assignment source still uses the legacy Node-backed V7 store/executor; the end-to-end Dart route and production acceptance are open. The implementation/migration order and phase evidence are defined by [Worker Runtime v2 Implementation](../roadmaps/WORKER_RUNTIME_V2_IMPLEMENTATION.md). The Node-backed Protocol 2.x implementation is migration-only, not the desired release baseline.
+
+
+## Architecture v8 transition
+
+Do not extend v7 by adding another provider-specific Worker executable. New CLI integrations must use the v8 logical Worker catalog + generic CLI Worker Engine + signed Tool Profile model. The authoritative implementation order is [Architecture v8 Implementation](../roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md).
