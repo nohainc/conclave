@@ -1,4 +1,47 @@
-# Workspace and Worker Release Operations
+# Workspace, Engine, and Tool Profile Release Operations
+
+**Architecture v8:** the active target uses one generic CLI Worker Engine plus
+signed Tool Profile releases. Per-provider native ChatGPT/Gemini Worker
+releases documented later in this file are migration history until removed.
+
+## v8 release classes
+
+Conclave now has three distinct release classes:
+
+1. **Workspace application release** — signed/notarized desktop application.
+2. **CLI Worker Engine release** — generic native Dart executable; initially may
+   be bundled with Workspace, later may support independent signed rollout.
+3. **Tool Profile release** — small immutable signed provider integration
+   payload promoted through Draft/Testing/Beta/Stable.
+
+Provider CLI software remains installed/updated by the user/provider.
+
+### Tool Profile release flow
+
+~~~text
+create immutable Profile release
+-> static schema/security validation
+-> fixture tests
+-> sign payload
+-> publish Draft
+-> promote to Testing
+-> real provider acceptance
+-> Beta optional
+-> Stable
+~~~
+
+Stable promotion changes lifecycle/pointers, never the signed Profile payload.
+
+Profile rollback selects a previous trusted compatible release. Revoked releases
+are never eligible for activation/rollback.
+
+### Generic Engine release flow
+
+The first v8 implementation may ship a known-good Engine with Workspace. The
+Engine still has its own version and diagnostic identity. If independent Engine
+delivery is enabled later, it must use immutable signed platform artifacts,
+active/LKG state, admission, health check, and rollback.
+
 
 **Current Worker release contract:** signed platform-specific native Dart
 executables published as Worker release v2 records. The Node adapter workflow
@@ -35,7 +78,7 @@ The legacy adapter test command is:
 pnpm worker-adapters:test
 ```
 
-## Native Worker release catalog
+## Historical v2 native provider Worker release catalog
 
 Cloud stores immutable releases in `worker_releases`, keyed by Worker Type ID,
 version, and platform. The catalog requires a platform and can be narrowed by
@@ -100,7 +143,7 @@ key separation, overlap rotation, revocation, and recovery constraints. Do not
 store release seeds or publication tokens in the repository, package archive,
 desktop artifact, or workflow output.
 
-## Worker Runtime v2 release workflow
+## Historical Worker Runtime v2 release workflow
 
 ADR-017 defines independently versioned platform-specific native Worker releases. Node adapter release tooling remains migration-only; first-party Worker releases are native Dart executables. The native publish workflow is implemented, but full Workspace download, admission, candidate activation, update/rollback, and assignment-path acceptance remain tracked gates.
 
@@ -196,3 +239,8 @@ assignments through the Dart executable.
 Each version directory is immutable. Bump `--version` (or let the default dev
 version timestamp change) for each rebuild before installing over an existing
 development version.
+
+
+## Architecture v8 operational target
+
+Do not publish a new provider-specific native Worker release for a normal CLI integration. Provider behavior changes should normally be released as signed Tool Profile revisions. Native binary publication is reserved for Workspace or generic Engine changes.
