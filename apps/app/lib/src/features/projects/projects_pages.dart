@@ -2741,20 +2741,27 @@ Widget _workflowOption(
   BuildContext context,
   StudioBuiltinWorkflow workflow,
 ) =>
-    SizedBox(
-      height: 54,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(workflow.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-          Text(
-            workflow.description,
+    ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 520),
+      child: SizedBox(
+        height: 54,
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(text: workflow.name),
+                const TextSpan(text: '  —  '),
+                TextSpan(
+                  text: workflow.description,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodySmall,
           ),
-        ],
+        ),
       ),
     );
 
@@ -2876,6 +2883,16 @@ class _WorkComposer extends StatelessWidget {
               itemHeight: null,
               initialValue: workflow,
               decoration: const InputDecoration(labelText: 'Workflow'),
+              selectedItemBuilder: (context) => workflowCatalog
+                  .map((definition) => Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          definition.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ))
+                  .toList(),
               items: workflowCatalog
                   .map((definition) => DropdownMenuItem(
                         value: definition.reference,
