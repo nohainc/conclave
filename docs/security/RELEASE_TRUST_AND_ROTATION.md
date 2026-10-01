@@ -1,6 +1,6 @@
-# Workspace and Worker Release Trust
+# Workspace, Engine, and Tool Profile Release Trust
 
-Worker Runtime v2 is the first-party Worker trust contract. Node adapter
+Architecture v8 is the active first-party runtime trust contract. Worker Runtime v2 remains predecessor history. Node adapter
 signatures and API routes mentioned below are migration history; native Worker
 releases are verified by Worker type, version, platform, protocol/state
 compatibility, manifest signature, package digest, and archive hash.
@@ -14,7 +14,7 @@ version, channel, platform/architecture, and archive digest. Worker release
 signatures also bind the canonical manifest (excluding its signature field)
 and the package file-tree digest.
 
-Workspace application releases and Worker releases use independent signing seeds and key IDs. Worker releases must use the dedicated Worker signing trust class; do not reuse the Workspace application signing seed or treat a legacy adapter key as interchangeable. They share the public-key trust-root configuration
+Workspace application, CLI Worker Engine, and Tool Profile release classes use explicit trust separation. Workspace application signing material must never be reused for Engine/Profile release signing. Worker releases must use the dedicated Worker signing trust class; do not reuse the Workspace application signing seed or treat a legacy adapter key as interchangeable. They share the public-key trust-root configuration
 format, but a key for one release class must not be reused for the other.
 Apple Developer ID signing and notarization verify macOS origin/platform
 requirements; Conclave release metadata verification remains required.
@@ -93,3 +93,28 @@ ADR-017 makes first-party Worker artifacts native platform executables. Trust ve
 Workspace may keep multiple trusted Worker versions installed for rollback. A previous version is eligible only while both its release and signing key remain trusted and its protocol/state schema remain compatible. Rollback does not bypass revocation.
 
 Native Worker executable code signing on macOS/Windows complements Conclave Ed25519 package trust; it does not replace the Conclave manifest/package verification.
+
+
+## Architecture v8 Profile trust
+
+Tool Profiles are configuration but are treated as executable behavior policy. Every official Profile release is immutable and signed. Workspace verifies Profile definition/release identity, payload digest, schema version, logical Worker binding, Engine compatibility, and signing key before the generic Engine may consume it.
+
+A database lifecycle transition such as Testing → Stable does not make unsigned or altered bytes trusted. The signed payload remains immutable; lifecycle state, promotion audit, and revocation are separate metadata.
+
+Profiles must support fast rollback without bypassing revocation. Last-known-good is eligible only when its release and signing key remain trusted and its Engine/provider compatibility still holds.
+
+## Architecture v8 Engine trust
+
+The generic CLI Worker Engine is a native executable trust class. Initially it may be delivered as a known-good component of a Workspace release. If independently distributed later, Engine artifacts require their own immutable version, platform/architecture identity, digest/signature, revocation, and rollback path. Engine trust never substitutes for Profile trust; both layers must pass.
+
+## Trust-class target
+
+Operationally distinguish:
+
+~~~text
+Workspace app signing
+CLI Worker Engine signing
+Tool Profile signing
+~~~
+
+These may use separate keys or carefully scoped publisher/key classes, but a compromised Profile-signing credential must not authorize a Workspace application release.

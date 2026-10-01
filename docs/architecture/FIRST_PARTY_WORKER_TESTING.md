@@ -1,10 +1,6 @@
-# Historical: Node adapter testing and acceptance
+# Historical predecessor testing; superseded by Architecture v8 Engine/Profile acceptance
 
-> **Superseded for current first-party runtime verification.** The procedures
-> below describe the Node-backed V7 adapter and Protocol 2.x migration path.
-> Use the Dart Worker protocol/package tests and the Worker Runtime v2
-> implementation plan for current status. Retain this document as historical
-> evidence until the legacy runtime is removed.
+> **Superseded.** The procedures below preserve v7/v2 migration evidence. Architecture v8 testing must exercise the generic CLI Worker Engine, Tool Profile schema/fixture harness, Profile lifecycle/rollback, and real provider acceptance defined by `docs/roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md`. Retain this document only as predecessor evidence.
 
 This document defines the verification pyramid for the first-party ChatGPT and
 Gemini Workers. Deterministic tests use fake CLIs and never need provider

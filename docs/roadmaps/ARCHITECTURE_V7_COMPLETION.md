@@ -1,12 +1,16 @@
 # Architecture v7 Completion Plan
 
-**Status:** Active completion plan  
+**Status:** Historical predecessor plan; superseded by [Architecture v8 Implementation](ARCHITECTURE_V8_IMPLEMENTATION.md)  
 **Baseline:** `main@36bfedd8b51c7395857bb77abc6f187c21bb7b82`
 
 **Date:** 2026-09-26  
 **Architecture:** [Architecture v7](../architecture/ARCHITECTURE_V7.md)  
 **Decision:** [ADR-012](../decisions/ADR-012-workspace-owned-local-workers.md)  
 **Detailed roadmap:** [Architecture v7 implementation](ARCHITECTURE_V7_IMPLEMENTATION.md)
+
+## v8 supersession
+
+Architecture v8 is now the active runtime roadmap. Carry forward only v7 concerns that remain relevant—Workspace ownership, scheduling authorization, failure/recovery, desktop lifecycle, and security—into the corresponding v8 phases. Do not complete the old per-provider Worker binary release path as a prerequisite for v8.
 
 ## Purpose
 

@@ -5,6 +5,10 @@
 **Decision:** [ADR-017](../decisions/ADR-017-standalone-dart-worker-executables.md)  
 **Product baseline:** Architecture v7 / ADR-015 ChatGPT + Gemini first-party catalog
 
+## v8 supersession
+
+Worker Runtime v2 successfully established the separate native process boundary and real provider behavior. Architecture v8 retains those generic/runtime lessons but replaces separate provider Worker executables and their release lifecycle with one CLI Worker Engine plus signed Tool Profiles. Do not continue new provider-specific Worker binary implementation from this roadmap.
+
 ## Goal
 
 Replace the legacy Node-backed first-party Worker Package implementation with

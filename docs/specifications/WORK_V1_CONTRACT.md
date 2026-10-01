@@ -5,9 +5,7 @@
 **Scope:** Work composer and built-in Workflow semantics in Conclave AX
 
 This is the single authoritative catalog and semantic definition for Work v1.
-Architecture v7, Workspace ownership, Workstream isolation, Cloud/Workspace
-transport, AX-owned Worker usage policy, and the Workspace desktop lifecycle
-remain unchanged. A Work v1 Workflow describes the user-visible shape of a
+Architecture v8 preserves Workspace ownership, Workstream isolation, Cloud/Workspace transport, AX-owned Worker usage policy, and the Workspace desktop lifecycle. Work v1 binds logical Workers and is intentionally independent from the underlying Engine/Profile implementation. A Work v1 Workflow describes the user-visible shape of a
 Work Request; it does not select a Worker, provider, model, Workspace, or
 execution permission.
 
@@ -519,3 +517,8 @@ details, not the Work v1 catalog. In particular, old names such as
 `Implementation`, `Review`, and `Implementation + Test + Review` must not be
 added to new Work v1 UI or APIs. AX obtains current definitions from the shared
 built-in catalog and must not maintain a duplicate Workflow list.
+
+
+## Architecture v8 runtime note
+
+Work v1 continues to resolve `chatgpt`, `gemini`, and future logical Worker IDs only. Workspace resolves the selected logical Worker to an admitted generic CLI Worker Engine plus official compatible Tool Profile locally. Workflow definitions and Step prompt semantics never depend on Profile IDs or provider CLI command formats.

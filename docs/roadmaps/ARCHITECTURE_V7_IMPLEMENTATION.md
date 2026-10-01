@@ -1,6 +1,6 @@
 # Architecture v7 — Workspace-Owned Workers Implementation Roadmap
 
-**Status:** Current V7 implementation roadmap; production acceptance gates remain open
+**Status:** Historical implementation roadmap; superseded for new runtime work by [Architecture v8 Implementation](ARCHITECTURE_V8_IMPLEMENTATION.md)
 **Architecture:** [ARCHITECTURE_V7.md](../architecture/ARCHITECTURE_V7.md)  
 **Decision:** [ADR-012](../decisions/ADR-012-workspace-owned-local-workers.md)  
 **Date:** 2026-09-26
@@ -1345,3 +1345,8 @@ Local Codex Worker
 ~~~
 
 Only after that slice passes should the v6 binding model be removed.
+
+
+## Architecture v8 note
+
+Retain this roadmap as implementation history for Workspace ownership, scheduling, and migration evidence. New CLI runtime work must use the generic Engine + signed Tool Profile model and must not add another provider-specific first-party Worker executable.

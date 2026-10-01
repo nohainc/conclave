@@ -1,6 +1,6 @@
 # Conclave Protocol Boundaries
 
-**Status:** Current product boundary contract. Local Worker Protocol 3.0 is the accepted first-party contract; Node-backed Protocol 2.x is historical migration implementation.
+**Status:** Current product boundary contract. Local Worker Protocol 4.0 is the Architecture v8 contract; Protocol 3.0/2.x describe predecessor implementations.
 **Applies to:** Conclave AX, Conclave Cloud, Conclave Workspace, and Workers
 
 Conclave has three protocol boundaries. They share domain vocabulary, but each
@@ -14,8 +14,8 @@ Conclave AX  <->  Conclave Cloud
 Conclave Workspace  <->  Conclave Cloud
                        Workspace Runtime Protocol
 
-Conclave Workspace  <->  Worker executable process
-                       Local Worker Protocol
+Conclave Workspace  <->  CLI Worker Engine process
+                       Local Worker Protocol 4.0
 ```
 
 The arrows show the three product/runtime boundaries. The Human Product
@@ -87,71 +87,32 @@ The current implementation is named
 authentication, transport negotiation, and assignment envelopes inside this
 boundary.
 
-## 3. Workspace ↔ Worker executable — Local Worker Protocol
+## 3. Workspace ↔ CLI Worker Engine — Local Worker Protocol 4.0
 
-**Endpoints:** Conclave Workspace's process supervisor and one standalone Worker executable child process.
-**Authentication:** local process admission; no Cloud or human session
-credential is part of this protocol.  
-**Transport:** versioned NDJSON over the child's stdin/stdout.  
-**Contract ownership:** Workspace defines the Local Worker Protocol;
-first-party and third-party Worker executables implement it.
+**Endpoints:** Conclave Workspace process supervisor and one generic CLI Worker Engine child process.  
+**Authentication:** local admission only; no Cloud/human credential is present.  
+**Transport:** versioned NDJSON over stdin/stdout.  
+**Contract ownership:** Workspace + shared protocol package; Engine implements it.
 
-This protocol carries Worker initialization, Worker-reported readiness,
-execution, progress, results, errors, and cancellation.
+Protocol 4.0 carries:
+- initialize;
+- passive/live probe;
+- execute;
+- progress;
+- result;
+- error.
 
-Under [ADR-017](../decisions/ADR-017-standalone-dart-worker-executables.md),
-Worker Runtime v2 standardizes first-party ChatGPT and Gemini integrations as
-independently versioned standalone Dart console executables. Workspace starts
-the absolute admitted Worker executable directly; it does not require Node.js,
-the Dart SDK, or a Flutter plugin. Local Worker Protocol 3.0 adds explicit
-Worker executable identity/version, protocol-range negotiation, and Worker
-state-schema compatibility while retaining provider-neutral probe/execute
-semantics.
+The identity includes logical Worker Type, Engine version, Tool Profile definition/release, Profile schema version, provider tool name/version, and capabilities.
 
-Workspace owns Worker release admission, process lifetime, filesystem CWD, local permissions, cancellation,
-and Cloud synchronization. Workspace MUST NOT discover, version, authenticate
-with, or execute a provider CLI or other provider tool directly. The Worker
-owns all provider-specific discovery, version/authentication checks,
-command construction, environment interpretation, output parsing, and
-diagnostics. It may invoke its configured provider CLI or API, but MUST NOT
-speak either Cloud-facing protocol or communicate directly with Conclave
-Cloud. In particular, it must not receive Cloud URLs, runtime credentials,
-Workspace Gateway envelopes, Cloud assignment authority, provider tokens, or
-account secrets as protocol fields. Any explicitly approved local tool input
-must use a bounded allowlisted non-secret field.
+Workspace owns Engine/Profile admission, process lifetime, local permissions, CWD, cancellation and safe Cloud synchronization. Workspace does not discover or invoke provider CLIs directly.
 
-**Historical V7 migration implementation (superseded):** the existing V7 Local Worker Protocol is implemented by the Node-backed `adapter-v7` schema (versions 2.1 through 2.6) and uses
-`initialize.request/result`, `probe.request/result`, `execute.request`,
-`progress`, `result`, and `error`. Every exchange carries a `requestId`.
-Versions 2.3 through 2.6 `probe.request` explicitly select `passive` or `live`; `probe.result`
-contains that mode, package-reported `ready`, nullable safe `toolVersion`, and
-structured `checks[]` with stable issue codes and bounded local diagnostics.
-Protocol 2.6 also reports package-resolved `toolName` and nullable absolute
-`toolPath`. Workspace stores these only in the local Worker registry and
-diagnostics; it never resolves the provider executable, and these fields are
-not synchronized to Cloud.
-Versions 2.1 and 2.2 retain their legacy readiness-result shape during
-migration. Optional probe settings are restricted to bounded non-secret fields.
-Provider tokens and account secrets are not protocol fields. Frames reject
-unknown fields, bound strings and arrays, and must fit within 1 MiB. Workspace
-validates the package's bounded safe result without interpreting
-provider-specific codes or raw provider output. Packages return stable readiness
-codes and safe display diagnostics. Packages capture provider CLI stdout/stderr
-and map it into bounded provider-neutral diagnostics. If a package exits before
-returning a protocol frame, Workspace may retain a bounded, redacted tail of
-the Worker process stderr for local diagnostics; this fallback is never sent
-to Cloud. Protocols 2.4 through 2.6 `execute.request` include the remaining assignment
-`timeoutMs`; the Worker subtracts a small cleanup grace when choosing its CLI
-deadline. Readiness live tests retain their separate explicit short deadline.
-Protocol 2.5 adds the Conclave `sessionPolicy` values `stateless` and
-`durable_session`. Durable requests carry an opaque `sessionKey`; stateless
-requests do not. Cloud and Workspace route these generic fields without
-interpreting provider session IDs. Each Worker maps the key to its own
-provider session ID in version-independent Worker state. Provider session IDs are never
-persisted by Cloud. Persistent provider processes are outside this contract;
-each assignment still starts a fresh Worker and CLI process.
-Raw provider stderr and output never become a Cloud message.
-That legacy schema is specified by `packages/worker-manifest/src/adapter-v7.ts`; it describes the current source assignment route only. The normative first-party contract is the Dart `conclave_worker_protocol` package and Local Worker Protocol 3.0: initialize validates Worker type, exact executable version, protocol negotiation, state schema, and capabilities; probe explicitly chooses passive or live; execute carries assignment/request IDs, prompt, optional model, remaining timeout, session policy, and optional logical session key. Provider secrets, provider session IDs, arbitrary executable paths, and Cloud-provided CWD are excluded. Workspace may always terminate the process tree. Full Workspace assignment-path convergence remains open. Changes to this local protocol do not change either Cloud-facing protocol.
+The Engine owns provider execution through one Workspace-admitted signed Tool Profile. It may launch only the resolved provider CLI using structured arguments with shell execution disabled. It never receives Workspace runtime credentials and never connects directly to Cloud.
+
+Tool Profiles are not protocol peers. They are signed immutable behavior configuration consumed locally by the Engine after Workspace trust/schema/compatibility admission. Profiles cannot disable Engine security invariants or add arbitrary process execution.
+
+Provider credentials, provider session IDs, arbitrary Cloud executable paths, shell commands, and raw provider output are not Local Worker Protocol fields.
+
+Protocol 3.0 and the older 2.x adapter schemas remain migration/history references only. Architecture v8 implementation must not add new provider-specific binary identity to the Local Worker Protocol.
 
 ## Shared canonical domain vocabulary
 

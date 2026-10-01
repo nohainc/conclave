@@ -1,140 +1,173 @@
 # Conclave AX Roadmap
 
-Architecture v6 is the historical Workstream/filesystem baseline. Architecture
-v7 is the active Worker/runtime architecture. Its desktop vertical slice and
-V6 compatibility retirement are implemented; production release gates remain
-open before v7 becomes the declared implemented baseline.
-
-Current product execution architecture (Worker Runtime v2):
-
-```text
-Conclave AX -> Conclave Cloud -> Conclave Workspace -> Worker process -> provider tool
-```
-
-Work product execution follows the constrained contract:
+Architecture v8 is the active implementation target.
 
 ~~~text
-Conclave defines Steps
-      ↓
-Conclave defines valid built-in Workflows
-      ↓
-Workstream assigns Workers to Direct and Steps
-      ↓
-User selects a Workflow and enters a request
-      ↓
-Cloud snapshots the request and composes Step prompts
-      ↓
-Workspace launches the selected Worker executable
-      ↓
-Workers execute
+Conclave AX
+-> Conclave Cloud
+-> Conclave Workspace
+-> CLI Worker Engine
+-> signed Tool Profile
+-> provider CLI
 ~~~
 
-The shared core catalog is authoritative for the closed StepKind set and the
-five versioned built-in Workflows. Workstream configuration contains a default
-Workflow and fixed Direct/Step Worker bindings. Every Work Request captures an
-immutable Workflow, binding, model, instruction, attachment-reference, and
-prompt-profile snapshot. Prompt Profiles are internal Conclave instructions;
-they are not a user-editable template language. See the [Work v1
-Contract](docs/specifications/WORK_V1_CONTRACT.md).
+Architecture v8 preserves the v7 Workspace ownership model and current Work v1
+product, but replaces separate provider-specific native Worker executables with
+one generic CLI Worker Engine and immutable signed Tool Profiles.
 
-Projects are the collaboration boundary. Workspaces provide machine execution.
-Worker slots are created and managed in Conclave Workspace, belong to exactly
-one Workspace, and synchronize only safe inventory/readiness to Cloud. Provider
-authentication and tool interaction are mediated by the Worker executable and
-remain owned by the provider CLI. Workspace never executes provider tools
-directly. Workers never connect directly to Conclave Cloud.
+## Current product contract
 
-**Implementation status:** standalone Dart Workers, protocol, and native release
-components exist, and local real-provider acceptance has progressed. The
-Workspace assignment route is not yet converged: current source still routes
-through the legacy V7 Node adapter store/executor. Full Cloud → Workspace → Dart
-Worker production-path acceptance, update/rollback acceptance, and Node cleanup
-remain open. Treat Node implementation docs as migration history, not the
-architecture to extend. See the [Runtime v2 implementation plan](docs/roadmaps/WORKER_RUNTIME_V2_IMPLEMENTATION.md)
-for phase-level evidence.
+Work v1 remains constrained and product-owned.
 
-The first-party v1 product catalog is frozen by
-[ADR-015](docs/decisions/ADR-015-first-party-worker-v1-contract.md): exactly
-one ChatGPT slot backed by Codex CLI and one Gemini slot backed by Antigravity
-CLI per Workspace. Provider login, credential storage, and subscription/API
-billing mode remain owned by the corresponding local CLI. Existing broader
-integration packages and multi-instance records require a later migration phase
-and are not part of the v1 product catalog.
+Canonical Steps:
 
-## Active work
+~~~text
+Research
+Plan
+Implement
+Test
+Verify
+~~~
 
-The Work composer contract is frozen for v1. Its closed `StepKind` set and
-five built-in `WorkflowId:v1` definitions are authoritative in the
-[Work v1 Contract](docs/specifications/WORK_V1_CONTRACT.md). V6 Workflow
-presets and runner models below remain historical implementation details; new
-Work UI and APIs must use the frozen contract. The core domain now represents
-only canonical built-in definitions and fixed StepKind dependencies; the
-AX composer loads the same catalog for selection and display. The generic
-Workflow catalog tables have been removed from the development schema;
-Work Requests carry the selected Workflow ID, version, and immutable snapshot.
-Workstream Work settings use the fixed `defaultWorkflowId` and `direct`/StepKind
-Worker bindings. The former arbitrary role usage policy is dropped by the
-development migration and must be configured again after bootstrap.
-The Work tab submits Direct and one-step Research Work Requests through the
-immutable request snapshot, Cloud scheduler, configured Worker binding, and
-Workspace runtime. Research uses a stateless read assignment and its internal
-prompt requests findings, available sources/references, constraints,
-uncertainties, and recommended next actions.
-Work Requests, step progress, Worker attribution, and final results load from
-the server-backed Workstream history API and survive page reloads and browser
-restarts. The original request remains visible as the first item in each Run
-card. Durable realtime events now refresh Step and Work Request state in the
-active Workstream without polling; reconnect gaps reload the full history.
-The unused generic Workflow SDK and stale database-template repository have
-been removed. Workflow catalog tables remain absent; only the fixed Work v1
-catalog, immutable request snapshots, and materialized task dependencies are
-used for Workflow execution.
-Plan & Implement now runs Plan before Implement, injects the completed Plan
-text into the Implement prompt through the fixed `inputsFrom` handoff. Direct
-uses a durable Workstream-scoped conversation; each Step in a multi-step
-Workflow uses its own durable Work Request-scoped retry session. Implement &
-Verify now runs Implement followed by a separate Verify assignment. Verify
-receives the implementation result, inspects the current Workstream filesystem
-under the active lease with read-only permissions, and never reuses the
-Implement provider session. Full Cycle now runs the fixed Research → Plan →
-Implement → Test → Verify sequence, passing only each step's `inputsFrom`
-results. The timeline uses Verify's text as the final result, shows Worker
-attribution for each Step, and surfaces recognizable Test counts when present.
-Test has a separate read-only contract: it can run existing tests, builds,
-lint, and typechecks, but cannot edit or fix application files. Requests to add
-tests belong to Implement.
+Built-in Workflows:
 
-This Work v1 orchestration is not yet accepted through Worker Runtime v2. The
-current first-party Workspace assignment route still uses the legacy V7 Node
-adapter store/executor; full Cloud → Workspace → Dart Worker acceptance for the
-built-in Workflows remains open.
+~~~text
+Direct
+Research
+Plan & Implement
+Implement & Verify
+Full Cycle
+~~~
 
-The detailed architecture roadmap is:
+Workstreams bind logical Workers to Direct/Steps. Work Requests snapshot
+Workflow, Worker/model bindings, instructions, attachments, and internal Step
+Prompt Profile versions.
 
-[Architecture v7 Implementation Roadmap](docs/roadmaps/ARCHITECTURE_V7_IMPLEMENTATION.md)
+The runtime change is below that logical Worker boundary:
 
-The ordered remaining work and release gates are:
+~~~text
+Implement -> ChatGPT
+               |
+               v
+        CLI Worker Engine
+               |
+       chatgpt-codex@N
+               |
+               v
+             codex
+~~~
 
-[Architecture v7 Completion Plan](docs/roadmaps/ARCHITECTURE_V7_COMPLETION.md)
+## Architecture v8 active work
 
-The current implementation audit is:
+The authoritative implementation sequence is:
 
-[V7 Implementation Audit](docs/architecture/V7_IMPLEMENTATION_AUDIT.md)
+[Architecture v8 Implementation Plan](docs/roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md)
 
-Phases 1–3 are implemented: Cloud-owned V7 scheduling state and inventory,
-real V7 end-to-end assignment execution, and retirement of V6 Worker
-compatibility APIs, scheduler fallback, and persistence.
+Core v8 contracts:
 
-Phase 4's Ed25519 trust and first-party release workflows are implemented. The
-remaining release sequence is:
+- [Architecture v8](docs/architecture/ARCHITECTURE_V8.md)
+- [ADR-018](docs/decisions/ADR-018-generic-cli-worker-engine-and-tool-profiles.md)
+- [Tool Profile v1](docs/specifications/TOOL_PROFILE_V1.md)
 
-1. **Phase 5:** finish supported-catalog and real-provider acceptance;
-2. **Phase 6:** close operational failure/recovery/security acceptance;
-3. **Phase 7:** finish the native `.app` replacement/restart/health-check/rollback transaction;
-4. **Phase 8:** keep documentation aligned now; declare v7 the implemented
-   baseline only after every release gate passes.
+The implementation order is intentionally:
 
-The Phase 2 behavioral E2E migration-safety gate passes and remains a regression test for the V7 execution path.
+1. freeze/machine-validate Tool Profile v1;
+2. implement the constrained Profile interpreter;
+3. implement Local Worker Protocol 4.0;
+4. build one generic Dart CLI Worker Engine;
+5. add Cloud Profile definitions/releases/lifecycle/trust;
+6. add Workspace Profile cache/resolver/activation;
+7. port current ChatGPT behavior to `chatgpt-codex` Profile;
+8. port current Gemini behavior to `gemini-antigravity` Profile;
+9. pass real provider and Work v1 acceptance;
+10. add testing/beta/stable Profile promotion and rollback;
+11. remove separate provider-specific Worker binaries/release paths;
+12. converge DB/docs and prove a third CLI can be added profile-only.
+
+## v8 success criterion
+
+A normal supported provider CLI compatibility change should usually be handled
+as:
+
+~~~text
+new immutable Profile release
+-> fixture tests
+-> Testing
+-> real provider acceptance
+-> Stable
+~~~
+
+without:
+- rebuilding Conclave Workspace;
+- rebuilding a provider-specific Worker executable;
+- changing Workstream bindings.
+
+## Current implementation baseline
+
+Main already contains:
+- v7 Workspace-owned local Worker execution;
+- Dart Worker Runtime v2 process/protocol primitives;
+- real local ChatGPT/Gemini Worker implementations;
+- constrained Work v1 Steps/Workflows;
+- server-backed Work history and multi-step handoff behavior.
+
+Those implementations are migration references for v8.
+
+Do not remove current provider-specific Dart Workers until generic Engine/Profile
+acceptance passes for both providers.
+
+Do not add new normal provider-specific Worker executables during the v8
+migration.
+
+## Profile release lifecycle
+
+Official v8 Profiles are Conclave-controlled:
+
+~~~text
+Draft
+-> Testing
+-> Beta (optional)
+-> Stable
+-> Retired / Revoked
+~~~
+
+Profile payloads are immutable and signed.
+
+Normal users do not edit/create Profiles in v8.
+
+Workspace keeps active and last-known-good verified Profile releases so a broken
+Profile can be rolled back without an application update.
+
+## Version layers
+
+Operational evidence must distinguish:
+
+~~~text
+Workspace version
+CLI Worker Engine version
+Tool Profile definition/release
+provider CLI version
+provider model when explicit
+~~~
+
+This distinction is central to diagnosing compatibility failures.
+
+## Historical architecture
+
+Architecture v7 and Worker Runtime v2 remain valuable predecessor documentation
+for:
+- Workspace ownership;
+- process isolation;
+- provider credentials staying local;
+- process-tree supervision;
+- durable session mapping.
+
+ADR-017 is superseded by ADR-018 for first-party CLI implementation.
+
+The v7 completion/implementation roadmaps are no longer the active place to
+schedule new runtime work. Open v7 production/recovery concerns that still
+apply must be carried into the relevant v8 phases rather than extending the
+per-provider binary architecture.
 
 ## Historical roadmaps
 
@@ -251,3 +284,4 @@ re-registering or rebuilding the runtime, and passive expiry never disconnects
 Cloud participation.
 
 [Workspace Desktop Lifecycle Implementation](docs/roadmaps/WORKSPACE_DESKTOP_LIFECYCLE_IMPLEMENTATION.md)
+
