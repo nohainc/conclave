@@ -8,6 +8,7 @@ import 'platform_runtime.dart';
 import 'worker_diagnostic_store.dart';
 import 'worker_launch_environment.dart';
 import 'worker_release_verifier.dart';
+import 'legacy_v2_initialize_frames.dart';
 
 /// Workspace-owned process boundary for a native Worker executable.
 ///
@@ -58,14 +59,14 @@ final class WorkerProcessSupervisor {
         maxStderrBytes: maxStderrBytes,
       );
       final initialized = await channel.exchange(
-        InitializeRequest(
+        LegacyV2InitializeRequest(
           requestId: 'probe-init-${DateTime.now().microsecondsSinceEpoch}',
           workerTypeId: admission.manifest.workerTypeId,
           expectedWorkerVersion: admission.manifest.workerVersion,
         ),
         _remaining(timeout, timer),
       );
-      if (initialized is! InitializeResult) {
+      if (initialized is! LegacyV2InitializeResult) {
         throw const WorkerProcessFailure(
           WorkerIssueCode.workerInternalFailure,
           'Worker returned an invalid initialize response',
@@ -146,14 +147,14 @@ final class WorkerProcessSupervisor {
       await _record(diagnostics, workerTypeId, workerVersion, stage,
           'protocol.initialize');
       final initialized = await channel.exchange(
-        InitializeRequest(
+        LegacyV2InitializeRequest(
           requestId: 'candidate-init',
           workerTypeId: workerTypeId,
           expectedWorkerVersion: workerVersion,
         ),
         _remaining(timeout, timer),
       );
-      if (initialized is! InitializeResult) {
+      if (initialized is! LegacyV2InitializeResult) {
         throw const WorkerProcessFailure(
           WorkerIssueCode.workerInternalFailure,
           'Candidate returned an invalid initialize response',
@@ -316,14 +317,14 @@ final class WorkerProcessSupervisor {
         runId: request.assignmentId,
       );
       final initialized = await channel.exchange(
-        InitializeRequest(
+        LegacyV2InitializeRequest(
           requestId: '${request.requestId}-init',
           workerTypeId: workerTypeId,
           expectedWorkerVersion: workerVersion,
         ),
         _remaining(budget, timer),
       );
-      if (initialized is! InitializeResult ||
+      if (initialized is! LegacyV2InitializeResult ||
           initialized.workerTypeId != workerTypeId ||
           initialized.workerVersion != workerVersion) {
         throw const WorkerProcessFailure(
@@ -705,7 +706,16 @@ final class _WorkerChannel {
       }
       late final WorkerFrame frame;
       try {
-        frame = decodeWorkerFrame(line);
+        final decoded = jsonDecode(line);
+        if (decoded is Map &&
+            decoded['type'] == 'initialize.result' &&
+            decoded.containsKey('workerVersion')) {
+          frame = LegacyV2InitializeResult.fromJson(
+            Map<String, Object?>.from(decoded),
+          );
+        } else {
+          frame = decodeWorkerFrame(line);
+        }
       } on FormatException {
         throw const WorkerProcessFailure(
           WorkerIssueCode.malformedFrame,

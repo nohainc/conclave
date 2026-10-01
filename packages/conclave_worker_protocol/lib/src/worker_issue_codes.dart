@@ -3,6 +3,10 @@ abstract final class WorkerIssueCode {
   static const malformedFrame = 'malformed_frame';
   static const protocolVersionUnsupported = 'protocol_version_unsupported';
   static const workerTypeMismatch = 'worker_type_mismatch';
+  @Deprecated('Migration-only Worker Runtime v2 issue code')
+  static const workerVersionMismatch = 'worker_version_mismatch';
+  @Deprecated('Migration-only Worker Runtime v2 issue code')
+  static const stateSchemaIncompatible = 'state_schema_incompatible';
   static const engineVersionMismatch = 'engine_version_mismatch';
   static const profileIdentityMismatch = 'profile_identity_mismatch';
   static const profileSchemaIncompatible = 'profile_schema_incompatible';
@@ -25,6 +29,8 @@ abstract final class WorkerIssueCode {
     malformedFrame,
     protocolVersionUnsupported,
     workerTypeMismatch,
+    workerVersionMismatch,
+    stateSchemaIncompatible,
     engineVersionMismatch,
     profileIdentityMismatch,
     profileSchemaIncompatible,

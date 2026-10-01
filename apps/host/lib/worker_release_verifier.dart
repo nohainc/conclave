@@ -7,6 +7,7 @@ import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 
 import 'worker_release_manifest.dart';
 import 'worker_trust_policy.dart';
+import 'legacy_v2_initialize_frames.dart';
 
 class WorkerReleaseAdmission {
   const WorkerReleaseAdmission({
@@ -24,7 +25,7 @@ class WorkerReleaseAdmission {
   /// Rejects a live executable that does not identify itself exactly as the
   /// signed release metadata selected during admission.
   void validateInitializeResult(
-    InitializeResult result, {
+    LegacyV2InitializeResult result, {
     String negotiatedProtocolVersion = localWorkerProtocolVersion,
   }) {
     if (!manifest.supportsProtocol(negotiatedProtocolVersion)) {
@@ -32,15 +33,16 @@ class WorkerReleaseAdmission {
         'Worker release does not support the negotiated protocol version',
       );
     }
-    validateInitializeAdmission(
-      result,
-      expectedWorkerTypeId: manifest.workerTypeId,
-      expectedWorkerVersion: manifest.workerVersion,
-      minReadableStateSchema: manifest.stateWrite,
-      maxReadableStateSchema: manifest.stateWrite,
-      requiredCapabilities: manifest.capabilities.toSet(),
-      negotiatedProtocolVersion: negotiatedProtocolVersion,
-    );
+    if (result.workerTypeId != manifest.workerTypeId ||
+        result.workerVersion != manifest.workerVersion ||
+        result.stateSchemaVersion != manifest.stateWrite ||
+        negotiatedProtocolVersion != localWorkerProtocolVersion ||
+        !manifest.supportsProtocol(negotiatedProtocolVersion) ||
+        !result.capabilities.toSet().containsAll(manifest.capabilities)) {
+      throw const FormatException(
+        'initialized Worker identity, schema, or capabilities do not match admission',
+      );
+    }
   }
 }
 
