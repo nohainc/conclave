@@ -1,6 +1,6 @@
 # Conclave AX Applications
 
-**Status:** Current v7 product/application boundary; production release gates remain open
+**Status:** Architecture v8 product/application boundary; v7/v2 runtime details below are predecessor history where noted
 
 Conclave AX has three primary applications and one extension type.
 
@@ -111,7 +111,7 @@ latter speaks only the Workspace Runtime Protocol with Conclave Workspace.
 - local Work Root and Workstream directories;
 - local configured Worker registry;
 - local provider authentication/secure credentials;
-- Worker adapter install/update/rollback;
+- CLI Worker Engine and signed Tool Profile cache/admission;
 - local permission approval;
 - child-process supervision;
 - assignment execution/cancellation;
@@ -134,7 +134,7 @@ or Workers management surfaces. Provider credentials remain local.
 
 Projects, Workstreams, Discuss, Work orchestration and Project administration remain in Conclave AX.
 
-## 4. Worker Types / adapter packages
+## 4. Logical Workers, CLI Worker Engine, and Tool Profiles
 
 **Suggested path:** `workers/<worker-type-id>`
 
@@ -234,3 +234,8 @@ The canonical Workspace desktop lifecycle is defined by
 The product distinguishes Sign in, Connect/Disconnect Workspace, Lock/Unlock,
 Release ownership, Sign out, and Reset. These actions must not be aliases for
 one another.
+
+
+## Architecture v8 local runtime refinement
+
+Conclave Workspace launches one generic standalone CLI Worker Engine process per assignment/probe by default. Product-visible ChatGPT/Gemini rows remain logical Workers. Official signed Tool Profiles map those identities to supported provider CLI behavior. New normal CLI integrations should be added through the Cloud Worker catalog + Tool Profile releases when Profile v1 can express them, not by adding another provider-specific native Worker binary.
