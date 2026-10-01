@@ -1,18 +1,11 @@
 # ADR-015: First-Party Worker v1 Contract
 
-**Status:** Accepted; product contract frozen for the first supported Workspace Worker release. First-party runtime implementation is refined by [ADR-017](ADR-017-standalone-dart-worker-executables.md).
+**Status:** Accepted; product catalog/identity contract remains frozen. Runtime implementation is now governed by [ADR-018](ADR-018-generic-cli-worker-engine-and-tool-profiles.md) / Architecture v8.
 **Date:** 2026-09-28  
 **Builds on:** ADR-012, Architecture v7  
 **Supersedes:** ADR-012 Worker Type catalog, identity/cardinality, naming, and local authentication UX where they conflict with this decision. Other ADR-012 decisions remain in force.
 
-> **Runtime status and terminology:** The fixed `chatgpt` / `gemini` catalog,
-> slot cardinality, provider-authentication boundary, and AX-owned model/usage
-> rules below remain normative. References below to adapter packages, package
-> IDs, or Local Worker Protocol 2.x record the legacy Node implementation and
-> are superseded by ADR-017 / Local Worker Protocol 3.0. First-party Workers
-> are signed native Dart console executables; Workspace must not probe provider
-> CLIs. The full Workspace assignment path has not yet converged; see the
-> [implementation plan](../roadmaps/WORKER_RUNTIME_V2_IMPLEMENTATION.md).
+> **Architecture v8 runtime note:** the fixed `chatgpt` / `gemini` catalog, slot cardinality, provider-authentication boundary, and AX-owned model/usage rules remain normative. Separate provider-specific Worker executables and package IDs are superseded implementation details. v8 resolves each logical Worker through one generic CLI Worker Engine plus an official signed Tool Profile. See the [v8 implementation plan](../roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md).
 
 ## Context
 
@@ -33,8 +26,8 @@ It contains exactly these two product-facing Worker types:
 
 | Stable product type ID | Product name | Local execution integration |
 | --- | --- | --- |
-| `chatgpt` | ChatGPT | standalone ChatGPT Worker executable -> Codex CLI |
-| `gemini` | Gemini | standalone Gemini Worker executable -> Antigravity CLI |
+| `chatgpt` | ChatGPT | CLI Worker Engine + `chatgpt-codex` Profile -> Codex CLI |
+| `gemini` | Gemini | CLI Worker Engine + `gemini-antigravity` Profile -> Antigravity CLI |
 
 The user-facing names are **ChatGPT** and **Gemini**. Provider executable names,
 version checks, and authentication details are package implementation details.
@@ -60,8 +53,8 @@ Each Workspace exposes exactly one catalog slot for each v1 product type:
 
 ~~~text
 Workspace
-├── ChatGPT slot (implemented by the Codex-backed Worker Package)
-└── Gemini slot (implemented by the Antigravity-backed Worker Package)
+├── ChatGPT slot (logical Worker; profile `chatgpt-codex`)
+└── Gemini slot (logical Worker; profile `gemini-antigravity`)
 ~~~
 
 The slots exist regardless of package readiness, authentication status, or
@@ -259,3 +252,8 @@ provider-tool diagnostic state. It does not persist user-defined names,
 provider credential references/status, model defaults, adapter configuration,
 or a legacy status as primary readiness. Worker release policy and active
 version remain in the Worker's version-independent release-state file.
+
+
+## Architecture v8 implementation refinement
+
+ADR-018 supersedes ADR-017 only at the provider implementation layer. This ADR's user-facing Worker IDs, cardinality, local-provider-auth boundary, and logical slot semantics remain unchanged. New runtime code must not use provider package IDs as product identity or add a new provider-specific native Worker binary for a normal CLI integration.
